@@ -23,17 +23,29 @@ import { jsPDF } from "jspdf"; // ✅ PDF real (sem print)
 
 const SETORES = ["GARANTIA", "MANUTENÇÃO", "SUPRIMENTOS"];
 
-const OBS_OPCOES = [
-  "AG. CHEGADA DE PEÇAS",
-  "AG. EXECUÇÃO DO SERVIÇO",
-  "AG. GARANTIA",
-];
+const OBS_OPCOES = ["AG. CHEGADA DE PEÇAS", "AG. EXECUÇÃO DO SERVIÇO", "AG. GARANTIA"];
 
+// ✅ ORDEM DEFINIDA:
+// GNS → FAIXA AMARELA → NOITE → PENDENTES → VENDA
 const CATEGORIAS = [
   { value: "GNS", label: "GNS", color: "bg-red-600 text-white", badge: "bg-red-600 text-white" },
-  { value: "NOITE", label: "Liberação Noturno", color: "bg-white text-gray-900", badge: "bg-gray-900 text-white" },
-  { value: "VENDA", label: "Venda", color: "bg-blue-600 text-white", badge: "bg-blue-600 text-white" },
+
+  // ✅ NOVA CATEGORIA (linha amarela)
+  {
+    value: "FAIXA_AMARELA",
+    label: "Faixa Amarela",
+    color: "bg-yellow-300 text-black",
+    badge: "bg-yellow-500 text-black",
+  },
+
+  {
+    value: "NOITE",
+    label: "Liberação Noturno",
+    color: "bg-white text-gray-900",
+    badge: "bg-gray-900 text-white",
+  },
   { value: "PENDENTES", label: "Pendentes", color: "bg-gray-500 text-white", badge: "bg-gray-500 text-white" },
+  { value: "VENDA", label: "Venda", color: "bg-blue-600 text-white", badge: "bg-blue-600 text-white" },
 ];
 
 /* ============================
@@ -125,9 +137,7 @@ function MultiSelectChips({ label, options, values, onChange }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {label ? (
-        <div className="text-[10px] font-black text-gray-500 uppercase mr-1">{label}:</div>
-      ) : null}
+      {label ? <div className="text-[10px] font-black text-gray-500 uppercase mr-1">{label}:</div> : null}
 
       {options.map((opt) => {
         const active = set.has(opt.value);
@@ -187,14 +197,20 @@ function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
     });
   }, [open, veiculo]);
 
+  // ✅ REGRAS DE MOVIMENTAÇÃO
+  // Pedido: FAIXA_AMARELA pode ir para GNS, PENDENTES, NOITE (e ficar nela)
+  // Mantive NOITE com regra original (NOITE -> GNS). Se quiser permitir NOITE -> FAIXA_AMARELA,
+  // altere a linha do NOITE abaixo para incluir "FAIXA_AMARELA".
   const opcoesCategoriaPermitidas = useMemo(() => {
     const atual = veiculo?.categoria;
 
-    if (atual === "PENDENTES") return ["PENDENTES", "GNS", "NOITE"];
-    if (atual === "NOITE") return ["NOITE", "GNS"];
-    if (atual === "GNS") return ["GNS", "PENDENTES", "NOITE"];
-    if (atual === "VENDA") return ["VENDA", "GNS", "PENDENTES", "NOITE"];
-    return ["GNS", "PENDENTES", "NOITE", "VENDA"];
+    if (atual === "PENDENTES") return ["PENDENTES", "GNS", "FAIXA_AMARELA", "NOITE"];
+    if (atual === "NOITE") return ["NOITE", "GNS"]; // <- se quiser, troque por ["NOITE","GNS","FAIXA_AMARELA"]
+    if (atual === "GNS") return ["GNS", "FAIXA_AMARELA", "PENDENTES", "NOITE"];
+    if (atual === "FAIXA_AMARELA") return ["FAIXA_AMARELA", "GNS", "PENDENTES", "NOITE"];
+    if (atual === "VENDA") return ["VENDA", "GNS", "FAIXA_AMARELA", "PENDENTES", "NOITE"];
+
+    return ["GNS", "FAIXA_AMARELA", "PENDENTES", "NOITE", "VENDA"];
   }, [veiculo]);
 
   if (!open || !veiculo) return null;
@@ -219,14 +235,7 @@ function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
       categoria: draft.categoria,
     };
 
-    const diff = buildDiff(veiculo, payloadUpdate, [
-      "frota",
-      "setor",
-      "ordem_servico",
-      "descricao",
-      "observacao",
-      "categoria",
-    ]);
+    const diff = buildDiff(veiculo, payloadUpdate, ["frota", "setor", "ordem_servico", "descricao", "observacao", "categoria"]);
 
     if (!Object.keys(diff).length) {
       return alert("Nenhuma alteração para salvar.");
@@ -296,9 +305,7 @@ function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
           </div>
 
           <div className="flex flex-col">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">
-              Ordem de Serviço (somente números)
-            </label>
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Ordem de Serviço (somente números)</label>
             <input
               className="border rounded-lg px-3 py-2 text-sm font-bold"
               type="text"
@@ -352,9 +359,7 @@ function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
               ))}
             </select>
 
-            <div className="text-[10px] text-gray-500 font-semibold mt-1">
-              Regras aplicadas conforme categoria atual.
-            </div>
+            <div className="text-[10px] text-gray-500 font-semibold mt-1">Regras aplicadas conforme categoria atual.</div>
           </div>
         </div>
 
@@ -643,7 +648,9 @@ export default function PCMDiario() {
   // ============================
   const veiculosFiltrados = useMemo(() => {
     const txt = filtroTexto.trim().toLowerCase();
-    const orderCat = { GNS: 0, NOITE: 1, PENDENTES: 2, VENDA: 3 };
+
+    // ✅ ORDEM: GNS → FAIXA_AMARELA → NOITE → PENDENTES → VENDA
+    const orderCat = { GNS: 0, FAIXA_AMARELA: 1, NOITE: 2, PENDENTES: 3, VENDA: 4 };
 
     const setCats = new Set(filtroCategorias || []);
     const setSetores = new Set(filtroSetores || []);
@@ -687,7 +694,7 @@ export default function PCMDiario() {
     const base = veiculosFiltrados.length ? veiculosFiltrados : veiculos;
     const total = (base || []).length;
 
-    const byCat = { GNS: 0, NOITE: 0, VENDA: 0, PENDENTES: 0 };
+    const byCat = { GNS: 0, FAIXA_AMARELA: 0, NOITE: 0, VENDA: 0, PENDENTES: 0 };
     (base || []).forEach((v) => {
       if (byCat[v.categoria] !== undefined) byCat[v.categoria]++;
     });
@@ -767,18 +774,12 @@ export default function PCMDiario() {
       {/* CABEÇALHO */}
       <div className="bg-white p-5 rounded-xl shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-4 border-b-4 border-blue-600">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/pcm-inicio")}
-            className="p-2 hover:bg-gray-100 rounded-full"
-            title="Voltar"
-          >
+          <button onClick={() => navigate("/pcm-inicio")} className="p-2 hover:bg-gray-100 rounded-full" title="Voltar">
             <FaArrowLeft />
           </button>
 
           <div>
-            <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight">
-              PCM - Planejamento e Controle de Manutenção
-            </h1>
+            <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight">PCM - Planejamento e Controle de Manutenção</h1>
             <p className="text-xs text-gray-500 font-semibold">
               Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span>
               {!pcmEditavel ? (
@@ -797,17 +798,13 @@ export default function PCMDiario() {
         <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
           <div className="flex bg-gray-100 rounded-lg overflow-hidden border">
             <button
-              className={`px-4 py-2 text-xs font-black ${
-                turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"
-              }`}
+              className={`px-4 py-2 text-xs font-black ${turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"}`}
               onClick={() => setTurnoAtivo("DIA")}
             >
               TURNO DIA
             </button>
             <button
-              className={`px-4 py-2 text-xs font-black ${
-                turnoAtivo === "NOITE" ? "bg-blue-700 text-white" : "text-gray-700"
-              }`}
+              className={`px-4 py-2 text-xs font-black ${turnoAtivo === "NOITE" ? "bg-blue-700 text-white" : "text-gray-700"}`}
               onClick={() => setTurnoAtivo("NOITE")}
             >
               TURNO NOITE
@@ -824,26 +821,35 @@ export default function PCMDiario() {
       </div>
 
       {/* RESUMO */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">Total</p>
           <p className="text-2xl font-black mt-1">{resumo.total}</p>
         </div>
+
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">GNS</p>
           <p className="text-2xl font-black mt-1 text-red-600">{resumo.GNS}</p>
         </div>
+
+        <div className="bg-white rounded-xl shadow p-4 border">
+          <p className="text-[10px] font-black text-gray-500 uppercase">Faixa Amarela</p>
+          <p className="text-2xl font-black mt-1 text-yellow-600">{resumo.FAIXA_AMARELA}</p>
+        </div>
+
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">Noturno</p>
           <p className="text-2xl font-black mt-1">{resumo.NOITE}</p>
         </div>
-        <div className="bg-white rounded-xl shadow p-4 border">
-          <p className="text-[10px] font-black text-gray-500 uppercase">Venda</p>
-          <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
-        </div>
+
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
           <p className="text-2xl font-black mt-1 text-gray-600">{resumo.PENDENTES}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4 border">
+          <p className="text-[10px] font-black text-gray-500 uppercase">Venda</p>
+          <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
         </div>
       </div>
 
@@ -876,9 +882,10 @@ export default function PCMDiario() {
               disabled={!pcmEditavel}
             >
               <option value="GNS">GNS (Vermelho)</option>
+              <option value="FAIXA_AMARELA">Faixa Amarela (Amarelo)</option>
               <option value="NOITE">Liberação Noturno (Branco)</option>
-              <option value="VENDA">Venda (Azul)</option>
               <option value="PENDENTES">Pendentes (Cinza)</option>
+              <option value="VENDA">Venda (Azul)</option>
             </select>
           </div>
 
@@ -929,9 +936,7 @@ export default function PCMDiario() {
             onClick={lancarVeiculo}
             disabled={!pcmEditavel}
             className={`p-2 rounded font-black flex items-center justify-center gap-2 h-[40px] ${
-              !pcmEditavel
-                ? "bg-gray-600 text-white opacity-60 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-500 text-white"
+              !pcmEditavel ? "bg-gray-600 text-white opacity-60 cursor-not-allowed" : "bg-green-600 hover:bg-green-500 text-white"
             }`}
             title={!pcmEditavel ? "PCM fechado" : "Lançar"}
           >
@@ -1069,7 +1074,7 @@ export default function PCMDiario() {
             </div>
 
             <div className="text-[10px] font-black text-gray-500 uppercase">
-              Ordenação: Categoria (GNS → Branco → Cinza → Venda) e Tempo parado (desc)
+              Ordenação: Categoria (GNS → Amarela → Branco → Cinza → Venda) e Tempo parado (desc)
             </div>
           </div>
         </div>
@@ -1113,9 +1118,7 @@ export default function PCMDiario() {
 
                   return (
                     <tr key={v.id} className={`border-b border-gray-200 font-medium ${catStyle.color}`}>
-                      <td className="p-3 border-r border-black/10 text-[10px] font-black uppercase">
-                        {v.cluster || "-"}
-                      </td>
+                      <td className="p-3 border-r border-black/10 text-[10px] font-black uppercase">{v.cluster || "-"}</td>
                       <td className="p-3 text-lg font-black border-r border-black/10">{v.frota}</td>
                       <td className="p-3 border-r border-black/10">{formatBRDate(v.data_entrada)}</td>
                       <td className="p-3 text-center font-black border-r border-black/10 text-lg">{dias}</td>
@@ -1133,9 +1136,7 @@ export default function PCMDiario() {
                         </span>
                       </td>
                       <td className="p-3 text-[10px] italic border-r border-black/10">{v.lancado_por || "-"}</td>
-                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">
-                        {v.observacao || "-"}
-                      </td>
+                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">{v.observacao || "-"}</td>
 
                       <td className="p-3 text-center">
                         <div className="flex justify-center gap-2">
@@ -1154,7 +1155,8 @@ export default function PCMDiario() {
 
                           <button
                             onClick={() => {
-                              if (!pcmEditavel) return alert("PCM fechado: não é permitido editar/mover após 10:00 do dia seguinte.");
+                              if (!pcmEditavel)
+                                return alert("PCM fechado: não é permitido editar/mover após 10:00 do dia seguinte.");
                               setEditVeiculo(v);
                               setEditOpen(true);
                             }}

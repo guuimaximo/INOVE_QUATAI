@@ -1,11 +1,13 @@
 // src/components/CobrancaDetalheModal.jsx
 // Ajustes: Origem (Interno/Externo) + Bloco Externo (Terceiro/Veículo/Fotos) + Persistência em avarias_terceiros
 // + NOVO: permitir editar/reverter quando status for Cancelada
+// + NOVO: Botão "Chamados de Motoristas" dentro de 🧮 Detalhes da Operação (abre modal)
 
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import { FaTimes } from "react-icons/fa";
 import CampoMotorista from "./CampoMotorista";
+import ChamadosMotoristasModal from "./ChamadosMotoristasModal";
 
 // Helper para converter string (BRL ou US) para número
 const parseCurrency = (value) => {
@@ -34,6 +36,9 @@ export default function CobrancaDetalheModal({
   const [isEditing, setIsEditing] = useState(false);
   const [tratativaTexto, setTratativaTexto] = useState("");
   const [salvandoInfo, setSalvandoInfo] = useState(false);
+
+  // ✅ NOVO: modal de chamados
+  const [openChamados, setOpenChamados] = useState(false);
 
   // Origem (Interno/Externo)
   const [origem, setOrigem] = useState("Interno");
@@ -715,14 +720,26 @@ export default function CobrancaDetalheModal({
                       ))}
                     </tbody>
                   </table>
-                  <div className="text-right text-xl font-bold mt-3">Valor Total: {formatCurrency(avaria.valor_total_orcamento)}</div>
+                  <div className="text-right text-xl font-bold mt-3">
+                    Valor Total: {formatCurrency(avaria.valor_total_orcamento)}
+                  </div>
                 </>
               )}
             </div>
 
             {/* Operação + Tratativa */}
             <div className="border-t pt-4">
-              <h3 className="text-xl font-semibold mb-2">🧮 Detalhes da Operação</h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xl font-semibold">🧮 Detalhes da Operação</h3>
+
+                {/* ✅ NOVO: Botão Chamados */}
+                <button
+                  onClick={() => setOpenChamados(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm"
+                >
+                  👥 Chamados de Motoristas
+                </button>
+              </div>
 
               <label className="block text-sm font-medium">Observações</label>
               <textarea
@@ -941,6 +958,14 @@ export default function CobrancaDetalheModal({
           </div>
         </div>
       </div>
+
+      {/* ✅ NOVO: Modal Chamados */}
+      {openChamados && (
+        <ChamadosMotoristasModal
+          avariaId={avaria.id}
+          onClose={() => setOpenChamados(false)}
+        />
+      )}
 
       {/* === LAYOUT DE IMPRESSÃO === */}
       <div id="printable-area" className="hidden font-sans text-[11px] leading-tight text-gray-900">

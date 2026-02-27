@@ -1,6 +1,7 @@
 // src/pages/ChecklistCentral.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBCNT } from "../supabaseBCNT";
+import ChecklistDetalheModal from "../components/ChecklistDetalheModal";
 
 function norm(s) {
   return String(s || "").trim();
@@ -23,7 +24,6 @@ function parseFileUrls(fileurls) {
   const raw = String(fileurls).trim();
   if (!raw) return [];
 
-  // tenta JSON: ["url1","url2"]
   if (raw.startsWith("[") && raw.endsWith("]")) {
     try {
       const arr = JSON.parse(raw);
@@ -31,7 +31,6 @@ function parseFileUrls(fileurls) {
     } catch (_) {}
   }
 
-  // split: url1,url2 ou com quebra de linha
   return raw
     .split(/[\n,;\s]+/g)
     .map((x) => x.trim())
@@ -40,11 +39,7 @@ function parseFileUrls(fileurls) {
 }
 
 function Badge({ children, className = "" }) {
-  return (
-    <span className={`px-2 py-1 rounded text-xs font-medium ${className}`}>
-      {children}
-    </span>
-  );
+  return <span className={`px-2 py-1 rounded text-xs font-medium ${className}`}>{children}</span>;
 }
 
 function CardResumo({ titulo, valor, cor }) {
@@ -52,156 +47,6 @@ function CardResumo({ titulo, valor, cor }) {
     <div className={`${cor} rounded-lg shadow p-5 text-center`}>
       <h3 className="text-sm font-medium text-gray-600">{titulo}</h3>
       <p className="text-3xl font-bold mt-2 text-gray-800">{valor}</p>
-    </div>
-  );
-}
-
-function ChecklistDetalheModal({ open, onClose, row }) {
-  const fotos = useMemo(() => parseFileUrls(row?.fileurls), [row]);
-
-  if (!open) return null;
-
-  const dataBR = row?.created_at
-    ? new Date(row.created_at).toLocaleDateString("pt-BR")
-    : "-";
-  const horaBR = row?.created_at
-    ? new Date(row.created_at).toLocaleTimeString("pt-BR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "-";
-
-  const prefixo = row?.numero_veiculo || "-";
-  const motorista = row?.nome_motorista || "-";
-  const chapa = row?.chapa_motorista ? `(${row.chapa_motorista})` : "";
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/50">
-      <div className="bg-white w-full max-w-4xl rounded-xl shadow-xl overflow-hidden">
-        <div className="flex items-start justify-between gap-3 p-4 border-b">
-          <div>
-            <div className="text-lg font-bold text-gray-800">Detalhes do Checklist</div>
-            <div className="text-sm text-gray-600 mt-1">
-              <b>Data:</b> {dataBR} &nbsp; | &nbsp; <b>Hora:</b> {horaBR} &nbsp; | &nbsp;{" "}
-              <b>Prefixo:</b> {prefixo}
-            </div>
-            <div className="text-sm text-gray-600">
-              <b>Motorista:</b> {motorista} {chapa}
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="px-3 py-2 rounded-md border bg-white hover:bg-gray-50 text-gray-700"
-          >
-            Fechar
-          </button>
-        </div>
-
-        <div className="p-4 space-y-4">
-          {/* Vídeo */}
-          <div className="rounded-lg border p-3">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold text-gray-800">Vídeo</div>
-              {row?.video_url ? (
-                <Badge className="bg-blue-100 text-blue-800">Disponível</Badge>
-              ) : (
-                <Badge className="bg-gray-100 text-gray-700">Sem vídeo</Badge>
-              )}
-            </div>
-
-            <div className="mt-3">
-              {row?.video_url ? (
-                <video src={row.video_url} controls className="w-full rounded-lg bg-black" />
-              ) : (
-                <div className="text-sm text-gray-500">Nenhum vídeo anexado.</div>
-              )}
-            </div>
-          </div>
-
-          {/* Fotos */}
-          <div className="rounded-lg border p-3">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold text-gray-800">Fotos</div>
-              {fotos.length > 0 ? (
-                <Badge className="bg-green-100 text-green-800">{fotos.length} foto(s)</Badge>
-              ) : (
-                <Badge className="bg-gray-100 text-gray-700">Sem fotos</Badge>
-              )}
-            </div>
-
-            <div className="mt-3">
-              {fotos.length === 0 ? (
-                <div className="text-sm text-gray-500">Nenhuma foto anexada.</div>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {fotos.map((url, idx) => (
-                    <a
-                      key={`${url}-${idx}`}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block border rounded-lg overflow-hidden hover:opacity-90"
-                      title="Abrir imagem"
-                    >
-                      <img
-                        src={url}
-                        alt={`Foto ${idx + 1}`}
-                        className="w-full h-28 object-cover"
-                        loading="lazy"
-                      />
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Textos */}
-          <div className="rounded-lg border p-3">
-            <div className="font-semibold text-gray-800">Descrição</div>
-
-            <div className="mt-3 space-y-3">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-gray-500">Resumo</div>
-                <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                  {row?.resumo_texto || "-"}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs uppercase tracking-wide text-gray-500">Resposta</div>
-                <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                  {row?.resposta_texto || "-"}
-                </div>
-              </div>
-
-              {row?.link_atendimento ? (
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Atendimento</div>
-                  <a
-                    className="text-sm text-blue-700 underline"
-                    href={row.link_atendimento}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Abrir link do atendimento
-                  </a>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="p-4 border-t flex items-center justify-end">
-          <button
-            onClick={onClose}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-          >
-            OK
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -220,7 +65,7 @@ export default function ChecklistCentral() {
   const [comVideoCount, setComVideoCount] = useState(0);
   const [comFotosCount, setComFotosCount] = useState(0);
 
-  // motoristas únicos via lista carregada (simples e suficiente)
+  // motoristas únicos via lista carregada
   const motoristasUnicos = useMemo(() => {
     const set = new Set(
       (rows || [])
@@ -230,6 +75,7 @@ export default function ChecklistCentral() {
     return set.size;
   }, [rows]);
 
+  // ✅ Modal (continua existindo aqui, só o componente foi separado)
   const [modalOpen, setModalOpen] = useState(false);
   const [rowSelecionada, setRowSelecionada] = useState(null);
 
@@ -287,9 +133,7 @@ export default function ChecklistCentral() {
 
   async function carregarContadoresHead() {
     // Total
-    let qTotal = supabaseBCNT
-      .from("checklists")
-      .select("id", { count: "exact", head: true });
+    let qTotal = supabaseBCNT.from("checklists").select("id", { count: "exact", head: true });
     qTotal = applyCommonFilters(qTotal);
     const { count: total } = await qTotal;
 
@@ -483,6 +327,7 @@ export default function ChecklistCentral() {
                       <button
                         onClick={() => abrirDetalhes(r)}
                         className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
+                        type="button"
                       >
                         Detalhes
                       </button>

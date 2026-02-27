@@ -96,6 +96,9 @@ const ACCESS = {
 
     // Diesel
     ...Object.values(DIESEL_ROUTES),
+
+    // ✅ Checklists
+    "/checklists",
   ],
 
   // ✅ NÍVEL RH
@@ -156,6 +159,7 @@ export default function Sidebar() {
   const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
+  const [checklistsOpen, setChecklistsOpen] = useState(false); // ✅ NOVO
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
@@ -216,7 +220,6 @@ export default function Sidebar() {
         label: "Desempenho Diesel",
         icon: <FaGasPump />,
         tabs: [
-          // ✅ ORDEM AJUSTADA + RENOME "Lançamento" -> "Lançamento Manual"
           { path: DIESEL_ROUTES.resumo, label: "Resumo", icon: <FaChartBar /> },
           { path: DIESEL_ROUTES.agente, label: "Agente Diesel", icon: <FaRobot /> },
           { path: DIESEL_ROUTES.lancamento, label: "Lançamento Manual", icon: <FaPenSquare /> },
@@ -229,8 +232,6 @@ export default function Sidebar() {
         { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie />, onlyAdminGestor: true },
         { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
         { path: "/central", label: "Central", icon: <FaListAlt /> },
-
-        // ✅ NOVO: RH - Tratativas (visível para Admin/Gestor/RH)
         { path: "/tratativas-rh", label: "Tratativas RH", icon: <FaUserCog />, onlyAdminGestorRH: true },
       ],
 
@@ -240,6 +241,11 @@ export default function Sidebar() {
         { path: "/avarias-em-revisao", label: "Pendências de Revisão", icon: <FaUndo /> },
         { path: "/aprovar-avarias", label: "Aprovações", icon: <FaClipboardCheck /> },
         { path: "/cobrancas", label: "Cobranças", icon: <FaMoneyBill /> },
+      ],
+
+      // ✅ NOVO: Checklists (aba simples)
+      checklists: [
+        { path: "/checklists", label: "Central", icon: <FaClipboardCheck /> },
       ],
 
       sos: [
@@ -286,6 +292,9 @@ export default function Sidebar() {
     if (l.path === "/avarias-resumo" && !(isAdmin || isGestor || isRH)) return null;
     return canSee(user, l.path);
   });
+
+  // ✅ Checklists: Admin vê tudo, Gestor vê (outros não)
+  const showChecklists = (isAdmin || isGestor) && canSee(user, "/checklists");
 
   const showSOS = links.sos.some((l) => canSee(user, l.path));
   const showConfig = isAdmin;
@@ -403,17 +412,12 @@ export default function Sidebar() {
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
                 {links.tratativas.map((link) => {
-                  // ✅ Resumo: apenas Admin/Gestor (você já liberou RH no seu filtro antigo,
-                  // aqui mantive exatamente sua regra original)
                   if (link.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
-
-                  // ✅ Tratativas RH: Admin/Gestor/RH
                   if (link.onlyAdminGestorRH && !(isAdmin || isGestor || isRH)) return null;
 
                   if (!link.onlyAdminGestor && !link.onlyAdminGestorRH && !canSee(user, link.path))
                     return null;
 
-                  // ✅ Garante que RH só veja se tiver no ACCESS dele
                   if (user?.nivel === "RH" && !canSee(user, link.path)) return null;
 
                   return (
@@ -452,6 +456,34 @@ export default function Sidebar() {
                     </NavLink>
                   ) : null;
                 })}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ✅ CHECKLISTS (ABA) — abaixo de Avarias */}
+        {showChecklists && (
+          <>
+            <button
+              onClick={() => setChecklistsOpen(!checklistsOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3">
+                <FaClipboardCheck /> <span>Checklists</span>
+              </div>
+              {checklistsOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {checklistsOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.checklists.map((link) =>
+                  canSee(user, link.path) ? (
+                    <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
+                      {link.icon} <span>{link.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
               </div>
             )}
           </>

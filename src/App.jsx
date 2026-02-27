@@ -42,6 +42,9 @@ import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
 import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
 import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
+// ✅ NOVO: Checklist Central
+import ChecklistCentral from "./pages/ChecklistCentral";
+
 import { useContext } from "react";
 import { AuthContext } from "./context/AuthContext";
 
@@ -87,7 +90,10 @@ export default function App() {
           {/* ✅ Desempenho Diesel */}
           <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
           <Route path="/desempenho-diesel-resumo" element={<DesempenhoDieselResumo />} />
-          <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
+          <Route
+            path="/desempenho-diesel-acompanhamento"
+            element={<DesempenhoDieselAcompanhamento />}
+          />
           <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
           <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
           <Route path="/desempenho-diesel-checkpoint/:id" element={<DesempenhoDieselCheckpoint />} />
@@ -97,6 +103,9 @@ export default function App() {
           <Route path="/pcm-inicio" element={<PCMInicio />} />
           <Route path="/pcm-resumo" element={<PCMResumo />} />
           <Route path="/pcm-diario/:id" element={<PCMDiario />} />
+
+          {/* ✅ Checklists (Tamo no Zap) */}
+          <Route path="/checklists" element={<ChecklistCentral />} />
 
           {/* Tratativas */}
           <Route path="/central" element={<CentralTratativas />} />

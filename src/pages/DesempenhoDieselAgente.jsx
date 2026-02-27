@@ -151,16 +151,22 @@ export default function DesempenhoDieselAgente() {
   useEffect(() => () => (mountedRef.current = false), []);
 
   const hoje = useMemo(() => new Date(), []);
-  const primeiroDiaMes = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1), [hoje]);
+
+  // ✅ primeiro dia do mês anterior (cobre 2 meses: mês anterior + mês atual até hoje)
+  const primeiroDiaPeriodo = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1), [hoje]);
 
   // Estados
-  const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
+  const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaPeriodo));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
   const [userSession, setUserSession] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState(null);
   const [sucesso, setSucesso] = useState(null);
+
+  // ✅ anti-duplo clique (loading por ação)
+  const [loadingGerencial, setLoadingGerencial] = useState(false);
+  const [loadingProntuarios, setLoadingProntuarios] = useState(false);
 
   const [ultimoGerencial, setUltimoGerencial] = useState(null);
   const [sugestoes, setSugestoes] = useState([]);
@@ -199,7 +205,7 @@ export default function DesempenhoDieselAgente() {
 
       // 2. Pega as sugestões
       const { data: sug } = await supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500);
-      
+
       // 3. Pega os acompanhamentos que AINDA NÃO FORAM CONCLUÍDOS
       const { data: acompanhamentos } = await supabase
         .from("diesel_acompanhamentos")
@@ -324,6 +330,9 @@ export default function DesempenhoDieselAgente() {
   // AÇÕES
   // ---------------------------------------------------------------------------
   const dispararGerencial = async () => {
+    if (loadingGerencial) return; // ✅ anti-duplo clique
+    setLoadingGerencial(true);
+
     setErro(null);
     setSucesso(null);
     try {
@@ -353,16 +362,23 @@ export default function DesempenhoDieselAgente() {
       setTimeout(carregarTela, 2000);
     } catch (err) {
       setErro(err?.message || String(err));
+    } finally {
+      if (!mountedRef.current) return;
+      setLoadingGerencial(false);
     }
   };
 
   const gerarFormulariosSelecionados = async () => {
+    if (loadingProntuarios) return; // ✅ anti-duplo clique
+    setLoadingProntuarios(true);
+
     setErro(null);
     setSucesso(null);
 
     const selecionados = sugestoes.filter((r) => selected[r.motorista_chapa]);
     if (!selecionados.length) {
       setErro("Selecione pelo menos 1 motorista.");
+      setLoadingProntuarios(false);
       return;
     }
 
@@ -404,6 +420,9 @@ export default function DesempenhoDieselAgente() {
       setTimeout(carregarTela, 2500);
     } catch (err) {
       setErro(err?.message || String(err));
+    } finally {
+      if (!mountedRef.current) return;
+      setLoadingProntuarios(false);
     }
   };
 
@@ -411,10 +430,10 @@ export default function DesempenhoDieselAgente() {
   // CHECKBOX
   // ---------------------------------------------------------------------------
   const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
-  
+
   // Atualizado para ignorar os checkboxes bloqueados no "Selecionar Todos"
   const allChecked = useMemo(() => {
-    const disponiveis = sugestoes.filter(r => !r.status_atual);
+    const disponiveis = sugestoes.filter((r) => !r.status_atual);
     return disponiveis.length > 0 && disponiveis.every((r) => selected[r.motorista_chapa]);
   }, [sugestoes, selected]);
 
@@ -429,7 +448,7 @@ export default function DesempenhoDieselAgente() {
       setSelected(m);
     }
   };
-  
+
   const toggleOne = (chapa) => setSelected((p) => ({ ...p, [chapa]: !p[chapa] }));
 
   // ---------------------------------------------------------------------------
@@ -546,13 +565,13 @@ export default function DesempenhoDieselAgente() {
           </div>
           <button
             onClick={dispararGerencial}
-            disabled={!validarPeriodo()}
+            disabled={!validarPeriodo() || loadingGerencial}
             className={clsx(
               "w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm transition-colors",
               "bg-cyan-600 text-white hover:bg-cyan-700 disabled:bg-slate-300"
             )}
           >
-            <FaPlay /> DISPARAR RELATÓRIO
+            <FaPlay className={clsx(loadingGerencial && "animate-spin")} /> {loadingGerencial ? "ENVIANDO..." : "DISPARAR RELATÓRIO"}
           </button>
         </div>
       </div>
@@ -570,13 +589,16 @@ export default function DesempenhoDieselAgente() {
             </div>
             <button
               onClick={gerarFormulariosSelecionados}
-              disabled={selectedCount === 0}
+              disabled={selectedCount === 0 || loadingProntuarios}
               className={clsx(
-                "px-4 py-2 rounded-xl font-extrabold text-sm transition-colors",
-                selectedCount === 0 ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                "px-4 py-2 rounded-xl font-extrabold text-sm transition-colors inline-flex items-center gap-2",
+                selectedCount === 0 || loadingProntuarios
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700"
               )}
             >
-              Gerar formulários
+              <FaSync className={clsx(loadingProntuarios && "animate-spin")} />
+              {loadingProntuarios ? "GERANDO..." : "Gerar formulários"}
             </button>
           </div>
         </div>
@@ -603,11 +625,12 @@ export default function DesempenhoDieselAgente() {
             <tbody className="divide-y">
               {sortedSugestoes.map((r) => {
                 const isOcupado = !!r.status_atual;
-                const statusFormatado = r.status_atual === "AGUARDANDO_INSTRUTOR" 
-                  ? "AGUARDANDO INSTRUTOR" 
-                  : r.status_atual === "EM_MONITORAMENTO" 
-                  ? "EM MONITORAMENTO" 
-                  : r.status_atual;
+                const statusFormatado =
+                  r.status_atual === "AGUARDANDO_INSTRUTOR"
+                    ? "AGUARDANDO INSTRUTOR"
+                    : r.status_atual === "EM_MONITORAMENTO"
+                    ? "EM MONITORAMENTO"
+                    : r.status_atual;
 
                 return (
                   <tr key={r.motorista_chapa} className="hover:bg-slate-50">

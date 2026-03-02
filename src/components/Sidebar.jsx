@@ -35,16 +35,22 @@ import { AuthContext } from "../context/AuthContext";
    ROTAS
 ========================= */
 
-// Rotas Diesel
+// Desempenho Diesel (módulo atual)
 const DIESEL_ROUTES = {
   lancamento: "/desempenho-lancamento",
   resumo: "/desempenho-diesel-resumo",
   acompanhamento: "/desempenho-diesel-acompanhamento",
-  tratativas: "/desempenho-diesel-tratativas", // Atuando como a Central de Diesel
   agente: "/desempenho-diesel-agente",
+  // ❌ NÃO usar mais como “central”:
+  // tratativas: "/desempenho-diesel-tratativas",
 };
 
-// Rotas PCM (ABA)
+// ✅ Tratativas Diesel (módulo separado - novo trio)
+const DIESEL_TRATATIVAS_ROUTES = {
+  central: "/diesel-tratativas",
+};
+
+// Rotas PCM
 const PCM_ROUTES = {
   resumo: "/pcm-resumo",
   inicio: "/pcm-inicio",
@@ -52,7 +58,7 @@ const PCM_ROUTES = {
 };
 
 /* =========================
-   FAROL TÁTICO (BOTÃO)
+   FAROL TÁTICO
 ========================= */
 const NIVEIS_LIBERADOS_FAROL = new Set(["Gestor", "Administrador", "RH"]);
 const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
@@ -93,21 +99,26 @@ const ACCESS = {
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
 
-    // Diesel
+    // Desempenho Diesel (módulo atual)
     ...Object.values(DIESEL_ROUTES),
+
+    // ✅ Tratativas Diesel (módulo separado)
+    ...Object.values(DIESEL_TRATATIVAS_ROUTES),
 
     // Checklists
     "/checklists",
   ],
 
   RH: [
-    "/", 
+    "/",
     "/tratativas-resumo",
-    "/central", 
-    "/tratativas-rh", 
+    "/central",
+    "/tratativas-rh",
     "/avarias-resumo",
-    "/cobrancas", 
-    DIESEL_ROUTES.tratativas, // ✅ RH agora tem acesso à Central de Tratativas de Diesel
+    "/cobrancas",
+
+    // ✅ Tratativas Diesel (módulo separado)
+    DIESEL_TRATATIVAS_ROUTES.central,
   ],
 
   Tratativa: ["/inicio-basico", "/solicitar", "/central", "/cobrancas"],
@@ -142,7 +153,12 @@ const ACCESS = {
     "/km-rodado",
   ],
 
-  Instrutor: ["/inicio-basico", ...Object.values(DIESEL_ROUTES)],
+  Instrutor: [
+    "/inicio-basico",
+    ...Object.values(DIESEL_ROUTES),
+    // ✅ Tratativas Diesel (módulo separado)
+    DIESEL_TRATATIVAS_ROUTES.central,
+  ],
 };
 
 function canSee(user, path) {
@@ -222,8 +238,9 @@ export default function Sidebar() {
           { path: DIESEL_ROUTES.agente, label: "Agente Diesel", icon: <FaRobot /> },
           { path: DIESEL_ROUTES.lancamento, label: "Lançamento Manual", icon: <FaPenSquare /> },
           { path: DIESEL_ROUTES.acompanhamento, label: "Acompanhamento", icon: <FaSearch /> },
-          // ✅ Ajustado rótulo para "Central" apontando para desempenho-diesel-tratativas
-          { path: DIESEL_ROUTES.tratativas, label: "Central", icon: <FaListAlt /> },
+
+          // ✅ NOVO: módulo separado
+          { path: DIESEL_TRATATIVAS_ROUTES.central, label: "Tratativas (Central)", icon: <FaListAlt /> },
         ],
       },
 

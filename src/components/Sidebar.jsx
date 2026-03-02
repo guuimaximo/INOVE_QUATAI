@@ -142,6 +142,9 @@ const ACCESS = {
     "/sos-dashboard",
     "/km-rodado",
   ],
+
+  // ✅ NOVO: Instrutor (somente Desempenho Diesel)
+  Instrutor: ["/inicio-basico", ...Object.values(DIESEL_ROUTES)],
 };
 
 // helper de acesso
@@ -170,6 +173,7 @@ export default function Sidebar() {
   const isGestor = user?.nivel === "Gestor";
   const isManutencao = user?.nivel === "Manutenção";
   const isRH = user?.nivel === "RH";
+  const isInstrutor = user?.nivel === "Instrutor"; // ✅ NOVO
 
   // Regra de Visualização do Dashboard Principal ("/")
   const showInicioExecutivo = isAdmin || isGestor || isRH;
@@ -244,9 +248,7 @@ export default function Sidebar() {
       ],
 
       // ✅ NOVO: Checklists (aba simples)
-      checklists: [
-        { path: "/checklists", label: "Central", icon: <FaClipboardCheck /> },
-      ],
+      checklists: [{ path: "/checklists", label: "Central", icon: <FaClipboardCheck /> }],
 
       sos: [
         { path: "/sos-solicitacao", label: "Solicitação", icon: <FaPenSquare /> },
@@ -279,7 +281,8 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
-  const showDesempenhoDiesel = isAdmin || isGestor;
+  // ✅ Instrutor vê apenas Diesel (o resto fica escondido por essas flags + canSee)
+  const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor;
   const showPCM = isAdmin || isGestor || isManutencao;
 
   const showTratativas = links.tratativas.some((l) => {

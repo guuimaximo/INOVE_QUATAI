@@ -1,9 +1,7 @@
 // src/pages/Usuarios.jsx
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import {
-  FaUserShield, FaUserCheck, FaUserTimes, FaSync
-} from "react-icons/fa";
+import { FaUserShield, FaUserCheck, FaUserTimes, FaSync } from "react-icons/fa";
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
@@ -61,9 +59,10 @@ export default function Usuarios() {
   }
 
   // 🔍 Filtro por nome ou login
-  const filtrados = usuarios.filter((u) =>
-    (u.nome || "").toLowerCase().includes(busca.toLowerCase()) ||
-    (u.login || "").toLowerCase().includes(busca.toLowerCase())
+  const filtrados = usuarios.filter(
+    (u) =>
+      (u.nome || "").toLowerCase().includes(busca.toLowerCase()) ||
+      (u.login || "").toLowerCase().includes(busca.toLowerCase())
   );
 
   return (
@@ -119,6 +118,7 @@ export default function Usuarios() {
                   <td className="py-2 px-4">{u.id}</td>
                   <td className="py-2 px-4">{u.nome}</td>
                   <td className="py-2 px-4">{u.login}</td>
+
                   <td className="py-2 px-4 text-center">
                     <select
                       value={u.nivel || "Pendente"}
@@ -129,13 +129,16 @@ export default function Usuarios() {
                       <option value="CCO">CCO</option>
                       <option value="Manutenção">Manutenção</option>
                       <option value="Tratativa">Tratativa</option>
-                      {/* 👇 ADICIONADO AQUI 👇 */}
+
+                      {/* ✅ NOVO: Instrutor */}
+                      <option value="Instrutor">Instrutor</option>
+
                       <option value="RH">RH</option>
-                      {/* 👆 ADICIONADO AQUI 👆 */}
                       <option value="Gestor">Gestor</option>
                       <option value="Administrador">Administrador</option>
                     </select>
                   </td>
+
                   <td className="py-2 px-4 text-center">
                     {u.ativo ? (
                       <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">
@@ -147,17 +150,17 @@ export default function Usuarios() {
                       </span>
                     )}
                   </td>
+
                   <td className="py-2 px-4 text-center flex justify-center gap-3">
                     <button
                       onClick={() => alternarAtivo(u.id, u.ativo)}
                       className={`${
-                        u.ativo
-                          ? "bg-red-500 hover:bg-red-600"
-                          : "bg-green-500 hover:bg-green-600"
+                        u.ativo ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"
                       } text-white px-3 py-1 rounded flex items-center gap-1`}
                     >
                       {u.ativo ? <FaUserTimes /> : <FaUserCheck />}
                     </button>
+
                     <button
                       onClick={() => atualizarNivel(u.id, "Administrador")}
                       className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded flex items-center gap-1"

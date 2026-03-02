@@ -12,7 +12,7 @@ import TratativasResumo from "./pages/TratativasResumo";
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
 import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
-import TratativasRH from "./pages/TratativasRH"; 
+import TratativasRH from "./pages/TratativasRH";
 
 import LancarAvaria from "./pages/LancarAvaria";
 import CobrancasAvarias from "./pages/CobrancasAvarias";
@@ -30,7 +30,7 @@ import KMRodado from "./pages/KMRodado";
 
 import PCMInicio from "./pages/PCMInicio";
 import PCMDiario from "./pages/PCMDiario";
-import PCMResumo from "./pages/PCMResumo"; 
+import PCMResumo from "./pages/PCMResumo";
 
 import Usuarios from "./pages/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
@@ -44,9 +44,10 @@ import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
 import ChecklistCentral from "./pages/ChecklistCentral";
 
-// Importações das novas telas de Diesel
+// ✅ Módulo separado Diesel (novo trio)
 import Diesel_tratativas_central from "./pages/Diesel_tratativas_central";
 import Diesel_Tratativas_tratar from "./pages/Diesel_Tratativas_tratar";
+import Diesel_Tratativas_consultar from "./pages/Diesel_Tratativas_consultar"; // ✅ CRIAR/IMPORTAR
 
 import { useContext } from "react";
 import { AuthContext } from "./context/AuthContext";
@@ -78,7 +79,7 @@ export default function App() {
           <Route path="/inove" element={<HomeDecider />} />
           <Route path="/inicio-rapido" element={<InicioRapido />} />
 
-          {/* Desempenho Diesel */}
+          {/* Desempenho Diesel (seu módulo atual) */}
           <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
           <Route path="/desempenho-diesel-resumo" element={<DesempenhoDieselResumo />} />
           <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
@@ -86,6 +87,11 @@ export default function App() {
           <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
           <Route path="/desempenho-diesel-checkpoint/:id" element={<DesempenhoDieselCheckpoint />} />
           <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
+
+          {/* ✅ Tratativas Diesel (módulo separado - novo trio) */}
+          <Route path="/diesel-tratativas" element={<Diesel_tratativas_central />} />
+          <Route path="/diesel-tratar/:id" element={<Diesel_Tratativas_tratar />} />
+          <Route path="/diesel-consultar/:id" element={<Diesel_Tratativas_consultar />} />
 
           {/* PCM */}
           <Route path="/pcm-inicio" element={<PCMInicio />} />
@@ -102,10 +108,6 @@ export default function App() {
           <Route path="/consultar/:id" element={<ConsultarTratativa />} />
           <Route path="/solicitar" element={<SolicitacaoTratativa />} />
           <Route path="/tratativas-rh" element={<TratativasRH />} />
-
-          {/* Novas Rotas: Atas Diesel */}
-          <Route path="/diesel-consultar/:id" element={<Diesel_tratativas_central />} />
-          <Route path="/diesel-tratar/:id" element={<Diesel_Tratativas_tratar />} />
 
           {/* Avarias */}
           <Route path="/lancar-avaria" element={<LancarAvaria />} />

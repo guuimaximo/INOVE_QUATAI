@@ -42,22 +42,15 @@ import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
 import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
 import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
-// Checklist Central
 import ChecklistCentral from "./pages/ChecklistCentral";
 
-// ✅ Importações das novas telas de Diesel
+// Importações das novas telas de Diesel
 import Diesel_tratativas_central from "./pages/Diesel_tratativas_central";
 import Diesel_Tratativas_tratar from "./pages/Diesel_Tratativas_tratar";
-// Nota: Diesel_tratativas_consultar é um Modal (recebe aberto, grupo, onClose), logo não recebe rota no App.jsx.
 
 import { useContext } from "react";
 import { AuthContext } from "./context/AuthContext";
 
-/**
- * HOME DECIDER:
- * - Gestor/Adm: abre Dashboard completo
- * - Qualquer outro: abre InicioRapido
- */
 function HomeDecider() {
   const { user } = useContext(AuthContext);
 
@@ -72,10 +65,8 @@ export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        {/* 🔓 Login público */}
         <Route path="/login" element={<Login />} />
 
-        {/* 🔐 Área protegida */}
         <Route
           element={
             <RequireAuth>
@@ -83,7 +74,6 @@ export default function App() {
             </RequireAuth>
           }
         >
-          {/* "/" agora é decidido pelo nível */}
           <Route path="/" element={<HomeDecider />} />
           <Route path="/inove" element={<HomeDecider />} />
           <Route path="/inicio-rapido" element={<InicioRapido />} />
@@ -102,7 +92,7 @@ export default function App() {
           <Route path="/pcm-resumo" element={<PCMResumo />} />
           <Route path="/pcm-diario/:id" element={<PCMDiario />} />
 
-          {/* Checklists (Tamo no Zap) */}
+          {/* Checklists */}
           <Route path="/checklists" element={<ChecklistCentral />} />
 
           {/* Tratativas Gerais */}
@@ -113,7 +103,7 @@ export default function App() {
           <Route path="/solicitar" element={<SolicitacaoTratativa />} />
           <Route path="/tratativas-rh" element={<TratativasRH />} />
 
-          {/* ✅ Novas Rotas: Atas Diesel */}
+          {/* Novas Rotas: Atas Diesel */}
           <Route path="/diesel-consultar/:id" element={<Diesel_tratativas_central />} />
           <Route path="/diesel-tratar/:id" element={<Diesel_Tratativas_tratar />} />
 
@@ -134,11 +124,10 @@ export default function App() {
           {/* KM Rodado */}
           <Route path="/km-rodado" element={<KMRodado />} />
 
-          {/* ⚙️ Configurações */}
+          {/* Configurações */}
           <Route path="/usuarios" element={<Usuarios />} />
         </Route>
 
-        {/* 🚫 Redireciona rotas inexistentes */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>

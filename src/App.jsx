@@ -44,10 +44,10 @@ import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
 import ChecklistCentral from "./pages/ChecklistCentral";
 
-// ✅ Módulo separado Diesel (novo trio)
-import Diesel_tratativas_central from "./pages/Diesel_tratativas_central";
-import Diesel_Tratativas_tratar from "./pages/Diesel_Tratativas_tratar";
-import Diesel_Tratativas_consultar from "./pages/Diesel_Tratativas_consultar"; // ✅ CRIAR/IMPORTAR
+// ✅ Módulo separado Diesel (NOMES REAIS dos arquivos do seu print)
+import Desempenho_Diesel_Tratativas_Central from "./pages/Desempenho_Diesel_Tratativas_Central";
+import DieselTratarTratativa from "./pages/DieselTratarTratativa";
+import DieselConsultarTratativa from "./pages/DieselConsultarTratativa";
 
 import { useContext } from "react";
 import { AuthContext } from "./context/AuthContext";
@@ -79,19 +79,25 @@ export default function App() {
           <Route path="/inove" element={<HomeDecider />} />
           <Route path="/inicio-rapido" element={<InicioRapido />} />
 
-          {/* Desempenho Diesel (seu módulo atual) */}
+          {/* Desempenho Diesel (módulo atual) */}
           <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
           <Route path="/desempenho-diesel-resumo" element={<DesempenhoDieselResumo />} />
-          <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
+          <Route
+            path="/desempenho-diesel-acompanhamento"
+            element={<DesempenhoDieselAcompanhamento />}
+          />
           <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
           <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
           <Route path="/desempenho-diesel-checkpoint/:id" element={<DesempenhoDieselCheckpoint />} />
           <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
 
           {/* ✅ Tratativas Diesel (módulo separado - novo trio) */}
-          <Route path="/diesel-tratativas" element={<Diesel_tratativas_central />} />
-          <Route path="/diesel-tratar/:id" element={<Diesel_Tratativas_tratar />} />
-          <Route path="/diesel-consultar/:id" element={<Diesel_Tratativas_consultar />} />
+          <Route
+            path="/diesel-tratativas"
+            element={<Desempenho_Diesel_Tratativas_Central />}
+          />
+          <Route path="/diesel-tratar/:id" element={<DieselTratarTratativa />} />
+          <Route path="/diesel-consultar/:id" element={<DieselConsultarTratativa />} />
 
           {/* PCM */}
           <Route path="/pcm-inicio" element={<PCMInicio />} />

@@ -24,7 +24,6 @@ import {
   FaGasPump,
   FaChartBar,
   FaSearch,
-  FaClipboardCheck as FaTratativasIcon,
   FaRobot,
   FaChartPie,
 } from "react-icons/fa";
@@ -41,7 +40,7 @@ const DIESEL_ROUTES = {
   lancamento: "/desempenho-lancamento",
   resumo: "/desempenho-diesel-resumo",
   acompanhamento: "/desempenho-diesel-acompanhamento",
-  tratativas: "/desempenho-diesel-tratativas",
+  tratativas: "/desempenho-diesel-tratativas", // Atuando como a Central de Diesel
   agente: "/desempenho-diesel-agente",
 };
 
@@ -108,7 +107,7 @@ const ACCESS = {
     "/tratativas-rh", 
     "/avarias-resumo",
     "/cobrancas", 
-    DIESEL_ROUTES.tratativas, // ✅ RH agora tem acesso às tratativas de Diesel
+    DIESEL_ROUTES.tratativas, // ✅ RH agora tem acesso à Central de Tratativas de Diesel
   ],
 
   Tratativa: ["/inicio-basico", "/solicitar", "/central", "/cobrancas"],
@@ -223,7 +222,8 @@ export default function Sidebar() {
           { path: DIESEL_ROUTES.agente, label: "Agente Diesel", icon: <FaRobot /> },
           { path: DIESEL_ROUTES.lancamento, label: "Lançamento Manual", icon: <FaPenSquare /> },
           { path: DIESEL_ROUTES.acompanhamento, label: "Acompanhamento", icon: <FaSearch /> },
-          { path: DIESEL_ROUTES.tratativas, label: "Tratativas", icon: <FaTratativasIcon /> },
+          // ✅ Ajustado rótulo para "Central" apontando para desempenho-diesel-tratativas
+          { path: DIESEL_ROUTES.tratativas, label: "Central", icon: <FaListAlt /> },
         ],
       },
 
@@ -275,7 +275,6 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
-  // ✅ RH agora também vê o menu principal de Diesel (para acessar Tratativas)
   const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
   const showPCM = isAdmin || isGestor || isManutencao;
 

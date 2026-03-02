@@ -73,7 +73,7 @@ const ACCESS = {
     "/solicitar",
     "/central",
     "/tratativas-resumo",
-    "/tratativas-rh", // ✅ NOVO (Gestor vê RH)
+    "/tratativas-rh",
 
     "/lancar-avaria",
     "/avarias-em-revisao",
@@ -97,18 +97,18 @@ const ACCESS = {
     // Diesel
     ...Object.values(DIESEL_ROUTES),
 
-    // ✅ Checklists
+    // Checklists
     "/checklists",
   ],
 
-  // ✅ NÍVEL RH
   RH: [
-    "/", // Dashboard Principal (Resumo Geral)
+    "/", 
     "/tratativas-resumo",
-    "/central", // Central de Tratativas
-    "/tratativas-rh", // ✅ NOVO (RH vê a nova tela)
+    "/central", 
+    "/tratativas-rh", 
     "/avarias-resumo",
-    "/cobrancas", // Cobranças de Avarias
+    "/cobrancas", 
+    DIESEL_ROUTES.tratativas, // ✅ RH agora tem acesso às tratativas de Diesel
   ],
 
   Tratativa: ["/inicio-basico", "/solicitar", "/central", "/cobrancas"],
@@ -143,11 +143,9 @@ const ACCESS = {
     "/km-rodado",
   ],
 
-  // ✅ NOVO: Instrutor (somente Desempenho Diesel)
   Instrutor: ["/inicio-basico", ...Object.values(DIESEL_ROUTES)],
 };
 
-// helper de acesso
 function canSee(user, path) {
   if (!user?.nivel) return false;
   if (user.nivel === "Administrador") return true;
@@ -162,7 +160,7 @@ export default function Sidebar() {
   const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
-  const [checklistsOpen, setChecklistsOpen] = useState(false); // ✅ NOVO
+  const [checklistsOpen, setChecklistsOpen] = useState(false);
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
@@ -173,13 +171,11 @@ export default function Sidebar() {
   const isGestor = user?.nivel === "Gestor";
   const isManutencao = user?.nivel === "Manutenção";
   const isRH = user?.nivel === "RH";
-  const isInstrutor = user?.nivel === "Instrutor"; // ✅ NOVO
+  const isInstrutor = user?.nivel === "Instrutor";
 
-  // Regra de Visualização do Dashboard Principal ("/")
   const showInicioExecutivo = isAdmin || isGestor || isRH;
   const showInicioBasico = !showInicioExecutivo;
 
-  // Botão Farol
   const podeVerFarol = useMemo(() => {
     const nivel = String(user?.nivel || "").trim();
     return NIVEIS_LIBERADOS_FAROL.has(nivel);
@@ -202,7 +198,6 @@ export default function Sidebar() {
     } catch (e) {
       console.warn("Falha ao salvar farol_user:", e);
     }
-
     window.location.href = FAROL_URL;
   }
 
@@ -247,7 +242,6 @@ export default function Sidebar() {
         { path: "/cobrancas", label: "Cobranças", icon: <FaMoneyBill /> },
       ],
 
-      // ✅ NOVO: Checklists (aba simples)
       checklists: [{ path: "/checklists", label: "Central", icon: <FaClipboardCheck /> }],
 
       sos: [
@@ -281,8 +275,8 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
-  // ✅ Instrutor vê apenas Diesel (o resto fica escondido por essas flags + canSee)
-  const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor;
+  // ✅ RH agora também vê o menu principal de Diesel (para acessar Tratativas)
+  const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
   const showPCM = isAdmin || isGestor || isManutencao;
 
   const showTratativas = links.tratativas.some((l) => {
@@ -296,9 +290,7 @@ export default function Sidebar() {
     return canSee(user, l.path);
   });
 
-  // ✅ Checklists: Admin vê tudo, Gestor vê (outros não)
   const showChecklists = (isAdmin || isGestor) && canSee(user, "/checklists");
-
   const showSOS = links.sos.some((l) => canSee(user, l.path));
   const showConfig = isAdmin;
 
@@ -417,10 +409,7 @@ export default function Sidebar() {
                 {links.tratativas.map((link) => {
                   if (link.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
                   if (link.onlyAdminGestorRH && !(isAdmin || isGestor || isRH)) return null;
-
-                  if (!link.onlyAdminGestor && !link.onlyAdminGestorRH && !canSee(user, link.path))
-                    return null;
-
+                  if (!link.onlyAdminGestor && !link.onlyAdminGestorRH && !canSee(user, link.path)) return null;
                   if (user?.nivel === "RH" && !canSee(user, link.path)) return null;
 
                   return (
@@ -464,7 +453,6 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* ✅ CHECKLISTS (ABA) — abaixo de Avarias */}
         {showChecklists && (
           <>
             <button

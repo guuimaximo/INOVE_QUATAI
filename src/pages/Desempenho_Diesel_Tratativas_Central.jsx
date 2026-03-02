@@ -4,6 +4,10 @@
 //   tratativas -> diesel_tratativas
 //   tratativas_detalhes -> diesel_tratativas_detalhes
 // - Mantém: SLA por prioridade, viewMode, contadores head, ordenação client-side
+// ✅ Ajustes Diesel:
+// - Remove filtro e coluna de Setor (não faz sentido em Diesel)
+// - Topo com identificação clara "Desempenho Diesel" para não confundir
+// - Ajusta rotas para bater com o App: /diesel-consultar/:id e /diesel-tratar/:id
 
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -79,14 +83,10 @@ export default function Desempenho_Diesel_Tratativas_Central() {
     busca: "",
     dataInicio: "",
     dataFim: "",
-    setor: "",
     status: "",
     prioridade: "",
   });
   const [loading, setLoading] = useState(false);
-
-  // Setores dinâmicos (mesma lógica do disciplina)
-  const [setores, setSetores] = useState([]);
 
   // Botão topo
   const [viewMode, setViewMode] = useState(VIEW.OPEN_ONLY);
@@ -112,11 +112,10 @@ export default function Desempenho_Diesel_Tratativas_Central() {
 
     if (f.busca) {
       query = query.or(
-        `motorista_nome.ilike.%${f.busca}%,motorista_chapa.ilike.%${f.busca}%,descricao.ilike.%${f.busca}%`
+        `motorista_nome.ilike.%${f.busca}%,motorista_chapa.ilike.%${f.busca}%,descricao.ilike.%${f.busca}%,tipo_ocorrencia.ilike.%${f.busca}%`
       );
     }
 
-    if (f.setor) query = query.eq("setor_origem", f.setor);
     if (f.status) query = query.ilike("status", `%${f.status}%`);
     if (f.prioridade) query = query.eq("prioridade", f.prioridade);
 
@@ -129,41 +128,6 @@ export default function Desempenho_Diesel_Tratativas_Central() {
     }
 
     return query;
-  }
-
-  async function carregarSetoresFiltro() {
-    try {
-      const { data: setoresData, error: eSet } = await supabase
-        .from("setores")
-        .select("nome")
-        .order("nome", { ascending: true });
-
-      if (!eSet && Array.isArray(setoresData) && setoresData.length > 0) {
-        const lista = setoresData
-          .map((s) => String(s?.nome || "").trim())
-          .filter(Boolean);
-        setSetores(Array.from(new Set(lista)));
-        return;
-      }
-
-      // fallback: setores presentes na tabela diesel_tratativas
-      const { data: trat, error: eTrat } = await supabase
-        .from("diesel_tratativas")
-        .select("setor_origem")
-        .not("setor_origem", "is", null)
-        .limit(10000);
-
-      if (eTrat) throw eTrat;
-
-      const lista2 = (trat || [])
-        .map((r) => String(r?.setor_origem || "").trim())
-        .filter(Boolean);
-
-      setSetores(Array.from(new Set(lista2)).sort((a, b) => a.localeCompare(b)));
-    } catch (err) {
-      console.error("Erro carregando setores do filtro (diesel):", err);
-      setSetores([]);
-    }
   }
 
   async function carregarLista() {
@@ -216,7 +180,6 @@ export default function Desempenho_Diesel_Tratativas_Central() {
   }
 
   useEffect(() => {
-    carregarSetoresFiltro();
     aplicar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -226,7 +189,6 @@ export default function Desempenho_Diesel_Tratativas_Central() {
       busca: "",
       dataInicio: "",
       dataFim: "",
-      setor: "",
       status: "",
       prioridade: "",
     });
@@ -301,9 +263,6 @@ export default function Desempenho_Diesel_Tratativas_Central() {
       if (sort.key === "tipo_ocorrencia") {
         return stringComparator((x) => x?.tipo_ocorrencia, sort.dir, a, b);
       }
-      if (sort.key === "setor_origem") {
-        return stringComparator((x) => x?.setor_origem, sort.dir, a, b);
-      }
 
       return 0;
     });
@@ -371,6 +330,27 @@ export default function Desempenho_Diesel_Tratativas_Central() {
 
   return (
     <div className="max-w-7xl mx-auto p-6">
+      {/* ✅ Banner Diesel (pra não confundir com Central Geral) */}
+      <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <div className="text-xs font-semibold tracking-wide text-amber-900">
+              DESEMPENHO DIESEL
+            </div>
+            <div className="text-lg font-bold text-amber-950">
+              Central de Tratativas – Diesel
+            </div>
+            <div className="text-sm text-amber-900/80">
+              KM/L • Condução • Linha • Prefixo • Motorista • Evidências
+            </div>
+          </div>
+
+          <div className="text-xs text-amber-900/70">
+            Use esta central apenas para tratativas ligadas ao consumo / condução.
+          </div>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between gap-3 mb-4">
         <h1 className="text-2xl font-bold text-gray-700">Tratativas Diesel</h1>
 
@@ -405,10 +385,10 @@ export default function Desempenho_Diesel_Tratativas_Central() {
       <div className="bg-white shadow rounded-lg p-4 mb-6">
         <h2 className="text-lg font-semibold mb-3">Filtros</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <input
             type="text"
-            placeholder="Buscar (nome, chapa, descrição...)"
+            placeholder="Buscar (nome, chapa, descrição, ocorrência...)"
             value={filtros.busca}
             onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
             className="border rounded-md px-3 py-2"
@@ -427,19 +407,6 @@ export default function Desempenho_Diesel_Tratativas_Central() {
             onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
             className="border rounded-md px-3 py-2"
           />
-
-          <select
-            value={filtros.setor}
-            onChange={(e) => setFiltros({ ...filtros, setor: e.target.value })}
-            className="border rounded-md px-3 py-2 bg-white"
-          >
-            <option value="">Todos os Setores</option>
-            {setores.map((nome) => (
-              <option key={nome} value={nome}>
-                {nome}
-              </option>
-            ))}
-          </select>
 
           <select
             value={filtros.prioridade}
@@ -527,27 +494,38 @@ export default function Desempenho_Diesel_Tratativas_Central() {
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
             <tr>
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("created_at")}>
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("created_at")}
+              >
                 Data de Abertura <SortIcon colKey="created_at" />
               </th>
 
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("motorista_nome")}>
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("motorista_nome")}
+              >
                 Motorista <SortIcon colKey="motorista_nome" />
               </th>
 
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("tipo_ocorrencia")}>
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("tipo_ocorrencia")}
+              >
                 Ocorrência <SortIcon colKey="tipo_ocorrencia" />
               </th>
 
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("prioridade")}>
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("prioridade")}
+              >
                 Prioridade <SortIcon colKey="prioridade" />
               </th>
 
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("setor_origem")}>
-                Setor <SortIcon colKey="setor_origem" />
-              </th>
-
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("status")}>
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("status")}
+              >
                 Status <SortIcon colKey="status" />
               </th>
 
@@ -558,13 +536,13 @@ export default function Desempenho_Diesel_Tratativas_Central() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" className="text-center p-4 text-gray-500">
+                <td colSpan="6" className="text-center p-4 text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : tratativasOrdenadas.length === 0 ? (
               <tr>
-                <td colSpan="7" className="text-center p-4 text-gray-500">
+                <td colSpan="6" className="text-center p-4 text-gray-500">
                   Nenhuma tratativa encontrada.
                 </td>
               </tr>
@@ -582,21 +560,19 @@ export default function Desempenho_Diesel_Tratativas_Central() {
 
                     <td className="py-2 px-3">{badgePrioridade(t.prioridade)}</td>
 
-                    <td className="py-2 px-3 text-gray-700">{t.setor_origem || "-"}</td>
-
                     <td className="py-2 px-3">{badgeStatus(t)}</td>
 
                     <td className="py-2 px-3">
                       {concluida ? (
                         <button
-                          onClick={() => navigate(`/diesel/consultar/${t.id}`)}
+                          onClick={() => navigate(`/diesel-consultar/${t.id}`)}
                           className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600 text-sm"
                         >
                           Consultar
                         </button>
                       ) : (
                         <button
-                          onClick={() => navigate(`/diesel/tratar/${t.id}`)}
+                          onClick={() => navigate(`/diesel-tratar/${t.id}`)}
                           className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
                         >
                           Tratar

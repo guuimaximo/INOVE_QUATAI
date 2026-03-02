@@ -1,5 +1,6 @@
 // src/pages/DesempenhoLancamento.jsx
 import { useEffect, useMemo, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
 import CampoPrefixo from "../components/CampoPrefixo";
@@ -11,17 +12,17 @@ const API_BASE = "https://agentediesel.onrender.com"; // ✅ API Python
 const TIPO_PRONTUARIO = "prontuarios_acompanhamento";
 const BUCKET_RELATORIOS = "relatorios";
 
-const MOTIVOS = [
-  "KM/L abaixo da meta",
-  "Tendência de queda",
-  "Comparativo com cluster",
-  "Outro",
-];
+const MOTIVOS = ["KM/L abaixo da meta", "Tendência de queda", "Comparativo com cluster", "Outro"];
+
+const DESTINOS = {
+  ACOMP: "ACOMPANHAMENTO",
+  TRAT: "TRATATIVA",
+};
+
+const PRIORIDADES = ["Gravíssima", "Alta", "Média", "Baixa"];
 
 function isUuid(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    String(v || "")
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || ""));
 }
 
 function safeNumber(v) {
@@ -63,6 +64,7 @@ async function uploadManyToStorage({ files, bucket, folder }) {
     const safeName = String(f.name || `arquivo_${i}`)
       .replaceAll(" ", "_")
       .replace(/[^\w.\-()]/g, "");
+
     const path = `${folder}/${ts}_${i}_${safeName}`;
 
     const { error: upErr } = await supabase.storage.from(bucket).upload(path, f, {
@@ -81,10 +83,10 @@ async function uploadManyToStorage({ files, bucket, folder }) {
 
 /**
  * ✅ RESUMO (premiacao_diaria via agentediesel)
- * Esperado do endpoint:
+ * Esperado:
  *  - totais: { dias, km, litros, kml }
- *  - dia: [{ dia, km, litros, kml, linhas:[...], veiculos:[...] }]  ✅ (singular)
- *  - veiculos (opcional): agregação por veiculo (fallback)
+ *  - dia: [{ dia, km, litros, kml, linhas:[...], veiculos:[...] }]
+ *  - veiculos (opcional)
  */
 async function fetchResumoPremiacao({ chapa, inicio, fim }) {
   const qs = new URLSearchParams({
@@ -146,7 +148,7 @@ function parseISODateParts(iso) {
     if (!iso) return null;
     const s = String(iso).trim();
     const [yStr, mStr] = s.split("-");
-    if (!yStr || yStr.length !== 4) return null; // ✅ evita ano 2/20/202
+    if (!yStr || yStr.length !== 4) return null;
     const y = parseInt(yStr, 10);
     const m = parseInt(mStr, 10);
     if (!y || !m) return null;
@@ -201,9 +203,10 @@ function Modal({ open, title, onClose, children }) {
 }
 
 export default function DesempenhoLancamento() {
+  const navigate = useNavigate();
   const { user } = useAuth ? useAuth() : { user: null };
-  const mountedRef = useRef(true);
 
+  const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -218,6 +221,12 @@ export default function DesempenhoLancamento() {
   const [prefixo, setPrefixo] = useState("");
   const [linha, setLinha] = useState("");
   const [cluster, setCluster] = useState("");
+
+  // ✅ NOVO: destino do lançamento (ACOMPANHAMENTO vs TRATATIVA)
+  const [destino, setDestino] = useState(DESTINOS.ACOMP);
+
+  // ✅ (opcional) prioridade da tratativa
+  const [prioridadeTratativa, setPrioridadeTratativa] = useState("Alta");
 
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
   const [motivoOutro, setMotivoOutro] = useState("");
@@ -298,7 +307,6 @@ export default function DesempenhoLancamento() {
 
         setResumoTotais(j?.totais || { dias: 0, km: 0, litros: 0, kml: 0 });
         setResumoVeiculos(Array.isArray(j?.veiculos) ? j.veiculos : []);
-        // ✅ PONTO 1: agora lê j.dia (singular)
         setResumoDias(Array.isArray(j?.dia) ? j.dia : []);
       } catch (e) {
         if (!alive) return;
@@ -317,10 +325,10 @@ export default function DesempenhoLancamento() {
     };
   }, [motorista?.chapa, periodoInicio, periodoFim]);
 
-  // ✅ PONTO 2: meritocracia usa mês do FINAL (periodoFim)
+  // ✅ meritocracia usa mês do FINAL (periodoFim)
   useEffect(() => {
     const chapa = String(motorista?.chapa || "").trim();
-    const parts = parseISODateParts(String(periodoFim || "").trim()); // ✅ mês do final
+    const parts = parseISODateParts(String(periodoFim || "").trim());
 
     if (!chapa || !parts?.mes || !parts?.ano) {
       setMetaErr("");
@@ -373,6 +381,9 @@ export default function DesempenhoLancamento() {
     setEvidAcomp((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  // ✅ Validação adaptativa por DESTINO:
+  // - ACOMPANHAMENTO: exige período (ini/fim) + evidências
+  // - TRATATIVA: exige evidências; período opcional (se quiser obrigar, troque a regra)
   const pronto = useMemo(() => {
     const baseOk =
       (motorista?.chapa || motorista?.nome) &&
@@ -384,16 +395,22 @@ export default function DesempenhoLancamento() {
 
     const motivoOk = String(motivoFinal || "").trim().length > 0;
     const evidOk = (evidAcomp || []).length > 0;
+
     const periodoOk = String(periodoInicio || "").trim() && String(periodoFim || "").trim();
 
-    return motivoOk && evidOk && periodoOk;
-  }, [motorista, prefixo, linha, cluster, motivoFinal, evidAcomp, periodoInicio, periodoFim]);
+    if (destino === DESTINOS.ACOMP) return motivoOk && evidOk && periodoOk;
+    return motivoOk && evidOk; // TRATATIVA
+  }, [motorista, prefixo, linha, cluster, motivoFinal, evidAcomp, periodoInicio, periodoFim, destino]);
 
   function limpar() {
     setMotorista({ chapa: "", nome: "" });
     setPrefixo("");
     setLinha("");
     setCluster("");
+
+    setDestino(DESTINOS.ACOMP);
+    setPrioridadeTratativa("Alta");
+
     setMotivo(MOTIVOS[0]);
     setMotivoOutro("");
 
@@ -424,182 +441,9 @@ export default function DesempenhoLancamento() {
     setProntPdfOpen(false);
   }
 
-  async function lancar() {
-    if (!pronto || saving) return;
-
-    setSaving(true);
-    setErrMsg("");
-    setOkMsg("");
-
-    try {
-      const lancadorLogin = user?.login || user?.email || null;
-      const lancadorNome = user?.nome || null;
-      const lancadorIdNum = user?.id ?? null;
-
-      const chapa = String(motorista?.chapa || "").trim();
-      const nomeMotorista = String(motorista?.nome || "").trim() || null;
-      const ini = String(periodoInicio || "").trim();
-      const fim = String(periodoFim || "").trim();
-
-      if (!chapa) throw new Error("Informe a chapa do motorista.");
-      if (!ini || !fim) throw new Error("Informe o período (início e fim).");
-
-      const folder = `diesel/acompanhamentos/${chapa || "sem_chapa"}/lancamento_${Date.now()}`;
-      const uploaded = await uploadManyToStorage({
-        files: evidAcomp,
-        bucket: "diesel",
-        folder,
-      });
-
-      const evidenciasUrls = uploaded.map((u) => u.publicUrl).filter(Boolean);
-      const obsInit = String(observacaoInicial || "").trim() || null;
-
-      const meritSnap = meritRow
-        ? {
-            motorista: meritRow?.motorista ?? null,
-            linha_com_mais_horas: meritRow?.linha_com_mais_horas ?? null,
-            kml_linha_com_mais_horas: meritRow?.kml_linha_com_mais_horas ?? null,
-            meta_linha: meritRow?.meta_linha ?? null,
-            kml_meta_linha_mais_horas: meritRow?.kml_meta_linha_mais_horas ?? null,
-          }
-        : {};
-
-      const resumoTotaisSnap = resumoTotais || { dias: 0, km: 0, litros: 0, kml: 0 };
-      const resumoDiasSnap = Array.isArray(resumoDias) ? resumoDias : [];
-      const resumoVeiculosSnap = Array.isArray(resumoVeiculos) ? resumoVeiculos : [];
-
-      const payloadLancamento = {
-        motorista_chapa: chapa,
-        motorista_nome: nomeMotorista,
-        prefixo: String(prefixo || "").trim(),
-        linha: String(linha || "").trim(),
-        cluster: String(cluster || "").trim(),
-
-        motivo: motivoFinal,
-        observacao_inicial: obsInit,
-        periodo_inicio: ini,
-        periodo_fim: fim,
-
-        dias_monitoramento: Number(dias) || 10,
-        kml_meta: String(kmlMeta || "").trim() ? safeNumber(kmlMeta) : null,
-
-        evidencias_urls: evidenciasUrls,
-
-        meritocracia: meritSnap,
-        resumo_totais: resumoTotaisSnap,
-        resumo_dias: resumoDiasSnap,
-        resumo_veiculos: resumoVeiculosSnap,
-
-        lancado_por_login: lancadorLogin,
-        lancado_por_nome: lancadorNome,
-        lancado_por_usuario_id: lancadorIdNum ? String(lancadorIdNum) : null,
-
-        metadata: {
-          lancamento_periodo_inicio: ini,
-          lancamento_periodo_fim: fim,
-        },
-      };
-
-      const { data: lanc, error: eL } = await supabase
-        .from("diesel_lancamentos")
-        .insert(payloadLancamento)
-        .select("id")
-        .single();
-
-      if (eL) throw eL;
-
-      const payloadAcomp = {
-        motorista_chapa: chapa,
-        motorista_nome: nomeMotorista,
-        motivo: motivoFinal,
-        status: "A_SER_ACOMPANHADO",
-        dias_monitoramento: Number(dias),
-
-        dt_inicio: new Date().toISOString().slice(0, 10),
-        dt_inicio_monitoramento: null,
-        dt_fim_planejado: null,
-        dt_fim_real: null,
-
-        kml_inicial: null,
-        kml_meta: String(kmlMeta || "").trim() ? safeNumber(kmlMeta) : null,
-        kml_final: null,
-
-        observacao_inicial: obsInit,
-        evidencias_urls: evidenciasUrls,
-
-        instrutor_login: null,
-        instrutor_nome: null,
-        instrutor_id: null,
-
-        tratativa_id: null,
-
-        lancamento_id: lanc.id,
-
-        metadata: {
-          prefixo: String(prefixo || "").trim(),
-          linha: String(linha || "").trim(),
-          cluster: String(cluster || "").trim(),
-
-          lancado_por_login: lancadorLogin,
-          lancado_por_nome: lancadorNome,
-          lancado_por_usuario_id: lancadorIdNum,
-
-          lancamento_periodo_inicio: ini,
-          lancamento_periodo_fim: fim,
-        },
-      };
-
-      const { data: acomp, error: eA } = await supabase
-        .from("diesel_acompanhamentos")
-        .insert(payloadAcomp)
-        .select("id")
-        .single();
-
-      if (eA) throw eA;
-
-      const payloadEvento = {
-        acompanhamento_id: acomp.id,
-        tipo: "LANCAMENTO",
-        observacoes: obsInit ? `${motivoFinal}\n\n${obsInit}` : motivoFinal,
-        evidencias_urls: evidenciasUrls,
-
-        kml: null,
-        periodo_inicio: ini || null,
-        periodo_fim: fim || null,
-
-        criado_por_login: lancadorLogin,
-        criado_por_nome: lancadorNome,
-        criado_por_id: isUuid(user?.id) ? user.id : null,
-
-        extra: {
-          prefixo: String(prefixo || "").trim(),
-          linha: String(linha || "").trim(),
-          cluster: String(cluster || "").trim(),
-          kml_meta: String(kmlMeta || "").trim() ? safeNumber(kmlMeta) : null,
-
-          evidencias_kml_inicial: false,
-
-          lancamento_id: lanc.id,
-          meritocracia: meritSnap,
-          resumo_totais: resumoTotaisSnap,
-          resumo_dias: resumoDiasSnap,
-          resumo_veiculos: resumoVeiculosSnap,
-        },
-      };
-
-      const { error: eE } = await supabase.from("diesel_acompanhamento_eventos").insert(payloadEvento);
-      if (eE) throw eE;
-
-      setOkMsg("Lançamento realizado com sucesso.");
-      limpar();
-    } catch (err) {
-      console.error(err);
-      setErrMsg(err?.message || "Erro ao lançar.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
+  // =====================================================================================
+  // ✅ GERAÇÃO DE PRONTUÁRIO (manual / re-gerar)
+  // =====================================================================================
   async function gerarProntuario() {
     if (prontLoading) return;
 
@@ -644,9 +488,7 @@ export default function DesempenhoLancamento() {
 
       const { data: row, error } = await supabase
         .from("relatorios_gerados")
-        .select(
-          "id, created_at, tipo, status, periodo_inicio, periodo_fim, arquivo_path, arquivo_nome, mime_type, tamanho_bytes, erro_msg"
-        )
+        .select("id, created_at, tipo, status, periodo_inicio, periodo_fim, arquivo_path, arquivo_nome, mime_type, tamanho_bytes, erro_msg")
         .eq("id", data.report_id)
         .single();
 
@@ -675,9 +517,7 @@ export default function DesempenhoLancamento() {
       }
 
       if (!resPdf?.url) {
-        throw new Error(
-          `Não encontrei PDF do prontuário no bucket '${BUCKET_RELATORIOS}'. Path tentado: ${pdfPath}`
-        );
+        throw new Error(`Não encontrei PDF do prontuário no bucket '${BUCKET_RELATORIOS}'. Path tentado: ${pdfPath}`);
       }
 
       if (!mountedRef.current) return;
@@ -702,25 +542,347 @@ export default function DesempenhoLancamento() {
     return !!(chapa && ini && fim);
   }, [motorista?.chapa, periodoInicio, periodoFim]);
 
+  // =====================================================================================
+  // ✅ Lançamento (TRATATIVA vs ACOMPANHAMENTO)
+  // =====================================================================================
+  async function lancar() {
+    if (!pronto || saving) return;
+
+    setSaving(true);
+    setErrMsg("");
+    setOkMsg("");
+
+    try {
+      const lancadorLogin = user?.login || user?.email || null;
+      const lancadorNome = user?.nome || null;
+      const lancadorIdNum = user?.id ?? null;
+
+      const chapa = String(motorista?.chapa || "").trim();
+      const nomeMotorista = String(motorista?.nome || "").trim() || null;
+
+      const ini = String(periodoInicio || "").trim();
+      const fim = String(periodoFim || "").trim();
+
+      if (!chapa) throw new Error("Informe a chapa do motorista.");
+
+      // Se for ACOMP, período é obrigatório
+      if (destino === DESTINOS.ACOMP) {
+        if (!ini || !fim) throw new Error("Informe o período (início e fim).");
+      }
+
+      // Upload evidências (obrigatório nos dois, pela validação)
+      const folder = `diesel/acompanhamentos/${chapa || "sem_chapa"}/lancamento_${Date.now()}`;
+      const uploaded = await uploadManyToStorage({
+        files: evidAcomp,
+        bucket: "diesel",
+        folder,
+      });
+
+      const evidenciasUrls = uploaded.map((u) => u.publicUrl).filter(Boolean);
+      const obsInit = String(observacaoInicial || "").trim() || null;
+
+      const meritSnap = meritRow
+        ? {
+            motorista: meritRow?.motorista ?? null,
+            linha_com_mais_horas: meritRow?.linha_com_mais_horas ?? null,
+            kml_linha_com_mais_horas: meritRow?.kml_linha_com_mais_horas ?? null,
+            meta_linha: meritRow?.meta_linha ?? null,
+            kml_meta_linha_mais_horas: meritRow?.kml_meta_linha_mais_horas ?? null,
+          }
+        : {};
+
+      const resumoTotaisSnap = resumoTotais || { dias: 0, km: 0, litros: 0, kml: 0 };
+      const resumoDiasSnap = Array.isArray(resumoDias) ? resumoDias : [];
+      const resumoVeiculosSnap = Array.isArray(resumoVeiculos) ? resumoVeiculos : [];
+
+      // 1) sempre registra o "diesel_lancamentos" (histórico do lançamento manual)
+      const payloadLancamento = {
+        motorista_chapa: chapa,
+        motorista_nome: nomeMotorista,
+        prefixo: String(prefixo || "").trim(),
+        linha: String(linha || "").trim(),
+        cluster: String(cluster || "").trim(),
+
+        destino: destino, // ✅ NOVO: útil pra auditoria
+        prioridade: destino === DESTINOS.TRAT ? prioridadeTratativa : null,
+
+        motivo: motivoFinal,
+        observacao_inicial: obsInit,
+        periodo_inicio: ini || null,
+        periodo_fim: fim || null,
+
+        dias_monitoramento: Number(dias) || 10,
+        kml_meta: String(kmlMeta || "").trim() ? safeNumber(kmlMeta) : null,
+
+        evidencias_urls: evidenciasUrls,
+
+        meritocracia: meritSnap,
+        resumo_totais: resumoTotaisSnap,
+        resumo_dias: resumoDiasSnap,
+        resumo_veiculos: resumoVeiculosSnap,
+
+        lancado_por_login: lancadorLogin,
+        lancado_por_nome: lancadorNome,
+        lancado_por_usuario_id: lancadorIdNum ? String(lancadorIdNum) : null,
+
+        metadata: {
+          lancamento_periodo_inicio: ini || null,
+          lancamento_periodo_fim: fim || null,
+        },
+      };
+
+      const { data: lanc, error: eL } = await supabase.from("diesel_lancamentos").insert(payloadLancamento).select("id").single();
+      if (eL) throw eL;
+
+      // =================================================================================
+      // ✅ TRATATIVA
+      // =================================================================================
+      if (destino === DESTINOS.TRAT) {
+        const descricaoBase = obsInit ? `${motivoFinal}\n\n${obsInit}` : motivoFinal;
+
+        const payloadTratativa = {
+          motorista_chapa: chapa,
+          motorista_nome: nomeMotorista,
+
+          // ajuste para o seu padrão de tratativas diesel:
+          origem: "DIESEL",
+          tipo_ocorrencia: "DIESEL_KML",
+          prioridade: prioridadeTratativa,
+          status: "Pendente",
+
+          descricao: descricaoBase,
+
+          prefixo: String(prefixo || "").trim(),
+          linha: String(linha || "").trim(),
+          cluster: String(cluster || "").trim(),
+
+          periodo_inicio: ini || null,
+          periodo_fim: fim || null,
+
+          evidencias_urls: evidenciasUrls,
+
+          lancamento_id: lanc.id,
+
+          metadata: {
+            origem: "LANCAMENTO_MANUAL",
+            meritocracia: meritSnap,
+            resumo_totais: resumoTotaisSnap,
+            resumo_dias: resumoDiasSnap,
+            resumo_veiculos: resumoVeiculosSnap,
+            lancado_por_login: lancadorLogin,
+            lancado_por_nome: lancadorNome,
+            lancado_por_usuario_id: lancadorIdNum ? String(lancadorIdNum) : null,
+          },
+        };
+
+        const { data: trat, error: eT } = await supabase.from("diesel_tratativas").insert(payloadTratativa).select("id").single();
+        if (eT) throw eT;
+
+        // opcional: detalhe inicial (timeline da tratativa)
+        await supabase.from("diesel_tratativas_detalhes").insert({
+          tratativa_id: trat.id,
+          acao_aplicada: "ABERTURA_MANUAL",
+          observacoes: descricaoBase,
+          imagem_tratativa: null,
+          anexo_tratativa: null,
+          tratado_por_login: lancadorLogin,
+          tratado_por_nome: lancadorNome,
+          tratado_por_id: isUuid(user?.id) ? user.id : null,
+          extra: { evidencias_urls: evidenciasUrls, lancamento_id: lanc.id },
+        });
+
+        setOkMsg("Tratativa criada com sucesso. Redirecionando...");
+        // ✅ ajuste a rota para sua central/tela diesel
+        setTimeout(() => {
+          navigate("/desempenho-diesel/tratativas");
+          // ou direto pra tratar:
+          // navigate(`/desempenho-diesel/tratar/${trat.id}`);
+        }, 300);
+
+        limpar();
+        return;
+      }
+
+      // =================================================================================
+      // ✅ ACOMPANHAMENTO (mantém fluxo + chama robô de prontuário automaticamente)
+      // =================================================================================
+      const payloadAcomp = {
+        motorista_chapa: chapa,
+        motorista_nome: nomeMotorista,
+        motivo: motivoFinal,
+        status: "A_SER_ACOMPANHADO",
+        dias_monitoramento: Number(dias),
+
+        dt_inicio: new Date().toISOString().slice(0, 10),
+        dt_inicio_monitoramento: null,
+        dt_fim_planejado: null,
+        dt_fim_real: null,
+
+        kml_inicial: null,
+        kml_meta: String(kmlMeta || "").trim() ? safeNumber(kmlMeta) : null,
+        kml_final: null,
+
+        observacao_inicial: obsInit,
+        evidencias_urls: evidenciasUrls,
+
+        instrutor_login: null,
+        instrutor_nome: null,
+        instrutor_id: null,
+
+        tratativa_id: null,
+        lancamento_id: lanc.id,
+
+        metadata: {
+          prefixo: String(prefixo || "").trim(),
+          linha: String(linha || "").trim(),
+          cluster: String(cluster || "").trim(),
+
+          lancado_por_login: lancadorLogin,
+          lancado_por_nome: lancadorNome,
+          lancado_por_usuario_id: lancadorIdNum,
+
+          lancamento_periodo_inicio: ini,
+          lancamento_periodo_fim: fim,
+        },
+      };
+
+      const { data: acomp, error: eA } = await supabase.from("diesel_acompanhamentos").insert(payloadAcomp).select("id").single();
+      if (eA) throw eA;
+
+      const payloadEvento = {
+        acompanhamento_id: acomp.id,
+        tipo: "LANCAMENTO",
+        observacoes: obsInit ? `${motivoFinal}\n\n${obsInit}` : motivoFinal,
+        evidencias_urls: evidenciasUrls,
+
+        kml: null,
+        periodo_inicio: ini || null,
+        periodo_fim: fim || null,
+
+        criado_por_login: lancadorLogin,
+        criado_por_nome: lancadorNome,
+        criado_por_id: isUuid(user?.id) ? user.id : null,
+
+        extra: {
+          prefixo: String(prefixo || "").trim(),
+          linha: String(linha || "").trim(),
+          cluster: String(cluster || "").trim(),
+          kml_meta: String(kmlMeta || "").trim() ? safeNumber(kmlMeta) : null,
+
+          evidencias_kml_inicial: false,
+
+          lancamento_id: lanc.id,
+          meritocracia: meritSnap,
+          resumo_totais: resumoTotaisSnap,
+          resumo_dias: resumoDiasSnap,
+          resumo_veiculos: resumoVeiculosSnap,
+        },
+      };
+
+      const { error: eE } = await supabase.from("diesel_acompanhamento_eventos").insert(payloadEvento);
+      if (eE) throw eE;
+
+      // ✅ CHAMA O ROBÔ (API) PARA GERAR PRONTUÁRIO AUTOMATICAMENTE
+      let prontReportId = null;
+      try {
+        const payloadPront = {
+          tipo: TIPO_PRONTUARIO,
+          periodo_inicio: ini,
+          periodo_fim: fim,
+          motorista: chapa,
+          linha: String(linha || "").trim() || null,
+          veiculo: String(prefixo || "").trim() || null,
+          cluster: String(cluster || "").trim() || null,
+        };
+
+        const rPr = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios/gerar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payloadPront),
+        });
+
+        const jPr = await rPr.json().catch(() => ({}));
+        if (!rPr.ok) throw new Error(jPr?.error || jPr?.detail || `Erro ao gerar prontuário (HTTP ${rPr.status})`);
+
+        prontReportId = jPr?.report_id ? String(jPr.report_id) : null;
+
+        if (prontReportId) {
+          await supabase
+            .from("diesel_acompanhamentos")
+            .update({
+              metadata: {
+                ...payloadAcomp.metadata,
+                prontuario_report_id: prontReportId,
+              },
+            })
+            .eq("id", acomp.id);
+
+          await supabase.from("diesel_acompanhamento_eventos").insert({
+            acompanhamento_id: acomp.id,
+            tipo: "PRONTUARIO_GERADO",
+            observacoes: `Prontuário gerado automaticamente. Report ID: ${prontReportId}`,
+            evidencias_urls: [],
+            criado_por_login: lancadorLogin,
+            criado_por_nome: lancadorNome,
+            criado_por_id: isUuid(user?.id) ? user.id : null,
+            extra: { report_id: prontReportId, lancamento_id: lanc.id },
+          });
+        }
+      } catch (ePr) {
+        // não derruba o acompanhamento, mas registra o erro
+        await supabase.from("diesel_acompanhamento_eventos").insert({
+          acompanhamento_id: acomp.id,
+          tipo: "PRONTUARIO_ERRO",
+          observacoes: `Falha ao gerar prontuário automaticamente: ${String(ePr?.message || ePr)}`,
+          evidencias_urls: [],
+          criado_por_login: lancadorLogin,
+          criado_por_nome: lancadorNome,
+          criado_por_id: isUuid(user?.id) ? user.id : null,
+          extra: { lancamento_id: lanc.id },
+        });
+
+        // e avisa no UI
+        setOkMsg("Acompanhamento lançado, mas o prontuário falhou. Você pode tentar gerar manualmente.");
+      }
+
+      if (!okMsg) setOkMsg("Lançamento de acompanhamento realizado com sucesso (prontuário solicitado).");
+      limpar();
+    } catch (err) {
+      console.error(err);
+      setErrMsg(err?.message || "Erro ao lançar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Se mudar para TRATATIVA, opcionalmente limpamos período/prontuário visual
+  useEffect(() => {
+    if (destino === DESTINOS.TRAT) {
+      // deixa o prontuário “manual” menos tentador no destino tratativa
+      setProntErr("");
+      setProntRow(null);
+      setProntPdfUrl(null);
+      setProntPdfPathUsed(null);
+      setProntPdfOpen(false);
+    }
+  }, [destino]);
+
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">Desempenho Diesel — Lançamento</h1>
+        <h1 className="text-2xl font-bold">Desempenho Diesel — Lançamento Manual</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Aqui você lança a fila. O monitoramento de 10 dias começa no primeiro acompanhamento do instrutor.
+          Aqui você lança manualmente escolhendo <b>Tratativa</b> ou <b>Acompanhamento</b>.
+          No acompanhamento, o prontuário é solicitado automaticamente.
         </p>
       </div>
 
       {errMsg && (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {errMsg}
-        </div>
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errMsg}</div>
       )}
 
       {okMsg && (
-        <div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-          {okMsg}
-        </div>
+        <div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{okMsg}</div>
       )}
 
       {(prontLoading || prontErr || prontRow) && (
@@ -733,38 +895,24 @@ export default function DesempenhoLancamento() {
               </div>
             </div>
 
-            <div className="text-xs text-gray-600">
-              {prontLoading ? "Carregando prontuário..." : prontErr ? "Falhou" : "Pronto"}
-            </div>
+            <div className="text-xs text-gray-600">{prontLoading ? "Carregando prontuário..." : prontErr ? "Falhou" : "Pronto"}</div>
           </div>
 
-          {prontLoading && (
-            <div className="mt-2 text-sm text-gray-700">
-              Gerando prontuário no Python… isso pode levar alguns segundos.
-            </div>
-          )}
+          {prontLoading && <div className="mt-2 text-sm text-gray-700">Gerando prontuário no Python…</div>}
 
-          {prontErr && (
-            <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {prontErr}
-            </div>
-          )}
+          {prontErr && <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{prontErr}</div>}
 
           {!!prontRow && (
             <div className="mt-2 text-xs text-gray-600">
               Registro: <span className="font-semibold">{String(prontRow.status || "")}</span> •{" "}
               {String(prontRow.periodo_inicio || "—")} → {String(prontRow.periodo_fim || "—")}
               {prontPdfPathUsed ? (
-                <div className="mt-1 text-[11px] text-gray-500 break-all">
-                  PDF path: {prontPdfPathUsed}
-                </div>
+                <div className="mt-1 text-[11px] text-gray-500 break-all">PDF path: {prontPdfPathUsed}</div>
               ) : null}
             </div>
           )}
 
-          {prontUrlsLoading && (
-            <div className="mt-2 text-sm text-gray-700">Preparando arquivo do bucket…</div>
-          )}
+          {prontUrlsLoading && <div className="mt-2 text-sm text-gray-700">Preparando arquivo do bucket…</div>}
         </div>
       )}
 
@@ -772,18 +920,51 @@ export default function DesempenhoLancamento() {
         <h2 className="text-lg font-semibold mb-3">Dados do Lançamento</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Destino */}
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">Destino do Lançamento</label>
+            <select
+              className="w-full rounded-md border px-3 py-2 bg-white"
+              value={destino}
+              onChange={(e) => setDestino(e.target.value)}
+              disabled={saving || prontLoading}
+            >
+              <option value={DESTINOS.ACOMP}>Acompanhamento (gera prontuário automaticamente)</option>
+              <option value={DESTINOS.TRAT}>Tratativa (vai para Central de Tratativas)</option>
+            </select>
+            <div className="mt-1 text-xs text-gray-500">
+              {destino === DESTINOS.ACOMP
+                ? "Vai para fila de acompanhamento e chama o robô de prontuário."
+                : "Cria uma tratativa Diesel e aparece na Central de Tratativas."}
+            </div>
+          </div>
+
+          {/* Prioridade (tratativa) */}
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">Prioridade (Tratativa)</label>
+            <select
+              className="w-full rounded-md border px-3 py-2 bg-white"
+              value={prioridadeTratativa}
+              onChange={(e) => setPrioridadeTratativa(e.target.value)}
+              disabled={saving || prontLoading || destino !== DESTINOS.TRAT}
+            >
+              {PRIORIDADES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <div className="mt-1 text-xs text-gray-500">
+              {destino !== DESTINOS.TRAT ? "Ativo apenas quando destino = Tratativa." : "Define o SLA na Central de Tratativas."}
+            </div>
+          </div>
+
           <div className="md:col-span-2">
             <CampoMotorista value={motorista} onChange={setMotorista} label="Motorista" />
           </div>
 
           <div className="md:col-span-2">
-            <CampoPrefixo
-              value={prefixo}
-              onChange={setPrefixo}
-              onChangeCluster={setCluster}
-              disabled={saving}
-              label="Prefixo"
-            />
+            <CampoPrefixo value={prefixo} onChange={setPrefixo} onChangeCluster={setCluster} disabled={saving} label="Prefixo" />
           </div>
 
           <div>
@@ -819,6 +1000,32 @@ export default function DesempenhoLancamento() {
           </div>
 
           <div className="md:col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">Motivo</label>
+            <select
+              className="w-full rounded-md border px-3 py-2 bg-white"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              disabled={saving}
+            >
+              {MOTIVOS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+
+            {motivo === "Outro" && (
+              <input
+                className="mt-2 w-full rounded-md border px-3 py-2"
+                value={motivoOutro}
+                onChange={(e) => setMotivoOutro(e.target.value)}
+                placeholder="Descreva o motivo..."
+                disabled={saving}
+              />
+            )}
+          </div>
+
+          <div className="md:col-span-2">
             <label className="block text-sm text-gray-600 mb-1">KM/L Meta (puxado da meritocracia)</label>
             <div className="flex items-center gap-2">
               <input
@@ -829,15 +1036,13 @@ export default function DesempenhoLancamento() {
                 value={kmlMeta}
                 readOnly
               />
-              <div className="text-xs text-gray-500 whitespace-nowrap">
-                {metaLoading ? "Carregando..." : metaErr ? "Erro" : meritRow ? "OK" : "—"}
-              </div>
+              <div className="text-xs text-gray-500 whitespace-nowrap">{metaLoading ? "Carregando..." : metaErr ? "Erro" : meritRow ? "OK" : "—"}</div>
             </div>
             {metaErr && <div className="mt-1 text-xs text-red-700">{metaErr}</div>}
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">Período analisado do KM/L (obrigatório)</label>
+            <label className="block text-sm text-gray-600 mb-1">Período analisado do KM/L {destino === DESTINOS.ACOMP ? "(obrigatório)" : "(opcional)"}</label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <input
                 type="date"
@@ -858,12 +1063,12 @@ export default function DesempenhoLancamento() {
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!prontoProntuario || prontLoading || saving}
+                disabled={!prontoProntuario || prontLoading || saving || destino !== DESTINOS.ACOMP}
                 className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                 onClick={gerarProntuario}
-                title="Gera e abre o prontuário do motorista (PDF)"
+                title="Gera/Regera o prontuário do motorista (PDF)"
               >
-                {prontLoading ? "Carregando prontuário..." : "Gerar prontuário (PDF)"}
+                {prontLoading ? "Carregando prontuário..." : "Gerar/Regerar prontuário (PDF)"}
               </button>
 
               {prontPdfUrl && (
@@ -889,19 +1094,64 @@ export default function DesempenhoLancamento() {
             </div>
           </div>
 
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">Observação inicial</label>
+            <textarea
+              className="w-full rounded-md border px-3 py-2 min-h-[92px]"
+              value={observacaoInicial}
+              onChange={(e) => setObservacaoInicial(e.target.value)}
+              disabled={saving}
+              placeholder="Detalhes, contexto, orientação, etc..."
+            />
+          </div>
+
+          <div className="md:col-span-4">
+            <label className="block text-sm text-gray-600 mb-1">Evidências (obrigatório)</label>
+            <div className="rounded-md border bg-white p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <input type="file" multiple onChange={addFiles} disabled={saving} />
+                <div className="text-xs text-gray-500">
+                  {evidAcomp.length ? `${evidAcomp.length} arquivo(s)` : "Nenhum arquivo selecionado"}
+                </div>
+              </div>
+
+              {evidAcomp.length > 0 && (
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {evidAcomp.map((f, idx) => (
+                    <div key={`${f.name}_${f.size}_${f.lastModified}`} className="flex items-center justify-between gap-2 rounded-md border bg-gray-50 px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-gray-800 truncate" title={f.name}>
+                          {f.name}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {(Number(f.size || 0) / 1024 / 1024).toFixed(2)} MB • {f.type || "arquivo"}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-red-700 hover:underline"
+                        onClick={() => removeFile(idx)}
+                        disabled={saving}
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Meritocracia */}
           <div className="md:col-span-4">
             <div className="rounded-md border bg-white p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-gray-800">Meritocracia (mês do PERÍODO FIM)</div>
-                <div className="text-xs text-gray-500">
-                  {metaLoading ? "Consultando..." : metaErr ? "Erro" : meritRow ? "OK" : "—"}
-                </div>
+                <div className="text-xs text-gray-500">{metaLoading ? "Consultando..." : metaErr ? "Erro" : meritRow ? "OK" : "—"}</div>
               </div>
 
               {!meritRow && !metaLoading && !metaErr && (
-                <div className="mt-2 text-sm text-gray-600">
-                  Informe a chapa e a data de fim do período para puxar a meritocracia do mês.
-                </div>
+                <div className="mt-2 text-sm text-gray-600">Informe a chapa e a data de fim do período para puxar a meritocracia do mês.</div>
               )}
 
               {meritRow && (
@@ -913,38 +1163,27 @@ export default function DesempenhoLancamento() {
 
                   <div className="rounded-md bg-gray-50 border p-2">
                     <div className="text-xs text-gray-500">Linha que mais trabalhou</div>
-                    <div className="text-sm font-semibold text-gray-800">
-                      {meritRow?.linha_com_mais_horas ?? "—"}
-                    </div>
+                    <div className="text-sm font-semibold text-gray-800">{meritRow?.linha_com_mais_horas ?? "—"}</div>
                   </div>
 
                   <div className="rounded-md bg-gray-50 border p-2">
                     <div className="text-xs text-gray-500">KM/L na linha</div>
                     <div className="text-sm font-semibold text-gray-800">
-                      {Number(meritRow?.kml_linha_com_mais_horas || 0).toLocaleString("pt-BR", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {Number(meritRow?.kml_linha_com_mais_horas || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </div>
 
                   <div className="rounded-md bg-gray-50 border p-2">
                     <div className="text-xs text-gray-500">Meta da linha</div>
                     <div className="text-sm font-semibold text-gray-800">
-                      {Number(meritRow?.meta_linha || 0).toLocaleString("pt-BR", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {Number(meritRow?.meta_linha || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </div>
 
                   <div className="rounded-md bg-gray-50 border p-2">
                     <div className="text-xs text-gray-500">Meta do motorista</div>
                     <div className="text-sm font-semibold text-gray-800">
-                      {Number(meritRow?.kml_meta_linha_mais_horas || 0).toLocaleString("pt-BR", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {Number(meritRow?.kml_meta_linha_mais_horas || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </div>
                 </div>
@@ -952,13 +1191,12 @@ export default function DesempenhoLancamento() {
             </div>
           </div>
 
+          {/* Resumo */}
           <div className="md:col-span-4">
             <div className="rounded-md border bg-gray-50 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-gray-800">Resumo do período (premiação)</div>
-                <div className="text-xs text-gray-500">
-                  {resumoLoading ? "Consultando..." : resumoErr ? "Erro" : "OK"}
-                </div>
+                <div className="text-xs text-gray-500">{resumoLoading ? "Consultando..." : resumoErr ? "Erro" : "OK"}</div>
               </div>
 
               {resumoErr ? (
@@ -973,28 +1211,19 @@ export default function DesempenhoLancamento() {
                     <div className="rounded-md bg-white border p-2">
                       <div className="text-xs text-gray-500">KM rodado</div>
                       <div className="text-sm font-semibold text-gray-800">
-                        {Number(resumoTotais?.km || 0).toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {Number(resumoTotais?.km || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                     <div className="rounded-md bg-white border p-2">
                       <div className="text-xs text-gray-500">Combustível</div>
                       <div className="text-sm font-semibold text-gray-800">
-                        {Number(resumoTotais?.litros || 0).toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {Number(resumoTotais?.litros || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                     <div className="rounded-md bg-white border p-2">
                       <div className="text-xs text-gray-500">KM/L (período)</div>
                       <div className="text-sm font-semibold text-gray-800">
-                        {Number(resumoTotais?.kml || 0).toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {Number(resumoTotais?.kml || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                   </div>
@@ -1016,29 +1245,16 @@ export default function DesempenhoLancamento() {
                           {resumoDias.map((d, idx) => (
                             <tr key={`${d?.dia || idx}`} className="border-t">
                               <td className="px-3 py-2 whitespace-nowrap">{d?.dia || "—"}</td>
-                              <td className="px-3 py-2">
-                                {Array.isArray(d?.linhas) ? d.linhas.join(", ") : d?.linha || "—"}
-                              </td>
-                              <td className="px-3 py-2">
-                                {Array.isArray(d?.veiculos) ? d.veiculos.join(", ") : d?.veiculo || "—"}
+                              <td className="px-3 py-2">{Array.isArray(d?.linhas) ? d.linhas.join(", ") : d?.linha || "—"}</td>
+                              <td className="px-3 py-2">{Array.isArray(d?.veiculos) ? d.veiculos.join(", ") : d?.veiculo || "—"}</td>
+                              <td className="px-3 py-2 text-right">
+                                {Number(d?.km || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td className="px-3 py-2 text-right">
-                                {Number(d?.km || 0).toLocaleString("pt-BR", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
+                                {Number(d?.litros || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td className="px-3 py-2 text-right">
-                                {Number(d?.litros || 0).toLocaleString("pt-BR", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                {Number(d?.kml || 0).toLocaleString("pt-BR", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
+                                {Number(d?.kml || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                             </tr>
                           ))}
@@ -1065,22 +1281,13 @@ export default function DesempenhoLancamento() {
                               <td className="px-3 py-2">{v.veiculo}</td>
                               <td className="px-3 py-2 text-right">{v.dias}</td>
                               <td className="px-3 py-2 text-right">
-                                {Number(v.km || 0).toLocaleString("pt-BR", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
+                                {Number(v.km || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td className="px-3 py-2 text-right">
-                                {Number(v.litros || 0).toLocaleString("pt-BR", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
+                                {Number(v.litros || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td className="px-3 py-2 text-right">
-                                {Number(v.kml || 0).toLocaleString("pt-BR", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
+                                {Number(v.kml || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                             </tr>
                           ))}
@@ -1105,8 +1312,7 @@ export default function DesempenhoLancamento() {
         </div>
       </div>
 
-      {/* resto do arquivo permanece igual ao seu... */}
-      {/* ... */}
+      {/* Ações */}
       <div className="flex items-center justify-end gap-3">
         <button
           type="button"
@@ -1122,11 +1328,13 @@ export default function DesempenhoLancamento() {
           disabled={!pronto || saving}
           className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
           onClick={lancar}
+          title={destino === DESTINOS.ACOMP ? "Lança acompanhamento e solicita prontuário" : "Cria tratativa Diesel e envia para a Central"}
         >
-          {saving ? "Lançando..." : "Lançar"}
+          {saving ? "Lançando..." : destino === DESTINOS.ACOMP ? "Lançar Acompanhamento" : "Criar Tratativa"}
         </button>
       </div>
 
+      {/* Modal PDF */}
       <Modal
         open={prontPdfOpen}
         onClose={() => setProntPdfOpen(false)}
@@ -1155,12 +1363,7 @@ export default function DesempenhoLancamento() {
             </div>
 
             <div className="bg-slate-50/70" style={{ height: "calc(100vh - 24px - 52px - 140px)" }}>
-              <iframe
-                title="ProntuarioPDF"
-                src={prontPdfUrl}
-                className="w-full h-full"
-                style={{ background: "transparent" }}
-              />
+              <iframe title="ProntuarioPDF" src={prontPdfUrl} className="w-full h-full" style={{ background: "transparent" }} />
             </div>
           </div>
         )}

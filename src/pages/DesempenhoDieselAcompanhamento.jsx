@@ -420,7 +420,7 @@ export default function DesempenhoDieselAcompanhamento() {
   }, []);
 
   // =============================================================================
-  // CONTADORES
+  // CONTADORES (UNIFICADOS)
   // =============================================================================
   const countAguardando = lista.filter(
     (i) => normalizeStatus(i.status) === "AGUARDANDO_INSTRUTOR"
@@ -769,11 +769,6 @@ export default function DesempenhoDieselAcompanhamento() {
 
     return result;
   }, [lista, busca, abaAtiva, filtroLinha, filtroDataIni, filtroDataFim, sortConfig]);
-
-  // Contadores
-  const countAguardando = lista.filter((i) => normalizeStatus(i.status) === "AGUARDANDO_INSTRUTOR").length;
-  const countMonitoramento = lista.filter((i) => normalizeStatus(i.status) === "EM_MONITORAMENTO").length;
-  const countConcluido = lista.filter((i) => ["OK", "ENCERRADO", "ATAS"].includes(normalizeStatus(i.status))).length;
 
   const abrirPDF = (item) => {
     const url = getPdfUrl(item);

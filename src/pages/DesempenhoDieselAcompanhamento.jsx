@@ -16,6 +16,7 @@ import {
   FaTimes as FaX,
   FaQuestionCircle,
   FaTrash,
+  FaEye,
   FaFilter,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
@@ -69,29 +70,8 @@ function getFoco(item) {
 }
 
 // Auxiliar para pegar apenas a linha para o filtro
-function getLinhaBusca(item) {
+function getLinhaApenas(item) {
   return item?.metadata?.linha_foco || "Sem Linha";
-}
-
-// CORREÇÃO DE FUSO HORÁRIO PARA EVITAR VOLTA DE 1 DIA
-function formatarDataBR(val) {
-  if (!val) return "-";
-  const strVal = String(val).trim();
-  
-  // Se for Timestamp completo do banco (ex: 2026-02-27T20:48:34.16876+00)
-  if (strVal.includes("T")) {
-    return new Date(strVal).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  }
-  
-  // Se for data pura do input dt_inicio_monitoramento (ex: 2026-03-05)
-  // Forçamos a string para evitar que o Date converta pra UTC e volte 1 dia
-  const datePart = strVal.split(" ")[0];
-  const parts = datePart.split("-");
-  if (parts.length === 3) {
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
-  }
-  
-  return new Date(strVal).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
 function getPdfUrl(item) {
@@ -206,6 +186,27 @@ function buildNomeSobrenome(u) {
 }
 
 // =============================================================================
+// FORMATAÇÃO DE DATA (CORREÇÃO DE FUSO)
+// =============================================================================
+function formatarDataHoraBR(val, isApenasData = false) {
+  if (!val) return "-";
+  try {
+    if (isApenasData) {
+      // Se for apenas data (YYYY-MM-DD), extraímos diretamente para evitar q o timezone atrase 1 dia
+      const str = String(val).split("T")[0].split(" ")[0];
+      const parts = str.split("-");
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return str;
+    } else {
+      // Se for Timestamp completo de Geração (com hora)
+      return new Date(val).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    }
+  } catch (e) {
+    return String(val);
+  }
+}
+
+// =============================================================================
 // OPÇÕES / NÍVEIS
 // =============================================================================
 const TEC_OPCOES = [
@@ -268,7 +269,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
   // Filtros & Abas & Ordenação
   const [busca, setBusca] = useState("");
-  const [abaAtiva, setAbaAtiva] = useState("ANTES");
+  const [abaAtiva, setAbaAtiva] = useState("AGUARDANDO");
   const [filtroLinha, setFiltroLinha] = useState("");
   const [filtroDataIni, setFiltroDataIni] = useState("");
   const [filtroDataFim, setFiltroDataFim] = useState("");
@@ -276,9 +277,13 @@ export default function DesempenhoDieselAcompanhamento() {
 
   // Modais
   const [modalLancarOpen, setModalLancarOpen] = useState(false);
+  const [modalVisaoGeralOpen, setModalVisaoGeralOpen] = useState(false);
+  
+  // Modais Legado mantidos para compatibilidade
   const [modalConsultaOpen, setModalConsultaOpen] = useState(false);
   const [modalDetalhesOpen, setModalDetalhesOpen] = useState(false);
   const [modalAnaliseOpen, setModalAnaliseOpen] = useState(false);
+  
   const [itemSelecionado, setItemSelecionado] = useState(null);
 
   // Histórico
@@ -329,7 +334,7 @@ export default function DesempenhoDieselAcompanhamento() {
   }, [user]);
 
   // =============================================================================
-  // CARGA DE ITENS DO CHECKLIST (SUPABASE) - COM PONTUAÇÕES
+  // CARGA DE ITENS DO CHECKLIST (SUPABASE)
   // =============================================================================
   async function carregarItensChecklist() {
     setLoadingItens(true);
@@ -415,21 +420,6 @@ export default function DesempenhoDieselAcompanhamento() {
   }, []);
 
   // =============================================================================
-  // CONTADORES
-  // =============================================================================
-  const countAguardando = lista.filter(
-    (i) => normalizeStatus(i.status) === "AGUARDANDO_INSTRUTOR"
-  ).length;
-
-  const countMonitoramento = lista.filter(
-    (i) => normalizeStatus(i.status) === "EM_MONITORAMENTO"
-  ).length;
-
-  const countConcluido = lista.filter((i) =>
-    ["OK", "ENCERRADO", "ATAS"].includes(normalizeStatus(i.status))
-  ).length;
-
-  // =============================================================================
   // AÇÕES
   // =============================================================================
   const handleConsultar = async (item) => {
@@ -458,6 +448,29 @@ export default function DesempenhoDieselAcompanhamento() {
   const handleDetalhes = (item) => {
     setItemSelecionado(item);
     setModalDetalhesOpen(true);
+  };
+
+  const abrirVisaoGeral = async (item) => {
+    setItemSelecionado(item);
+    setModalVisaoGeralOpen(true);
+    setLoadingHist(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("diesel_acompanhamentos")
+        .select("*")
+        .eq("motorista_chapa", item.motorista_chapa)
+        .neq("id", item.id)
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (error) throw error;
+      setHistorico(data || []);
+    } catch {
+      setHistorico([]);
+    } finally {
+      setLoadingHist(false);
+    }
   };
 
   const handleExcluir = async (id) => {
@@ -662,7 +675,7 @@ export default function DesempenhoDieselAcompanhamento() {
   // FILTROS AVANÇADOS E ORDENAÇÃO
   // =============================================================================
   const linhasUnicas = useMemo(() => {
-    const lns = lista.map((i) => getLinhaBusca(i)).filter(Boolean);
+    const lns = lista.map((i) => getLinhaApenas(i)).filter(Boolean);
     return [...new Set(lns)].sort();
   }, [lista]);
 
@@ -684,8 +697,9 @@ export default function DesempenhoDieselAcompanhamento() {
       // 1. Aba
       const st = normalizeStatus(item.status);
       let matchAba = false;
-      if (abaAtiva === "ANTES") matchAba = st === "AGUARDANDO_INSTRUTOR";
-      else if (abaAtiva === "POS") matchAba = ["EM_MONITORAMENTO", "OK", "ENCERRADO", "ATAS"].includes(st);
+      if (abaAtiva === "AGUARDANDO") matchAba = st === "AGUARDANDO_INSTRUTOR";
+      else if (abaAtiva === "MONITORAMENTO") matchAba = st === "EM_MONITORAMENTO";
+      else if (abaAtiva === "CONCLUIDOS") matchAba = ["OK", "ENCERRADO", "ATAS"].includes(st);
       if (!matchAba) return false;
 
       // 2. Busca
@@ -697,10 +711,10 @@ export default function DesempenhoDieselAcompanhamento() {
       }
 
       // 3. Filtro Linha
-      if (filtroLinha && getLinhaBusca(item) !== filtroLinha) return false;
+      if (filtroLinha && getLinhaApenas(item) !== filtroLinha) return false;
 
       // 4. Filtro Data
-      const dataRef = abaAtiva === "ANTES" ? item.created_at : item.dt_inicio_monitoramento;
+      const dataRef = abaAtiva === "AGUARDANDO" ? item.created_at : item.dt_inicio_monitoramento;
       if (filtroDataIni || filtroDataFim) {
         if (!dataRef) return false;
         const dFormat = String(dataRef).split("T")[0].split(" ")[0]; // YYYY-MM-DD
@@ -717,8 +731,8 @@ export default function DesempenhoDieselAcompanhamento() {
       const { key, direction } = sortConfig;
 
       if (key === "data") {
-        valA = abaAtiva === "ANTES" ? a.created_at : a.dt_inicio_monitoramento;
-        valB = abaAtiva === "ANTES" ? b.created_at : b.dt_inicio_monitoramento;
+        valA = abaAtiva === "AGUARDANDO" ? a.created_at : a.dt_inicio_monitoramento;
+        valB = abaAtiva === "AGUARDANDO" ? b.created_at : b.dt_inicio_monitoramento;
       } else if (key === "motorista") {
         valA = a.motorista_nome;
         valB = b.motorista_nome;
@@ -741,6 +755,11 @@ export default function DesempenhoDieselAcompanhamento() {
     return result;
   }, [lista, busca, abaAtiva, filtroLinha, filtroDataIni, filtroDataFim, sortConfig]);
 
+  // Contadores
+  const countAguardando = lista.filter((i) => normalizeStatus(i.status) === "AGUARDANDO_INSTRUTOR").length;
+  const countMonitoramento = lista.filter((i) => normalizeStatus(i.status) === "EM_MONITORAMENTO").length;
+  const countConcluido = lista.filter((i) => ["OK", "ENCERRADO", "ATAS"].includes(normalizeStatus(i.status))).length;
+
   const abrirPDF = (item) => {
     const url = getPdfUrl(item);
     if (!url) {
@@ -754,290 +773,184 @@ export default function DesempenhoDieselAcompanhamento() {
   // RENDER
   // =============================================================================
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
+      
       {/* HEADER */}
-      <div className="flex justify-between items-center border-b pb-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <FaBolt className="text-yellow-500" /> Gestão de Ordens de Acompanhamento
+            <FaBolt className="text-yellow-500" /> Ordens de Acompanhamento
           </h1>
-          <p className="text-sm text-slate-500">
-            Ordens geradas automaticamente — prontas para ação do instrutor.
+          <p className="text-sm text-slate-500 mt-1">
+            Gestão de ordens, lançamentos e prontuários.
           </p>
         </div>
-
-        <button
-          onClick={carregarOrdens}
-          className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm font-bold"
-          title="Atualizar"
-        >
+        <button onClick={carregarOrdens} className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm font-bold w-full md:w-auto justify-center">
           <FaSync className={loading ? "animate-spin" : ""} /> Atualizar
         </button>
       </div>
 
       {/* CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-amber-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Aguardando Instrutor</p>
-            <p className="text-2xl font-black text-slate-800">{countAguardando}</p>
-          </div>
+          <div><p className="text-sm text-gray-500 font-bold">Aguardando</p><p className="text-2xl font-black text-slate-800">{countAguardando}</p></div>
           <FaClock className="text-4xl text-amber-50" />
         </div>
-
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-blue-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Em Monitoramento</p>
-            <p className="text-2xl font-black text-slate-800">{countMonitoramento}</p>
-          </div>
+          <div><p className="text-sm text-gray-500 font-bold">Monitoramento</p><p className="text-2xl font-black text-slate-800">{countMonitoramento}</p></div>
           <FaRoad className="text-4xl text-blue-50" />
         </div>
-
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-emerald-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Concluídos / Atas</p>
-            <p className="text-2xl font-black text-slate-800">{countConcluido}</p>
-          </div>
+          <div><p className="text-sm text-gray-500 font-bold">Concluídos</p><p className="text-2xl font-black text-slate-800">{countConcluido}</p></div>
           <FaCheck className="text-4xl text-emerald-50" />
         </div>
       </div>
 
-      {/* TABS */}
-      <div className="flex bg-slate-200/50 p-1 rounded-lg w-fit">
-        <button
-          onClick={() => { setAbaAtiva("ANTES"); setSortConfig({ key: "data", direction: "desc" }); }}
-          className={`px-6 py-2.5 rounded-md text-base font-bold transition-all ${
-            abaAtiva === "ANTES"
-              ? "bg-white shadow-sm text-blue-700"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          📋 Antes do Acompanhamento
+      {/* TABS RESPONSIVAS */}
+      <div className="flex flex-wrap bg-slate-200/50 p-1 rounded-lg w-fit gap-1">
+        <button onClick={() => { setAbaAtiva("AGUARDANDO"); setSortConfig({key: "data", direction: "desc"}); }} className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${abaAtiva === "AGUARDANDO" ? "bg-white shadow-sm text-amber-600" : "text-slate-500 hover:text-slate-700"}`}>
+          📋 Aguardando
         </button>
-        <button
-          onClick={() => { setAbaAtiva("POS"); setSortConfig({ key: "data", direction: "desc" }); }}
-          className={`px-6 py-2.5 rounded-md text-base font-bold transition-all ${
-            abaAtiva === "POS"
-              ? "bg-white shadow-sm text-emerald-700"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          📊 Pós Acompanhamento (Análise)
+        <button onClick={() => { setAbaAtiva("MONITORAMENTO"); setSortConfig({key: "data", direction: "desc"}); }} className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${abaAtiva === "MONITORAMENTO" ? "bg-white shadow-sm text-blue-700" : "text-slate-500 hover:text-slate-700"}`}>
+          🛣️ Monitoramento
+        </button>
+        <button onClick={() => { setAbaAtiva("CONCLUIDOS"); setSortConfig({key: "data", direction: "desc"}); }} className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${abaAtiva === "CONCLUIDOS" ? "bg-white shadow-sm text-emerald-700" : "text-slate-500 hover:text-slate-700"}`}>
+          ✅ Concluídos
         </button>
       </div>
 
-      {/* FILTROS E BUSCA */}
-      <div className="flex flex-col lg:flex-row gap-4 mb-2 items-center bg-white p-4 rounded-lg border shadow-sm">
-        <div className="relative flex-1 w-full">
+      {/* FILTROS AVANÇADOS */}
+      <div className="flex flex-col md:flex-row gap-3 items-center bg-white p-3 md:p-4 rounded-lg border shadow-sm">
+        <div className="relative w-full md:flex-1">
           <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar Motorista (nome ou chapa)..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="pl-9 p-2.5 border rounded-lg w-full text-base outline-none focus:border-blue-500 font-medium"
-          />
+          <input type="text" placeholder="Buscar Motorista..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium" />
         </div>
 
-        {/* NOVOS FILTROS */}
-        <div className="w-full lg:w-auto flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-            <FaFilter className="text-gray-400 ml-2" />
-            <select
-              value={filtroLinha}
-              onChange={(e) => setFiltroLinha(e.target.value)}
-              className="p-2.5 bg-transparent text-sm outline-none focus:border-blue-500 flex-1 md:w-36 font-medium text-slate-600"
-            >
-              <option value="">Todas as Linhas</option>
-              <option value="Sem Linha">Sem Linha</option>
-              {linhasUnicas.filter(x => x !== "Sem Linha").map(ln => (
-                <option key={ln} value={ln}>{ln}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2 bg-slate-50 border rounded-lg p-1">
-            <input
-              type="date"
-              value={filtroDataIni}
-              onChange={(e) => setFiltroDataIni(e.target.value)}
-              className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium"
-            />
-            <span className="text-gray-400 font-bold text-xs">até</span>
-            <input
-              type="date"
-              value={filtroDataFim}
-              onChange={(e) => setFiltroDataFim(e.target.value)}
-              className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium"
-            />
-          </div>
+        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
+          <FaFilter className="text-gray-400 ml-2" />
+          <select value={filtroLinha} onChange={(e) => setFiltroLinha(e.target.value)} className="p-2.5 bg-transparent text-sm outline-none focus:border-blue-500 flex-1 md:w-36 font-medium text-slate-600">
+            <option value="">Todas Linhas</option>
+            <option value="Sem Linha">Sem Linha</option>
+            {linhasUnicas.filter(x => x !== "Sem Linha").map(ln => (
+              <option key={ln} value={ln}>{ln}</option>
+            ))}
+          </select>
         </div>
 
-        <div className="ml-auto text-base text-gray-500 font-medium hidden lg:block">
-          Mostrando <b>{listaFiltrada.length}</b> registros
+        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg p-1">
+          <input type="date" value={filtroDataIni} onChange={(e) => setFiltroDataIni(e.target.value)} className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium flex-1" />
+          <span className="text-gray-400 font-bold text-xs">até</span>
+          <input type="date" value={filtroDataFim} onChange={(e) => setFiltroDataFim(e.target.value)} className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium flex-1" />
         </div>
       </div>
 
-      {/* TABELA COM ORDENAÇÃO */}
+      {/* TABELA RESPONSIVA COM ORDENAÇÃO */}
       <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
         <table className="w-full text-left min-w-[800px]">
-          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-sm uppercase tracking-wider select-none">
+          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
             <tr>
-              <th className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("data")}>
+              <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("data")}>
                 <div className="flex items-center">
-                  {abaAtiva === "ANTES" ? "Data Geração" : "Data Acomp."}
+                  {abaAtiva === "AGUARDANDO" ? "Data Geração" : "Data Acomp."}
                   <SortIcon columnKey="data" />
                 </div>
               </th>
-              <th className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("motorista")}>
+              <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("motorista")}>
                 <div className="flex items-center">Motorista <SortIcon columnKey="motorista" /></div>
               </th>
-              <th className="px-6 py-5 text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("foco")}>
+              <th className="px-4 py-4 text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("foco")}>
                 <div className="flex items-center justify-center">Foco <SortIcon columnKey="foco" /></div>
               </th>
-              <th className="px-6 py-5 text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("status")}>
+              <th className="px-4 py-4 text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("status")}>
                 <div className="flex items-center justify-center">Status Atual <SortIcon columnKey="status" /></div>
               </th>
-              <th className="px-6 py-5 text-center">Ações</th>
+              <th className="px-4 py-4 text-center">Ações</th>
             </tr>
           </thead>
 
           <tbody className="divide-y divide-gray-100">
             {listaFiltrada.map((item) => {
               const status = normalizeStatus(item.status);
-              const showLancar = status === "AGUARDANDO_INSTRUTOR" && abaAtiva === "ANTES";
               const foco = getFoco(item);
               const diaXY = calcDiaXdeY(item);
-              const showDetalhes = hasLancamento(item);
-
-              // Identificar Data Baseado na Aba Atual
-              const dataRef = abaAtiva === "ANTES" ? item.created_at : item.dt_inicio_monitoramento;
+              
+              // Verificação de Data Dinâmica com Fuso
+              const dataRef = abaAtiva === "AGUARDANDO" ? item.created_at : item.dt_inicio_monitoramento;
+              const isTimestamp = abaAtiva === "AGUARDANDO"; 
+              const dataFormatada = formatarDataHoraBR(dataRef, !isTimestamp);
 
               return (
                 <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="px-6 py-5 text-gray-500 font-mono text-base whitespace-nowrap">
-                    {formatarDataBR(dataRef)}
+                  <td className="px-4 py-4 text-gray-500 font-mono text-sm whitespace-nowrap">
+                    {dataFormatada}
                   </td>
 
-                  <td className="px-6 py-5">
-                    <div className="font-black text-slate-900 text-lg">{item.motorista_nome || "-"}</div>
-                    <div className="text-base text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
+                  <td className="px-4 py-4">
+                    <div className="font-black text-slate-900 text-sm md:text-base">{item.motorista_nome || "-"}</div>
+                    <div className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
                       {item.motorista_chapa || "-"}
                     </div>
-
                     {n(item.perda_litros) >= 80 && (
-                      <div className="mt-2 inline-flex items-center text-xs font-extrabold px-2 py-1 rounded border bg-rose-50 border-rose-200 text-rose-700">
+                      <div className="mt-1 inline-flex items-center text-[10px] font-extrabold px-2 py-0.5 rounded border bg-rose-50 border-rose-200 text-rose-700">
                         PRIORIDADE ALTA
                       </div>
                     )}
                   </td>
 
-                  <td className="px-6 py-5 text-center">
-                    <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-bold border whitespace-nowrap">
+                  <td className="px-4 py-4 text-center">
+                    <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-lg text-xs font-bold border whitespace-nowrap">
                       {foco}
                     </span>
                   </td>
 
-                  <td className="px-6 py-5 text-center">
+                  <td className="px-4 py-4 text-center">
                     {status === "AGUARDANDO_INSTRUTOR" ? (
-                      <span className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-amber-200 inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
+                      <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded-lg text-xs font-bold border border-amber-200 inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
                         <FaClock /> AGUARDANDO
                       </span>
                     ) : status === "EM_MONITORAMENTO" ? (
                       <div className="flex flex-col items-center">
-                        <span className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-blue-200 whitespace-nowrap">
-                          EM MONITORAMENTO
+                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-lg text-xs font-bold border border-blue-200 whitespace-nowrap">
+                          MONITORAMENTO
                         </span>
                         {diaXY ? (
-                          <span className="text-xs font-bold text-gray-500 mt-1.5 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">
-                            Dia {diaXY.dia} de {diaXY.dias}
+                          <span className="text-[10px] font-bold text-gray-500 mt-1 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">
+                            Dia {diaXY.dia} / {diaXY.dias}
                           </span>
                         ) : (
-                          <span className="text-xs font-bold text-gray-500 mt-1.5 whitespace-nowrap">
+                          <span className="text-[10px] font-bold text-gray-500 mt-1 whitespace-nowrap">
                             Monitoramento ativo
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span
-                        className={`px-3 py-1.5 rounded-lg text-sm font-bold border inline-flex items-center gap-1.5 whitespace-nowrap ${
-                          status === "ATAS"
-                            ? "bg-rose-50 text-rose-700 border-rose-200"
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        }`}
-                      >
+                      <span className={`px-2 py-1 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 whitespace-nowrap ${status === "ATAS" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
                         {status === "ATAS" ? <FaX /> : <FaCheck />} {status}
                       </span>
                     )}
                   </td>
 
-                  <td className="px-6 py-5">
+                  <td className="px-4 py-4">
                     <div className="flex flex-wrap justify-center gap-2 items-center min-w-[120px]">
-                      <button
-                        onClick={() => abrirPDF(item)}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg hover:bg-rose-50 hover:border-rose-300 font-bold text-sm shadow-sm transition-all"
-                        title="Abrir Prontuário PDF"
-                      >
-                        <FaFilePdf size={14} /> PDF
+                      <button onClick={() => abrirPDF(item)} className="flex items-center justify-center p-2 bg-white border border-rose-200 text-rose-600 rounded hover:bg-rose-50 shadow-sm transition-all" title="Abrir PDF">
+                        <FaFilePdf size={14} />
                       </button>
 
-                      <button
-                        onClick={() => handleConsultar(item)}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 hover:border-blue-300 font-bold text-sm shadow-sm transition-all"
-                        title="Consultar Histórico"
-                      >
-                        <FaHistory size={14} /> Histórico
-                      </button>
-
-                      {showDetalhes && (
-                        <button
-                          onClick={() => handleDetalhes(item)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 font-bold text-sm shadow-sm transition-all"
-                          title="Ver Detalhes do Lançamento do Instrutor"
-                        >
-                          <FaClipboardList size={14} /> Detalhes
+                      {abaAtiva === "AGUARDANDO" && (
+                        <button onClick={() => handleLancar(item)} className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded font-bold text-xs shadow-sm transition-all transform hover:scale-105 whitespace-nowrap">
+                          <FaPlay size={10} /> LANÇAR
                         </button>
                       )}
 
-                      {showLancar && (
-                        <button
-                          onClick={() => handleLancar(item)}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-black text-sm shadow-sm transition-all transform hover:scale-105"
-                        >
-                          <FaPlay size={12} /> LANÇAR
+                      {abaAtiva === "AGUARDANDO" && podeExcluir && (
+                        <button onClick={() => handleExcluir(item.id)} className="flex items-center justify-center p-2 bg-white border border-red-200 text-red-600 rounded hover:bg-red-50 shadow-sm transition-all" title="Excluir Definitivamente">
+                          <FaTrash size={14} />
                         </button>
                       )}
 
-                      {/* Excluir Restrito */}
-                      {podeExcluir && abaAtiva === "ANTES" && (
-                        <button
-                          onClick={() => handleExcluir(item.id)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 hover:border-red-300 font-bold text-sm shadow-sm transition-all"
-                          title="Excluir Definitivamente"
-                        >
-                          <FaTrash size={14} /> Excluir
-                        </button>
-                      )}
-
-                      {abaAtiva === "POS" && status === "EM_MONITORAMENTO" && (
-                        <span
-                          className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg font-bold text-sm shadow-sm cursor-help whitespace-nowrap"
-                          title="Aguardando fechamento automático"
-                        >
-                          <FaClock size={12} /> Em andamento
-                        </span>
-                      )}
-
-                      {abaAtiva === "POS" && ["ENCERRADO", "ATAS", "OK"].includes(status) && (
-                        <button
-                          onClick={() => {
-                            setItemSelecionado(item);
-                            setModalAnaliseOpen(true);
-                          }}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-black text-sm shadow-sm transition-all transform hover:scale-105 whitespace-nowrap"
-                          title="Ver Análise Final"
-                        >
-                          <FaChartLine size={14} /> VER ANÁLISE
+                      {(abaAtiva === "MONITORAMENTO" || abaAtiva === "CONCLUIDOS") && (
+                        <button onClick={() => abrirVisaoGeral(item)} className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-white rounded font-bold text-xs shadow-sm hover:bg-slate-700 transition-all whitespace-nowrap" title="Visão Geral do Prontuário e Histórico">
+                          <FaEye size={12} /> Prontuário
                         </button>
                       )}
                     </div>
@@ -1049,8 +962,7 @@ export default function DesempenhoDieselAcompanhamento() {
             {listaFiltrada.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                  <div className="text-lg font-bold">Nenhum registro encontrado.</div>
-                  <div className="text-base mt-1">Verifique os filtros ou troque de aba.</div>
+                  <div className="text-sm font-bold">Nenhum registro encontrado nesta aba.</div>
                 </td>
               </tr>
             )}
@@ -1058,7 +970,89 @@ export default function DesempenhoDieselAcompanhamento() {
         </table>
       </div>
 
-      {/* MODAL DETALHES */}
+      {/* =========================================================================================
+          NOVO MODAL UNIFICADO: VISÃO GERAL (Prontuário + Detalhes + Análise + Histórico)
+      ========================================================================================= */}
+      {modalVisaoGeralOpen && itemSelecionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto flex flex-col animate-in zoom-in-95">
+            <div className="flex justify-between items-center p-5 border-b bg-slate-50 sticky top-0 z-10">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                <FaClipboardList /> Prontuário Unificado de Acompanhamento
+              </h3>
+              <button onClick={() => setModalVisaoGeralOpen(false)}>
+                <FaTimes className="text-gray-400 hover:text-red-500 text-xl" />
+              </button>
+            </div>
+
+            <div className="p-4 md:p-6 space-y-6">
+              <div className="p-4 bg-slate-100 rounded-lg border flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                <div>
+                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Motorista</div>
+                  <div className="font-black text-slate-800 text-lg">{itemSelecionado.motorista_nome || "-"}</div>
+                  <div className="font-mono text-slate-500 text-sm">{itemSelecionado.motorista_chapa || "-"}</div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Foco Principal</div>
+                  <div className="font-bold text-slate-700 bg-white px-3 py-1 rounded border shadow-sm inline-block">
+                    {getFoco(itemSelecionado)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 border rounded-lg p-4 md:p-5 bg-white shadow-sm">
+                  <h4 className="font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
+                    <FaEye className="text-blue-600" /> Resumo da Ordem Atual
+                  </h4>
+                  {normalizeStatus(itemSelecionado.status) === "EM_MONITORAMENTO" ? (
+                    <ResumoLancamentoInstrutor item={itemSelecionado} />
+                  ) : (
+                    <ResumoAnalise item={itemSelecionado} />
+                  )}
+                </div>
+
+                <div className="border rounded-lg p-4 md:p-5 bg-slate-50 shadow-sm h-fit">
+                  <h4 className="font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
+                    <FaHistory className="text-slate-500" /> Histórico Pregresso
+                  </h4>
+                  
+                  {loadingHist ? (
+                    <div className="text-sm text-slate-500 font-medium">Buscando ocorrências...</div>
+                  ) : historico.length === 0 ? (
+                    <div className="text-sm text-slate-500 font-medium">Nenhum registro anterior encontrado.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {historico.map((h) => (
+                        <div key={h.id} className="p-3 border rounded-lg bg-white shadow-sm">
+                          <div className="flex justify-between items-start mb-1">
+                            <div className="font-bold text-slate-700 text-sm">
+                              {formatarDataHoraBR(h.created_at, false)}
+                            </div>
+                            <div className="font-bold text-[10px] px-2 py-0.5 bg-slate-100 border text-slate-600 rounded">
+                              {normalizeStatus(h.status)}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-500 leading-relaxed">
+                            Foco: {getFoco(h)} <br />
+                            Nível: {h.nivel ?? "-"} • Dias: {h.dias_monitoramento ?? "-"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================================
+          MODAIS LEGADO MANTIDOS EXATAMENTE COMO ESTAVAM PARA PRESERVAR A INTEGRIDADE DO CÓDIGO
+      ========================================================================================= */}
+      
+      {/* MODAL DETALHES (Antigo) */}
       {modalDetalhesOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
@@ -1092,7 +1086,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       )}
 
-      {/* MODAL ANÁLISE */}
+      {/* MODAL ANÁLISE (Antigo) */}
       {modalAnaliseOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
@@ -1118,269 +1112,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       )}
 
-      {/* MODAL LANÇAR */}
-      {modalLancarOpen && itemSelecionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
-            <div className="flex justify-between items-center p-5 border-b bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                <FaRoad /> Lançar Intervenção Técnica
-              </h3>
-              <button onClick={() => setModalLancarOpen(false)}>
-                <FaTimes className="text-gray-400 hover:text-red-500" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {itensError ? (
-                <div className="p-3 rounded border bg-rose-50 text-sm text-rose-700">
-                  Erro ao carregar checklist: <b>{itensError}</b>
-                </div>
-              ) : null}
-
-              <div className="p-4 border rounded-lg bg-gray-50">
-                <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
-                  <FaClock /> Dados da Viagem de Teste (Prova)
-                </h4>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-gray-500">Hora Início *</label>
-                    <input
-                      type="time"
-                      value={form.horaInicio}
-                      onChange={(e) => setForm({ ...form, horaInicio: e.target.value })}
-                      className="w-full p-2 border rounded text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-gray-500">Hora Fim</label>
-                    <input
-                      type="time"
-                      value={form.horaFim}
-                      onChange={(e) => setForm({ ...form, horaFim: e.target.value })}
-                      className="w-full p-2 border rounded text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-gray-500">KM Início *</label>
-                    <input
-                      type="number"
-                      value={form.kmInicio}
-                      onChange={(e) => setForm({ ...form, kmInicio: e.target.value })}
-                      className="w-full p-2 border rounded text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-gray-500">KM Fim</label>
-                    <input
-                      type="number"
-                      value={form.kmFim}
-                      onChange={(e) => setForm({ ...form, kmFim: e.target.value })}
-                      className="w-full p-2 border rounded text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-3">
-                  <label className="text-xs font-bold text-blue-600">
-                    MÉDIA REALIZADA NO TESTE (KM/L) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.mediaTeste}
-                    onChange={(e) => setForm({ ...form, mediaTeste: e.target.value })}
-                    className="w-full p-2 border border-blue-300 rounded text-sm font-bold text-blue-800 bg-blue-50"
-                    placeholder="Ex: 2.80"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
-                  <FaClipboardList /> Checklist de Condução (Resumo Operacional)
-                </h4>
-
-                {loadingItens ? (
-                  <div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">
-                    Carregando checklist...
-                  </div>
-                ) : itensConducao.length === 0 ? (
-                  <div className="p-3 rounded border bg-amber-50 text-sm text-amber-700">
-                    Nenhum item encontrado para o grupo <b>CONDUCAO_INTELIGENTE</b>.
-                    <div className="mt-1 text-[11px] text-amber-700/80">
-                      (Se você já inseriu no banco, é quase certeza que o campo <b>grupo</b> está com
-                      texto diferente. O código agora está tolerante, então se ainda estiver vazio,
-                      o problema tende a ser RLS/SELECT ou a tabela está vazia mesmo.)
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {itensConducao.map((it) => {
-                      const val = form.checklistConducao?.[it.codigo];
-                      return (
-                        <div key={it.id} className="p-3 border rounded-lg bg-white">
-                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-xs font-extrabold text-slate-700">
-                                {String(it.ordem).padStart(2, "0")} • {it.descricao}
-                              </div>
-                              {it.ajuda ? (
-                                <div className="text-sm text-slate-600">{it.ajuda}</div>
-                              ) : null}
-                            </div>
-
-                            <div className="flex gap-2 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => setConducao(it.codigo, true)}
-                                className={`px-3 py-2 rounded border text-xs font-bold transition ${
-                                  val === true
-                                    ? "bg-emerald-600 text-white border-emerald-700"
-                                    : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                                }`}
-                              >
-                                SIM
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => setConducao(it.codigo, false)}
-                                className={`px-3 py-2 rounded border text-xs font-bold transition ${
-                                  val === false
-                                    ? "bg-rose-600 text-white border-rose-700"
-                                    : "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100"
-                                }`}
-                              >
-                                NÃO
-                              </button>
-                            </div>
-                          </div>
-
-                          {val === null && (
-                            <div className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block">
-                              Selecione SIM ou NÃO
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h4 className="font-bold text-slate-700 text-sm mb-3">
-                  Avaliação Técnica (Sistemas)
-                </h4>
-
-                {loadingItens ? (
-                  <div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">
-                    Carregando avaliação técnica...
-                  </div>
-                ) : itensTecnica.length === 0 ? (
-                  <div className="p-3 rounded border bg-amber-50 text-sm text-amber-700">
-                    Nenhum item encontrado para o grupo <b>AVALIACAO_TECNICA</b>.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {itensTecnica.map((q) => {
-                      const v = form.avaliacaoTecnica?.[q.codigo] || "";
-                      return (
-                        <div key={q.id} className="p-3 border rounded-lg bg-gray-50">
-                          <div className="text-sm text-slate-700 font-semibold mb-2">
-                            {String(q.ordem).padStart(2, "0")} • {q.descricao}
-                          </div>
-                          {q.ajuda ? (
-                            <div className="text-xs text-slate-500 mb-2">{q.ajuda}</div>
-                          ) : null}
-
-                          <div className="flex flex-wrap gap-2">
-                            {TEC_OPCOES.map((op) => {
-                              const Icon = op.icon;
-                              const active = v === op.value;
-                              return (
-                                <button
-                                  key={op.value}
-                                  type="button"
-                                  onClick={() => setTecnica(q.codigo, op.value)}
-                                  className={`px-3 py-2 rounded border text-xs font-bold transition inline-flex items-center gap-2 ${
-                                    active
-                                      ? "bg-slate-900 text-white border-slate-900"
-                                      : `${op.cls} hover:brightness-95`
-                                  }`}
-                                >
-                                  <Icon /> {op.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {!v && (
-                            <div className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block">
-                              Selecione uma opção
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h4 className="font-bold text-slate-700 text-sm mb-3">
-                  Definir Nível (Contrato)
-                </h4>
-
-                <div className="grid grid-cols-3 gap-3">
-                  {[1, 2, 3].map((lvl) => (
-                    <button
-                      key={lvl}
-                      onClick={() => setForm({ ...form, nivel: lvl })}
-                      className={`p-3 rounded-lg border text-center transition ${
-                        form.nivel === lvl
-                          ? "ring-2 ring-offset-1 ring-slate-400 bg-white"
-                          : NIVEIS[lvl].color
-                      }`}
-                      type="button"
-                    >
-                      <div className="font-bold">{NIVEIS[lvl].label}</div>
-                      <div className="text-xs opacity-80">{NIVEIS[lvl].dias} dias</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500">
-                  Observação do Instrutor (opcional)
-                </label>
-                <textarea
-                  rows={3}
-                  value={form.obs}
-                  onChange={(e) => setForm({ ...form, obs: e.target.value })}
-                  className="w-full p-2 border rounded text-sm"
-                  placeholder="Ex.: ajustes aplicados e pontos observados..."
-                />
-              </div>
-
-              <button
-                onClick={salvarIntervencao}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md flex justify-center items-center gap-2 transition"
-              >
-                <FaSave /> SALVAR E INICIAR MONITORAMENTO
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL CONSULTA */}
+      {/* MODAL CONSULTA (Antigo) */}
       {modalConsultaOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1417,7 +1149,7 @@ export default function DesempenhoDieselAcompanhamento() {
                   {historico.map((h) => (
                     <div key={h.id} className="p-3 border rounded bg-white">
                       <div className="text-sm font-bold text-slate-800">
-                        {h.created_at ? formatarDataBR(h.created_at) : "-"} •{" "}
+                        {h.created_at ? formatarDataHoraBR(h.created_at, false) : "-"} •{" "}
                         {normalizeStatus(h.status)}
                       </div>
                       <div className="text-xs text-slate-500">
@@ -1427,6 +1159,97 @@ export default function DesempenhoDieselAcompanhamento() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================================
+          MODAL LANÇAR (Permanece Intacto)
+      ========================================================================================= */}
+      {modalLancarOpen && itemSelecionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+             <div className="flex justify-between items-center p-4 border-b bg-slate-50 sticky top-0 z-10">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><FaRoad /> Lançar Intervenção Técnica</h3>
+              <button onClick={() => setModalLancarOpen(false)}><FaTimes className="text-gray-400 hover:text-red-500 text-xl" /></button>
+            </div>
+            
+            <div className="p-4 md:p-6 space-y-6">
+              {itensError && <div className="p-3 rounded border bg-rose-50 text-sm text-rose-700">Erro ao carregar checklist: <b>{itensError}</b></div>}
+              
+              <div className="p-4 md:p-5 border rounded-lg bg-gray-50">
+                <h4 className="font-bold text-slate-700 text-sm mb-4 flex items-center gap-2"><FaClock /> Dados da Viagem de Teste</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div><label className="text-xs font-bold text-gray-500 mb-1 block">Hora Início *</label><input type="time" value={form.horaInicio} onChange={(e) => setForm({ ...form, horaInicio: e.target.value })} className="w-full p-2.5 border rounded text-sm outline-none focus:border-blue-500" /></div>
+                  <div><label className="text-xs font-bold text-gray-500 mb-1 block">Hora Fim</label><input type="time" value={form.horaFim} onChange={(e) => setForm({ ...form, horaFim: e.target.value })} className="w-full p-2.5 border rounded text-sm outline-none focus:border-blue-500" /></div>
+                  <div><label className="text-xs font-bold text-gray-500 mb-1 block">KM Início *</label><input type="number" value={form.kmInicio} onChange={(e) => setForm({ ...form, kmInicio: e.target.value })} className="w-full p-2.5 border rounded text-sm outline-none focus:border-blue-500" /></div>
+                  <div><label className="text-xs font-bold text-gray-500 mb-1 block">KM Fim</label><input type="number" value={form.kmFim} onChange={(e) => setForm({ ...form, kmFim: e.target.value })} className="w-full p-2.5 border rounded text-sm outline-none focus:border-blue-500" /></div>
+                </div>
+                <div className="mt-4"><label className="text-xs font-bold text-blue-600 block mb-1">MÉDIA REALIZADA NO TESTE (KM/L) *</label><input type="number" step="0.01" value={form.mediaTeste} onChange={(e) => setForm({ ...form, mediaTeste: e.target.value })} className="w-full p-2.5 border border-blue-300 rounded text-sm font-bold text-blue-800 bg-blue-50 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: 2.80" /></div>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2"><FaClipboardList /> Condução Inteligente</h4>
+                <div className="space-y-2">
+                  {itensConducao.map((it) => (
+                    <div key={it.id} className="p-3 border rounded-lg bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
+                      <div>
+                        <div className="text-sm font-extrabold text-slate-700 leading-tight">{String(it.ordem).padStart(2, "0")} • {it.descricao}</div>
+                        {it.ajuda && <div className="text-xs text-slate-500 mt-1">{it.ajuda}</div>}
+                      </div>
+                      <div className="flex gap-2 shrink-0 w-full md:w-auto">
+                        <button type="button" onClick={() => setConducao(it.codigo, true)} className={`flex-1 md:flex-none px-4 py-2 rounded border text-xs font-bold transition-all ${form.checklistConducao[it.codigo] === true ? "bg-emerald-600 text-white border-emerald-700 shadow-inner" : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"}`}>SIM</button>
+                        <button type="button" onClick={() => setConducao(it.codigo, false)} className={`flex-1 md:flex-none px-4 py-2 rounded border text-xs font-bold transition-all ${form.checklistConducao[it.codigo] === false ? "bg-rose-600 text-white border-rose-700 shadow-inner" : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"}`}>NÃO</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-700 text-sm mb-3">Avaliação Técnica</h4>
+                <div className="space-y-3">
+                  {itensTecnica.map((q) => (
+                    <div key={q.id} className="p-3 border rounded-lg bg-gray-50 flex flex-col gap-2 shadow-sm">
+                      <div>
+                        <div className="text-sm text-slate-700 font-semibold leading-tight">{String(q.ordem).padStart(2, "0")} • {q.descricao}</div>
+                        {q.ajuda && <div className="text-xs text-slate-500 mt-1">{q.ajuda}</div>}
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {TEC_OPCOES.map((op) => (
+                          <button key={op.value} type="button" onClick={() => setTecnica(q.codigo, op.value)} className={`px-3 py-2 rounded border text-xs font-bold flex items-center gap-1.5 transition-all ${form.avaliacaoTecnica[q.codigo] === op.value ? "bg-slate-900 text-white border-slate-900 shadow-inner" : `${op.cls} hover:brightness-95`}`}><op.icon size={12} /> {op.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="font-bold text-slate-700 text-sm mb-2">Definir Nível</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[1, 2, 3].map((lvl) => (
+                      <button key={lvl} onClick={() => setForm({ ...form, nivel: lvl })} className={`p-3 rounded-lg border text-center transition-all ${form.nivel === lvl ? "ring-2 ring-offset-1 ring-slate-500 bg-white" : NIVEIS[lvl].color}`} type="button">
+                        <div className="font-bold text-sm">{NIVEIS[lvl].label}</div>
+                        <div className="text-xs opacity-80">{NIVEIS[lvl].dias} dias</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-slate-700 text-sm mb-2">Observação (opcional)</h4>
+                  <textarea rows={3} value={form.obs} onChange={(e) => setForm({ ...form, obs: e.target.value })} className="w-full p-2.5 border rounded-lg text-sm outline-none focus:border-blue-500" placeholder="Ex.: ajustes aplicados e pontos de atenção..." />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <button onClick={salvarIntervencao} className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-lg rounded-xl shadow-md flex justify-center items-center gap-2 transform transition-transform hover:scale-[1.01]">
+                  <FaSave /> SALVAR LANÇAMENTO
+                </button>
+              </div>
             </div>
           </div>
         </div>

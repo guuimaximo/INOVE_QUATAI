@@ -1,4 +1,4 @@
-// src/pages/TratativasResumo.jsx
+// src/pages/AtasResumo.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 import * as XLSX from "xlsx";
@@ -92,7 +92,7 @@ function ListItemButton({ label, value, onClick, active = false, sub = null }) {
   );
 }
 
-export default function TratativasResumo() {
+export default function AtasResumo() {
   const [filtros, setFiltros] = useState({
     dataInicio: "",
     dataFim: "",
@@ -101,15 +101,17 @@ export default function TratativasResumo() {
     status: "",
   });
 
+  const [setoresDisponiveis, setSetoresDisponiveis] = useState([]);
+
   const [loading, setLoading] = useState(false);
-  const [tratativas, setTratativas] = useState([]);
+  const [atas, setAtas] = useState([]);
   const [detalhes, setDetalhes] = useState([]);
 
   // Drill-down (cliques)
   const [selOcorrencia, setSelOcorrencia] = useState("");
   const [selMotorista, setSelMotorista] = useState(""); // chave: chapa|nome
   const [selAcao, setSelAcao] = useState("");
-  const [selLinha, setSelLinha] = useState(""); // ✅ NOVO
+  const [selLinha, setSelLinha] = useState(""); 
 
   // Cards (igual Central)
   const [totalCount, setTotalCount] = useState(0);
@@ -117,7 +119,7 @@ export default function TratativasResumo() {
   const [concluidasCount, setConcluidasCount] = useState(0);
   const [atrasadasCount, setAtrasadasCount] = useState(0);
 
-  // default período: mês atual
+  // default período: mês atual e carrega setores
   useEffect(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -127,6 +129,16 @@ export default function TratativasResumo() {
       dataInicio: toISODateOnly(start),
       dataFim: toISODateOnly(end),
     }));
+
+    async function carregarSetores() {
+      const { data } = await supabase.from("tratativas").select("setor_origem");
+      if (data) {
+        const unicos = [...new Set(data.map((d) => d.setor_origem).filter(Boolean))];
+        setSetoresDisponiveis(unicos.sort());
+      }
+    }
+    
+    carregarSetores();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -134,7 +146,7 @@ export default function TratativasResumo() {
     setSelOcorrencia("");
     setSelMotorista("");
     setSelAcao("");
-    setSelLinha(""); // ✅ NOVO
+    setSelLinha(""); 
   }
 
   function computeCardsFromList(list) {
@@ -146,7 +158,6 @@ export default function TratativasResumo() {
       (t) => ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid")
     ).length;
 
-    // atrasadas: pendente + created_at < hoje-10d
     const date10DaysAgo = new Date();
     date10DaysAgo.setDate(date10DaysAgo.getDate() - 10);
     const atr = list.filter((t) => {
@@ -167,8 +178,7 @@ export default function TratativasResumo() {
     try {
       resetDrill();
 
-      // ⚠️ Ajuste aqui se o nome da coluna de linha for diferente
-      const LINHA_FIELD = "linha"; // ✅ supõe que existe tratativas.linha
+      const LINHA_FIELD = "linha"; 
 
       let q = supabase.from("tratativas").select(
         `
@@ -201,11 +211,11 @@ export default function TratativasResumo() {
       const { data: tData, error: tErr } = await q.order("created_at", { ascending: false }).limit(100000);
       if (tErr) throw tErr;
 
-      const listTrat = tData || [];
-      setTratativas(listTrat);
-      computeCardsFromList(listTrat);
+      const listAtas = tData || [];
+      setAtas(listAtas);
+      computeCardsFromList(listAtas);
 
-      const ids = listTrat.map((x) => x.id).filter(Boolean);
+      const ids = listAtas.map((x) => x.id).filter(Boolean);
       if (!ids.length) {
         setDetalhes([]);
         return;
@@ -237,8 +247,8 @@ export default function TratativasResumo() {
 
       setDetalhes(allDet);
     } catch (e) {
-      console.error("Erro ao carregar resumo de tratativas:", e);
-      alert("Erro ao carregar Resumo de Tratativas. Verifique o console.");
+      console.error("Erro ao carregar resumo de atas:", e);
+      alert("Erro ao carregar Resumo de Atas. Verifique o console.");
     } finally {
       setLoading(false);
     }
@@ -248,16 +258,15 @@ export default function TratativasResumo() {
     await carregar();
   }
 
-  // join
-  const tratById = useMemo(() => {
+  const ataById = useMemo(() => {
     const m = new Map();
-    for (const t of tratativas) m.set(t.id, t);
+    for (const t of atas) m.set(t.id, t);
     return m;
-  }, [tratativas]);
+  }, [atas]);
 
   const detalhesJoin = useMemo(() => {
     return (detalhes || []).map((d) => {
-      const t = tratById.get(d.tratativa_id);
+      const t = ataById.get(d.tratativa_id);
       return {
         ...d,
         motorista_nome: t?.motorista_nome ?? "",
@@ -267,69 +276,67 @@ export default function TratativasResumo() {
         setor_origem: t?.setor_origem ?? "",
         prioridade: t?.prioridade ?? "",
         status: t?.status ?? "",
-        linha: t?.linha ?? "", // ✅
-        tratativa_created_at: t?.created_at ?? "",
+        linha: t?.linha ?? "",
+        ata_created_at: t?.created_at ?? "",
       };
     });
-  }, [detalhes, tratById]);
+  }, [detalhes, ataById]);
 
-  // recorte drill
   const recorteDrill = useMemo(() => {
-    let baseTrat = [...tratativas];
+    let baseAtas = [...atas];
     let baseDet = [...detalhesJoin];
 
     if (selOcorrencia) {
-      baseTrat = baseTrat.filter((t) => normStr(t.tipo_ocorrencia) === normStr(selOcorrencia));
-      const ids = new Set(baseTrat.map((t) => t.id));
+      baseAtas = baseAtas.filter((t) => normStr(t.tipo_ocorrencia) === normStr(selOcorrencia));
+      const ids = new Set(baseAtas.map((t) => t.id));
       baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
     }
 
     if (selLinha) {
-      baseTrat = baseTrat.filter((t) => normStr(t.linha) === normStr(selLinha));
-      const ids = new Set(baseTrat.map((t) => t.id));
+      baseAtas = baseAtas.filter((t) => normStr(t.linha) === normStr(selLinha));
+      const ids = new Set(baseAtas.map((t) => t.id));
       baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
     }
 
     if (selMotorista) {
-      baseTrat = baseTrat.filter(
+      baseAtas = baseAtas.filter(
         (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === selMotorista
       );
-      const ids = new Set(baseTrat.map((t) => t.id));
+      const ids = new Set(baseAtas.map((t) => t.id));
       baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
     }
 
     if (selAcao) {
       baseDet = baseDet.filter((d) => normStr(d.acao_aplicada) === normStr(selAcao));
       const ids = new Set(baseDet.map((d) => d.tratativa_id));
-      baseTrat = baseTrat.filter((t) => ids.has(t.id));
+      baseAtas = baseAtas.filter((t) => ids.has(t.id));
     }
 
-    return { baseTrat, baseDet };
-  }, [tratativas, detalhesJoin, selOcorrencia, selLinha, selMotorista, selAcao]);
+    return { baseAtas, baseDet };
+  }, [atas, detalhesJoin, selOcorrencia, selLinha, selMotorista, selAcao]);
 
-  // TOPs
   const topOcorrencias = useMemo(() => {
-    const m = countBy(recorteDrill.baseTrat, (t) => normStr(t.tipo_ocorrencia) || "Sem ocorrência");
+    const m = countBy(recorteDrill.baseAtas, (t) => normStr(t.tipo_ocorrencia) || "Sem ocorrência");
     return sortMapDesc(m).slice(0, 12);
-  }, [recorteDrill.baseTrat]);
+  }, [recorteDrill.baseAtas]);
 
   const topLinhas = useMemo(() => {
-    const m = countBy(recorteDrill.baseTrat, (t) => normStr(t.linha) || "Sem linha");
+    const m = countBy(recorteDrill.baseAtas, (t) => normStr(t.linha) || "Sem linha");
     return sortMapDesc(m).slice(0, 12);
-  }, [recorteDrill.baseTrat]);
+  }, [recorteDrill.baseAtas]);
 
   const topMotoristas = useMemo(() => {
     const key = (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}`.trim() || "Sem motorista";
-    const m = countBy(recorteDrill.baseTrat, (t) => key(t));
+    const m = countBy(recorteDrill.baseAtas, (t) => key(t));
     return sortMapDesc(m)
       .slice(0, 12)
       .map(([k, total]) => {
         const [chapa, nome] = k.split("|");
-        const pend = recorteDrill.baseTrat.filter(
+        const pend = recorteDrill.baseAtas.filter(
           (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k && ilikeContains(t.status, "pend")
         ).length;
 
-        const conc = recorteDrill.baseTrat.filter(
+        const conc = recorteDrill.baseAtas.filter(
           (t) =>
             `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k &&
             (ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid"))
@@ -337,7 +344,7 @@ export default function TratativasResumo() {
 
         return { k, chapa, nome, total, pend, conc };
       });
-  }, [recorteDrill.baseTrat]);
+  }, [recorteDrill.baseAtas]);
 
   const topAcoes = useMemo(() => {
     const m = countBy(recorteDrill.baseDet, (d) => normStr(d.acao_aplicada) || "Não aplicada");
@@ -356,14 +363,13 @@ export default function TratativasResumo() {
     return chips;
   }, [selOcorrencia, selLinha, selMotorista, selAcao]);
 
-  // EXCEL (1 arquivo, 3 abas)
   function baixarExcelUnificado() {
-    const { baseTrat } = recorteDrill;
+    const { baseAtas } = recorteDrill;
 
-    const ids = new Set(baseTrat.map((t) => t.id));
+    const ids = new Set(baseAtas.map((t) => t.id));
     const detFiltrado = detalhesJoin.filter((d) => ids.has(d.tratativa_id));
 
-    const sheetTrat = baseTrat.map((t) => ({
+    const sheetAtas = baseAtas.map((t) => ({
       id: t.id,
       created_at: t.created_at,
       motorista_chapa: t.motorista_chapa,
@@ -379,26 +385,26 @@ export default function TratativasResumo() {
     const sheetDet = detFiltrado.map((d) => ({
       id: d.id,
       created_at: d.created_at,
-      tratativa_id: d.tratativa_id,
+      ata_id: d.tratativa_id,
       acao_aplicada: d.acao_aplicada,
       observacoes: d.observacoes,
       tratado_por_login: d.tratado_por_login,
       tratado_por_nome: d.tratado_por_nome,
     }));
 
-    const detByTrat = new Map();
+    const detByAta = new Map();
     for (const d of detFiltrado) {
-      if (!detByTrat.has(d.tratativa_id)) detByTrat.set(d.tratativa_id, []);
-      detByTrat.get(d.tratativa_id).push(d);
+      if (!detByAta.has(d.tratativa_id)) detByAta.set(d.tratativa_id, []);
+      detByAta.get(d.tratativa_id).push(d);
     }
 
     const sheetUni = [];
-    for (const t of baseTrat) {
-      const list = detByTrat.get(t.id) || [];
+    for (const t of baseAtas) {
+      const list = detByAta.get(t.id) || [];
       if (!list.length) {
         sheetUni.push({
-          tratativa_id: t.id,
-          tratativa_created_at: t.created_at,
+          ata_id: t.id,
+          ata_created_at: t.created_at,
           motorista_chapa: t.motorista_chapa,
           motorista_nome: t.motorista_nome,
           linha: t.linha,
@@ -417,8 +423,8 @@ export default function TratativasResumo() {
       } else {
         for (const d of list) {
           sheetUni.push({
-            tratativa_id: t.id,
-            tratativa_created_at: t.created_at,
+            ata_id: t.id,
+            ata_created_at: t.created_at,
             motorista_chapa: t.motorista_chapa,
             motorista_nome: t.motorista_nome,
             linha: t.linha,
@@ -439,33 +445,31 @@ export default function TratativasResumo() {
     }
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetTrat), "Tratativas");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetAtas), "Atas");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetDet), "Detalhes");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetUni), "Unificado");
 
-    const nome = `tratativas_resumo_${filtros.dataInicio || "inicio"}_${filtros.dataFim || "fim"}.xlsx`;
+    const nome = `atas_resumo_${filtros.dataInicio || "inicio"}_${filtros.dataFim || "fim"}.xlsx`;
     XLSX.writeFile(wb, nome);
   }
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Resumo de Tratativas</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Resumo de Atas</h1>
           <p className="text-sm text-gray-500">Clique nos TOPs para filtrar como BI e exporte um único Excel unificado.</p>
         </div>
 
         <button
           onClick={baixarExcelUnificado}
-          disabled={loading || tratativas.length === 0}
+          disabled={loading || atas.length === 0}
           className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-300"
         >
           Baixar Excel (Unificado)
         </button>
       </div>
 
-      {/* Filtros */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <input
@@ -493,12 +497,11 @@ export default function TratativasResumo() {
             className="border rounded-md px-3 py-2 bg-white"
           >
             <option value="">Todos os Setores</option>
-            <option value="Telemetria">Telemetria</option>
-            <option value="CCO">CCO</option>
-            <option value="Manutenção">Manutenção</option>
-            <option value="Fiscalização">Fiscalização</option>
-            <option value="SAC">SAC</option>
-            <option value="Inspetoria">Inspetoria</option>
+            {setoresDisponiveis.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
           <select
             value={filtros.status}
@@ -536,7 +539,6 @@ export default function TratativasResumo() {
         </div>
       </div>
 
-      {/* Cards igual Central */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100" />
         <CardResumo titulo="Pendentes" valor={pendentesCount} cor="bg-yellow-100" />
@@ -544,9 +546,8 @@ export default function TratativasResumo() {
         <CardResumo titulo="Atrasadas (>10d)" valor={atrasadasCount} cor="bg-red-100" />
       </div>
 
-      {/* ✅ 4 tabelas TOP (inclui Linhas) */}
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        <Card title="Top Motoristas (Tratativas)" right={<Badge tone="blue">{recorteDrill.baseTrat.length} tratativas</Badge>}>
+        <Card title="Top Motoristas (Atas)" right={<Badge tone="blue">{recorteDrill.baseAtas.length} atas</Badge>}>
           <div className="space-y-2">
             {topMotoristas.length === 0 ? (
               <div className="text-sm text-gray-500">Sem dados no recorte.</div>
@@ -616,7 +617,7 @@ export default function TratativasResumo() {
           <div className="space-y-2">
             {topAcoes.length === 0 ? (
               <div className="text-sm text-gray-500">
-                Sem ações no recorte. (Ainda não há registros em <b>tratativas_detalhes</b> para este período/filtro.)
+                Sem ações no recorte.
               </div>
             ) : (
               topAcoes.map(([label, qtd]) => (

@@ -1,10 +1,21 @@
 // src/pages/DesempenhoLancamento.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
-import { useAuth } from "../context/AuthContext";
-import { FaTimes, FaRobot, FaExclamationTriangle, FaCheckCircle, FaFilePdf, FaArrowRight } from "react-icons/fa";
+import { AuthContext } from "../context/AuthContext";
+import { 
+  FaBolt, 
+  FaClock, 
+  FaExclamationTriangle, 
+  FaSave, 
+  FaRobot, 
+  FaTrash, 
+  FaFileUpload, 
+  FaCheckCircle,
+  FaArrowRight,
+  FaTimes
+} from "react-icons/fa";
 
 // =============================================================================
 // CONFIG (GitHub Actions)
@@ -14,16 +25,10 @@ const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
 const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GH_REF = "main";
 const WF_ACOMP = "ordem-acompanhamento.yml";
-const WF_TRAT = "ordem-tratativa.yml"; // Novo workflow para tratativas
+const WF_TRAT = "ordem-tratativa.yml"; 
 
 // =============================================================================
-// Storage
-// =============================================================================
-const SUPABASE_BASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const BUCKET_RELATORIOS = "relatorios";
-
-// =============================================================================
-// Config
+// Configurações Gerais
 // =============================================================================
 const TIPO_PRONTUARIO = "prontuarios_acompanhamento";
 const MOTIVOS = ["KM/L abaixo da meta", "Tendência de queda", "Comparativo com cluster", "Outro"];
@@ -37,11 +42,6 @@ function isUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || ""));
 }
 
-function safeNumber(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 function filesToList(files) {
   if (!files?.length) return [];
   return Array.from(files).map((f) => ({
@@ -49,54 +49,28 @@ function filesToList(files) {
   }));
 }
 
-function dedupeFiles(list) {
-  const seen = new Set();
-  return (list || []).filter((x) => {
-    const k = `${x.name}__${x.size}__${x.lastModified}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-}
-
 async function uploadManyToStorage({ files, bucket, folder }) {
   if (!files?.length) return [];
   const out = [];
   const ts = Date.now();
-
   for (let i = 0; i < files.length; i++) {
     const f = files[i]?.file;
     if (!f) continue;
     const safeName = String(f.name || `arquivo_${i}`).replaceAll(" ", "_").replace(/[^\w.\-()]/g, "");
     const path = `${folder}/${ts}_${i}_${safeName}`;
-
     const { error: upErr } = await supabase.storage.from(bucket).upload(path, f, {
       upsert: false, cacheControl: "3600", contentType: f.type || undefined,
     });
     if (upErr) throw upErr;
-
     const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
     out.push({ path, publicUrl: pub?.publicUrl || null });
   }
   return out;
 }
 
-function normalizePath(p) {
-  if (!p) return "";
-  return String(p).replace(/^\/+/, "");
-}
-
-function getPublicUrl(path) {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-  return `${SUPABASE_BASE_URL}/storage/v1/object/public/${BUCKET_RELATORIOS}/${cleanPath}`;
-}
-
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
-  if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes (VITE_GITHUB_*).");
+  if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes.");
   const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
-
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -107,7 +81,6 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
     },
     body: JSON.stringify({ ref: GH_REF, inputs }),
   });
-
   if (response.status !== 204) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.message || `Erro GitHub: ${response.status}`);
@@ -116,393 +89,334 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
 }
 
 // =============================================================================
-// COMPONENTES AUXILIARES
-// =============================================================================
-function Segmented({ value, onChange, disabled }) {
-  return (
-    <div className="flex bg-slate-100/80 p-1.5 rounded-xl border shadow-inner w-fit">
-      <button
-        type="button"
-        onClick={() => onChange(DESTINOS.ACOMP)}
-        disabled={disabled}
-        className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
-          value === DESTINOS.ACOMP ? "bg-white text-blue-700 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-700"
-        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-      >
-        <FaClock className={value === DESTINOS.ACOMP ? "text-blue-500" : ""} /> Acompanhamento Preventivo
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange(DESTINOS.TRAT)}
-        disabled={disabled}
-        className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
-          value === DESTINOS.TRAT ? "bg-white text-rose-700 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-700"
-        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-      >
-        <FaExclamationTriangle className={value === DESTINOS.TRAT ? "text-rose-500" : ""} /> Medida Disciplinar
-      </button>
-    </div>
-  );
-}
-
-// =============================================================================
 // COMPONENTE PRINCIPAL
 // =============================================================================
 export default function DesempenhoLancamento() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
+  const { user } = useContext(AuthContext);
 
   const [destino, setDestino] = useState(DESTINOS.ACOMP);
+  const [saving, setSaving] = useState(false);
+  const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
-  // Campos
+  // Form States
   const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
   const [motivoOutro, setMotivoOutro] = useState("");
   const [observacaoInicial, setObservacaoInicial] = useState("");
-  
   const [prioridadeTratativa, setPrioridadeTratativa] = useState("Alta");
-  const [evidTrat, setEvidTrat] = useState([]);
+  const [evidencias, setEvidencias] = useState([]);
 
   const motivoFinal = motivo === "Outro" ? motivoOutro.trim() : motivo;
-  const diasMonitoramento = 10;
 
-  // Estados UI
-  const [saving, setSaving] = useState(false);
-  const [errMsg, setErrMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
+  // Validação Dinâmica
+  const pronto = useMemo(() => {
+    const motoristaOk = !!(motorista?.chapa || motorista?.nome);
+    const camposBase = motoristaOk && motivoFinal && observacaoInicial.trim();
+    if (destino === DESTINOS.ACOMP) return camposBase;
+    return camposBase && evidencias.length > 0;
+  }, [destino, motorista, motivoFinal, observacaoInicial, evidencias]);
 
-  // =============================
-  // Files
-  // =============================
-  function addFilesTrat(e) {
+  const handleFileChange = (e) => {
     const list = filesToList(e.target.files);
-    setEvidTrat((prev) => dedupeFiles([...(prev || []), ...list]));
+    setEvidencias(prev => [...prev, ...list]);
     e.target.value = "";
-  }
-  function removeFileTrat(idx) {
-    setEvidTrat((prev) => prev.filter((_, i) => i !== idx));
-  }
+  };
 
-  // =============================
-  // Validações
-  // =============================
-  const prontoAcomp = useMemo(() => {
-    if (destino !== DESTINOS.ACOMP) return false;
-    return !!(String(motorista?.chapa || motorista?.nome || "").trim() && String(motivoFinal || "").trim() && String(observacaoInicial || "").trim().length > 0);
-  }, [destino, motorista, motivoFinal, observacaoInicial]);
+  const removeFile = (idx) => setEvidencias(prev => prev.filter((_, i) => i !== idx));
 
-  const prontoTrat = useMemo(() => {
-    if (destino !== DESTINOS.TRAT) return false;
-    return !!(String(motorista?.chapa || motorista?.nome || "").trim() && String(motivoFinal || "").trim() && (evidTrat || []).length > 0);
-  }, [destino, motorista, motivoFinal, evidTrat]);
-
-  const pronto = destino === DESTINOS.ACOMP ? prontoAcomp : prontoTrat;
-
-  function limparTudo() {
+  const limparTudo = () => {
     setMotorista({ chapa: "", nome: "" });
     setMotivo(MOTIVOS[0]);
     setMotivoOutro("");
     setObservacaoInicial("");
+    setEvidencias([]);
     setPrioridadeTratativa("Alta");
-    setEvidTrat([]);
-    setSaving(false);
-    setErrMsg("");
-    setOkMsg("");
-  }
-
-  useEffect(() => {
-    setErrMsg("");
-    setOkMsg("");
-  }, [destino]);
+    setStatusMsg({ type: "", text: "" });
+  };
 
   // =============================================================================
-  // AÇÃO PRINCIPAL: LANÇAR E DISPARAR ROBÔS (ASSÍNCRONO)
+  // LÓGICA DE LANÇAMENTO (UNIFICADA)
   // =============================================================================
-  async function lancar() {
+  async function handleLancar() {
     if (!pronto || saving) return;
     setSaving(true);
-    setErrMsg("");
-    setOkMsg("");
+    setStatusMsg({ type: "info", text: "Iniciando processamento e acionando robôs..." });
 
     try {
       const lancadorLogin = user?.login || user?.email || null;
-      const lancadorNome = user?.nome || null;
-      const lancadorIdNum = user?.id ?? null;
+      const lancadorNome = user?.nome || user?.nome_completo || null;
       const chapa = String(motorista?.chapa || "").trim();
-      const nomeMotorista = String(motorista?.nome || "").trim() || null;
-      const obsInit = String(observacaoInicial || "").trim() || null;
+      const nomeMot = String(motorista?.nome || "").trim() || null;
 
-      // ==========================================================
-      // FLUXO: ACOMPANHAMENTO PREVENTIVO
-      // ==========================================================
+      // 1. Upload de Evidências (apenas se houver)
+      let urlsEvidencias = [];
+      if (evidencias.length > 0) {
+        const folder = `diesel/lancamentos/${chapa || "manual"}/${Date.now()}`;
+        const uploaded = await uploadManyToStorage({ files: evidencias, bucket: "diesel", folder });
+        urlsEvidencias = uploaded.map(u => u.publicUrl).filter(Boolean);
+      }
+
+      // 2. Gravar diesel_lancamentos (Log Geral)
+      const { data: lancData, error: errLanc } = await supabase.from("diesel_lancamentos").insert({
+        motorista_chapa: chapa || null,
+        motorista_nome: nomeMot,
+        destino: destino,
+        prioridade: destino === DESTINOS.TRAT ? prioridadeTratativa : null,
+        motivo: motivoFinal,
+        observacao_inicial: observacaoInicial,
+        evidencias_urls: urlsEvidencias,
+        lancado_por_login: lancadorLogin,
+        lancado_por_nome: lancadorNome,
+      }).select("id").single();
+      if (errLanc) throw errLanc;
+
+      // 3. Fluxo Específico: ACOMPANHAMENTO
       if (destino === DESTINOS.ACOMP) {
-        
-        // 1) Grava Histórico Geral (Lançamento)
-        const payloadLancamento = {
-          motorista_chapa: chapa || null, motorista_nome: nomeMotorista, destino: DESTINOS.ACOMP,
-          motivo: motivoFinal, observacao_inicial: obsInit, dias_monitoramento: diasMonitoramento,
-          lancado_por_login: lancadorLogin, lancado_por_nome: lancadorNome,
-          lancado_por_usuario_id: lancadorIdNum ? String(lancadorIdNum) : null,
-          metadata: { origem: "LANCAMENTO_ACOMP_BOT" }
-        };
+        const { data: acompData, error: errAcomp } = await supabase.from("diesel_acompanhamentos").insert({
+          motorista_chapa: chapa || null,
+          motorista_nome: nomeMot,
+          motivo: motivoFinal,
+          status: "AGUARDANDO_INSTRUTOR",
+          observacao_inicial: observacaoInicial,
+          lancamento_id: lancData.id
+        }).select("id").single();
+        if (errAcomp) throw errAcomp;
 
-        const { data: lanc, error: eL } = await supabase.from("diesel_lancamentos").insert(payloadLancamento).select("id").single();
-        if (eL) throw eL;
-
-        // 2) Cria a Ordem de Acompanhamento
-        const payloadAcomp = {
-          motorista_chapa: chapa || null, motorista_nome: nomeMotorista, motivo: motivoFinal,
-          status: "AGUARDANDO_INSTRUTOR", dias_monitoramento: diasMonitoramento,
-          observacao_inicial: obsInit, lancamento_id: lanc.id,
-          metadata: { origem: "LANCAMENTO_ACOMP_BOT", lancado_por_login: lancadorLogin }
-        };
-
-        const { data: acomp, error: eA } = await supabase.from("diesel_acompanhamentos").insert(payloadAcomp).select("id").single();
-        if (eA) throw eA;
-
-        // 3) Evento Inicial da Linha do Tempo
-        const { error: eE } = await supabase.from("diesel_acompanhamento_eventos").insert({
-          acompanhamento_id: acomp.id, tipo: "LANCAMENTO", observacoes: `${motivoFinal}\n\n${obsInit || ""}`,
-          criado_por_login: lancadorLogin, criado_por_nome: lancadorNome, criado_por_id: isUuid(user?.id) ? user.id : null,
+        await supabase.from("diesel_acompanhamento_eventos").insert({
+          acompanhamento_id: acompData.id,
+          tipo: "LANCAMENTO",
+          observacoes: `Lançamento manual realizado.`,
+          criado_por_login: lancadorLogin,
+          criado_por_nome: lancadorNome
         });
-        if (eE) throw eE;
 
-        // 4) Lote para o Bot
-        const { data: lote, error: errL } = await supabase.from("acompanhamento_lotes").insert({
-          status: "PROCESSANDO", qtd: 1, extra: { origem: "LANCAMENTO_MANUAL_ACOMP", tipo: TIPO_PRONTUARIO, motorista_chapa: chapa }
+        // Disparar Robô de Acompanhamento
+        const { data: lote } = await supabase.from("acompanhamento_lotes").insert({
+          status: "PROCESSANDO", qtd: 1, extra: { tipo: TIPO_PRONTUARIO, chapa, lancamento_id: lancData.id }
         }).select("id").single();
-        if (errL) throw errL;
-
-        const { error: errI } = await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
-        if (errI) throw errI;
-
-        // 5) Dispara o Bot de Acompanhamento
+        await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
         await dispatchGitHubWorkflow(WF_ACOMP, { ordem_batch_id: String(lote.id), qtd: "1" });
-
-        limparTudo();
-        setOkMsg(`Acompanhamento criado com sucesso! O robô de Prontuário Preventivo (Lote #${lote.id}) foi acionado em segundo plano.`);
-        return;
-      }
-
-      // ==========================================================
-      // FLUXO: MEDIDA DISCIPLINAR (TRATATIVA)
-      // ==========================================================
-      if (destino === DESTINOS.TRAT) {
-        
-        // 1) Upload Evidências Manuais
-        const folder = `diesel/tratativas/${chapa || "sem_chapa"}/lancamento_${Date.now()}`;
-        const uploaded = await uploadManyToStorage({ files: evidTrat, bucket: "diesel", folder });
-        const evidenciasUrls = uploaded.map((u) => u.publicUrl).filter(Boolean);
-
-        // 2) Lançamento Geral
-        const payloadLancamento = {
-          motorista_chapa: chapa || null, motorista_nome: nomeMotorista, destino: DESTINOS.TRAT,
-          prioridade: prioridadeTratativa, motivo: motivoFinal, observacao_inicial: obsInit,
-          evidencias_urls: evidenciasUrls, lancado_por_login: lancadorLogin, lancado_por_nome: lancadorNome,
-          metadata: { origem: "LANCAMENTO_TRAT_BOT" }
-        };
-
-        const { data: lanc, error: eL } = await supabase.from("diesel_lancamentos").insert(payloadLancamento).select("id").single();
-        if (eL) throw eL;
-
-        // 3) Lote para o Bot de Tratativas
-        const { data: lote, error: errL } = await supabase.from("acompanhamento_lotes").insert({
-          status: "PROCESSANDO", qtd: 1, extra: { origem: "LANCAMENTO_MANUAL_TRAT", tipo: "prontuario_tratativa", motorista_chapa: chapa, evidencias: evidenciasUrls, observacao: obsInit, prioridade: prioridadeTratativa }
+      } 
+      
+      // 4. Fluxo Específico: TRATATIVA
+      else {
+        const { data: tratData, error: errTrat } = await supabase.from("diesel_tratativas").insert({
+          motorista_chapa: chapa || null,
+          motorista_nome: nomeMot,
+          status: "Pendente",
+          prioridade: prioridadeTratativa,
+          descricao: `${motivoFinal}\n\n${observacaoInicial}`,
+          evidencias_urls: urlsEvidencias,
+          tipo_ocorrencia: "DIESEL_KML",
+          lancamento_id: lancData.id
         }).select("id").single();
-        if (errL) throw errL;
+        if (errTrat) throw errTrat;
 
-        const { error: errI } = await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
-        if (errI) throw errI;
+        await supabase.from("diesel_tratativas_detalhes").insert({
+          tratativa_id: tratData.id,
+          acao_aplicada: "ABERTURA_MANUAL",
+          observacoes: observacaoInicial,
+          tratado_por_login: lancadorLogin,
+          extra: { evidencias_urls: urlsEvidencias }
+        });
 
-        // 4) Dispara o Bot de Tratativas
+        // Disparar Robô de Tratativa
+        const { data: lote } = await supabase.from("acompanhamento_lotes").insert({
+          status: "PROCESSANDO", qtd: 1, extra: { tipo: "prontuario_tratativa", chapa, lancamento_id: lancData.id }
+        }).select("id").single();
+        await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
         await dispatchGitHubWorkflow(WF_TRAT, { ordem_batch_id: String(lote.id), qtd: "1" });
-
-        limparTudo();
-        setOkMsg(`Tratativa encaminhada! O robô gerador de Medidas Disciplinares (Lote #${lote.id}) foi acionado em segundo plano para enviar o caso à Central.`);
-        setTimeout(() => { navigate("/desempenho-diesel/tratativas"); }, 2000);
-        return;
       }
 
-    } catch (err) {
-      console.error(err);
-      setErrMsg(err?.message || "Erro interno ao processar o lançamento.");
+      setStatusMsg({ type: "success", text: "Sucesso! O lançamento foi processado e o robô de IA já está trabalhando no documento." });
+      setTimeout(() => {
+        limparTudo();
+        if (destino === DESTINOS.TRAT) navigate("/desempenho-diesel/tratativas");
+      }, 3000);
+
+    } catch (e) {
+      console.error(e);
+      setStatusMsg({ type: "error", text: e.message || "Falha ao processar lançamento." });
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8 bg-slate-50 min-h-screen">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto min-h-screen bg-slate-50 font-sans text-slate-900">
       
-      {/* HEADER E TABS */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center gap-3">
-          <FaBolt className="text-yellow-500" /> Painel de Lançamentos
-        </h1>
-        <p className="text-slate-500 mt-2 font-medium">
-          Escolha o tipo de intervenção. O sistema acionará automaticamente os robôs de inteligência para gerar as documentações em segundo plano.
-        </p>
-        <div className="mt-6">
-          <Segmented value={destino} onChange={setDestino} disabled={saving} />
+      {/* HEADER */}
+      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-3xl font-black flex items-center gap-3">
+            <FaBolt className="text-yellow-500" /> Central de Lançamentos
+          </h1>
+          <p className="text-slate-500 font-medium mt-1">Registre ocorrências e acione a inteligência do robô automaticamente.</p>
+        </div>
+        
+        {/* TABS ESTILIZADAS */}
+        <div className="flex bg-slate-200 p-1.5 rounded-2xl w-fit shadow-inner">
+          <button 
+            onClick={() => setDestino(DESTINOS.ACOMP)} 
+            disabled={saving}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${destino === DESTINOS.ACOMP ? "bg-white text-blue-700 shadow-md" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            <FaClock /> Acompanhamento
+          </button>
+          <button 
+            onClick={() => setDestino(DESTINOS.TRAT)} 
+            disabled={saving}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${destino === DESTINOS.TRAT ? "bg-white text-rose-700 shadow-md" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            <FaExclamationTriangle /> Tratativa
+          </button>
         </div>
       </div>
 
-      {/* ALERTAS */}
-      {errMsg && (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 flex items-center gap-3 shadow-sm">
-          <FaExclamationTriangle className="text-red-500 text-xl" />
-          <div className="text-sm font-bold text-red-800">{errMsg}</div>
-        </div>
-      )}
-      {okMsg && (
-        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3 shadow-sm">
-          <FaCheckCircle className="text-emerald-500 text-xl" />
-          <div className="text-sm font-bold text-emerald-800">{okMsg}</div>
+      {/* FEEDBACK DE STATUS */}
+      {statusMsg.text && (
+        <div className={`mb-8 p-4 rounded-2xl border-2 flex items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500 ${
+          statusMsg.type === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-800" : 
+          statusMsg.type === "error" ? "bg-rose-50 border-rose-200 text-rose-800" : "bg-blue-50 border-blue-200 text-blue-800"
+        }`}>
+          <div className="text-2xl">
+            {statusMsg.type === "success" ? <FaCheckCircle /> : statusMsg.type === "error" ? <FaExclamationTriangle /> : <FaRobot className="animate-bounce" />}
+          </div>
+          <div className="font-bold">{statusMsg.text}</div>
         </div>
       )}
 
-      {/* FORMULÁRIO UNIFICADO E ELEGANTE */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      {/* FORMULÁRIO PRINCIPAL */}
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden transition-all duration-500">
+        <div className={`h-3 w-full ${destino === DESTINOS.ACOMP ? "bg-blue-600" : "bg-rose-600"}`} />
         
-        {/* BANNER INFORMATIVO DA ABA */}
-        <div className={`px-6 py-5 border-b ${destino === DESTINOS.ACOMP ? "bg-blue-50/50 border-blue-100" : "bg-rose-50/50 border-rose-100"}`}>
-          <div className={`text-lg font-black flex items-center gap-2 ${destino === DESTINOS.ACOMP ? "text-blue-800" : "text-rose-800"}`}>
-            {destino === DESTINOS.ACOMP ? <><FaClock /> Acompanhamento Preventivo</> : <><FaExclamationTriangle /> Medida Disciplinar (Tratativa)</>}
-          </div>
-          <div className={`text-sm mt-1 font-medium ${destino === DESTINOS.ACOMP ? "text-blue-600/80" : "text-rose-600/80"}`}>
-            {destino === DESTINOS.ACOMP 
-              ? "Cria uma ordem para o Instrutor e gera o Prontuário Telemetria PDF via robô." 
-              : "Exige anexo de evidências. O robô vai auditar o histórico e enviar para a Central de Tratativas."}
-          </div>
-        </div>
-
-        <div className="p-6 md:p-8 space-y-6">
+        <div className="p-6 md:p-12 space-y-10">
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             
-            {/* MOTORISTA */}
+            {/* CAMPO MOTORISTA (LARGURA TOTAL) */}
             <div className="md:col-span-2">
-              <CampoMotorista value={motorista} onChange={setMotorista} label="Selecione o Motorista Infrator" />
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Identificação do Motorista</label>
+              <CampoMotorista value={motorista} onChange={setMotorista} />
             </div>
 
-            {/* PRIORIDADE (SÓ TRATATIVA) */}
-            {destino === DESTINOS.TRAT && (
-              <div className="md:col-span-2 bg-rose-50/30 p-4 rounded-xl border border-rose-100">
-                <label className="block text-sm font-bold text-slate-700 mb-2">SLA de Gravidade na Central</label>
-                <div className="flex gap-2 flex-wrap">
-                  {PRIORIDADES.map((p) => (
-                    <button
-                      key={p} type="button" onClick={() => setPrioridadeTratativa(p)} disabled={saving}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${prioridadeTratativa === p ? "bg-rose-600 text-white shadow-md" : "bg-white border border-slate-200 text-slate-600 hover:bg-rose-50"}`}
-                    >
-                      {p}
-                    </button>
-                  ))}
+            {/* SEÇÃO ESQUERDA: MOTIVOS E PRIORIDADE */}
+            <div className="space-y-8">
+              {destino === DESTINOS.TRAT && (
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Nível de Gravidade</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PRIORIDADES.map(p => (
+                      <button 
+                        key={p} 
+                        onClick={() => setPrioridadeTratativa(p)}
+                        className={`py-3 px-4 rounded-xl border-2 text-sm font-bold transition-all ${prioridadeTratativa === p ? "bg-rose-600 border-rose-600 text-white shadow-lg" : "bg-white text-slate-600 border-slate-100 hover:border-rose-200"}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {/* MOTIVO */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-slate-700 mb-2">Classificação do Problema</label>
-              <select
-                className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-white text-slate-800 font-semibold focus:border-blue-500 focus:ring-0 outline-none transition-colors"
-                value={motivo} onChange={(e) => setMotivo(e.target.value)} disabled={saving}
-              >
-                {MOTIVOS.map((m) => (<option key={m} value={m}>{m}</option>))}
-              </select>
-
-              {motivo === "Outro" && (
-                <input
-                  className="mt-3 w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-slate-800 focus:border-blue-500 outline-none"
-                  value={motivoOutro} onChange={(e) => setMotivoOutro(e.target.value)} placeholder="Descreva brevemente o motivo..." disabled={saving}
-                />
               )}
+
+              <div>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Motivo do Lançamento</label>
+                <select 
+                  value={motivo} 
+                  onChange={(e) => setMotivo(e.target.value)}
+                  className="w-full p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 font-bold text-slate-700 focus:border-blue-500 focus:bg-white outline-none transition-all appearance-none cursor-pointer"
+                >
+                  {MOTIVOS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                {motivo === "Outro" && (
+                  <input 
+                    value={motivoOutro} 
+                    onChange={(e) => setMotivoOutro(e.target.value)} 
+                    className="mt-4 w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-blue-500 outline-none font-bold" 
+                    placeholder="Especifique o motivo..." 
+                  />
+                )}
+              </div>
             </div>
 
-            {/* OBSERVAÇÃO */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-slate-700 mb-2">
-                Contexto / Orientação Inicial <span className="text-slate-400 font-normal">(Opcional para acompanhamento)</span>
-              </label>
-              <textarea
-                className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 min-h-[120px] text-slate-800 focus:border-blue-500 outline-none resize-y"
-                value={observacaoInicial} onChange={(e) => setObservacaoInicial(e.target.value)} disabled={saving}
-                placeholder="Detalhes relevantes que o robô de IA ou o Instrutor precisam saber sobre este caso..."
+            {/* SEÇÃO DIREITA: TEXTO LIVRE */}
+            <div className="flex flex-col h-full">
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Detalhamento da Ocorrência</label>
+              <textarea 
+                value={observacaoInicial} 
+                onChange={(e) => setObservacaoInicial(e.target.value)} 
+                className="w-full flex-1 p-5 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:border-blue-500 focus:bg-white outline-none font-semibold text-slate-700 resize-none transition-all"
+                placeholder="Descreva aqui os fatos, contextos ou as orientações passadas ao motorista..."
               />
             </div>
 
-            {/* EVIDÊNCIAS (SÓ TRATATIVA) */}
+            {/* SEÇÃO EVIDÊNCIAS (APENAS TRATATIVA) */}
             {destino === DESTINOS.TRAT && (
-              <div className="md:col-span-2">
-                <label className="flex items-center justify-between text-sm font-bold text-slate-700 mb-2">
-                  <span>Anexar Provas Documentais <span className="text-rose-500">*</span></span>
-                  <span className="text-xs font-normal bg-slate-100 px-2 py-1 rounded text-slate-500 border">Obrigatório</span>
-                </label>
-                <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center hover:bg-slate-100 transition-colors relative cursor-pointer">
-                  <input type="file" multiple onChange={addFilesTrat} disabled={saving} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                  <FaFilePdf className="mx-auto text-3xl text-slate-400 mb-2" />
-                  <div className="text-sm font-bold text-slate-700">Clique ou arraste as evidências aqui</div>
-                  <div className="text-xs text-slate-500 mt-1">Imagens, planilhas ou relatórios de telemetria</div>
-                </div>
-
-                {evidTrat.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    {evidTrat.map((f, idx) => (
-                      <div key={idx} className="flex items-center justify-between bg-white border rounded-lg px-4 py-3 shadow-sm">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-bold text-slate-800 truncate">{f.name}</div>
-                          <div className="text-xs text-slate-500">{(Number(f.size || 0) / 1024 / 1024).toFixed(2)} MB</div>
+              <div className="md:col-span-2 bg-slate-50 p-6 rounded-[1.5rem] border-2 border-slate-100">
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Evidências e Provas (Obrigatório)</label>
+                <div className="flex flex-col md:flex-row gap-6">
+                  <label className="group flex-shrink-0 cursor-pointer bg-white border-2 border-dashed border-slate-300 rounded-2xl p-8 flex flex-col items-center justify-center hover:border-rose-400 hover:bg-rose-50 transition-all w-full md:w-56 shadow-sm">
+                    <input type="file" multiple onChange={handleFileChange} className="hidden" />
+                    <FaFileUpload className="text-3xl text-slate-300 group-hover:text-rose-400 mb-3" />
+                    <span className="text-xs font-bold text-slate-500 group-hover:text-rose-600">Carregar Arquivos</span>
+                  </label>
+                  
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {evidencias.map((f, idx) => (
+                      <div key={idx} className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-3 shadow-sm group animate-in zoom-in-95">
+                        <div className="truncate flex-1">
+                          <p className="text-xs font-bold text-slate-700 truncate">{f.name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">{(f.size/1024/1024).toFixed(2)} MB</p>
                         </div>
-                        <button type="button" className="text-rose-500 hover:text-rose-700 bg-rose-50 p-2 rounded-lg" onClick={() => removeFileTrat(idx)} disabled={saving}>
-                          <FaTrash size={14} />
+                        <button onClick={() => removeFile(idx)} className="text-slate-300 hover:text-rose-500 transition-colors">
+                          <FaTrash size={14}/>
                         </button>
                       </div>
                     ))}
+                    {evidencias.length === 0 && (
+                      <div className="flex items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-4 text-slate-300 text-xs italic font-medium">
+                        Nenhum anexo inserido ainda
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* RODAPÉ E BOTÃO DE SALVAR */}
-        <div className="px-6 py-5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="text-xs text-slate-500 font-medium flex items-center gap-2">
-            <FaRobot className="text-slate-400 text-lg" />
-            O robô cuidará da análise de dados e geração do PDF.
+        {/* FOOTER COM BOTÕES */}
+        <div className="bg-slate-50 px-6 py-6 md:px-12 md:py-8 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+            <FaRobot className="text-slate-300 text-xl" />
+            <span>Processamento automatizado via inteligência artificial</span>
           </div>
           
-          <div className="flex w-full sm:w-auto items-center gap-3">
-            <button type="button" className="px-5 py-3 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50 w-full sm:w-auto" onClick={limparTudo} disabled={saving}>
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <button 
+              onClick={limparTudo} 
+              disabled={saving} 
+              className="px-8 py-4 rounded-2xl text-sm font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-all flex-1 md:flex-none"
+            >
               Limpar
             </button>
-            
-            <button
-              type="button"
-              disabled={!pronto || saving}
-              className={`flex items-center justify-center gap-2 px-8 py-3 text-sm font-black text-white rounded-xl shadow-lg transition-all w-full sm:w-auto ${
-                saving ? "bg-slate-400 cursor-not-allowed" :
-                destino === DESTINOS.ACOMP ? "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/20" : "bg-rose-600 hover:bg-rose-700 hover:shadow-rose-500/20"
-              } disabled:opacity-60 disabled:hover:shadow-none`}
-              onClick={lancar}
+            <button 
+              onClick={handleLancar} 
+              disabled={!pronto || saving} 
+              className={`flex items-center justify-center gap-3 px-12 py-4 rounded-2xl text-sm font-black text-white shadow-2xl transition-all flex-1 md:flex-none transform active:scale-95 ${
+                !pronto ? "bg-slate-300 cursor-not-allowed shadow-none" : 
+                destino === DESTINOS.ACOMP ? "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/40" : "bg-rose-600 hover:bg-rose-700 hover:shadow-rose-500/40"
+              }`}
             >
               {saving ? "Processando..." : (
                 <>
-                  {destino === DESTINOS.ACOMP ? "Lançar e Acionar Robô" : "Criar Tratativa Oficial"}
-                  <FaArrowRight />
+                  Confirmar Lançamento <FaArrowRight />
                 </>
               )}
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

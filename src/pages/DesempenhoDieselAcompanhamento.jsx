@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useContext } from "react";
 import {
   FaBolt,
   FaSearch,
@@ -15,8 +15,10 @@ import {
   FaChartLine,
   FaTimes as FaX,
   FaQuestionCircle,
+  FaTrash,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
+import { AuthContext } from "../context/AuthContext";
 import ResumoLancamentoInstrutor from "../components/desempenho/ResumoLancamentoInstrutor";
 import ResumoAnalise from "../components/desempenho/ResumoAnalise";
 
@@ -133,19 +135,17 @@ function calcDiaXdeY(item) {
   }
 }
 
-// Normalização de grupos (tolerante)
 function normGrupo(g) {
   const s = String(g || "")
     .toUpperCase()
     .trim()
     .replace(/\s+/g, "_");
 
-  // sinônimos/tolerância
   if (
     s === "CONDUCAO_INTELIGENTE" ||
     s === "CONDUCAO" ||
     s === "CHECKLIST_CONDUCAO" ||
-    s === "CONDUCAO_INTELIGENTE_" // caso venha com _ final
+    s === "CONDUCAO_INTELIGENTE_"
   )
     return "CONDUCAO_INTELIGENTE";
 
@@ -165,6 +165,17 @@ function isAtivo(v) {
   if (v === true) return true;
   const s = String(v ?? "").toLowerCase().trim();
   return s === "true" || s === "t" || s === "1" || s === "sim" || s === "yes";
+}
+
+function buildNomeSobrenome(u) {
+  const nome = String(u?.nome || "").trim();
+  const sobrenome = String(u?.sobrenome || "").trim();
+  const nomeCompleto = String(u?.nome_completo || "").trim();
+
+  if (nomeCompleto) return nomeCompleto;
+  if (nome && sobrenome) return `${nome} ${sobrenome}`;
+  if (nome) return nome;
+  return null;
 }
 
 // =============================================================================
@@ -213,12 +224,18 @@ const NIVEIS = {
 // COMPONENTE PRINCIPAL
 // =============================================================================
 export default function DesempenhoDieselAcompanhamento() {
+  const { user } = useContext(AuthContext);
+
   const [loading, setLoading] = useState(false);
   const [lista, setLista] = useState([]);
 
+  // Permissões
+  const [userRoleData, setUserRoleData] = useState({ nivel: null, nome_completo: null });
+  const podeExcluir = ["Administrador", "Gestor"].includes(userRoleData.nivel);
+
   // Itens do checklist (dinâmico)
-  const [itensConducao, setItensConducao] = useState([]); // grupo CONDUCAO_INTELIGENTE
-  const [itensTecnica, setItensTecnica] = useState([]); // grupo AVALIACAO_TECNICA
+  const [itensConducao, setItensConducao] = useState([]);
+  const [itensTecnica, setItensTecnica] = useState([]);
   const [loadingItens, setLoadingItens] = useState(false);
   const [itensError, setItensError] = useState("");
 
@@ -246,23 +263,54 @@ export default function DesempenhoDieselAcompanhamento() {
     mediaTeste: "",
     nivel: 2,
     obs: "",
-    // respostas por CODIGO (chave = diesel_checklist_itens.codigo)
-    checklistConducao: {}, // { [codigo]: true/false/null }
-    avaliacaoTecnica: {}, // { [codigo]: "SIM"/"NAO"/"DUVIDAS"/"" }
+    checklistConducao: {},
+    avaliacaoTecnica: {},
   });
 
   // =============================================================================
-  // CARGA DE ITENS DO CHECKLIST (SUPABASE) - TOLERANTE (sem depender de filtro exato)
+  // CARGA DE DADOS DO USUÁRIO
+  // =============================================================================
+  useEffect(() => {
+    async function carregarPermissaoUsuario() {
+      const login = user?.login || user?.email;
+      if (!login) return;
+      try {
+        const { data } = await supabase
+          .from("usuarios_aprovadores")
+          .select("nivel, nome, sobrenome, nome_completo")
+          .eq("login", login)
+          .maybeSingle();
+
+        if (data) {
+          setUserRoleData({
+            nivel: data.nivel,
+            nome_completo:
+              data.nome_completo ||
+              [data.nome, data.sobrenome].filter(Boolean).join(" ") ||
+              data.nome,
+          });
+        }
+      } catch (e) {
+        console.error("Erro ao buscar permissões:", e);
+      }
+    }
+    carregarPermissaoUsuario();
+  }, [user]);
+
+  // =============================================================================
+  // CARGA DE ITENS DO CHECKLIST (SUPABASE) - COM PONTUAÇÕES
   // =============================================================================
   async function carregarItensChecklist() {
     setLoadingItens(true);
     setItensError("");
     try {
-      // ⚠️ Importante: NÃO filtra por grupo no SQL para evitar mismatch de texto.
-      // Filtra no front com normGrupo + isAtivo.
       const { data, error } = await supabase
         .from("diesel_checklist_itens")
-        .select("id, ordem, grupo, codigo, descricao, ajuda, tipo_resposta, ativo")
+        .select(`
+          id, ordem, grupo, codigo, descricao, ajuda, tipo_resposta, ativo,
+          pontos_true_100, pontos_false_100, pontos_max_100,
+          opcao_score_sim, opcao_score_duvidas, opcao_score_nao
+        `)
         .order("ordem", { ascending: true });
 
       if (error) throw error;
@@ -282,7 +330,6 @@ export default function DesempenhoDieselAcompanhamento() {
       setItensConducao(condu);
       setItensTecnica(tec);
 
-      // dica rápida no console caso esteja vindo grupo “diferente”
       if (condu.length === 0 || tec.length === 0) {
         const grupos = Array.from(
           new Set((ativos || []).map((x) => String(x.grupo || "").trim()))
@@ -382,10 +429,29 @@ export default function DesempenhoDieselAcompanhamento() {
     setModalDetalhesOpen(true);
   };
 
+  const handleExcluir = async (id) => {
+    if (!podeExcluir) {
+      alert("Apenas Gestores ou Administradores podem excluir ordens de acompanhamento.");
+      return;
+    }
+    const confirm = window.confirm("ATENÇÃO! Tem certeza que deseja excluir este acompanhamento definitivamente?");
+    if (!confirm) return;
+
+    try {
+      await supabase.from("diesel_checklist_respostas").delete().eq("acompanhamento_id", id);
+      const { error } = await supabase.from("diesel_acompanhamentos").delete().eq("id", id);
+      if (error) throw error;
+      
+      alert("Acompanhamento excluído com sucesso!");
+      carregarOrdens();
+    } catch (e) {
+      alert("Erro ao excluir: " + (e?.message || String(e)));
+    }
+  };
+
   const handleLancar = async (item) => {
     setItemSelecionado(item);
 
-    // garante que itens estejam carregados antes de abrir (evita “vazio” por corrida)
     if (!loadingItens && (itensConducao.length === 0 && itensTecnica.length === 0)) {
       await carregarItensChecklist();
     }
@@ -420,7 +486,7 @@ export default function DesempenhoDieselAcompanhamento() {
     }));
 
   // =============================================================================
-  // SALVAR (ATUALIZA ACOMPANHAMENTO + GRAVA RESPOSTAS NA TABELA NOVA)
+  // SALVAR (ATUALIZA ACOMPANHAMENTO + GRAVA RESPOSTAS)
   // =============================================================================
   const salvarIntervencao = async () => {
     if (!itemSelecionado?.id) return;
@@ -433,21 +499,43 @@ export default function DesempenhoDieselAcompanhamento() {
     const inicioISO = spDateISO(new Date());
     const fimISO = addDaysISO(inicioISO, dias - 1);
 
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const instrutorLogin = sess?.session?.user?.email || null;
-      const instrutorNome = sess?.session?.user?.user_metadata?.full_name || null;
+    // AUDITORIA (AuthContext)
+    const instrutorLogin = user?.login || user?.email || null;
+    const instrutorNome = buildNomeSobrenome(user) || userRoleData?.nome_completo || instrutorLogin;
 
-      // Mantém também no JSON (compatibilidade / leitura rápida)
+    // CÁLCULO DA NOTA
+    let notaTotal = 0;
+    const mapByCodigo = new Map();
+    [...itensConducao, ...itensTecnica].forEach((it) => mapByCodigo.set(it.codigo, it));
+
+    Object.entries(form.checklistConducao || {}).forEach(([codigo, val]) => {
+      const it = mapByCodigo.get(codigo);
+      if (!it) return;
+      if (val === true) notaTotal += n(it.pontos_true_100);
+      if (val === false) notaTotal += n(it.pontos_false_100);
+    });
+
+    Object.entries(form.avaliacaoTecnica || {}).forEach(([codigo, val]) => {
+      const it = mapByCodigo.get(codigo);
+      if (!it) return;
+      const maxPts = n(it.pontos_max_100);
+      if (val === "SIM") notaTotal += maxPts * n(it.opcao_score_sim);
+      if (val === "DUVIDAS") notaTotal += maxPts * n(it.opcao_score_duvidas);
+      if (val === "NAO") notaTotal += maxPts * n(it.opcao_score_nao);
+    });
+
+    const notaFinal = Math.round(Math.max(0, Math.min(100, notaTotal)));
+
+    try {
       const intervencaoChecklist = {
         versao: "FORM_ACOMPANHAMENTO_TELEMETRIA_v2",
         itens: {
           ...(form.checklistConducao || {}),
           ...(form.avaliacaoTecnica || {}),
         },
-        // legado (pra leitura antiga)
         conducao: form.checklistConducao || {},
         tecnica: form.avaliacaoTecnica || {},
+        nota_calculada: notaFinal,
       };
 
       const payload = {
@@ -465,10 +553,10 @@ export default function DesempenhoDieselAcompanhamento() {
         intervencao_media_teste: n(form.mediaTeste),
         intervencao_checklist: intervencaoChecklist,
         intervencao_obs: form.obs || null,
+        intervencao_nota: notaFinal, 
         updated_at: new Date().toISOString(),
       };
 
-      // 1) Atualiza acompanhamento
       const { error: errUpd } = await supabase
         .from("diesel_acompanhamentos")
         .update(payload)
@@ -476,12 +564,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
       if (errUpd) throw errUpd;
 
-      // 2) Grava respostas normalizadas (tabela diesel_checklist_respostas)
-      // Map por codigo -> item
-      const mapByCodigo = new Map();
-      [...itensConducao, ...itensTecnica].forEach((it) => mapByCodigo.set(it.codigo, it));
-
-      // Apaga respostas anteriores desse acompanhamento
+      // Apaga respostas anteriores
       const { error: errDel } = await supabase
         .from("diesel_checklist_respostas")
         .delete()
@@ -491,11 +574,9 @@ export default function DesempenhoDieselAcompanhamento() {
 
       const rows = [];
 
-      // Condução (bool)
       Object.entries(form.checklistConducao || {}).forEach(([codigo, val]) => {
         const it = mapByCodigo.get(codigo);
         if (!it?.id) return;
-
         if (val === true || val === false) {
           rows.push({
             acompanhamento_id: itemSelecionado.id,
@@ -511,11 +592,9 @@ export default function DesempenhoDieselAcompanhamento() {
         }
       });
 
-      // Técnica (texto)
       Object.entries(form.avaliacaoTecnica || {}).forEach(([codigo, val]) => {
         const it = mapByCodigo.get(codigo);
         if (!it?.id) return;
-
         const v = String(val || "").trim();
         if (v) {
           rows.push({
@@ -542,7 +621,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
       setModalLancarOpen(false);
       await carregarOrdens();
-      alert("Monitoramento iniciado com sucesso!");
+      alert(`Monitoramento iniciado com sucesso!\nNota Final do Check-list: ${notaFinal}/100`);
     } catch (e) {
       alert("Erro ao salvar: " + (e?.message || String(e)));
     }
@@ -786,6 +865,17 @@ export default function DesempenhoDieselAcompanhamento() {
                         </button>
                       )}
 
+                      {/* Excluir Restrito */}
+                      {podeExcluir && abaAtiva === "ANTES" && (
+                        <button
+                          onClick={() => handleExcluir(item.id)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 hover:border-red-300 font-bold text-sm shadow-sm transition-all"
+                          title="Excluir Definitivamente"
+                        >
+                          <FaTrash size={14} /> Excluir
+                        </button>
+                      )}
+
                       {abaAtiva === "POS" && status === "EM_MONITORAMENTO" && (
                         <span
                           className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg font-bold text-sm shadow-sm cursor-help"
@@ -899,14 +989,12 @@ export default function DesempenhoDieselAcompanhamento() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* ERRO ITENS (se tiver) */}
               {itensError ? (
                 <div className="p-3 rounded border bg-rose-50 text-sm text-rose-700">
                   Erro ao carregar checklist: <b>{itensError}</b>
                 </div>
               ) : null}
 
-              {/* 1) DADOS DA VIAGEM */}
               <div className="p-4 border rounded-lg bg-gray-50">
                 <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
                   <FaClock /> Dados da Viagem de Teste (Prova)
@@ -969,7 +1057,6 @@ export default function DesempenhoDieselAcompanhamento() {
                 </div>
               </div>
 
-              {/* 2) CHECKLIST CONDUÇÃO */}
               <div>
                 <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
                   <FaClipboardList /> Checklist de Condução (Resumo Operacional)
@@ -991,7 +1078,7 @@ export default function DesempenhoDieselAcompanhamento() {
                 ) : (
                   <div className="space-y-3">
                     {itensConducao.map((it) => {
-                      const val = form.checklistConducao?.[it.codigo]; // true/false/null
+                      const val = form.checklistConducao?.[it.codigo];
                       return (
                         <div key={it.id} className="p-3 border rounded-lg bg-white">
                           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -1043,7 +1130,6 @@ export default function DesempenhoDieselAcompanhamento() {
                 )}
               </div>
 
-              {/* 3) AVALIAÇÃO TÉCNICA */}
               <div>
                 <h4 className="font-bold text-slate-700 text-sm mb-3">
                   Avaliação Técnica (Sistemas)
@@ -1103,7 +1189,6 @@ export default function DesempenhoDieselAcompanhamento() {
                 )}
               </div>
 
-              {/* 4) NÍVEL */}
               <div>
                 <h4 className="font-bold text-slate-700 text-sm mb-3">
                   Definir Nível (Contrato)
@@ -1152,7 +1237,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       )}
 
-      {/* MODAL CONSULTA (mantive como estava no seu fluxo; se você já tem, ignora) */}
+      {/* MODAL CONSULTA */}
       {modalConsultaOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">

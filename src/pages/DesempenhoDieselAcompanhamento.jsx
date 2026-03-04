@@ -16,7 +16,7 @@ import {
   FaTimes as FaX,
   FaQuestionCircle,
   FaTrash,
-  FaEye,
+  FaFilter,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 import { AuthContext } from "../context/AuthContext";
@@ -66,6 +66,32 @@ function getFoco(item) {
   if (ln) return `Linha ${ln}`;
 
   return "Geral";
+}
+
+// Auxiliar para pegar apenas a linha para o filtro
+function getLinhaBusca(item) {
+  return item?.metadata?.linha_foco || "Sem Linha";
+}
+
+// CORREÇÃO DE FUSO HORÁRIO PARA EVITAR VOLTA DE 1 DIA
+function formatarDataBR(val) {
+  if (!val) return "-";
+  const strVal = String(val).trim();
+  
+  // Se for Timestamp completo do banco (ex: 2026-02-27T20:48:34.16876+00)
+  if (strVal.includes("T")) {
+    return new Date(strVal).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  }
+  
+  // Se for data pura do input dt_inicio_monitoramento (ex: 2026-03-05)
+  // Forçamos a string para evitar que o Date converta pra UTC e volte 1 dia
+  const datePart = strVal.split(" ")[0];
+  const parts = datePart.split("-");
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  
+  return new Date(strVal).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
 function getPdfUrl(item) {
@@ -240,19 +266,19 @@ export default function DesempenhoDieselAcompanhamento() {
   const [loadingItens, setLoadingItens] = useState(false);
   const [itensError, setItensError] = useState("");
 
-  // Filtros & Abas
+  // Filtros & Abas & Ordenação
   const [busca, setBusca] = useState("");
-  const [abaAtiva, setAbaAtiva] = useState("AGUARDANDO");
+  const [abaAtiva, setAbaAtiva] = useState("ANTES");
+  const [filtroLinha, setFiltroLinha] = useState("");
+  const [filtroDataIni, setFiltroDataIni] = useState("");
+  const [filtroDataFim, setFiltroDataFim] = useState("");
+  const [sortConfig, setSortConfig] = useState({ key: "data", direction: "desc" });
 
   // Modais
   const [modalLancarOpen, setModalLancarOpen] = useState(false);
-  const [modalVisaoGeralOpen, setModalVisaoGeralOpen] = useState(false); // NOVO MODAL UNIFICADO
-  
-  // Modais Legado mantidos para compatibilidade do código
   const [modalConsultaOpen, setModalConsultaOpen] = useState(false);
   const [modalDetalhesOpen, setModalDetalhesOpen] = useState(false);
   const [modalAnaliseOpen, setModalAnaliseOpen] = useState(false);
-  
   const [itemSelecionado, setItemSelecionado] = useState(null);
 
   // Histórico
@@ -432,29 +458,6 @@ export default function DesempenhoDieselAcompanhamento() {
   const handleDetalhes = (item) => {
     setItemSelecionado(item);
     setModalDetalhesOpen(true);
-  };
-
-  const abrirVisaoGeral = async (item) => {
-    setItemSelecionado(item);
-    setModalVisaoGeralOpen(true);
-    setLoadingHist(true);
-
-    try {
-      const { data, error } = await supabase
-        .from("diesel_acompanhamentos")
-        .select("*")
-        .eq("motorista_chapa", item.motorista_chapa)
-        .neq("id", item.id)
-        .order("created_at", { ascending: false })
-        .limit(30);
-
-      if (error) throw error;
-      setHistorico(data || []);
-    } catch {
-      setHistorico([]);
-    } finally {
-      setLoadingHist(false);
-    }
   };
 
   const handleExcluir = async (id) => {
@@ -656,23 +659,87 @@ export default function DesempenhoDieselAcompanhamento() {
   };
 
   // =============================================================================
-  // FILTROS COM ABAS
+  // FILTROS AVANÇADOS E ORDENAÇÃO
   // =============================================================================
+  const linhasUnicas = useMemo(() => {
+    const lns = lista.map((i) => getLinhaBusca(i)).filter(Boolean);
+    return [...new Set(lns)].sort();
+  }, [lista]);
+
+  const handleSort = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const SortIcon = ({ columnKey }) => {
+    if (sortConfig.key !== columnKey) return <span className="text-gray-300 ml-2 text-[10px]">↕</span>;
+    return sortConfig.direction === "asc" ? <span className="text-blue-600 ml-2 text-[10px]">▲</span> : <span className="text-blue-600 ml-2 text-[10px]">▼</span>;
+  };
+
   const listaFiltrada = useMemo(() => {
-    const q = busca.toLowerCase().trim();
-
-    return (lista || []).filter((item) => {
-      const nome = String(item.motorista_nome || "").toLowerCase();
-      const chapa = String(item.motorista_chapa || "");
-      const matchTexto = !q || nome.includes(q) || chapa.includes(q);
+    let result = (lista || []).filter((item) => {
+      // 1. Aba
       const st = normalizeStatus(item.status);
+      let matchAba = false;
+      if (abaAtiva === "ANTES") matchAba = st === "AGUARDANDO_INSTRUTOR";
+      else if (abaAtiva === "POS") matchAba = ["EM_MONITORAMENTO", "OK", "ENCERRADO", "ATAS"].includes(st);
+      if (!matchAba) return false;
 
-      if (abaAtiva === "AGUARDANDO") return matchTexto && st === "AGUARDANDO_INSTRUTOR";
-      if (abaAtiva === "MONITORAMENTO") return matchTexto && st === "EM_MONITORAMENTO";
-      if (abaAtiva === "CONCLUIDOS") return matchTexto && ["OK", "ENCERRADO", "ATAS"].includes(st);
-      return matchTexto;
+      // 2. Busca
+      const q = busca.toLowerCase().trim();
+      if (q) {
+        const nome = String(item.motorista_nome || "").toLowerCase();
+        const chapa = String(item.motorista_chapa || "");
+        if (!nome.includes(q) && !chapa.includes(q)) return false;
+      }
+
+      // 3. Filtro Linha
+      if (filtroLinha && getLinhaBusca(item) !== filtroLinha) return false;
+
+      // 4. Filtro Data
+      const dataRef = abaAtiva === "ANTES" ? item.created_at : item.dt_inicio_monitoramento;
+      if (filtroDataIni || filtroDataFim) {
+        if (!dataRef) return false;
+        const dFormat = String(dataRef).split("T")[0].split(" ")[0]; // YYYY-MM-DD
+        if (filtroDataIni && dFormat < filtroDataIni) return false;
+        if (filtroDataFim && dFormat > filtroDataFim) return false;
+      }
+
+      return true;
     });
-  }, [lista, busca, abaAtiva]);
+
+    // Ordenação
+    result.sort((a, b) => {
+      let valA, valB;
+      const { key, direction } = sortConfig;
+
+      if (key === "data") {
+        valA = abaAtiva === "ANTES" ? a.created_at : a.dt_inicio_monitoramento;
+        valB = abaAtiva === "ANTES" ? b.created_at : b.dt_inicio_monitoramento;
+      } else if (key === "motorista") {
+        valA = a.motorista_nome;
+        valB = b.motorista_nome;
+      } else if (key === "foco") {
+        valA = getFoco(a);
+        valB = getFoco(b);
+      } else if (key === "status") {
+        valA = normalizeStatus(a.status);
+        valB = normalizeStatus(b.status);
+      }
+
+      valA = valA || "";
+      valB = valB || "";
+
+      if (valA < valB) return direction === "asc" ? -1 : 1;
+      if (valA > valB) return direction === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [lista, busca, abaAtiva, filtroLinha, filtroDataIni, filtroDataFim, sortConfig]);
 
   const abrirPDF = (item) => {
     const url = getPdfUrl(item);
@@ -689,19 +756,19 @@ export default function DesempenhoDieselAcompanhamento() {
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
+      <div className="flex justify-between items-center border-b pb-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
             <FaBolt className="text-yellow-500" /> Gestão de Ordens de Acompanhamento
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500">
             Ordens geradas automaticamente — prontas para ação do instrutor.
           </p>
         </div>
 
         <button
           onClick={carregarOrdens}
-          className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm font-bold w-full md:w-auto justify-center"
+          className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm font-bold"
           title="Atualizar"
         >
           <FaSync className={loading ? "animate-spin" : ""} /> Atualizar
@@ -709,10 +776,10 @@ export default function DesempenhoDieselAcompanhamento() {
       </div>
 
       {/* CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-amber-500">
           <div>
-            <p className="text-sm text-gray-500 font-bold">Aguardando</p>
+            <p className="text-sm text-gray-500 font-bold">Aguardando Instrutor</p>
             <p className="text-2xl font-black text-slate-800">{countAguardando}</p>
           </div>
           <FaClock className="text-4xl text-amber-50" />
@@ -720,7 +787,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-blue-500">
           <div>
-            <p className="text-sm text-gray-500 font-bold">Monitoramento</p>
+            <p className="text-sm text-gray-500 font-bold">Em Monitoramento</p>
             <p className="text-2xl font-black text-slate-800">{countMonitoramento}</p>
           </div>
           <FaRoad className="text-4xl text-blue-50" />
@@ -735,125 +802,165 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       </div>
 
-      {/* TABS RESPONSIVAS */}
-      <div className="flex flex-wrap bg-slate-200/50 p-1 rounded-lg w-fit gap-1">
+      {/* TABS */}
+      <div className="flex bg-slate-200/50 p-1 rounded-lg w-fit">
         <button
-          onClick={() => setAbaAtiva("AGUARDANDO")}
-          className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${
-            abaAtiva === "AGUARDANDO"
-              ? "bg-white shadow-sm text-amber-600"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          📋 Aguardando
-        </button>
-        <button
-          onClick={() => setAbaAtiva("MONITORAMENTO")}
-          className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${
-            abaAtiva === "MONITORAMENTO"
+          onClick={() => { setAbaAtiva("ANTES"); setSortConfig({ key: "data", direction: "desc" }); }}
+          className={`px-6 py-2.5 rounded-md text-base font-bold transition-all ${
+            abaAtiva === "ANTES"
               ? "bg-white shadow-sm text-blue-700"
               : "text-slate-500 hover:text-slate-700"
           }`}
         >
-          🛣️ Monitoramento
+          📋 Antes do Acompanhamento
         </button>
         <button
-          onClick={() => setAbaAtiva("CONCLUIDOS")}
-          className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${
-            abaAtiva === "CONCLUIDOS"
+          onClick={() => { setAbaAtiva("POS"); setSortConfig({ key: "data", direction: "desc" }); }}
+          className={`px-6 py-2.5 rounded-md text-base font-bold transition-all ${
+            abaAtiva === "POS"
               ? "bg-white shadow-sm text-emerald-700"
               : "text-slate-500 hover:text-slate-700"
           }`}
         >
-          ✅ Concluídos
+          📊 Pós Acompanhamento (Análise)
         </button>
       </div>
 
-      {/* FILTROS */}
-      <div className="flex gap-4 mb-2 items-center bg-white p-3 md:p-4 rounded-lg border shadow-sm">
-        <div className="relative flex-1 max-w-md">
+      {/* FILTROS E BUSCA */}
+      <div className="flex flex-col lg:flex-row gap-4 mb-2 items-center bg-white p-4 rounded-lg border shadow-sm">
+        <div className="relative flex-1 w-full">
           <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar Motorista..."
+            placeholder="Buscar Motorista (nome ou chapa)..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+            className="pl-9 p-2.5 border rounded-lg w-full text-base outline-none focus:border-blue-500 font-medium"
           />
         </div>
 
-        <div className="ml-auto text-sm text-gray-500 font-medium hidden md:block">
+        {/* NOVOS FILTROS */}
+        <div className="w-full lg:w-auto flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
+            <FaFilter className="text-gray-400 ml-2" />
+            <select
+              value={filtroLinha}
+              onChange={(e) => setFiltroLinha(e.target.value)}
+              className="p-2.5 bg-transparent text-sm outline-none focus:border-blue-500 flex-1 md:w-36 font-medium text-slate-600"
+            >
+              <option value="">Todas as Linhas</option>
+              <option value="Sem Linha">Sem Linha</option>
+              {linhasUnicas.filter(x => x !== "Sem Linha").map(ln => (
+                <option key={ln} value={ln}>{ln}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-50 border rounded-lg p-1">
+            <input
+              type="date"
+              value={filtroDataIni}
+              onChange={(e) => setFiltroDataIni(e.target.value)}
+              className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium"
+            />
+            <span className="text-gray-400 font-bold text-xs">até</span>
+            <input
+              type="date"
+              value={filtroDataFim}
+              onChange={(e) => setFiltroDataFim(e.target.value)}
+              className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium"
+            />
+          </div>
+        </div>
+
+        <div className="ml-auto text-base text-gray-500 font-medium hidden lg:block">
           Mostrando <b>{listaFiltrada.length}</b> registros
         </div>
       </div>
 
-      {/* TABELA RESPONSIVA */}
+      {/* TABELA COM ORDENAÇÃO */}
       <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-        <table className="w-full text-left min-w-[700px]">
-          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
+        <table className="w-full text-left min-w-[800px]">
+          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-sm uppercase tracking-wider select-none">
             <tr>
-              <th className="px-4 py-4">{abaAtiva === "AGUARDANDO" ? "Data Geração" : "Data Acomp."}</th>
-              <th className="px-4 py-4">Motorista</th>
-              <th className="px-4 py-4 text-center">Foco</th>
-              <th className="px-4 py-4 text-center">Status Atual</th>
-              <th className="px-4 py-4 text-center">Ações</th>
+              <th className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("data")}>
+                <div className="flex items-center">
+                  {abaAtiva === "ANTES" ? "Data Geração" : "Data Acomp."}
+                  <SortIcon columnKey="data" />
+                </div>
+              </th>
+              <th className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("motorista")}>
+                <div className="flex items-center">Motorista <SortIcon columnKey="motorista" /></div>
+              </th>
+              <th className="px-6 py-5 text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("foco")}>
+                <div className="flex items-center justify-center">Foco <SortIcon columnKey="foco" /></div>
+              </th>
+              <th className="px-6 py-5 text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("status")}>
+                <div className="flex items-center justify-center">Status Atual <SortIcon columnKey="status" /></div>
+              </th>
+              <th className="px-6 py-5 text-center">Ações</th>
             </tr>
           </thead>
 
           <tbody className="divide-y divide-gray-100">
             {listaFiltrada.map((item) => {
               const status = normalizeStatus(item.status);
+              const showLancar = status === "AGUARDANDO_INSTRUTOR" && abaAtiva === "ANTES";
               const foco = getFoco(item);
               const diaXY = calcDiaXdeY(item);
-              const dataExibicao = abaAtiva === "AGUARDANDO" ? item.created_at : item.dt_inicio_monitoramento;
+              const showDetalhes = hasLancamento(item);
+
+              // Identificar Data Baseado na Aba Atual
+              const dataRef = abaAtiva === "ANTES" ? item.created_at : item.dt_inicio_monitoramento;
 
               return (
                 <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="px-4 py-4 text-gray-500 font-mono text-sm whitespace-nowrap">
-                    {dataExibicao ? new Date(dataExibicao).toLocaleDateString() : "-"}
+                  <td className="px-6 py-5 text-gray-500 font-mono text-base whitespace-nowrap">
+                    {formatarDataBR(dataRef)}
                   </td>
 
-                  <td className="px-4 py-4">
-                    <div className="font-black text-slate-900 text-sm md:text-base">{item.motorista_nome || "-"}</div>
-                    <div className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
+                  <td className="px-6 py-5">
+                    <div className="font-black text-slate-900 text-lg">{item.motorista_nome || "-"}</div>
+                    <div className="text-base text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
                       {item.motorista_chapa || "-"}
                     </div>
+
                     {n(item.perda_litros) >= 80 && (
-                      <div className="mt-1 inline-flex items-center text-[10px] font-extrabold px-2 py-0.5 rounded border bg-rose-50 border-rose-200 text-rose-700">
+                      <div className="mt-2 inline-flex items-center text-xs font-extrabold px-2 py-1 rounded border bg-rose-50 border-rose-200 text-rose-700">
                         PRIORIDADE ALTA
                       </div>
                     )}
                   </td>
 
-                  <td className="px-4 py-4 text-center">
-                    <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-lg text-xs font-bold border whitespace-nowrap">
+                  <td className="px-6 py-5 text-center">
+                    <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-bold border whitespace-nowrap">
                       {foco}
                     </span>
                   </td>
 
-                  <td className="px-4 py-4 text-center">
+                  <td className="px-6 py-5 text-center">
                     {status === "AGUARDANDO_INSTRUTOR" ? (
-                      <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded-lg text-xs font-bold border border-amber-200 inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
+                      <span className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-amber-200 inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
                         <FaClock /> AGUARDANDO
                       </span>
                     ) : status === "EM_MONITORAMENTO" ? (
                       <div className="flex flex-col items-center">
-                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-lg text-xs font-bold border border-blue-200 whitespace-nowrap">
-                          MONITORAMENTO
+                        <span className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-blue-200 whitespace-nowrap">
+                          EM MONITORAMENTO
                         </span>
                         {diaXY ? (
-                          <span className="text-[10px] font-bold text-gray-500 mt-1 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">
-                            Dia {diaXY.dia} / {diaXY.dias}
+                          <span className="text-xs font-bold text-gray-500 mt-1.5 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">
+                            Dia {diaXY.dia} de {diaXY.dias}
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold text-gray-500 mt-1 whitespace-nowrap">
+                          <span className="text-xs font-bold text-gray-500 mt-1.5 whitespace-nowrap">
                             Monitoramento ativo
                           </span>
                         )}
                       </div>
                     ) : (
                       <span
-                        className={`px-2 py-1 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 whitespace-nowrap ${
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold border inline-flex items-center gap-1.5 whitespace-nowrap ${
                           status === "ATAS"
                             ? "bg-rose-50 text-rose-700 border-rose-200"
                             : "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -864,43 +971,73 @@ export default function DesempenhoDieselAcompanhamento() {
                     )}
                   </td>
 
-                  <td className="px-4 py-4">
-                    {/* BOTÕES LADO A LADO E FLEX-WRAP PARA TABLET */}
+                  <td className="px-6 py-5">
                     <div className="flex flex-wrap justify-center gap-2 items-center min-w-[120px]">
                       <button
                         onClick={() => abrirPDF(item)}
-                        className="flex items-center justify-center p-2 bg-white border border-rose-200 text-rose-600 rounded hover:bg-rose-50 shadow-sm transition-all"
-                        title="Abrir PDF"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg hover:bg-rose-50 hover:border-rose-300 font-bold text-sm shadow-sm transition-all"
+                        title="Abrir Prontuário PDF"
                       >
-                        <FaFilePdf size={14} />
+                        <FaFilePdf size={14} /> PDF
                       </button>
 
-                      {abaAtiva === "AGUARDANDO" && (
+                      <button
+                        onClick={() => handleConsultar(item)}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 hover:border-blue-300 font-bold text-sm shadow-sm transition-all"
+                        title="Consultar Histórico"
+                      >
+                        <FaHistory size={14} /> Histórico
+                      </button>
+
+                      {showDetalhes && (
+                        <button
+                          onClick={() => handleDetalhes(item)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 font-bold text-sm shadow-sm transition-all"
+                          title="Ver Detalhes do Lançamento do Instrutor"
+                        >
+                          <FaClipboardList size={14} /> Detalhes
+                        </button>
+                      )}
+
+                      {showLancar && (
                         <button
                           onClick={() => handleLancar(item)}
-                          className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded font-bold text-xs shadow-sm transition-all transform hover:scale-105 whitespace-nowrap"
+                          className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-black text-sm shadow-sm transition-all transform hover:scale-105"
                         >
-                          <FaPlay size={10} /> LANÇAR
+                          <FaPlay size={12} /> LANÇAR
                         </button>
                       )}
 
-                      {abaAtiva === "AGUARDANDO" && podeExcluir && (
+                      {/* Excluir Restrito */}
+                      {podeExcluir && abaAtiva === "ANTES" && (
                         <button
                           onClick={() => handleExcluir(item.id)}
-                          className="flex items-center justify-center p-2 bg-white border border-red-200 text-red-600 rounded hover:bg-red-50 shadow-sm transition-all"
+                          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 hover:border-red-300 font-bold text-sm shadow-sm transition-all"
                           title="Excluir Definitivamente"
                         >
-                          <FaTrash size={14} />
+                          <FaTrash size={14} /> Excluir
                         </button>
                       )}
 
-                      {(abaAtiva === "MONITORAMENTO" || abaAtiva === "CONCLUIDOS") && (
-                        <button
-                          onClick={() => abrirVisaoGeral(item)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-white rounded font-bold text-xs shadow-sm hover:bg-slate-700 transition-all whitespace-nowrap"
-                          title="Visão Geral do Prontuário e Histórico"
+                      {abaAtiva === "POS" && status === "EM_MONITORAMENTO" && (
+                        <span
+                          className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg font-bold text-sm shadow-sm cursor-help whitespace-nowrap"
+                          title="Aguardando fechamento automático"
                         >
-                          <FaEye size={12} /> Prontuário
+                          <FaClock size={12} /> Em andamento
+                        </span>
+                      )}
+
+                      {abaAtiva === "POS" && ["ENCERRADO", "ATAS", "OK"].includes(status) && (
+                        <button
+                          onClick={() => {
+                            setItemSelecionado(item);
+                            setModalAnaliseOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-black text-sm shadow-sm transition-all transform hover:scale-105 whitespace-nowrap"
+                          title="Ver Análise Final"
+                        >
+                          <FaChartLine size={14} /> VER ANÁLISE
                         </button>
                       )}
                     </div>
@@ -912,7 +1049,8 @@ export default function DesempenhoDieselAcompanhamento() {
             {listaFiltrada.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                  <div className="text-sm font-bold">Nenhum registro encontrado nesta aba.</div>
+                  <div className="text-lg font-bold">Nenhum registro encontrado.</div>
+                  <div className="text-base mt-1">Verifique os filtros ou troque de aba.</div>
                 </td>
               </tr>
             )}
@@ -920,94 +1058,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </table>
       </div>
 
-      {/* =========================================================================================
-          NOVO MODAL UNIFICADO: VISÃO GERAL (Prontuário + Detalhes + Análise + Histórico)
-      ========================================================================================= */}
-      {modalVisaoGeralOpen && itemSelecionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto flex flex-col animate-in zoom-in-95">
-            <div className="flex justify-between items-center p-5 border-b bg-slate-50 sticky top-0 z-10">
-              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                <FaClipboardList /> Prontuário Unificado de Acompanhamento
-              </h3>
-              <button onClick={() => setModalVisaoGeralOpen(false)}>
-                <FaTimes className="text-gray-400 hover:text-red-500 text-xl" />
-              </button>
-            </div>
-
-            <div className="p-4 md:p-6 space-y-6">
-              {/* CABEÇALHO DO MOTORISTA */}
-              <div className="p-4 bg-slate-100 rounded-lg border flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-                <div>
-                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Motorista</div>
-                  <div className="font-black text-slate-800 text-lg">{itemSelecionado.motorista_nome || "-"}</div>
-                  <div className="font-mono text-slate-500 text-sm">{itemSelecionado.motorista_chapa || "-"}</div>
-                </div>
-                <div className="text-left sm:text-right">
-                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Foco Principal</div>
-                  <div className="font-bold text-slate-700 bg-white px-3 py-1 rounded border shadow-sm inline-block">
-                    {getFoco(itemSelecionado)}
-                  </div>
-                </div>
-              </div>
-
-              {/* CONTEÚDO DIVIDIDO EM DUAS COLUNAS EM TELAS MAIORES */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* LADO ESQUERDO: DETALHES DA ORDEM SELECIONADA */}
-                <div className="lg:col-span-2 border rounded-lg p-4 md:p-5 bg-white shadow-sm">
-                  <h4 className="font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
-                    <FaEye className="text-blue-600" /> Resumo da Ordem Atual
-                  </h4>
-                  {normalizeStatus(itemSelecionado.status) === "EM_MONITORAMENTO" ? (
-                    <ResumoLancamentoInstrutor item={itemSelecionado} />
-                  ) : (
-                    <ResumoAnalise item={itemSelecionado} />
-                  )}
-                </div>
-
-                {/* LADO DIREITO: HISTÓRICO DO MOTORISTA */}
-                <div className="border rounded-lg p-4 md:p-5 bg-slate-50 shadow-sm h-fit">
-                  <h4 className="font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
-                    <FaHistory className="text-slate-500" /> Histórico Pregresso
-                  </h4>
-                  
-                  {loadingHist ? (
-                    <div className="text-sm text-slate-500 font-medium">Buscando ocorrências...</div>
-                  ) : historico.length === 0 ? (
-                    <div className="text-sm text-slate-500 font-medium">Nenhum registro anterior encontrado.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {historico.map((h) => (
-                        <div key={h.id} className="p-3 border rounded-lg bg-white shadow-sm">
-                          <div className="flex justify-between items-start mb-1">
-                            <div className="font-bold text-slate-700 text-sm">
-                              {h.created_at ? new Date(h.created_at).toLocaleDateString() : "-"}
-                            </div>
-                            <div className="font-bold text-[10px] px-2 py-0.5 bg-slate-100 border text-slate-600 rounded">
-                              {normalizeStatus(h.status)}
-                            </div>
-                          </div>
-                          <div className="text-xs text-slate-500 leading-relaxed">
-                            Foco: {getFoco(h)} <br />
-                            Nível: {h.nivel ?? "-"} • Dias: {h.dias_monitoramento ?? "-"}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================================
-          MODAIS LEGADO MANTIDOS EXATAMENTE COMO ESTAVAM PARA PRESERVAR A INTEGRIDADE DO CÓDIGO
-      ========================================================================================= */}
-      
-      {/* MODAL DETALHES (Antigo) */}
+      {/* MODAL DETALHES */}
       {modalDetalhesOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
@@ -1041,7 +1092,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       )}
 
-      {/* MODAL ANÁLISE (Antigo) */}
+      {/* MODAL ANÁLISE */}
       {modalAnaliseOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
@@ -1067,61 +1118,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       )}
 
-      {/* MODAL CONSULTA (Antigo) */}
-      {modalConsultaOpen && itemSelecionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-5 border-b bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                <FaHistory /> Histórico do Motorista
-              </h3>
-              <button onClick={() => setModalConsultaOpen(false)}>
-                <FaTimes className="text-gray-400 hover:text-red-500" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="p-4 rounded-lg border bg-slate-50">
-                <div className="text-sm">
-                  <span className="font-bold text-slate-700">Motorista:</span>{" "}
-                  {itemSelecionado.motorista_nome || "-"}{" "}
-                  <span className="text-slate-400 font-mono">
-                    ({itemSelecionado.motorista_chapa || "-"})
-                  </span>
-                </div>
-              </div>
-
-              {loadingHist ? (
-                <div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">
-                  Carregando histórico...
-                </div>
-              ) : historico.length === 0 ? (
-                <div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">
-                  Nenhum histórico encontrado.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {historico.map((h) => (
-                    <div key={h.id} className="p-3 border rounded bg-white">
-                      <div className="text-sm font-bold text-slate-800">
-                        {h.created_at ? new Date(h.created_at).toLocaleString() : "-"} •{" "}
-                        {normalizeStatus(h.status)}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        Foco: {getFoco(h)} • Nível {h.nivel ?? "-"} • {h.dias_monitoramento ?? "-"} dias
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================================
-          MODAL LANÇAR (Permanece Intacto)
-      ========================================================================================= */}
+      {/* MODAL LANÇAR */}
       {modalLancarOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
@@ -1378,6 +1375,58 @@ export default function DesempenhoDieselAcompanhamento() {
               >
                 <FaSave /> SALVAR E INICIAR MONITORAMENTO
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONSULTA */}
+      {modalConsultaOpen && itemSelecionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-5 border-b bg-slate-50">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                <FaHistory /> Histórico do Motorista
+              </h3>
+              <button onClick={() => setModalConsultaOpen(false)}>
+                <FaTimes className="text-gray-400 hover:text-red-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-4 rounded-lg border bg-slate-50">
+                <div className="text-sm">
+                  <span className="font-bold text-slate-700">Motorista:</span>{" "}
+                  {itemSelecionado.motorista_nome || "-"}{" "}
+                  <span className="text-slate-400 font-mono">
+                    ({itemSelecionado.motorista_chapa || "-"})
+                  </span>
+                </div>
+              </div>
+
+              {loadingHist ? (
+                <div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">
+                  Carregando histórico...
+                </div>
+              ) : historico.length === 0 ? (
+                <div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">
+                  Nenhum histórico encontrado.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {historico.map((h) => (
+                    <div key={h.id} className="p-3 border rounded bg-white">
+                      <div className="text-sm font-bold text-slate-800">
+                        {h.created_at ? formatarDataBR(h.created_at) : "-"} •{" "}
+                        {normalizeStatus(h.status)}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Foco: {getFoco(h)} • Nível {h.nivel ?? "-"} • {h.dias_monitoramento ?? "-"} dias
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -25,7 +25,7 @@ const OCORRENCIAS_CARDS = [
   "SEGUIU VIAGEM",
 ];
 
-// ✅ AGORA: campo principal de data para filtro/ordenação/exibição
+// campo principal de data para filtro/ordenação/exibição
 const DATE_FIELD = "data_sos";
 
 function pickBestDate(row) {
@@ -42,7 +42,6 @@ function pickBestDate(row) {
 function parseToDate(value) {
   if (!value) return null;
 
-  // Se já for Date
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
 
   const s = String(value).trim();
@@ -63,7 +62,7 @@ function parseToDate(value) {
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  // Timestamp ISO (com horário / timezone) -> deixa o JS interpretar
+  // Timestamp ISO (com horário / timezone)
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -87,7 +86,25 @@ function monthRange(yyyyMm) {
   return { start, end };
 }
 
-/* ======================= */
+/* =======================
+   STATUS: LABEL + TAG
+======================= */
+function statusLabel(status) {
+  const s = String(status || "").toUpperCase().trim();
+  if (s === "ABERTO") return "AG. OPERAÇÃO";
+  if (s === "EM ANDAMENTO") return "AG. MANUTENÇÃO";
+  return ""; // Fechado ou outros
+}
+
+function StatusTag({ status }) {
+  const label = statusLabel(status);
+  if (!label) return null;
+  return (
+    <span className="bg-red-600 text-white px-2 py-1 rounded text-xs font-semibold">
+      {label}
+    </span>
+  );
+}
 
 /* --- Modal de Login --- */
 function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
@@ -333,10 +350,8 @@ export default function SOSCentral() {
   const [page, setPage] = useState(0);
 
   function buildQuery() {
-    let query = supabase
-      .from("sos_acionamentos")
-      .select("*")
-      .eq("status", "Fechado");
+    // ✅ AGORA TRAZ TUDO (sem filtrar Fechado)
+    let query = supabase.from("sos_acionamentos").select("*");
 
     // filtro por mês (em cima de data_sos)
     if (mesRef) {
@@ -356,11 +371,11 @@ export default function SOSCentral() {
   }
 
   async function carregarCounts() {
+    // ✅ Mantém cards por ocorrência, mas agora contando TODOS os status
     const promises = OCORRENCIAS_CARDS.map(async (key) => {
       let q = supabase
         .from("sos_acionamentos")
         .select("id", { count: "exact", head: true })
-        .eq("status", "Fechado")
         .ilike("ocorrencia", key);
 
       // mesmos filtros (em cima de data_sos)
@@ -454,19 +469,28 @@ export default function SOSCentral() {
 
   function SortIcon({ field }) {
     if (sortBy !== field) return <FaSort className="inline ml-2 opacity-70" />;
-    return sortAsc ? <FaSortUp className="inline ml-2" /> : <FaSortDown className="inline ml-2" />;
+    return sortAsc ? (
+      <FaSortUp className="inline ml-2" />
+    ) : (
+      <FaSortDown className="inline ml-2" />
+    );
   }
 
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">
-        Central de Intervenções (Fechadas)
+        Central de Intervenções
       </h1>
 
-      {/* 🔢 Cards de Resumo */}
+      {/* 🔢 Cards de Resumo (mantidos como estavam; você não pediu pra mudar) */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         {OCORRENCIAS_CARDS.map((key) => (
-          <CardResumo key={key} titulo={key} valor={counts[key] || 0} cor={cores[key]} />
+          <CardResumo
+            key={key}
+            titulo={key}
+            valor={counts[key] || 0}
+            cor={cores[key]}
+          />
         ))}
       </div>
 
@@ -522,7 +546,6 @@ export default function SOSCentral() {
                 <SortIcon field="numero_sos" />
               </ThSortable>
 
-              {/* ✅ Data agora vem de data_sos */}
               <ThSortable label="Data" onClick={() => toggleSort(DATE_FIELD)}>
                 <SortIcon field={DATE_FIELD} />
               </ThSortable>
@@ -531,11 +554,17 @@ export default function SOSCentral() {
                 <SortIcon field="veiculo" />
               </ThSortable>
 
-              <ThSortable label="Motorista" onClick={() => toggleSort("motorista_nome")}>
+              <ThSortable
+                label="Motorista"
+                onClick={() => toggleSort("motorista_nome")}
+              >
                 <SortIcon field="motorista_nome" />
               </ThSortable>
 
-              <ThSortable label="Ocorrência" onClick={() => toggleSort("ocorrencia")}>
+              <ThSortable
+                label="Ocorrência"
+                onClick={() => toggleSort("ocorrencia")}
+              >
                 <SortIcon field="ocorrencia" />
               </ThSortable>
 
@@ -557,28 +586,48 @@ export default function SOSCentral() {
                 </td>
               </tr>
             ) : (
-              filtrados.map((s) => (
-                <tr key={s.id} className="border-t hover:bg-gray-50 transition">
-                  <td className="py-3 px-4">{s.numero_sos}</td>
+              filtrados.map((s) => {
+                const st = String(s.status || "").toUpperCase().trim();
+                const isPendente =
+                  st === "ABERTO" || st === "EM ANDAMENTO";
 
-                  {/* ✅ exibição agora prioriza data_sos */}
-                  <td className="py-3 px-4">{formatDateBR(pickBestDate(s))}</td>
+                return (
+                  <tr
+                    key={s.id}
+                    className={`border-t transition ${
+                      isPendente
+                        ? "bg-red-50 hover:bg-red-100"
+                        : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <td className="py-3 px-4">{s.numero_sos}</td>
 
-                  <td className="py-3 px-4">{s.veiculo}</td>
-                  <td className="py-3 px-4">{s.motorista_nome}</td>
-                  <td className="py-3 px-4">
-                    <OcorrenciaTag ocorrencia={s.ocorrencia} />
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <button
-                      className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded-md text-sm flex items-center gap-2 mx-auto"
-                      onClick={() => setSelected(s)}
-                    >
-                      <FaEye /> Consultar
-                    </button>
-                  </td>
-                </tr>
-              ))
+                    <td className="py-3 px-4">
+                      {formatDateBR(pickBestDate(s))}
+                    </td>
+
+                    <td className="py-3 px-4">{s.veiculo}</td>
+                    <td className="py-3 px-4">{s.motorista_nome}</td>
+
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <OcorrenciaTag ocorrencia={s.ocorrencia} />
+                        {/* ✅ Aberto / Em andamento */}
+                        <StatusTag status={s.status} />
+                      </div>
+                    </td>
+
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded-md text-sm flex items-center gap-2 mx-auto"
+                        onClick={() => setSelected(s)}
+                      >
+                        <FaEye /> Consultar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

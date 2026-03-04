@@ -7,10 +7,36 @@ import CampoPrefixo from "../components/CampoPrefixo";
 import { useAuth } from "../context/AuthContext";
 import { FaTimes } from "react-icons/fa";
 
-const API_BASE = "https://agentediesel.onrender.com"; // ✅ API Python
+/**
+ * ✅ ATUALIZAÇÃO IMPORTANTE (conforme seu DesempenhoDieselAgente):
+ * - REMOVIDO: geração de prontuário via API Python (/relatorios/gerar)
+ * - AGORA: gera prontuário via GitHub Actions (ordem-acompanhamento.yml)
+ *   exatamente como no seu Agente Diesel:
+ *   1) cria acompanhamento_lotes
+ *   2) cria acompanhamento_lote_itens (1 item)
+ *   3) dispatch workflow WF_ACOMP com ordem_batch_id + qtd
+ *   4) faz polling no relatorios_gerados e/ou Storage para abrir o PDF
+ */
 
-const TIPO_PRONTUARIO = "prontuarios_acompanhamento";
+// =============================================================================
+// CONFIG (GitHub Actions) — IGUAL AO AGENTE
+// =============================================================================
+const GH_USER = import.meta.env.VITE_GITHUB_USER;
+const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
+const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
+const GH_REF = "main";
+const WF_ACOMP = "ordem-acompanhamento.yml";
+
+// =============================================================================
+// Storage — IGUAL AO AGENTE
+// =============================================================================
+const SUPABASE_BASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const BUCKET_RELATORIOS = "relatorios";
+
+// =============================================================================
+// Config do prontuário
+// =============================================================================
+const TIPO_PRONTUARIO = "prontuarios_acompanhamento";
 
 const MOTIVOS = ["KM/L abaixo da meta", "Tendência de queda", "Comparativo com cluster", "Outro"];
 
@@ -21,9 +47,9 @@ const DESTINOS = {
 
 const PRIORIDADES = ["Gravíssima", "Alta", "Média", "Baixa"];
 
-/* =========================
-   HELPERS
-========================= */
+// =============================================================================
+// HELPERS
+// =============================================================================
 function isUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     String(v || "")
@@ -91,51 +117,88 @@ function normalizePath(p) {
   return String(p).replace(/^\/+/, "");
 }
 
-function getFolderFromPath(p) {
-  const parts = normalizePath(p).split("/").filter(Boolean);
-  if (parts.length <= 1) return "";
-  return parts.slice(0, -1).join("/");
+// ✅ igual ao Agente
+function getPublicUrl(path) {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${SUPABASE_BASE_URL}/storage/v1/object/public/${BUCKET_RELATORIOS}/${cleanPath}`;
 }
 
-async function makeUrlFromPath(bucket, path, expiresIn = 3600) {
-  const clean = normalizePath(path);
+// ✅ GitHub Actions dispatch — igual ao Agente
+async function dispatchGitHubWorkflow(workflowFile, inputs) {
+  if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes (VITE_GITHUB_*).");
+  const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
 
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(clean, expiresIn);
-  if (!error && data?.signedUrl) return { url: data.signedUrl, mode: "signed", path: clean };
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${GH_TOKEN}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ref: GH_REF, inputs }),
+  });
 
-  const pub = supabase.storage.from(bucket).getPublicUrl(clean);
-  return { url: pub?.data?.publicUrl, mode: "public", path: clean };
-}
-
-function parseISODateParts(iso) {
-  try {
-    if (!iso) return null;
-    const s = String(iso).trim();
-    const [yStr, mStr] = s.split("-");
-    if (!yStr || yStr.length !== 4) return null;
-    const y = parseInt(yStr, 10);
-    const m = parseInt(mStr, 10);
-    if (!y || !m) return null;
-    if (y < 2000 || y > 2100) return null;
-    if (m < 1 || m > 12) return null;
-    return { ano: y, mes: m };
-  } catch {
-    return null;
+  if (response.status !== 204) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Erro GitHub: ${response.status}`);
   }
+  return true;
 }
 
-function toISODate(d) {
-  const dt = new Date(d);
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, "0");
-  const day = String(dt.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-function addDaysISO(iso, days) {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  return toISODate(d);
+async function pollFindProntuario({ chapa, loteId, maxTries = 24, intervalMs = 2500 }) {
+  // Estratégia robusta:
+  // 1) tenta achar em relatorios_gerados pelos campos comuns
+  // 2) tenta achar por arquivo_pdf_path contendo a chapa
+  // 3) retorna URL pública se achar
+
+  const chapaStr = String(chapa || "").trim();
+  const loteStr = loteId ? String(loteId) : null;
+
+  for (let i = 0; i < maxTries; i++) {
+    // 1) tipo exato
+    let q = supabase
+      .from("relatorios_gerados")
+      .select("id, created_at, tipo, status, arquivo_pdf_path, arquivo_path, erro_msg, extra, metadata")
+      .order("created_at", { ascending: false })
+      .limit(30);
+
+    // se você grava tipo do prontuário, ajuda MUITO
+    q = q.eq("tipo", TIPO_PRONTUARIO);
+
+    const { data: rows, error } = await q;
+    if (!error && rows?.length) {
+      // tenta casar por lote/chapa de vários jeitos
+      const found =
+        rows.find((r) => String(r?.extra?.lote_id || "") === loteStr) ||
+        rows.find((r) => String(r?.metadata?.lote_id || "") === loteStr) ||
+        rows.find((r) => String(r?.extra?.motorista_chapa || "") === chapaStr) ||
+        rows.find((r) => String(r?.metadata?.motorista_chapa || "") === chapaStr) ||
+        rows.find((r) => String(r?.arquivo_pdf_path || r?.arquivo_path || "").includes(chapaStr));
+
+      const row = found || rows[0];
+
+      const pdfPath = normalizePath(row?.arquivo_pdf_path || "");
+      const anyPath = normalizePath(row?.arquivo_path || "");
+
+      const url = getPublicUrl(pdfPath || anyPath);
+      if (url && row?.status === "CONCLUIDO") {
+        return { row, url };
+      }
+
+      // se tiver path mesmo em PROCESSANDO, continua polling
+    }
+
+    await sleep(intervalMs);
+  }
+
+  return null;
 }
 
 function Segmented({ value, onChange, disabled }) {
@@ -174,13 +237,7 @@ function Modal({ open, title, onClose, children }) {
 
   return (
     <div className="fixed inset-0 z-50">
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-        role="button"
-        tabIndex={0}
-        aria-label="Fechar"
-      />
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} role="button" tabIndex={0} aria-label="Fechar" />
       <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-6">
         <div className="w-full max-w-6xl">
           <div
@@ -211,47 +268,12 @@ function Modal({ open, title, onClose, children }) {
   );
 }
 
-/**
- * ✅ RESUMO (premiacao_diaria via agentediesel)
- * Esperado:
- *  - totais: { dias, km, litros, kml }
- *  - dia: [{ dia, km, litros, kml, linhas:[...], veiculos:[...] }]
- *  - veiculos (opcional)
- */
-async function fetchResumoPremiacao({ chapa, inicio, fim }) {
-  const qs = new URLSearchParams({
-    chapa: String(chapa || "").trim(),
-    inicio: String(inicio || "").trim(),
-    fim: String(fim || "").trim(),
-  }).toString();
-
-  const r = await fetch(`${API_BASE}/premiacao/resumo?${qs}`);
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j?.detail || j?.error || "Erro ao consultar premiação.");
-  return j;
-}
-
-/**
- * ✅ MERITOCRACIA
- * Front chama:
- *  GET /premiacao/meritocracia?motorista=...&mes=...&ano=...
- */
-async function fetchMeritocracia({ chapa, mes, ano }) {
-  const qs = new URLSearchParams({
-    motorista: String(chapa || "").trim(),
-    mes: String(mes || "").trim(),
-    ano: String(ano || "").trim(),
-  }).toString();
-
-  const r = await fetch(`${API_BASE}/premiacao/meritocracia?${qs}`);
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j?.detail || j?.error || "Erro ao consultar meritocracia.");
-  return j;
-}
-
+// =============================================================================
+// COMPONENTE
+// =============================================================================
 export default function DesempenhoLancamento() {
   const navigate = useNavigate();
-  const { user } = useAuth(); // ✅ corrigido (antes estava errado)
+  const { user } = useAuth();
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -262,12 +284,12 @@ export default function DesempenhoLancamento() {
   }, []);
 
   // =============================
-  // Top (tabs)
+  // Tabs
   // =============================
   const [destino, setDestino] = useState(DESTINOS.ACOMP);
 
   // =============================
-  // Shared (motorista, motivo, obs)
+  // Shared
   // =============================
   const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
@@ -277,7 +299,7 @@ export default function DesempenhoLancamento() {
   const motivoFinal = motivo === "Outro" ? motivoOutro.trim() : motivo;
 
   // =============================
-  // TRATATIVA (full fields)
+  // TRATATIVA (mantive do seu fluxo anterior)
   // =============================
   const [linhasOpt, setLinhasOpt] = useState([]);
   const [refsLoading, setRefsLoading] = useState(false);
@@ -293,20 +315,9 @@ export default function DesempenhoLancamento() {
   const [evidTrat, setEvidTrat] = useState([]);
 
   // =============================
-  // Data + UI
+  // UI
   // =============================
   const diasMonitoramento = 10;
-
-  const [kmlMeta, setKmlMeta] = useState("");
-  const [metaLoading, setMetaLoading] = useState(false);
-  const [metaErr, setMetaErr] = useState("");
-  const [meritRow, setMeritRow] = useState(null);
-
-  const [resumoLoading, setResumoLoading] = useState(false);
-  const [resumoErr, setResumoErr] = useState("");
-  const [resumoTotais, setResumoTotais] = useState({ dias: 0, km: 0, litros: 0, kml: 0 });
-  const [resumoVeiculos, setResumoVeiculos] = useState([]);
-  const [resumoDias, setResumoDias] = useState([]);
 
   const [saving, setSaving] = useState(false);
   const [errMsg, setErrMsg] = useState("");
@@ -318,13 +329,11 @@ export default function DesempenhoLancamento() {
   const [prontLoading, setProntLoading] = useState(false);
   const [prontErr, setProntErr] = useState("");
   const [prontRow, setProntRow] = useState(null);
-  const [prontUrlsLoading, setProntUrlsLoading] = useState(false);
   const [prontPdfUrl, setProntPdfUrl] = useState(null);
-  const [prontPdfPathUsed, setProntPdfPathUsed] = useState(null);
   const [prontPdfOpen, setProntPdfOpen] = useState(false);
 
   // =============================
-  // Load refs (linhas) for Tratativa
+  // Load refs (linhas)
   // =============================
   useEffect(() => {
     (async () => {
@@ -343,104 +352,6 @@ export default function DesempenhoLancamento() {
       }
     })();
   }, []);
-
-  // =============================
-  // TRATATIVA: resumo (premiacao_diaria)
-  // Só roda quando destino=TRAT e tem período
-  // =============================
-  useEffect(() => {
-    if (destino !== DESTINOS.TRAT) return;
-
-    const chapa = String(motorista?.chapa || "").trim();
-    const ini = String(periodoInicio || "").trim();
-    const fim = String(periodoFim || "").trim();
-
-    if (!chapa || !ini || !fim) {
-      setResumoErr("");
-      setResumoLoading(false);
-      setResumoTotais({ dias: 0, km: 0, litros: 0, kml: 0 });
-      setResumoVeiculos([]);
-      setResumoDias([]);
-      return;
-    }
-
-    let alive = true;
-    (async () => {
-      setResumoLoading(true);
-      setResumoErr("");
-      try {
-        const j = await fetchResumoPremiacao({ chapa, inicio: ini, fim });
-        if (!alive) return;
-
-        setResumoTotais(j?.totais || { dias: 0, km: 0, litros: 0, kml: 0 });
-        setResumoVeiculos(Array.isArray(j?.veiculos) ? j.veiculos : []);
-        setResumoDias(Array.isArray(j?.dia) ? j.dia : []);
-      } catch (e) {
-        if (!alive) return;
-        setResumoTotais({ dias: 0, km: 0, litros: 0, kml: 0 });
-        setResumoVeiculos([]);
-        setResumoDias([]);
-        setResumoErr(e?.message || "Erro ao buscar resumo.");
-      } finally {
-        if (!alive) return;
-        setResumoLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [destino, motorista?.chapa, periodoInicio, periodoFim]);
-
-  // =============================
-  // TRATATIVA: meritocracia usa mês do FINAL (periodoFim)
-  // =============================
-  useEffect(() => {
-    if (destino !== DESTINOS.TRAT) return;
-
-    const chapa = String(motorista?.chapa || "").trim();
-    const parts = parseISODateParts(String(periodoFim || "").trim());
-
-    if (!chapa || !parts?.mes || !parts?.ano) {
-      setMetaErr("");
-      setMetaLoading(false);
-      setMeritRow(null);
-      setKmlMeta("");
-      return;
-    }
-
-    let alive = true;
-    (async () => {
-      setMetaLoading(true);
-      setMetaErr("");
-      try {
-        const j = await fetchMeritocracia({ chapa, mes: parts.mes, ano: parts.ano });
-        if (!alive) return;
-
-        const item = j?.item || j?.data || j?.row || null;
-        setMeritRow(item);
-
-        const meta = item?.kml_meta_linha_mais_horas ?? item?.kml_meta ?? null;
-        if (meta !== null && meta !== undefined && String(meta).trim() !== "") {
-          setKmlMeta(String(meta));
-        } else {
-          setKmlMeta("");
-        }
-      } catch (e) {
-        if (!alive) return;
-        setMeritRow(null);
-        setMetaErr(e?.message || "Erro ao buscar meta (meritocracia).");
-        setKmlMeta("");
-      } finally {
-        if (!alive) return;
-        setMetaLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [destino, motorista?.chapa, periodoFim]);
 
   // =============================
   // Files (Tratativa)
@@ -503,17 +414,6 @@ export default function DesempenhoLancamento() {
     setPeriodoFim("");
     setEvidTrat([]);
 
-    setKmlMeta("");
-    setMetaLoading(false);
-    setMetaErr("");
-    setMeritRow(null);
-
-    setResumoLoading(false);
-    setResumoErr("");
-    setResumoTotais({ dias: 0, km: 0, litros: 0, kml: 0 });
-    setResumoVeiculos([]);
-    setResumoDias([]);
-
     setSaving(false);
     setErrMsg("");
     setOkMsg("");
@@ -521,28 +421,26 @@ export default function DesempenhoLancamento() {
     setProntLoading(false);
     setProntErr("");
     setProntRow(null);
-    setProntUrlsLoading(false);
     setProntPdfUrl(null);
-    setProntPdfPathUsed(null);
     setProntPdfOpen(false);
   }
 
-  // Se mudar para ACOMP, limpa campos “pesados”
   useEffect(() => {
     setErrMsg("");
     setOkMsg("");
     setProntErr("");
     setProntRow(null);
     setProntPdfUrl(null);
-    setProntPdfPathUsed(null);
     setProntPdfOpen(false);
   }, [destino]);
 
-  // =====================================================================================
-  // ✅ PRONTUÁRIO (ACOMP): gera minimalista
-  // - 1ª tentativa: { tipo, motorista, janela_dias }
-  // - fallback: manda { periodo_inicio, periodo_fim } (últimos 30 dias) caso API exija
-  // =====================================================================================
+  // =============================================================================
+  // ✅ PRONTUÁRIO (ACOMP) — AGORA IGUAL AO AGENTE DIESEL
+  // - cria lote
+  // - cria item do lote
+  // - dispatch workflow ordem-acompanhamento.yml
+  // - polling relatorios_gerados e abre PDF
+  // =============================================================================
   async function gerarProntuarioAcomp() {
     if (prontLoading) return;
 
@@ -550,123 +448,85 @@ export default function DesempenhoLancamento() {
     setProntErr("");
     setProntRow(null);
     setProntPdfUrl(null);
-    setProntPdfPathUsed(null);
 
     try {
-      const chapaOuNome = String(motorista?.chapa || motorista?.nome || "").trim();
-      if (!chapaOuNome) throw new Error("Informe o motorista.");
+      const chapa = String(motorista?.chapa || "").trim();
+      const nome = String(motorista?.nome || "").trim() || null;
 
-      // ✅ payload minimalista
-      let payload = {
-        tipo: TIPO_PRONTUARIO,
-        motorista: chapaOuNome,
-        janela_dias: 30,
-      };
+      if (!chapa) throw new Error("Para gerar prontuário, informe a CHAPA do motorista.");
 
-      let r = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios/gerar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      // 1) cria lote
+      const { data: lote, error: errL } = await supabase
+        .from("acompanhamento_lotes")
+        .insert({
+          status: "PROCESSANDO",
+          qtd: 1,
+          extra: {
+            origem: "DESPENHO_LANCAMENTO_ACOMP",
+            tipo: TIPO_PRONTUARIO,
+            gerado_em: new Date().toISOString(),
+            motorista_chapa: chapa,
+            motorista_nome: nome,
+          },
+        })
+        .select("id")
+        .single();
+      if (errL) throw errL;
+
+      // 2) cria item
+      const { error: errI } = await supabase.from("acompanhamento_lote_itens").insert([
+        {
+          lote_id: lote.id,
+          motorista_chapa: chapa,
+
+          // esses campos podem ser nulos no manual (script deve aguentar)
+          linha_mais_rodada: null,
+          km_percorrido: 0,
+          combustivel_consumido: 0,
+          kml_realizado: 0,
+          kml_meta: 0,
+          combustivel_desperdicado: 0,
+
+          extra: {
+            motorista_nome: nome,
+            origem: "DESPENHO_LANCAMENTO_ACOMP",
+            tipo: TIPO_PRONTUARIO,
+          },
+        },
+      ]);
+      if (errI) throw errI;
+
+      // 3) dispatch workflow (igual ao agente)
+      await dispatchGitHubWorkflow(WF_ACOMP, {
+        ordem_batch_id: String(lote.id),
+        qtd: "1",
       });
 
-      let data = await r.json().catch(() => ({}));
+      // 4) polling — tenta achar o relatório gerado e abrir PDF
+      const found = await pollFindProntuario({ chapa, loteId: lote.id, maxTries: 28, intervalMs: 2500 });
 
-      // fallback: se API reclamar de período, manda últimos 30 dias
-      if (!r.ok) {
-        const msg = data?.error || data?.detail || "";
-        const precisaPeriodo =
-          String(msg).toLowerCase().includes("período") ||
-          String(msg).toLowerCase().includes("periodo") ||
-          String(msg).toLowerCase().includes("inicio") ||
-          String(msg).toLowerCase().includes("fim");
-
-        if (precisaPeriodo) {
-          const fim = toISODate(new Date());
-          const ini = addDaysISO(fim, -30);
-
-          payload = {
-            tipo: TIPO_PRONTUARIO,
-            periodo_inicio: ini,
-            periodo_fim: fim,
-            motorista: chapaOuNome,
-            linha: null,
-            veiculo: null,
-            cluster: null,
-          };
-
-          r = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios/gerar`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          data = await r.json().catch(() => ({}));
-        }
-      }
-
-      if (!r.ok) {
-        const detail = data?.error || data?.detail || `HTTP ${r.status}`;
-        throw new Error(detail);
-      }
-
-      if (!data?.report_id) throw new Error("API não retornou report_id do prontuário.");
-
-      // busca registro (se existir)
-      const { data: row, error } = await supabase
-        .from("relatorios_gerados")
-        .select(
-          "id, created_at, tipo, status, periodo_inicio, periodo_fim, arquivo_path, arquivo_nome, mime_type, tamanho_bytes, erro_msg"
-        )
-        .eq("id", data.report_id)
-        .single();
-
-      if (error || !row) {
-        // ainda assim tenta abrir por path padrão (caso seu worker não grave a linha)
-        // mas aqui preferi falhar com mensagem clara
-        throw new Error("Não consegui localizar o registro em relatorios_gerados.");
+      if (!found?.url) {
+        throw new Error(
+          `Workflow disparado (lote #${lote.id}), mas não encontrei o PDF no relatorios_gerados ainda. Tente atualizar em 1–2 min.`
+        );
       }
 
       if (!mountedRef.current) return;
-      setProntRow(row);
-
-      setProntUrlsLoading(true);
-
-      const arquivoPath = normalizePath(row?.arquivo_path || "");
-      let pdfPath = arquivoPath;
-
-      const folder = getFolderFromPath(arquivoPath);
-      if (!/\.pdf$/i.test(pdfPath)) {
-        // path padrão
-        pdfPath = folder ? `${folder}/${chapaOuNome}_Prontuario.pdf` : `${chapaOuNome}_Prontuario.pdf`;
-      }
-
-      let resPdf = await makeUrlFromPath(BUCKET_RELATORIOS, pdfPath, 3600);
-      if (!resPdf?.url && folder) {
-        const alt = `${folder}/Prontuario.pdf`;
-        resPdf = await makeUrlFromPath(BUCKET_RELATORIOS, alt, 3600);
-      }
-
-      if (!resPdf?.url) {
-        throw new Error(`Não encontrei PDF do prontuário no bucket '${BUCKET_RELATORIOS}'. Path tentado: ${pdfPath}`);
-      }
-
-      if (!mountedRef.current) return;
-      setProntPdfUrl(resPdf.url);
-      setProntPdfPathUsed(resPdf.path);
+      setProntRow(found.row);
+      setProntPdfUrl(found.url);
       setProntPdfOpen(true);
     } catch (e) {
       if (!mountedRef.current) return;
       setProntErr(String(e?.message || e));
     } finally {
-      if (mountedRef.current) {
-        setProntUrlsLoading(false);
-        setProntLoading(false);
-      }
+      if (!mountedRef.current) return;
+      setProntLoading(false);
     }
   }
 
-  // =====================================================================================
-  // ✅ Lançar (ACOMP minimal vs TRAT full)
-  // =====================================================================================
+  // =============================================================================
+  // ✅ LANÇAR (ACOMP minimal vs TRAT full)
+  // =============================================================================
   async function lancar() {
     if (!pronto || saving) return;
 
@@ -800,105 +660,13 @@ export default function DesempenhoLancamento() {
         const { error: eE } = await supabase.from("diesel_acompanhamento_eventos").insert(payloadEvento);
         if (eE) throw eE;
 
-        // 4) gera prontuário automático (minimal) + salva report id no metadata
-        let prontReportId = null;
-        try {
-          const payloadPront = {
-            tipo: TIPO_PRONTUARIO,
-            motorista: String(motorista?.chapa || motorista?.nome || "").trim(),
-            janela_dias: 30,
-          };
+        setOkMsg("Acompanhamento lançado. Gerando prontuário...");
 
-          let rPr = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios/gerar`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payloadPront),
-          });
+        // ✅ gera prontuário pelo mesmo método do Agente
+        await gerarProntuarioAcomp();
 
-          let jPr = await rPr.json().catch(() => ({}));
-
-          if (!rPr.ok) {
-            const msg = jPr?.error || jPr?.detail || "";
-            const precisaPeriodo =
-              String(msg).toLowerCase().includes("período") ||
-              String(msg).toLowerCase().includes("periodo") ||
-              String(msg).toLowerCase().includes("inicio") ||
-              String(msg).toLowerCase().includes("fim");
-
-            if (precisaPeriodo) {
-              const fim = toISODate(new Date());
-              const ini = addDaysISO(fim, -30);
-
-              const payloadFallback = {
-                tipo: TIPO_PRONTUARIO,
-                periodo_inicio: ini,
-                periodo_fim: fim,
-                motorista: String(motorista?.chapa || motorista?.nome || "").trim(),
-                linha: null,
-                veiculo: null,
-                cluster: null,
-              };
-
-              rPr = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios/gerar`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payloadFallback),
-              });
-
-              jPr = await rPr.json().catch(() => ({}));
-            }
-          }
-
-          if (!rPr.ok) throw new Error(jPr?.error || jPr?.detail || `Erro ao gerar prontuário (HTTP ${rPr.status})`);
-
-          prontReportId = jPr?.report_id ? String(jPr.report_id) : null;
-
-          if (prontReportId) {
-            await supabase
-              .from("diesel_acompanhamentos")
-              .update({
-                metadata: {
-                  ...payloadAcomp.metadata,
-                  prontuario_report_id: prontReportId,
-                },
-              })
-              .eq("id", acomp.id);
-
-            await supabase.from("diesel_acompanhamento_eventos").insert({
-              acompanhamento_id: acomp.id,
-              tipo: "PRONTUARIO_GERADO",
-              observacoes: `Prontuário gerado automaticamente. Report ID: ${prontReportId}`,
-              evidencias_urls: [],
-              criado_por_login: lancadorLogin,
-              criado_por_nome: lancadorNome,
-              criado_por_id: isUuid(user?.id) ? user.id : null,
-              extra: { report_id: prontReportId, lancamento_id: lanc.id },
-            });
-          }
-        } catch (ePr) {
-          await supabase.from("diesel_acompanhamento_eventos").insert({
-            acompanhamento_id: acomp.id,
-            tipo: "PRONTUARIO_ERRO",
-            observacoes: `Falha ao gerar prontuário automaticamente: ${String(ePr?.message || ePr)}`,
-            evidencias_urls: [],
-            criado_por_login: lancadorLogin,
-            criado_por_nome: lancadorNome,
-            criado_por_id: isUuid(user?.id) ? user.id : null,
-            extra: { lancamento_id: lanc.id },
-          });
-
-          setOkMsg("Acompanhamento lançado. O prontuário falhou — você pode tentar gerar manualmente.");
-        }
-
-        if (!okMsg) setOkMsg("Acompanhamento lançado com sucesso.");
-
-        // se quiser abrir o pdf automaticamente, chama gerarProntuarioAcomp (que também abre modal)
-        // (somente se não estiver em loading e se não houve erro)
-        try {
-          await gerarProntuarioAcomp();
-        } catch {
-          // silencioso: já mostramos mensagens de prontuário no card
-        }
+        if (!mountedRef.current) return;
+        setOkMsg("Acompanhamento lançado e prontuário gerado.");
 
         return;
       }
@@ -927,23 +695,9 @@ export default function DesempenhoLancamento() {
       const evidenciasUrls = uploaded.map((u) => u.publicUrl).filter(Boolean);
       const obsInit = String(observacaoInicial || "").trim() || null;
 
-      const meritSnap = meritRow
-        ? {
-            motorista: meritRow?.motorista ?? null,
-            linha_com_mais_horas: meritRow?.linha_com_mais_horas ?? null,
-            kml_linha_com_mais_horas: meritRow?.kml_linha_com_mais_horas ?? null,
-            meta_linha: meritRow?.meta_linha ?? null,
-            kml_meta_linha_mais_horas: meritRow?.kml_meta_linha_mais_horas ?? null,
-          }
-        : {};
-
-      const resumoTotaisSnap = resumoTotais || { dias: 0, km: 0, litros: 0, kml: 0 };
-      const resumoDiasSnap = Array.isArray(resumoDias) ? resumoDias : [];
-      const resumoVeiculosSnap = Array.isArray(resumoVeiculos) ? resumoVeiculos : [];
-
       // 1) diesel_lancamentos
       const payloadLancamento = {
-        motorista_chapa: chapa,
+        motorista_chapa: chapa || null,
         motorista_nome: nomeMotorista,
         prefixo: String(prefixo || "").trim(),
         linha: String(linha || "").trim(),
@@ -958,14 +712,14 @@ export default function DesempenhoLancamento() {
         periodo_fim: fim || null,
 
         dias_monitoramento: Number(diasMonitoramento) || 10,
-        kml_meta: String(kmlMeta || "").trim() ? safeNumber(kmlMeta) : null,
+        kml_meta: null,
 
         evidencias_urls: evidenciasUrls,
 
-        meritocracia: meritSnap,
-        resumo_totais: resumoTotaisSnap,
-        resumo_dias: resumoDiasSnap,
-        resumo_veiculos: resumoVeiculosSnap,
+        meritocracia: {},
+        resumo_totais: { dias: 0, km: 0, litros: 0, kml: 0 },
+        resumo_dias: [],
+        resumo_veiculos: [],
 
         lancado_por_login: lancadorLogin,
         lancado_por_nome: lancadorNome,
@@ -988,7 +742,7 @@ export default function DesempenhoLancamento() {
       const descricaoBase = obsInit ? `${motivoFinal}\n\n${obsInit}` : motivoFinal;
 
       const payloadTratativa = {
-        motorista_chapa: chapa,
+        motorista_chapa: chapa || null,
         motorista_nome: nomeMotorista,
 
         origem: "DIESEL",
@@ -1011,10 +765,6 @@ export default function DesempenhoLancamento() {
 
         metadata: {
           origem: "LANCAMENTO_MANUAL",
-          meritocracia: meritSnap,
-          resumo_totais: resumoTotaisSnap,
-          resumo_dias: resumoDiasSnap,
-          resumo_veiculos: resumoVeiculosSnap,
           lancado_por_login: lancadorLogin,
           lancado_por_nome: lancadorNome,
           lancado_por_usuario_id: lancadorIdNum ? String(lancadorIdNum) : null,
@@ -1151,10 +901,10 @@ export default function DesempenhoLancamento() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={!String(motorista?.chapa || motorista?.nome || "").trim() || saving || prontLoading}
+                  disabled={!String(motorista?.chapa || "").trim() || saving || prontLoading}
                   className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   onClick={gerarProntuarioAcomp}
-                  title="Gera/Regera o prontuário (PDF) para este motorista"
+                  title="Gera/Regera o prontuário (PDF) via workflow (ordem-acompanhamento.yml)"
                 >
                   {prontLoading ? "Gerando..." : "Gerar prontuário (PDF)"}
                 </button>
@@ -1176,7 +926,7 @@ export default function DesempenhoLancamento() {
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-200">
               <div className="text-sm font-bold text-slate-900">Prontuário</div>
-              <div className="text-xs text-slate-500 mt-1">Status e abertura do PDF.</div>
+              <div className="text-xs text-slate-500 mt-1">Geração via workflow + abertura do PDF.</div>
             </div>
 
             <div className="p-5">
@@ -1199,19 +949,9 @@ export default function DesempenhoLancamento() {
                     {!!prontRow && (
                       <div className="mt-2 text-xs text-slate-600">
                         Status: <b>{String(prontRow.status || "")}</b>
-                        {prontRow?.periodo_inicio || prontRow?.periodo_fim ? (
-                          <>
-                            {" "}
-                            • {String(prontRow.periodo_inicio || "—")} → {String(prontRow.periodo_fim || "—")}
-                          </>
-                        ) : null}
-                        {prontPdfPathUsed ? (
-                          <div className="mt-1 text-[11px] text-slate-500 break-all">PDF path: {prontPdfPathUsed}</div>
-                        ) : null}
+                        {prontRow?.id ? <span> • #{prontRow.id}</span> : null}
                       </div>
                     )}
-
-                    {prontUrlsLoading && <div className="mt-2 text-sm text-slate-700">Preparando arquivo do bucket…</div>}
                   </div>
 
                   {prontPdfUrl && (
@@ -1236,7 +976,7 @@ export default function DesempenhoLancamento() {
                 </div>
               ) : (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                  Clique em <b>Gerar prontuário (PDF)</b> para abrir o documento.
+                  Clique em <b>Gerar prontuário (PDF)</b> para disparar o workflow e abrir o documento.
                 </div>
               )}
             </div>
@@ -1283,13 +1023,7 @@ export default function DesempenhoLancamento() {
 
             {/* Prefixo */}
             <div className="md:col-span-2">
-              <CampoPrefixo
-                value={prefixo}
-                onChange={setPrefixo}
-                onChangeCluster={setCluster}
-                disabled={saving}
-                label="Prefixo"
-              />
+              <CampoPrefixo value={prefixo} onChange={setPrefixo} onChangeCluster={setCluster} disabled={saving} label="Prefixo" />
             </div>
 
             {/* Linha */}
@@ -1321,14 +1055,25 @@ export default function DesempenhoLancamento() {
               />
             </div>
 
-            {/* Monitoramento */}
+            {/* Período */}
             <div className="md:col-span-2">
-              <label className="block text-sm text-slate-700 mb-1 font-semibold">Tempo de monitoramento</label>
-              <input
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 bg-slate-50"
-                value={`${diasMonitoramento} dias`}
-                readOnly
-              />
+              <label className="block text-sm text-slate-700 mb-1 font-semibold">Período analisado do KM/L</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                  value={periodoInicio}
+                  onChange={(e) => setPeriodoInicio(e.target.value)}
+                  disabled={saving}
+                />
+                <input
+                  type="date"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                  value={periodoFim}
+                  onChange={(e) => setPeriodoFim(e.target.value)}
+                  disabled={saving}
+                />
+              </div>
             </div>
 
             {/* Motivo */}
@@ -1356,46 +1101,6 @@ export default function DesempenhoLancamento() {
                   disabled={saving}
                 />
               )}
-            </div>
-
-            {/* Meta */}
-            <div className="md:col-span-2">
-              <label className="block text-sm text-slate-700 mb-1 font-semibold">KM/L Meta (meritocracia)</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 bg-slate-50"
-                  placeholder={metaLoading ? "Buscando..." : "—"}
-                  value={kmlMeta}
-                  readOnly
-                />
-                <div className="text-xs text-slate-500 whitespace-nowrap">
-                  {metaLoading ? "Carregando..." : metaErr ? "Erro" : meritRow ? "OK" : "—"}
-                </div>
-              </div>
-              {metaErr && <div className="mt-1 text-xs text-red-700">{metaErr}</div>}
-            </div>
-
-            {/* Período */}
-            <div className="md:col-span-2">
-              <label className="block text-sm text-slate-700 mb-1 font-semibold">Período analisado do KM/L</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <input
-                  type="date"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                  value={periodoInicio}
-                  onChange={(e) => setPeriodoInicio(e.target.value)}
-                  disabled={saving}
-                />
-                <input
-                  type="date"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                  value={periodoFim}
-                  onChange={(e) => setPeriodoFim(e.target.value)}
-                  disabled={saving}
-                />
-              </div>
             </div>
 
             {/* Observação */}
@@ -1450,218 +1155,6 @@ export default function DesempenhoLancamento() {
                 )}
               </div>
             </div>
-
-            {/* Meritocracia card */}
-            <div className="md:col-span-4">
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-slate-900">Meritocracia (mês do PERÍODO FIM)</div>
-                  <div className="text-xs text-slate-500">
-                    {metaLoading ? "Consultando..." : metaErr ? "Erro" : meritRow ? "OK" : "—"}
-                  </div>
-                </div>
-
-                {!meritRow && !metaLoading && !metaErr && (
-                  <div className="mt-2 text-sm text-slate-600">
-                    Informe a chapa e a data de fim do período para puxar a meritocracia do mês.
-                  </div>
-                )}
-
-                {meritRow && (
-                  <div className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-2">
-                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <div className="text-xs text-slate-500">Chapa</div>
-                      <div className="text-sm font-semibold text-slate-900">{meritRow?.motorista ?? "—"}</div>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <div className="text-xs text-slate-500">Linha que mais trabalhou</div>
-                      <div className="text-sm font-semibold text-slate-900">{meritRow?.linha_com_mais_horas ?? "—"}</div>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <div className="text-xs text-slate-500">KM/L na linha</div>
-                      <div className="text-sm font-semibold text-slate-900">
-                        {Number(meritRow?.kml_linha_com_mais_horas || 0).toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <div className="text-xs text-slate-500">Meta da linha</div>
-                      <div className="text-sm font-semibold text-slate-900">
-                        {Number(meritRow?.meta_linha || 0).toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <div className="text-xs text-slate-500">Meta do motorista</div>
-                      <div className="text-sm font-semibold text-slate-900">
-                        {Number(meritRow?.kml_meta_linha_mais_horas || 0).toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Resumo card */}
-            <div className="md:col-span-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-slate-900">Resumo do período (premiação)</div>
-                  <div className="text-xs text-slate-500">{resumoLoading ? "Consultando..." : resumoErr ? "Erro" : "OK"}</div>
-                </div>
-
-                {resumoErr ? (
-                  <div className="mt-2 text-sm text-red-700">{resumoErr}</div>
-                ) : (
-                  <>
-                    <div className="mt-2 grid grid-cols-1 md:grid-cols-4 gap-2">
-                      <div className="rounded-xl bg-white border border-slate-200 p-3">
-                        <div className="text-xs text-slate-500">Dias</div>
-                        <div className="text-sm font-semibold text-slate-900">{resumoTotais?.dias ?? 0}</div>
-                      </div>
-                      <div className="rounded-xl bg-white border border-slate-200 p-3">
-                        <div className="text-xs text-slate-500">KM rodado</div>
-                        <div className="text-sm font-semibold text-slate-900">
-                          {Number(resumoTotais?.km || 0).toLocaleString("pt-BR", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </div>
-                      </div>
-                      <div className="rounded-xl bg-white border border-slate-200 p-3">
-                        <div className="text-xs text-slate-500">Combustível</div>
-                        <div className="text-sm font-semibold text-slate-900">
-                          {Number(resumoTotais?.litros || 0).toLocaleString("pt-BR", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </div>
-                      </div>
-                      <div className="rounded-xl bg-white border border-slate-200 p-3">
-                        <div className="text-xs text-slate-500">KM/L (período)</div>
-                        <div className="text-sm font-semibold text-slate-900">
-                          {Number(resumoTotais?.kml || 0).toLocaleString("pt-BR", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </div>
-                      </div>
-                    </div>
-
-                    {(resumoDias || []).length > 0 && (
-                      <div className="mt-3 overflow-auto border border-slate-200 rounded-xl bg-white">
-                        <table className="min-w-full text-sm">
-                          <thead className="bg-slate-100 text-slate-700">
-                            <tr>
-                              <th className="text-left px-3 py-2">Dia</th>
-                              <th className="text-left px-3 py-2">Linhas (no dia)</th>
-                              <th className="text-left px-3 py-2">Veículos (no dia)</th>
-                              <th className="text-right px-3 py-2">KM</th>
-                              <th className="text-right px-3 py-2">Comb.</th>
-                              <th className="text-right px-3 py-2">KM/L</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {resumoDias.map((d, idx) => (
-                              <tr key={`${d?.dia || idx}`} className="border-t border-slate-200">
-                                <td className="px-3 py-2 whitespace-nowrap">{d?.dia || "—"}</td>
-                                <td className="px-3 py-2">
-                                  {Array.isArray(d?.linhas) ? d.linhas.join(", ") : d?.linha || "—"}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {Array.isArray(d?.veiculos) ? d.veiculos.join(", ") : d?.veiculo || "—"}
-                                </td>
-                                <td className="px-3 py-2 text-right">
-                                  {Number(d?.km || 0).toLocaleString("pt-BR", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                                <td className="px-3 py-2 text-right">
-                                  {Number(d?.litros || 0).toLocaleString("pt-BR", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                                <td className="px-3 py-2 text-right">
-                                  {Number(d?.kml || 0).toLocaleString("pt-BR", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    {(resumoDias || []).length === 0 && (resumoVeiculos || []).length > 0 && (
-                      <div className="mt-3 overflow-auto border border-slate-200 rounded-xl bg-white">
-                        <table className="min-w-full text-sm">
-                          <thead className="bg-slate-100 text-slate-700">
-                            <tr>
-                              <th className="text-left px-3 py-2">Veículo</th>
-                              <th className="text-right px-3 py-2">Dias</th>
-                              <th className="text-right px-3 py-2">KM</th>
-                              <th className="text-right px-3 py-2">Comb.</th>
-                              <th className="text-right px-3 py-2">KM/L</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {resumoVeiculos.map((v) => (
-                              <tr key={v.veiculo} className="border-t border-slate-200">
-                                <td className="px-3 py-2">{v.veiculo}</td>
-                                <td className="px-3 py-2 text-right">{v.dias}</td>
-                                <td className="px-3 py-2 text-right">
-                                  {Number(v.km || 0).toLocaleString("pt-BR", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                                <td className="px-3 py-2 text-right">
-                                  {Number(v.litros || 0).toLocaleString("pt-BR", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                                <td className="px-3 py-2 text-right">
-                                  {Number(v.kml || 0).toLocaleString("pt-BR", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    {!resumoLoading &&
-                      !resumoErr &&
-                      String(motorista?.chapa || "").trim() &&
-                      String(periodoInicio || "").trim() &&
-                      String(periodoFim || "").trim() &&
-                      (resumoDias || []).length === 0 &&
-                      (resumoVeiculos || []).length === 0 && (
-                        <div className="mt-2 text-sm text-slate-600">Nenhum dado encontrado para o período.</div>
-                      )}
-                  </>
-                )}
-              </div>
-            </div>
           </div>
 
           {/* Footer actions */}
@@ -1703,7 +1196,7 @@ export default function DesempenhoLancamento() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white">
               <div className="flex items-center gap-2 text-xs text-slate-600">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                Viewer seguro (Signed URL)
+                Viewer (Public URL)
               </div>
               <a
                 href={prontPdfUrl}
@@ -1717,12 +1210,7 @@ export default function DesempenhoLancamento() {
             </div>
 
             <div className="bg-slate-50/70" style={{ height: "calc(100vh - 24px - 52px - 140px)" }}>
-              <iframe
-                title="ProntuarioPDF"
-                src={prontPdfUrl}
-                className="w-full h-full"
-                style={{ background: "transparent" }}
-              />
+              <iframe title="ProntuarioPDF" src={prontPdfUrl} className="w-full h-full" style={{ background: "transparent" }} />
             </div>
           </div>
         )}

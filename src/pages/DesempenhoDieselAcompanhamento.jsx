@@ -334,7 +334,7 @@ export default function DesempenhoDieselAcompanhamento() {
   }, [user]);
 
   // =============================================================================
-  // CARGA DE ITENS DO CHECKLIST (SUPABASE)
+  // CARGA DE ITENS DO CHECKLIST (SUPABASE) - COM PONTUAÇÕES
   // =============================================================================
   async function carregarItensChecklist() {
     setLoadingItens(true);
@@ -343,7 +343,7 @@ export default function DesempenhoDieselAcompanhamento() {
       const { data, error } = await supabase
         .from("diesel_checklist_itens")
         .select(`
-          id, ordem, grupo, codigo, descricao, ajuda, tipo_resposta, ativo,
+          id, ordem, grupo, codigo, descricao, ajuda, tipo_resposta, ativo, bool_true_is_good,
           pontos_true_100, pontos_false_100, pontos_max_100,
           opcao_score_sim, opcao_score_duvidas, opcao_score_nao
         `)
@@ -418,6 +418,21 @@ export default function DesempenhoDieselAcompanhamento() {
   useEffect(() => {
     carregarOrdens();
   }, []);
+
+  // =============================================================================
+  // CONTADORES
+  // =============================================================================
+  const countAguardando = lista.filter(
+    (i) => normalizeStatus(i.status) === "AGUARDANDO_INSTRUTOR"
+  ).length;
+
+  const countMonitoramento = lista.filter(
+    (i) => normalizeStatus(i.status) === "EM_MONITORAMENTO"
+  ).length;
+
+  const countConcluido = lista.filter((i) =>
+    ["OK", "ENCERRADO", "ATAS"].includes(normalizeStatus(i.status))
+  ).length;
 
   // =============================================================================
   // AÇÕES
@@ -1049,112 +1064,57 @@ export default function DesempenhoDieselAcompanhamento() {
       )}
 
       {/* =========================================================================================
-          MODAIS LEGADO MANTIDOS EXATAMENTE COMO ESTAVAM PARA PRESERVAR A INTEGRIDADE DO CÓDIGO
+          MODAIS LEGADO MANTIDOS PARA PRESERVAR INTEGRIDADE DE CHAMADAS DIRETAS
       ========================================================================================= */}
       
-      {/* MODAL DETALHES (Antigo) */}
       {modalDetalhesOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
             <div className="flex justify-between items-center p-5 border-b bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                <FaClipboardList /> Detalhes do Lançamento
-              </h3>
-              <button onClick={() => setModalDetalhesOpen(false)}>
-                <FaTimes className="text-gray-400 hover:text-red-500" />
-              </button>
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><FaClipboardList /> Detalhes do Lançamento</h3>
+              <button onClick={() => setModalDetalhesOpen(false)}><FaTimes className="text-gray-400 hover:text-red-500" /></button>
             </div>
-
             <div className="p-6 space-y-4">
               <div className="p-4 rounded-lg border bg-slate-50">
-                <div className="text-sm">
-                  <span className="font-bold text-slate-700">Motorista:</span>{" "}
-                  {itemSelecionado.motorista_nome || "-"}{" "}
-                  <span className="text-slate-400 font-mono">
-                    ({itemSelecionado.motorista_chapa || "-"})
-                  </span>
-                </div>
-                <div className="text-sm">
-                  <span className="font-bold text-slate-700">Foco:</span>{" "}
-                  {getFoco(itemSelecionado)}
-                </div>
+                <div className="text-sm"><span className="font-bold text-slate-700">Motorista:</span> {itemSelecionado.motorista_nome || "-"} <span className="text-slate-400 font-mono">({itemSelecionado.motorista_chapa || "-"})</span></div>
+                <div className="text-sm"><span className="font-bold text-slate-700">Foco:</span> {getFoco(itemSelecionado)}</div>
               </div>
-
               <ResumoLancamentoInstrutor item={itemSelecionado} />
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL ANÁLISE (Antigo) */}
       {modalAnaliseOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
             <div className="flex justify-between items-center p-5 border-b bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                <FaChartLine className="text-purple-600" /> Análise Final do Monitoramento
-              </h3>
-              <button onClick={() => setModalAnaliseOpen(false)}>
-                <FaTimes className="text-gray-400 hover:text-red-500" />
-              </button>
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><FaChartLine className="text-purple-600" /> Análise Final do Monitoramento</h3>
+              <button onClick={() => setModalAnaliseOpen(false)}><FaTimes className="text-gray-400 hover:text-red-500" /></button>
             </div>
             <div className="p-6">
-              <div className="mb-4 text-sm bg-slate-100 p-3 rounded border">
-                <span className="font-bold text-slate-700">Motorista:</span>{" "}
-                {itemSelecionado.motorista_nome || "-"}{" "}
-                <span className="font-mono text-slate-500">
-                  ({itemSelecionado.motorista_chapa || "-"})
-                </span>
-              </div>
+              <div className="mb-4 text-sm bg-slate-100 p-3 rounded border"><span className="font-bold text-slate-700">Motorista:</span> {itemSelecionado.motorista_nome || "-"} <span className="font-mono text-slate-500">({itemSelecionado.motorista_chapa || "-"})</span></div>
               <ResumoAnalise item={itemSelecionado} />
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL CONSULTA (Antigo) */}
       {modalConsultaOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center p-5 border-b bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                <FaHistory /> Histórico do Motorista
-              </h3>
-              <button onClick={() => setModalConsultaOpen(false)}>
-                <FaTimes className="text-gray-400 hover:text-red-500" />
-              </button>
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><FaHistory /> Histórico do Motorista</h3>
+              <button onClick={() => setModalConsultaOpen(false)}><FaTimes className="text-gray-400 hover:text-red-500" /></button>
             </div>
-
             <div className="p-6 space-y-4">
-              <div className="p-4 rounded-lg border bg-slate-50">
-                <div className="text-sm">
-                  <span className="font-bold text-slate-700">Motorista:</span>{" "}
-                  {itemSelecionado.motorista_nome || "-"}{" "}
-                  <span className="text-slate-400 font-mono">
-                    ({itemSelecionado.motorista_chapa || "-"})
-                  </span>
-                </div>
-              </div>
-
-              {loadingHist ? (
-                <div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">
-                  Carregando histórico...
-                </div>
-              ) : historico.length === 0 ? (
-                <div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">
-                  Nenhum histórico encontrado.
-                </div>
-              ) : (
+              <div className="p-4 rounded-lg border bg-slate-50"><div className="text-sm"><span className="font-bold text-slate-700">Motorista:</span> {itemSelecionado.motorista_nome || "-"} <span className="text-slate-400 font-mono">({itemSelecionado.motorista_chapa || "-"})</span></div></div>
+              {loadingHist ? (<div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">Carregando histórico...</div>) : historico.length === 0 ? (<div className="p-3 rounded border bg-slate-50 text-sm text-slate-500">Nenhum histórico encontrado.</div>) : (
                 <div className="space-y-2">
                   {historico.map((h) => (
                     <div key={h.id} className="p-3 border rounded bg-white">
-                      <div className="text-sm font-bold text-slate-800">
-                        {h.created_at ? formatarDataHoraBR(h.created_at, false) : "-"} •{" "}
-                        {normalizeStatus(h.status)}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        Foco: {getFoco(h)} • Nível {h.nivel ?? "-"} • {h.dias_monitoramento ?? "-"} dias
-                      </div>
+                      <div className="text-sm font-bold text-slate-800">{formatarDataHoraBR(h.created_at, false)} • {normalizeStatus(h.status)}</div>
+                      <div className="text-xs text-slate-500">Foco: {getFoco(h)} • Nível {h.nivel ?? "-"} • {h.dias_monitoramento ?? "-"} dias</div>
                     </div>
                   ))}
                 </div>
@@ -1165,7 +1125,7 @@ export default function DesempenhoDieselAcompanhamento() {
       )}
 
       {/* =========================================================================================
-          MODAL LANÇAR (Permanece Intacto)
+          MODAL LANÇAR
       ========================================================================================= */}
       {modalLancarOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -1192,18 +1152,41 @@ export default function DesempenhoDieselAcompanhamento() {
               <div>
                 <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2"><FaClipboardList /> Condução Inteligente</h4>
                 <div className="space-y-2">
-                  {itensConducao.map((it) => (
-                    <div key={it.id} className="p-3 border rounded-lg bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
-                      <div>
-                        <div className="text-sm font-extrabold text-slate-700 leading-tight">{String(it.ordem).padStart(2, "0")} • {it.descricao}</div>
-                        {it.ajuda && <div className="text-xs text-slate-500 mt-1">{it.ajuda}</div>}
+                  {itensConducao.map((it) => {
+                    const val = form.checklistConducao[it.codigo];
+                    const isSimGood = it.bool_true_is_good !== false; 
+
+                    return (
+                      <div key={it.id} className="p-3 border rounded-lg bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
+                        <div>
+                          <div className="text-sm font-extrabold text-slate-700 leading-tight">{String(it.ordem).padStart(2, "0")} • {it.descricao}</div>
+                          {it.ajuda && <div className="text-xs text-slate-500 mt-1">{it.ajuda}</div>}
+                        </div>
+                        <div className="flex gap-2 shrink-0 w-full md:w-auto">
+                          <button 
+                            type="button" 
+                            onClick={() => setConducao(it.codigo, true)} 
+                            className={`flex-1 md:flex-none px-4 py-2 rounded border text-xs font-bold transition-all ${
+                              val === true 
+                                ? (isSimGood ? "bg-emerald-600 text-white border-emerald-700 shadow-inner" : "bg-rose-600 text-white border-rose-700 shadow-inner") 
+                                : (isSimGood ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100")
+                            }`}>
+                            SIM
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => setConducao(it.codigo, false)} 
+                            className={`flex-1 md:flex-none px-4 py-2 rounded border text-xs font-bold transition-all ${
+                              val === false 
+                                ? (!isSimGood ? "bg-emerald-600 text-white border-emerald-700 shadow-inner" : "bg-rose-600 text-white border-rose-700 shadow-inner") 
+                                : (!isSimGood ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100")
+                            }`}>
+                            NÃO
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-2 shrink-0 w-full md:w-auto">
-                        <button type="button" onClick={() => setConducao(it.codigo, true)} className={`flex-1 md:flex-none px-4 py-2 rounded border text-xs font-bold transition-all ${form.checklistConducao[it.codigo] === true ? "bg-emerald-600 text-white border-emerald-700 shadow-inner" : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"}`}>SIM</button>
-                        <button type="button" onClick={() => setConducao(it.codigo, false)} className={`flex-1 md:flex-none px-4 py-2 rounded border text-xs font-bold transition-all ${form.checklistConducao[it.codigo] === false ? "bg-rose-600 text-white border-rose-700 shadow-inner" : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"}`}>NÃO</button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

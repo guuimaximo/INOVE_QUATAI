@@ -62,8 +62,15 @@ async function uploadManyToStorage({ files, bucket, folder }) {
   return out;
 }
 
+// CORREÇÃO: Conversão rigorosa dos inputs para String para evitar erro 422 e 500 do GitHub
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
   if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes.");
+  
+  const safeInputs = {};
+  for (const key in inputs) {
+    safeInputs[key] = String(inputs[key] || "");
+  }
+
   const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
   const response = await fetch(url, {
     method: "POST",
@@ -73,8 +80,9 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
       "X-GitHub-Api-Version": "2022-11-28",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ ref: GH_REF, inputs }),
+    body: JSON.stringify({ ref: GH_REF, inputs: safeInputs }),
   });
+  
   if (response.status !== 204) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.message || `Erro GitHub: ${response.status}`);
@@ -86,6 +94,7 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
 // COMPONENTE PRINCIPAL
 // =============================================================================
 export default function DesempenhoLancamento() {
+  const navigate = useNavigate();
   const { user } = useContext(AuthContext);
 
   const mountedRef = useRef(true);
@@ -287,7 +296,7 @@ export default function DesempenhoLancamento() {
       setTimeout(() => {
         if (!mountedRef.current) return;
         limparTudo();
-        // REMOVIDO: navigate para não sair da tela. O form apenas reseta.
+        // REMOVIDO o navigate de Tratativa para que a tela não mude
       }, 3000);
 
     } catch (e) {

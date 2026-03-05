@@ -1,20 +1,23 @@
 // src/pages/Desempenho_Diesel_Tratativas_Central.jsx
+// ✅ AJUSTE: apenas APARÊNCIA para seguir o MESMO PADRÃO do layout da CentralTratativas
+// - Mantém: lógica, filtros, SLA, ordenação, contadores head:true, rotas, tabela e propriedades
+// - Ajusta: classes Tailwind + estrutura visual (container, header, filtros, cards e tabela)
+
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
-import { 
-  FaSearch, 
-  FaFilter, 
-  FaClock, 
-  FaExclamationCircle, 
-  FaCheckCircle, 
+import {
+  FaSearch,
+  FaFilter,
+  FaClock,
+  FaExclamationCircle,
+  FaCheckCircle,
   FaFolderOpen,
   FaGavel,
   FaSort,
   FaSortUp,
   FaSortDown,
-  FaArrowRight,
-  FaEye
+  FaEye,
 } from "react-icons/fa";
 
 const VIEW = {
@@ -145,17 +148,25 @@ export default function Desempenho_Diesel_Tratativas_Central() {
 
   async function carregarContadoresHead() {
     // Total
-    let qTotal = supabase.from("diesel_tratativas").select("id", { count: "exact", head: true });
+    let qTotal = supabase
+      .from("diesel_tratativas")
+      .select("id", { count: "exact", head: true });
     qTotal = applyCommonFilters(qTotal);
     const { count: total } = await qTotal;
 
     // Pendentes
-    let qPend = supabase.from("diesel_tratativas").select("id", { count: "exact", head: true }).ilike("status", "%pendente%");
+    let qPend = supabase
+      .from("diesel_tratativas")
+      .select("id", { count: "exact", head: true })
+      .ilike("status", "%pendente%");
     qPend = applyCommonFilters(qPend);
     const { count: pend } = await qPend;
 
     // Concluídas/Resolvidas
-    let qConc = supabase.from("diesel_tratativas").select("id", { count: "exact", head: true }).or("status.ilike.%conclu%,status.ilike.%resolvid%");
+    let qConc = supabase
+      .from("diesel_tratativas")
+      .select("id", { count: "exact", head: true })
+      .or("status.ilike.%conclu%,status.ilike.%resolvid%");
     qConc = applyCommonFilters(qConc);
     const { count: conc } = await qConc;
 
@@ -265,138 +276,132 @@ export default function Desempenho_Diesel_Tratativas_Central() {
   }
 
   function SortIcon({ colKey }) {
-    if (sort.key !== colKey || sort.key === "default") return <FaSort className="inline ml-1 text-slate-300" />;
-    return sort.dir === "asc" ? <FaSortUp className="inline ml-1 text-blue-500" /> : <FaSortDown className="inline ml-1 text-blue-500" />;
+    if (sort.key !== colKey || sort.key === "default") {
+      return <FaSort className="inline ml-1 text-white/70" />;
+    }
+    return sort.dir === "asc" ? (
+      <FaSortUp className="inline ml-1" />
+    ) : (
+      <FaSortDown className="inline ml-1" />
+    );
   }
 
   function badgePrioridade(p) {
     const v = norm(p);
-    const base = "px-2.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider shadow-sm";
-    if (v === "Gravíssima" || v === "Gravissima") return <span className={`${base} bg-rose-600 text-white`}>Gravíssima</span>;
-    if (v === "Alta") return <span className={`${base} bg-orange-500 text-white`}>Alta</span>;
-    if (v === "Média" || v === "Media") return <span className={`${base} bg-amber-400 text-amber-900`}>Média</span>;
-    if (v === "Baixa") return <span className={`${base} bg-emerald-500 text-white`}>Baixa</span>;
-    return <span className={`${base} bg-slate-200 text-slate-700`}>{v || "-"}</span>;
+    const base = "px-2 py-1 rounded text-xs font-medium";
+    if (v === "Gravíssima" || v === "Gravissima") {
+      return <span className={`${base} bg-red-100 text-red-800`}>Gravíssima</span>;
+    }
+    if (v === "Alta") return <span className={`${base} bg-orange-100 text-orange-800`}>Alta</span>;
+    if (v === "Média" || v === "Media") {
+      return <span className={`${base} bg-yellow-100 text-yellow-800`}>Média</span>;
+    }
+    if (v === "Baixa") return <span className={`${base} bg-green-100 text-green-800`}>Baixa</span>;
+    return <span className={`${base} bg-gray-100 text-gray-700`}>{v || "-"}</span>;
   }
 
   function badgeStatus(row) {
     const st = norm(row?.status).toLowerCase();
     const atrasada = isAtrasadaBySLA(row);
 
-    const base = "px-2.5 py-1 rounded-lg text-xs font-bold flex items-center w-fit gap-1.5 shadow-sm border";
-
     if (atrasada) {
       return (
-        <span className={`${base} bg-rose-50 text-rose-700 border-rose-200`}>
-          <FaExclamationCircle /> Atrasada
+        <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
+          Atraso
         </span>
       );
     }
     if (st.includes("pendente")) {
       return (
-        <span className={`${base} bg-amber-50 text-amber-700 border-amber-200`}>
-          <FaClock /> Pendente
+        <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+          Pendente
         </span>
       );
     }
     if (st.includes("resolvido") || st.includes("conclu")) {
       return (
-        <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>
-          <FaCheckCircle /> Resolvida
+        <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+          Resolvido
         </span>
       );
     }
     return (
-      <span className={`${base} bg-slate-100 text-slate-700 border-slate-200`}>
+      <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
         {row?.status || "-"}
       </span>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 font-sans bg-slate-50 min-h-screen">
-      
-      {/* HEADER DA PÁGINA */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-100 text-rose-800 text-xs font-black uppercase tracking-widest mb-3 shadow-sm border border-rose-200">
-            <FaGavel /> Desempenho Diesel
-          </div>
-          <h1 className="text-3xl font-black text-slate-900">
-            Central de Tratativas
-          </h1>
-          <p className="text-sm font-medium text-slate-500 mt-1">
-            Gestão de medidas disciplinares e reorientações de KM/L.
-          </p>
+    <div className="max-w-7xl mx-auto p-6">
+      {/* HEADER (mesmo padrão do layout da CentralTratativas) */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <FaGavel className="text-gray-400" />
+          <h1 className="text-2xl font-bold text-gray-700">Central de Tratativas — Diesel</h1>
         </div>
 
-        {/* VIEW MODE TOGGLE */}
-        <div className="flex bg-slate-200 p-1.5 rounded-2xl w-fit shadow-inner">
-          <button
-            onClick={() => setViewMode(VIEW.OPEN_ONLY)}
-            className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
-              viewMode === VIEW.OPEN_ONLY ? "bg-white text-rose-700 shadow-md" : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            <FaClock /> Pendentes & Atrasadas
-          </button>
+        {/* ✅ Botões simples no canto */}
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode(VIEW.ALL)}
-            className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
-              viewMode === VIEW.ALL ? "bg-white text-slate-800 shadow-md" : "text-slate-500 hover:text-slate-700"
-            }`}
+            className={[
+              "px-3 py-2 rounded-md text-sm border",
+              viewMode === VIEW.ALL
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
+            ].join(" ")}
           >
-            <FaFolderOpen /> Ver Histórico Completo
+            VER TUDO
+          </button>
+
+          <button
+            onClick={() => setViewMode(VIEW.OPEN_ONLY)}
+            className={[
+              "px-3 py-2 rounded-md text-sm border",
+              viewMode === VIEW.OPEN_ONLY
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
+            ].join(" ")}
+          >
+            PENDENTES & ATRASADAS
           </button>
         </div>
       </div>
 
-      {/* CARDS DE RESUMO (KPIs) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <CardResumo icone={<FaFolderOpen/>} titulo="Total de Ocorrências" valor={totalCount} cor="blue" />
-        <CardResumo icone={<FaClock/>} titulo="Aguardando Ação" valor={pendentesCount} cor="amber" />
-        <CardResumo icone={<FaExclamationCircle/>} titulo="Atrasadas (Fora do SLA)" valor={atrasadasCount} cor="rose" />
-        <CardResumo icone={<FaCheckCircle/>} titulo="Tratativas Concluídas" valor={concluidasCount} cor="emerald" />
-      </div>
+      {/* 🔍 FILTROS (mesmo padrão do layout base) */}
+      <div className="bg-white shadow rounded-lg p-4 mb-6">
+        <h2 className="text-lg font-semibold mb-3">Filtros</h2>
 
-      {/* FILTROS */}
-      <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm p-6 mb-8">
-        <h2 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide">
-          <FaFilter className="text-slate-400" /> Filtros de Busca
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="relative">
-            <FaSearch className="absolute left-3.5 top-3.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar motorista, chapa, motivo..."
-              value={filtros.busca}
-              onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-              className="w-full pl-10 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:border-blue-500 outline-none transition-colors"
-            />
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <input
+            type="text"
+            placeholder="Buscar (nome, chapa, descrição, ocorrência...)"
+            value={filtros.busca}
+            onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
+            className="border rounded-md px-3 py-2"
+          />
 
           <input
             type="date"
             value={filtros.dataInicio}
             onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:border-blue-500 outline-none text-slate-600 transition-colors"
+            className="border rounded-md px-3 py-2"
           />
 
           <input
             type="date"
             value={filtros.dataFim}
             onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:border-blue-500 outline-none text-slate-600 transition-colors"
+            className="border rounded-md px-3 py-2"
           />
 
           <select
             value={filtros.prioridade}
             onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:border-blue-500 outline-none appearance-none cursor-pointer transition-colors"
+            className="border rounded-md px-3 py-2 bg-white"
           >
-            <option value="">Todas Prioridades</option>
+            <option value="">Todas as Prioridades</option>
             <option value="Gravíssima">Gravíssima</option>
             <option value="Alta">Alta</option>
             <option value="Média">Média</option>
@@ -406,149 +411,185 @@ export default function Desempenho_Diesel_Tratativas_Central() {
           <select
             value={filtros.status}
             onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:border-blue-500 outline-none appearance-none cursor-pointer transition-colors"
+            className="border rounded-md px-3 py-2 bg-white"
           >
-            <option value="">Qualquer Status</option>
+            <option value="">Todos os Status</option>
             <option value="Pendente">Pendente</option>
             <option value="Resolvido">Resolvido</option>
             <option value="Concluída">Concluída</option>
           </select>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-between mt-6 pt-4 border-t border-slate-100 gap-4">
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-            <span>SLA:</span>
-            <span className="text-rose-600">Gravíssima 1D</span> • 
-            <span className="text-orange-500">Alta 3D</span> • 
-            <span className="text-amber-600">Média 7D</span> • 
-            <span className="text-emerald-500">Baixa 15D</span>
+        <div className="flex justify-end mt-3">
+          <button
+            onClick={limparFiltros}
+            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
+          >
+            Limpar
+          </button>
+          <button
+            onClick={aplicar}
+            disabled={loading}
+            className="ml-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+          >
+            {loading ? "Aplicando..." : "Aplicar"}
+          </button>
+        </div>
+
+        {/* ✅ Regras visíveis (igual layout base) */}
+        <div className="mt-4">
+          <div className="text-xs text-gray-500">
+            Ordenação padrão: <b>Prioridade</b> → <b>Status</b> → <b>Mais recentes</b>. Clique no
+            cabeçalho da tabela para ordenar; clique novamente para inverter; terceira vez volta ao
+            padrão.
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <button onClick={limparFiltros} className="px-6 py-3 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-100 transition-colors w-full sm:w-auto">
-              Limpar
-            </button>
-            <button onClick={aplicar} disabled={loading} className="px-8 py-3 rounded-xl text-sm font-black bg-blue-600 text-white shadow-lg hover:bg-blue-700 hover:shadow-blue-500/30 transition-all disabled:opacity-60 disabled:hover:shadow-none w-full sm:w-auto flex justify-center items-center gap-2">
-              {loading ? "Buscando..." : <><FaSearch /> Filtrar Registros</>}
-            </button>
+          <div className="mt-2 rounded-lg border bg-gray-50 px-3 py-2">
+            <div className="text-xs font-semibold text-gray-700">
+              Regra de SLA para considerar como <span className="text-red-700">ATRASO</span>
+            </div>
+
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-700">
+              <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-medium">
+                Gravíssima: 1 dia
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 font-medium">
+                Alta: 3 dias
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">
+                Média: 7 dias
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-medium">
+                Baixa: 15 dias
+              </span>
+
+              <span className="text-gray-500 ml-1">
+                (Atraso é calculado apenas quando o status está <b>Pendente</b>)
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* TABELA PRINCIPAL */}
-      <div className="bg-white rounded-[1.5rem] shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[900px]">
-            <thead className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
+      {/* 🧾 Resumo (mesmo padrão de cards do layout base) */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100 text-blue-700" />
+        <CardResumo titulo="Pendentes" valor={pendentesCount} cor="bg-yellow-100 text-yellow-700" />
+        <CardResumo titulo="Concluídas" valor={concluidasCount} cor="bg-green-100 text-green-700" />
+        <CardResumo titulo="Atrasadas (SLA)" valor={atrasadasCount} cor="bg-red-100 text-red-700" />
+      </div>
+
+      {/* 📋 Lista (mesmo padrão da tabela base: header azul) */}
+      <div className="bg-white shadow rounded-lg overflow-x-auto">
+        <table className="min-w-full">
+          <thead className="bg-blue-600 text-white">
+            <tr>
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("created_at")}
+              >
+                Data de Abertura <SortIcon colKey="created_at" />
+              </th>
+
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("motorista_nome")}
+              >
+                Motorista <SortIcon colKey="motorista_nome" />
+              </th>
+
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("tipo_ocorrencia")}
+              >
+                Ocorrência <SortIcon colKey="tipo_ocorrencia" />
+              </th>
+
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("prioridade")}
+              >
+                Prioridade <SortIcon colKey="prioridade" />
+              </th>
+
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("status")}
+              >
+                Status <SortIcon colKey="status" />
+              </th>
+
+              <th className="py-2 px-3 text-left">Ações</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {loading ? (
               <tr>
-                <th className="py-4 px-6 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => toggleSort("created_at")}>
-                  Data de Abertura <SortIcon colKey="created_at" />
-                </th>
-                <th className="py-4 px-6 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => toggleSort("motorista_nome")}>
-                  Motorista Infrator <SortIcon colKey="motorista_nome" />
-                </th>
-                <th className="py-4 px-6 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => toggleSort("tipo_ocorrencia")}>
-                  Ocorrência <SortIcon colKey="tipo_ocorrencia" />
-                </th>
-                <th className="py-4 px-6 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => toggleSort("prioridade")}>
-                  SLA / Prioridade <SortIcon colKey="prioridade" />
-                </th>
-                <th className="py-4 px-6 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => toggleSort("status")}>
-                  Status Atual <SortIcon colKey="status" />
-                </th>
-                <th className="py-4 px-6 text-center">Ações</th>
+                <td colSpan="6" className="text-center p-4 text-gray-500">
+                  Carregando...
+                </td>
               </tr>
-            </thead>
+            ) : tratativasOrdenadas.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="text-center p-4 text-gray-500">
+                  Nenhuma tratativa encontrada.
+                </td>
+              </tr>
+            ) : (
+              tratativasOrdenadas.map((t) => {
+                const concluida = isConcluidaOuResolvida(t?.status);
+                return (
+                  <tr key={t.id} className="border-t hover:bg-gray-50">
+                    <td className="py-2 px-3 text-gray-600">
+                      {t.created_at ? new Date(t.created_at).toLocaleDateString("pt-BR") : "-"}
+                    </td>
 
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan="6" className="text-center py-12 text-slate-400 font-bold text-sm">
-                    Carregando registros...
-                  </td>
-                </tr>
-              ) : tratativasOrdenadas.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="text-center py-12 text-slate-400 font-bold text-sm">
-                    Nenhuma tratativa encontrada com os filtros atuais.
-                  </td>
-                </tr>
-              ) : (
-                tratativasOrdenadas.map((t) => {
-                  const concluida = isConcluidaOuResolvida(t?.status);
-                  
-                  return (
-                    <tr key={t.id} className="hover:bg-slate-50/80 transition-colors group">
-                      <td className="py-4 px-6 text-sm font-mono text-slate-500">
-                        {t.created_at ? new Date(t.created_at).toLocaleDateString("pt-BR") : "-"}
-                      </td>
+                    <td className="py-2 px-3 text-gray-700">
+                      <div className="font-medium">{t.motorista_nome || "-"}</div>
+                      <div className="text-xs text-gray-400">{t.motorista_chapa || ""}</div>
+                    </td>
 
-                      <td className="py-4 px-6">
-                        <div className="font-bold text-slate-800 text-sm">{t.motorista_nome || "-"}</div>
-                        <div className="text-xs font-mono text-slate-400 mt-0.5 bg-slate-100 w-fit px-1.5 py-0.5 rounded">{t.motorista_chapa || "-"}</div>
-                      </td>
-                      
-                      <td className="py-4 px-6">
-                        <div className="text-sm font-semibold text-slate-700">{t.tipo_ocorrencia || "-"}</div>
-                      </td>
+                    <td className="py-2 px-3 text-gray-700">{t.tipo_ocorrencia || "-"}</td>
 
-                      <td className="py-4 px-6">
-                        {badgePrioridade(t.prioridade)}
-                      </td>
+                    <td className="py-2 px-3">{badgePrioridade(t.prioridade)}</td>
 
-                      <td className="py-4 px-6">
-                        {badgeStatus(t)}
-                      </td>
+                    <td className="py-2 px-3">{badgeStatus(t)}</td>
 
-                      <td className="py-4 px-6 text-center">
-                        {concluida ? (
-                          <button
-                            onClick={() => navigate(`/diesel-consultar/${t.id}`)}
-                            className="inline-flex items-center justify-center gap-1.5 bg-white border-2 border-slate-200 text-slate-600 px-4 py-2 rounded-xl hover:bg-slate-50 hover:border-slate-300 hover:text-slate-800 text-xs font-bold shadow-sm transition-all"
-                          >
-                            <FaEye /> Consultar
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => navigate(`/diesel-tratar/${t.id}`)}
-                            className="inline-flex items-center justify-center gap-1.5 bg-rose-600 text-white px-4 py-2 rounded-xl hover:bg-rose-700 text-xs font-black shadow-md hover:shadow-rose-600/30 transition-all transform hover:scale-105"
-                          >
-                            <FaGavel /> Analisar & Tratar
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                    <td className="py-2 px-3">
+                      {concluida ? (
+                        <button
+                          onClick={() => navigate(`/diesel-consultar/${t.id}`)}
+                          className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600 text-sm inline-flex items-center gap-2"
+                        >
+                          <FaEye /> Consultar
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/diesel-tratar/${t.id}`)}
+                          className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm inline-flex items-center gap-2"
+                        >
+                          <FaGavel /> Tratar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
-// Componente para os Cards de KPI
-function CardResumo({ titulo, valor, cor, icone }) {
-  const coresMap = {
-    blue: "bg-blue-50 border-blue-200 text-blue-700 icon-blue-500",
-    amber: "bg-amber-50 border-amber-200 text-amber-700 icon-amber-500",
-    rose: "bg-rose-50 border-rose-200 text-rose-700 icon-rose-500",
-    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700 icon-emerald-500"
-  };
-
-  const c = coresMap[cor] || coresMap.blue;
-  const textColor = c.split(" ")[2];
-  const iconColor = c.split(" ")[3].replace("icon-", "text-");
-
+// Card resumo (mantém assinatura, apenas estilo igual ao base)
+function CardResumo({ titulo, valor, cor }) {
   return (
-    <div className={`rounded-2xl border-2 p-6 shadow-sm flex flex-col justify-between ${c.split(" ").slice(0,2).join(" ")} transition-all hover:scale-[1.02] cursor-default`}>
-      <div className="flex items-start justify-between mb-4">
-        <h3 className={`text-xs font-black uppercase tracking-widest ${textColor} opacity-80 leading-tight w-2/3`}>{titulo}</h3>
-        <div className={`text-2xl ${iconColor} bg-white p-2 rounded-xl shadow-sm`}>{icone}</div>
-      </div>
-      <p className={`text-4xl font-black ${textColor}`}>{valor}</p>
+    <div className={`${cor} rounded-lg shadow p-5 text-center`}>
+      <h3 className="text-sm font-medium text-gray-600">{titulo}</h3>
+      <p className="text-3xl font-bold mt-2 text-gray-800">{valor}</p>
     </div>
   );
 }

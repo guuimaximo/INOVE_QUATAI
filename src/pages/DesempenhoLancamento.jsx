@@ -8,7 +8,6 @@ import {
   FaBolt, 
   FaClock, 
   FaExclamationTriangle, 
-  FaSave, 
   FaRobot, 
   FaTrash, 
   FaFileUpload, 
@@ -87,7 +86,6 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
 // COMPONENTE PRINCIPAL
 // =============================================================================
 export default function DesempenhoLancamento() {
-  const navigate = useNavigate();
   const { user } = useContext(AuthContext);
 
   const mountedRef = useRef(true);
@@ -100,6 +98,10 @@ export default function DesempenhoLancamento() {
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
+  // Bloqueios (Verificação de Pendências)
+  const [bloqueio, setBloqueio] = useState(null); 
+  const [verificandoBloqueio, setVerificandoBloqueio] = useState(false);
+
   // Form States
   const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
@@ -110,13 +112,75 @@ export default function DesempenhoLancamento() {
 
   const motivoFinal = motivo === "Outro" ? motivoOutro.trim() : motivo;
 
-  // Validação Dinâmica
+  // =============================================================================
+  // VERIFICAÇÃO DE PENDÊNCIAS (BLOQUEIO)
+  // =============================================================================
+  useEffect(() => {
+    async function verificarPendencias() {
+      const chapa = motorista?.chapa?.trim();
+      if (!chapa) {
+        setBloqueio(null);
+        return;
+      }
+
+      setVerificandoBloqueio(true);
+      setBloqueio(null);
+
+      try {
+        if (destino === DESTINOS.ACOMP) {
+          // Verifica se há acompanhamento pendente ou em monitoramento
+          const { data, error } = await supabase
+            .from("diesel_acompanhamentos")
+            .select("status, dt_inicio_monitoramento")
+            .eq("motorista_chapa", chapa)
+            .in("status", ["AGUARDANDO_INSTRUTOR", "EM_MONITORAMENTO", "AG_ACOMPANHAMENTO", "AGUARDANDO INSTRUTOR"])
+            .limit(1);
+
+          if (data && data.length > 0) {
+            const st = String(data[0].status).toUpperCase();
+            if (st === "EM_MONITORAMENTO") {
+              setBloqueio(`Motorista já está EM MONITORAMENTO desde ${data[0].dt_inicio_monitoramento ? new Date(data[0].dt_inicio_monitoramento).toLocaleDateString('pt-BR') : 'data não informada'}.`);
+            } else {
+              setBloqueio("Motorista já possui um acompanhamento AGUARDANDO INSTRUTOR.");
+            }
+          }
+        } 
+        
+        else if (destino === DESTINOS.TRAT) {
+          // Verifica se há tratativa pendente
+          const { data, error } = await supabase
+            .from("diesel_tratativas")
+            .select("status")
+            .eq("motorista_chapa", chapa)
+            .ilike("status", "%pendente%")
+            .limit(1);
+
+          if (data && data.length > 0) {
+            setBloqueio("Motorista já possui uma Medida Disciplinar PENDENTE de tratativa.");
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao verificar bloqueios:", e);
+      } finally {
+        if (mountedRef.current) setVerificandoBloqueio(false);
+      }
+    }
+
+    verificarPendencias();
+  }, [motorista, destino]);
+
+
+  // =============================================================================
+  // VALIDAÇÃO DINÂMICA
+  // =============================================================================
   const pronto = useMemo(() => {
+    if (bloqueio || verificandoBloqueio) return false;
+
     const motoristaOk = !!(motorista?.chapa || motorista?.nome);
     const camposBase = motoristaOk && motivoFinal && observacaoInicial.trim();
     if (destino === DESTINOS.ACOMP) return camposBase;
     return camposBase && evidencias.length > 0;
-  }, [destino, motorista, motivoFinal, observacaoInicial, evidencias]);
+  }, [destino, motorista, motivoFinal, observacaoInicial, evidencias, bloqueio, verificandoBloqueio]);
 
   const handleFileChange = (e) => {
     const list = filesToList(e.target.files);
@@ -134,10 +198,11 @@ export default function DesempenhoLancamento() {
     setEvidencias([]);
     setPrioridadeTratativa("Alta");
     setStatusMsg({ type: "", text: "" });
+    setBloqueio(null);
   };
 
   // =============================================================================
-  // LÓGICA DE LANÇAMENTO (DIRETO PARA ACOMPANHAMENTO OU TRATATIVA)
+  // LÓGICA DE LANÇAMENTO
   // =============================================================================
   async function handleLancar() {
     if (!pronto || saving) return;
@@ -150,7 +215,7 @@ export default function DesempenhoLancamento() {
       const chapa = String(motorista?.chapa || "").trim();
       const nomeMot = String(motorista?.nome || "").trim() || null;
 
-      // 1. Upload de Evidências (apenas se houver)
+      // Upload de Evidências (apenas se houver)
       let urlsEvidencias = [];
       if (evidencias.length > 0) {
         const folder = `diesel/lancamentos/${chapa || "manual"}/${Date.now()}`;
@@ -158,7 +223,7 @@ export default function DesempenhoLancamento() {
         urlsEvidencias = uploaded.map(u => u.publicUrl).filter(Boolean);
       }
 
-      // 2. Fluxo Específico: ACOMPANHAMENTO
+      // Fluxo Específico: ACOMPANHAMENTO
       if (destino === DESTINOS.ACOMP) {
         
         const { data: acompData, error: errAcomp } = await supabase.from("diesel_acompanhamentos").insert({
@@ -179,7 +244,6 @@ export default function DesempenhoLancamento() {
           criado_por_nome: lancadorNome
         });
 
-        // Disparar Robô de Acompanhamento (Lote e Dispatch)
         const { data: lote } = await supabase.from("acompanhamento_lotes").insert({
           status: "PROCESSANDO", qtd: 1, extra: { tipo: TIPO_PRONTUARIO, chapa }
         }).select("id").single();
@@ -188,10 +252,9 @@ export default function DesempenhoLancamento() {
         await dispatchGitHubWorkflow(WF_ACOMP, { ordem_batch_id: String(lote.id), qtd: "1" });
       } 
       
-      // 3. Fluxo Específico: TRATATIVA
+      // Fluxo Específico: TRATATIVA
       else {
         
-        // Removido o campo "metadata" aqui, pois a tabela diesel_tratativas não possui.
         const { data: tratData, error: errTrat } = await supabase.from("diesel_tratativas").insert({
           motorista_chapa: chapa || null,
           motorista_nome: nomeMot,
@@ -208,11 +271,9 @@ export default function DesempenhoLancamento() {
           acao_aplicada: "ABERTURA_MANUAL",
           observacoes: observacaoInicial,
           tratado_por_login: lancadorLogin,
-          tratado_por_nome: lancadorNome,
-          extra: { evidencias_urls: urlsEvidencias }
+          tratado_por_nome: lancadorNome
         });
 
-        // Disparar Robô de Tratativa (Lote e Dispatch)
         const { data: lote } = await supabase.from("acompanhamento_lotes").insert({
           status: "PROCESSANDO", qtd: 1, extra: { tipo: "prontuario_tratativa", chapa }
         }).select("id").single();
@@ -226,7 +287,7 @@ export default function DesempenhoLancamento() {
       setTimeout(() => {
         if (!mountedRef.current) return;
         limparTudo();
-        if (destino === DESTINOS.TRAT) navigate("/desempenho-diesel/tratativas");
+        // REMOVIDO: navigate para não sair da tela. O form apenas reseta.
       }, 3000);
 
     } catch (e) {
@@ -250,7 +311,6 @@ export default function DesempenhoLancamento() {
           <p className="text-slate-500 font-medium mt-1">Registre ocorrências e acione a inteligência do robô automaticamente.</p>
         </div>
         
-        {/* TABS ESTILIZADAS */}
         <div className="flex bg-slate-200 p-1.5 rounded-2xl w-fit shadow-inner">
           <button 
             onClick={() => { setDestino(DESTINOS.ACOMP); limparTudo(); }} 
@@ -269,7 +329,7 @@ export default function DesempenhoLancamento() {
         </div>
       </div>
 
-      {/* FEEDBACK DE STATUS */}
+      {/* FEEDBACK DE STATUS DE ENVIO */}
       {statusMsg.text && (
         <div className={`mb-8 p-4 rounded-2xl border-2 flex items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500 ${
           statusMsg.type === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-800" : 
@@ -289,13 +349,11 @@ export default function DesempenhoLancamento() {
         <div className="p-6 md:p-12 space-y-10">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             
-            {/* CAMPO MOTORISTA (LARGURA TOTAL) */}
             <div className="md:col-span-2">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Identificação do Motorista</label>
               <CampoMotorista value={motorista} onChange={setMotorista} />
             </div>
 
-            {/* SEÇÃO ESQUERDA: MOTIVOS E PRIORIDADE */}
             <div className="space-y-8">
               {destino === DESTINOS.TRAT && (
                 <div>
@@ -334,7 +392,6 @@ export default function DesempenhoLancamento() {
               </div>
             </div>
 
-            {/* SEÇÃO DIREITA: TEXTO LIVRE */}
             <div className="flex flex-col h-full">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Detalhamento da Ocorrência</label>
               <textarea 
@@ -345,7 +402,6 @@ export default function DesempenhoLancamento() {
               />
             </div>
 
-            {/* SEÇÃO EVIDÊNCIAS (APENAS TRATATIVA) */}
             {destino === DESTINOS.TRAT && (
               <div className="md:col-span-2 bg-slate-50 p-6 rounded-[1.5rem] border-2 border-slate-100">
                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Provas e Evidências <span className="text-rose-500">* Obrigatório</span></label>
@@ -380,7 +436,17 @@ export default function DesempenhoLancamento() {
           </div>
         </div>
 
-        {/* FOOTER COM BOTÕES */}
+        {/* FEEDBACK DE BLOQUEIO */}
+        {bloqueio && (
+          <div className="mx-6 md:mx-12 mb-4 p-4 rounded-xl border-2 border-rose-200 bg-rose-50 flex items-center gap-3 text-rose-800 animate-in fade-in">
+            <FaExclamationTriangle className="text-xl shrink-0" />
+            <div>
+              <p className="text-sm font-black uppercase tracking-wider">Ação Bloqueada</p>
+              <p className="text-sm font-medium">{bloqueio}</p>
+            </div>
+          </div>
+        )}
+
         <div className="bg-slate-50 px-6 py-6 md:px-12 md:py-8 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-tighter">
             <FaRobot className="text-slate-300 text-xl" />

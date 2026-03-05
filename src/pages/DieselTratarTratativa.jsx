@@ -5,14 +5,13 @@ import { supabase } from "../supabase";
 import { AuthContext } from "../context/AuthContext";
 import { 
   FaUser, 
-  FaRoute, 
   FaGavel, 
   FaHistory, 
   FaFilePdf, 
   FaCheckCircle, 
-  FaTimes,
   FaFileAlt,
-  FaRobot
+  FaRobot,
+  FaClock
 } from "react-icons/fa";
 
 const acoes = [
@@ -44,7 +43,8 @@ export default function DieselTratarTratativa() {
   const { user } = useContext(AuthContext);
 
   const [t, setT] = useState(null);
-  const [detalhes, setDetalhes] = useState([]); // Histórico/Timeline da tratativa
+  const [errorLoading, setErrorLoading] = useState(false);
+  const [detalhes, setDetalhes] = useState([]);
   const [resumo, setResumo] = useState("");
   const [acao, setAcao] = useState("Orientação");
 
@@ -55,16 +55,6 @@ export default function DieselTratarTratativa() {
   // Complementos
   const [linhaDescricao, setLinhaDescricao] = useState("");
   const [cargoMotorista, setCargoMotorista] = useState("MOTORISTA");
-
-  // Edição inline
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({
-    tipo_ocorrencia: "",
-    prioridade: "Média",
-    setor_origem: "",
-    linha: "",
-    descricao: "",
-  });
 
   // Suspensão
   const [diasSusp, setDiasSusp] = useState(1);
@@ -92,7 +82,7 @@ export default function DieselTratarTratativa() {
     if (!d) return "—";
     const dt = d instanceof Date ? d : new Date(d);
     if (Number.isNaN(dt.getTime())) return "—";
-    return dt.toLocaleString("pt-BR", { dateStyle: 'short', timeStyle: 'short' });
+    return dt.toLocaleString("pt-BR");
   };
 
   const parseDateLocal = (dateStr) => {
@@ -112,7 +102,7 @@ export default function DieselTratarTratativa() {
   const retornoSusp = useMemo(() => addDaysLocal(inicioSusp, Math.max(Number(diasSusp), 0)), [inicioSusp, diasSusp]);
 
   // ============================================================================
-  // HELPERS DE EVIDÊNCIAS E PDF
+  // HELPERS DE EVIDÊNCIAS E PDF (BLINDADOS CONTRA TELA BRANCA)
   // ============================================================================
   const fileNameFromUrl = (u) => {
     try {
@@ -132,17 +122,23 @@ export default function DieselTratarTratativa() {
 
   const isImageUrl = (u) => /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(String(u || "").toLowerCase());
 
-  // Extrai o PDF do Prontuário gerado pelo Robô
-  const prontuarioPdfUrl = useMemo(() => {
-    if (!t?.evidencias_urls) return null;
-    return t.evidencias_urls.find(u => typeof u === 'string' && u.toLowerCase().includes('.pdf'));
+  // Garantir que evidencia_urls seja um array
+  const safeEvidencias = useMemo(() => {
+    if (!t?.evidencias_urls) return [];
+    if (Array.isArray(t.evidencias_urls)) return t.evidencias_urls;
+    if (typeof t.evidencias_urls === 'string') {
+      try { return JSON.parse(t.evidencias_urls); } catch(e) { return [t.evidencias_urls]; }
+    }
+    return [];
   }, [t]);
 
-  // Outras evidências (imagens)
+  const prontuarioPdfUrl = useMemo(() => {
+    return safeEvidencias.find(u => typeof u === 'string' && u.toLowerCase().includes('.pdf'));
+  }, [safeEvidencias]);
+
   const outrasEvidencias = useMemo(() => {
-    if (!t?.evidencias_urls) return [];
-    return t.evidencias_urls.filter(u => typeof u === 'string' && !u.toLowerCase().includes('.pdf'));
-  }, [t]);
+    return safeEvidencias.filter(u => typeof u === 'string' && !u.toLowerCase().includes('.pdf'));
+  }, [safeEvidencias]);
 
   const renderEvidenciasGrid = (urls, label) => {
     const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
@@ -178,55 +174,33 @@ export default function DieselTratarTratativa() {
     );
   };
 
-  // Preview do arquivo a ser enviado
-  const [previewObjUrl, setPreviewObjUrl] = useState(null);
-  useEffect(() => {
-    if (!anexoTratativa) {
-      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
-      setPreviewObjUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(anexoTratativa);
-    setPreviewObjUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return url;
-    });
-  }, [anexoTratativa]);
-
   // ============================================================================
   // CARGA DE DADOS
   // ============================================================================
   async function carregarDados() {
-    const { data, error } = await supabase.from("diesel_tratativas").select("*").eq("id", id).single();
-    if (error) {
-      console.error(error);
-      return;
+    try {
+      const { data, error } = await supabase.from("diesel_tratativas").select("*").eq("id", id).single();
+      if (error) throw error;
+      setT(data || null);
+
+      if (data?.linha) {
+        const { data: row } = await supabase.from("linhas").select("descricao").eq("codigo", data.linha).maybeSingle();
+        setLinhaDescricao(row?.descricao || "");
+      }
+
+      if (data?.motorista_chapa) {
+        const { data: m } = await supabase.from("motoristas").select("cargo").eq("chapa", data.motorista_chapa).maybeSingle();
+        setCargoMotorista((m?.cargo || data?.cargo || "Motorista").toUpperCase());
+      } else {
+        setCargoMotorista((data?.cargo || "Motorista").toUpperCase());
+      }
+
+      const { data: detData } = await supabase.from("diesel_tratativas_detalhes").select("*").eq("tratativa_id", id).order("created_at", { ascending: true });
+      setDetalhes(detData || []);
+    } catch (e) {
+      console.error(e);
+      setErrorLoading(true);
     }
-    setT(data || null);
-
-    setEditForm({
-      tipo_ocorrencia: data?.tipo_ocorrencia || "",
-      prioridade: data?.prioridade || "Média",
-      setor_origem: data?.setor_origem || "",
-      linha: data?.linha || "",
-      descricao: data?.descricao || "",
-    });
-
-    if (data?.linha) {
-      const { data: row } = await supabase.from("linhas").select("descricao").eq("codigo", data.linha).maybeSingle();
-      setLinhaDescricao(row?.descricao || "");
-    } else setLinhaDescricao("");
-
-    if (data?.motorista_chapa) {
-      const { data: m } = await supabase.from("motoristas").select("cargo").eq("chapa", data.motorista_chapa).maybeSingle();
-      setCargoMotorista((m?.cargo || data?.cargo || "Motorista").toUpperCase());
-    } else {
-      setCargoMotorista((data?.cargo || "Motorista").toUpperCase());
-    }
-
-    // Busca a timeline de detalhes
-    const { data: detData } = await supabase.from("diesel_tratativas_detalhes").select("*").eq("tratativa_id", id).order("created_at", { ascending: true });
-    setDetalhes(detData || []);
   }
 
   useEffect(() => {
@@ -234,31 +208,8 @@ export default function DieselTratarTratativa() {
   }, [id]);
 
   // ============================================================================
-  // AÇÕES DE BANCO (SALVAR E CONCLUIR)
+  // AÇÕES DE BANCO E CONCLUSÃO
   // ============================================================================
-  async function salvarEdicao() {
-    if (!t) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.from("diesel_tratativas").update({
-        tipo_ocorrencia: editForm.tipo_ocorrencia || null,
-        prioridade: editForm.prioridade || null,
-        setor_origem: editForm.setor_origem || null,
-        linha: editForm.linha || null,
-        descricao: editForm.descricao || null,
-      }).eq("id", t.id);
-
-      if (error) throw error;
-      await carregarDados(); // Recarrega tudo
-      setIsEditing(false);
-      alert("Dados atualizados com sucesso!");
-    } catch (e) {
-      alert(`Erro ao salvar: ${e.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function concluir() {
     if (!t) return;
     if (!resumo.trim()) {
@@ -306,7 +257,7 @@ export default function DieselTratarTratativa() {
   }
 
   // ============================================================================
-  // FUNÇÕES DE IMPRESSÃO (Mantidas Originais)
+  // FUNÇÕES DE IMPRESSÃO
   // ============================================================================
   function baseCssCourier() {
     return `
@@ -399,6 +350,7 @@ export default function DieselTratarTratativa() {
   // ============================================================================
   // RENDER UI
   // ============================================================================
+  if (errorLoading) return <div className="flex h-screen items-center justify-center font-bold text-rose-500">Erro ao carregar dados da Tratativa. O registro pode ter sido excluído.</div>;
   if (!t) return <div className="flex h-screen items-center justify-center font-bold text-slate-500">Carregando dados da Tratativa...</div>;
 
   return (
@@ -487,16 +439,16 @@ export default function DieselTratarTratativa() {
               {detalhes.length === 0 ? (
                 <div className="text-sm text-slate-400 italic text-center">Nenhum evento registrado ainda.</div>
               ) : (
-                detalhes.map((det, idx) => (
+                detalhes.map((det) => (
                   <div key={det.id} className="relative pl-6 border-l-2 border-slate-200 last:border-l-transparent pb-2">
                     <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-slate-200 border-2 border-white shadow-sm flex items-center justify-center">
-                      {det.acao_aplicada === "ABERTURA_MANUAL" ? <div className="h-2 w-2 rounded-full bg-blue-500" /> : <div className="h-2 w-2 rounded-full bg-emerald-500" />}
+                      {det.acao_aplicada === "ABERTURA_MANUAL" || det.acao_aplicada === "ABERTURA_AUTOMATICA" ? <div className="h-2 w-2 rounded-full bg-blue-500" /> : <div className="h-2 w-2 rounded-full bg-emerald-500" />}
                     </div>
                     <div className="-mt-1.5">
                       <p className="text-[10px] font-bold text-slate-400">{brDateTime(det.created_at)}</p>
                       <p className="text-xs font-black text-slate-700 mt-0.5">{det.acao_aplicada}</p>
                       <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{det.observacoes}</p>
-                      <p className="text-[9px] text-slate-400 mt-2">Por: {det.tratado_por_nome || det.tratado_por_login || "Sistema"}</p>
+                      <p className="text-[9px] text-slate-400 mt-2">Por: {det.tratado_por_nome || det.tratado_por_login || "Sistema Robô"}</p>
                       
                       {/* Anexos deste evento */}
                       {det.anexo_tratativa && (
@@ -511,7 +463,7 @@ export default function DieselTratarTratativa() {
             </div>
           </div>
 
-          {/* FORMULÁRIO DE CONCLUSÃO (Apenas se não estiver concluída) */}
+          {/* FORMULÁRIO DE CONCLUSÃO */}
           {t.status !== "Concluída" ? (
             <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
               <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4">
@@ -576,19 +528,8 @@ export default function DieselTratarTratativa() {
               </button>
             </div>
           )}
-
         </div>
       </div>
-    </div>
-  );
-}
-
-// Componente simples para os detalhes textuais
-function Item({ titulo, valor, className }) {
-  return (
-    <div className={className}>
-      <dt className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">{titulo}</dt>
-      <dd className="font-medium text-slate-700 break-words">{valor}</dd>
     </div>
   );
 }

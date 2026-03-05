@@ -56,6 +56,16 @@ export default function DieselTratarTratativa() {
   const [linhaDescricao, setLinhaDescricao] = useState("");
   const [cargoMotorista, setCargoMotorista] = useState("MOTORISTA");
 
+  // Edição inline
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    tipo_ocorrencia: "",
+    prioridade: "Média",
+    setor_origem: "",
+    linha: "",
+    descricao: "",
+  });
+
   // Suspensão
   const [diasSusp, setDiasSusp] = useState(1);
   const [dataSuspensao, setDataSuspensao] = useState(() => new Date().toISOString().slice(0, 10));
@@ -82,7 +92,7 @@ export default function DieselTratarTratativa() {
     if (!d) return "—";
     const dt = d instanceof Date ? d : new Date(d);
     if (Number.isNaN(dt.getTime())) return "—";
-    return dt.toLocaleString("pt-BR");
+    return dt.toLocaleString("pt-BR", { dateStyle: 'short', timeStyle: 'short' });
   };
 
   const parseDateLocal = (dateStr) => {
@@ -102,7 +112,7 @@ export default function DieselTratarTratativa() {
   const retornoSusp = useMemo(() => addDaysLocal(inicioSusp, Math.max(Number(diasSusp), 0)), [inicioSusp, diasSusp]);
 
   // ============================================================================
-  // HELPERS DE EVIDÊNCIAS E PDF (BLINDADOS CONTRA TELA BRANCA)
+  // HELPERS DE EVIDÊNCIAS E PDF (BLINDADOS CONTRA TELA BRANCA E HTML)
   // ============================================================================
   const fileNameFromUrl = (u) => {
     try {
@@ -122,7 +132,7 @@ export default function DieselTratarTratativa() {
 
   const isImageUrl = (u) => /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(String(u || "").toLowerCase());
 
-  // Garantir que evidencia_urls seja um array
+  // Garantir que evidencia_urls seja um array limpo
   const safeEvidencias = useMemo(() => {
     if (!t?.evidencias_urls) return [];
     if (Array.isArray(t.evidencias_urls)) return t.evidencias_urls;
@@ -132,13 +142,24 @@ export default function DieselTratarTratativa() {
     return [];
   }, [t]);
 
+  // Força que o Prontuário seja APENAS o PDF. 
   const prontuarioPdfUrl = useMemo(() => {
+    // Busca o PDF com nome do robô
+    const pdfDoRobo = safeEvidencias.find(u => typeof u === 'string' && u.toLowerCase().includes('.pdf') && u.toLowerCase().includes('prontuario'));
+    if (pdfDoRobo) return pdfDoRobo;
+    // Se não achar com o nome, pega qualquer PDF disponível
     return safeEvidencias.find(u => typeof u === 'string' && u.toLowerCase().includes('.pdf'));
   }, [safeEvidencias]);
 
+  // Pega apenas as outras evidências, ignorando completamente o arquivo .html gerado pelo robô
   const outrasEvidencias = useMemo(() => {
-    return safeEvidencias.filter(u => typeof u === 'string' && !u.toLowerCase().includes('.pdf'));
-  }, [safeEvidencias]);
+    return safeEvidencias.filter(u => {
+      if (typeof u !== 'string') return false;
+      if (u === prontuarioPdfUrl) return false; // Esconde o PDF que já está no visualizador
+      if (u.toLowerCase().includes('.html')) return false; // 🔥 IGNORA O ARQUIVO HTML DO ROBÔ
+      return true;
+    });
+  }, [safeEvidencias, prontuarioPdfUrl]);
 
   const renderEvidenciasGrid = (urls, label) => {
     const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
@@ -174,6 +195,20 @@ export default function DieselTratarTratativa() {
     );
   };
 
+  const [previewObjUrl, setPreviewObjUrl] = useState(null);
+  useEffect(() => {
+    if (!anexoTratativa) {
+      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
+      setPreviewObjUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(anexoTratativa);
+    setPreviewObjUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+  }, [anexoTratativa]);
+
   // ============================================================================
   // CARGA DE DADOS
   // ============================================================================
@@ -183,10 +218,18 @@ export default function DieselTratarTratativa() {
       if (error) throw error;
       setT(data || null);
 
+      setEditForm({
+        tipo_ocorrencia: data?.tipo_ocorrencia || "",
+        prioridade: data?.prioridade || "Média",
+        setor_origem: data?.setor_origem || "",
+        linha: data?.linha || "",
+        descricao: data?.descricao || "",
+      });
+
       if (data?.linha) {
         const { data: row } = await supabase.from("linhas").select("descricao").eq("codigo", data.linha).maybeSingle();
         setLinhaDescricao(row?.descricao || "");
-      }
+      } else setLinhaDescricao("");
 
       if (data?.motorista_chapa) {
         const { data: m } = await supabase.from("motoristas").select("cargo").eq("chapa", data.motorista_chapa).maybeSingle();
@@ -208,8 +251,31 @@ export default function DieselTratarTratativa() {
   }, [id]);
 
   // ============================================================================
-  // AÇÕES DE BANCO E CONCLUSÃO
+  // AÇÕES DE BANCO (SALVAR E CONCLUIR)
   // ============================================================================
+  async function salvarEdicao() {
+    if (!t) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.from("diesel_tratativas").update({
+        tipo_ocorrencia: editForm.tipo_ocorrencia || null,
+        prioridade: editForm.prioridade || null,
+        setor_origem: editForm.setor_origem || null,
+        linha: editForm.linha || null,
+        descricao: editForm.descricao || null,
+      }).eq("id", t.id);
+
+      if (error) throw error;
+      await carregarDados();
+      setIsEditing(false);
+      alert("Dados atualizados com sucesso!");
+    } catch (e) {
+      alert(`Erro ao salvar: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function concluir() {
     if (!t) return;
     if (!resumo.trim()) {
@@ -374,10 +440,25 @@ export default function DieselTratarTratativa() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* COLUNA ESQUERDA (DADOS & PRONTUÁRIO) */}
+        {/* COLUNA ESQUERDA (PRONTUÁRIO -> DADOS -> EVIDÊNCIAS) */}
         <div className="lg:col-span-2 space-y-6">
+
+          {/* 1. VISUALIZADOR DE PRONTUÁRIO (NO TOPO) */}
+          {prontuarioPdfUrl && (
+            <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+              <div className="bg-slate-800 border-b border-slate-900 px-6 py-4 flex items-center justify-between">
+                <h2 className="font-black text-white flex items-center gap-2"><FaRobot className="text-blue-400"/> Prontuário de IA (Dossiê)</h2>
+                <a href={prontuarioPdfUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1 border border-slate-600 px-3 py-1 rounded-lg transition-colors">
+                  <FaFilePdf /> Abrir Externo
+                </a>
+              </div>
+              <div className="bg-slate-200 w-full" style={{ height: "750px" }}>
+                <iframe src={prontuarioPdfUrl} className="w-full h-full border-none" title="Prontuario do Robô" />
+              </div>
+            </div>
+          )}
           
-          {/* INFO CARD PRINCIPAL */}
+          {/* 2. INFO CARD PRINCIPAL */}
           <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
             <div className="bg-rose-50/50 border-b border-rose-100 px-6 py-4 flex items-center justify-between">
               <h2 className="font-black text-rose-800 flex items-center gap-2"><FaUser /> Dados do Infrator</h2>
@@ -404,22 +485,7 @@ export default function DieselTratarTratativa() {
             </div>
           </div>
 
-          {/* VISUALIZADOR DE PRONTUÁRIO (SE EXISTIR PDF DO ROBÔ) */}
-          {prontuarioPdfUrl && (
-            <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
-              <div className="bg-slate-800 border-b border-slate-900 px-6 py-4 flex items-center justify-between">
-                <h2 className="font-black text-white flex items-center gap-2"><FaRobot className="text-blue-400"/> Prontuário de IA (Dossiê)</h2>
-                <a href={prontuarioPdfUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1 border border-slate-600 px-3 py-1 rounded-lg transition-colors">
-                  <FaFilePdf /> Abrir Externo
-                </a>
-              </div>
-              <div className="bg-slate-200" style={{ height: "600px" }}>
-                <iframe src={prontuarioPdfUrl} className="w-full h-full border-none" title="Prontuario do Robô" />
-              </div>
-            </div>
-          )}
-
-          {/* OUTRAS EVIDÊNCIAS (IMAGENS E AFINS) */}
+          {/* 3. OUTRAS EVIDÊNCIAS (EMBAIXO) */}
           {outrasEvidencias.length > 0 && (
             <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm p-6">
               {renderEvidenciasGrid(outrasEvidencias, "Outras Evidências Anexadas")}

@@ -1,15 +1,19 @@
 // src/pages/DieselTratarTratativa.jsx
-// Tratar Diesel (módulo separado)
-// - Tabelas:
-//   diesel_tratativas
-//   diesel_tratativas_detalhes
-// - Storage bucket:
-//   diesel_tratativas
-
 import { useEffect, useMemo, useState, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabase";
 import { AuthContext } from "../context/AuthContext";
+import { 
+  FaUser, 
+  FaRoute, 
+  FaGavel, 
+  FaHistory, 
+  FaFilePdf, 
+  FaCheckCircle, 
+  FaTimes,
+  FaFileAlt,
+  FaRobot
+} from "react-icons/fa";
 
 const acoes = [
   "Orientação",
@@ -40,12 +44,12 @@ export default function DieselTratarTratativa() {
   const { user } = useContext(AuthContext);
 
   const [t, setT] = useState(null);
+  const [detalhes, setDetalhes] = useState([]); // Histórico/Timeline da tratativa
   const [resumo, setResumo] = useState("");
   const [acao, setAcao] = useState("Orientação");
 
   // Conclusão: anexo (imagem/pdf)
   const [anexoTratativa, setAnexoTratativa] = useState(null);
-
   const [loading, setLoading] = useState(false);
 
   // Complementos
@@ -66,21 +70,11 @@ export default function DieselTratarTratativa() {
   const [diasSusp, setDiasSusp] = useState(1);
   const [dataSuspensao, setDataSuspensao] = useState(() => new Date().toISOString().slice(0, 10));
 
+  // ============================================================================
+  // FUNÇÕES DE DATA E FORMATAÇÃO
+  // ============================================================================
   const dataPtCompletaUpper = (d = new Date()) => {
-    const meses = [
-      "JANEIRO",
-      "FEVEREIRO",
-      "MARÇO",
-      "ABRIL",
-      "MAIO",
-      "JUNHO",
-      "JULHO",
-      "AGOSTO",
-      "SETEMBRO",
-      "OUTUBRO",
-      "NOVEMBRO",
-      "DEZEMBRO",
-    ];
+    const meses = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"];
     const dia = String(d.getDate()).padStart(2, "0");
     const mes = meses[d.getMonth()];
     const ano = d.getFullYear();
@@ -98,10 +92,9 @@ export default function DieselTratarTratativa() {
     if (!d) return "—";
     const dt = d instanceof Date ? d : new Date(d);
     if (Number.isNaN(dt.getTime())) return "—";
-    return dt.toLocaleString("pt-BR");
+    return dt.toLocaleString("pt-BR", { dateStyle: 'short', timeStyle: 'short' });
   };
 
-  // Datas suspensão (local)
   const parseDateLocal = (dateStr) => {
     if (!dateStr) return new Date();
     const [yyyy, mm, dd] = String(dateStr).split("-").map(Number);
@@ -118,13 +111,13 @@ export default function DieselTratarTratativa() {
   const fimSusp = useMemo(() => addDaysLocal(inicioSusp, Math.max(Number(diasSusp) - 1, 0)), [inicioSusp, diasSusp]);
   const retornoSusp = useMemo(() => addDaysLocal(inicioSusp, Math.max(Number(diasSusp), 0)), [inicioSusp, diasSusp]);
 
-  // Evidências helpers
+  // ============================================================================
+  // HELPERS DE EVIDÊNCIAS E PDF
+  // ============================================================================
   const fileNameFromUrl = (u) => {
     try {
       const raw = String(u || "");
-      const noHash = raw.split("#")[0];
-      const noQuery = noHash.split("?")[0];
-      const last = noQuery.split("/").filter(Boolean).pop() || "arquivo";
+      const last = raw.split("?")[0].split("#")[0].split("/").filter(Boolean).pop() || "arquivo";
       return decodeURIComponent(last);
     } catch {
       return "arquivo";
@@ -137,19 +130,28 @@ export default function DieselTratarTratativa() {
     return fileOrUrl.type === "application/pdf" || String(fileOrUrl.name || "").toLowerCase().endsWith(".pdf");
   };
 
-  const isImageUrl = (u) => {
-    const s = String(u || "").toLowerCase();
-    return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s);
-  };
+  const isImageUrl = (u) => /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(String(u || "").toLowerCase());
+
+  // Extrai o PDF do Prontuário gerado pelo Robô
+  const prontuarioPdfUrl = useMemo(() => {
+    if (!t?.evidencias_urls) return null;
+    return t.evidencias_urls.find(u => typeof u === 'string' && u.toLowerCase().includes('.pdf'));
+  }, [t]);
+
+  // Outras evidências (imagens)
+  const outrasEvidencias = useMemo(() => {
+    if (!t?.evidencias_urls) return [];
+    return t.evidencias_urls.filter(u => typeof u === 'string' && !u.toLowerCase().includes('.pdf'));
+  }, [t]);
 
   const renderEvidenciasGrid = (urls, label) => {
     const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
     if (arr.length === 0) return null;
 
     return (
-      <div className="mt-3">
-        <span className="block text-sm text-gray-600 mb-2">{label}</span>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+      <div className="mt-4">
+        <span className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">{label}</span>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {arr.map((u, i) => {
             const pdf = isPdf(u);
             const img = !pdf && isImageUrl(u);
@@ -157,35 +159,17 @@ export default function DieselTratarTratativa() {
 
             if (img) {
               return (
-                <a
-                  key={`${u}-${i}`}
-                  href={u}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group rounded-lg border bg-white overflow-hidden hover:shadow-sm"
-                  title="Abrir evidência"
-                >
-                  <img src={u} alt={name} className="h-24 w-full object-cover group-hover:opacity-95" loading="lazy" />
-                  <div className="px-2 py-1.5 text-xs text-gray-700 truncate">{name}</div>
+                <a key={`${u}-${i}`} href={u} target="_blank" rel="noopener noreferrer" className="group rounded-xl border border-slate-200 bg-white overflow-hidden hover:shadow-md transition-all">
+                  <img src={u} alt={name} className="h-28 w-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                  <div className="px-3 py-2 text-[10px] font-bold text-slate-600 truncate bg-slate-50 border-t border-slate-100">{name}</div>
                 </a>
               );
             }
-
             return (
-              <a
-                key={`${u}-${i}`}
-                href={u}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-lg border bg-white p-3 hover:shadow-sm"
-                title="Abrir evidência"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-                    {pdf ? "PDF" : "ARQ"}
-                  </span>
-                </div>
-                <div className="mt-2 text-xs text-blue-700 underline break-words">{name}</div>
+              <a key={`${u}-${i}`} href={u} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-slate-200 bg-white p-4 hover:shadow-md transition-all flex flex-col justify-center items-center text-center">
+                <FaFileAlt className="text-3xl text-blue-500 mb-2" />
+                <span className="text-[10px] font-black px-2 py-1 rounded-md bg-blue-50 text-blue-700 mb-2">{pdf ? "PDF" : "ARQUIVO"}</span>
+                <div className="text-[10px] font-bold text-slate-600 truncate w-full">{name}</div>
               </a>
             );
           })}
@@ -194,34 +178,7 @@ export default function DieselTratarTratativa() {
     );
   };
 
-  const renderArquivoOuThumb = (url, label) => {
-    if (!url) return null;
-
-    const pdf = isPdf(url);
-    const img = !pdf && isImageUrl(url);
-    const name = fileNameFromUrl(url);
-
-    return (
-      <div className="mt-2">
-        <span className="block text-sm text-gray-600 mb-2">{label}</span>
-
-        {pdf || !img ? (
-          <a href={url} target="_blank" rel="noopener noreferrer" className="block rounded-lg border bg-white p-3 hover:shadow-sm">
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-              {pdf ? "PDF" : "ARQ"}
-            </span>
-            <div className="mt-2 text-sm text-blue-700 underline break-words">{name}</div>
-          </a>
-        ) : (
-          <a href={url} target="_blank" rel="noopener noreferrer" className="inline-block" title="Abrir imagem">
-            <img src={url} alt={name} className="h-24 w-24 rounded-lg border object-cover hover:opacity-90" loading="lazy" />
-          </a>
-        )}
-      </div>
-    );
-  };
-
-  // Preview do arquivo selecionado
+  // Preview do arquivo a ser enviado
   const [previewObjUrl, setPreviewObjUrl] = useState(null);
   useEffect(() => {
     if (!anexoTratativa) {
@@ -234,118 +191,67 @@ export default function DieselTratarTratativa() {
       if (prev) URL.revokeObjectURL(prev);
       return url;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anexoTratativa]);
 
-  useEffect(() => {
-    return () => {
-      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
-    };
-  }, [previewObjUrl]);
+  // ============================================================================
+  // CARGA DE DADOS
+  // ============================================================================
+  async function carregarDados() {
+    const { data, error } = await supabase.from("diesel_tratativas").select("*").eq("id", id).single();
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setT(data || null);
 
-  const renderPreviewSelecionado = () => {
-    if (!anexoTratativa) return null;
+    setEditForm({
+      tipo_ocorrencia: data?.tipo_ocorrencia || "",
+      prioridade: data?.prioridade || "Média",
+      setor_origem: data?.setor_origem || "",
+      linha: data?.linha || "",
+      descricao: data?.descricao || "",
+    });
 
-    const pdf = isPdf(anexoTratativa);
-    const name = anexoTratativa.name || "arquivo";
+    if (data?.linha) {
+      const { data: row } = await supabase.from("linhas").select("descricao").eq("codigo", data.linha).maybeSingle();
+      setLinhaDescricao(row?.descricao || "");
+    } else setLinhaDescricao("");
 
-    if (pdf) {
-      return (
-        <div className="mt-3 rounded-lg border bg-white p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">PDF</span>
-            <button
-              type="button"
-              onClick={() => setAnexoTratativa(null)}
-              className="text-xs text-gray-500 hover:text-gray-700"
-              title="Remover arquivo"
-            >
-              Remover
-            </button>
-          </div>
-          <div className="mt-2 text-sm text-gray-700 break-words">{name}</div>
-        </div>
-      );
+    if (data?.motorista_chapa) {
+      const { data: m } = await supabase.from("motoristas").select("cargo").eq("chapa", data.motorista_chapa).maybeSingle();
+      setCargoMotorista((m?.cargo || data?.cargo || "Motorista").toUpperCase());
+    } else {
+      setCargoMotorista((data?.cargo || "Motorista").toUpperCase());
     }
 
-    return (
-      <div className="mt-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-500">Pré-visualização</span>
-          <button
-            type="button"
-            onClick={() => setAnexoTratativa(null)}
-            className="text-xs text-gray-500 hover:text-gray-700"
-            title="Remover arquivo"
-          >
-            Remover
-          </button>
-        </div>
-        <img src={previewObjUrl} alt={name} className="mt-2 h-28 w-28 rounded-lg border object-cover" />
-        <div className="mt-1 text-xs text-gray-600 break-words">{name}</div>
-      </div>
-    );
-  };
+    // Busca a timeline de detalhes
+    const { data: detData } = await supabase.from("diesel_tratativas_detalhes").select("*").eq("tratativa_id", id).order("created_at", { ascending: true });
+    setDetalhes(detData || []);
+  }
 
   useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase.from("diesel_tratativas").select("*").eq("id", id).single();
-      if (error) {
-        console.error(error);
-        return;
-      }
-      setT(data || null);
-
-      setEditForm({
-        tipo_ocorrencia: data?.tipo_ocorrencia || "",
-        prioridade: data?.prioridade || "Média",
-        setor_origem: data?.setor_origem || "",
-        linha: data?.linha || "",
-        descricao: data?.descricao || "",
-      });
-
-      // Linha (código -> descrição)
-      if (data?.linha) {
-        const { data: row } = await supabase.from("linhas").select("descricao").eq("codigo", data.linha).maybeSingle();
-        setLinhaDescricao(row?.descricao || "");
-      } else setLinhaDescricao("");
-
-      // Cargo (por chapa)
-      if (data?.motorista_chapa) {
-        const { data: m } = await supabase.from("motoristas").select("cargo").eq("chapa", data.motorista_chapa).maybeSingle();
-        setCargoMotorista((m?.cargo || data?.cargo || "Motorista").toUpperCase());
-      } else {
-        setCargoMotorista((data?.cargo || "Motorista").toUpperCase());
-      }
-    })();
+    carregarDados();
   }, [id]);
 
+  // ============================================================================
+  // AÇÕES DE BANCO (SALVAR E CONCLUIR)
+  // ============================================================================
   async function salvarEdicao() {
     if (!t) return;
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from("diesel_tratativas")
-        .update({
-          tipo_ocorrencia: editForm.tipo_ocorrencia || null,
-          prioridade: editForm.prioridade || null,
-          setor_origem: editForm.setor_origem || null,
-          linha: editForm.linha || null,
-          descricao: editForm.descricao || null,
-        })
-        .eq("id", t.id);
+      const { error } = await supabase.from("diesel_tratativas").update({
+        tipo_ocorrencia: editForm.tipo_ocorrencia || null,
+        prioridade: editForm.prioridade || null,
+        setor_origem: editForm.setor_origem || null,
+        linha: editForm.linha || null,
+        descricao: editForm.descricao || null,
+      }).eq("id", t.id);
 
       if (error) throw error;
-
-      setT((prev) => (prev ? { ...prev, ...editForm } : prev));
-
-      if (editForm.linha) {
-        const { data: row } = await supabase.from("linhas").select("descricao").eq("codigo", editForm.linha).maybeSingle();
-        setLinhaDescricao(row?.descricao || "");
-      } else setLinhaDescricao("");
-
+      await carregarDados(); // Recarrega tudo
       setIsEditing(false);
-      alert("Dados atualizados!");
+      alert("Dados atualizados com sucesso!");
     } catch (e) {
       alert(`Erro ao salvar: ${e.message}`);
     } finally {
@@ -355,23 +261,20 @@ export default function DieselTratarTratativa() {
 
   async function concluir() {
     if (!t) return;
-    if (!resumo) {
-      alert("Informe o resumo/observações");
+    if (!resumo.trim()) {
+      alert("Informe o resumo/observações da tratativa.");
       return;
     }
 
     setLoading(true);
     try {
-      // Upload do anexo -> diesel_tratativas bucket
       let anexo_tratativa_url = null;
       if (anexoTratativa) {
         const safe = `anexo_${Date.now()}_${anexoTratativa.name}`.replace(/\s+/g, "_");
         const up = await supabase.storage.from("diesel_tratativas").upload(safe, anexoTratativa, {
-          upsert: false,
-          contentType: anexoTratativa.type || undefined,
+          upsert: false, contentType: anexoTratativa.type || undefined,
         });
         if (up.error) throw up.error;
-
         anexo_tratativa_url = supabase.storage.from("diesel_tratativas").getPublicUrl(safe).data.publicUrl;
       }
 
@@ -384,7 +287,6 @@ export default function DieselTratarTratativa() {
         acao_aplicada: acao,
         observacoes: resumo,
         anexo_tratativa: anexo_tratativa_url,
-
         tratado_por_login: tratadoPorLogin,
         tratado_por_nome: tratadoPorNome,
         tratado_por_id: tratadoPorId,
@@ -395,7 +297,7 @@ export default function DieselTratarTratativa() {
       if (upd.error) throw upd.error;
 
       alert("Tratativa Diesel concluída com sucesso!");
-      nav("/diesel/tratativas");
+      nav("/desempenho-diesel/tratativas");
     } catch (e) {
       alert(`Erro: ${e.message}`);
     } finally {
@@ -403,16 +305,15 @@ export default function DieselTratarTratativa() {
     }
   }
 
-  // Impressão (mantida igual; se não usar no Diesel, pode remover depois)
+  // ============================================================================
+  // FUNÇÕES DE IMPRESSÃO (Mantidas Originais)
+  // ============================================================================
   function baseCssCourier() {
     return `
       <style>
         @page { size: A4; margin: 25mm; }
         html, body { height: 100%; }
-        body {
-          font-family: "Courier New", Courier, monospace;
-          color:#000; font-size: 14px; line-height: 1.55; margin: 0;
-        }
+        body { font-family: "Courier New", Courier, monospace; color:#000; font-size: 14px; line-height: 1.55; margin: 0; }
         .page { min-height: 100vh; display: flex; flex-direction: column; }
         .content { padding: 0; }
         .linha { display:flex; justify-content:space-between; gap:16px; }
@@ -429,539 +330,265 @@ export default function DieselTratarTratativa() {
     `;
   }
 
-  function renderSuspensaoHtml({
-    nome,
-    registro,
-    cargo,
-    ocorrencia,
-    dataOcorr,
-    observ,
-    dataDoc,
-    dias,
-    inicio,
-    fim,
-    retorno,
-  }) {
+  function renderSuspensaoHtml({ nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc, dias, inicio, fim, retorno }) {
     const brLocal = (d) => {
       const dt = d instanceof Date ? d : new Date(d);
       return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString("pt-BR");
     };
     const diasFmt = String(dias).padStart(2, "0");
     const rotuloDia = Number(dias) === 1 ? "dia" : "dias";
-
     return `
-  <html>
-    <head>
-      <meta charset="utf-8" />
-      <style>
-        @page { size: A4; margin: 25mm; }
-        html, body { height: 100%; }
-        body {
-          font-family: "Courier New", Courier, monospace;
-          font-size: 14px; line-height: 1.7; color: #000; margin: 0;
-        }
-        .page { min-height: 100vh; display: flex; flex-direction: column; }
-        .content { max-width: 80ch; margin: 0 auto; }
-        .center { text-align: center; font-weight: bold; }
-        .right { text-align: right; }
-        .linha { display:flex; justify-content:space-between; gap:16px; }
-        .mt { margin-top: 18px; }
-        .label { font-weight: bold; }
-        .bl { white-space: pre-wrap; text-align: left; }
-        .nowrap { white-space: nowrap; }
-        .footer-sign { margin-top: auto; }
-        .ass-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-        .ass { text-align:center; }
-        .ass-line { margin-top: 36px; border-top:1px solid #000; height:1px; }
-      </style>
-      <title>SUSPENSÃO - ${nome}</title>
-    </head>
-    <body>
-      <div class="page">
-        <div class="content">
-          <div class="center">SUSPENSÃO DISCIPLINAR</div>
-          <div class="right mt">${dataDoc}</div>
-
-          <div class="linha mt">
-            <div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ""}</div>
-            <div><span class="label">Cargo:</span> ${cargo}</div>
-          </div>
-
-          <p class="mt bl">
-  Pelo presente, notificamos que encontra-se suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>,
-  <span class="nowrap">a partir de <span class="label">${brLocal(inicio)}</span></span>,
-  devendo apresentar-se no horário usual <span class="nowrap">no dia <span class="label">${brLocal(retorno)}</span></span>.
-</p>
-
-          <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
-          <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
-          <div class="mt"><span class="label">Período:</span> ${brLocal(inicio)} a ${brLocal(fim)} (retorno: ${brLocal(retorno)})</div>
-          <div class="mt"><span class="label">Observação:</span> ${observ}</div>
-
-          <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
-        </div>
-
-        <div class="footer-sign mt">
-          <div class="ass-grid">
-            <div class="ass"><div class="ass-line"></div>Assinatura do Empregado</div>
-            <div class="ass"><div class="ass-line"></div>Assinatura do Empregador</div>
-          </div>
-          <div class="ass-grid" style="margin-top:20px">
-            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
-            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
-          </div>
-        </div>
-      </div>
-      <script>window.onload = () => { window.print(); }</script>
-    </body>
-  </html>
-  `;
+  <html><head><meta charset="utf-8" />${baseCssCourier()}<title>SUSPENSÃO - ${nome}</title></head>
+  <body><div class="page"><div class="content">
+    <div class="center">SUSPENSÃO DISCIPLINAR</div><div class="right mt">${dataDoc}</div>
+    <div class="linha mt"><div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ""}</div><div><span class="label">Cargo:</span> ${cargo}</div></div>
+    <p class="mt bl">Pelo presente, notificamos que encontra-se suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>, a partir de <span class="label">${brLocal(inicio)}</span>, devendo apresentar-se no horário usual no dia <span class="label">${brLocal(retorno)}</span>.</p>
+    <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
+    <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
+    <div class="mt"><span class="label">Período:</span> ${brLocal(inicio)} a ${brLocal(fim)} (retorno: ${brLocal(retorno)})</div>
+    <div class="mt"><span class="label">Observação:</span> ${observ}</div>
+    <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
+  </div>
+  <div class="footer-sign mt"><div class="ass-grid"><div class="ass"><div class="ass-line"></div>Assinatura do Empregado</div><div class="ass"><div class="ass-line"></div>Assinatura do Empregador</div></div><div class="ass-grid" style="margin-top:20px"><div class="ass"><div class="ass-line"></div>Testemunha CPF:</div><div class="ass"><div class="ass-line"></div>Testemunha CPF:</div></div></div></div>
+  <script>window.onload = () => { window.print(); }</script></body></html>`;
   }
 
-  function renderGenericHtml({
-    titulo,
-    intro1,
-    intro2,
-    nome,
-    registro,
-    cargo,
-    ocorrencia,
-    dataOcorr,
-    observ,
-    dataDoc,
-  }) {
+  function renderGenericHtml({ titulo, intro1, intro2, nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc }) {
     return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          ${baseCssCourier()}
-          <title>${titulo} - ${nome}</title>
-        </head>
-        <body>
-          <div class="page">
-            <div class="content">
-              <div class="center">${titulo}</div>
-              <div class="right mt">${dataDoc}</div>
-
-              <div class="linha mt">
-                <div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ""}</div>
-                <div><span class="label">Cargo:</span> ${cargo}</div>
-              </div>
-
-              <p class="mt bl">${intro1}</p>
-              <p class="bl">${intro2}</p>
-
-              <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
-              <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
-              <div class="mt"><span class="label">Observação:</span> ${observ}</div>
-
-              <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
-            </div>
-
-            <div class="footer-sign mt">
-              <div class="ass-grid">
-                <div class="ass"><div class="ass-line"></div>Assinatura do Empregado</div>
-                <div class="ass"><div class="ass-line"></div>Assinatura do Empregador</div>
-              </div>
-              <div class="ass-grid" style="margin-top:20px">
-                <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
-                <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
-              </div>
-            </div>
-          </div>
-          <script>window.onload = () => { window.print(); }</script>
-        </body>
-      </html>
-    `;
+      <html><head><meta charset="utf-8" />${baseCssCourier()}<title>${titulo} - ${nome}</title></head>
+      <body><div class="page"><div class="content">
+        <div class="center">${titulo}</div><div class="right mt">${dataDoc}</div>
+        <div class="linha mt"><div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ""}</div><div><span class="label">Cargo:</span> ${cargo}</div></div>
+        <p class="mt bl">${intro1}</p><p class="bl">${intro2}</p>
+        <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
+        <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
+        <div class="mt"><span class="label">Observação:</span> ${observ}</div>
+        <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
+      </div>
+      <div class="footer-sign mt"><div class="ass-grid"><div class="ass"><div class="ass-line"></div>Assinatura do Empregado</div><div class="ass"><div class="ass-line"></div>Assinatura do Empregador</div></div><div class="ass-grid" style="margin-top:20px"><div class="ass"><div class="ass-line"></div>Testemunha CPF:</div><div class="ass"><div class="ass-line"></div>Testemunha CPF:</div></div></div></div>
+      <script>window.onload = () => { window.print(); }</script></body></html>`;
   }
 
   function gerarOrientacao() {
-    if (!t) return;
-    if (!resumo.trim()) return alert("Preencha o Resumo / Observações para gerar a medida.");
-
-    const dataDoc = dataPtCompletaUpper(new Date());
-    const nome = (t.motorista_nome || "—").toUpperCase();
-    const registro = t.motorista_chapa || "";
-    const cargo = cargoMotorista;
-    const ocorrencia = (t.tipo_ocorrencia || "—").toUpperCase();
-    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : "—";
-    const observ = (resumo || t.descricao || "").trim() || "—";
-
+    if (!t || !resumo.trim()) return alert("Preencha o Resumo para gerar a medida.");
     const html = renderGenericHtml({
-      titulo: "ORIENTAÇÃO",
-      intro1: "Vimos pelo presente, aplicar-lhe a pena de orientação, em virtude de ter cometido a falta abaixo descrita.",
-      intro2: "Pedimos que tal falta não mais se repita, pois poderemos adotar medidas mais severas.",
-      nome,
-      registro,
-      cargo,
-      ocorrencia,
-      dataOcorr,
-      observ,
-      dataDoc,
+      titulo: "ORIENTAÇÃO", intro1: "Vimos pelo presente, aplicar-lhe a pena de orientação, em virtude de ter cometido a falta abaixo descrita.", intro2: "Pedimos que tal falta não mais se repita, pois poderemos adotar medidas mais severas.",
+      nome: (t.motorista_nome || "—").toUpperCase(), registro: t.motorista_chapa || "", cargo: cargoMotorista, ocorrencia: (t.tipo_ocorrencia || "—").toUpperCase(), dataOcorr: t.data_ocorrido ? br(t.data_ocorrido) : "—", observ: (resumo || t.descricao || "").trim() || "—", dataDoc: dataPtCompletaUpper(new Date()),
     });
-
-    const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
+    window.open("", "_blank").document.write(html);
   }
 
   function gerarAdvertencia() {
-    if (!t) return;
-    if (!resumo.trim()) return alert("Preencha o Resumo / Observações para gerar a medida.");
-
-    const dataDoc = dataPtCompletaUpper(new Date());
-    const nome = (t.motorista_nome || "—").toUpperCase();
-    const registro = t.motorista_chapa || "";
-    const cargo = cargoMotorista;
-    const ocorrencia = (t.tipo_ocorrencia || "—").toUpperCase();
-    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : "—";
-    const observ = (resumo || t.descricao || "").trim() || "—";
-
+    if (!t || !resumo.trim()) return alert("Preencha o Resumo para gerar a medida.");
     const html = renderGenericHtml({
-      titulo: "ADVERTÊNCIA",
-      intro1: "Vimos pelo presente, aplicar-lhe a pena de advertência, em virtude de ter cometido a falta abaixo descrita.",
-      intro2: "Pedimos que tal falta não mais se repita, pois poderemos adotar medidas mais severas.",
-      nome,
-      registro,
-      cargo,
-      ocorrencia,
-      dataOcorr,
-      observ,
-      dataDoc,
+      titulo: "ADVERTÊNCIA", intro1: "Vimos pelo presente, aplicar-lhe a pena de advertência, em virtude de ter cometido a falta abaixo descrita.", intro2: "Pedimos que tal falta não mais se repita, pois poderemos adotar medidas mais severas.",
+      nome: (t.motorista_nome || "—").toUpperCase(), registro: t.motorista_chapa || "", cargo: cargoMotorista, ocorrencia: (t.tipo_ocorrencia || "—").toUpperCase(), dataOcorr: t.data_ocorrido ? br(t.data_ocorrido) : "—", observ: (resumo || t.descricao || "").trim() || "—", dataDoc: dataPtCompletaUpper(new Date()),
     });
-
-    const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
+    window.open("", "_blank").document.write(html);
   }
 
   function gerarSuspensao() {
-    if (!t) return;
-    if (!resumo.trim()) return alert("Preencha o Resumo / Observações para gerar a medida.");
-
-    const dataDoc = dataPtCompletaUpper(new Date());
-    const nome = (t.motorista_nome || "—").toUpperCase();
-    const registro = t.motorista_chapa || "";
-    const cargo = cargoMotorista;
-    const ocorrencia = (t.tipo_ocorrencia || "—").toUpperCase();
-    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : "—";
-    const observ = (resumo || t.descricao || "").trim() || "—";
-
+    if (!t || !resumo.trim()) return alert("Preencha o Resumo para gerar a medida.");
     const html = renderSuspensaoHtml({
-      nome,
-      registro,
-      cargo,
-      ocorrencia,
-      dataOcorr,
-      observ,
-      dataDoc,
-      dias: diasSusp,
-      inicio: inicioSusp,
-      fim: fimSusp,
-      retorno: retornoSusp,
+      nome: (t.motorista_nome || "—").toUpperCase(), registro: t.motorista_chapa || "", cargo: cargoMotorista, ocorrencia: (t.tipo_ocorrencia || "—").toUpperCase(), dataOcorr: t.data_ocorrido ? br(t.data_ocorrido) : "—", observ: (resumo || t.descricao || "").trim() || "—", dataDoc: dataPtCompletaUpper(new Date()),
+      dias: diasSusp, inicio: inicioSusp, fim: fimSusp, retorno: retornoSusp,
     });
-
-    const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
+    window.open("", "_blank").document.write(html);
   }
 
-  if (!t) return <div className="p-6">Carregando…</div>;
-
-  const evidenciasSolicitacao =
-    Array.isArray(t.evidencias_urls) && t.evidencias_urls.length > 0
-      ? t.evidencias_urls
-      : t.imagem_url
-      ? [t.imagem_url]
-      : [];
-
-  const criadoPor = t.criado_por_nome || t.criado_por_login || "—";
-  const criadoEm = brDateTime(t.created_at);
+  // ============================================================================
+  // RENDER UI
+  // ============================================================================
+  if (!t) return <div className="flex h-screen items-center justify-center font-bold text-slate-500">Carregando dados da Tratativa...</div>;
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <h1 className="text-2xl font-bold mb-2">Tratar (Diesel)</h1>
-
-      <div className="text-sm text-blue-700 mb-4">
-        <span className="font-semibold">Criado por:</span> {criadoPor}{" "}
-        <span className="mx-2 text-blue-300">•</span>
-        <span className="font-semibold">Data/Hora:</span> {criadoEm}
+    <div className="mx-auto max-w-7xl p-4 md:p-8 font-sans bg-slate-50 min-h-screen text-slate-800">
+      
+      {/* HEADER PAGE */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-black flex items-center gap-3 text-slate-900">
+            <FaGavel className="text-rose-600" /> Resolução de Tratativa
+          </h1>
+          <p className="text-sm font-medium text-slate-500 mt-1">
+            Analise os dados gerados, verifique o histórico e aplique a medida cabível.
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1 text-xs font-bold text-slate-400">
+          <div className="bg-white px-3 py-1.5 rounded-lg border shadow-sm">ID: #{t.id}</div>
+          <div className="flex items-center gap-1"><FaClock /> Abertura: {brDateTime(t.created_at)}</div>
+        </div>
       </div>
 
-      <p className="text-gray-600 mb-6">Revise os dados, anexe o anexo da tratativa e conclua.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* COLUNA ESQUERDA (DADOS & PRONTUÁRIO) */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* INFO CARD PRINCIPAL */}
+          <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-rose-50/50 border-b border-rose-100 px-6 py-4 flex items-center justify-between">
+              <h2 className="font-black text-rose-800 flex items-center gap-2"><FaUser /> Dados do Infrator</h2>
+              <div className={`px-3 py-1 rounded-md text-[10px] font-black uppercase text-white shadow-sm ${t.status === "Concluída" ? "bg-emerald-500" : "bg-amber-500"}`}>
+                {t.status}
+              </div>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="md:col-span-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motorista</p>
+                <p className="text-lg font-black text-slate-800 mt-1">{t.motorista_nome || "N/D"}</p>
+                <p className="text-sm font-mono text-slate-500 mt-0.5">Chapa: {t.motorista_chapa || "N/D"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nível de Prioridade</p>
+                <p className="text-base font-bold text-rose-600 mt-1">{t.prioridade}</p>
+              </div>
+              <div className="md:col-span-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motivo e Descrição da Abertura</p>
+                <div className="mt-2 bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-slate-700 whitespace-pre-wrap font-medium">
+                  {t.descricao || "Sem descrição."}
+                </div>
+              </div>
+            </div>
+          </div>
 
-      {/* Detalhes */}
-      <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
-        <div className="flex items-center justify-between gap-4 mb-3">
-          <h2 className="text-lg font-semibold">Detalhes da tratativa</h2>
-          {!isEditing ? (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="rounded-md bg-yellow-500 px-3 py-2 text-white hover:bg-yellow-600"
-            >
-              Editar dados
-            </button>
+          {/* VISUALIZADOR DE PRONTUÁRIO (SE EXISTIR PDF DO ROBÔ) */}
+          {prontuarioPdfUrl && (
+            <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
+              <div className="bg-slate-800 border-b border-slate-900 px-6 py-4 flex items-center justify-between">
+                <h2 className="font-black text-white flex items-center gap-2"><FaRobot className="text-blue-400"/> Prontuário de IA (Dossiê)</h2>
+                <a href={prontuarioPdfUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1 border border-slate-600 px-3 py-1 rounded-lg transition-colors">
+                  <FaFilePdf /> Abrir Externo
+                </a>
+              </div>
+              <div className="bg-slate-200" style={{ height: "600px" }}>
+                <iframe src={prontuarioPdfUrl} className="w-full h-full border-none" title="Prontuario do Robô" />
+              </div>
+            </div>
+          )}
+
+          {/* OUTRAS EVIDÊNCIAS (IMAGENS E AFINS) */}
+          {outrasEvidencias.length > 0 && (
+            <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm p-6">
+              {renderEvidenciasGrid(outrasEvidencias, "Outras Evidências Anexadas")}
+            </div>
+          )}
+        </div>
+
+        {/* COLUNA DIREITA (TIMELINE & AÇÃO) */}
+        <div className="space-y-6">
+          
+          {/* TIMELINE DE DETALHES "Conversar" */}
+          <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-[500px]">
+            <div className="bg-slate-50 border-b border-slate-100 px-6 py-4">
+              <h2 className="font-black text-slate-800 flex items-center gap-2"><FaHistory className="text-slate-400"/> Histórico da Tratativa</h2>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              {detalhes.length === 0 ? (
+                <div className="text-sm text-slate-400 italic text-center">Nenhum evento registrado ainda.</div>
+              ) : (
+                detalhes.map((det, idx) => (
+                  <div key={det.id} className="relative pl-6 border-l-2 border-slate-200 last:border-l-transparent pb-2">
+                    <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-slate-200 border-2 border-white shadow-sm flex items-center justify-center">
+                      {det.acao_aplicada === "ABERTURA_MANUAL" ? <div className="h-2 w-2 rounded-full bg-blue-500" /> : <div className="h-2 w-2 rounded-full bg-emerald-500" />}
+                    </div>
+                    <div className="-mt-1.5">
+                      <p className="text-[10px] font-bold text-slate-400">{brDateTime(det.created_at)}</p>
+                      <p className="text-xs font-black text-slate-700 mt-0.5">{det.acao_aplicada}</p>
+                      <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{det.observacoes}</p>
+                      <p className="text-[9px] text-slate-400 mt-2">Por: {det.tratado_por_nome || det.tratado_por_login || "Sistema"}</p>
+                      
+                      {/* Anexos deste evento */}
+                      {det.anexo_tratativa && (
+                        <a href={det.anexo_tratativa} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100 hover:bg-blue-100">
+                          <FaFileAlt /> Anexo da Conclusão
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* FORMULÁRIO DE CONCLUSÃO (Apenas se não estiver concluída) */}
+          {t.status !== "Concluída" ? (
+            <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
+              <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4">
+                <h2 className="font-black text-emerald-800 flex items-center gap-2"><FaCheckCircle /> Parecer e Conclusão</h2>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Ação Aplicada ao Motorista</label>
+                  <select className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 focus:border-emerald-500 outline-none" value={acao} onChange={(e) => setAcao(e.target.value)}>
+                    {acoes.map((a) => (<option key={a} value={a}>{a}</option>))}
+                  </select>
+                </div>
+
+                {acao === "Suspensão" && (
+                  <div className="grid grid-cols-2 gap-4 bg-amber-50 p-4 rounded-xl border border-amber-100">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">Dias de Suspensão</label>
+                      <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold" value={diasSusp} onChange={(e) => setDiasSusp(Number(e.target.value))}>
+                        {[1, 2, 3, 5, 7].map((d) => <option key={d} value={d}>{d} dia(s)</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">Data Início</label>
+                      <input type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold" value={dataSuspensao} onChange={(e) => setDataSuspensao(e.target.value)} />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Relato Final / Argumentação</label>
+                  <textarea rows={4} className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 focus:border-emerald-500 outline-none resize-none" value={resumo} onChange={(e) => setResumo(e.target.value)} placeholder="Detalhe a conversa, a justificativa do motorista e o motivo da ação tomada..." />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Anexar Documento Assinado (Opcional)</label>
+                  <input type="file" accept="image/*,application/pdf" onChange={(e) => setAnexoTratativa(e.target.files?.[0] || null)} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 space-y-3">
+                  <button onClick={concluir} disabled={loading} className="w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-md transition-all disabled:opacity-50">
+                    {loading ? "Processando..." : "Finalizar Tratativa"}
+                  </button>
+
+                  <button type="button" onClick={() => {
+                    if (acao === "Orientação") return gerarOrientacao();
+                    if (acao === "Advertência") return gerarAdvertencia();
+                    if (acao === "Suspensão") return gerarSuspensao();
+                    alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento PDF de assinatura.');
+                  }} className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all">
+                    Gerar PDF para Assinatura
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
-            <div className="flex gap-2">
-              <button
-                onClick={salvarEdicao}
-                disabled={loading}
-                className="rounded-md bg-emerald-600 px-3 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
-              >
-                Salvar
-              </button>
-              <button
-                onClick={() => {
-                  setIsEditing(false);
-                  setEditForm({
-                    tipo_ocorrencia: t.tipo_ocorrencia || "",
-                    prioridade: t.prioridade || "Média",
-                    setor_origem: t.setor_origem || "",
-                    linha: t.linha || "",
-                    descricao: t.descricao || "",
-                  });
-                }}
-                className="rounded-md bg-gray-400 px-3 py-2 text-white hover:bg-gray-500"
-              >
-                Cancelar
+            <div className="bg-emerald-50 rounded-[1.5rem] border border-emerald-200 p-8 text-center shadow-sm">
+              <FaCheckCircle className="text-5xl text-emerald-400 mx-auto mb-4" />
+              <h3 className="text-xl font-black text-emerald-800">Tratativa Finalizada</h3>
+              <p className="text-sm font-medium text-emerald-600 mt-2">Nenhuma ação pendente para esta ocorrência.</p>
+              <button onClick={() => nav("/desempenho-diesel/tratativas")} className="mt-6 px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors">
+                Voltar à Lista
               </button>
             </div>
           )}
-        </div>
 
-        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Item titulo="Motorista" valor={`${t.motorista_nome || "-"}`} />
-          <Item titulo="Registro" valor={t.motorista_chapa || "-"} />
-
-          <Item
-            titulo="Ocorrência"
-            valor={
-              isEditing ? (
-                <input
-                  className="w-full border rounded px-2 py-1"
-                  value={editForm.tipo_ocorrencia}
-                  onChange={(e) => setEditForm((s) => ({ ...s, tipo_ocorrencia: e.target.value }))}
-                />
-              ) : (
-                t.tipo_ocorrencia
-              )
-            }
-          />
-
-          <Item
-            titulo="Prioridade"
-            valor={
-              isEditing ? (
-                <select
-                  className="w-full border rounded px-2 py-1"
-                  value={editForm.prioridade}
-                  onChange={(e) => setEditForm((s) => ({ ...s, prioridade: e.target.value }))}
-                >
-                  <option>Baixa</option>
-                  <option>Média</option>
-                  <option>Alta</option>
-                  <option>Gravíssima</option>
-                </select>
-              ) : (
-                t.prioridade
-              )
-            }
-          />
-
-          <Item
-            titulo="Setor"
-            valor={
-              isEditing ? (
-                <input
-                  className="w-full border rounded px-2 py-1"
-                  value={editForm.setor_origem}
-                  onChange={(e) => setEditForm((s) => ({ ...s, setor_origem: e.target.value }))}
-                />
-              ) : (
-                t.setor_origem
-              )
-            }
-          />
-
-          <Item
-            titulo="Linha"
-            valor={
-              isEditing ? (
-                <input
-                  className="w-full border rounded px-2 py-1"
-                  placeholder="Código ex.: 01TR ou NA"
-                  value={editForm.linha}
-                  onChange={(e) => setEditForm((s) => ({ ...s, linha: e.target.value }))}
-                />
-              ) : t.linha ? (
-                `${t.linha}${linhaDescricao ? ` - ${linhaDescricao}` : ""}`
-              ) : (
-                "-"
-              )
-            }
-          />
-
-          <Item titulo="Status" valor={t.status} />
-          <Item titulo="Data/Hora" valor={`${t.data_ocorrido || "-"} ${t.hora_ocorrido || ""}`} />
-
-          <Item
-            className="md:col-span-2"
-            titulo="Descrição"
-            valor={
-              isEditing ? (
-                <textarea
-                  className="w-full border rounded px-2 py-1"
-                  rows={3}
-                  value={editForm.descricao}
-                  onChange={(e) => setEditForm((s) => ({ ...s, descricao: e.target.value }))}
-                />
-              ) : (
-                t.descricao || "-"
-              )
-            }
-          />
-
-          <div className="md:col-span-2">
-            {renderEvidenciasGrid(evidenciasSolicitacao, "Evidências da solicitação")}
-          </div>
-        </dl>
-      </div>
-
-      {/* Conclusão */}
-      <div className="bg-white rounded-lg shadow-sm p-5">
-        <h2 className="text-lg font-semibold mb-3">Conclusão</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Ação aplicada</label>
-            <select className="w-full rounded-md border px-3 py-2" value={acao} onChange={(e) => setAcao(e.target.value)}>
-              {acoes.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {acao === "Suspensão" && (
-            <>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Dias</label>
-                <select
-                  className="w-full rounded-md border px-3 py-2"
-                  value={diasSusp}
-                  onChange={(e) => setDiasSusp(Number(e.target.value))}
-                >
-                  {[1, 3, 5, 7].map((d) => (
-                    <option key={d} value={d}>
-                      {d} dia(s)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Data da Suspensão</label>
-                <input
-                  type="date"
-                  className="w-full rounded-md border px-3 py-2"
-                  value={dataSuspensao}
-                  onChange={(e) => setDataSuspensao(e.target.value)}
-                />
-              </div>
-
-              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Item titulo="Início" valor={br(inicioSusp)} />
-                <Item titulo="Fim" valor={br(fimSusp)} />
-                <Item titulo="Retorno" valor={br(retornoSusp)} />
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="rounded-lg border bg-gray-50 p-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Resumo / Observações</label>
-            <textarea
-              rows={6}
-              className="w-full rounded-md border bg-white px-3 py-2"
-              value={resumo}
-              onChange={(e) => setResumo(e.target.value)}
-              placeholder="Descreva o que foi feito, conclusão, orientações, etc."
-            />
-            <p className="text-xs text-gray-500 mt-2">
-              Vai para <b>diesel_tratativas_detalhes.observacoes</b>.
-            </p>
-          </div>
-
-          <div className="rounded-lg border bg-gray-50 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <label className="block text-sm font-semibold text-gray-700">Anexo da Tratativa (opcional)</label>
-              <span className="text-xs text-gray-500">imagem ou PDF</span>
-            </div>
-
-            <div className="mt-3 rounded-lg border-2 border-dashed bg-white p-4">
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                onChange={(e) => setAnexoTratativa(e.target.files?.[0] || null)}
-                className="block w-full text-sm text-gray-700
-                  file:mr-3 file:rounded-md file:border-0
-                  file:bg-blue-600 file:px-4 file:py-2
-                  file:text-white hover:file:bg-blue-700"
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                Será salvo no histórico como <b>diesel_tratativas_detalhes.anexo_tratativa</b>.
-              </p>
-
-              {renderPreviewSelecionado()}
-            </div>
-
-            {/* Aqui não existe coluna anexo na tabela principal (igual disciplina). Mantemos placeholder vazio. */}
-            {renderArquivoOuThumb(null, "Anexo já anexado (se houver)")}
-          </div>
-        </div>
-
-        <div className="mt-6 flex gap-3 flex-wrap">
-          <button
-            onClick={concluir}
-            disabled={loading}
-            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {loading ? "Salvando…" : "Concluir"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (acao === "Orientação") return gerarOrientacao();
-              if (acao === "Advertência") return gerarAdvertencia();
-              if (acao === "Suspensão") return gerarSuspensao();
-              alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento.');
-            }}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
-          >
-            GERAR DOCUMENTO
-          </button>
-
-          <button
-            type="button"
-            onClick={() => nav("/diesel/tratativas")}
-            className="rounded-md bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"
-          >
-            Voltar
-          </button>
         </div>
       </div>
     </div>
   );
 }
 
+// Componente simples para os detalhes textuais
 function Item({ titulo, valor, className }) {
   return (
     <div className={className}>
-      <dt className="text-sm text-gray-600">{titulo}</dt>
-      <dd className="font-medium break-words">{valor}</dd>
+      <dt className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">{titulo}</dt>
+      <dd className="font-medium text-slate-700 break-words">{valor}</dd>
     </div>
   );
 }

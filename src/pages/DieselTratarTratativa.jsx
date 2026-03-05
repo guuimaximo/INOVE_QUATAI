@@ -11,7 +11,8 @@ import {
   FaCheckCircle, 
   FaFileAlt,
   FaRobot,
-  FaClock
+  FaClock,
+  FaFolderOpen
 } from "react-icons/fa";
 
 const acoes = [
@@ -55,16 +56,6 @@ export default function DieselTratarTratativa() {
   // Complementos
   const [linhaDescricao, setLinhaDescricao] = useState("");
   const [cargoMotorista, setCargoMotorista] = useState("MOTORISTA");
-
-  // Edição inline
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({
-    tipo_ocorrencia: "",
-    prioridade: "Média",
-    setor_origem: "",
-    linha: "",
-    descricao: "",
-  });
 
   // Suspensão
   const [diasSusp, setDiasSusp] = useState(1);
@@ -112,7 +103,7 @@ export default function DieselTratarTratativa() {
   const retornoSusp = useMemo(() => addDaysLocal(inicioSusp, Math.max(Number(diasSusp), 0)), [inicioSusp, diasSusp]);
 
   // ============================================================================
-  // HELPERS DE EVIDÊNCIAS E PDF (BLINDADOS CONTRA TELA BRANCA E HTML)
+  // HELPERS DE EVIDÊNCIAS E PDF
   // ============================================================================
   const fileNameFromUrl = (u) => {
     try {
@@ -142,72 +133,22 @@ export default function DieselTratarTratativa() {
     return [];
   }, [t]);
 
-  // Força que o Prontuário seja APENAS o PDF. 
+  // Filtra apenas o PDF do Prontuário
   const prontuarioPdfUrl = useMemo(() => {
-    // Busca o PDF com nome do robô
     const pdfDoRobo = safeEvidencias.find(u => typeof u === 'string' && u.toLowerCase().includes('.pdf') && u.toLowerCase().includes('prontuario'));
     if (pdfDoRobo) return pdfDoRobo;
-    // Se não achar com o nome, pega qualquer PDF disponível
     return safeEvidencias.find(u => typeof u === 'string' && u.toLowerCase().includes('.pdf'));
   }, [safeEvidencias]);
 
-  // Pega apenas as outras evidências, ignorando completamente o arquivo .html gerado pelo robô
+  // Outras Evidências (excluindo prontuário e lixo HTML)
   const outrasEvidencias = useMemo(() => {
     return safeEvidencias.filter(u => {
       if (typeof u !== 'string') return false;
-      if (u === prontuarioPdfUrl) return false; // Esconde o PDF que já está no visualizador
-      if (u.toLowerCase().includes('.html')) return false; // 🔥 IGNORA O ARQUIVO HTML DO ROBÔ
+      if (u === prontuarioPdfUrl) return false; 
+      if (u.toLowerCase().includes('.html')) return false; 
       return true;
     });
   }, [safeEvidencias, prontuarioPdfUrl]);
-
-  const renderEvidenciasGrid = (urls, label) => {
-    const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
-    if (arr.length === 0) return null;
-
-    return (
-      <div className="mt-4">
-        <span className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">{label}</span>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {arr.map((u, i) => {
-            const pdf = isPdf(u);
-            const img = !pdf && isImageUrl(u);
-            const name = fileNameFromUrl(u);
-
-            if (img) {
-              return (
-                <a key={`${u}-${i}`} href={u} target="_blank" rel="noopener noreferrer" className="group rounded-xl border border-slate-200 bg-white overflow-hidden hover:shadow-md transition-all">
-                  <img src={u} alt={name} className="h-28 w-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                  <div className="px-3 py-2 text-[10px] font-bold text-slate-600 truncate bg-slate-50 border-t border-slate-100">{name}</div>
-                </a>
-              );
-            }
-            return (
-              <a key={`${u}-${i}`} href={u} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-slate-200 bg-white p-4 hover:shadow-md transition-all flex flex-col justify-center items-center text-center">
-                <FaFileAlt className="text-3xl text-blue-500 mb-2" />
-                <span className="text-[10px] font-black px-2 py-1 rounded-md bg-blue-50 text-blue-700 mb-2">{pdf ? "PDF" : "ARQUIVO"}</span>
-                <div className="text-[10px] font-bold text-slate-600 truncate w-full">{name}</div>
-              </a>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const [previewObjUrl, setPreviewObjUrl] = useState(null);
-  useEffect(() => {
-    if (!anexoTratativa) {
-      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
-      setPreviewObjUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(anexoTratativa);
-    setPreviewObjUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return url;
-    });
-  }, [anexoTratativa]);
 
   // ============================================================================
   // CARGA DE DADOS
@@ -218,18 +159,10 @@ export default function DieselTratarTratativa() {
       if (error) throw error;
       setT(data || null);
 
-      setEditForm({
-        tipo_ocorrencia: data?.tipo_ocorrencia || "",
-        prioridade: data?.prioridade || "Média",
-        setor_origem: data?.setor_origem || "",
-        linha: data?.linha || "",
-        descricao: data?.descricao || "",
-      });
-
       if (data?.linha) {
         const { data: row } = await supabase.from("linhas").select("descricao").eq("codigo", data.linha).maybeSingle();
         setLinhaDescricao(row?.descricao || "");
-      } else setLinhaDescricao("");
+      }
 
       if (data?.motorista_chapa) {
         const { data: m } = await supabase.from("motoristas").select("cargo").eq("chapa", data.motorista_chapa).maybeSingle();
@@ -251,31 +184,8 @@ export default function DieselTratarTratativa() {
   }, [id]);
 
   // ============================================================================
-  // AÇÕES DE BANCO (SALVAR E CONCLUIR)
+  // AÇÕES DE BANCO E CONCLUSÃO
   // ============================================================================
-  async function salvarEdicao() {
-    if (!t) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.from("diesel_tratativas").update({
-        tipo_ocorrencia: editForm.tipo_ocorrencia || null,
-        prioridade: editForm.prioridade || null,
-        setor_origem: editForm.setor_origem || null,
-        linha: editForm.linha || null,
-        descricao: editForm.descricao || null,
-      }).eq("id", t.id);
-
-      if (error) throw error;
-      await carregarDados();
-      setIsEditing(false);
-      alert("Dados atualizados com sucesso!");
-    } catch (e) {
-      alert(`Erro ao salvar: ${e.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function concluir() {
     if (!t) return;
     if (!resumo.trim()) {
@@ -420,10 +330,10 @@ export default function DieselTratarTratativa() {
   if (!t) return <div className="flex h-screen items-center justify-center font-bold text-slate-500">Carregando dados da Tratativa...</div>;
 
   return (
-    <div className="mx-auto max-w-7xl p-4 md:p-8 font-sans bg-slate-50 min-h-screen text-slate-800">
+    <div className="mx-auto max-w-6xl p-4 md:p-8 font-sans bg-slate-50 min-h-screen text-slate-800 space-y-6">
       
       {/* HEADER PAGE */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4">
         <div>
           <h1 className="text-3xl font-black flex items-center gap-3 text-slate-900">
             <FaGavel className="text-rose-600" /> Resolução de Tratativa
@@ -433,169 +343,235 @@ export default function DieselTratarTratativa() {
           </p>
         </div>
         <div className="flex flex-col items-end gap-1 text-xs font-bold text-slate-400">
-          <div className="bg-white px-3 py-1.5 rounded-lg border shadow-sm">ID: #{t.id}</div>
+          <div className="bg-white px-3 py-1.5 rounded-lg border shadow-sm text-slate-600">ID: #{t.id}</div>
           <div className="flex items-center gap-1"><FaClock /> Abertura: {brDateTime(t.created_at)}</div>
         </div>
       </div>
 
+      {/* ==========================================
+          BLOCO 1: TOPO (DADOS ESQUERDA / DOCS DIREITA) 
+          ========================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* COLUNA ESQUERDA (PRONTUÁRIO -> DADOS -> EVIDÊNCIAS) */}
-        <div className="lg:col-span-2 space-y-6">
-
-          {/* 1. VISUALIZADOR DE PRONTUÁRIO (NO TOPO) */}
-          {prontuarioPdfUrl && (
-            <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-              <div className="bg-slate-800 border-b border-slate-900 px-6 py-4 flex items-center justify-between">
-                <h2 className="font-black text-white flex items-center gap-2"><FaRobot className="text-blue-400"/> Prontuário de IA (Dossiê)</h2>
-                <a href={prontuarioPdfUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1 border border-slate-600 px-3 py-1 rounded-lg transition-colors">
-                  <FaFilePdf /> Abrir Externo
-                </a>
-              </div>
-              <div className="bg-slate-200 w-full" style={{ height: "750px" }}>
-                <iframe src={prontuarioPdfUrl} className="w-full h-full border-none" title="Prontuario do Robô" />
-              </div>
+        {/* DADOS DO INFRATOR */}
+        <div className="lg:col-span-2 bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
+          <div className="bg-rose-50/50 border-b border-rose-100 px-6 py-4 flex items-center justify-between">
+            <h2 className="font-black text-rose-800 flex items-center gap-2"><FaUser /> Dados da Tratativa</h2>
+            <div className={`px-3 py-1 rounded-md text-[10px] font-black uppercase text-white shadow-sm ${t.status === "Concluída" ? "bg-emerald-500" : "bg-amber-500"}`}>
+              {t.status}
             </div>
-          )}
-          
-          {/* 2. INFO CARD PRINCIPAL */}
-          <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
-            <div className="bg-rose-50/50 border-b border-rose-100 px-6 py-4 flex items-center justify-between">
-              <h2 className="font-black text-rose-800 flex items-center gap-2"><FaUser /> Dados do Infrator</h2>
-              <div className={`px-3 py-1 rounded-md text-[10px] font-black uppercase text-white shadow-sm ${t.status === "Concluída" ? "bg-emerald-500" : "bg-amber-500"}`}>
-                {t.status}
-              </div>
+          </div>
+          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6 flex-1">
+            <div className="sm:col-span-2">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motorista Infrator</p>
+              <p className="text-xl font-black text-slate-800 mt-1">{t.motorista_nome || "N/D"}</p>
+              <p className="text-sm font-mono text-slate-500 mt-0.5">Chapa: {t.motorista_chapa || "N/D"}</p>
             </div>
-            <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motorista</p>
-                <p className="text-lg font-black text-slate-800 mt-1">{t.motorista_nome || "N/D"}</p>
-                <p className="text-sm font-mono text-slate-500 mt-0.5">Chapa: {t.motorista_chapa || "N/D"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nível de Prioridade</p>
-                <p className="text-base font-bold text-rose-600 mt-1">{t.prioridade}</p>
-              </div>
-              <div className="md:col-span-3">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motivo e Descrição da Abertura</p>
-                <div className="mt-2 bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-slate-700 whitespace-pre-wrap font-medium">
-                  {t.descricao || "Sem descrição."}
-                </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nível de Prioridade</p>
+              <p className="text-lg font-bold text-rose-600 mt-1">{t.prioridade}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Classificação</p>
+              <p className="text-base font-bold text-slate-700 mt-1">{t.tipo_ocorrencia || "N/D"}</p>
+            </div>
+            <div className="sm:col-span-2">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motivo e Descrição da Abertura</p>
+              <div className="mt-2 bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-slate-700 whitespace-pre-wrap font-medium">
+                {t.descricao || "Sem descrição informada."}
               </div>
             </div>
           </div>
-
-          {/* 3. OUTRAS EVIDÊNCIAS (EMBAIXO) */}
-          {outrasEvidencias.length > 0 && (
-            <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm p-6">
-              {renderEvidenciasGrid(outrasEvidencias, "Outras Evidências Anexadas")}
-            </div>
-          )}
         </div>
 
-        {/* COLUNA DIREITA (TIMELINE & AÇÃO) */}
-        <div className="space-y-6">
-          
-          {/* TIMELINE DE DETALHES "Conversar" */}
-          <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-[500px]">
-            <div className="bg-slate-50 border-b border-slate-100 px-6 py-4">
-              <h2 className="font-black text-slate-800 flex items-center gap-2"><FaHistory className="text-slate-400"/> Histórico da Tratativa</h2>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1 space-y-6">
-              {detalhes.length === 0 ? (
-                <div className="text-sm text-slate-400 italic text-center">Nenhum evento registrado ainda.</div>
+        {/* DOCUMENTOS E EVIDÊNCIAS */}
+        <div className="lg:col-span-1 bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
+          <div className="bg-slate-50 border-b border-slate-100 px-6 py-4">
+            <h2 className="font-black text-slate-800 flex items-center gap-2"><FaFolderOpen className="text-slate-400"/> Documentos Oficiais</h2>
+          </div>
+          <div className="p-6 space-y-6 flex-1">
+            
+            {/* PRONTUÁRIO DE IA (BOTÃO) */}
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Dossiê de Inteligência</p>
+              {prontuarioPdfUrl ? (
+                <a 
+                  href={prontuarioPdfUrl} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="flex items-center justify-center gap-3 w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-black transition-all shadow-md hover:shadow-lg transform active:scale-95"
+                >
+                  <FaRobot className="text-blue-400 text-xl" />
+                  Abrir Prontuário de IA
+                </a>
               ) : (
-                detalhes.map((det) => (
-                  <div key={det.id} className="relative pl-6 border-l-2 border-slate-200 last:border-l-transparent pb-2">
-                    <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-slate-200 border-2 border-white shadow-sm flex items-center justify-center">
-                      {det.acao_aplicada === "ABERTURA_MANUAL" || det.acao_aplicada === "ABERTURA_AUTOMATICA" ? <div className="h-2 w-2 rounded-full bg-blue-500" /> : <div className="h-2 w-2 rounded-full bg-emerald-500" />}
-                    </div>
-                    <div className="-mt-1.5">
-                      <p className="text-[10px] font-bold text-slate-400">{brDateTime(det.created_at)}</p>
-                      <p className="text-xs font-black text-slate-700 mt-0.5">{det.acao_aplicada}</p>
-                      <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{det.observacoes}</p>
-                      <p className="text-[9px] text-slate-400 mt-2">Por: {det.tratado_por_nome || det.tratado_por_login || "Sistema Robô"}</p>
-                      
-                      {/* Anexos deste evento */}
-                      {det.anexo_tratativa && (
-                        <a href={det.anexo_tratativa} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100 hover:bg-blue-100">
-                          <FaFileAlt /> Anexo da Conclusão
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))
+                <div className="text-sm font-medium text-slate-400 italic bg-slate-50 p-4 rounded-xl border border-dashed border-slate-200 text-center">
+                  Prontuário de IA não gerado ou indisponível.
+                </div>
               )}
             </div>
-          </div>
 
-          {/* FORMULÁRIO DE CONCLUSÃO */}
-          {t.status !== "Concluída" ? (
-            <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
-              <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4">
-                <h2 className="font-black text-emerald-800 flex items-center gap-2"><FaCheckCircle /> Parecer e Conclusão</h2>
+            {/* OUTRAS EVIDÊNCIAS (IMAGENS ETC) */}
+            {outrasEvidencias.length > 0 && (
+              <div className="pt-4 border-t border-slate-100">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Evidências Anexadas</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {outrasEvidencias.map((u, i) => {
+                    const pdf = isPdf(u);
+                    const img = !pdf && isImageUrl(u);
+                    const name = fileNameFromUrl(u);
+
+                    if (img) {
+                      return (
+                        <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="group rounded-xl border border-slate-200 bg-white overflow-hidden hover:shadow-md transition-all block">
+                          <img src={u} alt={name} className="h-20 w-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                          <div className="px-2 py-1.5 text-[9px] font-bold text-slate-600 truncate bg-slate-50 border-t border-slate-100">{name}</div>
+                        </a>
+                      );
+                    }
+                    return (
+                      <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-slate-200 bg-white p-3 hover:shadow-md transition-all flex flex-col justify-center items-center text-center">
+                        <FaFileAlt className="text-2xl text-blue-500 mb-1" />
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded bg-blue-50 text-blue-700 mb-1">{pdf ? "PDF" : "ARQ"}</span>
+                        <div className="text-[9px] font-bold text-slate-600 truncate w-full">{name}</div>
+                      </a>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="p-6 space-y-5">
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* ==========================================
+          BLOCO 2: MEIO (FORMULÁRIO DE CONCLUSÃO) 
+          ========================================== */}
+      {t.status !== "Concluída" ? (
+        <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4">
+            <h2 className="font-black text-emerald-800 flex items-center gap-2"><FaCheckCircle /> Parecer e Conclusão</h2>
+          </div>
+          <div className="p-6 md:p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              
+              {/* ESQUERDA: AÇÃO E SUSPENSÃO */}
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Ação Aplicada ao Motorista</label>
-                  <select className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 focus:border-emerald-500 outline-none" value={acao} onChange={(e) => setAcao(e.target.value)}>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Medida Disciplinar Aplicada</label>
+                  <select className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 focus:border-emerald-500 outline-none transition-colors" value={acao} onChange={(e) => setAcao(e.target.value)}>
                     {acoes.map((a) => (<option key={a} value={a}>{a}</option>))}
                   </select>
                 </div>
 
                 {acao === "Suspensão" && (
-                  <div className="grid grid-cols-2 gap-4 bg-amber-50 p-4 rounded-xl border border-amber-100">
+                  <div className="grid grid-cols-2 gap-4 bg-amber-50 p-4 rounded-xl border border-amber-100 animate-in fade-in">
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">Dias de Suspensão</label>
-                      <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold" value={diasSusp} onChange={(e) => setDiasSusp(Number(e.target.value))}>
+                      <label className="block text-xs font-bold text-amber-800 mb-1">Dias de Suspensão</label>
+                      <select className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm font-bold bg-white text-amber-900" value={diasSusp} onChange={(e) => setDiasSusp(Number(e.target.value))}>
                         {[1, 2, 3, 5, 7].map((d) => <option key={d} value={d}>{d} dia(s)</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">Data Início</label>
-                      <input type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold" value={dataSuspensao} onChange={(e) => setDataSuspensao(e.target.value)} />
+                      <label className="block text-xs font-bold text-amber-800 mb-1">Data Início</label>
+                      <input type="date" className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm font-bold bg-white text-amber-900" value={dataSuspensao} onChange={(e) => setDataSuspensao(e.target.value)} />
                     </div>
                   </div>
                 )}
-
-                <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Relato Final / Argumentação</label>
-                  <textarea rows={4} className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 focus:border-emerald-500 outline-none resize-none" value={resumo} onChange={(e) => setResumo(e.target.value)} placeholder="Detalhe a conversa, a justificativa do motorista e o motivo da ação tomada..." />
-                </div>
-
+                
                 <div>
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Anexar Documento Assinado (Opcional)</label>
-                  <input type="file" accept="image/*,application/pdf" onChange={(e) => setAnexoTratativa(e.target.files?.[0] || null)} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                  <div className="border-2 border-dashed border-slate-200 bg-slate-50 rounded-xl p-3 hover:bg-slate-100 transition-colors">
+                    <input type="file" accept="image/*,application/pdf" onChange={(e) => setAnexoTratativa(e.target.files?.[0] || null)} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-white file:text-blue-700 file:shadow-sm hover:file:bg-blue-50 cursor-pointer" />
+                  </div>
+                </div>
+              </div>
+
+              {/* DIREITA: RELATO FINAL E BOTÕES */}
+              <div className="flex flex-col h-full space-y-6">
+                <div className="flex-1 flex flex-col">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Relato Final / Argumentação</label>
+                  <textarea className="w-full flex-1 rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 focus:border-emerald-500 outline-none resize-none min-h-[120px] transition-colors" value={resumo} onChange={(e) => setResumo(e.target.value)} placeholder="Detalhe a conversa de feedback, a justificativa do motorista e o motivo da decisão tomada..." />
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 space-y-3">
-                  <button onClick={concluir} disabled={loading} className="w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-md transition-all disabled:opacity-50">
-                    {loading ? "Processando..." : "Finalizar Tratativa"}
-                  </button>
-
+                <div className="flex flex-col sm:flex-row gap-3">
                   <button type="button" onClick={() => {
                     if (acao === "Orientação") return gerarOrientacao();
                     if (acao === "Advertência") return gerarAdvertencia();
                     if (acao === "Suspensão") return gerarSuspensao();
                     alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento PDF de assinatura.');
-                  }} className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all">
-                    Gerar PDF para Assinatura
+                  }} className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all border border-slate-200">
+                    Imprimir Termo
+                  </button>
+
+                  <button onClick={concluir} disabled={loading} className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-md transition-all disabled:opacity-50 flex justify-center items-center gap-2">
+                    {loading ? "Salvando..." : <><FaCheckCircle /> Finalizar Tratativa</>}
                   </button>
                 </div>
               </div>
+
             </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-emerald-50 rounded-[1.5rem] border border-emerald-200 p-8 text-center shadow-sm">
+          <FaCheckCircle className="text-5xl text-emerald-400 mx-auto mb-4" />
+          <h3 className="text-2xl font-black text-emerald-800">Tratativa Concluída</h3>
+          <p className="text-sm font-medium text-emerald-600 mt-2">Nenhuma ação pendente para esta ocorrência.</p>
+          <button onClick={() => nav("/desempenho-diesel/tratativas")} className="mt-6 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors shadow-md">
+            Voltar à Central
+          </button>
+        </div>
+      )}
+
+      {/* ==========================================
+          BLOCO 3: RODAPÉ (TIMELINE DE HISTÓRICO) 
+          ========================================== */}
+      <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-100 px-6 py-4">
+          <h2 className="font-black text-slate-800 flex items-center gap-2"><FaHistory className="text-slate-400"/> Histórico de Movimentações</h2>
+        </div>
+        <div className="p-6 md:p-8">
+          {detalhes.length === 0 ? (
+            <div className="text-sm text-slate-400 italic text-center py-6">Nenhum evento registrado ainda.</div>
           ) : (
-            <div className="bg-emerald-50 rounded-[1.5rem] border border-emerald-200 p-8 text-center shadow-sm">
-              <FaCheckCircle className="text-5xl text-emerald-400 mx-auto mb-4" />
-              <h3 className="text-xl font-black text-emerald-800">Tratativa Finalizada</h3>
-              <p className="text-sm font-medium text-emerald-600 mt-2">Nenhuma ação pendente para esta ocorrência.</p>
-              <button onClick={() => nav("/desempenho-diesel/tratativas")} className="mt-6 px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors">
-                Voltar à Lista
-              </button>
+            <div className="space-y-6 pl-2">
+              {detalhes.map((det) => (
+                <div key={det.id} className="relative pl-6 border-l-2 border-slate-200 last:border-l-transparent pb-4">
+                  <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-slate-200 border-2 border-white shadow-sm flex items-center justify-center">
+                    {det.acao_aplicada === "ABERTURA_MANUAL" || det.acao_aplicada === "ABERTURA_AUTOMATICA" ? (
+                      <div className="h-2 w-2 rounded-full bg-blue-500" />
+                    ) : (
+                      <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                    )}
+                  </div>
+                  <div className="-mt-1.5 bg-slate-50 border border-slate-100 rounded-xl p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="text-sm font-black text-slate-700">{det.acao_aplicada}</p>
+                      <p className="text-[10px] font-bold text-slate-400 bg-white px-2 py-1 rounded border shadow-sm">{brDateTime(det.created_at)}</p>
+                    </div>
+                    <p className="text-sm text-slate-600 whitespace-pre-wrap font-medium leading-relaxed">{det.observacoes}</p>
+                    
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Por: {det.tratado_por_nome || det.tratado_por_login || "Sistema Robô"}
+                      </p>
+                      
+                      {det.anexo_tratativa && (
+                        <a href={det.anexo_tratativa} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors">
+                          <FaFilePdf /> Ver Anexo Adicionado
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
       </div>
+
     </div>
   );
 }

@@ -1,3 +1,12 @@
+// src/pages/DieselConsultarTratativa.jsx
+// ✅ AJUSTE PEDIDO:
+// - Mesma identidade/layout do DieselTratarTratativa (cards, header, docs, timeline)
+// - Remover do bloco de detalhes: Setor, Linha, Data/Hora (do ocorrido)
+// - Manter consulta (somente leitura), mas com botão "Ir para Tratar" no topo
+// - Mostrar "Quem abriu" (mesma lógica: busca em diesel_tratativas_detalhes ABERTURA_* com fallback)
+// - Mantém evidências: prontuário (PDF), evidências anexadas (thumbs) e timeline
+// ⚠️ NÃO altera banco; apenas front.
+
 import { useEffect, useMemo, useState, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabase";

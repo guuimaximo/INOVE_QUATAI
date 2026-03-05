@@ -191,6 +191,7 @@ export default function DesempenhoLancamento() {
       // 3. Fluxo Específico: TRATATIVA
       else {
         
+        // Removido o campo "metadata" aqui, pois a tabela diesel_tratativas não possui.
         const { data: tratData, error: errTrat } = await supabase.from("diesel_tratativas").insert({
           motorista_chapa: chapa || null,
           motorista_nome: nomeMot,
@@ -198,8 +199,7 @@ export default function DesempenhoLancamento() {
           prioridade: prioridadeTratativa,
           descricao: `${motivoFinal}\n\n${observacaoInicial}`,
           evidencias_urls: urlsEvidencias,
-          tipo_ocorrencia: "DIESEL_KML",
-          metadata: { origem: "LANCAMENTO_MANUAL_UI" }
+          tipo_ocorrencia: "DIESEL_KML"
         }).select("id").single();
         if (errTrat) throw errTrat;
 

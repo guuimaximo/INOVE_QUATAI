@@ -1,5 +1,5 @@
 // src/pages/DesempenhoLancamento.jsx
-import { useMemo, useState, useContext } from "react";
+import { useMemo, useState, useContext, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
@@ -37,10 +37,6 @@ const PRIORIDADES = ["Gravíssima", "Alta", "Média", "Baixa"];
 // =============================================================================
 // HELPERS
 // =============================================================================
-function isUuid(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || ""));
-}
-
 function filesToList(files) {
   if (!files?.length) return [];
   return Array.from(files).map((f) => ({
@@ -94,6 +90,12 @@ export default function DesempenhoLancamento() {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const [destino, setDestino] = useState(DESTINOS.ACOMP);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
@@ -135,7 +137,7 @@ export default function DesempenhoLancamento() {
   };
 
   // =============================================================================
-  // LÓGICA DE LANÇAMENTO (ASSÍNCRONO E DIRETO)
+  // LÓGICA DE LANÇAMENTO (DIRETO PARA ACOMPANHAMENTO OU TRATATIVA)
   // =============================================================================
   async function handleLancar() {
     if (!pronto || saving) return;
@@ -156,35 +158,23 @@ export default function DesempenhoLancamento() {
         urlsEvidencias = uploaded.map(u => u.publicUrl).filter(Boolean);
       }
 
-      // 2. Gravar histórico de lançamento genérico (apenas para registo interno)
-      const { data: lancData, error: errLanc } = await supabase.from("diesel_lancamentos").insert({
-        motorista_chapa: chapa || null,
-        motorista_nome: nomeMot,
-        destino: destino,
-        prioridade: destino === DESTINOS.TRAT ? prioridadeTratativa : null,
-        motivo: motivoFinal,
-        observacao_inicial: observacaoInicial,
-        evidencias_urls: urlsEvidencias,
-        lancado_por_login: lancadorLogin,
-        lancado_por_nome: lancadorNome,
-      }).select("id").single();
-      if (errLanc) throw errLanc;
-
-      // 3. Fluxo Específico: ACOMPANHAMENTO
+      // 2. Fluxo Específico: ACOMPANHAMENTO
       if (destino === DESTINOS.ACOMP) {
+        
         const { data: acompData, error: errAcomp } = await supabase.from("diesel_acompanhamentos").insert({
           motorista_chapa: chapa || null,
           motorista_nome: nomeMot,
           motivo: motivoFinal,
           status: "AGUARDANDO_INSTRUTOR",
           observacao_inicial: observacaoInicial,
+          metadata: { origem: "LANCAMENTO_MANUAL_UI" }
         }).select("id").single();
         if (errAcomp) throw errAcomp;
 
         await supabase.from("diesel_acompanhamento_eventos").insert({
           acompanhamento_id: acompData.id,
           tipo: "LANCAMENTO",
-          observacoes: `Lançamento manual: ${motivoFinal}`,
+          observacoes: `Lançamento manual realizado.\n\n${observacaoInicial}`,
           criado_por_login: lancadorLogin,
           criado_por_nome: lancadorNome
         });
@@ -198,8 +188,9 @@ export default function DesempenhoLancamento() {
         await dispatchGitHubWorkflow(WF_ACOMP, { ordem_batch_id: String(lote.id), qtd: "1" });
       } 
       
-      // 4. Fluxo Específico: TRATATIVA
+      // 3. Fluxo Específico: TRATATIVA
       else {
+        
         const { data: tratData, error: errTrat } = await supabase.from("diesel_tratativas").insert({
           motorista_chapa: chapa || null,
           motorista_nome: nomeMot,
@@ -208,6 +199,7 @@ export default function DesempenhoLancamento() {
           descricao: `${motivoFinal}\n\n${observacaoInicial}`,
           evidencias_urls: urlsEvidencias,
           tipo_ocorrencia: "DIESEL_KML",
+          metadata: { origem: "LANCAMENTO_MANUAL_UI" }
         }).select("id").single();
         if (errTrat) throw errTrat;
 
@@ -216,6 +208,7 @@ export default function DesempenhoLancamento() {
           acao_aplicada: "ABERTURA_MANUAL",
           observacoes: observacaoInicial,
           tratado_por_login: lancadorLogin,
+          tratado_por_nome: lancadorNome,
           extra: { evidencias_urls: urlsEvidencias }
         });
 
@@ -231,15 +224,17 @@ export default function DesempenhoLancamento() {
       setStatusMsg({ type: "success", text: "Sucesso! O lançamento foi gravado e o robô de IA acionado em segundo plano." });
       
       setTimeout(() => {
+        if (!mountedRef.current) return;
         limparTudo();
         if (destino === DESTINOS.TRAT) navigate("/desempenho-diesel/tratativas");
       }, 3000);
 
     } catch (e) {
       console.error(e);
+      if (!mountedRef.current) return;
       setStatusMsg({ type: "error", text: e.message || "Falha ao processar lançamento." });
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   }
 
@@ -346,7 +341,7 @@ export default function DesempenhoLancamento() {
                 value={observacaoInicial} 
                 onChange={(e) => setObservacaoInicial(e.target.value)} 
                 className="w-full flex-1 p-5 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:border-blue-500 focus:bg-white outline-none font-semibold text-slate-700 resize-none min-h-[140px] transition-all"
-                placeholder="Descreva aqui os factos, contextos ou as orientações passadas ao motorista..."
+                placeholder="Descreva aqui os fatos, contextos ou as orientações passadas ao motorista..."
               />
             </div>
 

@@ -33,6 +33,7 @@ export default function EmbarcadosMovimentacoes() {
   // Dados globais
   const [prefixos, setPrefixos] = useState([]);
   const [disponiveisGlobais, setDisponiveisGlobais] = useState([]);
+  const [usuarioLogado, setUsuarioLogado] = useState("SISTEMA"); // Estado para o responsável automático
 
   // Seleção de Veículo
   const [buscaVeiculo, setBuscaVeiculo] = useState("");
@@ -48,17 +49,24 @@ export default function EmbarcadosMovimentacoes() {
   const [tipoSelecionado, setTipoSelecionado] = useState(""); // Usado para instalar
   const [deviceSelecionado, setDeviceSelecionado] = useState(null); // Usado para movimentar
 
-  // Formulários
-  const [formInstalar, setFormInstalar] = useState({ embarcado_id: "", responsavel: "", observacao: "" });
+  // Formulários (responsavel removido daqui, pois será automático)
+  const [formInstalar, setFormInstalar] = useState({ embarcado_id: "", observacao: "" });
   const [formMovimentar, setFormMovimentar] = useState({
     destino_tipo: "ESTOQUE",
     destino_valor: "",
-    responsavel: "",
     observacao: "",
   });
 
   async function carregarIniciais() {
     setLoading(true);
+
+    // Busca o usuário logado para o campo "Responsável"
+    const { data: authData } = await supabase.auth.getSession();
+    const email = authData?.session?.user?.email;
+    if (email) {
+      setUsuarioLogado(email.split("@")[0].toUpperCase());
+    }
+
     const [resPrefixos, resDisponiveis] = await Promise.all([
       supabase.from("prefixos").select("codigo, cluster").order("codigo"),
       supabase
@@ -129,7 +137,7 @@ export default function EmbarcadosMovimentacoes() {
       setSaving(true);
       const embarcado = disponiveisGlobais.find((d) => d.id === formInstalar.embarcado_id);
 
-      // 1. Inserir Movimentação
+      // 1. Inserir Movimentação usando usuarioLogado
       const { error: movError } = await supabase.from("embarcados_movimentacoes").insert([
         {
           embarcado_id: embarcado.id,
@@ -138,19 +146,19 @@ export default function EmbarcadosMovimentacoes() {
           origem_valor: "Disponível",
           destino_tipo: "VEICULO",
           destino_valor: veiculoSelecionado,
-          responsavel: formInstalar.responsavel || null,
+          responsavel: usuarioLogado,
           observacao: formInstalar.observacao || null,
         },
       ]);
       if (movError) throw movError;
 
-      // 2. Encerrar instalação anterior se houver (lógica do sistema antigo)
+      // 2. Encerrar instalação anterior se houver
       await supabase
         .from("embarcados_instalacoes")
         .update({
           ativo: false,
           data_retirada: new Date().toISOString(),
-          retirado_por: formInstalar.responsavel || null,
+          retirado_por: usuarioLogado,
         })
         .eq("embarcado_id", embarcado.id)
         .eq("ativo", true);
@@ -160,7 +168,7 @@ export default function EmbarcadosMovimentacoes() {
         {
           embarcado_id: embarcado.id,
           veiculo: veiculoSelecionado,
-          instalado_por: formInstalar.responsavel || null,
+          instalado_por: usuarioLogado,
           observacao: formInstalar.observacao || null,
           ativo: true,
         },
@@ -179,8 +187,8 @@ export default function EmbarcadosMovimentacoes() {
 
       alert("Equipamento instalado com sucesso!");
       setModalAcao(null);
-      carregarIniciais(); // Recarrega disponíveis
-      carregarDadosVeiculo(veiculoSelecionado); // Recarrega o carro atual
+      carregarIniciais(); 
+      carregarDadosVeiculo(veiculoSelecionado); 
     } catch (err) {
       console.error(err);
       alert("Erro ao instalar equipamento.");
@@ -202,7 +210,6 @@ export default function EmbarcadosMovimentacoes() {
     try {
       setSaving(true);
 
-      // Validação Crítica: Se for para outro veículo, checar se ele já tem esse tipo!
       if (formMovimentar.destino_tipo === "VEICULO") {
         const { data: checkData } = await supabase
           .from("embarcados")
@@ -229,7 +236,7 @@ export default function EmbarcadosMovimentacoes() {
       if (formMovimentar.destino_tipo === "RESERVA") novoStatus = "RESERVA";
       if (formMovimentar.destino_tipo === "SUCATA") novoStatus = "SUCATA";
 
-      // 1. Inserir Movimentação
+      // 1. Inserir Movimentação usando usuarioLogado
       const { error: movError } = await supabase.from("embarcados_movimentacoes").insert([
         {
           embarcado_id: deviceSelecionado.id,
@@ -238,7 +245,7 @@ export default function EmbarcadosMovimentacoes() {
           origem_valor: veiculoSelecionado,
           destino_tipo: formMovimentar.destino_tipo,
           destino_valor: destValor,
-          responsavel: formMovimentar.responsavel || null,
+          responsavel: usuarioLogado,
           observacao: formMovimentar.observacao || null,
         },
       ]);
@@ -250,7 +257,7 @@ export default function EmbarcadosMovimentacoes() {
         .update({
           ativo: false,
           data_retirada: new Date().toISOString(),
-          retirado_por: formMovimentar.responsavel || null,
+          retirado_por: usuarioLogado,
         })
         .eq("embarcado_id", deviceSelecionado.id)
         .eq("ativo", true);
@@ -261,7 +268,7 @@ export default function EmbarcadosMovimentacoes() {
           {
             embarcado_id: deviceSelecionado.id,
             veiculo: formMovimentar.destino_valor,
-            instalado_por: formMovimentar.responsavel || null,
+            instalado_por: usuarioLogado,
             observacao: formMovimentar.observacao || null,
             ativo: true,
           },
@@ -383,7 +390,21 @@ export default function EmbarcadosMovimentacoes() {
         {/* DASHBOARD DO VEÍCULO (CARDS) */}
         {veiculoSelecionado && (
           <div className="space-y-4 animate-in slide-in-from-bottom-4">
-            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 px-2">
+            
+            {/* RESUMO EM LINHA ÚNICA DOS EQUIPAMENTOS INSTALADOS */}
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3 flex flex-wrap items-center justify-center gap-4 text-xs font-black text-indigo-800 uppercase tracking-widest shadow-sm">
+              <span className="text-slate-500 mr-2">Resumo Instalados:</span>
+              {TIPOS_EMBARCADOS.map(tipo => {
+                const qtd = embarcadosVeiculo.filter(e => e.tipo === tipo).length;
+                return (
+                  <span key={tipo} className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-indigo-100 shadow-sm">
+                    {tipo}: <span className={qtd > 0 ? "text-emerald-600" : "text-indigo-300"}>{qtd}</span>
+                  </span>
+                );
+              })}
+            </div>
+
+            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 px-2 mt-4">
               <FaTools className="text-slate-400" /> Status do Veículo: <span className="text-indigo-600">{veiculoSelecionado}</span>
             </h2>
 
@@ -409,7 +430,7 @@ export default function EmbarcadosMovimentacoes() {
                         <button
                           onClick={() => {
                             setTipoSelecionado(tipo);
-                            setFormInstalar({ embarcado_id: "", responsavel: "", observacao: "" });
+                            setFormInstalar({ embarcado_id: "", observacao: "" });
                             setModalAcao("INSTALAR");
                           }}
                           className="px-5 py-2.5 rounded-xl bg-white border border-red-200 text-red-700 font-black text-sm shadow-sm hover:bg-red-50 flex items-center gap-2 transition-colors"
@@ -438,7 +459,7 @@ export default function EmbarcadosMovimentacoes() {
                         <button
                           onClick={() => {
                             setDeviceSelecionado(embarcado);
-                            setFormMovimentar({ destino_tipo: "ESTOQUE", destino_valor: "", responsavel: "", observacao: "" });
+                            setFormMovimentar({ destino_tipo: "ESTOQUE", destino_valor: "", observacao: "" });
                             setModalAcao("MOVIMENTAR");
                           }}
                           className="w-full px-5 py-3 rounded-xl bg-white border border-amber-300 text-amber-800 font-black text-sm shadow-sm hover:bg-amber-100 flex items-center justify-center gap-2 transition-colors"
@@ -465,7 +486,7 @@ export default function EmbarcadosMovimentacoes() {
                       <button
                         onClick={() => {
                           setDeviceSelecionado(embarcado);
-                          setFormMovimentar({ destino_tipo: "ESTOQUE", destino_valor: "", responsavel: "", observacao: "" });
+                          setFormMovimentar({ destino_tipo: "ESTOQUE", destino_valor: "", observacao: "" });
                           setModalAcao("MOVIMENTAR");
                         }}
                         className="w-full px-5 py-3 rounded-xl bg-white border border-emerald-200 text-emerald-700 font-black text-sm shadow-sm hover:bg-emerald-100 flex items-center justify-center gap-2 transition-colors"
@@ -518,13 +539,13 @@ export default function EmbarcadosMovimentacoes() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-black uppercase text-slate-500 mb-1.5 block">Responsável pela Instalação</label>
+                  <label className="text-xs font-black uppercase text-slate-500 mb-1.5 block">Responsável (Lançamento)</label>
                   <input
                     type="text"
-                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                    value={formInstalar.responsavel}
-                    onChange={(e) => setFormInstalar({ ...formInstalar, responsavel: e.target.value })}
-                    placeholder="Nome do técnico"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-500 bg-slate-100 cursor-not-allowed"
+                    value={usuarioLogado}
+                    disabled
+                    title="Usuário logado no sistema"
                   />
                 </div>
 
@@ -611,13 +632,13 @@ export default function EmbarcadosMovimentacoes() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-black uppercase text-slate-500 mb-1.5 block">Responsável</label>
+                  <label className="text-xs font-black uppercase text-slate-500 mb-1.5 block">Responsável (Lançamento)</label>
                   <input
                     type="text"
-                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                    value={formMovimentar.responsavel}
-                    onChange={(e) => setFormMovimentar({ ...formMovimentar, responsavel: e.target.value })}
-                    placeholder="Nome do técnico"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-500 bg-slate-100 cursor-not-allowed"
+                    value={usuarioLogado}
+                    disabled
+                    title="Usuário logado no sistema"
                   />
                 </div>
 

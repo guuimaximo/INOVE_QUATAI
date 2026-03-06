@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import {
   FaPlus,
@@ -6,10 +6,8 @@ import {
   FaTimes,
   FaSearch,
   FaSync,
-  FaTools,
   FaWrench,
-  FaCheckCircle,
-  FaExclamationTriangle,
+  FaUpload,
 } from "react-icons/fa";
 
 const TIPOS = [
@@ -23,6 +21,15 @@ const TIPOS = [
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
 const STATUS = ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS", "CONCLUIDA", "CANCELADA"];
+
+const BUCKET_FOTOS = "embarcados";
+
+function sanitizeFileName(name) {
+  return String(name || "arquivo")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w.\-]+/g, "_");
+}
 
 function statusClass(status) {
   switch (status) {
@@ -58,9 +65,16 @@ function prioridadeClass(p) {
   }
 }
 
-function NovaSolicitacaoModal({ open, onClose, onSave, saving, embarcados, prefixos }) {
+function EmptyPhoto() {
+  return (
+    <div className="w-full h-40 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 text-sm font-bold">
+      Sem foto
+    </div>
+  );
+}
+
+function NovaSolicitacaoModal({ open, onClose, onSave, saving, prefixos }) {
   const [form, setForm] = useState({
-    embarcado_id: "",
     veiculo: "",
     tipo_embarcado: "TELEMETRIA",
     problema: "",
@@ -73,10 +87,12 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, embarcados, prefi
     ativo: true,
   });
 
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
   useEffect(() => {
     if (!open) return;
     setForm({
-      embarcado_id: "",
       veiculo: "",
       tipo_embarcado: "TELEMETRIA",
       problema: "",
@@ -90,33 +106,65 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, embarcados, prefi
     });
   }, [open]);
 
-  useEffect(() => {
-    const emb = embarcados.find((e) => e.id === form.embarcado_id);
-    if (!emb) return;
-
-    setForm((prev) => ({
-      ...prev,
-      tipo_embarcado: emb.tipo || prev.tipo_embarcado,
-      veiculo: emb.localizacao_tipo === "VEICULO" ? emb.localizacao_valor || "" : prev.veiculo,
-    }));
-  }, [form.embarcado_id, embarcados]);
-
   if (!open) return null;
+
+  async function handleUploadFoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+
+      const nomeLimpo = sanitizeFileName(file.name);
+      const ext = nomeLimpo.split(".").pop() || "jpg";
+      const baseSemDuplicarExt = nomeLimpo.replace(/\.[^.]+$/, "");
+      const filePath = `reparos/solicitacoes/${form.veiculo || "sem_veiculo"}/${Date.now()}_${baseSemDuplicarExt}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET_FOTOS)
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error(uploadError);
+        alert(uploadError.message || "Erro ao enviar foto.");
+        return;
+      }
+
+      const { data } = supabase.storage.from(BUCKET_FOTOS).getPublicUrl(filePath);
+
+      setForm((prev) => ({
+        ...prev,
+        foto_url: data?.publicUrl || "",
+      }));
+    } finally {
+      setUploading(false);
+      if (e.target) e.target.value = "";
+    }
+  }
 
   async function submit(e) {
     e.preventDefault();
 
+    if (!form.veiculo) return alert("Veículo é obrigatório.");
     if (!form.tipo_embarcado) return alert("Tipo do embarcado é obrigatório.");
     if (!form.problema.trim()) return alert("Problema é obrigatório.");
     if (!form.prioridade) return alert("Prioridade é obrigatória.");
 
     await onSave({
-      ...form,
+      veiculo: form.veiculo,
+      tipo_embarcado: form.tipo_embarcado,
       problema: form.problema.trim(),
       descricao: form.descricao.trim(),
       local_problema: form.local_problema.trim(),
+      prioridade: form.prioridade,
       solicitante: form.solicitante.trim(),
       foto_url: form.foto_url.trim(),
+      status: "ABERTA",
+      ativo: true,
+      embarcado_id: null,
     });
   }
 
@@ -136,16 +184,16 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, embarcados, prefi
 
         <form onSubmit={submit} className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Embarcado</label>
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Veículo</label>
             <select
               className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.embarcado_id}
-              onChange={(e) => setForm({ ...form, embarcado_id: e.target.value })}
+              value={form.veiculo}
+              onChange={(e) => setForm({ ...form, veiculo: e.target.value })}
             >
               <option value="">Selecione...</option>
-              {embarcados.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.numero_equipamento} - {e.tipo}
+              {prefixos.map((p) => (
+                <option key={p.codigo} value={p.codigo}>
+                  {p.codigo} {p.cluster ? `- ${p.cluster}` : ""}
                 </option>
               ))}
             </select>
@@ -167,22 +215,6 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, embarcados, prefi
           </div>
 
           <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Veículo</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.veiculo}
-              onChange={(e) => setForm({ ...form, veiculo: e.target.value })}
-            >
-              <option value="">Selecione...</option>
-              {prefixos.map((p) => (
-                <option key={p.codigo} value={p.codigo}>
-                  {p.codigo} {p.cluster ? `- ${p.cluster}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Prioridade</label>
             <select
               className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
@@ -197,6 +229,15 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, embarcados, prefi
             </select>
           </div>
 
+          <div>
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Solicitante</label>
+            <input
+              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
+              value={form.solicitante}
+              onChange={(e) => setForm({ ...form, solicitante: e.target.value })}
+            />
+          </div>
+
           <div className="md:col-span-2">
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Problema</label>
             <input
@@ -207,22 +248,13 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, embarcados, prefi
             />
           </div>
 
-          <div>
+          <div className="md:col-span-2">
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Local do problema</label>
             <input
               className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
               value={form.local_problema}
               onChange={(e) => setForm({ ...form, local_problema: e.target.value })}
               placeholder="Ex: Painel frontal / teto / traseira"
-            />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Solicitante</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.solicitante}
-              onChange={(e) => setForm({ ...form, solicitante: e.target.value })}
             />
           </div>
 
@@ -236,12 +268,49 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, embarcados, prefi
           </div>
 
           <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">URL da foto</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.foto_url}
-              onChange={(e) => setForm({ ...form, foto_url: e.target.value })}
-            />
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Foto</label>
+
+            <div className="flex flex-col gap-3">
+              {form.foto_url ? (
+                <img
+                  src={form.foto_url}
+                  alt="Evidência"
+                  className="w-full h-52 object-cover rounded-xl border bg-white"
+                />
+              ) : (
+                <EmptyPhoto />
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60"
+                >
+                  <FaUpload />
+                  {uploading ? "Enviando foto..." : "Anexar foto"}
+                </button>
+
+                {form.foto_url && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, foto_url: "" }))}
+                    className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-black"
+                  >
+                    Remover foto
+                  </button>
+                )}
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleUploadFoto}
+              />
+            </div>
           </div>
 
           <div className="md:col-span-2 flex justify-between gap-3 pt-2 border-t">
@@ -255,7 +324,7 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, embarcados, prefi
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || uploading}
               className="px-4 py-2 rounded-lg font-black text-sm bg-gray-900 text-white hover:bg-black disabled:opacity-60 flex items-center gap-2"
             >
               <FaSave /> {saving ? "Salvando..." : "Salvar solicitação"}
@@ -277,6 +346,9 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
     foto_url: "",
   });
 
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
   useEffect(() => {
     if (!open) return;
     setForm({
@@ -291,10 +363,48 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
 
   if (!open || !solicitacao) return null;
 
+  async function handleUploadFoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+
+      const nomeLimpo = sanitizeFileName(file.name);
+      const ext = nomeLimpo.split(".").pop() || "jpg";
+      const baseSemDuplicarExt = nomeLimpo.replace(/\.[^.]+$/, "");
+      const filePath = `reparos/execucao/${solicitacao.id}/${Date.now()}_${baseSemDuplicarExt}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET_FOTOS)
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error(uploadError);
+        alert(uploadError.message || "Erro ao enviar foto.");
+        return;
+      }
+
+      const { data } = supabase.storage.from(BUCKET_FOTOS).getPublicUrl(filePath);
+
+      setForm((prev) => ({
+        ...prev,
+        foto_url: data?.publicUrl || "",
+      }));
+    } finally {
+      setUploading(false);
+      if (e.target) e.target.value = "";
+    }
+  }
+
   async function submit(e) {
     e.preventDefault();
 
     if (!form.status_evento) return alert("Status é obrigatório.");
+
     await onSave({
       ...form,
       acao_executada: form.acao_executada.trim(),
@@ -374,12 +484,49 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
           </div>
 
           <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">URL da evidência</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.foto_url}
-              onChange={(e) => setForm({ ...form, foto_url: e.target.value })}
-            />
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Evidência</label>
+
+            <div className="flex flex-col gap-3">
+              {form.foto_url ? (
+                <img
+                  src={form.foto_url}
+                  alt="Evidência"
+                  className="w-full h-52 object-cover rounded-xl border bg-white"
+                />
+              ) : (
+                <EmptyPhoto />
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60"
+                >
+                  <FaUpload />
+                  {uploading ? "Enviando foto..." : "Anexar foto"}
+                </button>
+
+                {form.foto_url && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, foto_url: "" }))}
+                    className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-black"
+                  >
+                    Remover foto
+                  </button>
+                )}
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleUploadFoto}
+              />
+            </div>
           </div>
 
           <div className="md:col-span-2 flex justify-between gap-3 pt-2 border-t">
@@ -393,7 +540,7 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || uploading}
               className="px-4 py-2 rounded-lg font-black text-sm bg-gray-900 text-white hover:bg-black disabled:opacity-60 flex items-center gap-2"
             >
               <FaSave /> {saving ? "Salvando..." : "Salvar execução"}
@@ -407,7 +554,6 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
 
 export default function EmbarcadosReparos() {
   const [rows, setRows] = useState([]);
-  const [embarcados, setEmbarcados] = useState([]);
   const [prefixos, setPrefixos] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -423,19 +569,16 @@ export default function EmbarcadosReparos() {
   async function carregar() {
     setLoading(true);
 
-    const [r1, r2, r3] = await Promise.all([
+    const [r1, r2] = await Promise.all([
       supabase.from("embarcados_solicitacoes_reparo").select("*").order("created_at", { ascending: false }),
-      supabase.from("embarcados").select("id, numero_equipamento, tipo, localizacao_tipo, localizacao_valor").eq("ativo", true).order("numero_equipamento"),
       supabase.from("prefixos").select("codigo, cluster").order("codigo"),
     ]);
 
     if (r1.error) console.error(r1.error);
     if (r2.error) console.error(r2.error);
-    if (r3.error) console.error(r3.error);
 
     setRows(r1.data || []);
-    setEmbarcados(r2.data || []);
-    setPrefixos(r3.data || []);
+    setPrefixos(r2.data || []);
     setLoading(false);
   }
 
@@ -560,7 +703,7 @@ export default function EmbarcadosReparos() {
               Reparos de Embarcados
             </h1>
             <p className="text-sm text-gray-500 font-semibold mt-1">
-              Abertura de solicitação e controle da execução do serviço.
+              Abertura por veículo e controle da execução do serviço.
             </p>
           </div>
 
@@ -725,7 +868,6 @@ export default function EmbarcadosReparos() {
         onClose={() => setNovaOpen(false)}
         onSave={salvarSolicitacao}
         saving={saving}
-        embarcados={embarcados}
         prefixos={prefixos}
       />
 

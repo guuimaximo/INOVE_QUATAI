@@ -554,14 +554,13 @@ export default function EmbarcadosCentral() {
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-5">
           <div className="flex flex-col 2xl:flex-row 2xl:items-end 2xl:justify-between gap-4">
             <div>
-              <div className="text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">
-                Telemetria / Ativos
+              <div className="text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">              
               </div>
               <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">
-                Central de Embarcados
+                Cadastro de Embarcados
               </h1>
               <p className="text-sm text-slate-500 font-semibold mt-1">
-                Cadastro mestre dos embarcados com status automático, posição atual e edição detalhada em linha.
+                
               </p>
             </div>
 

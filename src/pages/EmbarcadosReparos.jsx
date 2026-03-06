@@ -35,6 +35,8 @@ function statusLabel(status) {
       return "AG. PEÇAS";
     case "CONCLUIDA":
       return "CONCLUÍDA";
+    case "CANCELADA":
+      return "CANCELADA";
     default:
       return status || "-";
   }
@@ -164,7 +166,6 @@ export default function EmbarcadosReparos() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-[1700px] space-y-4">
-        {/* CABEÇALHO */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
           <div className="flex flex-col 2xl:flex-row 2xl:items-end 2xl:justify-between gap-4">
             <div>
@@ -189,7 +190,7 @@ export default function EmbarcadosReparos() {
               </button>
 
               <button
-                onClick={() => navigate("/embarcados/reparos/nova")}
+                onClick={() => navigate("/embarcados-reparos/nova")}
                 className="h-[44px] px-4 rounded-2xl bg-emerald-600 text-white font-black text-sm hover:bg-emerald-500 flex items-center gap-2"
               >
                 <FaPlus />
@@ -199,7 +200,6 @@ export default function EmbarcadosReparos() {
           </div>
         </div>
 
-        {/* CARDS */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
             <div className="flex items-center justify-between">
@@ -250,7 +250,6 @@ export default function EmbarcadosReparos() {
           </div>
         </div>
 
-        {/* FILTROS */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4">
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
             <div>
@@ -306,20 +305,35 @@ export default function EmbarcadosReparos() {
           </div>
         </div>
 
-        {/* TABELA */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1250px] text-sm">
               <thead className="bg-slate-100 border-b border-slate-200">
                 <tr className="text-left">
-                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Criado em</th>
-                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Veículo</th>
-                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Tipo</th>
-                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Problema</th>
-                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Prioridade</th>
-                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Status</th>
-                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Solicitante</th>
-                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600 text-center">Ações</th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">
+                    Criado em
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">
+                    Veículo
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">
+                    Tipo
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">
+                    Problema
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">
+                    Prioridade
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">
+                    Solicitante
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600 text-center">
+                    Ações
+                  </th>
                 </tr>
               </thead>
 
@@ -389,7 +403,7 @@ export default function EmbarcadosReparos() {
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-2">
                           <button
-                            onClick={() => navigate(`/embarcados/reparos/${r.id}`)}
+                            onClick={() => navigate(`/embarcados-reparos/${r.id}`)}
                             className="px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-black flex items-center gap-2"
                           >
                             <FaEye />
@@ -397,7 +411,7 @@ export default function EmbarcadosReparos() {
                           </button>
 
                           <button
-                            onClick={() => navigate(`/embarcados/reparos/${r.id}/executar`)}
+                            onClick={() => navigate(`/embarcados-reparos/${r.id}/executar`)}
                             className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center gap-2"
                           >
                             <FaWrench />

@@ -33,6 +33,7 @@ export default function EmbarcadosMovimentacoes() {
   // Dados globais
   const [prefixos, setPrefixos] = useState([]);
   const [disponiveisGlobais, setDisponiveisGlobais] = useState([]);
+  const [instaladosGlobais, setInstaladosGlobais] = useState([]); // Novo estado para o resumo do topo
   const [usuarioLogado, setUsuarioLogado] = useState("SISTEMA"); // Estado para o responsável automático
 
   // Seleção de Veículo
@@ -67,7 +68,7 @@ export default function EmbarcadosMovimentacoes() {
       setUsuarioLogado(email.split("@")[0].toUpperCase());
     }
 
-    const [resPrefixos, resDisponiveis] = await Promise.all([
+    const [resPrefixos, resDisponiveis, resInstalados] = await Promise.all([
       supabase.from("prefixos").select("codigo, cluster").order("codigo"),
       supabase
         .from("embarcados")
@@ -75,10 +76,17 @@ export default function EmbarcadosMovimentacoes() {
         .eq("ativo", true)
         .in("status_atual", ["DISPONIVEL", "RESERVA", "RETORNADO"])
         .order("numero_equipamento"),
+      // Busca todos os embarcados instalados em qualquer veículo para o Resumo do Topo
+      supabase
+        .from("embarcados")
+        .select("tipo")
+        .eq("ativo", true)
+        .eq("localizacao_tipo", "VEICULO")
     ]);
 
     if (resPrefixos.data) setPrefixos(resPrefixos.data);
     if (resDisponiveis.data) setDisponiveisGlobais(resDisponiveis.data);
+    if (resInstalados.data) setInstaladosGlobais(resInstalados.data);
     setLoading(false);
   }
 
@@ -311,6 +319,19 @@ export default function EmbarcadosMovimentacoes() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
       <div className="mx-auto max-w-[1700px] space-y-4">
         
+        {/* RESUMO GLOBAL EM LINHA ÚNICA FIXO NO TOPO */}
+        <div className="bg-indigo-900 border border-indigo-800 rounded-3xl p-4 flex flex-nowrap overflow-x-auto hide-scrollbar items-center lg:justify-center gap-4 text-sm md:text-base font-black text-white uppercase tracking-widest shadow-md whitespace-nowrap">
+          <span className="text-indigo-200 mr-2 flex-shrink-0">Total Instalados Frota:</span>
+          {TIPOS_EMBARCADOS.map(tipo => {
+            const qtd = instaladosGlobais.filter(e => e.tipo === tipo).length;
+            return (
+              <span key={tipo} className="flex items-center gap-2 bg-indigo-800/50 px-4 py-2 rounded-xl border border-indigo-700/50 shadow-sm flex-shrink-0">
+                {tipo}: <span className={qtd > 0 ? "text-emerald-400 text-lg" : "text-indigo-300 text-lg"}>{qtd}</span>
+              </span>
+            );
+          })}
+        </div>
+
         {/* HEADER PRINCIPAL */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
           <div className="flex flex-col 2xl:flex-row 2xl:items-end 2xl:justify-between gap-4">
@@ -390,20 +411,6 @@ export default function EmbarcadosMovimentacoes() {
         {/* DASHBOARD DO VEÍCULO (CARDS) */}
         {veiculoSelecionado && (
           <div className="space-y-4 animate-in slide-in-from-bottom-4">
-            
-            {/* RESUMO EM LINHA ÚNICA DOS EQUIPAMENTOS INSTALADOS */}
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3 flex flex-wrap items-center justify-center gap-4 text-xs font-black text-indigo-800 uppercase tracking-widest shadow-sm">
-              <span className="text-slate-500 mr-2">Resumo Instalados:</span>
-              {TIPOS_EMBARCADOS.map(tipo => {
-                const qtd = embarcadosVeiculo.filter(e => e.tipo === tipo).length;
-                return (
-                  <span key={tipo} className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-indigo-100 shadow-sm">
-                    {tipo}: <span className={qtd > 0 ? "text-emerald-600" : "text-indigo-300"}>{qtd}</span>
-                  </span>
-                );
-              })}
-            </div>
-
             <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 px-2 mt-4">
               <FaTools className="text-slate-400" /> Status do Veículo: <span className="text-indigo-600">{veiculoSelecionado}</span>
             </h2>

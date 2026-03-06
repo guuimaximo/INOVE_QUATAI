@@ -49,6 +49,8 @@ import EmbarcadosCentral from "./pages/EmbarcadosCentral";
 import EmbarcadosMovimentacoes from "./pages/EmbarcadosMovimentacoes";
 import EmbarcadosReparos from "./pages/EmbarcadosReparos";
 import EmbarcadosEnvioManutencao from "./pages/EmbarcadosEnvioManutencao";
+import ReparoSolicitacaoDetalhes from "./components/embarcados/ReparoSolicitacaoDetalhes";
+import ReparoSolicitacaoExecucao from "./components/embarcados/ReparoSolicitacaoExecucao";
 
 // ✅ Módulo separado Diesel
 import Desempenho_Diesel_Tratativas_Central from "./pages/Desempenho_Diesel_Tratativas_Central";
@@ -95,7 +97,10 @@ export default function App() {
           <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
           <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
           <Route path="/desempenho-diesel-checkpoint/:id" element={<DesempenhoDieselCheckpoint />} />
-          <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
+          <Route
+            path="/desempenho-diesel"
+            element={<Navigate to="/desempenho-diesel-resumo" replace />}
+          />
 
           {/* ✅ Tratativas Diesel (módulo separado - novo trio) */}
           <Route
@@ -117,6 +122,14 @@ export default function App() {
           <Route path="/embarcados-central" element={<EmbarcadosCentral />} />
           <Route path="/embarcados-movimentacoes" element={<EmbarcadosMovimentacoes />} />
           <Route path="/embarcados-reparos" element={<EmbarcadosReparos />} />
+          <Route
+            path="/embarcados-reparos/:id"
+            element={<ReparoSolicitacaoDetalhes />}
+          />
+          <Route
+            path="/embarcados-reparos/:id/executar"
+            element={<ReparoSolicitacaoExecucao />}
+          />
           <Route path="/embarcados-envio-manutencao" element={<EmbarcadosEnvioManutencao />} />
           <Route path="/embarcados" element={<Navigate to="/embarcados-central" replace />} />
 

@@ -707,16 +707,17 @@ export default function PCMDiario() {
     try {
       if (!reportRef.current) return;
 
-      // garante que fontes/estilos já assentaram
       await new Promise((r) => requestAnimationFrame(r));
 
-      const scale = 3; // nítido
+      const scale = 3;
       const canvas = await html2canvas(reportRef.current, {
         scale,
         backgroundColor: "#ffffff",
         useCORS: true,
         allowTaint: true,
         logging: false,
+        windowWidth: reportRef.current.scrollWidth,
+        windowHeight: reportRef.current.scrollHeight,
       });
 
       const fileName = `PCM_${pcmInfo?.data_referencia || "diario"}.pdf`;
@@ -730,7 +731,6 @@ export default function PCMDiario() {
       const printableW = pageW - margin * 2;
       const printableH = pageH - margin * 2;
 
-      // conversão px -> mm baseado na largura
       const mmPerPx = printableW / canvas.width;
       const pageSlicePx = Math.floor(printableH / mmPerPx);
 
@@ -1061,8 +1061,150 @@ export default function PCMDiario() {
         </div>
       </div>
 
-      {/* RELATORIO */}
-      <div ref={reportRef} className="bg-white shadow-2xl overflow-hidden rounded-xl border mt-4">
+      {/* BLOCO EXCLUSIVO DO PDF */}
+      <div className="fixed -left-[99999px] top-0 pointer-events-none opacity-0">
+        <div ref={reportRef} className="bg-white w-[1400px] p-6 text-black">
+          {/* TOPO PDF */}
+          <div className="mb-5">
+            <div className="bg-blue-700 text-white rounded-t-xl px-5 py-4">
+              <div className="text-2xl font-black uppercase tracking-tight">PCM - Planejamento e Controle de Manutenção</div>
+              <div className="text-sm font-semibold mt-1">
+                Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span>
+              </div>
+            </div>
+
+            <div className="border border-t-0 rounded-b-xl px-5 py-4 bg-white">
+              <div className="flex flex-wrap gap-6 text-sm font-semibold text-gray-700">
+                <div>
+                  Itens em aberto: <span className="font-black text-gray-900">{veiculosFiltrados.length}</span>
+                </div>
+                <div>
+                  Status:{" "}
+                  <span className={`font-black ${pcmEditavel ? "text-green-700" : "text-gray-700"}`}>
+                    {pcmEditavel ? "EDITÁVEL (até 10:00 do dia seguinte)" : "SOMENTE CONSULTA (fechado)"}
+                  </span>
+                </div>
+                <div>
+                  Gerado em: <span className="font-black text-gray-900">{new Date().toLocaleString("pt-BR")}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* RESUMO NO COMEÇO DO PDF */}
+          <div className="grid grid-cols-6 gap-3 mb-6">
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Total</p>
+              <p className="text-2xl font-black mt-1">{resumo.total}</p>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black text-gray-500 uppercase">GNS</p>
+              <p className="text-2xl font-black mt-1 text-red-600">{resumo.GNS}</p>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Faixa Amarela</p>
+              <p className="text-2xl font-black mt-1 text-yellow-600">{resumo.FAIXA_AMARELA}</p>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Noturno</p>
+              <p className="text-2xl font-black mt-1">{resumo.NOITE}</p>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
+              <p className="text-2xl font-black mt-1 text-gray-600">{resumo.PENDENTES}</p>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Venda</p>
+              <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
+            </div>
+          </div>
+
+          {/* CABEÇALHO DA TABELA PDF */}
+          <div className="mb-3">
+            <h2 className="text-base font-black uppercase text-gray-800">Relatório diário - PCM</h2>
+            <p className="text-xs text-gray-500 font-semibold">
+              Ordenação: Categoria (GNS → Amarela → Branco → Cinza → Venda) e Tempo parado (desc)
+            </p>
+          </div>
+
+          {/* TABELA PDF */}
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border font-black">
+                <th className="p-3 border whitespace-nowrap">Cluster</th>
+                <th className="p-3 border whitespace-nowrap">Frota</th>
+                <th className="p-3 border whitespace-nowrap">Entrada</th>
+                <th className="p-3 border text-center whitespace-nowrap">Dias</th>
+                <th className="p-3 border whitespace-nowrap">Categoria</th>
+                <th className="p-3 border w-[420px]">Descrição</th>
+                <th className="p-3 border whitespace-nowrap">O.S</th>
+                <th className="p-3 border whitespace-nowrap">Setor</th>
+                <th className="p-3 border whitespace-nowrap">Turno</th>
+                <th className="p-3 border whitespace-nowrap">Responsável</th>
+                <th className="p-3 border w-[260px]">Observação</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={11} className="p-6 text-center text-gray-500 font-bold border">
+                    Carregando PCM...
+                  </td>
+                </tr>
+              ) : veiculosFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="p-6 text-center text-gray-500 font-bold border">
+                    Nenhum registro encontrado.
+                  </td>
+                </tr>
+              ) : (
+                veiculosFiltrados.map((v) => {
+                  const catStyle = getCategoriaStyle(v.categoria);
+                  const dias = daysBetween(v.data_entrada);
+
+                  return (
+                    <tr key={v.id} className={`border-b border-gray-200 font-medium ${catStyle.color}`}>
+                      <td className="p-3 border border-black/10 text-[10px] font-black uppercase">{v.cluster || "-"}</td>
+                      <td className="p-3 text-lg font-black border border-black/10">{v.frota}</td>
+                      <td className="p-3 border border-black/10">{formatBRDate(v.data_entrada)}</td>
+                      <td className="p-3 text-center font-black border border-black/10 text-lg">{dias}</td>
+                      <td className="p-3 border border-black/10">
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}>
+                          {catStyle.label}
+                        </span>
+                      </td>
+                      <td className="p-3 text-[11px] uppercase leading-tight border border-black/10">{v.descricao}</td>
+                      <td className="p-3 font-bold border border-black/10">{v.ordem_servico || "-"}</td>
+                      <td className="p-3 text-[10px] font-black border border-black/10">{v.setor}</td>
+                      <td className="p-3 border border-black/10">
+                        <span className="px-2 py-1 rounded-full bg-black/20 text-[10px] font-black uppercase">
+                          {v.lancado_no_turno || "-"}
+                        </span>
+                      </td>
+                      <td className="p-3 text-[10px] italic border border-black/10">{v.lancado_por || "-"}</td>
+                      <td className="p-3 text-[10px] font-bold border border-black/10 uppercase">{v.observacao || "-"}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+
+          <div className="mt-4 pt-3 border-t text-[10px] text-gray-500 font-bold flex justify-between">
+            <span>PCM Diário — Quatai</span>
+            <span>Gerado em: {new Date().toLocaleString("pt-BR")}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* RELATORIO VISUAL DA TELA */}
+      <div className="bg-white shadow-2xl overflow-hidden rounded-xl border mt-4">
         <div className="p-4 border-b bg-gray-50">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
             <div>

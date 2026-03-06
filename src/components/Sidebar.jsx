@@ -26,6 +26,7 @@ import {
   FaSearch,
   FaRobot,
   FaChartPie,
+  FaMicrochip,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -55,6 +56,11 @@ const PCM_ROUTES = {
   resumo: "/pcm-resumo",
   inicio: "/pcm-inicio",
   diario: "/pcm-diario",
+};
+
+// ✅ Rotas Embarcados
+const EMBARCADOS_ROUTES = {
+  central: "/embarcados",
 };
 
 /* =========================
@@ -99,6 +105,9 @@ const ACCESS = {
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
 
+    // ✅ Embarcados
+    EMBARCADOS_ROUTES.central,
+
     // Desempenho Diesel (módulo atual)
     ...Object.values(DIESEL_ROUTES),
 
@@ -142,6 +151,9 @@ const ACCESS = {
     PCM_ROUTES.resumo,
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
+
+    // ✅ Embarcados
+    EMBARCADOS_ROUTES.central,
   ],
 
   CCO: [
@@ -177,6 +189,7 @@ export default function Sidebar() {
   const [avariasOpen, setAvariasOpen] = useState(false);
   const [checklistsOpen, setChecklistsOpen] = useState(false);
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
+  const [embarcadosOpen, setEmbarcadosOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
   const { user, logout } = useContext(AuthContext);
@@ -228,6 +241,12 @@ export default function Sidebar() {
           { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
           { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
         ],
+      },
+
+      embarcados: {
+        label: "Embarcados",
+        icon: <FaMicrochip />,
+        tabs: [{ path: EMBARCADOS_ROUTES.central, label: "Central", icon: <FaListAlt /> }],
       },
 
       desempenhoDiesel: {
@@ -294,6 +313,7 @@ export default function Sidebar() {
 
   const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
   const showPCM = isAdmin || isGestor || isManutencao;
+  const showEmbarcados = (isAdmin || isGestor || isManutencao) && canSee(user, EMBARCADOS_ROUTES.central);
 
   const showTratativas = links.tratativas.some((l) => {
     if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
@@ -366,6 +386,35 @@ export default function Sidebar() {
             {pcmOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.pcm.tabs.map((t) =>
+                  canSee(user, t.path) ? (
+                    <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
+                      {t.icon}
+                      <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {showEmbarcados && (
+          <>
+            <button
+              onClick={() => setEmbarcadosOpen(!embarcadosOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {links.embarcados.icon}
+                <span className="whitespace-nowrap truncate">{links.embarcados.label}</span>
+              </div>
+              {embarcadosOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {embarcadosOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.embarcados.tabs.map((t) =>
                   canSee(user, t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
                       {t.icon}

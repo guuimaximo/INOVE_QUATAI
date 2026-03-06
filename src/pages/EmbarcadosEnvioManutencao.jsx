@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import {
-  FaPlus,
   FaSave,
   FaSearch,
   FaSync,
@@ -13,8 +12,17 @@ import {
 } from "react-icons/fa";
 
 const BUCKET_FOTOS = "embarcados";
+
+const TIPOS_EMBARCADOS = [
+  "TELEMETRIA",
+  "CAMERAS",
+  "VISION",
+  "VALIDADOR",
+  "CHIP_VALIDADOR",
+  "GPS",
+];
+
 const DESTINOS_FINAIS = ["DISPONIVEL", "SUCATA"];
-const STATUS_ENVIO = ["ABERTO", "ENVIADO", "RETORNO_PARCIAL", "FINALIZADO", "CANCELADO"];
 
 function sanitizeFileName(name) {
   return String(name || "arquivo")
@@ -61,6 +69,7 @@ export default function EmbarcadosEnvioManutencao() {
 
   const [form, setForm] = useState({
     ordem_servico: "1",
+    tipo_embarcado_servico: "",
     prestador_servico: "",
     data_envio: new Date().toISOString().slice(0, 10),
     status: "ENVIADO",
@@ -122,6 +131,11 @@ export default function EmbarcadosEnvioManutencao() {
     });
   }, [embarcados]);
 
+  const disponiveisFiltradosPorTipo = useMemo(() => {
+    if (!form.tipo_embarcado_servico) return disponiveisParaEnvio;
+    return disponiveisParaEnvio.filter((e) => e.tipo === form.tipo_embarcado_servico);
+  }, [disponiveisParaEnvio, form.tipo_embarcado_servico]);
+
   const enviosFiltrados = useMemo(() => {
     const txt = busca.trim().toLowerCase();
     if (!txt) return envios;
@@ -146,6 +160,7 @@ export default function EmbarcadosEnvioManutencao() {
       const blob = [
         e.numero_registro,
         e.ordem_servico,
+        e.tipo_embarcado_servico,
         e.prestador_servico,
         e.status,
         e.observacao_geral,
@@ -170,6 +185,7 @@ export default function EmbarcadosEnvioManutencao() {
   function resetForm(proximoNumero = 1) {
     setForm({
       ordem_servico: String(proximoNumero),
+      tipo_embarcado_servico: "",
       prestador_servico: "",
       data_envio: new Date().toISOString().slice(0, 10),
       status: "ENVIADO",
@@ -182,6 +198,11 @@ export default function EmbarcadosEnvioManutencao() {
   function addItem(embarcadoId) {
     const emb = disponiveisParaEnvio.find((x) => x.id === embarcadoId);
     if (!emb) return;
+
+    if (form.tipo_embarcado_servico && emb.tipo !== form.tipo_embarcado_servico) {
+      return alert("Esse equipamento não pertence ao tipo de embarcado selecionado no serviço.");
+    }
+
     const exists = form.itens_json.some((i) => i.embarcado_id === emb.id);
     if (exists) return alert("Esse equipamento já foi adicionado.");
 
@@ -263,9 +284,18 @@ export default function EmbarcadosEnvioManutencao() {
   async function salvarNovoEnvio(e) {
     e.preventDefault();
 
+    if (!form.tipo_embarcado_servico) return alert("Tipo de embarcado do serviço é obrigatório.");
     if (!form.prestador_servico.trim()) return alert("Prestador de serviço é obrigatório.");
     if (!form.data_envio) return alert("Data de envio é obrigatória.");
     if (!form.itens_json.length) return alert("Adicione ao menos um equipamento.");
+
+    const existeTipoDiferente = form.itens_json.some(
+      (item) => item.tipo !== form.tipo_embarcado_servico
+    );
+
+    if (existeTipoDiferente) {
+      return alert("Todos os equipamentos enviados devem ser do mesmo tipo do serviço.");
+    }
 
     try {
       setSaving(true);
@@ -274,6 +304,7 @@ export default function EmbarcadosEnvioManutencao() {
 
       const payload = {
         ordem_servico: String(proximaOS),
+        tipo_embarcado_servico: form.tipo_embarcado_servico,
         prestador_servico: form.prestador_servico.trim(),
         data_envio: form.data_envio,
         status: statusCalculado,
@@ -507,6 +538,30 @@ export default function EmbarcadosEnvioManutencao() {
             </div>
 
             <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">
+                Tipo de embarcado do serviço
+              </label>
+              <select
+                className="w-full border rounded-xl px-3 py-2 text-sm font-bold"
+                value={form.tipo_embarcado_servico}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    tipo_embarcado_servico: e.target.value,
+                    itens_json: prev.itens_json.filter((item) => item.tipo === e.target.value || !e.target.value),
+                  }))
+                }
+              >
+                <option value="">Selecione...</option>
+                {TIPOS_EMBARCADOS.map((tipo) => (
+                  <option key={tipo} value={tipo}>
+                    {tipo}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Prestador de serviço</label>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm font-bold"
@@ -609,9 +664,14 @@ export default function EmbarcadosEnvioManutencao() {
                   addItem(e.target.value);
                   e.target.value = "";
                 }}
+                disabled={!form.tipo_embarcado_servico}
               >
-                <option value="">Adicionar equipamento...</option>
-                {disponiveisParaEnvio.map((e) => (
+                <option value="">
+                  {form.tipo_embarcado_servico
+                    ? "Adicionar equipamento..."
+                    : "Selecione primeiro o tipo do serviço"}
+                </option>
+                {disponiveisFiltradosPorTipo.map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.numero_equipamento} - {e.tipo} ({e.status_atual})
                   </option>
@@ -700,6 +760,10 @@ export default function EmbarcadosEnvioManutencao() {
                         </div>
                         <div className="text-lg font-black text-gray-900">
                           {envio.prestador_servico}
+                        </div>
+                        <div className="text-sm text-gray-500 font-semibold mt-1">
+                          Tipo do serviço:{" "}
+                          <span className="font-black">{envio.tipo_embarcado_servico || "-"}</span>
                         </div>
                         <div className="text-sm text-gray-500 font-semibold mt-1">
                           OS: <span className="font-black">{envio.ordem_servico || "-"}</span>

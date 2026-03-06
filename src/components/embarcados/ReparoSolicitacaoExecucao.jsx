@@ -47,6 +47,8 @@ function statusLabel(status) {
       return "AG. PEÇAS";
     case "CONCLUIDA":
       return "CONCLUÍDA";
+    case "CANCELADA":
+      return "CANCELADA";
     default:
       return status || "-";
   }
@@ -240,7 +242,7 @@ export default function ReparoSolicitacaoExecucao() {
       }
 
       alert("Execução salva com sucesso.");
-      navigate("/embarcados/reparos");
+      navigate("/embarcados-reparos");
     } finally {
       setSaving(false);
     }
@@ -259,7 +261,7 @@ export default function ReparoSolicitacaoExecucao() {
       <div className="mx-auto max-w-5xl space-y-4">
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
           <button
-            onClick={() => navigate("/embarcados/reparos")}
+            onClick={() => navigate("/embarcados-reparos")}
             className="mb-3 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-black"
           >
             <FaArrowLeft />

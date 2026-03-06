@@ -8,6 +8,7 @@ import {
   FaUser,
   FaWrench,
   FaImage,
+  FaEdit,
 } from "react-icons/fa";
 
 function formatDateTimeBR(v) {
@@ -130,19 +131,33 @@ export default function ReparoSolicitacaoDetalhes() {
     );
   }
 
+  const podeEditar = ["CONCLUIDA", "CANCELADA"].includes(row.status);
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-[1500px] space-y-4">
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
             <div>
-              <button
-                onClick={() => navigate("/embarcados-reparos")}
-                className="mb-3 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-black"
-              >
-                <FaArrowLeft />
-                Voltar
-              </button>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  onClick={() => navigate("/embarcados-reparos")}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-black"
+                >
+                  <FaArrowLeft />
+                  Voltar
+                </button>
+
+                {podeEditar && (
+                  <button
+                    onClick={() => navigate(`/embarcados-reparos/${row.id}/editar`)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-sm font-black"
+                  >
+                    <FaEdit />
+                    Editar
+                  </button>
+                )}
+              </div>
 
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                 Detalhes da solicitação

@@ -11,7 +11,6 @@ import {
   FaCheckCircle,
   FaClock,
   FaExclamationTriangle,
-  FaEdit,
 } from "react-icons/fa";
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
@@ -177,7 +176,7 @@ export default function EmbarcadosReparos() {
                 Reparos de Embarcados
               </h1>
               <p className="text-sm text-slate-500 font-semibold mt-1">
-                Central de solicitações com consulta rápida, detalhes, edição e execução separada.
+                Central de solicitações com consulta rápida, detalhes e execução separada.
               </p>
             </div>
 
@@ -420,21 +419,13 @@ export default function EmbarcadosReparos() {
                               Detalhes
                             </button>
 
-                            {!finalizada ? (
+                            {!finalizada && (
                               <button
                                 onClick={() => navigate(`/embarcados-reparos/${r.id}/executar`)}
                                 className="px-3 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white text-xs font-black flex items-center gap-2 shadow-sm"
                               >
                                 <FaWrench />
                                 Executar serviço
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => navigate(`/embarcados-reparos/${r.id}/editar`)}
-                                className="px-3 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-white text-xs font-black flex items-center gap-2 shadow-sm"
-                              >
-                                <FaEdit />
-                                Editar
                               </button>
                             )}
                           </div>

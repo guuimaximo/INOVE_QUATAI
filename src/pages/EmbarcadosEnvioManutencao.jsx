@@ -9,8 +9,8 @@ import {
   FaTools,
   FaFileInvoice,
   FaCheckCircle,
-  FaChevronDown,
-  FaChevronUp,
+  FaTimes,
+  FaEdit,
 } from "react-icons/fa";
 
 const BUCKET_FOTOS = "embarcados";
@@ -63,9 +63,8 @@ export default function EmbarcadosEnvioManutencao() {
 
   const [busca, setBusca] = useState("");
   const [aba, setAba] = useState("NOVO");
-  
-  // Novo estado para controlar a expansão do card
-  const [expandedEnvioId, setExpandedEnvioId] = useState(null);
+
+  const [modalEnvioId, setModalEnvioId] = useState(null);
 
   const [fileUploading, setFileUploading] = useState(false);
   const fileOrcamentoRef = useRef(null);
@@ -446,7 +445,8 @@ export default function EmbarcadosEnvioManutencao() {
       }
 
       await carregar();
-      alert("Retorno salvo com sucesso.");
+      setModalEnvioId(null);
+      alert("Retorno da OS salvo com sucesso.");
     } finally {
       setSaving(false);
     }
@@ -467,9 +467,10 @@ export default function EmbarcadosEnvioManutencao() {
     );
   }
 
-  function toggleEnvio(id) {
-    setExpandedEnvioId((prev) => (prev === id ? null : id));
-  }
+  const envioModal = useMemo(() => {
+    if (!modalEnvioId) return null;
+    return envios.find((e) => e.id === modalEnvioId) || null;
+  }, [modalEnvioId, envios]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-900">
@@ -759,7 +760,6 @@ export default function EmbarcadosEnvioManutencao() {
               enviosFiltrados.map((envio) => {
                 const itens = Array.isArray(envio.itens_json) ? envio.itens_json : [];
                 const totalCobranca = itens.reduce((acc, i) => acc + Number(i.valor_cobrado || 0), 0);
-                const isExpanded = expandedEnvioId === envio.id;
 
                 let badgeColor = "bg-slate-100 text-slate-800";
                 if (envio.status === "FINALIZADO") badgeColor = "bg-emerald-100 text-emerald-800";
@@ -767,201 +767,256 @@ export default function EmbarcadosEnvioManutencao() {
                 if (envio.status === "ENVIADO") badgeColor = "bg-blue-100 text-blue-800";
 
                 return (
-                  <div key={envio.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-200">
-                    
-                    {/* ACCORDION HEADER / CARD RESUMIDO */}
-                    <div 
-                      className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors"
-                      onClick={() => toggleEnvio(envio.id)}
-                    >
-                      <div className="flex flex-col md:flex-row md:items-center gap-4 flex-1">
-                        <div className="min-w-[120px]">
-                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            Reg. nº {envio.numero_registro}
-                          </div>
-                          <div className="text-sm font-black text-slate-800 mt-1">
-                            OS: {envio.ordem_servico || "-"}
-                          </div>
+                  <div key={envio.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:shadow-md transition-shadow">
+                    <div className="flex flex-col md:flex-row md:items-center gap-4 flex-1">
+                      <div className="min-w-[120px]">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                          Reg. nº {envio.numero_registro}
                         </div>
-
-                        <div className="flex-1">
-                          <div className="text-base font-black text-indigo-900 leading-tight">
-                            {envio.prestador_servico}
-                          </div>
-                          <div className="text-xs text-slate-500 font-semibold mt-1 flex gap-2 items-center">
-                            <span>Tipo: <strong className="text-slate-700">{envio.tipo_embarcado_servico || "-"}</strong></span>
-                            <span className="text-slate-300">•</span>
-                            <span>Data: <strong className="text-slate-700">{formatDateBR(envio.data_envio)}</strong></span>
-                          </div>
+                        <div className="text-sm font-black text-slate-800 mt-1">
+                          OS: {envio.ordem_servico || "-"}
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between md:justify-end gap-6 min-w-[280px]">
-                        <div className="text-right">
-                          <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${badgeColor}`}>
-                            {envio.status}
-                          </span>
-                          <div className="text-xs font-black text-slate-700 mt-1.5">
-                            Cobrado: {formatMoney(totalCobranca)}
-                          </div>
+                      <div className="flex-1">
+                        <div className="text-base font-black text-indigo-900 leading-tight">
+                          {envio.prestador_servico}
                         </div>
-                        
-                        <button className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-indigo-600 transition-colors">
-                          {isExpanded ? <FaChevronUp /> : <FaChevronDown />}
-                        </button>
+                        <div className="text-xs text-slate-500 font-semibold mt-1 flex gap-2 items-center">
+                          <span>Tipo: <strong className="text-slate-700">{envio.tipo_embarcado_servico || "-"}</strong></span>
+                          <span className="text-slate-300">•</span>
+                          <span>Data: <strong className="text-slate-700">{formatDateBR(envio.data_envio)}</strong></span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* CONTEÚDO EXPANDIDO (DETALHES) */}
-                    {isExpanded && (
-                      <div className="border-t border-slate-100 bg-slate-50/50 p-4 md:p-6 animate-in slide-in-from-top-2">
-                        {envio.orcamento_url && (
-                          <div className="mb-5">
-                            <a
-                              href={envio.orcamento_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 font-black text-sm hover:bg-blue-100 transition-colors shadow-sm"
-                            >
-                              <FaFileInvoice /> Abrir orçamento do prestador
-                            </a>
-                          </div>
-                        )}
-
-                        {envio.observacao_geral && (
-                          <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observação geral</div>
-                            <div className="text-sm font-semibold text-slate-800 mt-1.5">
-                              {envio.observacao_geral}
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="space-y-4">
-                          <h4 className="text-xs font-black text-indigo-800 uppercase tracking-widest border-b pb-2">Equipamentos do Envio</h4>
-                          {itens.map((item, index) => (
-                            <div key={`${item.embarcado_id}_${index}`} className="rounded-xl border border-slate-200 p-4 bg-white shadow-sm">
-                              <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 pb-3 border-b border-slate-100">
-                                <div>
-                                  <div className="text-sm font-black text-slate-900">
-                                    {item.numero_equipamento} <span className="text-slate-300 mx-1">•</span> <span className="text-indigo-600">{item.tipo}</span>
-                                  </div>
-                                </div>
-
-                                {item.status_item === "RETORNADO" || item.status_item === "FINALIZADO" ? (
-                                  <span className="px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-2">
-                                    <FaCheckCircle /> Retornado
-                                  </span>
-                                ) : (
-                                  <span className="px-3 py-1.5 rounded-full bg-amber-50 border border-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider">
-                                    Enviado
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                <div>
-                                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">
-                                    Observação do envio
-                                  </label>
-                                  <textarea
-                                    className="w-full border rounded-lg px-3 py-2 text-sm font-medium min-h-[70px] bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-                                    value={item.observacao_envio || ""}
-                                    onChange={(e) =>
-                                      updateEnvioItem(envio.id, index, { observacao_envio: e.target.value })
-                                    }
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">
-                                    Retorno do prestador
-                                  </label>
-                                  <textarea
-                                    className="w-full border rounded-lg px-3 py-2 text-sm font-medium min-h-[70px] bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-                                    value={item.retorno_prestador || ""}
-                                    onChange={(e) =>
-                                      updateEnvioItem(envio.id, index, { retorno_prestador: e.target.value })
-                                    }
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">
-                                    Valor cobrado
-                                  </label>
-                                  <input
-                                    className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-slate-700"
-                                    value={item.valor_cobrado || ""}
-                                    onChange={(e) =>
-                                      updateEnvioItem(envio.id, index, { valor_cobrado: e.target.value })
-                                    }
-                                    placeholder="Ex: 150.00"
-                                  />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div>
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">
-                                      Data de retorno
-                                    </label>
-                                    <input
-                                      type="date"
-                                      className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-slate-700"
-                                      value={item.data_retorno || ""}
-                                      onChange={(e) =>
-                                        updateEnvioItem(envio.id, index, {
-                                          data_retorno: e.target.value,
-                                          status_item: e.target.value ? "RETORNADO" : item.status_item || "ENVIADO",
-                                        })
-                                      }
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">
-                                      Destino final
-                                    </label>
-                                    <select
-                                      className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-slate-700"
-                                      value={item.destino_final || ""}
-                                      onChange={(e) =>
-                                        updateEnvioItem(envio.id, index, {
-                                          destino_final: e.target.value,
-                                          status_item: e.target.value ? "RETORNADO" : item.status_item || "ENVIADO",
-                                        })
-                                      }
-                                    >
-                                      <option value="">Selecione...</option>
-                                      {DESTINOS_FINAIS.map((d) => (
-                                        <option key={d} value={d}>
-                                          {d}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="mt-6 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => salvarRetornoEnvio(envio)}
-                            disabled={saving}
-                            className="px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60 transition-colors shadow-md"
-                          >
-                            <FaSave /> {saving ? "Salvando..." : "Salvar retorno"}
-                          </button>
+                    <div className="flex flex-col md:flex-row items-center gap-4 min-w-[280px] md:justify-end">
+                      <div className="text-right flex-1 md:flex-none">
+                        <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${badgeColor}`}>
+                          {envio.status}
+                        </span>
+                        <div className="text-xs font-black text-slate-700 mt-1.5">
+                          Cobrado: {formatMoney(totalCobranca)}
                         </div>
                       </div>
-                    )}
+                      
+                      <button
+                        onClick={() => setModalEnvioId(envio.id)}
+                        className="w-full md:w-auto px-4 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm font-black flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <FaEdit /> Detalhes / Edição
+                      </button>
+                    </div>
                   </div>
                 );
               })
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE DETALHES E EDIÇÃO DA OS */}
+      {envioModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-slate-50 rounded-2xl w-full max-w-5xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95">
+            
+            {/* Header Fixo */}
+            <div className="bg-white border-b px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+              <div>
+                <h2 className="text-lg font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight">
+                  <FaTools className="text-indigo-600" /> Detalhes da Ordem de Serviço
+                </h2>
+                <div className="text-xs font-bold text-slate-500 mt-1">
+                  Registro nº {envioModal.numero_registro} | OS: {envioModal.ordem_servico}
+                </div>
+              </div>
+              <button
+                onClick={() => setModalEnvioId(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-600 transition-colors"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            {/* Corpo Rolável */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              
+              {/* SESSÃO 1: CABEÇALHO / ORÇAMENTO */}
+              <div className="bg-white rounded-xl border p-5 shadow-sm">
+                <div className="text-xs font-black uppercase text-indigo-800 tracking-widest mb-4 border-b pb-2">
+                  1. Informações e Orçamento
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="bg-slate-50 rounded-lg p-3 border">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Prestador</div>
+                    <div className="text-sm font-bold text-slate-800 mt-1">{envioModal.prestador_servico}</div>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-3 border">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data de Envio</div>
+                    <div className="text-sm font-bold text-slate-800 mt-1">{formatDateBR(envioModal.data_envio)}</div>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-3 border">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status Geral</div>
+                    <div className="text-sm font-bold text-slate-800 mt-1">{envioModal.status}</div>
+                  </div>
+                </div>
+
+                {envioModal.observacao_geral && (
+                  <div className="mb-4">
+                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Observação geral de envio:</div>
+                    <div className="bg-slate-50 border rounded-lg p-3 text-sm font-medium text-slate-700">
+                      {envioModal.observacao_geral}
+                    </div>
+                  </div>
+                )}
+
+                {envioModal.orcamento_url && (
+                  <div>
+                    <a
+                      href={envioModal.orcamento_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 font-black text-sm hover:bg-blue-100 transition-colors"
+                    >
+                      <FaFileInvoice /> Ver anexo do orçamento do prestador
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* SESSÃO 2: FINALIZAÇÃO DO SERVIÇO / ITENS */}
+              <div className="bg-white rounded-xl border p-5 shadow-sm">
+                <div className="text-xs font-black uppercase text-indigo-800 tracking-widest mb-4 border-b pb-2">
+                  2. Finalização do Serviço por Equipamento
+                </div>
+
+                <div className="space-y-6">
+                  {(envioModal.itens_json || []).map((item, index) => (
+                    <div key={`${item.embarcado_id}_${index}`} className="border rounded-xl bg-slate-50 overflow-hidden">
+                      {/* Topo do Item */}
+                      <div className="bg-slate-100 border-b p-3 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                        <div>
+                          <span className="text-sm font-black text-slate-900">{item.numero_equipamento}</span>
+                          <span className="text-slate-400 mx-2">•</span>
+                          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">{item.tipo}</span>
+                        </div>
+                        {item.status_item === "RETORNADO" || item.status_item === "FINALIZADO" ? (
+                          <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                            <FaCheckCircle /> Retornado
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider">
+                            Pendente
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Lado Esquerdo: O que foi relatado */}
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">
+                            Defeito relatado / Motivo
+                          </label>
+                          <div className="w-full border rounded-lg px-3 py-2 text-sm font-medium min-h-[80px] bg-slate-100 text-slate-600">
+                            {item.observacao_envio || "Nenhuma observação informada no envio."}
+                          </div>
+                        </div>
+
+                        {/* Lado Direito: O que foi feito (Edição) */}
+                        <div className="space-y-4">
+                          <div>
+                            <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1.5 block">
+                              O que foi feito (Retorno do Prestador)
+                            </label>
+                            <textarea
+                              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium min-h-[80px] bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                              value={item.retorno_prestador || ""}
+                              onChange={(e) => updateEnvioItem(envioModal.id, index, { retorno_prestador: e.target.value })}
+                              placeholder="Descreva o serviço executado..."
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1.5 block">
+                                Custo / Valor
+                              </label>
+                              <input
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                                value={item.valor_cobrado || ""}
+                                onChange={(e) => updateEnvioItem(envioModal.id, index, { valor_cobrado: e.target.value })}
+                                placeholder="0.00"
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1.5 block">
+                                Data Retorno
+                              </label>
+                              <input
+                                type="date"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                                value={item.data_retorno || ""}
+                                onChange={(e) => updateEnvioItem(envioModal.id, index, { 
+                                  data_retorno: e.target.value,
+                                  status_item: e.target.value && item.destino_final ? "RETORNADO" : item.status_item || "ENVIADO"
+                                })}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1.5 block">
+                                Destino Final
+                              </label>
+                              <select
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                                value={item.destino_final || ""}
+                                onChange={(e) => updateEnvioItem(envioModal.id, index, { 
+                                  destino_final: e.target.value,
+                                  status_item: e.target.value && item.data_retorno ? "RETORNADO" : item.status_item || "ENVIADO"
+                                })}
+                              >
+                                <option value="">Selecione...</option>
+                                {DESTINOS_FINAIS.map((d) => (
+                                  <option key={d} value={d}>{d}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Fixo */}
+            <div className="bg-white border-t px-6 py-4 flex flex-col sm:flex-row items-center justify-between sticky bottom-0 z-10 gap-4">
+              <div className="text-sm font-black text-slate-700 bg-slate-100 px-4 py-2 rounded-lg border">
+                Custo Total da OS: <span className="text-indigo-700 ml-1">
+                  {formatMoney((envioModal.itens_json || []).reduce((acc, i) => acc + Number(i.valor_cobrado || 0), 0))}
+                </span>
+              </div>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setModalEnvioId(null)}
+                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-black transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => salvarRetornoEnvio(envioModal)}
+                  disabled={saving}
+                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60 transition-colors shadow-md"
+                >
+                  <FaSave /> {saving ? "Salvando..." : "Finalizar OS"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

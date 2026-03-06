@@ -1,5 +1,5 @@
 // src/pages/Embarcados.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import {
   FaSearch,
@@ -17,13 +17,17 @@ import {
   FaTimes,
   FaPlus,
   FaSync,
+  FaUpload,
 } from "react-icons/fa";
+
+const BUCKET_FOTOS = "embarcados";
 
 const TIPOS_FIXOS = [
   { value: "TELEMETRIA", label: "TELEMETRIA", icon: FaMicrochip },
   { value: "CAMERAS", label: "CAMERAS", icon: FaCamera },
   { value: "VISION", label: "VISION", icon: FaPlug },
   { value: "VALIDADOR", label: "VALIDADOR", icon: FaCheckCircle },
+  { value: "CHIP_VALIDADOR", label: "CHIP DO VALIDADOR", icon: FaMicrochip },
   { value: "GPS", label: "GPS", icon: FaMapMarkerAlt },
 ];
 
@@ -90,6 +94,13 @@ function getStatusMeta(status) {
   }
 }
 
+function sanitizeFileName(name) {
+  return String(name || "arquivo")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w.\-]+/g, "_");
+}
+
 function EmptyPhoto() {
   return (
     <div className="w-full h-44 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 text-sm font-bold">
@@ -116,6 +127,9 @@ function EquipamentoModal({
     observacao: "",
     ativo: true,
   });
+
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
@@ -147,6 +161,47 @@ function EquipamentoModal({
   if (!open) return null;
 
   const isEdicao = !!registro;
+
+  async function handleUploadFoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+
+      const ext = file.name.split(".").pop() || "jpg";
+      const nomeLimpo = sanitizeFileName(file.name);
+      const filePath = `${form.veiculo || "sem_veiculo"}/${form.tipo || "SEM_TIPO"}/${Date.now()}_${nomeLimpo}.${ext}`.replace(
+        /\.(\w+)\.(\w+)$/,
+        ".$2"
+      );
+
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET_FOTOS)
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error(uploadError);
+        alert(uploadError.message || "Erro ao enviar foto.");
+        return;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from(BUCKET_FOTOS)
+        .getPublicUrl(filePath);
+
+      setForm((prev) => ({
+        ...prev,
+        foto_url: publicData?.publicUrl || "",
+      }));
+    } finally {
+      setUploading(false);
+      if (e.target) e.target.value = "";
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -250,14 +305,50 @@ function EquipamentoModal({
 
           <div className="flex flex-col md:col-span-2">
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1">
-              URL da foto
+              Foto do equipamento
             </label>
-            <input
-              className="border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.foto_url}
-              onChange={(e) => setForm({ ...form, foto_url: e.target.value })}
-              placeholder="https://..."
-            />
+
+            <div className="flex flex-col gap-3">
+              {form.foto_url ? (
+                <img
+                  src={form.foto_url}
+                  alt="Foto do equipamento"
+                  className="w-full h-52 object-cover rounded-xl border bg-white"
+                />
+              ) : (
+                <EmptyPhoto />
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60"
+                >
+                  <FaUpload />
+                  {uploading ? "Enviando foto..." : "Selecionar foto"}
+                </button>
+
+                {form.foto_url && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, foto_url: "" }))}
+                    className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-black"
+                  >
+                    Remover foto
+                  </button>
+                )}
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleUploadFoto}
+              />
+            </div>
           </div>
 
           <div className="flex flex-col md:col-span-2">
@@ -295,7 +386,7 @@ function EquipamentoModal({
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || uploading}
               className="px-4 py-2 rounded-lg font-black text-sm bg-gray-900 text-white hover:bg-black disabled:opacity-60 flex items-center gap-2"
             >
               <FaSave /> {saving ? "Salvando..." : "Salvar"}
@@ -540,7 +631,6 @@ export default function Embarcados() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      {/* CABEÇALHO */}
       <div className="bg-white rounded-2xl shadow-sm border p-5">
         <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
           <div>
@@ -604,7 +694,6 @@ export default function Embarcados() {
         </div>
       </div>
 
-      {/* RESUMO */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
         <div className="bg-white rounded-2xl shadow-sm border p-4">
           <div className="text-[10px] font-black text-gray-500 uppercase">

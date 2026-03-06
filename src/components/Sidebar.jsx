@@ -27,6 +27,7 @@ import {
   FaRobot,
   FaChartPie,
   FaMicrochip,
+  FaExchangeAlt,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -42,11 +43,9 @@ const DIESEL_ROUTES = {
   resumo: "/desempenho-diesel-resumo",
   acompanhamento: "/desempenho-diesel-acompanhamento",
   agente: "/desempenho-diesel-agente",
-  // ❌ NÃO usar mais como “central”:
-  // tratativas: "/desempenho-diesel-tratativas",
 };
 
-// ✅ Tratativas Diesel (módulo separado - novo trio)
+// ✅ Tratativas Diesel (módulo separado)
 const DIESEL_TRATATIVAS_ROUTES = {
   central: "/diesel-tratativas",
 };
@@ -58,9 +57,11 @@ const PCM_ROUTES = {
   diario: "/pcm-diario",
 };
 
-// ✅ Rotas Embarcados
+// ✅ Rotas Embarcados (modelo novo)
 const EMBARCADOS_ROUTES = {
-  central: "/embarcados",
+  central: "/embarcados-central",
+  movimentacoes: "/embarcados-movimentacoes",
+  reparos: "/embarcados-reparos",
 };
 
 /* =========================
@@ -79,7 +80,7 @@ const ACCESS = {
   Gestor: [
     "/",
     "/inove",
-    "/inicio-basico",
+    "/inicio-rapido",
 
     "/solicitar",
     "/central",
@@ -106,7 +107,7 @@ const ACCESS = {
     PCM_ROUTES.diario,
 
     // ✅ Embarcados
-    EMBARCADOS_ROUTES.central,
+    ...Object.values(EMBARCADOS_ROUTES),
 
     // Desempenho Diesel (módulo atual)
     ...Object.values(DIESEL_ROUTES),
@@ -130,10 +131,10 @@ const ACCESS = {
     DIESEL_TRATATIVAS_ROUTES.central,
   ],
 
-  Tratativa: ["/inicio-basico", "/solicitar", "/central", "/cobrancas"],
+  Tratativa: ["/inicio-rapido", "/solicitar", "/central", "/cobrancas"],
 
   Manutenção: [
-    "/inicio-basico",
+    "/inicio-rapido",
     "/solicitar",
 
     "/lancar-avaria",
@@ -153,11 +154,11 @@ const ACCESS = {
     PCM_ROUTES.diario,
 
     // ✅ Embarcados
-    EMBARCADOS_ROUTES.central,
+    ...Object.values(EMBARCADOS_ROUTES),
   ],
 
   CCO: [
-    "/inicio-basico",
+    "/inicio-rapido",
     "/solicitar",
     "/sos-solicitacao",
     "/sos-fechamento",
@@ -166,9 +167,8 @@ const ACCESS = {
   ],
 
   Instrutor: [
-    "/inicio-basico",
+    "/inicio-rapido",
     ...Object.values(DIESEL_ROUTES),
-    // ✅ Tratativas Diesel (módulo separado)
     DIESEL_TRATATIVAS_ROUTES.central,
   ],
 };
@@ -232,7 +232,7 @@ export default function Sidebar() {
   const links = useMemo(
     () => ({
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
-      inicioBasico: { path: "/inicio-basico", label: "Início", icon: <FaHome /> },
+      inicioBasico: { path: "/inicio-rapido", label: "Início", icon: <FaHome /> },
 
       pcm: {
         label: "PCM",
@@ -246,7 +246,11 @@ export default function Sidebar() {
       embarcados: {
         label: "Embarcados",
         icon: <FaMicrochip />,
-        tabs: [{ path: EMBARCADOS_ROUTES.central, label: "Central", icon: <FaListAlt /> }],
+        tabs: [
+          { path: EMBARCADOS_ROUTES.central, label: "Central", icon: <FaListAlt /> },
+          { path: EMBARCADOS_ROUTES.movimentacoes, label: "Movimentações", icon: <FaExchangeAlt /> },
+          { path: EMBARCADOS_ROUTES.reparos, label: "Reparos", icon: <FaTools /> },
+        ],
       },
 
       desempenhoDiesel: {
@@ -257,8 +261,6 @@ export default function Sidebar() {
           { path: DIESEL_ROUTES.agente, label: "Agente Diesel", icon: <FaRobot /> },
           { path: DIESEL_ROUTES.lancamento, label: "Lançamento Manual", icon: <FaPenSquare /> },
           { path: DIESEL_ROUTES.acompanhamento, label: "Acompanhamento", icon: <FaSearch /> },
-
-          // ✅ NOVO: módulo separado
           { path: DIESEL_TRATATIVAS_ROUTES.central, label: "Tratativas (Central)", icon: <FaListAlt /> },
         ],
       },

@@ -11,6 +11,7 @@ import {
   FaCheckCircle,
   FaClock,
   FaExclamationTriangle,
+  FaEdit,
 } from "react-icons/fa";
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
@@ -176,7 +177,7 @@ export default function EmbarcadosReparos() {
                 Reparos de Embarcados
               </h1>
               <p className="text-sm text-slate-500 font-semibold mt-1">
-                Central de solicitações com consulta rápida, detalhes e execução separada.
+                Central de solicitações com consulta rápida, detalhes, edição e execução separada.
               </p>
             </div>
 
@@ -351,76 +352,96 @@ export default function EmbarcadosReparos() {
                     </td>
                   </tr>
                 ) : (
-                  filtrados.map((r) => (
-                    <tr key={r.id} className="border-b border-slate-200 hover:bg-slate-50 transition">
-                      <td className="px-4 py-3 font-semibold whitespace-nowrap text-slate-700">
-                        {formatDateTimeBR(r.created_at)}
-                      </td>
+                  filtrados.map((r) => {
+                    const finalizada = ["CONCLUIDA", "CANCELADA"].includes(r.status);
 
-                      <td className="px-4 py-3">
-                        <div className="font-black text-slate-900">{r.veiculo || "-"}</div>
-                      </td>
+                    return (
+                      <tr
+                        key={r.id}
+                        className="border-b border-slate-200 hover:bg-slate-50 transition"
+                      >
+                        <td className="px-4 py-3 font-semibold whitespace-nowrap text-slate-700">
+                          {formatDateTimeBR(r.created_at)}
+                        </td>
 
-                      <td className="px-4 py-3">
-                        <div className="font-black text-slate-800">{r.tipo_embarcado || "-"}</div>
-                      </td>
+                        <td className="px-4 py-3">
+                          <div className="font-black text-slate-900">{r.veiculo || "-"}</div>
+                        </td>
 
-                      <td className="px-4 py-3">
-                        <div className="max-w-[340px]">
-                          <div className="font-semibold text-slate-800 truncate" title={r.problema}>
-                            {r.problema || "-"}
+                        <td className="px-4 py-3">
+                          <div className="font-black text-slate-800">{r.tipo_embarcado || "-"}</div>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="max-w-[340px]">
+                            <div className="font-semibold text-slate-800 truncate" title={r.problema}>
+                              {r.problema || "-"}
+                            </div>
+                            <div
+                              className="text-xs text-slate-500 truncate mt-1"
+                              title={r.local_problema}
+                            >
+                              {r.local_problema || "Sem local informado"}
+                            </div>
                           </div>
-                          <div className="text-xs text-slate-500 truncate mt-1" title={r.local_problema}>
-                            {r.local_problema || "Sem local informado"}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex px-3 py-1.5 rounded-full text-[11px] font-black uppercase ${prioridadeClass(
+                              r.prioridade
+                            )}`}
+                          >
+                            {prioridadeLabel(r.prioridade)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex px-3 py-1.5 rounded-full text-[11px] font-black uppercase ${statusClass(
+                              r.status
+                            )}`}
+                          >
+                            {statusLabel(r.status)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3 font-semibold text-slate-700">
+                          {r.solicitante || "-"}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex justify-center gap-2 flex-wrap">
+                            <button
+                              onClick={() => navigate(`/embarcados-reparos/${r.id}`)}
+                              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center gap-2 shadow-sm"
+                            >
+                              <FaEye />
+                              Detalhes
+                            </button>
+
+                            {!finalizada ? (
+                              <button
+                                onClick={() => navigate(`/embarcados-reparos/${r.id}/executar`)}
+                                className="px-3 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white text-xs font-black flex items-center gap-2 shadow-sm"
+                              >
+                                <FaWrench />
+                                Executar serviço
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => navigate(`/embarcados-reparos/${r.id}/editar`)}
+                                className="px-3 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-white text-xs font-black flex items-center gap-2 shadow-sm"
+                              >
+                                <FaEdit />
+                                Editar
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex px-3 py-1.5 rounded-full text-[11px] font-black uppercase ${prioridadeClass(
-                            r.prioridade
-                          )}`}
-                        >
-                          {prioridadeLabel(r.prioridade)}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex px-3 py-1.5 rounded-full text-[11px] font-black uppercase ${statusClass(
-                            r.status
-                          )}`}
-                        >
-                          {statusLabel(r.status)}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 font-semibold text-slate-700">
-                        {r.solicitante || "-"}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => navigate(`/embarcados-reparos/${r.id}`)}
-                            className="px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-black flex items-center gap-2"
-                          >
-                            <FaEye />
-                            Detalhes
-                          </button>
-
-                          <button
-                            onClick={() => navigate(`/embarcados-reparos/${r.id}/executar`)}
-                            className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center gap-2"
-                          >
-                            <FaWrench />
-                            Executar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

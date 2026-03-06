@@ -170,13 +170,13 @@ export default function EmbarcadosReparos() {
           <div className="flex flex-col 2xl:flex-row 2xl:items-end 2xl:justify-between gap-4">
             <div>
               <div className="text-[11px] font-black tracking-[0.18em] text-slate-500 uppercase">
-                Manutenção / Embarcados
+                
               </div>
               <h1 className="text-3xl font-black tracking-tight text-slate-900">
-                Reparos de Embarcados
+                Solicitação de Reparo - Embarcados
               </h1>
               <p className="text-sm text-slate-500 font-semibold mt-1">
-                Central de solicitações com consulta rápida, detalhes e execução separada.
+                
               </p>
             </div>
 

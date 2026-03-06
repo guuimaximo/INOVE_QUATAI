@@ -1,69 +1,20 @@
-import { useEffect, useMemo, useRef, useState, useContext } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
-import { AuthContext } from "../context/AuthContext";
 import {
   FaPlus,
-  FaSave,
-  FaTimes,
   FaSearch,
   FaSync,
   FaWrench,
-  FaUpload,
   FaEye,
-  FaChevronDown,
-  FaChevronRight,
-  FaCalendarAlt,
-  FaMapMarkerAlt,
-  FaUser,
-  FaClipboardList,
-  FaImage,
+  FaTools,
+  FaCheckCircle,
+  FaClock,
+  FaExclamationTriangle,
 } from "react-icons/fa";
-
-const TIPOS = [
-  "TELEMETRIA",
-  "CAMERAS",
-  "VISION",
-  "VALIDADOR",
-  "CHIP_VALIDADOR",
-  "GPS",
-];
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
 const STATUS = ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS", "CONCLUIDA", "CANCELADA"];
-
-const BUCKET_FOTOS = "embarcados";
-
-function isValidUUID(v) {
-  if (!v) return false;
-  const s = String(v).trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    s
-  );
-}
-
-function pickUserUuid(user) {
-  if (isValidUUID(user?.auth_user_id)) return user.auth_user_id;
-  if (isValidUUID(user?.id)) return user.id;
-  return null;
-}
-
-function buildNomeSobrenome(u) {
-  const nome = String(u?.nome || "").trim();
-  const sobrenome = String(u?.sobrenome || "").trim();
-  const nomeCompleto = String(u?.nome_completo || "").trim();
-
-  if (nomeCompleto) return nomeCompleto;
-  if (nome && sobrenome) return `${nome} ${sobrenome}`;
-  if (nome) return nome;
-  return null;
-}
-
-function sanitizeFileName(name) {
-  return String(name || "arquivo")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\w.\-]+/g, "_");
-}
 
 function formatDateTimeBR(v) {
   if (!v) return "-";
@@ -76,8 +27,6 @@ function formatDateTimeBR(v) {
 
 function statusLabel(status) {
   switch (status) {
-    case "ABERTA":
-      return "ABERTA";
     case "EM_ANALISE":
       return "EM ANÁLISE";
     case "EM_EXECUCAO":
@@ -86,8 +35,6 @@ function statusLabel(status) {
       return "AG. PEÇAS";
     case "CONCLUIDA":
       return "CONCLUÍDA";
-    case "CANCELADA":
-      return "CANCELADA";
     default:
       return status || "-";
   }
@@ -95,12 +42,8 @@ function statusLabel(status) {
 
 function prioridadeLabel(p) {
   switch (p) {
-    case "BAIXA":
-      return "BAIXA";
     case "MEDIA":
       return "MÉDIA";
-    case "ALTA":
-      return "ALTA";
     case "CRITICA":
       return "CRÍTICA";
     default:
@@ -111,712 +54,69 @@ function prioridadeLabel(p) {
 function statusClass(status) {
   switch (status) {
     case "ABERTA":
-      return "bg-blue-100 text-blue-700";
+      return "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
     case "EM_ANALISE":
-      return "bg-yellow-100 text-yellow-800";
+      return "bg-yellow-50 text-yellow-800 ring-1 ring-yellow-200";
     case "EM_EXECUCAO":
-      return "bg-orange-100 text-orange-700";
+      return "bg-orange-50 text-orange-700 ring-1 ring-orange-200";
     case "AG_PECAS":
-      return "bg-purple-100 text-purple-700";
+      return "bg-purple-50 text-purple-700 ring-1 ring-purple-200";
     case "CONCLUIDA":
-      return "bg-green-100 text-green-700";
+      return "bg-green-50 text-green-700 ring-1 ring-green-200";
     case "CANCELADA":
-      return "bg-gray-200 text-gray-700";
+      return "bg-gray-100 text-gray-700 ring-1 ring-gray-200";
     default:
-      return "bg-gray-100 text-gray-700";
+      return "bg-gray-100 text-gray-700 ring-1 ring-gray-200";
   }
 }
 
 function prioridadeClass(p) {
   switch (p) {
     case "CRITICA":
-      return "bg-red-100 text-red-700";
+      return "bg-red-50 text-red-700 ring-1 ring-red-200";
     case "ALTA":
-      return "bg-orange-100 text-orange-700";
+      return "bg-orange-50 text-orange-700 ring-1 ring-orange-200";
     case "MEDIA":
-      return "bg-yellow-100 text-yellow-800";
+      return "bg-yellow-50 text-yellow-800 ring-1 ring-yellow-200";
     case "BAIXA":
-      return "bg-green-100 text-green-700";
+      return "bg-green-50 text-green-700 ring-1 ring-green-200";
     default:
-      return "bg-gray-100 text-gray-700";
+      return "bg-gray-100 text-gray-700 ring-1 ring-gray-200";
   }
 }
 
-function EmptyPhoto({ h = "h-40" }) {
-  return (
-    <div
-      className={`w-full ${h} rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 text-sm font-bold`}
-    >
-      Sem foto
-    </div>
-  );
-}
-
-function NovaSolicitacaoModal({ open, onClose, onSave, saving, prefixos, nomeUsuario }) {
-  const [form, setForm] = useState({
-    veiculo: "",
-    tipo_embarcado: "TELEMETRIA",
-    problema: "",
-    descricao: "",
-    local_problema: "",
-    prioridade: "MEDIA",
-    solicitante: "",
-    foto_url: "",
-    status: "ABERTA",
-    ativo: true,
-  });
-
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setForm({
-      veiculo: "",
-      tipo_embarcado: "TELEMETRIA",
-      problema: "",
-      descricao: "",
-      local_problema: "",
-      prioridade: "MEDIA",
-      solicitante: nomeUsuario || "",
-      foto_url: "",
-      status: "ABERTA",
-      ativo: true,
-    });
-  }, [open, nomeUsuario]);
-
-  if (!open) return null;
-
-  async function handleUploadFoto(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setUploading(true);
-
-      const nomeLimpo = sanitizeFileName(file.name);
-      const ext = nomeLimpo.split(".").pop() || "jpg";
-      const baseSemDuplicarExt = nomeLimpo.replace(/\.[^.]+$/, "");
-      const filePath = `reparos/solicitacoes/${form.veiculo || "sem_veiculo"}/${Date.now()}_${baseSemDuplicarExt}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET_FOTOS)
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: true,
-        });
-
-      if (uploadError) {
-        console.error(uploadError);
-        alert(uploadError.message || "Erro ao enviar foto.");
-        return;
-      }
-
-      const { data } = supabase.storage.from(BUCKET_FOTOS).getPublicUrl(filePath);
-
-      setForm((prev) => ({
-        ...prev,
-        foto_url: data?.publicUrl || "",
-      }));
-    } finally {
-      setUploading(false);
-      if (e.target) e.target.value = "";
-    }
-  }
-
-  async function submit(e) {
-    e.preventDefault();
-
-    if (!form.veiculo) return alert("Veículo é obrigatório.");
-    if (!form.tipo_embarcado) return alert("Tipo do embarcado é obrigatório.");
-    if (!form.problema.trim()) return alert("Problema é obrigatório.");
-    if (!form.prioridade) return alert("Prioridade é obrigatória.");
-
-    await onSave({
-      veiculo: form.veiculo,
-      tipo_embarcado: form.tipo_embarcado,
-      problema: form.problema.trim(),
-      descricao: form.descricao.trim(),
-      local_problema: form.local_problema.trim(),
-      prioridade: form.prioridade,
-      solicitante: nomeUsuario || form.solicitante.trim(),
-      foto_url: form.foto_url.trim(),
-      status: "ABERTA",
-      ativo: true,
-      embarcado_id: null,
-    });
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b flex items-center justify-between">
-          <div>
-            <div className="text-xs font-black text-gray-500 uppercase">Nova solicitação</div>
-            <div className="text-lg font-black text-gray-900">Solicitação de reparo</div>
-          </div>
-
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
-            <FaTimes />
-          </button>
-        </div>
-
-        <form onSubmit={submit} className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Veículo</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.veiculo}
-              onChange={(e) => setForm({ ...form, veiculo: e.target.value })}
-            >
-              <option value="">Selecione...</option>
-              {prefixos.map((p) => (
-                <option key={p.codigo} value={p.codigo}>
-                  {p.codigo} {p.cluster ? `- ${p.cluster}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Tipo embarcado</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.tipo_embarcado}
-              onChange={(e) => setForm({ ...form, tipo_embarcado: e.target.value })}
-            >
-              {TIPOS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Prioridade</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.prioridade}
-              onChange={(e) => setForm({ ...form, prioridade: e.target.value })}
-            >
-              {PRIORIDADES.map((p) => (
-                <option key={p} value={p}>
-                  {prioridadeLabel(p)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Solicitante</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-gray-100"
-              value={nomeUsuario || ""}
-              disabled
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Problema</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.problema}
-              onChange={(e) => setForm({ ...form, problema: e.target.value })}
-              placeholder="Ex: Sem comunicação / equipamento desligado / câmera sem imagem"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Local do problema</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.local_problema}
-              onChange={(e) => setForm({ ...form, local_problema: e.target.value })}
-              placeholder="Ex: Painel frontal / teto / traseira"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Descrição</label>
-            <textarea
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold min-h-[90px]"
-              value={form.descricao}
-              onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Foto</label>
-
-            <div className="flex flex-col gap-3">
-              {form.foto_url ? (
-                <img
-                  src={form.foto_url}
-                  alt="Evidência"
-                  className="w-full h-52 object-cover rounded-xl border bg-white"
-                />
-              ) : (
-                <EmptyPhoto />
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60"
-                >
-                  <FaUpload />
-                  {uploading ? "Enviando foto..." : "Anexar foto"}
-                </button>
-
-                {form.foto_url && (
-                  <button
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, foto_url: "" }))}
-                    className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-black"
-                  >
-                    Remover foto
-                  </button>
-                )}
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleUploadFoto}
-              />
-            </div>
-          </div>
-
-          <div className="md:col-span-2 flex justify-between gap-3 pt-2 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg font-black text-sm bg-white border hover:bg-gray-100"
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="submit"
-              disabled={saving || uploading}
-              className="px-4 py-2 rounded-lg font-black text-sm bg-gray-900 text-white hover:bg-black disabled:opacity-60 flex items-center gap-2"
-            >
-              <FaSave /> {saving ? "Salvando..." : "Salvar solicitação"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function ExecucaoModal({ open, onClose, solicitacao, onSave, saving, nomeUsuario }) {
-  const [form, setForm] = useState({
-    status_evento: "EM_ANALISE",
-    acao_executada: "",
-    diagnostico: "",
-    observacao: "",
-    executado_por: "",
-    foto_url: "",
-  });
-
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setForm({
-      status_evento: solicitacao?.status || "EM_ANALISE",
-      acao_executada: "",
-      diagnostico: "",
-      observacao: "",
-      executado_por: nomeUsuario || "",
-      foto_url: "",
-    });
-  }, [open, solicitacao, nomeUsuario]);
-
-  if (!open || !solicitacao) return null;
-
-  async function handleUploadFoto(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setUploading(true);
-
-      const nomeLimpo = sanitizeFileName(file.name);
-      const ext = nomeLimpo.split(".").pop() || "jpg";
-      const baseSemDuplicarExt = nomeLimpo.replace(/\.[^.]+$/, "");
-      const filePath = `reparos/execucao/${solicitacao.id}/${Date.now()}_${baseSemDuplicarExt}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET_FOTOS)
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: true,
-        });
-
-      if (uploadError) {
-        console.error(uploadError);
-        alert(uploadError.message || "Erro ao enviar foto.");
-        return;
-      }
-
-      const { data } = supabase.storage.from(BUCKET_FOTOS).getPublicUrl(filePath);
-
-      setForm((prev) => ({
-        ...prev,
-        foto_url: data?.publicUrl || "",
-      }));
-    } finally {
-      setUploading(false);
-      if (e.target) e.target.value = "";
-    }
-  }
-
-  async function submit(e) {
-    e.preventDefault();
-
-    if (!form.status_evento) return alert("Status é obrigatório.");
-
-    await onSave({
-      ...form,
-      executado_por: nomeUsuario || form.executado_por.trim(),
-      acao_executada: form.acao_executada.trim(),
-      diagnostico: form.diagnostico.trim(),
-      observacao: form.observacao.trim(),
-      foto_url: form.foto_url.trim(),
-    });
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b flex items-center justify-between">
-          <div>
-            <div className="text-xs font-black text-gray-500 uppercase">Execução</div>
-            <div className="text-lg font-black text-gray-900">
-              {solicitacao.tipo_embarcado} • {solicitacao.problema}
-            </div>
-          </div>
-
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
-            <FaTimes />
-          </button>
-        </div>
-
-        <form onSubmit={submit} className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Novo status</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.status_evento}
-              onChange={(e) => setForm({ ...form, status_evento: e.target.value })}
-            >
-              {STATUS.map((s) => (
-                <option key={s} value={s}>
-                  {statusLabel(s)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Executado por</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-gray-100"
-              value={nomeUsuario || ""}
-              disabled
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Diagnóstico</label>
-            <textarea
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold min-h-[80px]"
-              value={form.diagnostico}
-              onChange={(e) => setForm({ ...form, diagnostico: e.target.value })}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Ação executada</label>
-            <textarea
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold min-h-[80px]"
-              value={form.acao_executada}
-              onChange={(e) => setForm({ ...form, acao_executada: e.target.value })}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Observação</label>
-            <textarea
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold min-h-[80px]"
-              value={form.observacao}
-              onChange={(e) => setForm({ ...form, observacao: e.target.value })}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Evidência</label>
-
-            <div className="flex flex-col gap-3">
-              {form.foto_url ? (
-                <img
-                  src={form.foto_url}
-                  alt="Evidência"
-                  className="w-full h-52 object-cover rounded-xl border bg-white"
-                />
-              ) : (
-                <EmptyPhoto />
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60"
-                >
-                  <FaUpload />
-                  {uploading ? "Enviando foto..." : "Anexar foto"}
-                </button>
-
-                {form.foto_url && (
-                  <button
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, foto_url: "" }))}
-                    className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-black"
-                  >
-                    Remover foto
-                  </button>
-                )}
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleUploadFoto}
-              />
-            </div>
-          </div>
-
-          <div className="md:col-span-2 flex justify-between gap-3 pt-2 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg font-black text-sm bg-white border hover:bg-gray-100"
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="submit"
-              disabled={saving || uploading}
-              className="px-4 py-2 rounded-lg font-black text-sm bg-gray-900 text-white hover:bg-black disabled:opacity-60 flex items-center gap-2"
-            >
-              <FaSave /> {saving ? "Salvando..." : "Salvar execução"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function LinhaDetalhesSolicitacao({ row }) {
-  return (
-    <div className="bg-gray-50 border-t">
-      <div className="p-4 md:p-5 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            <div className="bg-white rounded-xl border p-3">
-              <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
-                <FaCalendarAlt />
-                Criado em
-              </div>
-              <div className="text-sm font-black text-gray-900 mt-1">
-                {formatDateTimeBR(row.created_at)}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border p-3">
-              <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
-                <FaMapMarkerAlt />
-                Local do problema
-              </div>
-              <div className="text-sm font-black text-gray-900 mt-1">
-                {row.local_problema || "-"}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border p-3">
-              <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
-                <FaUser />
-                Solicitante
-              </div>
-              <div className="text-sm font-black text-gray-900 mt-1">
-                {row.solicitante || "-"}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border p-3">
-              <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
-                <FaWrench />
-                Executado por
-              </div>
-              <div className="text-sm font-black text-gray-900 mt-1">
-                {row.executado_por || "-"}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border p-4">
-            <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
-              <FaClipboardList />
-              Descrição da solicitação
-            </div>
-            <div className="text-sm font-semibold text-gray-800 mt-2 whitespace-pre-wrap min-h-[48px]">
-              {row.descricao || "Sem descrição detalhada."}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="bg-white rounded-xl border p-4">
-              <div className="text-[10px] font-black uppercase text-gray-500">
-                Observação da execução
-              </div>
-              <div className="text-sm font-semibold text-gray-800 mt-2 whitespace-pre-wrap min-h-[70px]">
-                {row.observacao_execucao || "Sem observação de execução."}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border p-4">
-              <div className="text-[10px] font-black uppercase text-gray-500">
-                Fechamento
-              </div>
-              <div className="text-sm font-semibold text-gray-800 mt-2 space-y-1">
-                <div>
-                  <span className="font-black">Data execução:</span>{" "}
-                  {formatDateTimeBR(row.data_execucao)}
-                </div>
-                <div>
-                  <span className="font-black">Data fechamento:</span>{" "}
-                  {formatDateTimeBR(row.data_fechamento)}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border p-4">
-          <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2 mb-3">
-            <FaImage />
-            Evidência
-          </div>
-
-          {row.foto_url ? (
-            <img
-              src={row.foto_url}
-              alt="Evidência da solicitação"
-              className="w-full h-72 object-cover rounded-xl border bg-white"
-            />
-          ) : (
-            <EmptyPhoto h="h-72" />
-          )}
-        </div>
-      </div>
-    </div>
-  );
+function countAbertas(rows) {
+  return rows.filter((x) =>
+    ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS"].includes(x.status)
+  ).length;
 }
 
 export default function EmbarcadosReparos() {
-  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
 
   const [rows, setRows] = useState([]);
-  const [prefixos, setPrefixos] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroPrioridade, setFiltroPrioridade] = useState("");
 
-  const [novaOpen, setNovaOpen] = useState(false);
-  const [execOpen, setExecOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [solicitacaoAtual, setSolicitacaoAtual] = useState(null);
-
-  const [nomeUsuario, setNomeUsuario] = useState("");
-  const [loginUsuario, setLoginUsuario] = useState("");
-  const [usuarioId, setUsuarioId] = useState(null);
-
-  const [expandedId, setExpandedId] = useState(null);
-
-  useEffect(() => {
-    async function carregarUsuarioSessao() {
-      try {
-        const loginSessao = user?.login || user?.email || null;
-        const idSessao = pickUserUuid(user);
-
-        let nomeSessao =
-          buildNomeSobrenome(user) ||
-          (user?.nome ? String(user.nome).trim() : null) ||
-          (user?.nome_completo ? String(user.nome_completo).trim() : null) ||
-          null;
-
-        if (!nomeSessao && loginSessao) {
-          const { data: u, error } = await supabase
-            .from("usuarios_aprovadores")
-            .select("nome, sobrenome, nome_completo")
-            .eq("login", loginSessao)
-            .maybeSingle();
-
-          if (!error && u) {
-            nomeSessao =
-              u?.nome_completo ||
-              [u?.nome, u?.sobrenome].filter(Boolean).join(" ") ||
-              u?.nome ||
-              null;
-          }
-        }
-
-        setNomeUsuario(nomeSessao || loginSessao || "");
-        setLoginUsuario(loginSessao || "");
-        setUsuarioId(idSessao || null);
-      } catch (err) {
-        console.error("Erro ao carregar usuário logado:", err);
-        setNomeUsuario(user?.login || user?.email || "");
-        setLoginUsuario(user?.login || user?.email || "");
-        setUsuarioId(pickUserUuid(user));
-      }
-    }
-
-    carregarUsuarioSessao();
-  }, [user]);
-
   async function carregar() {
     setLoading(true);
 
-    const [r1, r2] = await Promise.all([
-      supabase
-        .from("embarcados_solicitacoes_reparo")
-        .select("*")
-        .order("created_at", { ascending: false }),
-      supabase.from("prefixos").select("codigo, cluster").order("codigo"),
-    ]);
+    const { data, error } = await supabase
+      .from("embarcados_solicitacoes_reparo")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    if (r1.error) console.error(r1.error);
-    if (r2.error) console.error(r2.error);
+    if (error) {
+      console.error(error);
+      alert("Erro ao carregar solicitações.");
+      setRows([]);
+    } else {
+      setRows(data || []);
+    }
 
-    setRows(r1.data || []);
-    setPrefixos(r2.data || []);
     setLoading(false);
   }
 
@@ -827,7 +127,7 @@ export default function EmbarcadosReparos() {
   const filtrados = useMemo(() => {
     const txt = busca.trim().toLowerCase();
 
-    return rows.filter((r) => {
+    return (rows || []).filter((r) => {
       if (filtroStatus && r.status !== filtroStatus) return false;
       if (filtroPrioridade && r.prioridade !== filtroPrioridade) return false;
 
@@ -854,352 +154,265 @@ export default function EmbarcadosReparos() {
 
   const resumo = useMemo(() => {
     const total = filtrados.length;
-    const abertas = filtrados.filter((x) =>
-      ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS"].includes(x.status)
-    ).length;
+    const abertas = countAbertas(filtrados);
     const concluidas = filtrados.filter((x) => x.status === "CONCLUIDA").length;
     const criticas = filtrados.filter((x) => x.prioridade === "CRITICA").length;
+
     return { total, abertas, concluidas, criticas };
   }, [filtrados]);
 
-  async function salvarSolicitacao(payload) {
-    try {
-      setSaving(true);
-
-      const insertPayload = {
-        ...payload,
-        solicitante: nomeUsuario || loginUsuario || payload.solicitante || null,
-        criado_por_login: loginUsuario || null,
-        criado_por_nome: nomeUsuario || loginUsuario || null,
-        criado_por_id: usuarioId || null,
-      };
-
-      const { error } = await supabase
-        .from("embarcados_solicitacoes_reparo")
-        .insert([insertPayload]);
-
-      if (error) {
-        console.error(error);
-        alert(error.message || "Erro ao salvar solicitação.");
-        return;
-      }
-
-      setNovaOpen(false);
-      await carregar();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function salvarExecucao(payload) {
-    if (!solicitacaoAtual?.id) return;
-
-    try {
-      setSaving(true);
-
-      const executadoPorFinal = nomeUsuario || loginUsuario || payload.executado_por || null;
-
-      const { error: evError } = await supabase
-        .from("embarcados_solicitacoes_reparo_eventos")
-        .insert([
-          {
-            solicitacao_id: solicitacaoAtual.id,
-            status_evento: payload.status_evento,
-            acao_executada: payload.acao_executada || null,
-            diagnostico: payload.diagnostico || null,
-            observacao: payload.observacao || null,
-            executado_por: executadoPorFinal,
-            foto_url: payload.foto_url || null,
-            criado_por_login: loginUsuario || null,
-            criado_por_nome: nomeUsuario || loginUsuario || null,
-            criado_por_id: usuarioId || null,
-          },
-        ]);
-
-      if (evError) {
-        console.error(evError);
-        alert(evError.message || "Erro ao salvar evento.");
-        return;
-      }
-
-      const updatePayload = {
-        status: payload.status_evento,
-        observacao_execucao: payload.observacao || null,
-        executado_por: executadoPorFinal,
-        data_execucao: new Date().toISOString(),
-      };
-
-      if (payload.status_evento === "CONCLUIDA" || payload.status_evento === "CANCELADA") {
-        updatePayload.data_fechamento = new Date().toISOString();
-      }
-
-      const { error: upError } = await supabase
-        .from("embarcados_solicitacoes_reparo")
-        .update(updatePayload)
-        .eq("id", solicitacaoAtual.id);
-
-      if (upError) {
-        console.error(upError);
-        alert(upError.message || "Erro ao atualizar solicitação.");
-        return;
-      }
-
-      setExecOpen(false);
-      setSolicitacaoAtual(null);
-      await carregar();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function toggleDetalhes(id) {
-    setExpandedId((prev) => (prev === id ? null : id));
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="bg-white rounded-2xl shadow-sm border p-5">
-        <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
-          <div>
-            <div className="text-xs font-black text-gray-500 uppercase">Módulo</div>
-            <h1 className="text-2xl font-black uppercase tracking-tight text-gray-900">
-              Reparos de Embarcados
-            </h1>
-            <p className="text-sm text-gray-500 font-semibold mt-1">
-              Abertura por veículo, consulta detalhada e controle da execução do serviço.
-            </p>
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+      <div className="mx-auto max-w-[1700px] space-y-4">
+        {/* CABEÇALHO */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+          <div className="flex flex-col 2xl:flex-row 2xl:items-end 2xl:justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-black tracking-[0.18em] text-slate-500 uppercase">
+                Manutenção / Embarcados
+              </div>
+              <h1 className="text-3xl font-black tracking-tight text-slate-900">
+                Reparos de Embarcados
+              </h1>
+              <p className="text-sm text-slate-500 font-semibold mt-1">
+                Central de solicitações com consulta rápida, detalhes e execução separada.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={carregar}
+                className="h-[44px] px-4 rounded-2xl bg-white border border-slate-300 text-slate-800 font-black text-sm hover:bg-slate-50 flex items-center gap-2"
+              >
+                <FaSync />
+                Atualizar
+              </button>
+
+              <button
+                onClick={() => navigate("/embarcados/reparos/nova")}
+                className="h-[44px] px-4 rounded-2xl bg-emerald-600 text-white font-black text-sm hover:bg-emerald-500 flex items-center gap-2"
+              >
+                <FaPlus />
+                Nova solicitação
+              </button>
+            </div>
           </div>
+        </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={carregar}
-              className="h-[42px] px-4 rounded-xl bg-white border text-gray-800 font-black text-sm hover:bg-gray-100 flex items-center gap-2"
-            >
-              <FaSync /> Atualizar
-            </button>
-
-            <button
-              onClick={() => setNovaOpen(true)}
-              className="h-[42px] px-4 rounded-xl bg-green-600 text-white font-black text-sm hover:bg-green-500 flex items-center gap-2"
-            >
-              <FaPlus /> Nova solicitação
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-gray-500 uppercase">Total</div>
-          <div className="text-2xl font-black mt-1">{resumo.total}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-gray-500 uppercase">Abertas</div>
-          <div className="text-2xl font-black mt-1 text-blue-700">{resumo.abertas}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-gray-500 uppercase">Concluídas</div>
-          <div className="text-2xl font-black mt-1 text-green-700">{resumo.concluidas}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-gray-500 uppercase">Críticas</div>
-          <div className="text-2xl font-black mt-1 text-red-700">{resumo.criticas}</div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm border p-4 mt-4">
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Buscar</label>
-            <div className="flex items-center gap-2 border rounded-xl px-3 py-2 bg-white">
-              <FaSearch className="text-gray-400" />
-              <input
-                className="w-full outline-none text-sm font-semibold"
-                placeholder="Veículo, problema, solicitante..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
+        {/* CARDS */}
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase text-slate-500">Total</div>
+                <div className="text-2xl font-black text-slate-900 mt-1">{resumo.total}</div>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                <FaTools />
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Status</label>
-            <select
-              className="w-full border rounded-xl px-3 py-2 text-sm font-bold"
-              value={filtroStatus}
-              onChange={(e) => setFiltroStatus(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {STATUS.map((s) => (
-                <option key={s} value={s}>
-                  {statusLabel(s)}
-                </option>
-              ))}
-            </select>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase text-slate-500">Abertas</div>
+                <div className="text-2xl font-black text-blue-700 mt-1">{resumo.abertas}</div>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
+                <FaClock />
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Prioridade</label>
-            <select
-              className="w-full border rounded-xl px-3 py-2 text-sm font-bold"
-              value={filtroPrioridade}
-              onChange={(e) => setFiltroPrioridade(e.target.value)}
-            >
-              <option value="">Todas</option>
-              {PRIORIDADES.map((p) => (
-                <option key={p} value={p}>
-                  {prioridadeLabel(p)}
-                </option>
-              ))}
-            </select>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase text-slate-500">Concluídas</div>
+                <div className="text-2xl font-black text-green-700 mt-1">{resumo.concluidas}</div>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-green-50 text-green-700 flex items-center justify-center">
+                <FaCheckCircle />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase text-slate-500">Críticas</div>
+                <div className="text-2xl font-black text-red-700 mt-1">{resumo.criticas}</div>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center">
+                <FaExclamationTriangle />
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="mt-4 bg-white rounded-2xl border shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
-                <th className="p-3 border-r whitespace-nowrap w-[52px]"></th>
-                <th className="p-3 border-r whitespace-nowrap">Criado em</th>
-                <th className="p-3 border-r whitespace-nowrap">Veículo</th>
-                <th className="p-3 border-r whitespace-nowrap">Tipo</th>
-                <th className="p-3 border-r whitespace-nowrap">Problema</th>
-                <th className="p-3 border-r whitespace-nowrap">Prioridade</th>
-                <th className="p-3 border-r whitespace-nowrap">Status</th>
-                <th className="p-3 border-r whitespace-nowrap">Solicitante</th>
-                <th className="p-3 text-center whitespace-nowrap">Ações</th>
-              </tr>
-            </thead>
+        {/* FILTROS */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
+                Buscar
+              </label>
+              <div className="flex items-center gap-2 border border-slate-300 rounded-2xl px-3 py-2.5 bg-white">
+                <FaSearch className="text-slate-400" />
+                <input
+                  className="w-full outline-none text-sm font-semibold"
+                  placeholder="Veículo, problema, solicitante..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                />
+              </div>
+            </div>
 
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="p-8 text-center text-gray-500 font-black">
-                    Carregando solicitações...
-                  </td>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
+                Status
+              </label>
+              <select
+                className="w-full border border-slate-300 rounded-2xl px-3 py-2.5 text-sm font-bold bg-white"
+                value={filtroStatus}
+                onChange={(e) => setFiltroStatus(e.target.value)}
+              >
+                <option value="">Todos</option>
+                {STATUS.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabel(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
+                Prioridade
+              </label>
+              <select
+                className="w-full border border-slate-300 rounded-2xl px-3 py-2.5 text-sm font-bold bg-white"
+                value={filtroPrioridade}
+                onChange={(e) => setFiltroPrioridade(e.target.value)}
+              >
+                <option value="">Todas</option>
+                {PRIORIDADES.map((p) => (
+                  <option key={p} value={p}>
+                    {prioridadeLabel(p)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* TABELA */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1250px] text-sm">
+              <thead className="bg-slate-100 border-b border-slate-200">
+                <tr className="text-left">
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Criado em</th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Veículo</th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Tipo</th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Problema</th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Prioridade</th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Status</th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600">Solicitante</th>
+                  <th className="px-4 py-3 text-[11px] font-black uppercase text-slate-600 text-center">Ações</th>
                 </tr>
-              ) : filtrados.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="p-8 text-center text-gray-500 font-black">
-                    Nenhuma solicitação encontrada.
-                  </td>
-                </tr>
-              ) : (
-                filtrados.map((r) => {
-                  const expanded = expandedId === r.id;
+              </thead>
 
-                  return (
-                    <>
-                      <tr
-                        key={r.id}
-                        className={`border-b hover:bg-gray-50 transition ${expanded ? "bg-gray-50" : ""}`}
-                      >
-                        <td className="p-3 border-r text-center">
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-12 text-center font-black text-slate-500">
+                      Carregando solicitações...
+                    </td>
+                  </tr>
+                ) : filtrados.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-12 text-center font-black text-slate-500">
+                      Nenhuma solicitação encontrada.
+                    </td>
+                  </tr>
+                ) : (
+                  filtrados.map((r) => (
+                    <tr key={r.id} className="border-b border-slate-200 hover:bg-slate-50 transition">
+                      <td className="px-4 py-3 font-semibold whitespace-nowrap text-slate-700">
+                        {formatDateTimeBR(r.created_at)}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="font-black text-slate-900">{r.veiculo || "-"}</div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="font-black text-slate-800">{r.tipo_embarcado || "-"}</div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="max-w-[340px]">
+                          <div className="font-semibold text-slate-800 truncate" title={r.problema}>
+                            {r.problema || "-"}
+                          </div>
+                          <div className="text-xs text-slate-500 truncate mt-1" title={r.local_problema}>
+                            {r.local_problema || "Sem local informado"}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex px-3 py-1.5 rounded-full text-[11px] font-black uppercase ${prioridadeClass(
+                            r.prioridade
+                          )}`}
+                        >
+                          {prioridadeLabel(r.prioridade)}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex px-3 py-1.5 rounded-full text-[11px] font-black uppercase ${statusClass(
+                            r.status
+                          )}`}
+                        >
+                          {statusLabel(r.status)}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3 font-semibold text-slate-700">
+                        {r.solicitante || "-"}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="flex justify-center gap-2">
                           <button
-                            onClick={() => toggleDetalhes(r.id)}
-                            className="w-8 h-8 rounded-lg border bg-white hover:bg-gray-100 inline-flex items-center justify-center"
-                            title={expanded ? "Fechar detalhes" : "Abrir detalhes"}
+                            onClick={() => navigate(`/embarcados/reparos/${r.id}`)}
+                            className="px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-black flex items-center gap-2"
                           >
-                            {expanded ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />}
+                            <FaEye />
+                            Detalhes
                           </button>
-                        </td>
 
-                        <td className="p-3 border-r font-semibold whitespace-nowrap">
-                          {formatDateTimeBR(r.created_at)}
-                        </td>
-
-                        <td className="p-3 border-r font-black">{r.veiculo || "-"}</td>
-
-                        <td className="p-3 border-r font-black">{r.tipo_embarcado}</td>
-
-                        <td className="p-3 border-r font-semibold">
-                          <div className="max-w-[280px] truncate" title={r.problema}>
-                            {r.problema}
-                          </div>
-                        </td>
-
-                        <td className="p-3 border-r">
-                          <span
-                            className={`px-3 py-1 rounded-full text-[11px] font-black uppercase ${prioridadeClass(
-                              r.prioridade
-                            )}`}
+                          <button
+                            onClick={() => navigate(`/embarcados/reparos/${r.id}/executar`)}
+                            className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center gap-2"
                           >
-                            {prioridadeLabel(r.prioridade)}
-                          </span>
-                        </td>
-
-                        <td className="p-3 border-r">
-                          <span
-                            className={`px-3 py-1 rounded-full text-[11px] font-black uppercase ${statusClass(
-                              r.status
-                            )}`}
-                          >
-                            {statusLabel(r.status)}
-                          </span>
-                        </td>
-
-                        <td className="p-3 border-r font-semibold">{r.solicitante || "-"}</td>
-
-                        <td className="p-3 text-center">
-                          <div className="flex justify-center gap-2 flex-wrap">
-                            <button
-                              onClick={() => toggleDetalhes(r.id)}
-                              className="px-3 py-2 rounded-lg bg-white border hover:bg-gray-100 text-gray-800 text-xs font-black flex items-center gap-2"
-                            >
-                              <FaEye /> Detalhes
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setSolicitacaoAtual(r);
-                                setExecOpen(true);
-                              }}
-                              className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-black flex items-center gap-2"
-                            >
-                              <FaWrench /> Executar
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-
-                      {expanded && (
-                        <tr>
-                          <td colSpan={9} className="p-0">
-                            <LinhaDetalhesSolicitacao row={r} />
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                            <FaWrench />
+                            Executar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-
-      <NovaSolicitacaoModal
-        open={novaOpen}
-        onClose={() => setNovaOpen(false)}
-        onSave={salvarSolicitacao}
-        saving={saving}
-        prefixos={prefixos}
-        nomeUsuario={nomeUsuario}
-      />
-
-      <ExecucaoModal
-        open={execOpen}
-        onClose={() => {
-          setExecOpen(false);
-          setSolicitacaoAtual(null);
-        }}
-        solicitacao={solicitacaoAtual}
-        onSave={salvarExecucao}
-        saving={saving}
-        nomeUsuario={nomeUsuario}
-      />
     </div>
   );
 }

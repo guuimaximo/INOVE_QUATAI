@@ -44,8 +44,10 @@ import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
 import ChecklistCentral from "./pages/ChecklistCentral";
 
-// ✅ NOVO: Embarcados
-import Embarcados from "./pages/Embarcados";
+// ✅ NOVO: Embarcados (modelo novo)
+import EmbarcadosCentral from "./pages/EmbarcadosCentral";
+import EmbarcadosMovimentacoes from "./pages/EmbarcadosMovimentacoes";
+import EmbarcadosReparos from "./pages/EmbarcadosReparos";
 
 // ✅ Módulo separado Diesel (NOMES REAIS dos arquivos do seu print)
 import Desempenho_Diesel_Tratativas_Central from "./pages/Desempenho_Diesel_Tratativas_Central";
@@ -110,8 +112,11 @@ export default function App() {
           {/* Checklists */}
           <Route path="/checklists" element={<ChecklistCentral />} />
 
-          {/* ✅ Embarcados */}
-          <Route path="/embarcados" element={<Embarcados />} />
+          {/* ✅ Embarcados - modelo novo */}
+          <Route path="/embarcados-central" element={<EmbarcadosCentral />} />
+          <Route path="/embarcados-movimentacoes" element={<EmbarcadosMovimentacoes />} />
+          <Route path="/embarcados-reparos" element={<EmbarcadosReparos />} />
+          <Route path="/embarcados" element={<Navigate to="/embarcados-central" replace />} />
 
           {/* Tratativas Gerais */}
           <Route path="/central" element={<CentralTratativas />} />

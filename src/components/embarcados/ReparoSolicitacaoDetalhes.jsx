@@ -500,7 +500,7 @@ export default function ReparoSolicitacaoDetalhes() {
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-black"
                   >
                     <FaTrash />
-                    Excluir
+                    Cancelar
                   </button>
                 )}
 

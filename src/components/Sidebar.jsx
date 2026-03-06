@@ -28,6 +28,7 @@ import {
   FaChartPie,
   FaMicrochip,
   FaExchangeAlt,
+  FaFileInvoice,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -62,6 +63,7 @@ const EMBARCADOS_ROUTES = {
   central: "/embarcados-central",
   movimentacoes: "/embarcados-movimentacoes",
   reparos: "/embarcados-reparos",
+  envioManutencao: "/embarcados-envio-manutencao",
 };
 
 /* =========================
@@ -250,6 +252,7 @@ export default function Sidebar() {
           { path: EMBARCADOS_ROUTES.central, label: "Central", icon: <FaListAlt /> },
           { path: EMBARCADOS_ROUTES.movimentacoes, label: "Movimentações", icon: <FaExchangeAlt /> },
           { path: EMBARCADOS_ROUTES.reparos, label: "Reparos", icon: <FaTools /> },
+          { path: EMBARCADOS_ROUTES.envioManutencao, label: "Envio Manutenção", icon: <FaFileInvoice /> },
         ],
       },
 
@@ -315,7 +318,8 @@ export default function Sidebar() {
 
   const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
   const showPCM = isAdmin || isGestor || isManutencao;
-  const showEmbarcados = (isAdmin || isGestor || isManutencao) && canSee(user, EMBARCADOS_ROUTES.central);
+  const showEmbarcados =
+    (isAdmin || isGestor || isManutencao) && canSee(user, EMBARCADOS_ROUTES.central);
 
   const showTratativas = links.tratativas.some((l) => {
     if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;

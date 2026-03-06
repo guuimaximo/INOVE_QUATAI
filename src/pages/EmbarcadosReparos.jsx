@@ -9,6 +9,14 @@ import {
   FaSync,
   FaWrench,
   FaUpload,
+  FaEye,
+  FaChevronDown,
+  FaChevronRight,
+  FaCalendarAlt,
+  FaMapMarkerAlt,
+  FaUser,
+  FaClipboardList,
+  FaImage,
 } from "react-icons/fa";
 
 const TIPOS = [
@@ -57,6 +65,49 @@ function sanitizeFileName(name) {
     .replace(/[^\w.\-]+/g, "_");
 }
 
+function formatDateTimeBR(v) {
+  if (!v) return "-";
+  try {
+    return new Date(v).toLocaleString("pt-BR");
+  } catch {
+    return "-";
+  }
+}
+
+function statusLabel(status) {
+  switch (status) {
+    case "ABERTA":
+      return "ABERTA";
+    case "EM_ANALISE":
+      return "EM ANÁLISE";
+    case "EM_EXECUCAO":
+      return "EM EXECUÇÃO";
+    case "AG_PECAS":
+      return "AG. PEÇAS";
+    case "CONCLUIDA":
+      return "CONCLUÍDA";
+    case "CANCELADA":
+      return "CANCELADA";
+    default:
+      return status || "-";
+  }
+}
+
+function prioridadeLabel(p) {
+  switch (p) {
+    case "BAIXA":
+      return "BAIXA";
+    case "MEDIA":
+      return "MÉDIA";
+    case "ALTA":
+      return "ALTA";
+    case "CRITICA":
+      return "CRÍTICA";
+    default:
+      return p || "-";
+  }
+}
+
 function statusClass(status) {
   switch (status) {
     case "ABERTA":
@@ -91,9 +142,11 @@ function prioridadeClass(p) {
   }
 }
 
-function EmptyPhoto() {
+function EmptyPhoto({ h = "h-40" }) {
   return (
-    <div className="w-full h-40 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 text-sm font-bold">
+    <div
+      className={`w-full ${h} rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 text-sm font-bold`}
+    >
       Sem foto
     </div>
   );
@@ -249,7 +302,7 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, prefixos, nomeUsu
             >
               {PRIORIDADES.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {prioridadeLabel(p)}
                 </option>
               ))}
             </select>
@@ -467,7 +520,7 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving, nomeUsuario
             >
               {STATUS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {statusLabel(s)}
                 </option>
               ))}
             </select>
@@ -578,6 +631,112 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving, nomeUsuario
   );
 }
 
+function LinhaDetalhesSolicitacao({ row }) {
+  return (
+    <div className="bg-gray-50 border-t">
+      <div className="p-4 md:p-5 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
+                <FaCalendarAlt />
+                Criado em
+              </div>
+              <div className="text-sm font-black text-gray-900 mt-1">
+                {formatDateTimeBR(row.created_at)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
+                <FaMapMarkerAlt />
+                Local do problema
+              </div>
+              <div className="text-sm font-black text-gray-900 mt-1">
+                {row.local_problema || "-"}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
+                <FaUser />
+                Solicitante
+              </div>
+              <div className="text-sm font-black text-gray-900 mt-1">
+                {row.solicitante || "-"}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
+                <FaWrench />
+                Executado por
+              </div>
+              <div className="text-sm font-black text-gray-900 mt-1">
+                {row.executado_por || "-"}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border p-4">
+            <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2">
+              <FaClipboardList />
+              Descrição da solicitação
+            </div>
+            <div className="text-sm font-semibold text-gray-800 mt-2 whitespace-pre-wrap min-h-[48px]">
+              {row.descricao || "Sem descrição detalhada."}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="bg-white rounded-xl border p-4">
+              <div className="text-[10px] font-black uppercase text-gray-500">
+                Observação da execução
+              </div>
+              <div className="text-sm font-semibold text-gray-800 mt-2 whitespace-pre-wrap min-h-[70px]">
+                {row.observacao_execucao || "Sem observação de execução."}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border p-4">
+              <div className="text-[10px] font-black uppercase text-gray-500">
+                Fechamento
+              </div>
+              <div className="text-sm font-semibold text-gray-800 mt-2 space-y-1">
+                <div>
+                  <span className="font-black">Data execução:</span>{" "}
+                  {formatDateTimeBR(row.data_execucao)}
+                </div>
+                <div>
+                  <span className="font-black">Data fechamento:</span>{" "}
+                  {formatDateTimeBR(row.data_fechamento)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border p-4">
+          <div className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2 mb-3">
+            <FaImage />
+            Evidência
+          </div>
+
+          {row.foto_url ? (
+            <img
+              src={row.foto_url}
+              alt="Evidência da solicitação"
+              className="w-full h-72 object-cover rounded-xl border bg-white"
+            />
+          ) : (
+            <EmptyPhoto h="h-72" />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EmbarcadosReparos() {
   const { user } = useContext(AuthContext);
 
@@ -597,6 +756,8 @@ export default function EmbarcadosReparos() {
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [loginUsuario, setLoginUsuario] = useState("");
   const [usuarioId, setUsuarioId] = useState(null);
+
+  const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
     async function carregarUsuarioSessao() {
@@ -644,7 +805,10 @@ export default function EmbarcadosReparos() {
     setLoading(true);
 
     const [r1, r2] = await Promise.all([
-      supabase.from("embarcados_solicitacoes_reparo").select("*").order("created_at", { ascending: false }),
+      supabase
+        .from("embarcados_solicitacoes_reparo")
+        .select("*")
+        .order("created_at", { ascending: false }),
       supabase.from("prefixos").select("codigo, cluster").order("codigo"),
     ]);
 
@@ -678,6 +842,7 @@ export default function EmbarcadosReparos() {
         r.prioridade,
         r.status,
         r.solicitante,
+        r.executado_por,
       ]
         .filter(Boolean)
         .join(" ")
@@ -704,8 +869,6 @@ export default function EmbarcadosReparos() {
       const insertPayload = {
         ...payload,
         solicitante: nomeUsuario || loginUsuario || payload.solicitante || null,
-
-        // auditoria opcional
         criado_por_login: loginUsuario || null,
         criado_por_nome: nomeUsuario || loginUsuario || null,
         criado_por_id: usuarioId || null,
@@ -747,8 +910,6 @@ export default function EmbarcadosReparos() {
             observacao: payload.observacao || null,
             executado_por: executadoPorFinal,
             foto_url: payload.foto_url || null,
-
-            // auditoria opcional
             criado_por_login: loginUsuario || null,
             criado_por_nome: nomeUsuario || loginUsuario || null,
             criado_por_id: usuarioId || null,
@@ -791,6 +952,10 @@ export default function EmbarcadosReparos() {
     }
   }
 
+  function toggleDetalhes(id) {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="bg-white rounded-2xl shadow-sm border p-5">
@@ -801,7 +966,7 @@ export default function EmbarcadosReparos() {
               Reparos de Embarcados
             </h1>
             <p className="text-sm text-gray-500 font-semibold mt-1">
-              Abertura por veículo e controle da execução do serviço.
+              Abertura por veículo, consulta detalhada e controle da execução do serviço.
             </p>
           </div>
 
@@ -867,7 +1032,7 @@ export default function EmbarcadosReparos() {
               <option value="">Todos</option>
               {STATUS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {statusLabel(s)}
                 </option>
               ))}
             </select>
@@ -883,7 +1048,7 @@ export default function EmbarcadosReparos() {
               <option value="">Todas</option>
               {PRIORIDADES.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {prioridadeLabel(p)}
                 </option>
               ))}
             </select>
@@ -896,6 +1061,7 @@ export default function EmbarcadosReparos() {
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
+                <th className="p-3 border-r whitespace-nowrap w-[52px]"></th>
                 <th className="p-3 border-r whitespace-nowrap">Criado em</th>
                 <th className="p-3 border-r whitespace-nowrap">Veículo</th>
                 <th className="p-3 border-r whitespace-nowrap">Tipo</th>
@@ -910,51 +1076,104 @@ export default function EmbarcadosReparos() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-gray-500 font-black">
+                  <td colSpan={9} className="p-8 text-center text-gray-500 font-black">
                     Carregando solicitações...
                   </td>
                 </tr>
               ) : filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-gray-500 font-black">
+                  <td colSpan={9} className="p-8 text-center text-gray-500 font-black">
                     Nenhuma solicitação encontrada.
                   </td>
                 </tr>
               ) : (
-                filtrados.map((r) => (
-                  <tr key={r.id} className="border-b">
-                    <td className="p-3 border-r font-semibold whitespace-nowrap">
-                      {new Date(r.created_at).toLocaleString("pt-BR")}
-                    </td>
-                    <td className="p-3 border-r font-black">{r.veiculo || "-"}</td>
-                    <td className="p-3 border-r font-black">{r.tipo_embarcado}</td>
-                    <td className="p-3 border-r font-semibold">{r.problema}</td>
-                    <td className="p-3 border-r">
-                      <span className={`px-3 py-1 rounded-full text-[11px] font-black uppercase ${prioridadeClass(r.prioridade)}`}>
-                        {r.prioridade}
-                      </span>
-                    </td>
-                    <td className="p-3 border-r">
-                      <span className={`px-3 py-1 rounded-full text-[11px] font-black uppercase ${statusClass(r.status)}`}>
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="p-3 border-r font-semibold">{r.solicitante || "-"}</td>
-                    <td className="p-3 text-center">
-                      <div className="flex justify-center gap-2">
-                        <button
-                          onClick={() => {
-                            setSolicitacaoAtual(r);
-                            setExecOpen(true);
-                          }}
-                          className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-black flex items-center gap-2"
-                        >
-                          <FaWrench /> Executar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                filtrados.map((r) => {
+                  const expanded = expandedId === r.id;
+
+                  return (
+                    <>
+                      <tr
+                        key={r.id}
+                        className={`border-b hover:bg-gray-50 transition ${expanded ? "bg-gray-50" : ""}`}
+                      >
+                        <td className="p-3 border-r text-center">
+                          <button
+                            onClick={() => toggleDetalhes(r.id)}
+                            className="w-8 h-8 rounded-lg border bg-white hover:bg-gray-100 inline-flex items-center justify-center"
+                            title={expanded ? "Fechar detalhes" : "Abrir detalhes"}
+                          >
+                            {expanded ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />}
+                          </button>
+                        </td>
+
+                        <td className="p-3 border-r font-semibold whitespace-nowrap">
+                          {formatDateTimeBR(r.created_at)}
+                        </td>
+
+                        <td className="p-3 border-r font-black">{r.veiculo || "-"}</td>
+
+                        <td className="p-3 border-r font-black">{r.tipo_embarcado}</td>
+
+                        <td className="p-3 border-r font-semibold">
+                          <div className="max-w-[280px] truncate" title={r.problema}>
+                            {r.problema}
+                          </div>
+                        </td>
+
+                        <td className="p-3 border-r">
+                          <span
+                            className={`px-3 py-1 rounded-full text-[11px] font-black uppercase ${prioridadeClass(
+                              r.prioridade
+                            )}`}
+                          >
+                            {prioridadeLabel(r.prioridade)}
+                          </span>
+                        </td>
+
+                        <td className="p-3 border-r">
+                          <span
+                            className={`px-3 py-1 rounded-full text-[11px] font-black uppercase ${statusClass(
+                              r.status
+                            )}`}
+                          >
+                            {statusLabel(r.status)}
+                          </span>
+                        </td>
+
+                        <td className="p-3 border-r font-semibold">{r.solicitante || "-"}</td>
+
+                        <td className="p-3 text-center">
+                          <div className="flex justify-center gap-2 flex-wrap">
+                            <button
+                              onClick={() => toggleDetalhes(r.id)}
+                              className="px-3 py-2 rounded-lg bg-white border hover:bg-gray-100 text-gray-800 text-xs font-black flex items-center gap-2"
+                            >
+                              <FaEye /> Detalhes
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setSolicitacaoAtual(r);
+                                setExecOpen(true);
+                              }}
+                              className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-black flex items-center gap-2"
+                            >
+                              <FaWrench /> Executar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {expanded && (
+                        <tr>
+                          <td colSpan={9} className="p-0">
+                            <LinhaDetalhesSolicitacao row={r} />
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useContext } from "react";
 import { supabase } from "../supabase";
+import { AuthContext } from "../context/AuthContext";
 import {
   FaPlus,
   FaSave,
@@ -23,6 +24,31 @@ const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
 const STATUS = ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS", "CONCLUIDA", "CANCELADA"];
 
 const BUCKET_FOTOS = "embarcados";
+
+function isValidUUID(v) {
+  if (!v) return false;
+  const s = String(v).trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    s
+  );
+}
+
+function pickUserUuid(user) {
+  if (isValidUUID(user?.auth_user_id)) return user.auth_user_id;
+  if (isValidUUID(user?.id)) return user.id;
+  return null;
+}
+
+function buildNomeSobrenome(u) {
+  const nome = String(u?.nome || "").trim();
+  const sobrenome = String(u?.sobrenome || "").trim();
+  const nomeCompleto = String(u?.nome_completo || "").trim();
+
+  if (nomeCompleto) return nomeCompleto;
+  if (nome && sobrenome) return `${nome} ${sobrenome}`;
+  if (nome) return nome;
+  return null;
+}
 
 function sanitizeFileName(name) {
   return String(name || "arquivo")
@@ -73,7 +99,7 @@ function EmptyPhoto() {
   );
 }
 
-function NovaSolicitacaoModal({ open, onClose, onSave, saving, prefixos }) {
+function NovaSolicitacaoModal({ open, onClose, onSave, saving, prefixos, nomeUsuario }) {
   const [form, setForm] = useState({
     veiculo: "",
     tipo_embarcado: "TELEMETRIA",
@@ -99,12 +125,12 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, prefixos }) {
       descricao: "",
       local_problema: "",
       prioridade: "MEDIA",
-      solicitante: "",
+      solicitante: nomeUsuario || "",
       foto_url: "",
       status: "ABERTA",
       ativo: true,
     });
-  }, [open]);
+  }, [open, nomeUsuario]);
 
   if (!open) return null;
 
@@ -160,7 +186,7 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, prefixos }) {
       descricao: form.descricao.trim(),
       local_problema: form.local_problema.trim(),
       prioridade: form.prioridade,
-      solicitante: form.solicitante.trim(),
+      solicitante: nomeUsuario || form.solicitante.trim(),
       foto_url: form.foto_url.trim(),
       status: "ABERTA",
       ativo: true,
@@ -232,9 +258,9 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, prefixos }) {
           <div>
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Solicitante</label>
             <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.solicitante}
-              onChange={(e) => setForm({ ...form, solicitante: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-gray-100"
+              value={nomeUsuario || ""}
+              disabled
             />
           </div>
 
@@ -336,7 +362,7 @@ function NovaSolicitacaoModal({ open, onClose, onSave, saving, prefixos }) {
   );
 }
 
-function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
+function ExecucaoModal({ open, onClose, solicitacao, onSave, saving, nomeUsuario }) {
   const [form, setForm] = useState({
     status_evento: "EM_ANALISE",
     acao_executada: "",
@@ -356,10 +382,10 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
       acao_executada: "",
       diagnostico: "",
       observacao: "",
-      executado_por: "",
+      executado_por: nomeUsuario || "",
       foto_url: "",
     });
-  }, [open, solicitacao]);
+  }, [open, solicitacao, nomeUsuario]);
 
   if (!open || !solicitacao) return null;
 
@@ -407,10 +433,10 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
 
     await onSave({
       ...form,
+      executado_por: nomeUsuario || form.executado_por.trim(),
       acao_executada: form.acao_executada.trim(),
       diagnostico: form.diagnostico.trim(),
       observacao: form.observacao.trim(),
-      executado_por: form.executado_por.trim(),
       foto_url: form.foto_url.trim(),
     });
   }
@@ -450,9 +476,9 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
           <div>
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Executado por</label>
             <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
-              value={form.executado_por}
-              onChange={(e) => setForm({ ...form, executado_por: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-gray-100"
+              value={nomeUsuario || ""}
+              disabled
             />
           </div>
 
@@ -553,6 +579,8 @@ function ExecucaoModal({ open, onClose, solicitacao, onSave, saving }) {
 }
 
 export default function EmbarcadosReparos() {
+  const { user } = useContext(AuthContext);
+
   const [rows, setRows] = useState([]);
   const [prefixos, setPrefixos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -565,6 +593,52 @@ export default function EmbarcadosReparos() {
   const [execOpen, setExecOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [solicitacaoAtual, setSolicitacaoAtual] = useState(null);
+
+  const [nomeUsuario, setNomeUsuario] = useState("");
+  const [loginUsuario, setLoginUsuario] = useState("");
+  const [usuarioId, setUsuarioId] = useState(null);
+
+  useEffect(() => {
+    async function carregarUsuarioSessao() {
+      try {
+        const loginSessao = user?.login || user?.email || null;
+        const idSessao = pickUserUuid(user);
+
+        let nomeSessao =
+          buildNomeSobrenome(user) ||
+          (user?.nome ? String(user.nome).trim() : null) ||
+          (user?.nome_completo ? String(user.nome_completo).trim() : null) ||
+          null;
+
+        if (!nomeSessao && loginSessao) {
+          const { data: u, error } = await supabase
+            .from("usuarios_aprovadores")
+            .select("nome, sobrenome, nome_completo")
+            .eq("login", loginSessao)
+            .maybeSingle();
+
+          if (!error && u) {
+            nomeSessao =
+              u?.nome_completo ||
+              [u?.nome, u?.sobrenome].filter(Boolean).join(" ") ||
+              u?.nome ||
+              null;
+          }
+        }
+
+        setNomeUsuario(nomeSessao || loginSessao || "");
+        setLoginUsuario(loginSessao || "");
+        setUsuarioId(idSessao || null);
+      } catch (err) {
+        console.error("Erro ao carregar usuário logado:", err);
+        setNomeUsuario(user?.login || user?.email || "");
+        setLoginUsuario(user?.login || user?.email || "");
+        setUsuarioId(pickUserUuid(user));
+      }
+    }
+
+    carregarUsuarioSessao();
+  }, [user]);
 
   async function carregar() {
     setLoading(true);
@@ -615,7 +689,9 @@ export default function EmbarcadosReparos() {
 
   const resumo = useMemo(() => {
     const total = filtrados.length;
-    const abertas = filtrados.filter((x) => ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS"].includes(x.status)).length;
+    const abertas = filtrados.filter((x) =>
+      ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS"].includes(x.status)
+    ).length;
     const concluidas = filtrados.filter((x) => x.status === "CONCLUIDA").length;
     const criticas = filtrados.filter((x) => x.prioridade === "CRITICA").length;
     return { total, abertas, concluidas, criticas };
@@ -625,7 +701,20 @@ export default function EmbarcadosReparos() {
     try {
       setSaving(true);
 
-      const { error } = await supabase.from("embarcados_solicitacoes_reparo").insert([payload]);
+      const insertPayload = {
+        ...payload,
+        solicitante: nomeUsuario || loginUsuario || payload.solicitante || null,
+
+        // auditoria opcional
+        criado_por_login: loginUsuario || null,
+        criado_por_nome: nomeUsuario || loginUsuario || null,
+        criado_por_id: usuarioId || null,
+      };
+
+      const { error } = await supabase
+        .from("embarcados_solicitacoes_reparo")
+        .insert([insertPayload]);
+
       if (error) {
         console.error(error);
         alert(error.message || "Erro ao salvar solicitação.");
@@ -645,17 +734,26 @@ export default function EmbarcadosReparos() {
     try {
       setSaving(true);
 
-      const { error: evError } = await supabase.from("embarcados_solicitacoes_reparo_eventos").insert([
-        {
-          solicitacao_id: solicitacaoAtual.id,
-          status_evento: payload.status_evento,
-          acao_executada: payload.acao_executada || null,
-          diagnostico: payload.diagnostico || null,
-          observacao: payload.observacao || null,
-          executado_por: payload.executado_por || null,
-          foto_url: payload.foto_url || null,
-        },
-      ]);
+      const executadoPorFinal = nomeUsuario || loginUsuario || payload.executado_por || null;
+
+      const { error: evError } = await supabase
+        .from("embarcados_solicitacoes_reparo_eventos")
+        .insert([
+          {
+            solicitacao_id: solicitacaoAtual.id,
+            status_evento: payload.status_evento,
+            acao_executada: payload.acao_executada || null,
+            diagnostico: payload.diagnostico || null,
+            observacao: payload.observacao || null,
+            executado_por: executadoPorFinal,
+            foto_url: payload.foto_url || null,
+
+            // auditoria opcional
+            criado_por_login: loginUsuario || null,
+            criado_por_nome: nomeUsuario || loginUsuario || null,
+            criado_por_id: usuarioId || null,
+          },
+        ]);
 
       if (evError) {
         console.error(evError);
@@ -666,7 +764,7 @@ export default function EmbarcadosReparos() {
       const updatePayload = {
         status: payload.status_evento,
         observacao_execucao: payload.observacao || null,
-        executado_por: payload.executado_por || null,
+        executado_por: executadoPorFinal,
         data_execucao: new Date().toISOString(),
       };
 
@@ -869,6 +967,7 @@ export default function EmbarcadosReparos() {
         onSave={salvarSolicitacao}
         saving={saving}
         prefixos={prefixos}
+        nomeUsuario={nomeUsuario}
       />
 
       <ExecucaoModal
@@ -880,6 +979,7 @@ export default function EmbarcadosReparos() {
         solicitacao={solicitacaoAtual}
         onSave={salvarExecucao}
         saving={saving}
+        nomeUsuario={nomeUsuario}
       />
     </div>
   );

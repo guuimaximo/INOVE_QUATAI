@@ -1,4 +1,3 @@
-// src/pages/EmbarcadosEnvioManutencao.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import {
@@ -14,7 +13,6 @@ import {
 } from "react-icons/fa";
 
 const BUCKET_FOTOS = "embarcados";
-
 const DESTINOS_FINAIS = ["DISPONIVEL", "SUCATA"];
 const STATUS_ENVIO = ["ABERTO", "ENVIADO", "RETORNO_PARCIAL", "FINALIZADO", "CANCELADO"];
 
@@ -59,8 +57,10 @@ export default function EmbarcadosEnvioManutencao() {
   const [fileUploading, setFileUploading] = useState(false);
   const fileOrcamentoRef = useRef(null);
 
+  const [proximaOS, setProximaOS] = useState(1);
+
   const [form, setForm] = useState({
-    ordem_servico: "",
+    ordem_servico: "1",
     prestador_servico: "",
     data_envio: new Date().toISOString().slice(0, 10),
     status: "ENVIADO",
@@ -72,7 +72,7 @@ export default function EmbarcadosEnvioManutencao() {
   async function carregar() {
     setLoading(true);
 
-    const [r1, r2] = await Promise.all([
+    const [r1, r2, r3] = await Promise.all([
       supabase
         .from("embarcados")
         .select("id, tipo, numero_equipamento, status_atual, foto_url, observacao")
@@ -83,13 +83,31 @@ export default function EmbarcadosEnvioManutencao() {
         .from("embarcados_envios_manutencao")
         .select("*")
         .order("numero_registro", { ascending: false }),
+      supabase
+        .from("embarcados_envios_manutencao")
+        .select("ordem_servico")
+        .not("ordem_servico", "is", null),
     ]);
 
     if (r1.error) console.error(r1.error);
     if (r2.error) console.error(r2.error);
+    if (r3.error) console.error(r3.error);
 
     setEmbarcados(r1.data || []);
     setEnvios(r2.data || []);
+
+    const numeros = (r3.data || [])
+      .map((x) => Number(String(x.ordem_servico || "").replace(/\D/g, "")))
+      .filter((n) => !Number.isNaN(n) && n > 0);
+
+    const proximo = numeros.length ? Math.max(...numeros) + 1 : 1;
+    setProximaOS(proximo);
+
+    setForm((prev) => ({
+      ...prev,
+      ordem_servico: String(proximo),
+    }));
+
     setLoading(false);
   }
 
@@ -149,9 +167,9 @@ export default function EmbarcadosEnvioManutencao() {
     return { total, enviados, parcial, finalizados };
   }, [enviosFiltrados]);
 
-  function resetForm() {
+  function resetForm(proximoNumero = 1) {
     setForm({
-      ordem_servico: "",
+      ordem_servico: String(proximoNumero),
       prestador_servico: "",
       data_envio: new Date().toISOString().slice(0, 10),
       status: "ENVIADO",
@@ -255,7 +273,7 @@ export default function EmbarcadosEnvioManutencao() {
       const statusCalculado = calcularStatusEnvio(form.itens_json);
 
       const payload = {
-        ordem_servico: form.ordem_servico.trim() || null,
+        ordem_servico: String(proximaOS),
         prestador_servico: form.prestador_servico.trim(),
         data_envio: form.data_envio,
         status: statusCalculado,
@@ -287,9 +305,7 @@ export default function EmbarcadosEnvioManutencao() {
           })
           .eq("id", item.embarcado_id);
 
-        if (embError) {
-          console.error(embError);
-        }
+        if (embError) console.error(embError);
 
         const { error: movError } = await supabase.from("embarcados_movimentacoes").insert([
           {
@@ -308,10 +324,12 @@ export default function EmbarcadosEnvioManutencao() {
         if (movError) console.error(movError);
       }
 
-      resetForm();
+      const proximo = Number(proximaOS) + 1;
+      setProximaOS(proximo);
+      resetForm(proximo);
       setAba("CONTROLE");
       await carregar();
-      alert(`Envio salvo com sucesso. Registro nº ${data.numero_registro}`);
+      alert(`Envio salvo com sucesso. Registro nº ${data.numero_registro} | OS ${payload.ordem_servico}`);
     } finally {
       setSaving(false);
     }
@@ -482,10 +500,9 @@ export default function EmbarcadosEnvioManutencao() {
             <div>
               <label className="text-[10px] font-black text-gray-500 uppercase mb-1 block">Ordem de serviço</label>
               <input
-                className="w-full border rounded-xl px-3 py-2 text-sm font-bold"
+                className="w-full border rounded-xl px-3 py-2 text-sm font-bold bg-gray-100"
                 value={form.ordem_servico}
-                onChange={(e) => setForm({ ...form, ordem_servico: e.target.value })}
-                placeholder="Ex: OS-001"
+                disabled
               />
             </div>
 

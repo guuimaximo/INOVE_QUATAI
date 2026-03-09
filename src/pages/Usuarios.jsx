@@ -129,10 +129,8 @@ export default function Usuarios() {
                       <option value="CCO">CCO</option>
                       <option value="Manutenção">Manutenção</option>
                       <option value="Tratativa">Tratativa</option>
-
-                      {/* ✅ NOVO: Instrutor */}
                       <option value="Instrutor">Instrutor</option>
-
+                      <option value="Embarcados">Embarcados</option>
                       <option value="RH">RH</option>
                       <option value="Gestor">Gestor</option>
                       <option value="Administrador">Administrador</option>

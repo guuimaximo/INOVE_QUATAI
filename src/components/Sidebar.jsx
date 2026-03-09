@@ -133,7 +133,15 @@ const ACCESS = {
     DIESEL_TRATATIVAS_ROUTES.central,
   ],
 
-  Tratativa: ["/inicio-rapido", "/solicitar", "/central", "/cobrancas"],
+  Tratativa: [
+    "/inicio-rapido",
+    "/solicitar",
+    "/central",
+    "/cobrancas",
+
+    // ✅ Embarcados - apenas Reparos
+    EMBARCADOS_ROUTES.reparos,
+  ],
 
   Manutenção: [
     "/inicio-rapido",
@@ -166,12 +174,23 @@ const ACCESS = {
     "/sos-fechamento",
     "/sos-dashboard",
     "/km-rodado",
+
+    // ✅ Embarcados - apenas Reparos
+    EMBARCADOS_ROUTES.reparos,
   ],
 
   Instrutor: [
     "/inicio-rapido",
     ...Object.values(DIESEL_ROUTES),
     DIESEL_TRATATIVAS_ROUTES.central,
+  ],
+
+  // ✅ NOVO NÍVEL
+  Embarcados: [
+    "/inicio-rapido",
+
+    // ✅ Embarcados - acesso total ao módulo
+    ...Object.values(EMBARCADOS_ROUTES),
   ],
 };
 
@@ -202,6 +221,9 @@ export default function Sidebar() {
   const isManutencao = user?.nivel === "Manutenção";
   const isRH = user?.nivel === "RH";
   const isInstrutor = user?.nivel === "Instrutor";
+  const isCCO = user?.nivel === "CCO";
+  const isTratativa = user?.nivel === "Tratativa";
+  const isEmbarcados = user?.nivel === "Embarcados";
 
   const showInicioExecutivo = isAdmin || isGestor || isRH;
   const showInicioBasico = !showInicioExecutivo;
@@ -318,8 +340,16 @@ export default function Sidebar() {
 
   const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
   const showPCM = isAdmin || isGestor || isManutencao;
+
+  // ✅ Agora mostra Embarcados para qualquer nível que tenha ao menos uma subrota liberada
   const showEmbarcados =
-    (isAdmin || isGestor || isManutencao) && canSee(user, EMBARCADOS_ROUTES.central);
+    isAdmin ||
+    isGestor ||
+    isManutencao ||
+    isCCO ||
+    isTratativa ||
+    isEmbarcados ||
+    links.embarcados.tabs.some((t) => canSee(user, t.path));
 
   const showTratativas = links.tratativas.some((l) => {
     if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;

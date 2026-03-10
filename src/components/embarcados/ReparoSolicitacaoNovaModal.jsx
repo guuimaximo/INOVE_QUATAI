@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
 import {
@@ -10,6 +10,9 @@ import {
   FaMapMarkerAlt,
   FaAlignLeft,
   FaExclamationTriangle,
+  FaImage,
+  FaSearch,
+  FaTrash,
 } from "react-icons/fa";
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
@@ -21,6 +24,8 @@ const TIPOS = [
   "CHIP_VALIDADOR",
   "GPS",
 ];
+
+const BUCKET_EVIDENCIAS = "embarcados";
 
 function isValidUUID(v) {
   if (!v) return false;
@@ -56,6 +61,13 @@ function prioridadeLabel(p) {
   }
 }
 
+function sanitizeFileName(name) {
+  return String(name || "arquivo")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w.\-]+/g, "_");
+}
+
 export default function ReparoSolicitacaoNovaModal({
   open,
   onClose,
@@ -64,12 +76,20 @@ export default function ReparoSolicitacaoNovaModal({
   const { user } = useContext(AuthContext);
 
   const [salvando, setSalvando] = useState(false);
+  const [carregandoPrefixos, setCarregandoPrefixos] = useState(false);
+
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [loginUsuario, setLoginUsuario] = useState("");
   const [usuarioId, setUsuarioId] = useState(null);
 
+  const [prefixos, setPrefixos] = useState([]);
+  const [buscaVeiculo, setBuscaVeiculo] = useState("");
+  const [veiculoSelecionado, setVeiculoSelecionado] = useState("");
+
+  const [arquivoEvidencia, setArquivoEvidencia] = useState(null);
+  const [previewEvidencia, setPreviewEvidencia] = useState("");
+
   const [form, setForm] = useState({
-    veiculo: "",
     tipo_embarcado: "TELEMETRIA",
     problema: "",
     descricao: "",
@@ -124,16 +144,65 @@ export default function ReparoSolicitacaoNovaModal({
     if (!open) return;
 
     setForm({
-      veiculo: "",
       tipo_embarcado: "TELEMETRIA",
       problema: "",
       descricao: "",
       local_problema: "",
       prioridade: "MEDIA",
     });
+    setBuscaVeiculo("");
+    setVeiculoSelecionado("");
+    setArquivoEvidencia(null);
+    setPreviewEvidencia("");
   }, [open]);
 
-  async function gerarHistorico(solicitacaoId) {
+  useEffect(() => {
+    if (!open) return;
+
+    async function carregarPrefixos() {
+      try {
+        setCarregandoPrefixos(true);
+
+        const { data, error } = await supabase
+          .from("prefixos")
+          .select("codigo, cluster")
+          .order("codigo");
+
+        if (error) {
+          console.error(error);
+          alert("Erro ao carregar veículos.");
+          return;
+        }
+
+        setPrefixos(data || []);
+      } finally {
+        setCarregandoPrefixos(false);
+      }
+    }
+
+    carregarPrefixos();
+  }, [open]);
+
+  useEffect(() => {
+    return () => {
+      if (previewEvidencia) {
+        URL.revokeObjectURL(previewEvidencia);
+      }
+    };
+  }, [previewEvidencia]);
+
+  const prefixosFiltrados = useMemo(() => {
+    const txt = buscaVeiculo.toLowerCase().trim();
+    if (!txt) return prefixos;
+
+    return prefixos.filter(
+      (p) =>
+        String(p.codigo || "").toLowerCase().includes(txt) ||
+        String(p.cluster || "").toLowerCase().includes(txt)
+    );
+  }, [prefixos, buscaVeiculo]);
+
+  async function gerarHistorico(solicitacaoId, fotoUrl) {
     const payload = {
       solicitacao_id: solicitacaoId,
       status_evento: "ABERTA",
@@ -141,7 +210,7 @@ export default function ReparoSolicitacaoNovaModal({
       diagnostico: "Solicitação criada no sistema.",
       observacao: `Solicitação aberta por ${nomeUsuario || loginUsuario}.`,
       executado_por: null,
-      foto_url: null,
+      foto_url: fotoUrl || null,
       criado_por_login: loginUsuario || null,
       criado_por_nome: nomeUsuario || loginUsuario || null,
       criado_por_id: usuarioId || null,
@@ -154,9 +223,75 @@ export default function ReparoSolicitacaoNovaModal({
     if (error) throw error;
   }
 
+  async function uploadEvidencia() {
+    if (!arquivoEvidencia) return null;
+
+    const ext = arquivoEvidencia.name.split(".").pop()?.toLowerCase() || "jpg";
+    const nomeBase = sanitizeFileName(arquivoEvidencia.name.replace(/\.[^/.]+$/, ""));
+    const arquivoNome = `${Date.now()}_${nomeBase}.${ext}`;
+    const pasta = veiculoSelecionado || "sem_veiculo";
+    const path = `solicitacoes_reparo/${pasta}/${arquivoNome}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET_EVIDENCIAS)
+      .upload(path, arquivoEvidencia, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: arquivoEvidencia.type || undefined,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: publicData } = supabase.storage
+      .from(BUCKET_EVIDENCIAS)
+      .getPublicUrl(path);
+
+    return publicData?.publicUrl || null;
+  }
+
+  function handleArquivoChange(e) {
+    const file = e.target.files?.[0] || null;
+
+    if (!file) return;
+
+    const tiposPermitidos = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+      "application/pdf",
+    ];
+
+    if (!tiposPermitidos.includes(file.type)) {
+      alert("Selecione uma imagem (JPG, PNG, WEBP) ou PDF.");
+      e.target.value = "";
+      return;
+    }
+
+    if (previewEvidencia) {
+      URL.revokeObjectURL(previewEvidencia);
+    }
+
+    setArquivoEvidencia(file);
+
+    if (file.type === "application/pdf") {
+      setPreviewEvidencia("");
+    } else {
+      setPreviewEvidencia(URL.createObjectURL(file));
+    }
+  }
+
+  function removerEvidencia() {
+    if (previewEvidencia) {
+      URL.revokeObjectURL(previewEvidencia);
+    }
+    setPreviewEvidencia("");
+    setArquivoEvidencia(null);
+  }
+
   async function salvar() {
-    if (!form.veiculo.trim()) {
-      alert("Informe o veículo.");
+    if (!veiculoSelecionado) {
+      alert("Selecione o veículo.");
       return;
     }
 
@@ -165,17 +300,25 @@ export default function ReparoSolicitacaoNovaModal({
       return;
     }
 
+    if (!arquivoEvidencia) {
+      alert("Anexe uma evidência.");
+      return;
+    }
+
     try {
       setSalvando(true);
 
+      const fotoUrl = await uploadEvidencia();
+
       const payload = {
-        veiculo: form.veiculo.trim(),
+        veiculo: veiculoSelecionado,
         tipo_embarcado: form.tipo_embarcado,
         problema: form.problema.trim(),
         descricao: form.descricao.trim() || null,
         local_problema: form.local_problema.trim() || null,
         prioridade: form.prioridade,
         status: "ABERTA",
+        foto_url: fotoUrl || null,
         solicitante: nomeUsuario || loginUsuario || null,
         criado_por_login: loginUsuario || null,
         criado_por_nome: nomeUsuario || loginUsuario || null,
@@ -194,14 +337,14 @@ export default function ReparoSolicitacaoNovaModal({
         return;
       }
 
-      await gerarHistorico(data.id);
+      await gerarHistorico(data.id, fotoUrl);
 
       alert("Solicitação de reparo aberta com sucesso.");
       onSuccess?.();
       onClose?.();
     } catch (e) {
       console.error(e);
-      alert(e?.message || "Erro ao registrar histórico da solicitação.");
+      alert(e?.message || "Erro ao registrar solicitação.");
     } finally {
       setSalvando(false);
     }
@@ -211,7 +354,7 @@ export default function ReparoSolicitacaoNovaModal({
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-200 bg-slate-50">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -237,19 +380,50 @@ export default function ReparoSolicitacaoNovaModal({
 
         <div className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            <div className="xl:col-span-1">
+            <div className="xl:col-span-1 relative">
               <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
                 Veículo *
               </label>
+
               <div className="flex items-center gap-2 border border-slate-300 rounded-2xl px-3 py-3 bg-white">
                 <FaBus className="text-slate-400" />
                 <input
                   className="w-full outline-none text-sm font-bold"
-                  placeholder="Ex.: 24015"
-                  value={form.veiculo}
-                  onChange={(e) => setForm({ ...form, veiculo: e.target.value })}
+                  placeholder={carregandoPrefixos ? "Carregando..." : "Buscar veículo"}
+                  value={veiculoSelecionado || buscaVeiculo}
+                  onChange={(e) => {
+                    setVeiculoSelecionado("");
+                    setBuscaVeiculo(e.target.value);
+                  }}
                 />
+                <FaSearch className="text-slate-400" />
               </div>
+
+              {!veiculoSelecionado && buscaVeiculo.trim() && prefixosFiltrados.length > 0 && (
+                <div className="absolute z-20 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                  {prefixosFiltrados.map((p) => (
+                    <div
+                      key={p.codigo}
+                      onClick={() => {
+                        setVeiculoSelecionado(p.codigo);
+                        setBuscaVeiculo("");
+                      }}
+                      className="px-4 py-3 hover:bg-indigo-50 cursor-pointer font-bold text-slate-700 border-b last:border-0 flex justify-between items-center"
+                    >
+                      <span>{p.codigo}</span>
+                      <span className="text-xs text-slate-400 font-semibold">
+                        {p.cluster || "S/N"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!veiculoSelecionado && buscaVeiculo.trim() && prefixosFiltrados.length === 0 && (
+                <div className="absolute z-20 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl px-4 py-3 text-sm font-bold text-slate-500">
+                  Nenhum veículo encontrado.
+                </div>
+              )}
             </div>
 
             <div className="xl:col-span-1">
@@ -280,7 +454,7 @@ export default function ReparoSolicitacaoNovaModal({
                 <FaMapMarkerAlt className="text-slate-400" />
                 <input
                   className="w-full outline-none text-sm font-bold"
-                  placeholder="Ex.: Painel / Validador traseiro"
+                  placeholder="Ex.: Painel / Validador"
                   value={form.local_problema}
                   onChange={(e) => setForm({ ...form, local_problema: e.target.value })}
                 />
@@ -333,6 +507,65 @@ export default function ReparoSolicitacaoNovaModal({
                 onChange={(e) => setForm({ ...form, descricao: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-3">
+            <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
+              Evidência *
+            </label>
+
+            <div className="flex flex-col md:flex-row gap-3 md:items-center">
+              <label className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-black cursor-pointer">
+                <FaImage />
+                Selecionar arquivo
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                  className="hidden"
+                  onChange={handleArquivoChange}
+                />
+              </label>
+
+              {arquivoEvidencia && (
+                <div className="text-sm font-bold text-slate-700 break-all">
+                  {arquivoEvidencia.name}
+                </div>
+              )}
+
+              {arquivoEvidencia && (
+                <button
+                  type="button"
+                  onClick={removerEvidencia}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 hover:bg-red-100 text-red-700 text-sm font-black"
+                >
+                  <FaTrash />
+                  Remover
+                </button>
+              )}
+            </div>
+
+            {previewEvidencia ? (
+              <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white">
+                <img
+                  src={previewEvidencia}
+                  alt="Pré-visualização da evidência"
+                  className="w-full max-h-[320px] object-contain bg-slate-50"
+                />
+              </div>
+            ) : arquivoEvidencia?.type === "application/pdf" ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+                <div className="text-sm font-black text-slate-800">PDF selecionado</div>
+                <div className="text-xs font-semibold text-slate-500 mt-1">
+                  O arquivo será enviado como evidência.
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-8 text-center">
+                <div className="text-sm font-black text-slate-500">
+                  Anexe uma imagem ou PDF da evidência
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">

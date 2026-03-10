@@ -12,6 +12,7 @@ import {
   FaClock,
   FaExclamationTriangle,
 } from "react-icons/fa";
+import ReparoSolicitacaoNovaModal from "../components/embarcados/ReparoSolicitacaoNovaModal";
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
 const STATUS = ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS", "CONCLUIDA", "CANCELADA"];
@@ -102,6 +103,7 @@ export default function EmbarcadosReparos() {
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroPrioridade, setFiltroPrioridade] = useState("");
+  const [showNovaSolicitacao, setShowNovaSolicitacao] = useState(false);
 
   async function carregar() {
     setLoading(true);
@@ -170,13 +172,13 @@ export default function EmbarcadosReparos() {
           <div className="flex flex-col 2xl:flex-row 2xl:items-end 2xl:justify-between gap-4">
             <div>
               <div className="text-[11px] font-black tracking-[0.18em] text-slate-500 uppercase">
-                
+                Gestão de embarcados
               </div>
               <h1 className="text-3xl font-black tracking-tight text-slate-900">
                 Solicitação de Reparo - Embarcados
               </h1>
               <p className="text-sm text-slate-500 font-semibold mt-1">
-                
+                Acompanhe, filtre e abra novas solicitações de reparo dos embarcados.
               </p>
             </div>
 
@@ -190,7 +192,7 @@ export default function EmbarcadosReparos() {
               </button>
 
               <button
-                onClick={() => navigate("/embarcados-reparos/nova")}
+                onClick={() => setShowNovaSolicitacao(true)}
                 className="h-[44px] px-4 rounded-2xl bg-emerald-600 text-white font-black text-sm hover:bg-emerald-500 flex items-center gap-2"
               >
                 <FaPlus />
@@ -438,6 +440,12 @@ export default function EmbarcadosReparos() {
             </table>
           </div>
         </div>
+
+        <ReparoSolicitacaoNovaModal
+          open={showNovaSolicitacao}
+          onClose={() => setShowNovaSolicitacao(false)}
+          onSuccess={carregar}
+        />
       </div>
     </div>
   );

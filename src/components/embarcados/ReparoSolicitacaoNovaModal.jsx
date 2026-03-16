@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
 import {
@@ -67,7 +67,6 @@ function safeText(v) {
   return s || null;
 }
 
-// use somente se no futuro você confirmar que a coluna é UUID
 function pickUserUuid(user) {
   if (isValidUUID(user?.auth_user_id)) return user.auth_user_id;
   if (isValidUUID(user?.id)) return user.id;
@@ -80,9 +79,12 @@ export default function ReparoSolicitacaoNovaModal({
   onSuccess,
 }) {
   const { user } = useContext(AuthContext);
+  const fileInputRef = useRef(null);
+  const dropRef = useRef(null);
 
   const [salvando, setSalvando] = useState(false);
   const [carregandoPrefixos, setCarregandoPrefixos] = useState(false);
+  const [dragAtivo, setDragAtivo] = useState(false);
 
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [loginUsuario, setLoginUsuario] = useState("");
@@ -159,6 +161,7 @@ export default function ReparoSolicitacaoNovaModal({
     setVeiculoSelecionado("");
     setArquivoEvidencia(null);
     setPreviewEvidencia("");
+    setDragAtivo(false);
   }, [open]);
 
   useEffect(() => {
@@ -196,6 +199,29 @@ export default function ReparoSolicitacaoNovaModal({
     };
   }, [previewEvidencia]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePaste(event) {
+      const items = event.clipboardData?.items || [];
+      if (!items.length) return;
+
+      for (const item of items) {
+        if (item.kind !== "file") continue;
+
+        const file = item.getAsFile();
+        if (file) {
+          processarArquivo(file);
+          event.preventDefault();
+          break;
+        }
+      }
+    }
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [open, previewEvidencia]);
+
   const prefixosFiltrados = useMemo(() => {
     const txt = buscaVeiculo.toLowerCase().trim();
     if (!txt) return prefixos;
@@ -218,8 +244,6 @@ export default function ReparoSolicitacaoNovaModal({
       foto_url: fotoUrl || null,
       criado_por_login: safeText(loginUsuario),
       criado_por_nome: safeText(nomeUsuario || loginUsuario),
-      // REMOVIDO criado_por_id para não quebrar se a coluna não for UUID
-      // criado_por_id: usuarioUuid || null,
     };
 
     const { error } = await supabase
@@ -255,10 +279,8 @@ export default function ReparoSolicitacaoNovaModal({
     return publicData?.publicUrl || null;
   }
 
-  function handleArquivoChange(e) {
-    const file = e.target.files?.[0] || null;
-
-    if (!file) return;
+  function validarArquivo(file) {
+    if (!file) return false;
 
     const tiposPermitidos = [
       "image/jpeg",
@@ -270,9 +292,14 @@ export default function ReparoSolicitacaoNovaModal({
 
     if (!tiposPermitidos.includes(file.type)) {
       alert("Selecione uma imagem (JPG, PNG, WEBP) ou PDF.");
-      e.target.value = "";
-      return;
+      return false;
     }
+
+    return true;
+  }
+
+  function processarArquivo(file) {
+    if (!validarArquivo(file)) return;
 
     if (previewEvidencia) {
       URL.revokeObjectURL(previewEvidencia);
@@ -287,12 +314,58 @@ export default function ReparoSolicitacaoNovaModal({
     }
   }
 
+  function handleArquivoChange(e) {
+    const file = e.target.files?.[0] || null;
+    if (!file) return;
+
+    processarArquivo(file);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   function removerEvidencia() {
     if (previewEvidencia) {
       URL.revokeObjectURL(previewEvidencia);
     }
     setPreviewEvidencia("");
     setArquivoEvidencia(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragAtivo(true);
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragAtivo(true);
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setDragAtivo(false);
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragAtivo(false);
+
+    const file = e.dataTransfer?.files?.[0] || null;
+    if (!file) return;
+
+    processarArquivo(file);
   }
 
   async function salvar() {
@@ -325,14 +398,9 @@ export default function ReparoSolicitacaoNovaModal({
         prioridade: safeText(form.prioridade),
         status: "ABERTA",
         foto_url: fotoUrl || null,
-
-        // CAMPOS DE TEXTO
         solicitante: safeText(nomeUsuario || loginUsuario),
         criado_por_login: safeText(loginUsuario),
         criado_por_nome: safeText(nomeUsuario || loginUsuario),
-
-        // REMOVIDO PARA NÃO QUEBRAR COM COLUNA INTEGER/UUID INCERTA
-        // criado_por_id: usuarioUuid || null,
       };
 
       const { data, error } = await supabase
@@ -524,33 +592,56 @@ export default function ReparoSolicitacaoNovaModal({
               Evidência *
             </label>
 
-            <div className="flex flex-col md:flex-row gap-3 md:items-center">
-              <label className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-black cursor-pointer">
-                <FaImage />
-                Selecionar arquivo
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
-                  className="hidden"
-                  onChange={handleArquivoChange}
-                />
-              </label>
-
-              {arquivoEvidencia && (
-                <div className="text-sm font-bold text-slate-700 break-all">
-                  {arquivoEvidencia.name}
+            <div
+              ref={dropRef}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`rounded-2xl border-2 border-dashed p-6 transition ${
+                dragAtivo
+                  ? "border-emerald-500 bg-emerald-50"
+                  : "border-slate-300 bg-white"
+              }`}
+            >
+              <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                <div>
+                  <div className="text-sm font-black text-slate-800">
+                    Arraste e solte aqui, cole com Ctrl + V ou selecione um arquivo
+                  </div>
+                  <div className="text-xs font-semibold text-slate-500 mt-1">
+                    Permitido: JPG, PNG, WEBP e PDF
+                  </div>
                 </div>
-              )}
+
+                <label className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-black cursor-pointer">
+                  <FaImage />
+                  Selecionar arquivo
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                    className="hidden"
+                    onChange={handleArquivoChange}
+                  />
+                </label>
+              </div>
 
               {arquivoEvidencia && (
-                <button
-                  type="button"
-                  onClick={removerEvidencia}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 hover:bg-red-100 text-red-700 text-sm font-black"
-                >
-                  <FaTrash />
-                  Remover
-                </button>
+                <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                  <div className="text-sm font-bold text-slate-700 break-all">
+                    {arquivoEvidencia.name}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={removerEvidencia}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 hover:bg-red-100 text-red-700 text-sm font-black"
+                  >
+                    <FaTrash />
+                    Remover
+                  </button>
+                </div>
               )}
             </div>
 

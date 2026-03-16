@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
-import { FaArrowLeft, FaSave, FaUpload } from "react-icons/fa";
+import { FaArrowLeft, FaSave, FaUpload, FaTrash } from "react-icons/fa";
 
 const STATUS = ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS", "CONCLUIDA", "CANCELADA"];
 const BUCKET_FOTOS = "embarcados";
@@ -37,6 +37,11 @@ function sanitizeFileName(name) {
     .replace(/[^\w.\-]+/g, "_");
 }
 
+function safeText(v) {
+  const s = String(v ?? "").trim();
+  return s || null;
+}
+
 function statusLabel(status) {
   switch (status) {
     case "EM_ANALISE":
@@ -57,7 +62,7 @@ function statusLabel(status) {
 function EmptyPhoto() {
   return (
     <div className="w-full h-48 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400 text-sm font-bold">
-      Sem foto
+      Sem evidência
     </div>
   );
 }
@@ -71,6 +76,7 @@ export default function ReparoSolicitacaoExecucao() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [dragAtivo, setDragAtivo] = useState(false);
 
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [loginUsuario, setLoginUsuario] = useState("");
@@ -83,6 +89,8 @@ export default function ReparoSolicitacaoExecucao() {
     observacao: "",
     executado_por: "",
     foto_url: "",
+    foto_tipo: "",
+    foto_nome: "",
   });
 
   const fileInputRef = useRef(null);
@@ -90,13 +98,13 @@ export default function ReparoSolicitacaoExecucao() {
   useEffect(() => {
     async function carregarUsuarioSessao() {
       try {
-        const loginSessao = user?.login || user?.email || null;
+        const loginSessao = safeText(user?.login || user?.email);
         const idSessao = pickUserUuid(user);
 
         let nomeSessao =
           buildNomeSobrenome(user) ||
-          (user?.nome ? String(user.nome).trim() : null) ||
-          (user?.nome_completo ? String(user.nome_completo).trim() : null) ||
+          safeText(user?.nome) ||
+          safeText(user?.nome_completo) ||
           null;
 
         if (!nomeSessao && loginSessao) {
@@ -108,10 +116,9 @@ export default function ReparoSolicitacaoExecucao() {
 
           if (u) {
             nomeSessao =
-              u?.nome_completo ||
-              [u?.nome, u?.sobrenome].filter(Boolean).join(" ") ||
-              u?.nome ||
-              null;
+              safeText(u?.nome_completo) ||
+              safeText([u?.nome, u?.sobrenome].filter(Boolean).join(" ")) ||
+              safeText(u?.nome);
           }
         }
 
@@ -119,8 +126,8 @@ export default function ReparoSolicitacaoExecucao() {
         setLoginUsuario(loginSessao || "");
         setUsuarioId(idSessao || null);
       } catch {
-        setNomeUsuario(user?.login || user?.email || "");
-        setLoginUsuario(user?.login || user?.email || "");
+        setNomeUsuario(safeText(user?.login || user?.email) || "");
+        setLoginUsuario(safeText(user?.login || user?.email) || "");
         setUsuarioId(pickUserUuid(user));
       }
     }
@@ -144,6 +151,9 @@ export default function ReparoSolicitacaoExecucao() {
       ...prev,
       status_evento: data?.status || "EM_ANALISE",
       executado_por: nomeUsuario || "",
+      foto_url: data?.foto_url || "",
+      foto_tipo: data?.foto_url?.toLowerCase().includes(".pdf") ? "application/pdf" : "",
+      foto_nome: "",
     }));
 
     setLoading(false);
@@ -153,40 +163,144 @@ export default function ReparoSolicitacaoExecucao() {
     carregar();
   }, [id, nomeUsuario]);
 
-  async function handleUploadFoto(e) {
-    const file = e.target.files?.[0];
-    if (!file || !row?.id) return;
+  useEffect(() => {
+    function handlePaste(event) {
+      const items = event.clipboardData?.items || [];
+      if (!items.length) return;
+
+      for (const item of items) {
+        if (item.kind !== "file") continue;
+
+        const file = item.getAsFile();
+        if (file) {
+          processarArquivo(file);
+          event.preventDefault();
+          break;
+        }
+      }
+    }
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [row]);
+
+  function validarArquivo(file) {
+    if (!file) return false;
+
+    const tiposPermitidos = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+      "application/pdf",
+    ];
+
+    if (!tiposPermitidos.includes(file.type)) {
+      alert("Selecione uma imagem (JPG, PNG, WEBP) ou PDF.");
+      return false;
+    }
+
+    return true;
+  }
+
+  async function uploadArquivo(file) {
+    if (!file || !row?.id) return null;
+
+    const nomeLimpo = sanitizeFileName(file.name);
+    const ext = nomeLimpo.split(".").pop() || (file.type === "application/pdf" ? "pdf" : "jpg");
+    const baseSemDuplicarExt = nomeLimpo.replace(/\.[^.]+$/, "");
+    const filePath = `reparos/execucao/${row.id}/${Date.now()}_${baseSemDuplicarExt}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET_FOTOS)
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: file.type || undefined,
+      });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage.from(BUCKET_FOTOS).getPublicUrl(filePath);
+
+    return {
+      publicUrl: data?.publicUrl || "",
+      tipo: file.type || "",
+      nome: file.name || "",
+    };
+  }
+
+  async function processarArquivo(file) {
+    if (!validarArquivo(file) || !row?.id) return;
 
     try {
       setUploading(true);
 
-      const nomeLimpo = sanitizeFileName(file.name);
-      const ext = nomeLimpo.split(".").pop() || "jpg";
-      const baseSemDuplicarExt = nomeLimpo.replace(/\.[^.]+$/, "");
-      const filePath = `reparos/execucao/${row.id}/${Date.now()}_${baseSemDuplicarExt}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET_FOTOS)
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: true,
-        });
-
-      if (uploadError) {
-        alert(uploadError.message || "Erro ao enviar foto.");
-        return;
-      }
-
-      const { data } = supabase.storage.from(BUCKET_FOTOS).getPublicUrl(filePath);
+      const uploaded = await uploadArquivo(file);
 
       setForm((prev) => ({
         ...prev,
-        foto_url: data?.publicUrl || "",
+        foto_url: uploaded?.publicUrl || "",
+        foto_tipo: uploaded?.tipo || "",
+        foto_nome: uploaded?.nome || "",
       }));
+    } catch (e) {
+      console.error(e);
+      alert(e?.message || "Erro ao enviar evidência.");
     } finally {
       setUploading(false);
-      if (e.target) e.target.value = "";
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  }
+
+  function handleUploadFoto(e) {
+    const file = e.target.files?.[0] || null;
+    if (!file) return;
+    processarArquivo(file);
+  }
+
+  function removerArquivo() {
+    setForm((prev) => ({
+      ...prev,
+      foto_url: "",
+      foto_tipo: "",
+      foto_nome: "",
+    }));
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragAtivo(true);
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragAtivo(true);
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setDragAtivo(false);
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragAtivo(false);
+
+    const file = e.dataTransfer?.files?.[0] || null;
+    if (!file) return;
+
+    processarArquivo(file);
   }
 
   async function salvar() {
@@ -204,14 +318,14 @@ export default function ReparoSolicitacaoExecucao() {
           {
             solicitacao_id: row.id,
             status_evento: form.status_evento,
-            acao_executada: form.acao_executada || null,
-            diagnostico: form.diagnostico || null,
-            observacao: form.observacao || null,
+            acao_executada: safeText(form.acao_executada),
+            diagnostico: safeText(form.diagnostico),
+            observacao: safeText(form.observacao),
             executado_por: executadoPorFinal,
-            foto_url: form.foto_url || null,
-            criado_por_login: loginUsuario || null,
-            criado_por_nome: nomeUsuario || loginUsuario || null,
-            criado_por_id: usuarioId || null,
+            foto_url: safeText(form.foto_url),
+            criado_por_login: safeText(loginUsuario),
+            criado_por_nome: safeText(nomeUsuario || loginUsuario),
+            // criado_por_id: usuarioId || null,
           },
         ]);
 
@@ -222,9 +336,10 @@ export default function ReparoSolicitacaoExecucao() {
 
       const updatePayload = {
         status: form.status_evento,
-        observacao_execucao: form.observacao || null,
+        observacao_execucao: safeText(form.observacao),
         executado_por: executadoPorFinal,
         data_execucao: new Date().toISOString(),
+        foto_url: safeText(form.foto_url),
       };
 
       if (form.status_evento === "CONCLUIDA" || form.status_evento === "CANCELADA") {
@@ -255,6 +370,10 @@ export default function ReparoSolicitacaoExecucao() {
   if (!row) {
     return <div className="p-6 text-center font-black text-slate-500">Solicitação não encontrada.</div>;
   }
+
+  const isPdf =
+    form.foto_tipo === "application/pdf" ||
+    String(form.foto_url || "").toLowerCase().includes(".pdf");
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -346,36 +465,81 @@ export default function ReparoSolicitacaoExecucao() {
               Evidência
             </label>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-start">
-              <div>
-                {form.foto_url ? (
-                  <img
-                    src={form.foto_url}
-                    alt="Evidência"
-                    className="w-full h-48 object-cover rounded-2xl border bg-white"
-                  />
-                ) : (
-                  <EmptyPhoto />
-                )}
+            <div
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`rounded-2xl border-2 border-dashed p-4 transition ${
+                dragAtivo
+                  ? "border-emerald-500 bg-emerald-50"
+                  : "border-slate-300 bg-slate-50"
+              }`}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-start">
+                <div>
+                  {form.foto_url ? (
+                    isPdf ? (
+                      <div className="w-full h-48 rounded-2xl border border-slate-200 bg-white flex flex-col items-center justify-center text-slate-600 text-sm font-bold px-4 text-center">
+                        <div>PDF anexado</div>
+                        {form.foto_nome ? (
+                          <div className="text-xs text-slate-500 mt-2 break-all">{form.foto_nome}</div>
+                        ) : null}
+                        <a
+                          href={form.foto_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-3 text-blue-600 hover:text-blue-700 underline font-black"
+                        >
+                          Abrir PDF
+                        </a>
+                      </div>
+                    ) : (
+                      <img
+                        src={form.foto_url}
+                        alt="Evidência"
+                        className="w-full h-48 object-cover rounded-2xl border bg-white"
+                      />
+                    )
+                  ) : (
+                    <EmptyPhoto />
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60"
+                  >
+                    <FaUpload />
+                    {uploading ? "Enviando..." : "Anexar arquivo"}
+                  </button>
+
+                  {form.foto_url ? (
+                    <button
+                      type="button"
+                      onClick={removerArquivo}
+                      disabled={uploading}
+                      className="px-4 py-3 rounded-2xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-sm font-black flex items-center gap-2 disabled:opacity-60"
+                    >
+                      <FaTrash />
+                      Remover
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60"
-                >
-                  <FaUpload />
-                  {uploading ? "Enviando..." : "Anexar foto"}
-                </button>
+              <div className="mt-3 text-xs font-semibold text-slate-500">
+                Arraste e solte aqui, cole com Ctrl + V ou selecione um arquivo. Permitido: JPG, PNG, WEBP e PDF.
               </div>
             </div>
 
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
               className="hidden"
               onChange={handleUploadFoto}
             />

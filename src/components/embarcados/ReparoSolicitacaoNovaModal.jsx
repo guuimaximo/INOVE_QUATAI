@@ -33,12 +33,6 @@ function isValidUUID(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
-function pickUserUuid(user) {
-  if (isValidUUID(user?.auth_user_id)) return user.auth_user_id;
-  if (isValidUUID(user?.id)) return user.id;
-  return null;
-}
-
 function buildNomeSobrenome(u) {
   const nome = String(u?.nome || "").trim();
   const sobrenome = String(u?.sobrenome || "").trim();
@@ -68,6 +62,18 @@ function sanitizeFileName(name) {
     .replace(/[^\w.\-]+/g, "_");
 }
 
+function safeText(v) {
+  const s = String(v ?? "").trim();
+  return s || null;
+}
+
+// use somente se no futuro você confirmar que a coluna é UUID
+function pickUserUuid(user) {
+  if (isValidUUID(user?.auth_user_id)) return user.auth_user_id;
+  if (isValidUUID(user?.id)) return user.id;
+  return null;
+}
+
 export default function ReparoSolicitacaoNovaModal({
   open,
   onClose,
@@ -80,7 +86,7 @@ export default function ReparoSolicitacaoNovaModal({
 
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [loginUsuario, setLoginUsuario] = useState("");
-  const [usuarioId, setUsuarioId] = useState(null);
+  const [usuarioUuid, setUsuarioUuid] = useState(null);
 
   const [prefixos, setPrefixos] = useState([]);
   const [buscaVeiculo, setBuscaVeiculo] = useState("");
@@ -102,13 +108,13 @@ export default function ReparoSolicitacaoNovaModal({
 
     async function carregarUsuarioSessao() {
       try {
-        const loginSessao = user?.login || user?.email || null;
-        const idSessao = pickUserUuid(user);
+        const loginSessao = safeText(user?.login || user?.email);
+        const uuidSessao = pickUserUuid(user);
 
         let nomeSessao =
           buildNomeSobrenome(user) ||
-          (user?.nome ? String(user.nome).trim() : null) ||
-          (user?.nome_completo ? String(user.nome_completo).trim() : null) ||
+          safeText(user?.nome) ||
+          safeText(user?.nome_completo) ||
           null;
 
         if (!nomeSessao && loginSessao) {
@@ -120,20 +126,19 @@ export default function ReparoSolicitacaoNovaModal({
 
           if (u) {
             nomeSessao =
-              u?.nome_completo ||
-              [u?.nome, u?.sobrenome].filter(Boolean).join(" ") ||
-              u?.nome ||
-              null;
+              safeText(u?.nome_completo) ||
+              safeText([u?.nome, u?.sobrenome].filter(Boolean).join(" ")) ||
+              safeText(u?.nome);
           }
         }
 
         setNomeUsuario(nomeSessao || loginSessao || "");
         setLoginUsuario(loginSessao || "");
-        setUsuarioId(idSessao || null);
+        setUsuarioUuid(uuidSessao || null);
       } catch {
-        setNomeUsuario(user?.login || user?.email || "");
-        setLoginUsuario(user?.login || user?.email || "");
-        setUsuarioId(pickUserUuid(user));
+        setNomeUsuario(safeText(user?.login || user?.email) || "");
+        setLoginUsuario(safeText(user?.login || user?.email) || "");
+        setUsuarioUuid(pickUserUuid(user));
       }
     }
 
@@ -208,12 +213,13 @@ export default function ReparoSolicitacaoNovaModal({
       status_evento: "ABERTA",
       acao_executada: "ABERTURA DA SOLICITAÇÃO",
       diagnostico: "Solicitação criada no sistema.",
-      observacao: `Solicitação aberta por ${nomeUsuario || loginUsuario}.`,
+      observacao: `Solicitação aberta por ${safeText(nomeUsuario || loginUsuario) || "Usuário"}.`,
       executado_por: null,
       foto_url: fotoUrl || null,
-      criado_por_login: loginUsuario || null,
-      criado_por_nome: nomeUsuario || loginUsuario || null,
-      criado_por_id: usuarioId || null,
+      criado_por_login: safeText(loginUsuario),
+      criado_por_nome: safeText(nomeUsuario || loginUsuario),
+      // REMOVIDO criado_por_id para não quebrar se a coluna não for UUID
+      // criado_por_id: usuarioUuid || null,
     };
 
     const { error } = await supabase
@@ -311,18 +317,22 @@ export default function ReparoSolicitacaoNovaModal({
       const fotoUrl = await uploadEvidencia();
 
       const payload = {
-        veiculo: veiculoSelecionado,
-        tipo_embarcado: form.tipo_embarcado,
-        problema: form.problema.trim(),
-        descricao: form.descricao.trim() || null,
-        local_problema: form.local_problema.trim() || null,
-        prioridade: form.prioridade,
+        veiculo: safeText(veiculoSelecionado),
+        tipo_embarcado: safeText(form.tipo_embarcado),
+        problema: safeText(form.problema),
+        descricao: safeText(form.descricao),
+        local_problema: safeText(form.local_problema),
+        prioridade: safeText(form.prioridade),
         status: "ABERTA",
         foto_url: fotoUrl || null,
-        solicitante: nomeUsuario || loginUsuario || null,
-        criado_por_login: loginUsuario || null,
-        criado_por_nome: nomeUsuario || loginUsuario || null,
-        criado_por_id: usuarioId || null,
+
+        // CAMPOS DE TEXTO
+        solicitante: safeText(nomeUsuario || loginUsuario),
+        criado_por_login: safeText(loginUsuario),
+        criado_por_nome: safeText(nomeUsuario || loginUsuario),
+
+        // REMOVIDO PARA NÃO QUEBRAR COM COLUNA INTEGER/UUID INCERTA
+        // criado_por_id: usuarioUuid || null,
       };
 
       const { data, error } = await supabase

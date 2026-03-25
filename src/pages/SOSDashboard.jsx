@@ -34,6 +34,8 @@ const TIPOS_TABELA = [
   "SEGUIU VIAGEM",
 ];
 
+const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutos
+
 function todayYMD_SP() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -169,12 +171,15 @@ export default function SOSDashboard() {
 
   const [modoExibicao, setModoExibicao] = useState(false);
   const [realtimeOn, setRealtimeOn] = useState(false);
+  const [autoRefreshOn, setAutoRefreshOn] = useState(true);
 
   const debounceRef = useRef(null);
   const channelRef = useRef(null);
+  const pollingRef = useRef(null);
   const modoRef = useRef(false);
+  const fetchingRef = useRef(false);
 
-  const hoje = useMemo(() => todayYMD_SP(), []);
+  const hoje = todayYMD_SP();
   const acumuladoDia = useMemo(() => (doDia || []).length, [doDia]);
 
   const PRINT_CSS = `
@@ -193,107 +198,115 @@ export default function SOSDashboard() {
     setDataFim(end);
   }, [mesRef]);
 
-  const fetchDashboard = useCallback(async () => {
-    if (!dataInicio || !dataFim) return;
+  const fetchDashboard = useCallback(
+    async (origem = "manual") => {
+      if (!dataInicio || !dataFim) return;
+      if (fetchingRef.current) return;
 
-    setLoading(true);
-    setErro("");
+      fetchingRef.current = true;
+      setLoading(true);
+      setErro("");
 
-    try {
-      const { data: periodoData, error: periodoErr } = await supabase
-        .from("sos_acionamentos")
-        .select("id, data_sos, ocorrencia")
-        .gte("data_sos", dataInicio)
-        .lte("data_sos", dataFim);
+      try {
+        const { data: periodoData, error: periodoErr } = await supabase
+          .from("sos_acionamentos")
+          .select("id, data_sos, ocorrencia")
+          .gte("data_sos", dataInicio)
+          .lte("data_sos", dataFim);
 
-      if (periodoErr) throw periodoErr;
+        if (periodoErr) throw periodoErr;
 
-      const { data: kmData, error: kmErr } = await supabase
-        .from("km_rodado_diario")
-        .select("km_total, data")
-        .gte("data", dataInicio)
-        .lte("data", dataFim);
+        const { data: kmData, error: kmErr } = await supabase
+          .from("km_rodado_diario")
+          .select("km_total, data")
+          .gte("data", dataInicio)
+          .lte("data", dataFim);
 
-      if (kmErr) throw kmErr;
+        if (kmErr) throw kmErr;
 
-      const kmSum = (kmData || []).reduce(
-        (acc, r) => acc + (Number(r.km_total) || 0),
-        0
-      );
+        const kmSum = (kmData || []).reduce(
+          (acc, r) => acc + (Number(r.km_total) || 0),
+          0
+        );
 
-      const ocorrValidas = (periodoData || []).reduce((acc, r) => {
-        return acc + (isOcorrenciaValidaParaMKBF(r.ocorrencia) ? 1 : 0);
-      }, 0);
+        const ocorrValidas = (periodoData || []).reduce((acc, r) => {
+          return acc + (isOcorrenciaValidaParaMKBF(r.ocorrencia) ? 1 : 0);
+        }, 0);
 
-      setKmPeriodo(kmSum);
-      setOcorrenciasValidasPeriodo(ocorrValidas);
-      setMkbfPeriodo(ocorrValidas > 0 ? kmSum / ocorrValidas : 0);
+        setKmPeriodo(kmSum);
+        setOcorrenciasValidasPeriodo(ocorrValidas);
+        setMkbfPeriodo(ocorrValidas > 0 ? kmSum / ocorrValidas : 0);
 
-      const { data: diaData, error: diaErr } = await supabase
-        .from("sos_acionamentos")
-        .select(
-          "id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, reclamacao_motorista, ocorrencia, status"
-        )
-        .eq("data_sos", hoje)
-        .order("hora_sos", { ascending: true });
+        const { data: diaData, error: diaErr } = await supabase
+          .from("sos_acionamentos")
+          .select(
+            "id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, reclamacao_motorista, ocorrencia, status"
+          )
+          .eq("data_sos", hoje)
+          .order("hora_sos", { ascending: true });
 
-      if (diaErr) throw diaErr;
+        if (diaErr) throw diaErr;
 
-      const byDay = new Map();
-      (periodoData || []).forEach((r) => {
-        const day = r.data_sos;
-        if (!day) return;
+        const byDay = new Map();
+        (periodoData || []).forEach((r) => {
+          const day = r.data_sos;
+          if (!day) return;
 
-        const tipo = normalizeTipo(r.ocorrencia);
-        if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
+          const tipo = normalizeTipo(r.ocorrencia);
+          if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
 
-        if (!byDay.has(day)) {
-          const base = { day };
-          TIPOS_GRAFICO.forEach((t) => (base[t] = 0));
-          byDay.set(day, base);
-        }
+          if (!byDay.has(day)) {
+            const base = { day };
+            TIPOS_GRAFICO.forEach((t) => (base[t] = 0));
+            byDay.set(day, base);
+          }
 
-        byDay.get(day)[tipo] = (byDay.get(day)[tipo] || 0) + 1;
-      });
+          byDay.get(day)[tipo] = (byDay.get(day)[tipo] || 0) + 1;
+        });
 
-      const chart = Array.from(byDay.values())
-        .filter((row) => TIPOS_GRAFICO.some((t) => (row[t] || 0) > 0))
-        .sort((a, b) => String(a.day).localeCompare(String(b.day)));
+        const chart = Array.from(byDay.values())
+          .filter((row) => TIPOS_GRAFICO.some((t) => (row[t] || 0) > 0))
+          .sort((a, b) => String(a.day).localeCompare(String(b.day)));
 
-      const porTipo = {};
-      TIPOS_GRAFICO.forEach((t) => (porTipo[t] = 0));
+        const porTipo = {};
+        TIPOS_GRAFICO.forEach((t) => (porTipo[t] = 0));
 
-      (periodoData || []).forEach((r) => {
-        const tipo = normalizeTipo(r.ocorrencia);
-        if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
-        porTipo[tipo] = (porTipo[tipo] || 0) + 1;
-      });
+        (periodoData || []).forEach((r) => {
+          const tipo = normalizeTipo(r.ocorrencia);
+          if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
+          porTipo[tipo] = (porTipo[tipo] || 0) + 1;
+        });
 
-      const totalPeriodo = Object.values(porTipo).reduce(
-        (acc, v) => acc + (v || 0),
-        0
-      );
+        const totalPeriodo = Object.values(porTipo).reduce(
+          (acc, v) => acc + (v || 0),
+          0
+        );
 
-      setSeries(chart);
-      setCards({ totalPeriodo, porTipo });
-      setDoDia(diaData || []);
-      setLastUpdate(new Date());
-    } catch (e) {
-      setErro(e?.message || "Erro ao carregar dashboard.");
-      setSeries([]);
-      setCards({ totalPeriodo: 0, porTipo: {} });
-      setDoDia([]);
-      setKmPeriodo(0);
-      setOcorrenciasValidasPeriodo(0);
-      setMkbfPeriodo(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [dataInicio, dataFim, hoje]);
+        setSeries(chart);
+        setCards({ totalPeriodo, porTipo });
+        setDoDia(diaData || []);
+        setLastUpdate(new Date());
+
+        console.log(`[SOSDashboard] Atualizado via: ${origem}`);
+      } catch (e) {
+        setErro(e?.message || "Erro ao carregar dashboard.");
+        setSeries([]);
+        setCards({ totalPeriodo: 0, porTipo: {} });
+        setDoDia([]);
+        setKmPeriodo(0);
+        setOcorrenciasValidasPeriodo(0);
+        setMkbfPeriodo(0);
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    },
+    [dataInicio, dataFim, hoje]
+  );
 
   function scheduleReload() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchDashboard(), 600);
+    debounceRef.current = setTimeout(() => fetchDashboard("realtime"), 600);
   }
 
   function setupRealtime() {
@@ -301,6 +314,7 @@ export default function SOSDashboard() {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
+
     if (!realtimeOn) return;
 
     channelRef.current = supabase
@@ -313,17 +327,44 @@ export default function SOSDashboard() {
       .subscribe();
   }
 
+  function setupAutoRefresh() {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    if (!autoRefreshOn) return;
+
+    pollingRef.current = setInterval(() => {
+      fetchDashboard("auto-5min");
+    }, AUTO_REFRESH_MS);
+  }
+
   useEffect(() => {
-    fetchDashboard();
+    fetchDashboard("init");
   }, [fetchDashboard]);
 
   useEffect(() => {
     setupRealtime();
     return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeOn]);
+
+  useEffect(() => {
+    setupAutoRefresh();
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefreshOn, fetchDashboard]);
 
   useEffect(() => {
     modoRef.current = modoExibicao;
@@ -338,11 +379,20 @@ export default function SOSDashboard() {
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, []);
+
   const toggleModoExibicao = useCallback(async () => {
     const el = fsRef.current;
     if (!modoRef.current) {
       setModoExibicao(true);
       setRealtimeOn(true);
+      setAutoRefreshOn(true);
       setTimeout(() => enterFullscreen(el), 50);
     } else {
       await exitFullscreen();
@@ -515,6 +565,16 @@ export default function SOSDashboard() {
                       onChange={(e) => setRealtimeOn(e.target.checked)}
                     />
                     Tempo real
+                  </label>
+
+                  <label className="mt-2 flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={autoRefreshOn}
+                      onChange={(e) => setAutoRefreshOn(e.target.checked)}
+                    />
+                    Auto review 5 min
                   </label>
                 </div>
               </div>
@@ -725,7 +785,10 @@ export default function SOSDashboard() {
                         key={r.id}
                         className="hover:opacity-80 transition-colors"
                         style={{
-                          backgroundColor: ((r.status || "").toLowerCase() === "aberto" || !r.ocorrencia) ? "#FEF3C7" : "transparent",
+                          backgroundColor:
+                            ((r.status || "").toLowerCase() === "aberto" || !r.ocorrencia)
+                              ? "#FEF3C7"
+                              : "transparent",
                         }}
                       >
                         <td className="py-2.5 px-4 font-mono text-slate-800">
@@ -754,8 +817,7 @@ export default function SOSDashboard() {
                               borderColor:
                                 COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1",
                               backgroundColor:
-                                (COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1") +
-                                "15",
+                                (COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1") + "15",
                             }}
                           >
                             {labelOcorrenciaTabela(r.ocorrencia)}
@@ -808,7 +870,7 @@ export default function SOSDashboard() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={fetchDashboard}
+            onClick={() => fetchDashboard("manual")}
             className="bg-slate-900 text-white hover:bg-slate-800 px-3 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-60"
             disabled={loading}
           >
@@ -918,6 +980,16 @@ export default function SOSDashboard() {
                       onChange={(e) => setRealtimeOn(e.target.checked)}
                     />
                     Tempo real
+                  </label>
+
+                  <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={autoRefreshOn}
+                      onChange={(e) => setAutoRefreshOn(e.target.checked)}
+                    />
+                    Auto review 5 min
                   </label>
 
                   <div className="text-[11px] text-slate-500 mt-2">
@@ -1062,7 +1134,10 @@ export default function SOSDashboard() {
                       key={r.id}
                       className="border-t border-slate-200 hover:opacity-80 transition-colors"
                       style={{
-                        backgroundColor: ((r.status || "").toLowerCase() === "aberto" || !r.ocorrencia) ? "#FEF3C7" : "transparent",
+                        backgroundColor:
+                          ((r.status || "").toLowerCase() === "aberto" || !r.ocorrencia)
+                            ? "#FEF3C7"
+                            : "transparent",
                       }}
                     >
                       <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>

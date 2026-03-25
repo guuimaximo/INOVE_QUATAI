@@ -481,7 +481,7 @@ export default function SOSDashboard() {
 
       <div
         className="grid grid-cols-12 gap-3 min-h-0"
-        style={{ minHeight: 0, height: "30%" }}
+        style={{ minHeight: 0, height: "42%" }}
       >
         <div className="col-span-3 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden p-2`}>
@@ -711,7 +711,7 @@ export default function SOSDashboard() {
 
       <div
         className="grid grid-cols-12 gap-3 min-h-0"
-        style={{ minHeight: 0, height: "65%" }}
+        style={{ minHeight: 0, height: "53%" }}
       >
         <div className="col-span-3 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden`}>

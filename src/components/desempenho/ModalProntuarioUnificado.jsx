@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+// src/components/desempenho/ModalProntuarioUnificado.jsx
+import React, { useEffect, useState, useMemo } from "react";
 import {
   FaClipboardList,
   FaTimes,
@@ -6,6 +7,9 @@ import {
   FaEye,
   FaChartLine,
   FaFilePdf,
+  FaArrowRight,
+  FaCheckCircle,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import ResumoLancamentoInstrutor from "./ResumoLancamentoInstrutor";
@@ -83,6 +87,14 @@ function buildCheckpointCard(label, dataGerada, onClick) {
   );
 }
 
+function getCheckpointDecisao(item) {
+  if (item?.prontuario_pendente) return item.prontuario_pendente;
+  if (item?.prontuario_30_gerado_em) return "PRONTUARIO_30";
+  if (item?.prontuario_20_gerado_em) return "PRONTUARIO_20";
+  if (item?.prontuario_10_gerado_em) return "PRONTUARIO_10";
+  return null;
+}
+
 export default function ModalProntuarioUnificado({
   item,
   onClose,
@@ -116,6 +128,55 @@ export default function ModalProntuarioUnificado({
   }, [item]);
 
   const statusAtual = normalizeStatus(item?.status_ciclo || item?.status);
+
+  const checkpointDecisao = useMemo(() => getCheckpointDecisao(item), [item]);
+
+  const isAnaliseFinal = ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(
+    statusAtual
+  );
+
+  const decisaoInfo = useMemo(() => {
+    if (!isAnaliseFinal) return null;
+
+    if (item?.prontuario_pendente) {
+      return {
+        titulo: "Existe prontuário pendente para decisão",
+        texto:
+          "Este acompanhamento já está em fase de análise. Abra o checkpoint pendente para decidir se o caso será finalizado ou enviado para tratativa.",
+        classe: "bg-amber-50 border-amber-200 text-amber-800",
+        icon: <FaExclamationTriangle className="text-amber-600" />,
+        cta: "Abrir checkpoint pendente",
+      };
+    }
+
+    if (checkpointDecisao) {
+      return {
+        titulo: "Abrir checkpoint para decisão final",
+        texto:
+          "Use o checkpoint mais recente para decidir se o acompanhamento deve ser encerrado ou encaminhado para tratativa.",
+        classe: "bg-violet-50 border-violet-200 text-violet-800",
+        icon: <FaCheckCircle className="text-violet-600" />,
+        cta: "Abrir checkpoint mais recente",
+      };
+    }
+
+    return {
+      titulo: "Nenhum checkpoint disponível",
+      texto:
+        "Ainda não existe checkpoint gerado para este acompanhamento. Sem um checkpoint, não há base completa para enviar à tratativa ou finalizar por esta tela.",
+      classe: "bg-slate-50 border-slate-200 text-slate-700",
+      icon: <FaExclamationTriangle className="text-slate-500" />,
+      cta: null,
+    };
+  }, [isAnaliseFinal, item, checkpointDecisao]);
+
+  const handleAbrirDecisao = () => {
+    if (!checkpointDecisao) {
+      alert("Nenhum checkpoint disponível para decisão.");
+      return;
+    }
+    onOpenCheckpoint?.(item, checkpointDecisao);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -192,6 +253,36 @@ export default function ModalProntuarioUnificado({
                 <ResumoLancamentoInstrutor item={item} />
               ) : (
                 <ResumoAnalise item={item} />
+              )}
+
+              {isAnaliseFinal && decisaoInfo && (
+                <div className={`mt-5 border rounded-xl p-4 ${decisaoInfo.classe}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="text-lg mt-0.5">{decisaoInfo.icon}</div>
+                    <div className="flex-1">
+                      <div className="font-black text-sm uppercase tracking-wider mb-1">
+                        Ações da Análise
+                      </div>
+                      <div className="font-bold text-base mb-1">
+                        {decisaoInfo.titulo}
+                      </div>
+                      <div className="text-sm leading-relaxed">
+                        {decisaoInfo.texto}
+                      </div>
+
+                      {decisaoInfo.cta && (
+                        <div className="mt-4">
+                          <button
+                            onClick={handleAbrirDecisao}
+                            className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-black shadow-sm hover:bg-slate-800 inline-flex items-center gap-2"
+                          >
+                            <FaArrowRight /> {decisaoInfo.cta}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 

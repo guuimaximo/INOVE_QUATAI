@@ -176,41 +176,25 @@ export default function DieselTratarTratativa() {
   const isImageUrl = (u) =>
     /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(String(u || "").toLowerCase());
 
-  // Garantir que evidencia_urls seja um array limpo
-  const safeEvidencias = useMemo(() => {
-    if (!t?.evidencias_urls) return [];
-    if (Array.isArray(t.evidencias_urls)) return t.evidencias_urls;
-    if (typeof t.evidencias_urls === "string") {
-      try {
-        return JSON.parse(t.evidencias_urls);
-      } catch (e) {
-        return [t.evidencias_urls];
-      }
-    }
-    return [];
-  }, [t]);
+  // ✅ LÊ DIRETAMENTE DA NOVA COLUNA DO BANCO
+  const prontuarioPdfUrl = t?.url_pdf_tratativa || null;
 
-  // Filtra apenas o PDF do Prontuário
-  const prontuarioPdfUrl = useMemo(() => {
-    const pdfDoRobo = safeEvidencias.find(
-      (u) =>
-        typeof u === "string" &&
-        u.toLowerCase().includes(".pdf") &&
-        u.toLowerCase().includes("prontuario")
-    );
-    if (pdfDoRobo) return pdfDoRobo;
-    return safeEvidencias.find((u) => typeof u === "string" && u.toLowerCase().includes(".pdf"));
-  }, [safeEvidencias]);
-
-  // Outras Evidências (excluindo prontuário e lixo HTML)
+  // ✅ Filtra array antigo (caso o usuário envie arquivos novos na conclusão)
   const outrasEvidencias = useMemo(() => {
-    return safeEvidencias.filter((u) => {
-      if (typeof u !== "string") return false;
-      if (u === prontuarioPdfUrl) return false;
-      if (u.toLowerCase().includes(".html")) return false;
-      return true;
-    });
-  }, [safeEvidencias, prontuarioPdfUrl]);
+    if (!t?.evidencias_urls) return [];
+    try {
+      let arr = Array.isArray(t.evidencias_urls) ? t.evidencias_urls : JSON.parse(t.evidencias_urls);
+      // Remove duplicatas, links vazios, o html, e previne se o link principal veio aqui também
+      return [...new Set(arr)].filter(u => 
+        u && 
+        typeof u === "string" && 
+        !u.includes(".html") && 
+        u !== prontuarioPdfUrl
+      );
+    } catch (e) {
+      return [];
+    }
+  }, [t, prontuarioPdfUrl]);
 
   // ============================================================================
   // CARGA DE DADOS
@@ -716,11 +700,11 @@ export default function DieselTratarTratativa() {
                   className="flex items-center justify-center gap-3 w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-black transition-all shadow-md hover:shadow-lg transform active:scale-95"
                 >
                   <FaRobot className="text-blue-400 text-xl" />
-                  Abrir Prontuário de IA
+                  Prontuário de Tratativa
                 </a>
               ) : (
                 <div className="text-sm font-medium text-slate-400 italic bg-slate-50 p-4 rounded-xl border border-dashed border-slate-200 text-center">
-                  Prontuário de IA não gerado ou indisponível.
+                  Prontuário de Tratativa não gerado ou indisponível.
                 </div>
               )}
             </div>

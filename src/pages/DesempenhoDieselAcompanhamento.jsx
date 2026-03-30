@@ -113,7 +113,7 @@ function getProntuarioPendenteLabel(item) {
 function getProntuarioStatus(item) {
   if (item?.prontuario_pendente) return "PENDENTE";
   if (item?.prontuario_30_gerado_em) return "30 GERADO";
-  if (item?.prontuario_20_gerado_em) return "20 GERADO";
+  if (item?.prontuario_20_gerado_em) return "10 GERADO";
   if (item?.prontuario_10_gerado_em) return "10 GERADO";
   return "SEM PRONTUÁRIO";
 }
@@ -164,6 +164,7 @@ export default function DesempenhoDieselAcompanhamento() {
   const [busca, setBusca] = useState("");
   const [abaAtiva, setAbaAtiva] = useState("AGUARDANDO");
   const [filtroLinha, setFiltroLinha] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroDataIni, setFiltroDataIni] = useState("");
   const [filtroDataFim, setFiltroDataFim] = useState("");
   const [sortConfig, setSortConfig] = useState({
@@ -309,6 +310,11 @@ export default function DesempenhoDieselAcompanhamento() {
     return [...new Set(lns)].sort();
   }, [lista]);
 
+  const statusUnicos = useMemo(() => {
+    const sts = lista.map((i) => getStatusView(i)).filter(Boolean);
+    return [...new Set(sts)].sort();
+  }, [lista]);
+
   const handleSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") {
@@ -341,6 +347,8 @@ export default function DesempenhoDieselAcompanhamento() {
         matchAba = ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
       }
       if (!matchAba) return false;
+
+      if (filtroStatus && st !== filtroStatus) return false;
 
       const q = busca.toLowerCase().trim();
       if (q) {
@@ -410,6 +418,7 @@ export default function DesempenhoDieselAcompanhamento() {
     busca,
     abaAtiva,
     filtroLinha,
+    filtroStatus,
     filtroDataIni,
     filtroDataFim,
     sortConfig,
@@ -541,6 +550,22 @@ export default function DesempenhoDieselAcompanhamento() {
                   {ln}
                 </option>
               ))}
+          </select>
+        </div>
+
+        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
+          <FaFilter className="text-gray-400 ml-2" />
+          <select
+            value={filtroStatus}
+            onChange={(e) => setFiltroStatus(e.target.value)}
+            className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-36 font-medium text-slate-600"
+          >
+            <option value="">Todos Status</option>
+            {statusUnicos.map((st) => (
+              <option key={st} value={st}>
+                {st}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -732,7 +757,7 @@ export default function DesempenhoDieselAcompanhamento() {
                         </button>
                       )}
 
-                      {abaAtiva === "ANALISE" && decisionTipo && (
+                      {abaAtiva === "ANALISE" && decisionTipo && status !== "OK" && (
                         <button
                           onClick={() => abrirCheckpoint(item, decisionTipo)}
                           className="flex items-center gap-1.5 px-3 py-2 bg-violet-700 text-white rounded font-bold text-xs shadow-sm hover:bg-violet-800 transition-all whitespace-nowrap"

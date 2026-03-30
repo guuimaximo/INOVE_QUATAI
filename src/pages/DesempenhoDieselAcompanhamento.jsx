@@ -12,7 +12,7 @@ import {
   FaEye,
   FaChartLine,
   FaClipboardList,
-  FaArrowRight,
+  FaGavel,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 import { AuthContext } from "../context/AuthContext";
@@ -118,6 +118,14 @@ function getProntuarioStatus(item) {
   return "SEM PRONTUÁRIO";
 }
 
+function getDecisionCheckpoint(item) {
+  if (item?.prontuario_pendente) return item.prontuario_pendente;
+  if (item?.prontuario_30_gerado_em) return "PRONTUARIO_30";
+  if (item?.prontuario_20_gerado_em) return "PRONTUARIO_20";
+  if (item?.prontuario_10_gerado_em) return "PRONTUARIO_10";
+  return null;
+}
+
 function statusBadgeClass(status) {
   const st = normalizeStatus(status);
   if (st === "AGUARDANDO_INSTRUTOR") {
@@ -132,15 +140,10 @@ function statusBadgeClass(status) {
   if (st === "ATAS") {
     return "bg-rose-50 text-rose-700 border-rose-200";
   }
+  if (st === "OK" || st === "ENCERRADO") {
+    return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  }
   return "bg-emerald-50 text-emerald-700 border-emerald-200";
-}
-
-function getCheckpointDecisaoTipo(item) {
-  if (item?.prontuario_pendente) return item.prontuario_pendente;
-  if (item?.prontuario_30_gerado_em) return "PRONTUARIO_30";
-  if (item?.prontuario_20_gerado_em) return "PRONTUARIO_20";
-  if (item?.prontuario_10_gerado_em) return "PRONTUARIO_10";
-  return null;
 }
 
 // =============================================================================
@@ -175,9 +178,6 @@ export default function DesempenhoDieselAcompanhamento() {
   const [itemSelecionado, setItemSelecionado] = useState(null);
   const [checkpointTipo, setCheckpointTipo] = useState(null);
 
-  // =============================================================================
-  // USER
-  // =============================================================================
   useEffect(() => {
     async function carregarPermissaoUsuario() {
       const login = user?.login || user?.email;
@@ -207,9 +207,6 @@ export default function DesempenhoDieselAcompanhamento() {
     carregarPermissaoUsuario();
   }, [user]);
 
-  // =============================================================================
-  // CARGA PRINCIPAL
-  // =============================================================================
   async function carregarOrdens() {
     setLoading(true);
     try {
@@ -232,9 +229,6 @@ export default function DesempenhoDieselAcompanhamento() {
     carregarOrdens();
   }, []);
 
-  // =============================================================================
-  // CONTADORES
-  // =============================================================================
   const countAguardando = lista.filter(
     (i) => getStatusView(i) === "AGUARDANDO_INSTRUTOR"
   ).length;
@@ -252,9 +246,6 @@ export default function DesempenhoDieselAcompanhamento() {
     return ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
   }).length;
 
-  // =============================================================================
-  // AÇÕES
-  // =============================================================================
   const handleExcluir = async (id) => {
     if (!podeExcluir) {
       alert(
@@ -304,17 +295,6 @@ export default function DesempenhoDieselAcompanhamento() {
     setModalCheckpointOpen(true);
   };
 
-  const abrirDecisao = (item) => {
-    const tipo = getCheckpointDecisaoTipo(item);
-    if (!tipo) {
-      alert("Nenhum checkpoint disponível para decisão.");
-      return;
-    }
-    setItemSelecionado(item);
-    setCheckpointTipo(tipo);
-    setModalCheckpointOpen(true);
-  };
-
   const abrirPDF = (item) => {
     const url = getPdfUrl(item);
     if (!url) {
@@ -324,9 +304,6 @@ export default function DesempenhoDieselAcompanhamento() {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  // =============================================================================
-  // FILTROS
-  // =============================================================================
   const linhasUnicas = useMemo(() => {
     const lns = lista.map((i) => getLinhaApenas(i)).filter(Boolean);
     return [...new Set(lns)].sort();
@@ -438,9 +415,6 @@ export default function DesempenhoDieselAcompanhamento() {
     sortConfig,
   ]);
 
-  // =============================================================================
-  // RENDER
-  // =============================================================================
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
@@ -465,9 +439,7 @@ export default function DesempenhoDieselAcompanhamento() {
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-amber-500">
           <div>
             <p className="text-sm text-gray-500 font-bold">Aguardando</p>
-            <p className="text-2xl font-black text-slate-800">
-              {countAguardando}
-            </p>
+            <p className="text-2xl font-black text-slate-800">{countAguardando}</p>
           </div>
           <FaClock className="text-4xl text-amber-50" />
         </div>
@@ -475,21 +447,15 @@ export default function DesempenhoDieselAcompanhamento() {
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-blue-500">
           <div>
             <p className="text-sm text-gray-500 font-bold">Monitoramento</p>
-            <p className="text-2xl font-black text-slate-800">
-              {countMonitoramento}
-            </p>
+            <p className="text-2xl font-black text-slate-800">{countMonitoramento}</p>
           </div>
           <FaRoad className="text-4xl text-blue-50" />
         </div>
 
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-rose-500">
           <div>
-            <p className="text-sm text-gray-500 font-bold">
-              Prontuários Pendentes
-            </p>
-            <p className="text-2xl font-black text-slate-800">
-              {countProntuariosPendentes}
-            </p>
+            <p className="text-sm text-gray-500 font-bold">Prontuários Pendentes</p>
+            <p className="text-2xl font-black text-slate-800">{countProntuariosPendentes}</p>
           </div>
           <FaClipboardList className="text-4xl text-rose-50" />
         </div>
@@ -497,9 +463,7 @@ export default function DesempenhoDieselAcompanhamento() {
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-violet-500">
           <div>
             <p className="text-sm text-gray-500 font-bold">Em Análise</p>
-            <p className="text-2xl font-black text-slate-800">
-              {countEmAnalise}
-            </p>
+            <p className="text-2xl font-black text-slate-800">{countEmAnalise}</p>
           </div>
           <FaChartLine className="text-4xl text-violet-50" />
         </div>
@@ -664,14 +628,10 @@ export default function DesempenhoDieselAcompanhamento() {
 
               const isTimestamp = abaAtiva === "AGUARDANDO";
               const dataFormatada = formatarDataHoraBR(dataRef, !isTimestamp);
-
-              const tipoDecisao = getCheckpointDecisaoTipo(item);
+              const decisionTipo = getDecisionCheckpoint(item);
 
               return (
-                <tr
-                  key={item.id}
-                  className="hover:bg-blue-50/50 transition-colors"
-                >
+                <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
                   <td className="px-4 py-4 text-gray-500 font-mono text-sm whitespace-nowrap">
                     {dataFormatada}
                   </td>
@@ -734,7 +694,7 @@ export default function DesempenhoDieselAcompanhamento() {
                   </td>
 
                   <td className="px-4 py-4">
-                    <div className="flex flex-wrap justify-center gap-2 items-center min-w-[240px]">
+                    <div className="flex flex-wrap justify-center gap-2 items-center min-w-[260px]">
                       <button
                         onClick={() => abrirPDF(item)}
                         className="flex items-center justify-center p-2 bg-white border border-rose-200 text-rose-600 rounded hover:bg-rose-50 shadow-sm transition-all"
@@ -772,17 +732,12 @@ export default function DesempenhoDieselAcompanhamento() {
                         </button>
                       )}
 
-                      {abaAtiva === "ANALISE" && (
+                      {abaAtiva === "ANALISE" && decisionTipo && (
                         <button
-                          onClick={() => abrirDecisao(item)}
-                          disabled={!tipoDecisao}
-                          className={`flex items-center gap-1.5 px-3 py-2 rounded font-bold text-xs shadow-sm transition-all whitespace-nowrap ${
-                            tipoDecisao
-                              ? "bg-violet-600 text-white hover:bg-violet-700"
-                              : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                          }`}
+                          onClick={() => abrirCheckpoint(item, decisionTipo)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-violet-700 text-white rounded font-bold text-xs shadow-sm hover:bg-violet-800 transition-all whitespace-nowrap"
                         >
-                          <FaArrowRight size={11} /> Decisão
+                          <FaGavel size={12} /> Decisão
                         </button>
                       )}
                     </div>

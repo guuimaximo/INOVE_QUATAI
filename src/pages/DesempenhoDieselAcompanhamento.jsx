@@ -12,6 +12,7 @@ import {
   FaEye,
   FaChartLine,
   FaClipboardList,
+  FaArrowRight,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 import { AuthContext } from "../context/AuthContext";
@@ -132,6 +133,14 @@ function statusBadgeClass(status) {
     return "bg-rose-50 text-rose-700 border-rose-200";
   }
   return "bg-emerald-50 text-emerald-700 border-emerald-200";
+}
+
+function getCheckpointDecisaoTipo(item) {
+  if (item?.prontuario_pendente) return item.prontuario_pendente;
+  if (item?.prontuario_30_gerado_em) return "PRONTUARIO_30";
+  if (item?.prontuario_20_gerado_em) return "PRONTUARIO_20";
+  if (item?.prontuario_10_gerado_em) return "PRONTUARIO_10";
+  return null;
 }
 
 // =============================================================================
@@ -290,6 +299,17 @@ export default function DesempenhoDieselAcompanhamento() {
   };
 
   const abrirCheckpoint = (item, tipo) => {
+    setItemSelecionado(item);
+    setCheckpointTipo(tipo);
+    setModalCheckpointOpen(true);
+  };
+
+  const abrirDecisao = (item) => {
+    const tipo = getCheckpointDecisaoTipo(item);
+    if (!tipo) {
+      alert("Nenhum checkpoint disponível para decisão.");
+      return;
+    }
     setItemSelecionado(item);
     setCheckpointTipo(tipo);
     setModalCheckpointOpen(true);
@@ -578,7 +598,7 @@ export default function DesempenhoDieselAcompanhamento() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-        <table className="w-full text-left min-w-[1100px]">
+        <table className="w-full text-left min-w-[1180px]">
           <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
             <tr>
               <th
@@ -644,6 +664,8 @@ export default function DesempenhoDieselAcompanhamento() {
 
               const isTimestamp = abaAtiva === "AGUARDANDO";
               const dataFormatada = formatarDataHoraBR(dataRef, !isTimestamp);
+
+              const tipoDecisao = getCheckpointDecisaoTipo(item);
 
               return (
                 <tr
@@ -712,7 +734,7 @@ export default function DesempenhoDieselAcompanhamento() {
                   </td>
 
                   <td className="px-4 py-4">
-                    <div className="flex flex-wrap justify-center gap-2 items-center min-w-[180px]">
+                    <div className="flex flex-wrap justify-center gap-2 items-center min-w-[240px]">
                       <button
                         onClick={() => abrirPDF(item)}
                         className="flex items-center justify-center p-2 bg-white border border-rose-200 text-rose-600 rounded hover:bg-rose-50 shadow-sm transition-all"
@@ -746,7 +768,21 @@ export default function DesempenhoDieselAcompanhamento() {
                           onClick={() => abrirVisaoGeral(item)}
                           className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-white rounded font-bold text-xs shadow-sm hover:bg-slate-700 transition-all whitespace-nowrap"
                         >
-                          <FaEye size={12} /> Prontuário
+                          <FaEye size={12} /> Detalhes
+                        </button>
+                      )}
+
+                      {abaAtiva === "ANALISE" && (
+                        <button
+                          onClick={() => abrirDecisao(item)}
+                          disabled={!tipoDecisao}
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded font-bold text-xs shadow-sm transition-all whitespace-nowrap ${
+                            tipoDecisao
+                              ? "bg-violet-600 text-white hover:bg-violet-700"
+                              : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                          }`}
+                        >
+                          <FaArrowRight size={11} /> Decisão
                         </button>
                       )}
                     </div>

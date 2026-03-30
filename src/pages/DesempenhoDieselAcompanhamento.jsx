@@ -4,7 +4,6 @@ import {
   FaSync,
   FaClock,
   FaRoad,
-  FaCheck,
   FaSearch,
   FaFilter,
   FaFilePdf,
@@ -793,6 +792,12 @@ export default function DesempenhoDieselAcompanhamento() {
           item={itemSelecionado}
           checkpointTipo={checkpointTipo}
           onClose={() => {
+            setModalCheckpointOpen(false);
+            setCheckpointTipo(null);
+          }}
+          onSaved={async () => {
+            await carregarOrdens();
+            setModalVisaoGeralOpen(false);
             setModalCheckpointOpen(false);
             setCheckpointTipo(null);
           }}

@@ -1,4 +1,3 @@
-// src/components/desempenho/ModalCheckpointAnalise.jsx
 import React, { useEffect, useMemo, useState, useContext } from "react";
 import {
   FaChartLine,
@@ -109,28 +108,6 @@ function getLinhaApenas(item) {
 
 function getClusterApenas(item) {
   return item?.metadata?.cluster_foco || null;
-}
-
-function getResumoDecisao(comp) {
-  const melhorouKml = comp.delta_kml >= 0;
-  const reduziuDesperdicio = comp.delta_desp <= 0;
-
-  if (melhorouKml && reduziuDesperdicio) {
-    return {
-      titulo: "Meta atingida / evolução positiva",
-      classe:
-        "bg-emerald-50 border-emerald-200 text-emerald-800",
-      texto:
-        "O checkpoint indica melhora ou manutenção positiva. O acompanhamento já pode ser finalizado, caso a avaliação da gestão esteja de acordo.",
-    };
-  }
-
-  return {
-    titulo: "Desvio mantido / encaminhar tratativa",
-    classe: "bg-rose-50 border-rose-200 text-rose-800",
-    texto:
-      "O checkpoint ainda mostra desvio de performance. O recomendado é encaminhar para tratativa disciplinar com base no prontuário gerado.",
-  };
 }
 
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
@@ -259,39 +236,29 @@ export default function ModalCheckpointAnalise({
     return html || null;
   }, [evento]);
 
-  const parecer = useMemo(() => getResumoDecisao(comp), [comp]);
+  async function registrarHistoricoAcao(tipo, observacoes, extra = {}) {
+    const { error } = await supabase.from("diesel_acompanhamento_eventos").insert({
+      acompanhamento_id: item.id,
+      tipo,
+      observacoes,
+      criado_por_login: user?.login || user?.email || null,
+      criado_por_nome: user?.nome || user?.nome_completo || user?.email || null,
+      extra,
+    });
 
-  async function atualizarAcompanhamento(status, observacaoEvento) {
-    const agora = new Date().toISOString();
+    if (error) throw error;
+  }
 
-    const { error: upErr } = await supabase
+  async function atualizarStatusParaOk() {
+    const { error } = await supabase
       .from("diesel_acompanhamentos")
       .update({
-        status,
-        updated_at: agora,
+        status: "OK",
+        updated_at: new Date().toISOString(),
       })
       .eq("id", item.id);
 
-    if (upErr) throw upErr;
-
-    const { error: evErr } = await supabase
-      .from("diesel_acompanhamento_eventos")
-      .insert({
-        acompanhamento_id: item.id,
-        tipo: "ANALISE_FINAL",
-        observacoes: observacaoEvento,
-        criado_por_login: user?.login || user?.email || null,
-        criado_por_nome:
-          user?.nome || user?.nome_completo || user?.email || null,
-        extra: {
-          origem: "ModalCheckpointAnalise",
-          checkpoint_tipo: checkpointTipo,
-          delta_kml: comp.delta_kml,
-          delta_desperdicio: comp.delta_desp,
-        },
-      });
-
-    if (evErr) throw evErr;
+    if (error) throw error;
   }
 
   async function handleFinalizarAcompanhamento() {
@@ -304,11 +271,19 @@ export default function ModalCheckpointAnalise({
     setStatusMsg({ type: "info", text: "Finalizando acompanhamento..." });
 
     try {
-      await atualizarAcompanhamento(
-        "ENCERRADO",
-        `Acompanhamento finalizado manualmente na etapa ${checkpointTipo}. Delta KM/L: ${comp.delta_kml.toFixed(
-          2
-        )} | Delta Desperdício: ${comp.delta_desp.toFixed(1)} L.`
+      await atualizarStatusParaOk();
+
+      await registrarHistoricoAcao(
+        "DECISAO_FINALIZAR",
+        `Acompanhamento finalizado na etapa ${checkpointTipo}. Status ajustado para OK.`,
+        {
+          checkpoint_tipo: checkpointTipo,
+          decisao: "FINALIZADO",
+          delta_kml: comp.delta_kml,
+          delta_desperdicio: comp.delta_desp,
+          antes: comp.antes,
+          depois: comp.depois,
+        }
       );
 
       setStatusMsg({
@@ -319,13 +294,6 @@ export default function ModalCheckpointAnalise({
       if (typeof onSaved === "function") {
         await onSaved();
       }
-
-      setTimeout(() => {
-        onClose?.();
-        if (typeof onSaved !== "function") {
-          window.location.reload();
-        }
-      }, 1200);
     } catch (e) {
       console.error(e);
       setStatusMsg({
@@ -356,7 +324,6 @@ export default function ModalCheckpointAnalise({
       const lancadorNome =
         user?.nome || user?.nome_completo || user?.email || null;
 
-      // 1) verifica se já existe tratativa pendente
       const { data: tratExistente, error: tratExistenteErr } = await supabase
         .from("diesel_tratativas")
         .select("id, evidencias_urls")
@@ -394,9 +361,7 @@ export default function ModalCheckpointAnalise({
         const descricao = [
           `Encaminhado automaticamente a partir do checkpoint ${checkpointTipo}.`,
           `Foco: ${foco}.`,
-          `Meta: ${comp.depois.meta.toFixed(2)} | Real: ${comp.depois.kml.toFixed(
-            2
-          )}.`,
+          `Meta: ${comp.depois.meta.toFixed(2)} | Real: ${comp.depois.kml.toFixed(2)}.`,
           `Delta KM/L: ${comp.delta_kml.toFixed(2)}.`,
           `Delta Desperdício: ${comp.delta_desp.toFixed(1)} L.`,
           "",
@@ -437,22 +402,18 @@ export default function ModalCheckpointAnalise({
         tratativaId = novaTrat.id;
       }
 
-      // 2) detalhe da tratativa
       const { error: tratDetErr } = await supabase
         .from("diesel_tratativas_detalhes")
         .insert({
           tratativa_id: tratativaId,
           acao_aplicada: "ABERTURA_AUTOMATICA",
-          observacoes: `Tratativa aberta a partir do ${checkpointTipo}. Foco: ${foco}. Delta KM/L: ${comp.delta_kml.toFixed(
-            2
-          )} | Delta Desperdício: ${comp.delta_desp.toFixed(1)} L.`,
+          observacoes: `Tratativa aberta a partir do ${checkpointTipo}. Foco: ${foco}.`,
           tratado_por_login: lancadorLogin,
           tratado_por_nome: lancadorNome,
         });
 
       if (tratDetErr) throw tratDetErr;
 
-      // 3) lote para prontuário de tratativa
       const { data: lote, error: loteErr } = await supabase
         .from("acompanhamento_lotes")
         .insert({
@@ -476,13 +437,22 @@ export default function ModalCheckpointAnalise({
 
       if (itemLoteErr) throw itemLoteErr;
 
-      // 4) atualiza acompanhamento
-      await atualizarAcompanhamento(
-        "ATAS",
-        `Caso encaminhado para tratativa a partir do ${checkpointTipo}. Tratativa ID: ${tratativaId}.`
+      await atualizarStatusParaOk();
+
+      await registrarHistoricoAcao(
+        "DECISAO_TRATATIVA",
+        `Caso enviado para tratativa a partir da etapa ${checkpointTipo}. Status ajustado para OK.`,
+        {
+          checkpoint_tipo: checkpointTipo,
+          decisao: "TRATATIVA",
+          tratativa_id: tratativaId,
+          delta_kml: comp.delta_kml,
+          delta_desperdicio: comp.delta_desp,
+          antes: comp.antes,
+          depois: comp.depois,
+        }
       );
 
-      // 5) workflow
       await dispatchGitHubWorkflow(WF_TRAT, {
         ordem_batch_id: String(lote.id),
         qtd: "1",
@@ -496,13 +466,6 @@ export default function ModalCheckpointAnalise({
       if (typeof onSaved === "function") {
         await onSaved();
       }
-
-      setTimeout(() => {
-        onClose?.();
-        if (typeof onSaved !== "function") {
-          window.location.reload();
-        }
-      }, 1500);
     } catch (e) {
       console.error(e);
       setStatusMsg({
@@ -553,6 +516,29 @@ export default function ModalCheckpointAnalise({
         </div>
 
         <div className="p-4 md:p-6 space-y-6">
+          {statusMsg.text && (
+            <div
+              className={`p-4 rounded-xl border flex items-center gap-3 ${
+                statusMsg.type === "success"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : statusMsg.type === "error"
+                  ? "bg-rose-50 border-rose-200 text-rose-800"
+                  : "bg-blue-50 border-blue-200 text-blue-800"
+              }`}
+            >
+              <div className="text-lg">
+                {statusMsg.type === "success" ? (
+                  <FaCheckCircle />
+                ) : statusMsg.type === "error" ? (
+                  <FaExclamationTriangle />
+                ) : (
+                  <FaSync className="animate-spin" />
+                )}
+              </div>
+              <div className="font-bold text-sm">{statusMsg.text}</div>
+            </div>
+          )}
+
           <div className="p-4 bg-slate-100 rounded-lg border flex flex-col md:flex-row justify-between gap-4">
             <div>
               <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
@@ -596,49 +582,27 @@ export default function ModalCheckpointAnalise({
             </div>
           </div>
 
-          {statusMsg.text && (
-            <div
-              className={`p-4 rounded-xl border flex items-center gap-3 ${
-                statusMsg.type === "success"
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  : statusMsg.type === "error"
-                  ? "bg-rose-50 border-rose-200 text-rose-800"
-                  : "bg-blue-50 border-blue-200 text-blue-800"
-              }`}
-            >
-              <div className="text-lg">
-                {statusMsg.type === "success" ? (
-                  <FaCheckCircle />
-                ) : statusMsg.type === "error" ? (
-                  <FaExclamationTriangle />
-                ) : (
-                  <FaSync className="animate-spin" />
-                )}
-              </div>
-              <div className="font-bold text-sm">{statusMsg.text}</div>
-            </div>
-          )}
-
           {loading ? (
             <div className="p-8 text-center text-slate-500 font-bold flex items-center justify-center gap-2">
               <FaSync className="animate-spin" /> Carregando análise...
             </div>
           ) : (
             <>
-              <div className={`border rounded-xl p-4 shadow-sm ${parecer.classe}`}>
-                <div className="font-black text-sm uppercase tracking-wider mb-2">
+              <div className="border rounded-xl p-4 bg-violet-50 border-violet-200 shadow-sm">
+                <div className="font-black text-sm uppercase tracking-wider mb-2 text-violet-800">
                   Decisão da Etapa
                 </div>
-                <div className="font-bold text-base mb-1">{parecer.titulo}</div>
-                <div className="text-sm leading-relaxed">{parecer.texto}</div>
+                <div className="text-sm text-violet-800 leading-relaxed mb-4">
+                  Escolha abaixo se o caso deve ser encerrado como OK ou encaminhado para tratativa. Ambas as ações irão registrar histórico do checkpoint.
+                </div>
 
-                <div className="flex flex-wrap gap-3 mt-4">
+                <div className="flex flex-wrap gap-3">
                   <button
                     onClick={handleFinalizarAcompanhamento}
                     disabled={actionLoading}
                     className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-black shadow-sm hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-2"
                   >
-                    <FaCheckCircle /> Finalizar Acompanhamento
+                    <FaCheckCircle /> Finalizar
                   </button>
 
                   <button
@@ -668,9 +632,7 @@ export default function ModalCheckpointAnalise({
 
                 <div className="bg-white p-4 rounded-xl border shadow-sm">
                   <div className="text-sm text-gray-500 font-bold">Delta KM/L</div>
-                  <div
-                    className={`text-2xl font-black ${cardClass(comp.delta_kml)}`}
-                  >
+                  <div className={`text-2xl font-black ${cardClass(comp.delta_kml)}`}>
                     {comp.delta_kml >= 0 ? "+" : ""}
                     {comp.delta_kml.toFixed(2)}
                   </div>
@@ -706,45 +668,21 @@ export default function ModalCheckpointAnalise({
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     <tr>
-                      <td className="px-4 py-3 font-black text-slate-700">
-                        Antes
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {comp.antes.km.toFixed(0)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {comp.antes.litros.toFixed(0)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold">
-                        {comp.antes.kml.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {comp.antes.meta.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold">
-                        {comp.antes.desperdicio.toFixed(1)} L
-                      </td>
+                      <td className="px-4 py-3 font-black text-slate-700">Antes</td>
+                      <td className="px-4 py-3 text-right">{comp.antes.km.toFixed(0)}</td>
+                      <td className="px-4 py-3 text-right">{comp.antes.litros.toFixed(0)}</td>
+                      <td className="px-4 py-3 text-right font-bold">{comp.antes.kml.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">{comp.antes.meta.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right font-bold">{comp.antes.desperdicio.toFixed(1)} L</td>
                     </tr>
 
                     <tr>
-                      <td className="px-4 py-3 font-black text-slate-700">
-                        Depois
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {comp.depois.km.toFixed(0)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {comp.depois.litros.toFixed(0)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold">
-                        {comp.depois.kml.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {comp.depois.meta.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold">
-                        {comp.depois.desperdicio.toFixed(1)} L
-                      </td>
+                      <td className="px-4 py-3 font-black text-slate-700">Depois</td>
+                      <td className="px-4 py-3 text-right">{comp.depois.km.toFixed(0)}</td>
+                      <td className="px-4 py-3 text-right">{comp.depois.litros.toFixed(0)}</td>
+                      <td className="px-4 py-3 text-right font-bold">{comp.depois.kml.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">{comp.depois.meta.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right font-bold">{comp.depois.desperdicio.toFixed(1)} L</td>
                     </tr>
                   </tbody>
                 </table>
@@ -755,8 +693,7 @@ export default function ModalCheckpointAnalise({
                   Observações da Etapa
                 </div>
                 <div className="text-sm text-slate-600 leading-relaxed">
-                  {evento?.observacoes ||
-                    "Sem observação registrada para esta etapa."}
+                  {evento?.observacoes || "Sem observação registrada para esta etapa."}
                 </div>
               </div>
             </>

@@ -44,10 +44,10 @@ function getStatusView(item) {
 }
 
 function getFoco(item) {
-  if (item?.motivo) return item.motivo;
+  if (item?.motivo) return String(item.motivo).trim();
 
-  const m = item?.metadata;
-  if (m?.foco) return m.foco;
+  const m = item?.metadata || {};
+  if (m?.foco) return String(m.foco).trim();
 
   const cl = m?.cluster_foco;
   const ln = m?.linha_foco;
@@ -57,8 +57,24 @@ function getFoco(item) {
   return "Geral";
 }
 
+function extrairLinhaDoMotivo(motivo) {
+  const txt = String(motivo || "").trim();
+  if (!txt) return null;
+
+  const match = txt.match(/linha\s*([a-z0-9]+)$/i);
+  if (match?.[1]) return match[1].toUpperCase();
+
+  return null;
+}
+
 function getLinhaApenas(item) {
-  return item?.metadata?.linha_foco || "Sem Linha";
+  const linhaMotivo = extrairLinhaDoMotivo(item?.motivo);
+  if (linhaMotivo) return linhaMotivo;
+
+  const linhaMeta = String(item?.metadata?.linha_foco || "").trim();
+  if (linhaMeta) return linhaMeta.toUpperCase();
+
+  return "Sem Linha";
 }
 
 function getPdfUrl(item) {
@@ -113,7 +129,7 @@ function getProntuarioPendenteLabel(item) {
 function getProntuarioStatus(item) {
   if (item?.prontuario_pendente) return "PENDENTE";
   if (item?.prontuario_30_gerado_em) return "30 GERADO";
-  if (item?.prontuario_20_gerado_em) return "10 GERADO";
+  if (item?.prontuario_20_gerado_em) return "20 GERADO";
   if (item?.prontuario_10_gerado_em) return "10 GERADO";
   return "SEM PRONTUÁRIO";
 }
@@ -230,6 +246,45 @@ export default function DesempenhoDieselAcompanhamento() {
     carregarOrdens();
   }, []);
 
+  const listaComFiltrosSemAba = useMemo(() => {
+    return (lista || []).filter((item) => {
+      const st = getStatusView(item);
+
+      if (filtroStatus && st !== filtroStatus) return false;
+
+      const q = busca.toLowerCase().trim();
+      if (q) {
+        const nome = String(item.motorista_nome || "").toLowerCase();
+        const chapa = String(item.motorista_chapa || "");
+        if (!nome.includes(q) && !chapa.includes(q)) return false;
+      }
+
+      if (filtroLinha && getLinhaApenas(item) !== filtroLinha) return false;
+
+      const dataRef =
+        abaAtiva === "AGUARDANDO"
+          ? item.created_at
+          : item.dt_inicio_monitoramento || item.created_at;
+
+      if (filtroDataIni || filtroDataFim) {
+        if (!dataRef) return false;
+        const dFormat = String(dataRef).split("T")[0].split(" ")[0];
+        if (filtroDataIni && dFormat < filtroDataIni) return false;
+        if (filtroDataFim && dFormat > filtroDataFim) return false;
+      }
+
+      return true;
+    });
+  }, [
+    lista,
+    busca,
+    filtroLinha,
+    filtroStatus,
+    filtroDataIni,
+    filtroDataFim,
+    abaAtiva,
+  ]);
+
   const countAguardando = lista.filter(
     (i) => getStatusView(i) === "AGUARDANDO_INSTRUTOR"
   ).length;
@@ -243,6 +298,23 @@ export default function DesempenhoDieselAcompanhamento() {
   ).length;
 
   const countEmAnalise = lista.filter((i) => {
+    const st = getStatusView(i);
+    return ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
+  }).length;
+
+  const countAguardandoFiltrado = listaComFiltrosSemAba.filter(
+    (i) => getStatusView(i) === "AGUARDANDO_INSTRUTOR"
+  ).length;
+
+  const countMonitoramentoFiltrado = listaComFiltrosSemAba.filter(
+    (i) => getStatusView(i) === "EM_MONITORAMENTO"
+  ).length;
+
+  const countProntuariosPendentesFiltrado = listaComFiltrosSemAba.filter(
+    (i) => !!i?.prontuario_pendente
+  ).length;
+
+  const countEmAnaliseFiltrado = listaComFiltrosSemAba.filter((i) => {
     const st = getStatusView(i);
     return ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
   }).length;
@@ -306,8 +378,12 @@ export default function DesempenhoDieselAcompanhamento() {
   };
 
   const linhasUnicas = useMemo(() => {
-    const lns = lista.map((i) => getLinhaApenas(i)).filter(Boolean);
-    return [...new Set(lns)].sort();
+    const lns = lista
+      .map((i) => getLinhaApenas(i))
+      .filter(Boolean)
+      .map((x) => String(x).trim().toUpperCase());
+
+    return [...new Set(lns)].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [lista]);
 
   const statusUnicos = useMemo(() => {
@@ -448,7 +524,12 @@ export default function DesempenhoDieselAcompanhamento() {
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-amber-500">
           <div>
             <p className="text-sm text-gray-500 font-bold">Aguardando</p>
-            <p className="text-2xl font-black text-slate-800">{countAguardando}</p>
+            <div className="flex items-end gap-2 flex-wrap">
+              <p className="text-2xl font-black text-slate-800">{countAguardando}</p>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                filtrado: {countAguardandoFiltrado}
+              </span>
+            </div>
           </div>
           <FaClock className="text-4xl text-amber-50" />
         </div>
@@ -456,7 +537,12 @@ export default function DesempenhoDieselAcompanhamento() {
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-blue-500">
           <div>
             <p className="text-sm text-gray-500 font-bold">Monitoramento</p>
-            <p className="text-2xl font-black text-slate-800">{countMonitoramento}</p>
+            <div className="flex items-end gap-2 flex-wrap">
+              <p className="text-2xl font-black text-slate-800">{countMonitoramento}</p>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                filtrado: {countMonitoramentoFiltrado}
+              </span>
+            </div>
           </div>
           <FaRoad className="text-4xl text-blue-50" />
         </div>
@@ -464,7 +550,12 @@ export default function DesempenhoDieselAcompanhamento() {
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-rose-500">
           <div>
             <p className="text-sm text-gray-500 font-bold">Prontuários Pendentes</p>
-            <p className="text-2xl font-black text-slate-800">{countProntuariosPendentes}</p>
+            <div className="flex items-end gap-2 flex-wrap">
+              <p className="text-2xl font-black text-slate-800">{countProntuariosPendentes}</p>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                filtrado: {countProntuariosPendentesFiltrado}
+              </span>
+            </div>
           </div>
           <FaClipboardList className="text-4xl text-rose-50" />
         </div>
@@ -472,7 +563,12 @@ export default function DesempenhoDieselAcompanhamento() {
         <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-violet-500">
           <div>
             <p className="text-sm text-gray-500 font-bold">Em Análise</p>
-            <p className="text-2xl font-black text-slate-800">{countEmAnalise}</p>
+            <div className="flex items-end gap-2 flex-wrap">
+              <p className="text-2xl font-black text-slate-800">{countEmAnalise}</p>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                filtrado: {countEmAnaliseFiltrado}
+              </span>
+            </div>
           </div>
           <FaChartLine className="text-4xl text-violet-50" />
         </div>

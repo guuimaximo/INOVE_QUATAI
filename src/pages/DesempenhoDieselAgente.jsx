@@ -13,6 +13,8 @@ import {
   FaTimes,
   FaChartLine,
   FaListAlt,
+  FaFilter,
+  FaSearch,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 
@@ -54,6 +56,10 @@ function getPublicUrl(path) {
 function n(v) {
   const x = Number(v);
   return Number.isFinite(x) ? x : 0;
+}
+
+function normalizarLinha(v) {
+  return String(v || "").trim().toUpperCase();
 }
 
 // Disparo de GitHub Actions
@@ -152,7 +158,6 @@ export default function DesempenhoDieselAgente() {
 
   const hoje = useMemo(() => new Date(), []);
 
-  // ✅ primeiro dia do mês anterior (cobre 2 meses: mês anterior + mês atual até hoje)
   const primeiroDiaPeriodo = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1), [hoje]);
 
   // Estados
@@ -164,7 +169,6 @@ export default function DesempenhoDieselAgente() {
   const [erro, setErro] = useState(null);
   const [sucesso, setSucesso] = useState(null);
 
-  // ✅ anti-duplo clique (loading por ação)
   const [loadingGerencial, setLoadingGerencial] = useState(false);
   const [loadingProntuarios, setLoadingProntuarios] = useState(false);
 
@@ -172,6 +176,9 @@ export default function DesempenhoDieselAgente() {
   const [sugestoes, setSugestoes] = useState([]);
   const [selected, setSelected] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: "combustivel_desperdicado", direction: "desc" });
+
+  const [busca, setBusca] = useState("");
+  const [filtroLinha, setFiltroLinha] = useState("");
 
   // Modal
   const [viewingDetails, setViewingDetails] = useState(null);
@@ -192,7 +199,6 @@ export default function DesempenhoDieselAgente() {
       if (!mountedRef.current) return;
       setUserSession(sess?.session || null);
 
-      // 1. Pega o último relatório gerencial
       const { data: rel } = await supabase
         .from("relatorios_gerados")
         .select("*")
@@ -200,19 +206,17 @@ export default function DesempenhoDieselAgente() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+
       if (!mountedRef.current) return;
       setUltimoGerencial(rel || null);
 
-      // 2. Pega as sugestões
       const { data: sug } = await supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500);
 
-      // 3. Pega os acompanhamentos que AINDA NÃO FORAM CONCLUÍDOS
       const { data: acompanhamentos } = await supabase
         .from("diesel_acompanhamentos")
         .select("motorista_chapa, status")
         .not("status", "in", '("OK","ENCERRADO","ATAS")');
 
-      // 4. Cria um mapa de chapa -> status
       const mapStatusAtivo = {};
       if (acompanhamentos) {
         acompanhamentos.forEach((a) => {
@@ -220,7 +224,6 @@ export default function DesempenhoDieselAgente() {
         });
       }
 
-      // 5. Injeta o status atual dentro do array de sugestões
       const sugestoesComStatus = (sug || []).map((s) => ({
         ...s,
         status_atual: mapStatusAtivo[s.motorista_chapa] || null,
@@ -275,6 +278,35 @@ export default function DesempenhoDieselAgente() {
   };
 
   // ---------------------------------------------------------------------------
+  // FILTROS
+  // ---------------------------------------------------------------------------
+  const linhasUnicas = useMemo(() => {
+    const linhas = (sugestoes || [])
+      .map((r) => normalizarLinha(r.linha_mais_rodada))
+      .filter(Boolean);
+
+    return [...new Set(linhas)].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [sugestoes]);
+
+  const sugestoesFiltradas = useMemo(() => {
+    return (sugestoes || []).filter((r) => {
+      const linha = normalizarLinha(r.linha_mais_rodada);
+      const nome = String(r.motorista_nome || "").toLowerCase();
+      const chapa = String(r.motorista_chapa || "").toLowerCase();
+      const q = busca.toLowerCase().trim();
+
+      if (filtroLinha && linha !== filtroLinha) return false;
+
+      if (q) {
+        const linhaTexto = linha.toLowerCase();
+        if (!nome.includes(q) && !chapa.includes(q) && !linhaTexto.includes(q)) return false;
+      }
+
+      return true;
+    });
+  }, [sugestoes, busca, filtroLinha]);
+
+  // ---------------------------------------------------------------------------
   // ORDENAÇÃO
   // ---------------------------------------------------------------------------
   const handleSort = (key) => {
@@ -285,8 +317,7 @@ export default function DesempenhoDieselAgente() {
   };
 
   const sortedSugestoes = useMemo(() => {
-    if (!sugestoes) return [];
-    const items = [...sugestoes];
+    const items = [...sugestoesFiltradas];
 
     if (sortConfig.key) {
       items.sort((a, b) => {
@@ -309,7 +340,7 @@ export default function DesempenhoDieselAgente() {
     }
 
     return items;
-  }, [sugestoes, sortConfig]);
+  }, [sugestoesFiltradas, sortConfig]);
 
   const ThSortable = ({ label, columnKey, align = "left" }) => (
     <th className={`p-3 cursor-pointer hover:bg-slate-100 text-${align}`} onClick={() => handleSort(columnKey)}>
@@ -330,7 +361,7 @@ export default function DesempenhoDieselAgente() {
   // AÇÕES
   // ---------------------------------------------------------------------------
   const dispararGerencial = async () => {
-    if (loadingGerencial) return; // ✅ anti-duplo clique
+    if (loadingGerencial) return;
     setLoadingGerencial(true);
 
     setErro(null);
@@ -369,13 +400,13 @@ export default function DesempenhoDieselAgente() {
   };
 
   const gerarFormulariosSelecionados = async () => {
-    if (loadingProntuarios) return; // ✅ anti-duplo clique
+    if (loadingProntuarios) return;
     setLoadingProntuarios(true);
 
     setErro(null);
     setSucesso(null);
 
-    const selecionados = sugestoes.filter((r) => selected[r.motorista_chapa]);
+    const selecionados = sugestoesFiltradas.filter((r) => selected[r.motorista_chapa]);
     if (!selecionados.length) {
       setErro("Selecione pelo menos 1 motorista.");
       setLoadingProntuarios(false);
@@ -431,18 +462,21 @@ export default function DesempenhoDieselAgente() {
   // ---------------------------------------------------------------------------
   const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
 
-  // Atualizado para ignorar os checkboxes bloqueados no "Selecionar Todos"
   const allChecked = useMemo(() => {
-    const disponiveis = sugestoes.filter((r) => !r.status_atual);
+    const disponiveis = sugestoesFiltradas.filter((r) => !r.status_atual);
     return disponiveis.length > 0 && disponiveis.every((r) => selected[r.motorista_chapa]);
-  }, [sugestoes, selected]);
+  }, [sugestoesFiltradas, selected]);
 
   const toggleAll = () => {
     if (allChecked) {
-      setSelected({});
+      const novo = { ...selected };
+      sugestoesFiltradas.forEach((r) => {
+        delete novo[r.motorista_chapa];
+      });
+      setSelected(novo);
     } else {
-      const m = {};
-      sugestoes.forEach((r) => {
+      const m = { ...selected };
+      sugestoesFiltradas.forEach((r) => {
         if (!r.status_atual) m[r.motorista_chapa] = true;
       });
       setSelected(m);
@@ -475,7 +509,6 @@ export default function DesempenhoDieselAgente() {
   // ===========================================================================
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto relative">
-      {/* HEADER */}
       <div className="flex items-center justify-between gap-4 border-b pb-4">
         <div className="flex items-center gap-3">
           <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
@@ -491,7 +524,6 @@ export default function DesempenhoDieselAgente() {
         </button>
       </div>
 
-      {/* FEEDBACK */}
       {(sucesso || erro) && (
         <div
           className={clsx(
@@ -507,7 +539,6 @@ export default function DesempenhoDieselAgente() {
         </div>
       )}
 
-      {/* PAINEL GERENCIAL */}
       <div className="bg-white rounded-2xl border p-6 shadow-sm">
         <div className="flex justify-between mb-4">
           <h3 className="font-semibold text-slate-700">Relatório Gerencial</h3>
@@ -576,12 +607,13 @@ export default function DesempenhoDieselAgente() {
         </div>
       </div>
 
-      {/* TABELA */}
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b bg-slate-50">
           <div>
             <h3 className="font-extrabold text-slate-800">Sugestões de Acompanhamento (30 dias)</h3>
-            <p className="text-xs text-slate-500">Selecione os motoristas e gere prontuários para iniciar o ciclo.</p>
+            <p className="text-xs text-slate-500">
+              Total: <b>{sugestoes.length}</b> | Filtrados: <b>{sugestoesFiltradas.length}</b>
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-xs text-slate-600">
@@ -600,6 +632,37 @@ export default function DesempenhoDieselAgente() {
               <FaSync className={clsx(loadingProntuarios && "animate-spin")} />
               {loadingProntuarios ? "GERANDO..." : "Gerar formulários"}
             </button>
+          </div>
+        </div>
+
+        <div className="p-4 border-b bg-white">
+          <div className="flex flex-col md:flex-row gap-3 items-center">
+            <div className="relative w-full md:flex-1">
+              <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por chapa, nome ou linha..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-cyan-500 font-medium"
+              />
+            </div>
+
+            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
+              <FaFilter className="text-gray-400 ml-2" />
+              <select
+                value={filtroLinha}
+                onChange={(e) => setFiltroLinha(e.target.value)}
+                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-40 font-medium text-slate-600"
+              >
+                <option value="">Todas Linhas</option>
+                {linhasUnicas.map((ln) => (
+                  <option key={ln} value={ln}>
+                    {ln}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -666,7 +729,7 @@ export default function DesempenhoDieselAgente() {
                       )}
                     </td>
 
-                    <td className="p-3 text-slate-700">{r.linha_mais_rodada}</td>
+                    <td className="p-3 text-slate-700">{r.linha_mais_rodada || "-"}</td>
                     <td className="p-3 text-right">{n(r.km_percorrido).toFixed(0)}</td>
                     <td className="p-3 text-right font-bold">{n(r.kml_realizado).toFixed(2)}</td>
                     <td className="p-3 text-right text-slate-500">{n(r.kml_meta).toFixed(2)}</td>
@@ -674,12 +737,19 @@ export default function DesempenhoDieselAgente() {
                   </tr>
                 );
               })}
+
+              {sortedSugestoes.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="p-8 text-center text-slate-500 font-medium">
+                    Nenhum registro encontrado com os filtros aplicados.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* MODAL */}
       {viewingDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 flex flex-col">

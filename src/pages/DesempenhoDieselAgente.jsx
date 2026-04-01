@@ -17,6 +17,7 @@ import {
   FaSearch,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
+import DesempenhoDieselAnalise from "./DesempenhoDieselAnalise";
 
 // =============================================================================
 // CONFIGURAÇÕES E ENV
@@ -173,6 +174,8 @@ export default function DesempenhoDieselAgente() {
   const [loadingProntuarios, setLoadingProntuarios] = useState(false);
 
   const [ultimoGerencial, setUltimoGerencial] = useState(null);
+  const [ultimaAnalise, setUltimaAnalise] = useState(null);
+  const [abaAtiva, setAbaAtiva] = useState("analise");
   const [sugestoes, setSugestoes] = useState([]);
   const [selected, setSelected] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: "combustivel_desperdicado", direction: "desc" });
@@ -209,6 +212,16 @@ export default function DesempenhoDieselAgente() {
 
       if (!mountedRef.current) return;
       setUltimoGerencial(rel || null);
+
+      const { data: ultAnalise } = await supabase
+        .from("diesel_analise_gerencial_snapshot")
+        .select("id, report_id, periodo_label, mes_atual_nome, created_at")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!mountedRef.current) return;
+      setUltimaAnalise(ultAnalise || null);
 
       const { data: sug } = await supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500);
 
@@ -503,6 +516,9 @@ export default function DesempenhoDieselAgente() {
   const kmlGeralMeta = litrosTeoricosTotal > 0 ? totalKm / litrosTeoricosTotal : 0;
 
   const ultimoPdfUrl = getPublicUrl(ultimoGerencial?.arquivo_pdf_path);
+  const ultimaAnaliseLabel = ultimaAnalise
+    ? `Última análise gerada: Relatório #${ultimaAnalise.report_id || "-"} · ${ultimaAnalise.mes_atual_nome || ultimaAnalise.periodo_label || "-"} · ${ultimaAnalise.created_at ? new Date(ultimaAnalise.created_at).toLocaleDateString() : "-"}`
+    : "Nenhuma análise gerada até o momento.";
 
   // ===========================================================================
   // RENDER
@@ -539,7 +555,38 @@ export default function DesempenhoDieselAgente() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border p-6 shadow-sm">
+      <div className="bg-white rounded-2xl border shadow-sm p-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            onClick={() => setAbaAtiva("analise")}
+            className={clsx(
+              "px-4 py-3 rounded-xl text-sm font-extrabold transition-colors",
+              abaAtiva === "analise"
+                ? "bg-slate-900 text-white shadow"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+          >
+            Aba 1 · Análise
+          </button>
+
+          <button
+            onClick={() => setAbaAtiva("sugestoes")}
+            className={clsx(
+              "px-4 py-3 rounded-xl text-sm font-extrabold transition-colors",
+              abaAtiva === "sugestoes"
+                ? "bg-slate-900 text-white shadow"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+          >
+            Aba 2 · Sugestões de Acompanhamento
+          </button>
+        </div>
+      </div>
+
+      {abaAtiva === "analise" ? (
+        <DesempenhoDieselAnalise />
+      ) : (
+        <>
         <div className="flex justify-between mb-4">
           <h3 className="font-semibold text-slate-700">Relatório Gerencial</h3>
           <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span>
@@ -605,6 +652,10 @@ export default function DesempenhoDieselAgente() {
             <FaPlay className={clsx(loadingGerencial && "animate-spin")} /> {loadingGerencial ? "ENVIANDO..." : "DISPARAR RELATÓRIO"}
           </button>
         </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-rose-200 bg-rose-50 shadow-sm p-4">
+        <div className="text-sm font-extrabold text-rose-700">{ultimaAnaliseLabel}</div>
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
@@ -749,6 +800,9 @@ export default function DesempenhoDieselAgente() {
           </table>
         </div>
       </div>
+
+        </>
+      )}
 
       {viewingDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">

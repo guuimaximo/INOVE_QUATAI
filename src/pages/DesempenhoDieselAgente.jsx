@@ -652,8 +652,7 @@ export default function DesempenhoDieselAgente() {
             <FaPlay className={clsx(loadingGerencial && "animate-spin")} /> {loadingGerencial ? "ENVIANDO..." : "DISPARAR RELATÓRIO"}
           </button>
         </div>
-      </div>
-
+      
       <div className="bg-white rounded-2xl border border-rose-200 bg-rose-50 shadow-sm p-4">
         <div className="text-sm font-extrabold text-rose-700">{ultimaAnaliseLabel}</div>
       </div>

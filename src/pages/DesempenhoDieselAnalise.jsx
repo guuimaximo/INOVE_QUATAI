@@ -15,6 +15,9 @@ import {
   FaExclamationTriangle,
   FaClock,
   FaChartLine,
+  FaArrowUp,
+  FaArrowDown,
+  FaEquals,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 
@@ -86,6 +89,7 @@ function CardResumo({ titulo, valor, subtitulo, icon: Icon, destaque = "slate" }
     amber: "bg-amber-50 border-amber-200 text-amber-700",
     cyan: "bg-cyan-50 border-cyan-200 text-cyan-700",
     violet: "bg-violet-50 border-violet-200 text-violet-700",
+    blue: "bg-blue-50 border-blue-200 text-blue-700",
   };
 
   return (
@@ -486,6 +490,40 @@ export default function DesempenhoDieselAnalise() {
       });
   }, [acompanhamentosFiltrados]);
 
+  const checkpointResumo = useMemo(() => {
+    const rows = checkpointTabelaFiltrada || [];
+
+    const melhoraramKml = rows.filter((r) => n(r.delta_kml) > 0).length;
+    const pioraramKml = rows.filter((r) => n(r.delta_kml) < 0).length;
+    const estavelKml = rows.filter((r) => n(r.delta_kml) === 0).length;
+
+    const reduziramDesperdicio = rows.filter((r) => n(r.delta_desperdicio) < 0).length;
+    const aumentaramDesperdicio = rows.filter((r) => n(r.delta_desperdicio) > 0).length;
+    const estavelDesperdicio = rows.filter((r) => n(r.delta_desperdicio) === 0).length;
+
+    const mediaDeltaKml =
+      rows.length > 0
+        ? rows.reduce((acc, r) => acc + n(r.delta_kml), 0) / rows.length
+        : 0;
+
+    const mediaDeltaDesp =
+      rows.length > 0
+        ? rows.reduce((acc, r) => acc + n(r.delta_desperdicio), 0) / rows.length
+        : 0;
+
+    return {
+      total: rows.length,
+      melhoraramKml,
+      pioraramKml,
+      estavelKml,
+      reduziramDesperdicio,
+      aumentaramDesperdicio,
+      estavelDesperdicio,
+      mediaDeltaKml,
+      mediaDeltaDesp,
+    };
+  }, [checkpointTabelaFiltrada]);
+
   const resumo = snapshot?.resumo || {};
   const cobertura = resumo?.cobertura || {};
   const instrutorKpis = resumo?.instrutor_kpis || {};
@@ -719,46 +757,44 @@ export default function DesempenhoDieselAnalise() {
       </div>
 
       {abaInterna === "linhas" && (
-        <>
-          <BlocoSecao
-            titulo="Análise de Linhas"
-            subtitulo={`Total filtrado: ${tabelaLinhasFiltrada.length}`}
-            icon={FaRoad}
-          >
-            <TabelaPadrao
-              rows={tabelaLinhasFiltrada}
-              columns={[
-                { key: "linha", label: "Linha", render: (r) => <span className="font-extrabold">{r.linha}</span> },
-                { key: "Cluster", label: "Cluster" },
-                {
-                  key: "KM_Total",
-                  label: "KM",
-                  align: "right",
-                  render: (r) => n(r.KM_Total || r.km_total || r.KM).toFixed(0),
-                },
-                {
-                  key: "KML_Real",
-                  label: "KML Real",
-                  align: "right",
-                  render: (r) => n(r.KML_Real || r.kml_real).toFixed(2),
-                },
-                {
-                  key: "Meta_Linha",
-                  label: "Meta",
-                  align: "right",
-                  render: (r) => n(r.Meta_Linha || r.kml_meta).toFixed(2),
-                },
-                {
-                  key: "Litros_Desp_Meta",
-                  label: "Desp.",
-                  align: "right",
-                  className: "font-extrabold text-rose-700",
-                  render: (r) => n(r.Litros_Desp_Meta || r.desperdicio || r.perda_litros).toFixed(0),
-                },
-              ]}
-            />
-          </BlocoSecao>
-        </>
+        <BlocoSecao
+          titulo="Análise de Linhas"
+          subtitulo={`Total filtrado: ${tabelaLinhasFiltrada.length}`}
+          icon={FaRoad}
+        >
+          <TabelaPadrao
+            rows={tabelaLinhasFiltrada}
+            columns={[
+              { key: "linha", label: "Linha", render: (r) => <span className="font-extrabold">{r.linha}</span> },
+              { key: "Cluster", label: "Cluster" },
+              {
+                key: "KM_Total",
+                label: "KM",
+                align: "right",
+                render: (r) => n(r.KM_Total || r.km_total || r.KM).toFixed(0),
+              },
+              {
+                key: "KML_Real",
+                label: "KML Real",
+                align: "right",
+                render: (r) => n(r.KML_Real || r.kml_real).toFixed(2),
+              },
+              {
+                key: "Meta_Linha",
+                label: "Meta",
+                align: "right",
+                render: (r) => n(r.Meta_Linha || r.kml_meta).toFixed(2),
+              },
+              {
+                key: "Litros_Desp_Meta",
+                label: "Desp.",
+                align: "right",
+                className: "font-extrabold text-rose-700",
+                render: (r) => n(r.Litros_Desp_Meta || r.desperdicio || r.perda_litros).toFixed(0),
+              },
+            ]}
+          />
+        </BlocoSecao>
       )}
 
       {abaInterna === "motoristas" && (
@@ -815,6 +851,51 @@ export default function DesempenhoDieselAnalise() {
 
       {abaInterna === "acompanhamentos" && (
         <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+            <CardResumo
+              titulo="Melhoraram KM/L"
+              valor={n(checkpointResumo.melhoraramKml).toFixed(0)}
+              subtitulo="Δ KML maior que zero"
+              icon={FaArrowUp}
+              destaque="emerald"
+            />
+            <CardResumo
+              titulo="Pioraram KM/L"
+              valor={n(checkpointResumo.pioraramKml).toFixed(0)}
+              subtitulo="Δ KML menor que zero"
+              icon={FaArrowDown}
+              destaque="rose"
+            />
+            <CardResumo
+              titulo="Estáveis KM/L"
+              valor={n(checkpointResumo.estavelKml).toFixed(0)}
+              subtitulo="Δ KML igual a zero"
+              icon={FaEquals}
+              destaque="slate"
+            />
+            <CardResumo
+              titulo="Reduziram desperdício"
+              valor={n(checkpointResumo.reduziramDesperdicio).toFixed(0)}
+              subtitulo="Δ Desp. menor que zero"
+              icon={FaArrowDown}
+              destaque="emerald"
+            />
+            <CardResumo
+              titulo="Aumentaram desperdício"
+              valor={n(checkpointResumo.aumentaramDesperdicio).toFixed(0)}
+              subtitulo="Δ Desp. maior que zero"
+              icon={FaArrowUp}
+              destaque="rose"
+            />
+            <CardResumo
+              titulo="Média Δ KML"
+              valor={checkpointResumo.mediaDeltaKml.toFixed(2)}
+              subtitulo={`Média Δ Desp.: ${checkpointResumo.mediaDeltaDesp.toFixed(1)} L`}
+              icon={FaChartLine}
+              destaque="violet"
+            />
+          </div>
+
           <BlocoSecao
             titulo="Checkpoints"
             subtitulo={`Total: ${snapshot?.checkpoint_tabela?.length || 0} | Filtrados: ${checkpointTabelaFiltrada.length}`}
@@ -861,8 +942,30 @@ export default function DesempenhoDieselAnalise() {
                         r.kml_final
                     ).toFixed(2),
                 },
-                { key: "delta_kml", label: "Δ KML", align: "right", render: (r) => n(r.delta_kml).toFixed(2) },
-                { key: "delta_desperdicio", label: "Δ Desp.", align: "right", render: (r) => n(r.delta_desperdicio).toFixed(1) },
+                {
+                  key: "delta_kml",
+                  label: "Δ KML",
+                  align: "right",
+                  className: "font-extrabold",
+                  render: (r) => (
+                    <span className={n(r.delta_kml) > 0 ? "text-emerald-700" : n(r.delta_kml) < 0 ? "text-rose-700" : "text-slate-700"}>
+                      {n(r.delta_kml) > 0 ? "+" : ""}
+                      {n(r.delta_kml).toFixed(2)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "delta_desperdicio",
+                  label: "Δ Desp.",
+                  align: "right",
+                  className: "font-extrabold",
+                  render: (r) => (
+                    <span className={n(r.delta_desperdicio) < 0 ? "text-emerald-700" : n(r.delta_desperdicio) > 0 ? "text-rose-700" : "text-slate-700"}>
+                      {n(r.delta_desperdicio) > 0 ? "+" : ""}
+                      {n(r.delta_desperdicio).toFixed(1)}
+                    </span>
+                  ),
+                },
                 { key: "conclusao", label: "Conclusão", render: (r) => <span className="font-bold">{r.conclusao}</span> },
               ]}
             />

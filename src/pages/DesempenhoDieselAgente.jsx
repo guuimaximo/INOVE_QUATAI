@@ -17,7 +17,6 @@ import {
   FaSearch,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
-import DesempenhoDieselAnalise from "./DesempenhoDieselAnalise";
 
 // =============================================================================
 // CONFIGURAÇÕES E ENV
@@ -63,7 +62,6 @@ function normalizarLinha(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-// Disparo de GitHub Actions
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
   if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes.");
   const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
@@ -86,10 +84,12 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
 }
 
 function StatusBadge({ status }) {
-  if (status === "CONCLUIDO")
+  if (status === "CONCLUIDO") {
     return <span className="px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-700">OK</span>;
-  if (status === "ERRO")
+  }
+  if (status === "ERRO") {
     return <span className="px-2 py-1 rounded text-xs font-bold bg-rose-100 text-rose-700">ERRO</span>;
+  }
   return (
     <span className="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700">
       {status || "PROCESSANDO"}
@@ -97,9 +97,6 @@ function StatusBadge({ status }) {
   );
 }
 
-// =============================================================================
-// GRÁFICO (com label de meta)
-// =============================================================================
 const SimpleLineChart = ({ data }) => {
   if (!data || data.length === 0) {
     return <div className="text-center text-xs text-slate-400 py-10">Sem dados gráficos disponíveis</div>;
@@ -114,7 +111,7 @@ const SimpleLineChart = ({ data }) => {
   const minVal = (Math.min(...allValues) || 0) * 0.95;
   const range = maxVal - minVal || 1;
 
-  const getX = (i) => padding + (i / (data.length - 1)) * (width - 2 * padding);
+  const getX = (i) => padding + (i / Math.max(1, data.length - 1)) * (width - 2 * padding);
   const getY = (val) => height - padding - ((val - minVal) / range) * (height - 2 * padding);
 
   const pointsReal = data.map((d, i) => `${getX(i)},${getY(d.real)}`).join(" ");
@@ -150,18 +147,15 @@ const SimpleLineChart = ({ data }) => {
   );
 };
 
-// =============================================================================
-// COMPONENTE PRINCIPAL
-// =============================================================================
 export default function DesempenhoDieselAgente() {
   const mountedRef = useRef(true);
-  useEffect(() => () => (mountedRef.current = false), []);
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
 
   const hoje = useMemo(() => new Date(), []);
-
   const primeiroDiaPeriodo = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1), [hoje]);
 
-  // Estados
   const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaPeriodo));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
   const [userSession, setUserSession] = useState(null);
@@ -175,7 +169,6 @@ export default function DesempenhoDieselAgente() {
 
   const [ultimoGerencial, setUltimoGerencial] = useState(null);
   const [ultimaAnalise, setUltimaAnalise] = useState(null);
-  const [abaAtiva, setAbaAtiva] = useState("analise");
   const [sugestoes, setSugestoes] = useState([]);
   const [selected, setSelected] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: "combustivel_desperdicado", direction: "desc" });
@@ -183,7 +176,6 @@ export default function DesempenhoDieselAgente() {
   const [busca, setBusca] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
 
-  // Modal
   const [viewingDetails, setViewingDetails] = useState(null);
   const [modalContent, setModalContent] = useState({ raioX: [], chartData: [] });
 
@@ -192,9 +184,6 @@ export default function DesempenhoDieselAgente() {
     return periodoInicio <= periodoFim;
   }, [periodoInicio, periodoFim]);
 
-  // ---------------------------------------------------------------------------
-  // CARREGAMENTO
-  // ---------------------------------------------------------------------------
   async function carregarTela() {
     setLoading(true);
     try {
@@ -257,9 +246,6 @@ export default function DesempenhoDieselAgente() {
     carregarTela();
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // MODAL (com fallback que também pega nome)
-  // ---------------------------------------------------------------------------
   const openModal = async (motorista) => {
     let detalhes = motorista.detalhes_json || null;
     let nomeFallback = motorista.motorista_nome || null;
@@ -290,9 +276,6 @@ export default function DesempenhoDieselAgente() {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // FILTROS
-  // ---------------------------------------------------------------------------
   const linhasUnicas = useMemo(() => {
     const linhas = (sugestoes || [])
       .map((r) => normalizarLinha(r.linha_mais_rodada))
@@ -319,9 +302,6 @@ export default function DesempenhoDieselAgente() {
     });
   }, [sugestoes, busca, filtroLinha]);
 
-  // ---------------------------------------------------------------------------
-  // ORDENAÇÃO
-  // ---------------------------------------------------------------------------
   const handleSort = (key) => {
     setSortConfig((prev) => ({
       key,
@@ -370,9 +350,6 @@ export default function DesempenhoDieselAgente() {
     </th>
   );
 
-  // ---------------------------------------------------------------------------
-  // AÇÕES
-  // ---------------------------------------------------------------------------
   const dispararGerencial = async () => {
     if (loadingGerencial) return;
     setLoadingGerencial(true);
@@ -470,9 +447,6 @@ export default function DesempenhoDieselAgente() {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // CHECKBOX
-  // ---------------------------------------------------------------------------
   const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
 
   const allChecked = useMemo(() => {
@@ -498,9 +472,6 @@ export default function DesempenhoDieselAgente() {
 
   const toggleOne = (chapa) => setSelected((p) => ({ ...p, [chapa]: !p[chapa] }));
 
-  // ---------------------------------------------------------------------------
-  // MODAL TOTAIS
-  // ---------------------------------------------------------------------------
   const totalKm = modalContent.raioX?.reduce((acc, r) => acc + n(r.km), 0) || 0;
   const totalLitros = modalContent.raioX?.reduce((acc, r) => acc + n(r.litros), 0) || 0;
   const totalDesperdicio = modalContent.raioX?.reduce((acc, r) => acc + n(r.desperdicio), 0) || 0;
@@ -520,9 +491,6 @@ export default function DesempenhoDieselAgente() {
     ? `Última análise gerada: Relatório #${ultimaAnalise.report_id || "-"} · ${ultimaAnalise.mes_atual_nome || ultimaAnalise.periodo_label || "-"} · ${ultimaAnalise.created_at ? new Date(ultimaAnalise.created_at).toLocaleDateString() : "-"}`
     : "Nenhuma análise gerada até o momento.";
 
-  // ===========================================================================
-  // RENDER
-  // ===========================================================================
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto relative">
       <div className="flex items-center justify-between gap-4 border-b pb-4">
@@ -532,7 +500,7 @@ export default function DesempenhoDieselAgente() {
           </div>
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Agente Diesel</h2>
-            <p className="text-sm text-slate-500">Gerencial + Sugestões de Acompanhamento</p>
+            <p className="text-sm text-slate-500">Sugestões de Acompanhamento</p>
           </div>
         </div>
         <button onClick={carregarTela} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar">
@@ -555,44 +523,15 @@ export default function DesempenhoDieselAgente() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border shadow-sm p-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
-            onClick={() => setAbaAtiva("analise")}
-            className={clsx(
-              "px-4 py-3 rounded-xl text-sm font-extrabold transition-colors",
-              abaAtiva === "analise"
-                ? "bg-slate-900 text-white shadow"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            )}
-          >
-            Aba 1 · Análise
-          </button>
-
-          <button
-            onClick={() => setAbaAtiva("sugestoes")}
-            className={clsx(
-              "px-4 py-3 rounded-xl text-sm font-extrabold transition-colors",
-              abaAtiva === "sugestoes"
-                ? "bg-slate-900 text-white shadow"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            )}
-          >
-            Aba 2 · Sugestões de Acompanhamento
-          </button>
-        </div>
-      </div>
-
-      {abaAtiva === "analise" ? (
-        <DesempenhoDieselAnalise />
-      ) : (
-        <>
-        <div className="flex justify-between mb-4">
-          <h3 className="font-semibold text-slate-700">Relatório Gerencial</h3>
-          <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span>
+      <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-4">
+        <div className="flex justify-between items-center gap-4 flex-wrap">
+          <div>
+            <h3 className="font-semibold text-slate-700">Relatório Gerencial</h3>
+            <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between bg-slate-50 border rounded-xl px-4 py-3 mb-4">
+        <div className="flex items-center justify-between bg-slate-50 border rounded-xl px-4 py-3 gap-4 flex-wrap">
           <div className="text-sm">
             <span className="text-slate-500 font-bold">Último Relatório: </span>
             {ultimoGerencial ? (
@@ -652,7 +591,8 @@ export default function DesempenhoDieselAgente() {
             <FaPlay className={clsx(loadingGerencial && "animate-spin")} /> {loadingGerencial ? "ENVIANDO..." : "DISPARAR RELATÓRIO"}
           </button>
         </div>
-      
+      </div>
+
       <div className="bg-white rounded-2xl border border-rose-200 bg-rose-50 shadow-sm p-4">
         <div className="text-sm font-extrabold text-rose-700">{ultimaAnaliseLabel}</div>
       </div>
@@ -799,9 +739,6 @@ export default function DesempenhoDieselAgente() {
           </table>
         </div>
       </div>
-
-        </>
-      )}
 
       {viewingDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">

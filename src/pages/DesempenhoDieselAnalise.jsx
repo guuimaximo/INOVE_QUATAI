@@ -1,1187 +1,849 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import {
   FaBolt,
-  FaSync,
-  FaFilePdf,
-  FaFilter,
-  FaSearch,
-  FaRoad,
-  FaTruck,
-  FaUser,
-  FaClipboardList,
-  FaCalendarAlt,
-  FaDatabase,
   FaCheckCircle,
   FaExclamationTriangle,
-  FaClock,
+  FaPlay,
+  FaFilePdf,
+  FaSync,
+  FaSort,
+  FaSortUp,
+  FaSortDown,
+  FaInfoCircle,
+  FaTimes,
   FaChartLine,
-  FaArrowUp,
-  FaArrowDown,
-  FaEquals,
+  FaListAlt,
+  FaFilter,
+  FaSearch,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
+
+// =============================================================================
+// CONFIGURAÇÕES E ENV
+// =============================================================================
+const GH_USER = import.meta.env.VITE_GITHUB_USER;
+const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
+const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
+const GH_REF = "main";
+
+const WF_GERENCIAL = "relatorio_gerencial.yml";
+const WF_ACOMP = "ordem-acompanhamento.yml";
+
+const SUPABASE_BASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const BUCKET_NAME = "relatorios";
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+function clsx(...arr) {
+  return arr.filter(Boolean).join(" ");
+}
+
+function fmtDateInput(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getPublicUrl(path) {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${SUPABASE_BASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${cleanPath}`;
+}
 
 function n(v) {
   const x = Number(v);
   return Number.isFinite(x) ? x : 0;
 }
 
-function clsx(...arr) {
-  return arr.filter(Boolean).join(" ");
-}
-
-function getPublicUrl(path) {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  const base = import.meta.env.VITE_SUPABASE_URL;
-  const bucket = "relatorios";
-  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-  return `${base}/storage/v1/object/public/${bucket}/${cleanPath}`;
-}
-
-function normalizar(v) {
+function normalizarLinha(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-function fmtDateBr(v) {
-  if (!v) return "-";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return String(v);
-  return d.toLocaleDateString("pt-BR");
-}
+async function dispatchGitHubWorkflow(workflowFile, inputs) {
+  if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes.");
+  const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${GH_TOKEN}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ref: GH_REF, inputs }),
+  });
 
-function getDateOnly(v) {
-  if (!v) return "";
-  try {
-    return String(v).split("T")[0].split(" ")[0];
-  } catch {
-    return "";
+  if (response.status !== 204) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Erro GitHub: ${response.status}`);
   }
+  return true;
 }
 
-function parseHoraToMin(hora) {
-  const txt = String(hora || "").trim();
-  if (!txt) return null;
-
-  const parts = txt.split(":");
-  if (parts.length < 2) return null;
-
-  const hh = Number(parts[0]);
-  const mm = Number(parts[1]);
-  const ss = Number(parts[2] || 0);
-
-  if (![hh, mm, ss].every(Number.isFinite)) return null;
-  return hh * 60 + mm + ss / 60;
-}
-
-function formatMinutes(mins) {
-  const total = Math.max(0, Math.round(n(mins)));
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return `${h}h ${String(m).padStart(2, "0")}min`;
-}
-
-function CardResumo({ titulo, valor, subtitulo, icon: Icon, destaque = "slate" }) {
-  const mapa = {
-    slate: "bg-slate-50 border-slate-200 text-slate-800",
-    rose: "bg-rose-50 border-rose-200 text-rose-700",
-    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
-    amber: "bg-amber-50 border-amber-200 text-amber-700",
-    cyan: "bg-cyan-50 border-cyan-200 text-cyan-700",
-    violet: "bg-violet-50 border-violet-200 text-violet-700",
-  };
-
+function StatusBadge({ status }) {
+  if (status === "CONCLUIDO") {
+    return <span className="px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-700">OK</span>;
+  }
+  if (status === "ERRO") {
+    return <span className="px-2 py-1 rounded text-xs font-bold bg-rose-100 text-rose-700">ERRO</span>;
+  }
   return (
-    <div className={clsx("rounded-2xl border p-4 shadow-sm", mapa[destaque] || mapa.slate)}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide opacity-80">{titulo}</p>
-          <p className="text-2xl font-black mt-1">{valor}</p>
-          {subtitulo ? <p className="text-xs mt-1 opacity-80">{subtitulo}</p> : null}
-        </div>
-        {Icon ? (
-          <div className="h-10 w-10 rounded-xl bg-white/70 flex items-center justify-center border">
-            <Icon size={16} />
-          </div>
-        ) : null}
-      </div>
-    </div>
+    <span className="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700">
+      {status || "PROCESSANDO"}
+    </span>
   );
 }
 
-function BlocoSecao({ titulo, subtitulo, icon: Icon, children, right }) {
-  return (
-    <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b bg-slate-50 flex items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            {Icon ? <Icon className="text-slate-600" /> : null}
-            <h3 className="text-base font-extrabold text-slate-800">{titulo}</h3>
-          </div>
-          {subtitulo ? <p className="text-xs text-slate-500 mt-1">{subtitulo}</p> : null}
-        </div>
-        {right}
-      </div>
-      <div>{children}</div>
-    </div>
-  );
-}
+const SimpleLineChart = ({ data }) => {
+  if (!data || data.length === 0) {
+    return <div className="text-center text-xs text-slate-400 py-10">Sem dados gráficos disponíveis</div>;
+  }
 
-function TabelaPadrao({ columns, rows, emptyText = "Sem dados disponíveis" }) {
-  return (
-    <div className="overflow-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-white border-b text-[11px] uppercase tracking-wide text-slate-500">
-          <tr>
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                className={clsx(
-                  "px-4 py-3 font-extrabold whitespace-nowrap",
-                  col.align === "right" ? "text-right" : "text-left"
-                )}
-              >
-                {col.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-400">
-                {emptyText}
-              </td>
-            </tr>
-          ) : (
-            rows.map((row, idx) => (
-              <tr key={row.id || idx} className="hover:bg-slate-50 transition-colors">
-                {columns.map((col) => (
-                  <td
-                    key={col.key}
-                    className={clsx(
-                      "px-4 py-3 whitespace-nowrap",
-                      col.align === "right" ? "text-right" : "text-left",
-                      col.className
-                    )}
-                  >
-                    {col.render ? col.render(row) : row[col.key]}
-                  </td>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+  const width = 500;
+  const height = 180;
+  const padding = 30;
 
-export default function DesempenhoDieselAnalise() {
+  const allValues = data.flatMap((d) => [d.real, d.meta]);
+  const maxVal = (Math.max(...allValues) || 5) * 1.05;
+  const minVal = (Math.min(...allValues) || 0) * 0.95;
+  const range = maxVal - minVal || 1;
+
+  const getX = (i) => padding + (i / Math.max(1, data.length - 1)) * (width - 2 * padding);
+  const getY = (val) => height - padding - ((val - minVal) / range) * (height - 2 * padding);
+
+  const pointsReal = data.map((d, i) => `${getX(i)},${getY(d.real)}`).join(" ");
+  const pointsMeta = data.map((d, i) => `${getX(i)},${getY(d.meta)}`).join(" ");
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto border bg-white rounded-lg font-sans">
+      {[0, 0.5, 1].map((pct, i) => {
+        const y = height - padding - pct * (height - 2 * padding);
+        return <line key={i} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#f1f5f9" strokeWidth="1" />;
+      })}
+
+      <polyline fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray="4,4" points={pointsMeta} />
+      <polyline fill="none" stroke="#dc2626" strokeWidth="2" points={pointsReal} />
+
+      {data.map((d, i) => (
+        <g key={i}>
+          <circle cx={getX(i)} cy={getY(d.real)} r="3" fill="#dc2626" />
+          <text x={getX(i)} y={getY(d.real) - 10} textAnchor="middle" fontSize="10" fill="#dc2626" fontWeight="bold">
+            {n(d.real).toFixed(2)}
+          </text>
+
+          <text x={getX(i)} y={getY(d.meta) + 15} textAnchor="middle" fontSize="9" fill="#64748b">
+            Ref: {n(d.meta).toFixed(2)}
+          </text>
+
+          <text x={getX(i)} y={height - 8} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="500">
+            {d.label}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+};
+
+export default function DesempenhoDieselAgente() {
+  const mountedRef = useRef(true);
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
+
+  const hoje = useMemo(() => new Date(), []);
+  const primeiroDiaPeriodo = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1), [hoje]);
+
+  const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaPeriodo));
+  const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
+  const [userSession, setUserSession] = useState(null);
+
   const [loading, setLoading] = useState(false);
-  const [snapshot, setSnapshot] = useState(null);
-  const [historico, setHistorico] = useState([]);
-  const [acompanhamentos, setAcompanhamentos] = useState([]);
+  const [erro, setErro] = useState(null);
+  const [sucesso, setSucesso] = useState(null);
+
+  const [loadingGerencial, setLoadingGerencial] = useState(false);
+  const [loadingProntuarios, setLoadingProntuarios] = useState(false);
+
+  const [ultimoGerencial, setUltimoGerencial] = useState(null);
+  const [ultimaAnalise, setUltimaAnalise] = useState(null);
+  const [sugestoes, setSugestoes] = useState([]);
+  const [selected, setSelected] = useState({});
+  const [sortConfig, setSortConfig] = useState({ key: "combustivel_desperdicado", direction: "desc" });
 
   const [busca, setBusca] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
-  const [filtroCluster, setFiltroCluster] = useState("");
-  const [filtroCheckpoint, setFiltroCheckpoint] = useState("");
-  const [filtroInstrutor, setFiltroInstrutor] = useState("");
-  const [filtroDataAcompIni, setFiltroDataAcompIni] = useState("");
-  const [filtroDataAcompFim, setFiltroDataAcompFim] = useState("");
-  const [abaInterna, setAbaInterna] = useState("linhas");
 
-  async function carregar() {
+  const [viewingDetails, setViewingDetails] = useState(null);
+  const [modalContent, setModalContent] = useState({ raioX: [], chartData: [] });
+
+  const validarPeriodo = useCallback(() => {
+    if (!periodoInicio || !periodoFim) return true;
+    return periodoInicio <= periodoFim;
+  }, [periodoInicio, periodoFim]);
+
+  async function carregarTela() {
     setLoading(true);
     try {
-      const { data: ult } = await supabase
-        .from("diesel_analise_gerencial_snapshot")
+      const { data: sess } = await supabase.auth.getSession();
+      if (!mountedRef.current) return;
+      setUserSession(sess?.session || null);
+
+      const { data: rel } = await supabase
+        .from("relatorios_gerados")
         .select("*")
+        .eq("tipo", "diesel_gerencial")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      const { data: hist } = await supabase
+      if (!mountedRef.current) return;
+      setUltimoGerencial(rel || null);
+
+      const { data: ultAnalise } = await supabase
         .from("diesel_analise_gerencial_snapshot")
         .select("id, report_id, periodo_label, mes_atual_nome, created_at")
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(1)
+        .maybeSingle();
 
-      const { data: acomp } = await supabase
+      if (!mountedRef.current) return;
+      setUltimaAnalise(ultAnalise || null);
+
+      const { data: sug } = await supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500);
+
+      const { data: acompanhamentos } = await supabase
         .from("diesel_acompanhamentos")
-        .select(
-          `
-            id,
-            created_at,
-            motorista_chapa,
-            motorista_nome,
-            linha_foco,
-            cluster_foco,
-            status,
-            instrutor_login,
-            instrutor_nome,
-            dt_inicio_monitoramento,
-            dt_fim_real,
-            dt_fim_planejado,
-            intervencao_hora_inicio,
-            intervencao_hora_fim,
-            teste_kml,
-            kml_inicial,
-            kml_real,
-            kml_meta,
-            perda_litros,
-            motivo
-          `
-        )
-        .order("created_at", { ascending: false })
-        .limit(2000);
+        .select("motorista_chapa, status")
+        .not("status", "in", '("OK","ENCERRADO","ATAS")');
 
-      setSnapshot(ult || null);
-      setHistorico(hist || []);
-      setAcompanhamentos(acomp || []);
+      const mapStatusAtivo = {};
+      if (acompanhamentos) {
+        acompanhamentos.forEach((a) => {
+          mapStatusAtivo[a.motorista_chapa] = a.status;
+        });
+      }
+
+      const sugestoesComStatus = (sug || []).map((s) => ({
+        ...s,
+        status_atual: mapStatusAtivo[s.motorista_chapa] || null,
+      }));
+
+      if (!mountedRef.current) return;
+      setSugestoes(sugestoesComStatus);
     } catch (e) {
-      alert("Erro ao carregar análise: " + (e?.message || String(e)));
+      if (!mountedRef.current) return;
+      setErro("Erro ao carregar: " + (e?.message || String(e)));
     } finally {
+      if (!mountedRef.current) return;
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    carregar();
+    carregarTela();
   }, []);
 
-  const linhas = useMemo(() => {
-    const base = snapshot?.tabela_linhas || [];
-    return [...new Set(base.map((r) => normalizar(r.linha)).filter(Boolean))].sort();
-  }, [snapshot]);
+  const openModal = async (motorista) => {
+    let detalhes = motorista.detalhes_json || null;
+    let nomeFallback = motorista.motorista_nome || null;
 
-  const clusters = useMemo(() => {
-    const base = [
-      ...(snapshot?.top_veiculos || []),
-      ...(snapshot?.top_motoristas || []),
-    ];
-    return [...new Set(base.map((r) => normalizar(r.Cluster)).filter(Boolean))].sort();
-  }, [snapshot]);
+    if (!detalhes) {
+      const mesRef = motorista.mes_ref || new Date().toISOString().slice(0, 7);
 
-  const instrutores = useMemo(() => {
-    return [
-      ...new Set(
-        (acompanhamentos || [])
-          .map((r) => String(r.instrutor_nome || "").trim())
-          .filter(Boolean)
-      ),
-    ].sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [acompanhamentos]);
+      const { data } = await supabase
+        .from("diesel_sugestoes_acompanhamento")
+        .select("detalhes_json, motorista_nome")
+        .eq("chapa", motorista.motorista_chapa)
+        .eq("mes_ref", mesRef)
+        .maybeSingle();
 
-  const tabelaLinhasFiltrada = useMemo(() => {
-    let rows = [...(snapshot?.tabela_linhas || [])];
-
-    if (filtroLinha) {
-      rows = rows.filter((r) => normalizar(r.linha) === filtroLinha);
+      if (data?.detalhes_json) detalhes = data.detalhes_json;
+      if (!nomeFallback && data?.motorista_nome) nomeFallback = data.motorista_nome;
     }
 
-    if (busca.trim()) {
-      const q = busca.toLowerCase().trim();
-      rows = rows.filter((r) => String(r.linha || "").toLowerCase().includes(q));
-    }
+    setViewingDetails({ ...motorista, motorista_nome: nomeFallback });
 
-    return rows;
-  }, [snapshot, filtroLinha, busca]);
-
-  const topVeiculosFiltrado = useMemo(() => {
-    let rows = [...(snapshot?.top_veiculos || [])];
-
-    if (filtroLinha) {
-      rows = rows.filter((r) => normalizar(r.linha) === filtroLinha);
-    }
-
-    if (filtroCluster) {
-      rows = rows.filter((r) => normalizar(r.Cluster) === filtroCluster);
-    }
-
-    if (busca.trim()) {
-      const q = busca.toLowerCase().trim();
-      rows = rows.filter(
-        (r) =>
-          String(r.veiculo || "").toLowerCase().includes(q) ||
-          String(r.linha || "").toLowerCase().includes(q)
-      );
-    }
-
-    return rows;
-  }, [snapshot, filtroLinha, filtroCluster, busca]);
-
-  const topMotoristasFiltrado = useMemo(() => {
-    let rows = [...(snapshot?.top_motoristas || [])];
-
-    if (filtroLinha) {
-      rows = rows.filter((r) => normalizar(r.linha) === filtroLinha);
-    }
-
-    if (filtroCluster) {
-      rows = rows.filter((r) => normalizar(r.Cluster) === filtroCluster);
-    }
-
-    if (busca.trim()) {
-      const q = busca.toLowerCase().trim();
-      rows = rows.filter(
-        (r) =>
-          String(r.Motorista || "").toLowerCase().includes(q) ||
-          String(r.linha || "").toLowerCase().includes(q)
-      );
-    }
-
-    return rows;
-  }, [snapshot, filtroLinha, filtroCluster, busca]);
-
-  const checkpointTabelaFiltrada = useMemo(() => {
-    let rows = [...(snapshot?.checkpoint_tabela || [])];
-
-    if (filtroLinha) {
-      rows = rows.filter((r) => normalizar(r.linha_foco) === filtroLinha);
-    }
-
-    if (filtroCheckpoint) {
-      rows = rows.filter((r) => normalizar(r.tipo) === filtroCheckpoint);
-    }
-
-    if (busca.trim()) {
-      const q = busca.toLowerCase().trim();
-      rows = rows.filter(
-        (r) =>
-          String(r.motorista_nome || "").toLowerCase().includes(q) ||
-          String(r.motorista_chapa || "").toLowerCase().includes(q) ||
-          String(r.linha_foco || "").toLowerCase().includes(q)
-      );
-    }
-
-    return rows;
-  }, [snapshot, filtroLinha, filtroCheckpoint, busca]);
-
-  const acompanhamentosFiltrados = useMemo(() => {
-    let rows = [...(acompanhamentos || [])];
-
-    if (filtroLinha) {
-      rows = rows.filter((r) => normalizar(r.linha_foco) === filtroLinha);
-    }
-
-    if (filtroInstrutor) {
-      rows = rows.filter((r) => String(r.instrutor_nome || "").trim() === filtroInstrutor);
-    }
-
-    if (filtroDataAcompIni) {
-      rows = rows.filter((r) => {
-        const d = getDateOnly(r.dt_inicio_monitoramento || r.created_at);
-        return d && d >= filtroDataAcompIni;
+    if (detalhes) {
+      setModalContent({
+        raioX: detalhes.raio_x || [],
+        chartData: detalhes.grafico_semanal || [],
       });
+    } else {
+      setModalContent({ raioX: [], chartData: [] });
     }
+  };
 
-    if (filtroDataAcompFim) {
-      rows = rows.filter((r) => {
-        const d = getDateOnly(r.dt_inicio_monitoramento || r.created_at);
-        return d && d <= filtroDataAcompFim;
-      });
-    }
+  const linhasUnicas = useMemo(() => {
+    const linhas = (sugestoes || [])
+      .map((r) => normalizarLinha(r.linha_mais_rodada))
+      .filter(Boolean);
 
-    if (busca.trim()) {
+    return [...new Set(linhas)].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [sugestoes]);
+
+  const sugestoesFiltradas = useMemo(() => {
+    return (sugestoes || []).filter((r) => {
+      const linha = normalizarLinha(r.linha_mais_rodada);
+      const nome = String(r.motorista_nome || "").toLowerCase();
+      const chapa = String(r.motorista_chapa || "").toLowerCase();
       const q = busca.toLowerCase().trim();
-      rows = rows.filter(
-        (r) =>
-          String(r.motorista_nome || "").toLowerCase().includes(q) ||
-          String(r.motorista_chapa || "").toLowerCase().includes(q) ||
-          String(r.linha_foco || "").toLowerCase().includes(q) ||
-          String(r.instrutor_nome || "").toLowerCase().includes(q)
-      );
-    }
 
-    return rows.map((r) => {
-      const iniMin = parseHoraToMin(r.intervencao_hora_inicio);
-      const fimMin = parseHoraToMin(r.intervencao_hora_fim);
-      const duracaoMin =
-        iniMin != null && fimMin != null && fimMin >= iniMin ? fimMin - iniMin : 0;
+      if (filtroLinha && linha !== filtroLinha) return false;
 
-      return {
-        ...r,
-        data_ref: getDateOnly(r.dt_inicio_monitoramento || r.created_at),
-        duracao_min: duracaoMin,
-      };
-    });
-  }, [
-    acompanhamentos,
-    filtroLinha,
-    filtroInstrutor,
-    filtroDataAcompIni,
-    filtroDataAcompFim,
-    busca,
-  ]);
-
-  const resumoInstrutor = useMemo(() => {
-    const map = new Map();
-
-    acompanhamentosFiltrados.forEach((r) => {
-      const key = String(r.instrutor_nome || "Sem instrutor").trim() || "Sem instrutor";
-
-      if (!map.has(key)) {
-        map.set(key, {
-          instrutor_nome: key,
-          total_acompanhamentos: 0,
-          total_minutos: 0,
-          media_minutos: 0,
-          em_monitoramento: 0,
-          em_analise: 0,
-          concluidos: 0,
-          linhas: new Set(),
-        });
+      if (q) {
+        const linhaTexto = linha.toLowerCase();
+        if (!nome.includes(q) && !chapa.includes(q) && !linhaTexto.includes(q)) return false;
       }
 
-      const item = map.get(key);
-      item.total_acompanhamentos += 1;
-      item.total_minutos += n(r.duracao_min);
-      if (normalizar(r.status) === "EM_MONITORAMENTO") item.em_monitoramento += 1;
-      if (normalizar(r.status) === "EM_ANALISE") item.em_analise += 1;
-      if (["OK", "ENCERRADO", "ATAS"].includes(normalizar(r.status))) item.concluidos += 1;
-      if (r.linha_foco) item.linhas.add(r.linha_foco);
+      return true;
     });
+  }, [sugestoes, busca, filtroLinha]);
 
-    return [...map.values()]
-      .map((r) => ({
-        ...r,
-        media_minutos: r.total_acompanhamentos ? r.total_minutos / r.total_acompanhamentos : 0,
-        qtd_linhas: r.linhas.size,
-      }))
-      .sort((a, b) => b.total_minutos - a.total_minutos);
-  }, [acompanhamentosFiltrados]);
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
+  };
 
-  const tempoPorDia = useMemo(() => {
-    const map = new Map();
+  const sortedSugestoes = useMemo(() => {
+    const items = [...sugestoesFiltradas];
 
-    acompanhamentosFiltrados.forEach((r) => {
-      const data = r.data_ref || "Sem data";
-      const instrutor = String(r.instrutor_nome || "Sem instrutor").trim() || "Sem instrutor";
-      const key = `${data}__${instrutor}`;
+    if (sortConfig.key) {
+      items.sort((a, b) => {
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
 
-      if (!map.has(key)) {
-        map.set(key, {
-          data_ref: data,
-          instrutor_nome: instrutor,
-          total_acompanhamentos: 0,
-          total_minutos: 0,
-          media_minutos: 0,
-        });
-      }
-
-      const item = map.get(key);
-      item.total_acompanhamentos += 1;
-      item.total_minutos += n(r.duracao_min);
-    });
-
-    return [...map.values()]
-      .map((r) => ({
-        ...r,
-        media_minutos: r.total_acompanhamentos ? r.total_minutos / r.total_acompanhamentos : 0,
-      }))
-      .sort((a, b) => {
-        if (a.data_ref === b.data_ref) {
-          return a.instrutor_nome.localeCompare(b.instrutor_nome, "pt-BR");
+        const nums = ["km_percorrido", "combustivel_consumido", "kml_realizado", "kml_meta", "combustivel_desperdicado"];
+        if (nums.includes(sortConfig.key)) {
+          aVal = n(aVal);
+          bVal = n(bVal);
+        } else {
+          aVal = String(aVal || "").toLowerCase();
+          bVal = String(bVal || "").toLowerCase();
         }
-        return String(b.data_ref).localeCompare(String(a.data_ref));
+
+        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
       });
-  }, [acompanhamentosFiltrados]);
+    }
 
-  const checkpointResumo = useMemo(() => {
-    const rows = checkpointTabelaFiltrada || [];
+    return items;
+  }, [sugestoesFiltradas, sortConfig]);
 
-    const melhoraramKml = rows.filter((r) => n(r.delta_kml) > 0).length;
-    const pioraramKml = rows.filter((r) => n(r.delta_kml) < 0).length;
-    const estavelKml = rows.filter((r) => n(r.delta_kml) === 0).length;
-
-    const reduziramDesperdicio = rows.filter((r) => n(r.delta_desperdicio) < 0).length;
-    const aumentaramDesperdicio = rows.filter((r) => n(r.delta_desperdicio) > 0).length;
-    const estavelDesperdicio = rows.filter((r) => n(r.delta_desperdicio) === 0).length;
-
-    const mediaDeltaKml =
-      rows.length > 0
-        ? rows.reduce((acc, r) => acc + n(r.delta_kml), 0) / rows.length
-        : 0;
-
-    const mediaDeltaDesp =
-      rows.length > 0
-        ? rows.reduce((acc, r) => acc + n(r.delta_desperdicio), 0) / rows.length
-        : 0;
-
-    return {
-      total: rows.length,
-      melhoraramKml,
-      pioraramKml,
-      estavelKml,
-      reduziramDesperdicio,
-      aumentaramDesperdicio,
-      estavelDesperdicio,
-      mediaDeltaKml,
-      mediaDeltaDesp,
-    };
-  }, [checkpointTabelaFiltrada]);
-
-  const resumo = snapshot?.resumo || {};
-  const cobertura = resumo?.cobertura || {};
-  const instrutorKpis = resumo?.instrutor_kpis || {};
-  const checkpointKpis = snapshot?.checkpoint_kpis || resumo?.checkpoint_kpis || {};
-  const pdfUrl = getPublicUrl(snapshot?.arquivo_pdf_path);
-
-  const totalMinutosAcompanhamentos = useMemo(
-    () => acompanhamentosFiltrados.reduce((acc, r) => acc + n(r.duracao_min), 0),
-    [acompanhamentosFiltrados]
+  const ThSortable = ({ label, columnKey, align = "left" }) => (
+    <th className={`p-3 cursor-pointer hover:bg-slate-100 text-${align}`} onClick={() => handleSort(columnKey)}>
+      <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : "justify-start"}`}>
+        {label}
+        {sortConfig.key !== columnKey ? (
+          <FaSort className="text-slate-300" />
+        ) : sortConfig.direction === "asc" ? (
+          <FaSortUp className="text-cyan-600" />
+        ) : (
+          <FaSortDown className="text-cyan-600" />
+        )}
+      </div>
+    </th>
   );
 
-  const mediaMinutosAcompanhamentos = useMemo(
-    () =>
-      acompanhamentosFiltrados.length
-        ? totalMinutosAcompanhamentos / acompanhamentosFiltrados.length
-        : 0,
-    [acompanhamentosFiltrados, totalMinutosAcompanhamentos]
-  );
+  const dispararGerencial = async () => {
+    if (loadingGerencial) return;
+    setLoadingGerencial(true);
+
+    setErro(null);
+    setSucesso(null);
+    try {
+      const { data: record, error } = await supabase
+        .from("relatorios_gerados")
+        .insert({
+          tipo: "diesel_gerencial",
+          status: "PROCESSANDO",
+          periodo_inicio: periodoInicio,
+          periodo_fim: periodoFim,
+          solicitante_login: userSession?.user?.email || "sistema",
+          solicitante_nome: userSession?.user?.user_metadata?.full_name,
+        })
+        .select("id")
+        .single();
+
+      if (error) throw error;
+
+      await dispatchGitHubWorkflow(WF_GERENCIAL, {
+        report_id: String(record.id),
+        periodo_inicio: periodoInicio,
+        periodo_fim: periodoFim,
+        report_tipo: "diesel_gerencial",
+      });
+
+      setSucesso(`Relatório #${record.id} enviado.`);
+      setTimeout(carregarTela, 2000);
+    } catch (err) {
+      setErro(err?.message || String(err));
+    } finally {
+      if (!mountedRef.current) return;
+      setLoadingGerencial(false);
+    }
+  };
+
+  const gerarFormulariosSelecionados = async () => {
+    if (loadingProntuarios) return;
+    setLoadingProntuarios(true);
+
+    setErro(null);
+    setSucesso(null);
+
+    const selecionados = sugestoesFiltradas.filter((r) => selected[r.motorista_chapa]);
+    if (!selecionados.length) {
+      setErro("Selecione pelo menos 1 motorista.");
+      setLoadingProntuarios(false);
+      return;
+    }
+
+    try {
+      const { data: lote, error: errL } = await supabase
+        .from("acompanhamento_lotes")
+        .insert({
+          status: "PROCESSANDO",
+          qtd: selecionados.length,
+          extra: { origem: "v_sugestoes_acompanhamento_30d", gerado_em: new Date().toISOString() },
+        })
+        .select("id")
+        .single();
+
+      if (errL) throw errL;
+
+      const itens = selecionados.map((r) => ({
+        lote_id: lote.id,
+        motorista_chapa: r.motorista_chapa,
+        linha_mais_rodada: r.linha_mais_rodada ?? null,
+        km_percorrido: n(r.km_percorrido),
+        combustivel_consumido: n(r.combustivel_consumido),
+        kml_realizado: n(r.kml_realizado),
+        kml_meta: n(r.kml_meta),
+        combustivel_desperdicado: n(r.combustivel_desperdicado),
+        extra: { motorista_nome: r.motorista_nome ?? null },
+      }));
+
+      const { error: errI } = await supabase.from("acompanhamento_lote_itens").insert(itens);
+      if (errI) throw errI;
+
+      await dispatchGitHubWorkflow(WF_ACOMP, {
+        ordem_batch_id: String(lote.id),
+        qtd: String(selecionados.length),
+      });
+
+      setSucesso(`Lote #${lote.id} enviado. Processando...`);
+      setSelected({});
+      setTimeout(carregarTela, 2500);
+    } catch (err) {
+      setErro(err?.message || String(err));
+    } finally {
+      if (!mountedRef.current) return;
+      setLoadingProntuarios(false);
+    }
+  };
+
+  const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
+
+  const allChecked = useMemo(() => {
+    const disponiveis = sugestoesFiltradas.filter((r) => !r.status_atual);
+    return disponiveis.length > 0 && disponiveis.every((r) => selected[r.motorista_chapa]);
+  }, [sugestoesFiltradas, selected]);
+
+  const toggleAll = () => {
+    if (allChecked) {
+      const novo = { ...selected };
+      sugestoesFiltradas.forEach((r) => {
+        delete novo[r.motorista_chapa];
+      });
+      setSelected(novo);
+    } else {
+      const m = { ...selected };
+      sugestoesFiltradas.forEach((r) => {
+        if (!r.status_atual) m[r.motorista_chapa] = true;
+      });
+      setSelected(m);
+    }
+  };
+
+  const toggleOne = (chapa) => setSelected((p) => ({ ...p, [chapa]: !p[chapa] }));
+
+  const totalKm = modalContent.raioX?.reduce((acc, r) => acc + n(r.km), 0) || 0;
+  const totalLitros = modalContent.raioX?.reduce((acc, r) => acc + n(r.litros), 0) || 0;
+  const totalDesperdicio = modalContent.raioX?.reduce((acc, r) => acc + n(r.desperdicio), 0) || 0;
+
+  const kmlGeralReal = totalLitros > 0 ? totalKm / totalLitros : 0;
+
+  const litrosTeoricosTotal =
+    modalContent.raioX?.reduce((acc, r) => {
+      const metaLinha = n(r.kml_meta);
+      return acc + (metaLinha > 0 ? n(r.km) / metaLinha : 0);
+    }, 0) || 0;
+
+  const kmlGeralMeta = litrosTeoricosTotal > 0 ? totalKm / litrosTeoricosTotal : 0;
+
+  const ultimoPdfUrl = getPublicUrl(ultimoGerencial?.arquivo_pdf_path);
+  const ultimaAnaliseLabel = ultimaAnalise
+    ? `Última análise gerada: Relatório #${ultimaAnalise.report_id || "-"} · ${ultimaAnalise.mes_atual_nome || ultimaAnalise.periodo_label || "-"} · ${ultimaAnalise.created_at ? new Date(ultimaAnalise.created_at).toLocaleDateString() : "-"}`
+    : "Nenhuma análise gerada até o momento.";
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
-        <div className="px-6 py-5 bg-slate-900 text-white">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-4">
-              <div className="h-14 w-14 rounded-2xl bg-white/10 flex items-center justify-center border border-white/10">
-                <FaBolt size={20} />
-              </div>
-              <div>
-                <h2 className="text-2xl font-black">Análise Gerencial Diesel</h2>
-                <p className="text-sm text-slate-300">
-                  Painel analítico consolidado da última geração do relatório
-                </p>
-              </div>
-            </div>
+    <div className="p-6 space-y-6 max-w-6xl mx-auto relative">
+      <div className="flex items-center justify-between gap-4 border-b pb-4">
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
+            <FaBolt size={20} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Agente Diesel</h2>
+            <p className="text-sm text-slate-500">Sugestões de Acompanhamento</p>
+          </div>
+        </div>
+        <button onClick={carregarTela} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar">
+          <FaSync className={clsx(loading && "animate-spin")} />
+        </button>
+      </div>
 
-            <div className="flex items-center gap-2">
-              {pdfUrl && (
-                <a
-                  href={pdfUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm inline-flex items-center gap-2"
-                >
-                  <FaFilePdf /> Abrir PDF
-                </a>
-              )}
+      {(sucesso || erro) && (
+        <div
+          className={clsx(
+            "p-4 rounded-xl border flex items-center gap-3",
+            sucesso ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800"
+          )}
+        >
+          {sucesso ? <FaCheckCircle /> : <FaExclamationTriangle />}
+          <div>
+            <p className="font-bold text-sm">{sucesso ? "Sucesso" : "Atenção"}</p>
+            <p className="text-xs">{sucesso || erro}</p>
+          </div>
+        </div>
+      )}
 
-              <button
-                onClick={carregar}
-                className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center"
-                title="Atualizar"
-              >
-                <FaSync className={clsx(loading && "animate-spin")} />
-              </button>
-            </div>
+      <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-4">
+        <div className="flex justify-between items-center gap-4 flex-wrap">
+          <div>
+            <h3 className="font-semibold text-slate-700">Relatório Gerencial</h3>
+            <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span>
           </div>
         </div>
 
-        <div className="px-6 py-4 bg-slate-50 border-t flex flex-wrap items-center gap-3 text-sm">
-          <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border">
-            <FaCalendarAlt className="text-slate-500" />
-            <span className="text-slate-500 font-bold">Período:</span>
-            <span className="font-extrabold text-slate-800">{snapshot?.periodo_label || "-"}</span>
-          </div>
-
-          <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border">
-            <FaDatabase className="text-slate-500" />
-            <span className="text-slate-500 font-bold">Mês ref.:</span>
-            <span className="font-extrabold text-slate-800">{snapshot?.mes_atual_nome || "-"}</span>
-          </div>
-
-          <div
-            className={clsx(
-              "inline-flex items-center gap-2 px-3 py-2 rounded-xl border",
-              snapshot
-                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                : "bg-amber-50 border-amber-200 text-amber-700"
+        <div className="flex items-center justify-between bg-slate-50 border rounded-xl px-4 py-3 gap-4 flex-wrap">
+          <div className="text-sm">
+            <span className="text-slate-500 font-bold">Último Relatório: </span>
+            {ultimoGerencial ? (
+              <>
+                <span className="font-extrabold text-slate-800">#{ultimoGerencial.id}</span>
+                <span className="text-slate-500 text-xs ml-2">
+                  {ultimoGerencial.created_at ? new Date(ultimoGerencial.created_at).toLocaleDateString() : "-"}
+                </span>
+                <span className="ml-3">
+                  <StatusBadge status={ultimoGerencial.status} />
+                </span>
+              </>
+            ) : (
+              <span className="text-slate-500">Nenhum registro encontrado</span>
             )}
-          >
-            {snapshot ? <FaCheckCircle /> : <FaExclamationTriangle />}
-            <span className="font-bold">{snapshot ? "Snapshot carregado" : "Sem snapshot disponível"}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <div className="relative md:col-span-2">
-            <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar linha, veículo, motorista, chapa ou instrutor..."
-              className="pl-9 pr-3 py-2.5 border rounded-xl w-full text-sm outline-none"
-            />
           </div>
 
-          <div className="flex items-center gap-2 bg-slate-50 border rounded-xl px-2">
-            <FaFilter className="text-slate-400 ml-2" />
-            <select
-              value={filtroLinha}
-              onChange={(e) => setFiltroLinha(e.target.value)}
-              className="p-2.5 bg-transparent text-sm outline-none w-full"
+          {ultimoGerencial?.status === "CONCLUIDO" && ultimoPdfUrl && (
+            <a
+              href={ultimoPdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-700 font-extrabold inline-flex items-center gap-2 hover:underline"
             >
-              <option value="">Todas as linhas</option>
-              {linhas.map((ln) => (
-                <option key={ln} value={ln}>
-                  {ln}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2 bg-slate-50 border rounded-xl px-2">
-            <FaFilter className="text-slate-400 ml-2" />
-            <select
-              value={filtroCluster}
-              onChange={(e) => setFiltroCluster(e.target.value)}
-              className="p-2.5 bg-transparent text-sm outline-none w-full"
-            >
-              <option value="">Todos os clusters</option>
-              {clusters.map((cl) => (
-                <option key={cl} value={cl}>
-                  {cl}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2 bg-slate-50 border rounded-xl px-2">
-            <FaClipboardList className="text-slate-400 ml-2" />
-            <select
-              value={filtroCheckpoint}
-              onChange={(e) => setFiltroCheckpoint(e.target.value)}
-              className="p-2.5 bg-transparent text-sm outline-none w-full"
-            >
-              <option value="">Todos checkpoints</option>
-              <option value="PRONTUARIO_10">PRONTUÁRIO 10</option>
-              <option value="PRONTUARIO_20">PRONTUÁRIO 20</option>
-              <option value="PRONTUARIO_30">PRONTUÁRIO 30</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2 bg-slate-50 border rounded-xl px-2">
-            <FaUser className="text-slate-400 ml-2" />
-            <select
-              value={filtroInstrutor}
-              onChange={(e) => setFiltroInstrutor(e.target.value)}
-              className="p-2.5 bg-transparent text-sm outline-none w-full"
-            >
-              <option value="">Todos os instrutores</option>
-              {instrutores.map((nome) => (
-                <option key={nome} value={nome}>
-                  {nome}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <div className="md:col-span-2 flex gap-3">
-            <input
-              type="date"
-              value={filtroDataAcompIni}
-              onChange={(e) => setFiltroDataAcompIni(e.target.value)}
-              className="w-full border rounded-xl px-3 py-2.5 text-sm"
-            />
-            <input
-              type="date"
-              value={filtroDataAcompFim}
-              onChange={(e) => setFiltroDataAcompFim(e.target.value)}
-              className="w-full border rounded-xl px-3 py-2.5 text-sm"
-            />
-          </div>
-
-          <div className="md:col-span-4 flex flex-wrap gap-2">
-            {[
-              { key: "linhas", label: "Análise de Linhas" },
-              { key: "motoristas", label: "Ranking de Motoristas" },
-              { key: "carros", label: "Ranking de Carros" },
-              { key: "acompanhamentos", label: "Acompanhamentos" },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setAbaInterna(tab.key)}
-                className={clsx(
-                  "px-4 py-2.5 rounded-xl text-sm font-extrabold transition-colors",
-                  abaInterna === tab.key
-                    ? "bg-slate-900 text-white shadow"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <CardResumo
-          titulo="Cobertura"
-          valor={n(cobertura.perc_cobertura || cobertura.percentual || 0).toFixed(1) + "%"}
-          subtitulo="Cobertura geral do relatório"
-          icon={FaChartLine}
-          destaque="cyan"
-        />
-        <CardResumo
-          titulo="Checkpoints"
-          valor={n(checkpointKpis.total || snapshot?.checkpoint_tabela?.length || 0).toFixed(0)}
-          subtitulo="Total de checkpoints"
-          icon={FaClipboardList}
-          destaque="violet"
-        />
-        <CardResumo
-          titulo="Acompanhamentos"
-          valor={n(acompanhamentosFiltrados.length).toFixed(0)}
-          subtitulo="Base filtrada de acompanhamentos"
-          icon={FaRoad}
-          destaque="amber"
-        />
-        <CardResumo
-          titulo="Tempo total"
-          valor={formatMinutes(totalMinutosAcompanhamentos)}
-          subtitulo={`Média: ${formatMinutes(mediaMinutosAcompanhamentos)}`}
-          icon={FaClock}
-          destaque="emerald"
-        />
-      </div>
-
-      {abaInterna === "linhas" && (
-        <BlocoSecao
-          titulo="Análise de Linhas"
-          subtitulo={`Total filtrado: ${tabelaLinhasFiltrada.length}`}
-          icon={FaRoad}
-        >
-          <TabelaPadrao
-            rows={tabelaLinhasFiltrada}
-            columns={[
-              { key: "linha", label: "Linha", render: (r) => <span className="font-extrabold">{r.linha}</span> },
-              { key: "Cluster", label: "Cluster" },
-              {
-                key: "KM_Total",
-                label: "KM",
-                align: "right",
-                render: (r) => n(r.KM_Total || r.km_total || r.KM).toFixed(0),
-              },
-              {
-                key: "KML_Real",
-                label: "KML Real",
-                align: "right",
-                render: (r) => n(r.KML_Real || r.kml_real).toFixed(2),
-              },
-              {
-                key: "Meta_Linha",
-                label: "Meta",
-                align: "right",
-                render: (r) => n(r.Meta_Linha || r.kml_meta).toFixed(2),
-              },
-              {
-                key: "Litros_Desp_Meta",
-                label: "Desp.",
-                align: "right",
-                className: "font-extrabold text-rose-700",
-                render: (r) => n(r.Litros_Desp_Meta || r.desperdicio || r.perda_litros).toFixed(0),
-              },
-            ]}
-          />
-        </BlocoSecao>
-      )}
-
-      {abaInterna === "motoristas" && (
-        <BlocoSecao
-          titulo="Ranking de Motoristas"
-          subtitulo={`Total filtrado: ${topMotoristasFiltrado.length}`}
-          icon={FaUser}
-        >
-          <TabelaPadrao
-            rows={topMotoristasFiltrado}
-            columns={[
-              { key: "Motorista", label: "Motorista", render: (r) => <span className="font-extrabold">{r.Motorista}</span> },
-              { key: "Cluster", label: "Cluster" },
-              { key: "linha", label: "Linha" },
-              { key: "KML_Real", label: "KML", align: "right", render: (r) => n(r.KML_Real).toFixed(2) },
-              { key: "Meta_Linha", label: "Meta", align: "right", render: (r) => n(r.Meta_Linha).toFixed(2) },
-              {
-                key: "Litros_Desp_Meta",
-                label: "Desp.",
-                align: "right",
-                className: "font-extrabold text-rose-700",
-                render: (r) => n(r.Litros_Desp_Meta).toFixed(0),
-              },
-            ]}
-          />
-        </BlocoSecao>
-      )}
-
-      {abaInterna === "carros" && (
-        <BlocoSecao
-          titulo="Ranking de Carros"
-          subtitulo={`Total filtrado: ${topVeiculosFiltrado.length}`}
-          icon={FaTruck}
-        >
-          <TabelaPadrao
-            rows={topVeiculosFiltrado}
-            columns={[
-              { key: "veiculo", label: "Carro", render: (r) => <span className="font-extrabold">{r.veiculo}</span> },
-              { key: "Cluster", label: "Cluster" },
-              { key: "linha", label: "Linha" },
-              { key: "KML_Real", label: "KML", align: "right", render: (r) => n(r.KML_Real).toFixed(2) },
-              { key: "Meta_Linha", label: "Meta", align: "right", render: (r) => n(r.Meta_Linha).toFixed(2) },
-              {
-                key: "Litros_Desp_Meta",
-                label: "Desp.",
-                align: "right",
-                className: "font-extrabold text-rose-700",
-                render: (r) => n(r.Litros_Desp_Meta).toFixed(0),
-              },
-            ]}
-          />
-        </BlocoSecao>
-      )}
-
-      {abaInterna === "acompanhamentos" && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
-            <CardResumo
-              titulo="Melhoraram KM/L"
-              valor={String(checkpointResumo.melhoraramKml)}
-              subtitulo="Δ KML maior que zero"
-              icon={FaArrowUp}
-              destaque="emerald"
-            />
-            <CardResumo
-              titulo="Pioraram KM/L"
-              valor={String(checkpointResumo.pioraramKml)}
-              subtitulo="Δ KML menor que zero"
-              icon={FaArrowDown}
-              destaque="rose"
-            />
-            <CardResumo
-              titulo="Estáveis KM/L"
-              valor={String(checkpointResumo.estavelKml)}
-              subtitulo="Δ KML igual a zero"
-              icon={FaEquals}
-              destaque="slate"
-            />
-            <CardResumo
-              titulo="Reduziram desperdício"
-              valor={String(checkpointResumo.reduziramDesperdicio)}
-              subtitulo="Δ Desp. menor que zero"
-              icon={FaArrowDown}
-              destaque="emerald"
-            />
-            <CardResumo
-              titulo="Aumentaram desperdício"
-              valor={String(checkpointResumo.aumentaramDesperdicio)}
-              subtitulo="Δ Desp. maior que zero"
-              icon={FaArrowUp}
-              destaque="rose"
-            />
-            <CardResumo
-              titulo="Média Δ KML"
-              valor={checkpointResumo.mediaDeltaKml.toFixed(2)}
-              subtitulo={`Média Δ Desp.: ${checkpointResumo.mediaDeltaDesp.toFixed(1)} L`}
-              icon={FaChartLine}
-              destaque="violet"
-            />
-          </div>
-
-          <BlocoSecao
-            titulo="Checkpoints"
-            subtitulo={`Total: ${snapshot?.checkpoint_tabela?.length || 0} | Filtrados: ${checkpointTabelaFiltrada.length}`}
-            icon={FaClipboardList}
-          >
-            <TabelaPadrao
-              rows={checkpointTabelaFiltrada}
-              columns={[
-                { key: "created_at_dt", label: "Data", render: (r) => String(r.created_at_dt || "").slice(0, 10) },
-                { key: "tipo", label: "Tipo", render: (r) => <span className="font-extrabold">{r.tipo}</span> },
-                {
-                  key: "motorista_nome",
-                  label: "Motorista",
-                  render: (r) => (
-                    <span>
-                      {r.motorista_nome} <span className="text-slate-400">({r.motorista_chapa})</span>
-                    </span>
-                  ),
-                },
-                { key: "linha_foco", label: "Linha" },
-                {
-                  key: "kml_antes",
-                  label: "KM/L Antes",
-                  align: "right",
-                  render: (r) =>
-                    n(
-                      r.kml_antes ??
-                        r.kml_real_antes ??
-                        r.kml_pre ??
-                        r.kml_anterior ??
-                        r.kml_base
-                    ).toFixed(2),
-                },
-                {
-                  key: "kml_depois",
-                  label: "KM/L Após",
-                  align: "right",
-                  render: (r) =>
-                    n(
-                      r.kml_depois ??
-                        r.kml_real_depois ??
-                        r.kml_pos ??
-                        r.kml_atual ??
-                        r.kml_final
-                    ).toFixed(2),
-                },
-                {
-                  key: "delta_kml",
-                  label: "Δ KML",
-                  align: "right",
-                  className: "font-extrabold",
-                  render: (r) => {
-                    const v = n(r.delta_kml);
-                    return (
-                      <span className={v > 0 ? "text-emerald-700" : v < 0 ? "text-rose-700" : "text-slate-700"}>
-                        {v > 0 ? "+" : ""}
-                        {v.toFixed(2)}
-                      </span>
-                    );
-                  },
-                },
-                {
-                  key: "delta_desperdicio",
-                  label: "Δ Desp.",
-                  align: "right",
-                  className: "font-extrabold",
-                  render: (r) => {
-                    const v = n(r.delta_desperdicio);
-                    return (
-                      <span className={v < 0 ? "text-emerald-700" : v > 0 ? "text-rose-700" : "text-slate-700"}>
-                        {v > 0 ? "+" : ""}
-                        {v.toFixed(1)}
-                      </span>
-                    );
-                  },
-                },
-                { key: "conclusao", label: "Conclusão", render: (r) => <span className="font-bold">{r.conclusao}</span> },
-              ]}
-            />
-          </BlocoSecao>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <CardResumo
-              titulo="Instrutores"
-              valor={n(resumoInstrutor.length).toFixed(0)}
-              subtitulo="Total com atividade no filtro"
-              icon={FaUser}
-              destaque="cyan"
-            />
-            <CardResumo
-              titulo="Tempo total"
-              valor={formatMinutes(totalMinutosAcompanhamentos)}
-              subtitulo="Tempo somado das intervenções"
-              icon={FaClock}
-              destaque="amber"
-            />
-            <CardResumo
-              titulo="Média por acompanhamento"
-              valor={formatMinutes(mediaMinutosAcompanhamentos)}
-              subtitulo="Tempo médio por registro"
-              icon={FaChartLine}
-              destaque="violet"
-            />
-            <CardResumo
-              titulo="KPI snapshot"
-              valor={n(instrutorKpis.concluidos || 0).toFixed(0)}
-              subtitulo="Concluídos no snapshot"
-              icon={FaCheckCircle}
-              destaque="emerald"
-            />
-          </div>
-
-          <BlocoSecao
-            titulo="Resumo por Instrutor"
-            subtitulo={`Instrutores filtrados: ${resumoInstrutor.length}`}
-            icon={FaUser}
-          >
-            <TabelaPadrao
-              rows={resumoInstrutor}
-              columns={[
-                {
-                  key: "instrutor_nome",
-                  label: "Instrutor",
-                  render: (r) => <span className="font-extrabold">{r.instrutor_nome}</span>,
-                },
-                {
-                  key: "total_acompanhamentos",
-                  label: "Acompanhamentos",
-                  align: "right",
-                  render: (r) => n(r.total_acompanhamentos).toFixed(0),
-                },
-                {
-                  key: "total_minutos",
-                  label: "Tempo Total",
-                  align: "right",
-                  render: (r) => formatMinutes(r.total_minutos),
-                },
-                {
-                  key: "media_minutos",
-                  label: "Média",
-                  align: "right",
-                  render: (r) => formatMinutes(r.media_minutos),
-                },
-                {
-                  key: "em_monitoramento",
-                  label: "Em Monitoramento",
-                  align: "right",
-                  render: (r) => n(r.em_monitoramento).toFixed(0),
-                },
-                {
-                  key: "em_analise",
-                  label: "Em Análise",
-                  align: "right",
-                  render: (r) => n(r.em_analise).toFixed(0),
-                },
-                {
-                  key: "concluidos",
-                  label: "Concluídos",
-                  align: "right",
-                  render: (r) => n(r.concluidos).toFixed(0),
-                },
-                {
-                  key: "qtd_linhas",
-                  label: "Linhas",
-                  align: "right",
-                  render: (r) => n(r.qtd_linhas).toFixed(0),
-                },
-              ]}
-            />
-          </BlocoSecao>
-
-          <BlocoSecao
-            titulo="Tempo por Dia"
-            subtitulo={`Linhas diárias: ${tempoPorDia.length}`}
-            icon={FaCalendarAlt}
-          >
-            <TabelaPadrao
-              rows={tempoPorDia}
-              columns={[
-                { key: "data_ref", label: "Data", render: (r) => fmtDateBr(r.data_ref) },
-                {
-                  key: "instrutor_nome",
-                  label: "Instrutor",
-                  render: (r) => <span className="font-extrabold">{r.instrutor_nome}</span>,
-                },
-                {
-                  key: "total_acompanhamentos",
-                  label: "Qtd.",
-                  align: "right",
-                  render: (r) => n(r.total_acompanhamentos).toFixed(0),
-                },
-                {
-                  key: "total_minutos",
-                  label: "Tempo Total",
-                  align: "right",
-                  render: (r) => formatMinutes(r.total_minutos),
-                },
-                {
-                  key: "media_minutos",
-                  label: "Tempo Médio",
-                  align: "right",
-                  render: (r) => formatMinutes(r.media_minutos),
-                },
-              ]}
-            />
-          </BlocoSecao>
-
-          <BlocoSecao
-            titulo="Detalhamento dos Acompanhamentos"
-            subtitulo={`Total filtrado: ${acompanhamentosFiltrados.length}`}
-            icon={FaRoad}
-          >
-            <TabelaPadrao
-              rows={acompanhamentosFiltrados}
-              columns={[
-                {
-                  key: "data_ref",
-                  label: "Data",
-                  render: (r) => fmtDateBr(r.data_ref || r.created_at),
-                },
-                {
-                  key: "instrutor_nome",
-                  label: "Instrutor",
-                  render: (r) => <span className="font-extrabold">{r.instrutor_nome || "-"}</span>,
-                },
-                {
-                  key: "motorista_nome",
-                  label: "Motorista",
-                  render: (r) => (
-                    <span>
-                      {r.motorista_nome || "-"}{" "}
-                      <span className="text-slate-400">({r.motorista_chapa || "-"})</span>
-                    </span>
-                  ),
-                },
-                { key: "linha_foco", label: "Linha", render: (r) => r.linha_foco || "-" },
-                { key: "status", label: "Status", render: (r) => r.status || "-" },
-                {
-                  key: "duracao_min",
-                  label: "Tempo",
-                  align: "right",
-                  render: (r) => formatMinutes(r.duracao_min),
-                },
-                {
-                  key: "kml_inicial",
-                  label: "KML Inicial",
-                  align: "right",
-                  render: (r) => n(r.kml_inicial).toFixed(2),
-                },
-                {
-                  key: "teste_kml",
-                  label: "Teste KML",
-                  align: "right",
-                  render: (r) => n(r.teste_kml).toFixed(2),
-                },
-                {
-                  key: "kml_meta",
-                  label: "Meta",
-                  align: "right",
-                  render: (r) => n(r.kml_meta).toFixed(2),
-                },
-              ]}
-            />
-          </BlocoSecao>
-        </>
-      )}
-
-      <BlocoSecao
-        titulo="Histórico de Snapshots"
-        subtitulo="Últimas análises salvas no banco"
-        icon={FaCalendarAlt}
-      >
-        <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-          {historico.length === 0 ? (
-            <div className="text-sm text-slate-400">Sem histórico disponível.</div>
-          ) : (
-            historico.map((r) => (
-              <div key={r.id} className="border rounded-2xl p-4 bg-slate-50">
-                <div className="text-sm font-black text-slate-800">Relatório #{r.report_id}</div>
-                <div className="text-xs text-slate-500 mt-2">{r.periodo_label || "-"}</div>
-                <div className="text-xs text-slate-500">{r.mes_atual_nome || "-"}</div>
-                <div className="text-xs text-slate-400 mt-2">{fmtDateBr(r.created_at)}</div>
-              </div>
-            ))
+              <FaFilePdf /> Abrir PDF
+            </a>
           )}
         </div>
-      </BlocoSecao>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div>
+            <label className="text-xs font-bold text-slate-500">Início</label>
+            <input
+              type="date"
+              value={periodoInicio}
+              onChange={(e) => setPeriodoInicio(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500">Fim</label>
+            <input
+              type="date"
+              value={periodoFim}
+              onChange={(e) => setPeriodoFim(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            onClick={dispararGerencial}
+            disabled={!validarPeriodo() || loadingGerencial}
+            className={clsx(
+              "w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm transition-colors",
+              "bg-cyan-600 text-white hover:bg-cyan-700 disabled:bg-slate-300"
+            )}
+          >
+            <FaPlay className={clsx(loadingGerencial && "animate-spin")} /> {loadingGerencial ? "ENVIANDO..." : "DISPARAR RELATÓRIO"}
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-rose-200 bg-rose-50 shadow-sm p-4">
+        <div className="text-sm font-extrabold text-rose-700">{ultimaAnaliseLabel}</div>
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b bg-slate-50">
+          <div>
+            <h3 className="font-extrabold text-slate-800">Sugestões de Acompanhamento (30 dias)</h3>
+            <p className="text-xs text-slate-500">
+              Total: <b>{sugestoes.length}</b> | Filtrados: <b>{sugestoesFiltradas.length}</b>
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-slate-600">
+              Selecionados: <b>{selectedCount}</b>
+            </div>
+            <button
+              onClick={gerarFormulariosSelecionados}
+              disabled={selectedCount === 0 || loadingProntuarios}
+              className={clsx(
+                "px-4 py-2 rounded-xl font-extrabold text-sm transition-colors inline-flex items-center gap-2",
+                selectedCount === 0 || loadingProntuarios
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+              )}
+            >
+              <FaSync className={clsx(loadingProntuarios && "animate-spin")} />
+              {loadingProntuarios ? "GERANDO..." : "Gerar formulários"}
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4 border-b bg-white">
+          <div className="flex flex-col md:flex-row gap-3 items-center">
+            <div className="relative w-full md:flex-1">
+              <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por chapa, nome ou linha..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-cyan-500 font-medium"
+              />
+            </div>
+
+            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
+              <FaFilter className="text-gray-400 ml-2" />
+              <select
+                value={filtroLinha}
+                onChange={(e) => setFiltroLinha(e.target.value)}
+                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-40 font-medium text-slate-600"
+              >
+                <option value="">Todas Linhas</option>
+                {linhasUnicas.map((ln) => (
+                  <option key={ln} value={ln}>
+                    {ln}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-slate-500 bg-white border-b sticky top-0 z-10">
+              <tr>
+                <th className="p-3 w-10 text-center">
+                  <input type="checkbox" checked={!!allChecked} onChange={toggleAll} />
+                </th>
+                <th className="p-3 w-10"></th>
+                <ThSortable label="Chapa" columnKey="motorista_chapa" />
+                <ThSortable label="Nome" columnKey="motorista_nome" />
+                <ThSortable label="Status" columnKey="status_atual" />
+                <ThSortable label="Linha" columnKey="linha_mais_rodada" />
+                <ThSortable label="KM" columnKey="km_percorrido" align="right" />
+                <ThSortable label="Real" columnKey="kml_realizado" align="right" />
+                <ThSortable label="Meta" columnKey="kml_meta" align="right" />
+                <ThSortable label="Desperdício" columnKey="combustivel_desperdicado" align="right" />
+              </tr>
+            </thead>
+
+            <tbody className="divide-y">
+              {sortedSugestoes.map((r) => {
+                const isOcupado = !!r.status_atual;
+                const statusFormatado =
+                  r.status_atual === "AGUARDANDO_INSTRUTOR"
+                    ? "AGUARDANDO INSTRUTOR"
+                    : r.status_atual === "EM_MONITORAMENTO"
+                    ? "EM MONITORAMENTO"
+                    : r.status_atual;
+
+                return (
+                  <tr key={r.motorista_chapa} className="hover:bg-slate-50">
+                    <td className="p-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={!!selected[r.motorista_chapa]}
+                        onChange={() => toggleOne(r.motorista_chapa)}
+                        disabled={isOcupado}
+                        className={isOcupado ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}
+                        title={isOcupado ? "Motorista já possui um acompanhamento em andamento" : ""}
+                      />
+                    </td>
+                    <td className="p-3 text-center">
+                      <button onClick={() => openModal(r)} className="text-slate-400 hover:text-cyan-600" title="Ver detalhes completos">
+                        <FaInfoCircle size={18} />
+                      </button>
+                    </td>
+                    <td className="p-3 font-bold text-slate-800">{r.motorista_chapa}</td>
+                    <td className="p-3 text-slate-600 text-xs truncate max-w-[240px]" title={r.motorista_nome}>
+                      {r.motorista_nome || "-"}
+                    </td>
+
+                    <td className="p-3">
+                      {isOcupado ? (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
+                          {statusFormatado}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          LIVRE
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-3 text-slate-700">{r.linha_mais_rodada || "-"}</td>
+                    <td className="p-3 text-right">{n(r.km_percorrido).toFixed(0)}</td>
+                    <td className="p-3 text-right font-bold">{n(r.kml_realizado).toFixed(2)}</td>
+                    <td className="p-3 text-right text-slate-500">{n(r.kml_meta).toFixed(2)}</td>
+                    <td className="p-3 text-right text-rose-700 font-bold">{n(r.combustivel_desperdicado).toFixed(0)} L</td>
+                  </tr>
+                );
+              })}
+
+              {sortedSugestoes.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="p-8 text-center text-slate-500 font-medium">
+                    Nenhum registro encontrado com os filtros aplicados.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {viewingDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 flex flex-col">
+            <div className="bg-slate-800 text-white p-5 flex justify-between items-start sticky top-0 z-20">
+              <div>
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <FaBolt className="text-yellow-400" /> Auditoria de Eficiência
+                </h3>
+                <p className="text-slate-300 text-sm mt-1">
+                  {viewingDetails.motorista_chapa} - {viewingDetails.motorista_nome || "-"}
+                </p>
+                <div className="text-xs text-slate-400 mt-1">Dados processados pela IA no momento da sugestão.</div>
+              </div>
+              <button onClick={() => setViewingDetails(null)} className="text-slate-400 hover:text-white p-2 hover:bg-slate-700 rounded-full transition">
+                <FaTimes size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-8 flex-1">
+              {!modalContent.raioX || modalContent.raioX.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400 gap-3 border-2 border-dashed rounded-xl bg-slate-50">
+                  <FaExclamationTriangle className="text-3xl text-slate-300" />
+                  <p>Detalhes não disponíveis para este registro.</p>
+                  <span className="text-xs">Execute o relatório novamente para gerar os dados detalhados.</span>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-slate-700 border-b pb-2">
+                      <FaListAlt />
+                      <h4 className="font-bold text-sm uppercase">1. Raio-X da Operação</h4>
+                    </div>
+
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-100 text-slate-500 font-bold uppercase">
+                          <tr>
+                            <th className="p-2 text-left">Linha</th>
+                            <th className="p-2 text-left">Cluster</th>
+                            <th className="p-2 text-right">KM</th>
+                            <th className="p-2 text-right">Litros</th>
+                            <th className="p-2 text-right">Real</th>
+                            <th className="p-2 text-right">Meta</th>
+                            <th className="p-2 text-right">Desp.</th>
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y">
+                          {modalContent.raioX.map((row, idx) => (
+                            <tr key={idx} className={n(row.desperdicio) > 10 ? "bg-rose-50" : ""}>
+                              <td className="p-2 font-bold text-slate-700">{row.linha}</td>
+                              <td className="p-2 text-slate-500">{row.cluster}</td>
+                              <td className="p-2 text-right">{n(row.km).toFixed(0)}</td>
+                              <td className="p-2 text-right">{n(row.litros).toFixed(0)}</td>
+                              <td className="p-2 text-right font-bold">{n(row.kml_real).toFixed(2)}</td>
+                              <td className="p-2 text-right text-slate-500">{n(row.kml_meta).toFixed(2)}</td>
+                              <td className={clsx("p-2 text-right font-bold", n(row.desperdicio) > 0 ? "text-rose-600" : "text-emerald-600")}>
+                                {n(row.desperdicio).toFixed(1)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+
+                        <tfoot className="bg-slate-800 text-white font-bold border-t-2 border-slate-900">
+                          <tr>
+                            <td colSpan={2} className="p-2 text-right uppercase text-slate-300">
+                              TOTAL
+                            </td>
+                            <td className="p-2 text-right">{totalKm.toFixed(0)}</td>
+                            <td className="p-2 text-right">{totalLitros.toFixed(0)}</td>
+                            <td className="p-2 text-right text-yellow-400">{kmlGeralReal.toFixed(2)}</td>
+                            <td className="p-2 text-right text-slate-300">{kmlGeralMeta.toFixed(2)}</td>
+                            <td className="p-2 text-right bg-rose-900/50 text-rose-300">{totalDesperdicio.toFixed(1)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-slate-700 border-b pb-2">
+                      <FaChartLine />
+                      <h4 className="font-bold text-sm uppercase">2. Evolução Semanal</h4>
+                    </div>
+
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <SimpleLineChart data={modalContent.chartData} />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="pt-4 border-t flex justify-end">
+                <button
+                  onClick={() => setViewingDetails(null)}
+                  className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-colors"
+                >
+                  Fechar Análise
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

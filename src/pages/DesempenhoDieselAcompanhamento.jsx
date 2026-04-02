@@ -20,6 +20,7 @@ import { AuthContext } from "../context/AuthContext";
 import ModalLancamentoIntervencao from "../components/desempenho/ModalLancamentoIntervencao";
 import ModalProntuarioUnificado from "../components/desempenho/ModalProntuarioUnificado";
 import ModalCheckpointAnalise from "../components/desempenho/ModalCheckpointAnalise";
+import DesempenhoDieselAnalise from "./DesempenhoDieselAnalise";
 
 // =============================================================================
 // HELPERS
@@ -27,6 +28,10 @@ import ModalCheckpointAnalise from "../components/desempenho/ModalCheckpointAnal
 function n(v) {
   const x = Number(v);
   return Number.isFinite(x) ? x : 0;
+}
+
+function clsx(...arr) {
+  return arr.filter(Boolean).join(" ");
 }
 
 function normalizeStatus(s) {
@@ -162,6 +167,41 @@ function statusBadgeClass(status) {
   return "bg-emerald-50 text-emerald-700 border-emerald-200";
 }
 
+function CardTopo({ titulo, valor, subtitulo, destaque = "slate", filtrado }) {
+  const mapa = {
+    amber: "border-amber-200 bg-amber-50/40",
+    blue: "border-blue-200 bg-blue-50/40",
+    rose: "border-rose-200 bg-rose-50/40",
+    emerald: "border-emerald-200 bg-emerald-50/40",
+    slate: "border-slate-200 bg-slate-50/40",
+  };
+
+  const corNumero = {
+    amber: "text-amber-700",
+    blue: "text-blue-700",
+    rose: "text-rose-700",
+    emerald: "text-emerald-700",
+    slate: "text-slate-700",
+  };
+
+  return (
+    <div className={clsx("rounded-2xl border p-4 shadow-sm", mapa[destaque] || mapa.slate)}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{titulo}</p>
+          <div className="flex items-end gap-2 flex-wrap mt-1">
+            <p className={clsx("text-3xl font-black", corNumero[destaque] || corNumero.slate)}>{valor}</p>
+            <span className="text-[11px] px-2 py-1 rounded-full border bg-white text-slate-500 font-bold">
+              filtrado: {filtrado}
+            </span>
+          </div>
+          {subtitulo ? <p className="text-xs text-slate-500 mt-1">{subtitulo}</p> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // =============================================================================
 // COMPONENTE PRINCIPAL
 // =============================================================================
@@ -178,7 +218,9 @@ export default function DesempenhoDieselAcompanhamento() {
   const podeExcluir = ["Administrador", "Gestor"].includes(userRoleData.nivel);
 
   const [busca, setBusca] = useState("");
-  const [abaAtiva, setAbaAtiva] = useState("AGUARDANDO");
+  const [abaPrincipal, setAbaPrincipal] = useState("analise");
+  const [abaStatus, setAbaStatus] = useState("AGUARDANDO");
+
   const [filtroLinha, setFiltroLinha] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroDataIni, setFiltroDataIni] = useState("");
@@ -262,7 +304,7 @@ export default function DesempenhoDieselAcompanhamento() {
       if (filtroLinha && getLinhaApenas(item) !== filtroLinha) return false;
 
       const dataRef =
-        abaAtiva === "AGUARDANDO"
+        abaStatus === "AGUARDANDO"
           ? item.created_at
           : item.dt_inicio_monitoramento || item.created_at;
 
@@ -282,7 +324,7 @@ export default function DesempenhoDieselAcompanhamento() {
     filtroStatus,
     filtroDataIni,
     filtroDataFim,
-    abaAtiva,
+    abaStatus,
   ]);
 
   const countAguardando = lista.filter(
@@ -321,9 +363,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
   const handleExcluir = async (id) => {
     if (!podeExcluir) {
-      alert(
-        "Apenas Gestores ou Administradores podem excluir ordens de acompanhamento."
-      );
+      alert("Apenas Gestores ou Administradores podem excluir ordens de acompanhamento.");
       return;
     }
 
@@ -415,11 +455,11 @@ export default function DesempenhoDieselAcompanhamento() {
       const st = getStatusView(item);
 
       let matchAba = false;
-      if (abaAtiva === "AGUARDANDO") {
+      if (abaStatus === "AGUARDANDO") {
         matchAba = st === "AGUARDANDO_INSTRUTOR";
-      } else if (abaAtiva === "MONITORAMENTO") {
+      } else if (abaStatus === "MONITORAMENTO") {
         matchAba = st === "EM_MONITORAMENTO";
-      } else if (abaAtiva === "ANALISE") {
+      } else if (abaStatus === "ANALISE") {
         matchAba = ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
       }
       if (!matchAba) return false;
@@ -436,7 +476,7 @@ export default function DesempenhoDieselAcompanhamento() {
       if (filtroLinha && getLinhaApenas(item) !== filtroLinha) return false;
 
       const dataRef =
-        abaAtiva === "AGUARDANDO"
+        abaStatus === "AGUARDANDO"
           ? item.created_at
           : item.dt_inicio_monitoramento || item.created_at;
 
@@ -456,11 +496,11 @@ export default function DesempenhoDieselAcompanhamento() {
 
       if (key === "data") {
         valA =
-          abaAtiva === "AGUARDANDO"
+          abaStatus === "AGUARDANDO"
             ? a.created_at
             : a.dt_inicio_monitoramento || a.created_at;
         valB =
-          abaAtiva === "AGUARDANDO"
+          abaStatus === "AGUARDANDO"
             ? b.created_at
             : b.dt_inicio_monitoramento || b.created_at;
       } else if (key === "motorista") {
@@ -492,7 +532,7 @@ export default function DesempenhoDieselAcompanhamento() {
   }, [
     lista,
     busca,
-    abaAtiva,
+    abaStatus,
     filtroLinha,
     filtroStatus,
     filtroDataIni,
@@ -501,384 +541,344 @@ export default function DesempenhoDieselAcompanhamento() {
   ]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <FaBolt className="text-yellow-500" /> Ordens de Acompanhamento
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Gestão de ordens, checkpoints e análises pós-acompanhamento.
-          </p>
+    <div className="p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
+      <div className="flex items-center justify-between gap-4 border-b pb-4">
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
+            <FaBolt size={20} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Ordens de Acompanhamento</h2>
+            <p className="text-sm text-slate-500">Gestão de ordens, checkpoints e análises pós-acompanhamento.</p>
+          </div>
         </div>
 
         <button
           onClick={carregarOrdens}
-          className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm font-bold w-full md:w-auto justify-center"
+          className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"
+          title="Atualizar"
         >
-          <FaSync className={loading ? "animate-spin" : ""} /> Atualizar
+          <FaSync className={loading ? "animate-spin" : ""} />
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-amber-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Aguardando</p>
-            <div className="flex items-end gap-2 flex-wrap">
-              <p className="text-2xl font-black text-slate-800">{countAguardando}</p>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                filtrado: {countAguardandoFiltrado}
-              </span>
-            </div>
-          </div>
-          <FaClock className="text-4xl text-amber-50" />
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-blue-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Monitoramento</p>
-            <div className="flex items-end gap-2 flex-wrap">
-              <p className="text-2xl font-black text-slate-800">{countMonitoramento}</p>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                filtrado: {countMonitoramentoFiltrado}
-              </span>
-            </div>
-          </div>
-          <FaRoad className="text-4xl text-blue-50" />
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-rose-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Prontuários Pendentes</p>
-            <div className="flex items-end gap-2 flex-wrap">
-              <p className="text-2xl font-black text-slate-800">{countProntuariosPendentes}</p>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                filtrado: {countProntuariosPendentesFiltrado}
-              </span>
-            </div>
-          </div>
-          <FaClipboardList className="text-4xl text-rose-50" />
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-violet-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Em Análise</p>
-            <div className="flex items-end gap-2 flex-wrap">
-              <p className="text-2xl font-black text-slate-800">{countEmAnalise}</p>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
-                filtrado: {countEmAnaliseFiltrado}
-              </span>
-            </div>
-          </div>
-          <FaChartLine className="text-4xl text-violet-50" />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap bg-slate-200/50 p-1 rounded-lg w-fit gap-1">
-        <button
-          onClick={() => {
-            setAbaAtiva("AGUARDANDO");
-            setSortConfig({ key: "data", direction: "desc" });
-          }}
-          className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${
-            abaAtiva === "AGUARDANDO"
-              ? "bg-white shadow-sm text-amber-600"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          📋 Aguardando
-        </button>
-
-        <button
-          onClick={() => {
-            setAbaAtiva("MONITORAMENTO");
-            setSortConfig({ key: "data", direction: "desc" });
-          }}
-          className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${
-            abaAtiva === "MONITORAMENTO"
-              ? "bg-white shadow-sm text-blue-700"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          🛣️ Monitoramento
-        </button>
-
-        <button
-          onClick={() => {
-            setAbaAtiva("ANALISE");
-            setSortConfig({ key: "data", direction: "desc" });
-          }}
-          className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${
-            abaAtiva === "ANALISE"
-              ? "bg-white shadow-sm text-violet-700"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          🧠 Análise Final
-        </button>
-      </div>
-
-      <div className="flex flex-col md:flex-row gap-3 items-center bg-white p-3 md:p-4 rounded-lg border shadow-sm">
-        <div className="relative w-full md:flex-1">
-          <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar motorista..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-          />
-        </div>
-
-        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-          <FaFilter className="text-gray-400 ml-2" />
-          <select
-            value={filtroLinha}
-            onChange={(e) => setFiltroLinha(e.target.value)}
-            className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-36 font-medium text-slate-600"
-          >
-            <option value="">Todas Linhas</option>
-            <option value="Sem Linha">Sem Linha</option>
-            {linhasUnicas
-              .filter((x) => x !== "Sem Linha")
-              .map((ln) => (
-                <option key={ln} value={ln}>
-                  {ln}
-                </option>
-              ))}
-          </select>
-        </div>
-
-        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-          <FaFilter className="text-gray-400 ml-2" />
-          <select
-            value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
-            className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-36 font-medium text-slate-600"
-          >
-            <option value="">Todos Status</option>
-            {statusUnicos.map((st) => (
-              <option key={st} value={st}>
-                {st}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg p-1">
-          <input
-            type="date"
-            value={filtroDataIni}
-            onChange={(e) => setFiltroDataIni(e.target.value)}
-            className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium flex-1"
-          />
-          <span className="text-gray-400 font-bold text-xs">até</span>
-          <input
-            type="date"
-            value={filtroDataFim}
-            onChange={(e) => setFiltroDataFim(e.target.value)}
-            className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium flex-1"
-          />
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-        <table className="w-full text-left min-w-[1180px]">
-          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
-            <tr>
-              <th
-                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => handleSort("data")}
-              >
-                <div className="flex items-center">
-                  {abaAtiva === "AGUARDANDO" ? "Data Geração" : "Data Acomp."}
-                  <SortIcon columnKey="data" />
-                </div>
-              </th>
-
-              <th
-                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => handleSort("motorista")}
-              >
-                <div className="flex items-center">
-                  Motorista <SortIcon columnKey="motorista" />
-                </div>
-              </th>
-
-              <th
-                className="px-4 py-4 text-center cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => handleSort("foco")}
-              >
-                <div className="flex items-center justify-center">
-                  Foco <SortIcon columnKey="foco" />
-                </div>
-              </th>
-
-              <th
-                className="px-4 py-4 text-center cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => handleSort("etapa")}
-              >
-                <div className="flex items-center justify-center">
-                  Etapa <SortIcon columnKey="etapa" />
-                </div>
-              </th>
-
-              <th
-                className="px-4 py-4 text-center cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => handleSort("status")}
-              >
-                <div className="flex items-center justify-center">
-                  Status <SortIcon columnKey="status" />
-                </div>
-              </th>
-
-              <th className="px-4 py-4 text-center">Prontuário</th>
-              <th className="px-4 py-4 text-center">Ações</th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-gray-100">
-            {listaFiltrada.map((item) => {
-              const status = getStatusView(item);
-              const foco = getFoco(item);
-
-              const dataRef =
-                abaAtiva === "AGUARDANDO"
-                  ? item.created_at
-                  : item.dt_inicio_monitoramento || item.created_at;
-
-              const isTimestamp = abaAtiva === "AGUARDANDO";
-              const dataFormatada = formatarDataHoraBR(dataRef, !isTimestamp);
-              const decisionTipo = getDecisionCheckpoint(item);
-
-              return (
-                <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="px-4 py-4 text-gray-500 font-mono text-sm whitespace-nowrap">
-                    {dataFormatada}
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <div className="font-black text-slate-900 text-sm md:text-base">
-                      {item.motorista_nome || "-"}
-                    </div>
-                    <div className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
-                      {item.motorista_chapa || "-"}
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-4 text-center">
-                    <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-lg text-xs font-bold border whitespace-nowrap">
-                      {foco}
-                    </span>
-                  </td>
-
-                  <td className="px-4 py-4 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-slate-50 text-slate-700 border-slate-200">
-                        {getEtapaLabel(item)}
-                      </span>
-                      {item?.dias_decorridos != null && (
-                        <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">
-                          {n(item.dias_decorridos)} dias
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-4 text-center">
-                    <span
-                      className={`px-2 py-1 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 whitespace-nowrap ${statusBadgeClass(
-                        status
-                      )}`}
-                    >
-                      {status}
-                    </span>
-                  </td>
-
-                  <td className="px-4 py-4 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      {item?.prontuario_pendente ? (
-                        <button
-                          onClick={() =>
-                            abrirCheckpoint(item, item.prontuario_pendente)
-                          }
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold border bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 transition-all"
-                        >
-                          {getProntuarioPendenteLabel(item)} pendente
-                        </button>
-                      ) : (
-                        <span className="px-3 py-1.5 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
-                          {getProntuarioStatus(item)}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <div className="flex flex-wrap justify-center gap-2 items-center min-w-[260px]">
-                      <button
-                        onClick={() => abrirPDF(item)}
-                        className="flex items-center justify-center p-2 bg-white border border-rose-200 text-rose-600 rounded hover:bg-rose-50 shadow-sm transition-all"
-                        title="Abrir PDF"
-                      >
-                        <FaFilePdf size={14} />
-                      </button>
-
-                      {abaAtiva === "AGUARDANDO" && (
-                        <button
-                          onClick={() => handleLancar(item)}
-                          className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded font-bold text-xs shadow-sm transition-all transform hover:scale-105 whitespace-nowrap"
-                        >
-                          <FaPlay size={10} /> LANÇAR
-                        </button>
-                      )}
-
-                      {abaAtiva === "AGUARDANDO" && podeExcluir && (
-                        <button
-                          onClick={() => handleExcluir(item.id)}
-                          className="flex items-center justify-center p-2 bg-white border border-red-200 text-red-600 rounded hover:bg-red-50 shadow-sm transition-all"
-                          title="Excluir Definitivamente"
-                        >
-                          <FaTrash size={14} />
-                        </button>
-                      )}
-
-                      {(abaAtiva === "MONITORAMENTO" ||
-                        abaAtiva === "ANALISE") && (
-                        <button
-                          onClick={() => abrirVisaoGeral(item)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-white rounded font-bold text-xs shadow-sm hover:bg-slate-700 transition-all whitespace-nowrap"
-                        >
-                          <FaEye size={12} /> Detalhes
-                        </button>
-                      )}
-
-                      {abaAtiva === "ANALISE" && decisionTipo && status !== "OK" && (
-                        <button
-                          onClick={() => abrirCheckpoint(item, decisionTipo)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-violet-700 text-white rounded font-bold text-xs shadow-sm hover:bg-violet-800 transition-all whitespace-nowrap"
-                        >
-                          <FaGavel size={12} /> Decisão
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-
-            {listaFiltrada.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
-                  <div className="text-sm font-bold">
-                    Nenhum registro encontrado nesta aba.
-                  </div>
-                </td>
-              </tr>
+      <div className="bg-white rounded-2xl border shadow-sm p-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            onClick={() => setAbaPrincipal("analise")}
+            className={clsx(
+              "px-4 py-3 rounded-xl text-sm font-extrabold transition-colors",
+              abaPrincipal === "analise"
+                ? "bg-slate-900 text-white shadow"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             )}
-          </tbody>
-        </table>
+          >
+            Aba 1 · Análise
+          </button>
+
+          <button
+            onClick={() => setAbaPrincipal("sugestoes")}
+            className={clsx(
+              "px-4 py-3 rounded-xl text-sm font-extrabold transition-colors",
+              abaPrincipal === "sugestoes"
+                ? "bg-slate-900 text-white shadow"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+          >
+            Aba 2 · Sugestões de Acompanhamento
+          </button>
+        </div>
       </div>
+
+      {abaPrincipal === "analise" ? (
+        <DesempenhoDieselAnalise />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <CardTopo
+              titulo="Aguardando instrutor"
+              valor={countAguardando}
+              filtrado={countAguardandoFiltrado}
+              subtitulo="Fila atual"
+              destaque="amber"
+            />
+
+            <CardTopo
+              titulo="Em andamento"
+              valor={countMonitoramento}
+              filtrado={countMonitoramentoFiltrado}
+              subtitulo="Monitoramentos ativos"
+              destaque="blue"
+            />
+
+            <CardTopo
+              titulo="Prontuários pendentes"
+              valor={countProntuariosPendentes}
+              filtrado={countProntuariosPendentesFiltrado}
+              subtitulo="Checkpoint aguardando análise"
+              destaque="rose"
+            />
+
+            <CardTopo
+              titulo="Concluídos / análise"
+              valor={countEmAnalise}
+              filtrado={countEmAnaliseFiltrado}
+              subtitulo="Processos finalizados"
+              destaque="emerald"
+            />
+          </div>
+
+          <div className="bg-white rounded-2xl border shadow-sm p-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setAbaStatus("AGUARDANDO")}
+                className={clsx(
+                  "px-4 py-3 rounded-xl text-sm font-extrabold transition-colors",
+                  abaStatus === "AGUARDANDO"
+                    ? "bg-amber-500 text-white shadow"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                📋 Aguardando
+              </button>
+
+              <button
+                onClick={() => setAbaStatus("MONITORAMENTO")}
+                className={clsx(
+                  "px-4 py-3 rounded-xl text-sm font-extrabold transition-colors",
+                  abaStatus === "MONITORAMENTO"
+                    ? "bg-blue-600 text-white shadow"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                🛣️ Monitoramento
+              </button>
+
+              <button
+                onClick={() => setAbaStatus("ANALISE")}
+                className={clsx(
+                  "px-4 py-3 rounded-xl text-sm font-extrabold transition-colors",
+                  abaStatus === "ANALISE"
+                    ? "bg-violet-700 text-white shadow"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                🧠 Análise Final
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border shadow-sm p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+              <div className="lg:col-span-4 relative">
+                <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+                <input
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar motorista..."
+                  className="pl-9 pr-3 py-2.5 border rounded-xl w-full text-sm outline-none"
+                />
+              </div>
+
+              <div className="lg:col-span-2 flex items-center gap-2 bg-slate-50 border rounded-xl px-2">
+                <FaFilter className="text-slate-400 ml-2" />
+                <select
+                  value={filtroLinha}
+                  onChange={(e) => setFiltroLinha(e.target.value)}
+                  className="p-2.5 bg-transparent text-sm outline-none w-full"
+                >
+                  <option value="">Todas Linhas</option>
+                  {linhasUnicas.map((ln) => (
+                    <option key={ln} value={ln}>
+                      {ln}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="lg:col-span-2 flex items-center gap-2 bg-slate-50 border rounded-xl px-2">
+                <FaFilter className="text-slate-400 ml-2" />
+                <select
+                  value={filtroStatus}
+                  onChange={(e) => setFiltroStatus(e.target.value)}
+                  className="p-2.5 bg-transparent text-sm outline-none w-full"
+                >
+                  <option value="">Todos Status</option>
+                  {statusUnicos.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="lg:col-span-2">
+                <input
+                  type="date"
+                  value={filtroDataIni}
+                  onChange={(e) => setFiltroDataIni(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                />
+              </div>
+
+              <div className="lg:col-span-2">
+                <input
+                  type="date"
+                  value={filtroDataFim}
+                  onChange={(e) => setFiltroDataFim(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b text-[11px] uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 text-left cursor-pointer" onClick={() => handleSort("data")}>
+                      Data Geração <SortIcon columnKey="data" />
+                    </th>
+                    <th className="px-4 py-3 text-left cursor-pointer" onClick={() => handleSort("motorista")}>
+                      Motorista <SortIcon columnKey="motorista" />
+                    </th>
+                    <th className="px-4 py-3 text-left cursor-pointer" onClick={() => handleSort("foco")}>
+                      Foco <SortIcon columnKey="foco" />
+                    </th>
+                    <th className="px-4 py-3 text-left cursor-pointer" onClick={() => handleSort("etapa")}>
+                      Etapa <SortIcon columnKey="etapa" />
+                    </th>
+                    <th className="px-4 py-3 text-left cursor-pointer" onClick={() => handleSort("status")}>
+                      Status <SortIcon columnKey="status" />
+                    </th>
+                    <th className="px-4 py-3 text-left">Prontuário</th>
+                    <th className="px-4 py-3 text-left">Ações</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {listaFiltrada.map((item) => {
+                    const status = getStatusView(item);
+                    const decisionTipo = getDecisionCheckpoint(item);
+
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-4 whitespace-nowrap text-slate-600">
+                          {formatarDataHoraBR(
+                            abaStatus === "AGUARDANDO"
+                              ? item.created_at
+                              : item.dt_inicio_monitoramento || item.created_at
+                          )}
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="font-extrabold text-slate-800">{item.motorista_nome || "-"}</div>
+                          <div className="text-xs text-slate-400 mt-1">{item.motorista_chapa || "-"}</div>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-700 border text-xs font-bold">
+                            {getFoco(item)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-700 border text-xs font-bold">
+                            {abaStatus === "AGUARDANDO" ? "-" : getEtapaLabel(item)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span
+                            className={clsx(
+                              "inline-flex items-center px-2 py-1 rounded-lg border text-xs font-bold",
+                              statusBadgeClass(status)
+                            )}
+                          >
+                            {status.replaceAll("_", " ")}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="flex flex-col gap-1">
+                            <span className="inline-flex items-center px-2 py-1 rounded-lg border text-xs font-bold bg-emerald-50 text-emerald-700 border-emerald-200 w-fit">
+                              {getProntuarioStatus(item)}
+                            </span>
+
+                            {item?.prontuario_pendente ? (
+                              <span className="text-[11px] text-amber-700 font-bold">
+                                Pendente: {getProntuarioPendenteLabel(item)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              onClick={() => abrirPDF(item)}
+                              className="flex items-center justify-center p-2 bg-white border border-rose-200 text-rose-600 rounded hover:bg-rose-50 shadow-sm transition-all"
+                              title="Abrir PDF"
+                            >
+                              <FaFilePdf size={14} />
+                            </button>
+
+                            {abaStatus === "AGUARDANDO" && (
+                              <button
+                                onClick={() => handleLancar(item)}
+                                className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded font-bold text-xs shadow-sm transition-all transform hover:scale-105 whitespace-nowrap"
+                              >
+                                <FaPlay size={10} /> LANÇAR
+                              </button>
+                            )}
+
+                            {abaStatus === "AGUARDANDO" && podeExcluir && (
+                              <button
+                                onClick={() => handleExcluir(item.id)}
+                                className="flex items-center justify-center p-2 bg-white border border-red-200 text-red-600 rounded hover:bg-red-50 shadow-sm transition-all"
+                                title="Excluir Definitivamente"
+                              >
+                                <FaTrash size={14} />
+                              </button>
+                            )}
+
+                            {(abaStatus === "MONITORAMENTO" || abaStatus === "ANALISE") && (
+                              <button
+                                onClick={() => abrirVisaoGeral(item)}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-white rounded font-bold text-xs shadow-sm hover:bg-slate-700 transition-all whitespace-nowrap"
+                              >
+                                <FaEye size={12} /> Detalhes
+                              </button>
+                            )}
+
+                            {abaStatus === "ANALISE" && decisionTipo && status !== "OK" && (
+                              <button
+                                onClick={() => abrirCheckpoint(item, decisionTipo)}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-violet-700 text-white rounded font-bold text-xs shadow-sm hover:bg-violet-800 transition-all whitespace-nowrap"
+                              >
+                                <FaGavel size={12} /> Decisão
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {listaFiltrada.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                        <div className="text-sm font-bold">Nenhum registro encontrado nesta aba.</div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {modalLancarOpen && itemSelecionado && (
         <ModalLancamentoIntervencao

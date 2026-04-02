@@ -244,8 +244,7 @@ export default function DesempenhoDieselAnalise() {
           litros_consumidos,
           km_l,
           meta_kml_usada,
-          litros_ideais,
-          minutos_em_viagem
+          litros_ideais
         `)
         .order("dia", { ascending: false })
         .range(start, end);
@@ -313,8 +312,7 @@ export default function DesempenhoDieselAnalise() {
         metadata,
         prontuario_10_gerado_em,
         prontuario_20_gerado_em,
-        prontuario_30_gerado_em,
-        prontuario_pendente
+        prontuario_30_gerado_em
       `)
       .order("created_at", { ascending: false })
       .limit(6000);
@@ -892,7 +890,7 @@ export default function DesempenhoDieselAnalise() {
           : 0,
         qtd_linhas: r.linhas.size,
       }))
-      .sort((a, b) => b.total_minutos - a.total_minutos);
+      .sort((a, b) => b.total_minutos - a.totalMinutos);
   }, [acompanhamentosFiltrados]);
 
   const tempoPorDia = useMemo(() => {
@@ -1070,65 +1068,6 @@ export default function DesempenhoDieselAnalise() {
         "Lista todas as ordens do mês, inclusive finalizadas, com evolução operacional e status final.",
     },
   };
-
-  const analiseLinhas = useMemo(() => {
-    if (!linhasTabelaOrdenada.length) return null;
-    const piorDesperdicio = linhasTabelaOrdenada[0];
-    const melhorVariacao = [...linhasTabelaOrdenada].sort(
-      (a, b) => b.Variacao_Pct - a.Variacao_Pct
-    )[0];
-    const piorVariacao = [...linhasTabelaOrdenada].sort(
-      (a, b) => a.Variacao_Pct - b.Variacao_Pct
-    )[0];
-
-    return {
-      piorDesperdicio,
-      melhorVariacao,
-      piorVariacao,
-    };
-  }, [linhasTabelaOrdenada]);
-
-  const analiseMotoristas = useMemo(() => {
-    if (!motoristasOrdenados.length) return null;
-    const maiorImpacto = [...motoristasOrdenados].sort(
-      (a, b) => b.Impacto_Pct - a.Impacto_Pct
-    )[0];
-    const maiorDesperdicio = [...motoristasOrdenados].sort(
-      (a, b) => b.Litros_Desp_Meta - a.Litros_Desp_Meta
-    )[0];
-    return { maiorImpacto, maiorDesperdicio };
-  }, [motoristasOrdenados]);
-
-  const analiseCarros = useMemo(() => {
-    if (!veiculosOrdenados.length) return null;
-    const pior = veiculosOrdenados[0];
-    const melhorKml = [...veiculosOrdenados].sort(
-      (a, b) => b.KML_Real - a.KML_Real
-    )[0];
-    return { pior, melhorKml };
-  }, [veiculosOrdenados]);
-
-  const analiseCheckpoint = useMemo(() => {
-    if (!resumoPorLinhaCheckpoint.length) return null;
-    const melhorLinha = [...resumoPorLinhaCheckpoint].sort(
-      (a, b) => a.delta_desperdicio - b.delta_desperdicio
-    )[0];
-    const piorLinha = [...resumoPorLinhaCheckpoint].sort(
-      (a, b) => b.delta_desperdicio - a.delta_desperdicio
-    )[0];
-    return { melhorLinha, piorLinha };
-  }, [resumoPorLinhaCheckpoint]);
-
-  const analiseInstrutor = useMemo(() => {
-    if (!resumoInstrutor.length) return null;
-    const maiorVolume = [...resumoInstrutor].sort(
-      (a, b) => b.total_acompanhamentos - a.total_acompanhamentos
-    )[0];
-    const maiorTempo = [...resumoInstrutor].sort(
-      (a, b) => b.total_minutos - a.total_minutos
-    )[0];
-    return { maiorVolume, maiorTempo };
-  }, [resumoInstrutor]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[96rem] mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
@@ -1337,30 +1276,6 @@ export default function DesempenhoDieselAnalise() {
 
       {abaAtiva === "LINHAS" && (
         <>
-          {analiseLinhas && (
-            <div className="bg-white rounded-xl border shadow-sm p-4">
-              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
-                <FaInfoCircle className="text-blue-600" />
-                Leitura Analítica
-              </div>
-              <div className="text-sm text-slate-600 space-y-1">
-                <p>
-                  Maior pressão de desperdício na linha{" "}
-                  <b>{analiseLinhas.piorDesperdicio.linha}</b>, com{" "}
-                  <b>{fmtNum(analiseLinhas.piorDesperdicio.Desperdicio)} L</b>.
-                </p>
-                <p>
-                  Melhor evolução percentual em <b>{analiseLinhas.melhorVariacao.linha}</b>, com{" "}
-                  <b>{fmtNum(analiseLinhas.melhorVariacao.Variacao_Pct)}%</b>.
-                </p>
-                <p>
-                  Pior variação no período em <b>{analiseLinhas.piorVariacao.linha}</b>, com{" "}
-                  <b>{fmtNum(analiseLinhas.piorVariacao.Variacao_Pct)}%</b>.
-                </p>
-              </div>
-            </div>
-          )}
-
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-xl border shadow-sm">
               <p className="text-sm text-gray-500 font-bold">KM/L Mês Referência</p>
@@ -1438,163 +1353,121 @@ export default function DesempenhoDieselAnalise() {
       )}
 
       {abaAtiva === "MOTORISTAS" && (
-        <>
-          {analiseMotoristas && (
-            <div className="bg-white rounded-xl border shadow-sm p-4">
-              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
-                <FaInfoCircle className="text-blue-600" />
-                Leitura Analítica
-              </div>
-              <div className="text-sm text-slate-600 space-y-1">
-                <p>
-                  Maior impacto operacional: <b>{analiseMotoristas.maiorImpacto.Motorista}</b>, com{" "}
-                  <b>{fmtNum(analiseMotoristas.maiorImpacto.Impacto_Pct)}%</b> do KM da linha.
-                </p>
-                <p>
-                  Maior desperdício individual: <b>{analiseMotoristas.maiorDesperdicio.Motorista}</b>, com{" "}
-                  <b>{fmtNum(analiseMotoristas.maiorDesperdicio.Litros_Desp_Meta)} L</b>.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-            <table className="w-full text-left min-w-[1500px]">
-              <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
-                <tr>
-                  {[
-                    ["Motorista", "Motorista"],
-                    ["chapa", "Chapa"],
-                    ["linha", "Linha"],
-                    ["Cluster", "Cluster"],
-                    ["KML_Real", "KM/L Real"],
-                    ["KML_Meta", "KM/L Ref"],
-                    ["Litros_Desp_Meta", "Desperdício"],
-                    ["Impacto_Pct", "Impacto %"],
-                    ["Km", "KM"],
-                  ].map(([key, label]) => (
-                    <th
-                      key={key}
-                      className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                      onClick={() => handleSort(key)}
-                    >
-                      <div className="flex items-center">
-                        {label}
-                        <SortIcon active={sortConfig.key === key} direction={sortConfig.direction} />
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {motoristasOrdenados.map((row) => (
-                  <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
-                    <td className="px-4 py-4">
-                      <div className="font-black text-slate-900">{row.Motorista}</div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                        {row.chapa}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">{row.linha}</td>
-                    <td className="px-4 py-4">{row.Cluster}</td>
-                    <td className="px-4 py-4">{fmtNum(row.KML_Real)}</td>
-                    <td className="px-4 py-4">{fmtNum(row.KML_Meta)}</td>
-                    <td className="px-4 py-4 font-bold text-rose-700">
-                      {fmtNum(row.Litros_Desp_Meta)} L
-                    </td>
-                    <td className="px-4 py-4">{fmtNum(row.Impacto_Pct)}%</td>
-                    <td className="px-4 py-4">{fmtInt(row.Km)}</td>
-                  </tr>
+        <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+          <table className="w-full text-left min-w-[1500px]">
+            <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
+              <tr>
+                {[
+                  ["Motorista", "Motorista"],
+                  ["chapa", "Chapa"],
+                  ["linha", "Linha"],
+                  ["Cluster", "Cluster"],
+                  ["KML_Real", "KM/L Real"],
+                  ["KML_Meta", "KM/L Ref"],
+                  ["Litros_Desp_Meta", "Desperdício"],
+                  ["Impacto_Pct", "Impacto %"],
+                  ["Km", "KM"],
+                ].map(([key, label]) => (
+                  <th
+                    key={key}
+                    className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={() => handleSort(key)}
+                  >
+                    <div className="flex items-center">
+                      {label}
+                      <SortIcon active={sortConfig.key === key} direction={sortConfig.direction} />
+                    </div>
+                  </th>
                 ))}
-                {motoristasOrdenados.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-slate-500 font-bold">
-                      Nenhum motorista encontrado.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {motoristasOrdenados.map((row) => (
+                <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
+                  <td className="px-4 py-4">
+                    <div className="font-black text-slate-900">{row.Motorista}</div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      {row.chapa}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">{row.linha}</td>
+                  <td className="px-4 py-4">{row.Cluster}</td>
+                  <td className="px-4 py-4">{fmtNum(row.KML_Real)}</td>
+                  <td className="px-4 py-4">{fmtNum(row.KML_Meta)}</td>
+                  <td className="px-4 py-4 font-bold text-rose-700">
+                    {fmtNum(row.Litros_Desp_Meta)} L
+                  </td>
+                  <td className="px-4 py-4">{fmtNum(row.Impacto_Pct)}%</td>
+                  <td className="px-4 py-4">{fmtInt(row.Km)}</td>
+                </tr>
+              ))}
+              {motoristasOrdenados.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-6 py-12 text-center text-slate-500 font-bold">
+                    Nenhum motorista encontrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {abaAtiva === "CARROS" && (
-        <>
-          {analiseCarros && (
-            <div className="bg-white rounded-xl border shadow-sm p-4">
-              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
-                <FaInfoCircle className="text-blue-600" />
-                Leitura Analítica
-              </div>
-              <div className="text-sm text-slate-600 space-y-1">
-                <p>
-                  Maior desperdício de frota no veículo <b>{analiseCarros.pior.veiculo}</b>, com{" "}
-                  <b>{fmtNum(analiseCarros.pior.Litros_Desp_Meta)} L</b>.
-                </p>
-                <p>
-                  Melhor KM/L real no período no veículo <b>{analiseCarros.melhorKml.veiculo}</b>, com{" "}
-                  <b>{fmtNum(analiseCarros.melhorKml.KML_Real)}</b>.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-            <table className="w-full text-left min-w-[1200px]">
-              <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
-                <tr>
-                  {[
-                    ["veiculo", "Carro"],
-                    ["linha", "Linha"],
-                    ["Cluster", "Cluster"],
-                    ["KML_Real", "KM/L Real"],
-                    ["KML_Meta", "KM/L Ref"],
-                    ["Litros_Desp_Meta", "Desperdício"],
-                    ["Km", "KM"],
-                    ["Comb", "Comb."],
-                  ].map(([key, label]) => (
-                    <th
-                      key={key}
-                      className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                      onClick={() => handleSort(key)}
-                    >
-                      <div className="flex items-center">
-                        {label}
-                        <SortIcon active={sortConfig.key === key} direction={sortConfig.direction} />
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {veiculosOrdenados.map((row) => (
-                  <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
-                    <td className="px-4 py-4 font-black text-slate-900">{row.veiculo}</td>
-                    <td className="px-4 py-4">{row.linha}</td>
-                    <td className="px-4 py-4">{row.Cluster}</td>
-                    <td className="px-4 py-4">{fmtNum(row.KML_Real)}</td>
-                    <td className="px-4 py-4">{fmtNum(row.KML_Meta)}</td>
-                    <td className="px-4 py-4 font-bold text-rose-700">
-                      {fmtNum(row.Litros_Desp_Meta)} L
-                    </td>
-                    <td className="px-4 py-4">{fmtInt(row.Km)}</td>
-                    <td className="px-4 py-4">{fmtNum(row.Comb)} L</td>
-                  </tr>
+        <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+          <table className="w-full text-left min-w-[1200px]">
+            <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
+              <tr>
+                {[
+                  ["veiculo", "Carro"],
+                  ["linha", "Linha"],
+                  ["Cluster", "Cluster"],
+                  ["KML_Real", "KM/L Real"],
+                  ["KML_Meta", "KM/L Ref"],
+                  ["Litros_Desp_Meta", "Desperdício"],
+                  ["Km", "KM"],
+                  ["Comb", "Comb."],
+                ].map(([key, label]) => (
+                  <th
+                    key={key}
+                    className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={() => handleSort(key)}
+                  >
+                    <div className="flex items-center">
+                      {label}
+                      <SortIcon active={sortConfig.key === key} direction={sortConfig.direction} />
+                    </div>
+                  </th>
                 ))}
-                {veiculosOrdenados.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-slate-500 font-bold">
-                      Nenhum carro encontrado.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {veiculosOrdenados.map((row) => (
+                <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
+                  <td className="px-4 py-4 font-black text-slate-900">{row.veiculo}</td>
+                  <td className="px-4 py-4">{row.linha}</td>
+                  <td className="px-4 py-4">{row.Cluster}</td>
+                  <td className="px-4 py-4">{fmtNum(row.KML_Real)}</td>
+                  <td className="px-4 py-4">{fmtNum(row.KML_Meta)}</td>
+                  <td className="px-4 py-4 font-bold text-rose-700">
+                    {fmtNum(row.Litros_Desp_Meta)} L
+                  </td>
+                  <td className="px-4 py-4">{fmtInt(row.Km)}</td>
+                  <td className="px-4 py-4">{fmtNum(row.Comb)} L</td>
+                </tr>
+              ))}
+              {veiculosOrdenados.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-500 font-bold">
+                    Nenhum carro encontrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {abaAtiva === "ACOMPANHAMENTOS" && (
@@ -1626,80 +1499,6 @@ export default function DesempenhoDieselAnalise() {
               {headerSubAcompanhamento[subAcompanhamento].subtitulo}
             </p>
           </div>
-
-          {subAcompanhamento === "CHECKPOINT_LINHA" && analiseCheckpoint && (
-            <div className="bg-white rounded-xl border shadow-sm p-4">
-              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
-                <FaInfoCircle className="text-blue-600" />
-                Leitura Analítica
-              </div>
-              <div className="text-sm text-slate-600 space-y-1">
-                <p>
-                  Melhor recuperação em <b>{analiseCheckpoint.melhorLinha.linha_foco}</b> no{" "}
-                  <b>{analiseCheckpoint.melhorLinha.tipo}</b>, com Δ desperdício de{" "}
-                  <b>{fmtNum(analiseCheckpoint.melhorLinha.delta_desperdicio)} L</b>.
-                </p>
-                <p>
-                  Ponto crítico em <b>{analiseCheckpoint.piorLinha.linha_foco}</b> no{" "}
-                  <b>{analiseCheckpoint.piorLinha.tipo}</b>, com Δ desperdício de{" "}
-                  <b>{fmtNum(analiseCheckpoint.piorLinha.delta_desperdicio)} L</b>.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {subAcompanhamento === "RESUMO_INSTRUTOR" && analiseInstrutor && (
-            <div className="bg-white rounded-xl border shadow-sm p-4">
-              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
-                <FaInfoCircle className="text-blue-600" />
-                Leitura Analítica
-              </div>
-              <div className="text-sm text-slate-600 space-y-1">
-                <p>
-                  Maior volume de atuação: <b>{analiseInstrutor.maiorVolume.instrutor_nome}</b>, com{" "}
-                  <b>{fmtInt(analiseInstrutor.maiorVolume.total_acompanhamentos)}</b> acompanhamentos.
-                </p>
-                <p>
-                  Maior esforço de campo: <b>{analiseInstrutor.maiorTempo.instrutor_nome}</b>, com{" "}
-                  <b>{formatMinutes(analiseInstrutor.maiorTempo.total_minutos)}</b>.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {subAcompanhamento === "ACOMPANHAMENTOS" && (
-            <div className="bg-white rounded-xl border shadow-sm p-4">
-              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
-                <FaInfoCircle className="text-blue-600" />
-                Leitura Analítica
-              </div>
-              <div className="text-sm text-slate-600 space-y-1">
-                <p>
-                  Total no mês: <b>{fmtInt(acompanhamentosComEvolucao.length)}</b> acompanhamentos.
-                </p>
-                <p>
-                  Finalizados (OK / ENCERRADO / ATAS):{" "}
-                  <b>
-                    {fmtInt(
-                      acompanhamentosComEvolucao.filter((x) =>
-                        ["OK", "ENCERRADO", "ATAS"].includes(x.status_norm)
-                      ).length
-                    )}
-                  </b>
-                  .
-                </p>
-                <p>
-                  Em monitoramento:{" "}
-                  <b>
-                    {fmtInt(
-                      acompanhamentosComEvolucao.filter((x) => x.status_norm === "EM_MONITORAMENTO").length
-                    )}
-                  </b>
-                  .
-                </p>
-              </div>
-            </div>
-          )}
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white p-4 rounded-xl border shadow-sm">

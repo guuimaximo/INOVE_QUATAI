@@ -12,6 +12,7 @@ import {
   FaArrowUp,
   FaArrowDown,
   FaEquals,
+  FaInfoCircle,
 } from "react-icons/fa";
 import { createClient } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
@@ -125,7 +126,8 @@ function statusNorm(v) {
 }
 
 function getLinhaFocoAcompanhamento(item) {
-  const meta = item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
+  const meta =
+    item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
   const linhaMeta = String(meta?.linha_foco || "").trim();
   if (linhaMeta) return linhaMeta.toUpperCase();
 
@@ -139,11 +141,15 @@ function getLinhaFocoAcompanhamento(item) {
 
 function statusBadgeClass(status) {
   const st = statusNorm(status);
-  if (st === "AGUARDANDO_INSTRUTOR") return "bg-amber-50 text-amber-700 border-amber-200";
-  if (st === "EM_MONITORAMENTO") return "bg-blue-50 text-blue-700 border-blue-200";
-  if (st === "EM_ANALISE") return "bg-violet-50 text-violet-700 border-violet-200";
+  if (st === "AGUARDANDO_INSTRUTOR")
+    return "bg-amber-50 text-amber-700 border-amber-200";
+  if (st === "EM_MONITORAMENTO")
+    return "bg-blue-50 text-blue-700 border-blue-200";
+  if (st === "EM_ANALISE")
+    return "bg-violet-50 text-violet-700 border-violet-200";
   if (st === "ATAS") return "bg-rose-50 text-rose-700 border-rose-200";
-  if (st === "OK" || st === "ENCERRADO") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (st === "OK" || st === "ENCERRADO")
+    return "bg-emerald-50 text-emerald-700 border-emerald-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
@@ -201,13 +207,18 @@ export default function DesempenhoDieselAnalise() {
   const [filtroLinha, setFiltroLinha] = useState("");
   const [filtroCluster, setFiltroCluster] = useState("");
   const [filtroInstrutor, setFiltroInstrutor] = useState("");
-
+  const [filtroProntuario, setFiltroProntuario] = useState("");
   const [mesReferencia, setMesReferencia] = useState("");
-  const [sortConfig, setSortConfig] = useState({ key: "Desperdicio", direction: "desc" });
+  const [sortConfig, setSortConfig] = useState({
+    key: "Desperdicio",
+    direction: "desc",
+  });
 
   async function carregarPremiacao() {
     if (!supabaseA) {
-      throw new Error("Supabase A não configurado nas variáveis VITE_SUPA_BASE_BCNT_URL e VITE_SUPA_BASE_BCNT_ANON_KEY.");
+      throw new Error(
+        "Supabase A não configurado nas variáveis VITE_SUPA_BASE_BCNT_URL e VITE_SUPA_BASE_BCNT_ANON_KEY."
+      );
     }
 
     const pageSize = 1000;
@@ -302,10 +313,11 @@ export default function DesempenhoDieselAnalise() {
         metadata,
         prontuario_10_gerado_em,
         prontuario_20_gerado_em,
-        prontuario_30_gerado_em
+        prontuario_30_gerado_em,
+        prontuario_pendente
       `)
       .order("created_at", { ascending: false })
-      .limit(5000);
+      .limit(6000);
 
     if (error) throw error;
     return data || [];
@@ -317,7 +329,7 @@ export default function DesempenhoDieselAnalise() {
       .select("id, acompanhamento_id, created_at, tipo, observacoes, extra")
       .in("tipo", ["PRONTUARIO_10", "PRONTUARIO_20", "PRONTUARIO_30"])
       .order("created_at", { ascending: false })
-      .limit(5000);
+      .limit(8000);
 
     if (error) throw error;
     return data || [];
@@ -374,7 +386,10 @@ export default function DesempenhoDieselAnalise() {
       const motoristaNome = nomeDb || motoristaRaw;
       const metaLinha = n(r.meta_kml_usada);
       const litrosIdeais = n(r.litros_ideais);
-      const litrosDespMeta = metaLinha > 0 && litrosIdeais > 0 && comb > litrosIdeais ? comb - litrosIdeais : 0;
+      const litrosDespMeta =
+        metaLinha > 0 && litrosIdeais > 0 && comb > litrosIdeais
+          ? comb - litrosIdeais
+          : 0;
 
       return {
         id: r.id_premiacao_diaria,
@@ -396,7 +411,9 @@ export default function DesempenhoDieselAnalise() {
       };
     });
 
-    return base.filter((r) => r.Date && r.Km > 0 && r.Comb > 0 && r.Cluster && r.kml >= 1.5 && r.kml <= 5);
+    return base.filter(
+      (r) => r.Date && r.Km > 0 && r.Comb > 0 && r.Cluster && r.kml >= 1.5 && r.kml <= 5
+    );
   }, [rowsBase, mapaFuncionarios]);
 
   const mesesDisponiveis = useMemo(() => {
@@ -427,16 +444,21 @@ export default function DesempenhoDieselAnalise() {
   }, [dataset]);
 
   const instrutoresUnicos = useMemo(() => {
-    return [...new Set(acompanhamentos.map((a) => String(a.instrutor_nome || "").trim()).filter(Boolean))].sort((a, b) =>
-      a.localeCompare(b, "pt-BR")
-    );
+    return [
+      ...new Set(
+        acompanhamentos
+          .map((a) => String(a.instrutor_nome || "").trim())
+          .filter(Boolean)
+      ),
+    ].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [acompanhamentos]);
 
   const datasetFiltrado = useMemo(() => {
     return dataset.filter((r) => {
       if (filtroLinha && r.linha !== filtroLinha) return false;
       if (filtroCluster && r.Cluster !== filtroCluster) return false;
-      if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.Mes_Ano)) return false;
+      if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.Mes_Ano))
+        return false;
 
       const q = busca.toLowerCase().trim();
       if (!q) return true;
@@ -465,7 +487,13 @@ export default function DesempenhoDieselAnalise() {
     const map = new Map();
     datasetFiltrado.forEach((r) => {
       const key = `${r.linha}__${r.Mes_Ano}`;
-      if (!map.has(key)) map.set(key, { Km: 0, Comb: 0, Litros_Esperados: 0, Litros_Desp_Meta: 0 });
+      if (!map.has(key))
+        map.set(key, {
+          Km: 0,
+          Comb: 0,
+          Litros_Esperados: 0,
+          Litros_Desp_Meta: 0,
+        });
       const item = map.get(key);
       item.Km += r.Km;
       item.Comb += r.Comb;
@@ -480,13 +508,29 @@ export default function DesempenhoDieselAnalise() {
 
     return linhas
       .map((linha) => {
-        const ref = mapaLinhaMes.get(`${linha}__${mesReferencia}`) || { Km: 0, Comb: 0, Litros_Esperados: 0, Litros_Desp_Meta: 0 };
-        const comp = mapaLinhaMes.get(`${linha}__${mesComparacao}`) || { Km: 0, Comb: 0, Litros_Esperados: 0, Litros_Desp_Meta: 0 };
+        const ref =
+          mapaLinhaMes.get(`${linha}__${mesReferencia}`) || {
+            Km: 0,
+            Comb: 0,
+            Litros_Esperados: 0,
+            Litros_Desp_Meta: 0,
+          };
+        const comp =
+          mapaLinhaMes.get(`${linha}__${mesComparacao}`) || {
+            Km: 0,
+            Comb: 0,
+            Litros_Esperados: 0,
+            Litros_Desp_Meta: 0,
+          };
 
         const kmlReferencia = ref.Comb > 0 ? ref.Km / ref.Comb : 0;
         const kmlComparacao = comp.Comb > 0 ? comp.Km / comp.Comb : 0;
-        const metaPonderada = ref.Litros_Esperados > 0 ? ref.Km / ref.Litros_Esperados : 0;
-        const variacaoPct = kmlComparacao > 0 ? ((kmlReferencia - kmlComparacao) / kmlComparacao) * 100 : 0;
+        const metaPonderada =
+          ref.Litros_Esperados > 0 ? ref.Km / ref.Litros_Esperados : 0;
+        const variacaoPct =
+          kmlComparacao > 0
+            ? ((kmlReferencia - kmlComparacao) / kmlComparacao) * 100
+            : 0;
 
         return {
           id: linha,
@@ -517,9 +561,14 @@ export default function DesempenhoDieselAnalise() {
 
   const rowsReferenciaComRef = useMemo(() => {
     return rowsReferencia.map((r) => {
-      const ref = refGrupoReferencia.get(`${r.linha}__${r.Cluster}`) || { Km: 0, Comb: 0 };
+      const ref = refGrupoReferencia.get(`${r.linha}__${r.Cluster}`) || {
+        Km: 0,
+        Comb: 0,
+      };
       const KML_Ref = ref.Comb > 0 ? ref.Km / ref.Comb : 0;
-      const Litros_Desperdicio = KML_Ref > 0 && r.kml < KML_Ref ? r.Comb - r.Km / KML_Ref : 0;
+      const Litros_Desperdicio =
+        KML_Ref > 0 && r.kml < KML_Ref ? r.Comb - r.Km / KML_Ref : 0;
+
       return {
         ...r,
         KML_Ref,
@@ -623,7 +672,9 @@ export default function DesempenhoDieselAnalise() {
     return (acompanhamentos || []).map((a) => {
       const iniMin = parseHoraToMin(a.intervencao_hora_inicio);
       const fimMin = parseHoraToMin(a.intervencao_hora_fim);
-      const duracaoMin = iniMin != null && fimMin != null && fimMin >= iniMin ? fimMin - iniMin : 0;
+      const duracaoMin =
+        iniMin != null && fimMin != null && fimMin >= iniMin ? fimMin - iniMin : 0;
+
       return {
         ...a,
         status_norm: statusNorm(a.status),
@@ -634,39 +685,25 @@ export default function DesempenhoDieselAnalise() {
     });
   }, [acompanhamentos]);
 
-  const acompanhamentosFiltrados = useMemo(() => {
-    return acompanhamentosTratados.filter((a) => {
-      if (filtroLinha && a.linha_resolvida !== filtroLinha) return false;
-      if (filtroCluster) {
-        const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
-        if (c !== filtroCluster) return false;
-      }
-      if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor) return false;
-      if (mesReferencia) {
-        const mesItem = a.data_ref ? String(a.data_ref).slice(0, 7) : "";
-        if (mesItem !== mesReferencia) return false;
-      }
-
-      const q = busca.toLowerCase().trim();
-      if (!q) return true;
-
-      return (
-        String(a.motorista_nome || "").toLowerCase().includes(q) ||
-        String(a.motorista_chapa || "").toLowerCase().includes(q) ||
-        String(a.linha_resolvida || "").toLowerCase().includes(q) ||
-        String(a.instrutor_nome || "").toLowerCase().includes(q)
-      );
-    });
-  }, [acompanhamentosTratados, filtroLinha, filtroCluster, filtroInstrutor, mesReferencia, busca]);
-
   const eventosTratados = useMemo(() => {
     const mapaAcomp = new Map(acompanhamentosTratados.map((a) => [a.id, a]));
 
     return (eventos || []).map((ev) => {
       const extra = ev?.extra && typeof ev.extra === "object" ? ev.extra : {};
-      const comparativo = extra?.comparativo && typeof extra.comparativo === "object" ? extra.comparativo : {};
-      const antes = comparativo?.antes_periodo && typeof comparativo.antes_periodo === "object" ? comparativo.antes_periodo : {};
-      const depois = comparativo?.depois_periodo && typeof comparativo.depois_periodo === "object" ? comparativo.depois_periodo : {};
+      const comparativo =
+        extra?.comparativo && typeof extra.comparativo === "object"
+          ? extra.comparativo
+          : {};
+      const antes =
+        comparativo?.antes_periodo &&
+        typeof comparativo.antes_periodo === "object"
+          ? comparativo.antes_periodo
+          : {};
+      const depois =
+        comparativo?.depois_periodo &&
+        typeof comparativo.depois_periodo === "object"
+          ? comparativo.depois_periodo
+          : {};
       const acomp = mapaAcomp.get(ev.acompanhamento_id);
 
       return {
@@ -684,14 +721,49 @@ export default function DesempenhoDieselAnalise() {
         depois_kml: n(depois?.kml_real),
         antes_desp: n(antes?.desperdicio),
         depois_desp: n(depois?.desperdicio),
+        acompanhamento_id: ev.acompanhamento_id,
       };
     });
   }, [eventos, acompanhamentosTratados]);
+
+  const acompanhamentosFiltrados = useMemo(() => {
+    return acompanhamentosTratados.filter((a) => {
+      if (filtroLinha && a.linha_resolvida !== filtroLinha) return false;
+      if (filtroCluster) {
+        const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
+        if (c !== filtroCluster) return false;
+      }
+      if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor)
+        return false;
+      if (mesReferencia) {
+        const mesItem = a.data_ref ? String(a.data_ref).slice(0, 7) : "";
+        if (mesItem !== mesReferencia) return false;
+      }
+
+      const q = busca.toLowerCase().trim();
+      if (!q) return true;
+
+      return (
+        String(a.motorista_nome || "").toLowerCase().includes(q) ||
+        String(a.motorista_chapa || "").toLowerCase().includes(q) ||
+        String(a.linha_resolvida || "").toLowerCase().includes(q) ||
+        String(a.instrutor_nome || "").toLowerCase().includes(q)
+      );
+    });
+  }, [
+    acompanhamentosTratados,
+    filtroLinha,
+    filtroCluster,
+    filtroInstrutor,
+    mesReferencia,
+    busca,
+  ]);
 
   const eventosFiltrados = useMemo(() => {
     return eventosTratados.filter((e) => {
       if (filtroLinha && e.linha_foco !== filtroLinha) return false;
       if (filtroInstrutor && e.instrutor_nome !== filtroInstrutor) return false;
+      if (filtroProntuario && e.tipo !== filtroProntuario) return false;
       if (mesReferencia) {
         const mesItem = dateOnly(e.created_at_dt).slice(0, 7);
         if (mesItem !== mesReferencia) return false;
@@ -706,7 +778,14 @@ export default function DesempenhoDieselAnalise() {
         String(e.linha_foco || "").toLowerCase().includes(q)
       );
     });
-  }, [eventosTratados, filtroLinha, filtroInstrutor, mesReferencia, busca]);
+  }, [
+    eventosTratados,
+    filtroLinha,
+    filtroInstrutor,
+    filtroProntuario,
+    mesReferencia,
+    busca,
+  ]);
 
   const checkpointResumo = useMemo(() => {
     const rows = eventosFiltrados;
@@ -714,8 +793,15 @@ export default function DesempenhoDieselAnalise() {
       total: rows.length,
       melhoraramKml: rows.filter((r) => n(r.delta_kml) > 0).length,
       pioraramKml: rows.filter((r) => n(r.delta_kml) < 0).length,
+      estavelKml: rows.filter((r) => n(r.delta_kml) === 0).length,
       reduziramDesperdicio: rows.filter((r) => n(r.delta_desperdicio) < 0).length,
-      mediaDeltaDesp: rows.length ? rows.reduce((acc, r) => acc + n(r.delta_desperdicio), 0) / rows.length : 0,
+      aumentaramDesperdicio: rows.filter((r) => n(r.delta_desperdicio) > 0).length,
+      mediaDeltaKml: rows.length
+        ? rows.reduce((acc, r) => acc + n(r.delta_kml), 0) / rows.length
+        : 0,
+      mediaDeltaDesp: rows.length
+        ? rows.reduce((acc, r) => acc + n(r.delta_desperdicio), 0) / rows.length
+        : 0,
     };
   }, [eventosFiltrados]);
 
@@ -764,7 +850,9 @@ export default function DesempenhoDieselAnalise() {
         delta_kml: r.qtd_motoristas ? r.delta_kml / r.qtd_motoristas : 0,
         antes_desp: r.qtd_motoristas ? r.antes_desp / r.qtd_motoristas : 0,
         depois_desp: r.qtd_motoristas ? r.depois_desp / r.qtd_motoristas : 0,
-        delta_desperdicio: r.qtd_motoristas ? r.delta_desperdicio / r.qtd_motoristas : 0,
+        delta_desperdicio: r.qtd_motoristas
+          ? r.delta_desperdicio / r.qtd_motoristas
+          : 0,
       }))
       .sort((a, b) => a.delta_desperdicio - b.delta_desperdicio);
   }, [eventosFiltrados]);
@@ -799,7 +887,9 @@ export default function DesempenhoDieselAnalise() {
     return [...map.values()]
       .map((r) => ({
         ...r,
-        media_minutos: r.total_acompanhamentos ? r.total_minutos / r.total_acompanhamentos : 0,
+        media_minutos: r.total_acompanhamentos
+          ? r.total_minutos / r.total_acompanhamentos
+          : 0,
         qtd_linhas: r.linhas.size,
       }))
       .sort((a, b) => b.total_minutos - a.total_minutos);
@@ -827,13 +917,49 @@ export default function DesempenhoDieselAnalise() {
     return [...map.values()]
       .map((r) => ({
         ...r,
-        media_minutos: r.total_acompanhamentos ? r.total_minutos / r.total_acompanhamentos : 0,
+        media_minutos: r.total_acompanhamentos
+          ? r.total_minutos / r.total_acompanhamentos
+          : 0,
       }))
       .sort((a, b) => {
-        if (a.data_ref === b.data_ref) return String(a.instrutor_nome).localeCompare(String(b.instrutor_nome), "pt-BR");
+        if (a.data_ref === b.data_ref)
+          return String(a.instrutor_nome).localeCompare(
+            String(b.instrutor_nome),
+            "pt-BR"
+          );
         return String(b.data_ref).localeCompare(String(a.data_ref));
       });
   }, [acompanhamentosFiltrados]);
+
+  const mapaUltimoCheckpoint = useMemo(() => {
+    const map = new Map();
+
+    eventosFiltrados.forEach((ev) => {
+      const atual = map.get(ev.acompanhamento_id);
+      if (!atual || String(ev.created_at_dt) > String(atual.created_at_dt)) {
+        map.set(ev.acompanhamento_id, ev);
+      }
+    });
+
+    return map;
+  }, [eventosFiltrados]);
+
+  const acompanhamentosComEvolucao = useMemo(() => {
+    return acompanhamentosFiltrados.map((a) => {
+      const cp = mapaUltimoCheckpoint.get(a.id);
+      return {
+        ...a,
+        checkpoint_tipo: cp?.tipo || "",
+        antes_kml: cp?.antes_kml ?? null,
+        depois_kml: cp?.depois_kml ?? null,
+        delta_kml: cp?.delta_kml ?? null,
+        antes_desp: cp?.antes_desp ?? null,
+        depois_desp: cp?.depois_desp ?? null,
+        delta_desperdicio: cp?.delta_desperdicio ?? null,
+        conclusao_checkpoint: cp?.conclusao || "",
+      };
+    });
+  }, [acompanhamentosFiltrados, mapaUltimoCheckpoint]);
 
   const totalDesperdicioMeta = useMemo(() => {
     return rowsReferenciaComRef.reduce((acc, r) => acc + n(r.Litros_Desp_Meta), 0);
@@ -852,20 +978,31 @@ export default function DesempenhoDieselAnalise() {
   }, [rowsComparacao]);
 
   const variacaoGeral = useMemo(() => {
-    return kmlComparacaoGeral > 0 ? ((kmlReferenciaGeral - kmlComparacaoGeral) / kmlComparacaoGeral) * 100 : 0;
+    return kmlComparacaoGeral > 0
+      ? ((kmlReferenciaGeral - kmlComparacaoGeral) / kmlComparacaoGeral) * 100
+      : 0;
   }, [kmlReferenciaGeral, kmlComparacaoGeral]);
 
   const totalMinutosAcompanhamentos = useMemo(() => {
     return acompanhamentosFiltrados.reduce((acc, r) => acc + n(r.duracao_min), 0);
   }, [acompanhamentosFiltrados]);
 
-  const cards = useMemo(() => ({
-    linhas: tabelaLinhas.length,
-    motoristas: topMotoristas.length,
-    veiculos: topVeiculos.length,
-    acompanhamentos: acompanhamentosFiltrados.length,
-    checkpoints: eventosFiltrados.length,
-  }), [tabelaLinhas, topMotoristas, topVeiculos, acompanhamentosFiltrados, eventosFiltrados]);
+  const cards = useMemo(
+    () => ({
+      linhas: tabelaLinhas.length,
+      motoristas: topMotoristas.length,
+      veiculos: topVeiculos.length,
+      acompanhamentos: acompanhamentosFiltrados.length,
+      checkpoints: eventosFiltrados.length,
+    }),
+    [
+      tabelaLinhas,
+      topMotoristas,
+      topVeiculos,
+      acompanhamentosFiltrados,
+      eventosFiltrados,
+    ]
+  );
 
   function handleSort(key) {
     setSortConfig((prev) => ({
@@ -904,14 +1041,97 @@ export default function DesempenhoDieselAnalise() {
       const dir = sortConfig.direction === "asc" ? 1 : -1;
       const va = a[sortConfig.key] ?? 0;
       const vb = b[sortConfig.key] ?? 0;
-      if (typeof va === "string") return String(va).localeCompare(String(vb), "pt-BR") * dir;
+      if (typeof va === "string")
+        return String(va).localeCompare(String(vb), "pt-BR") * dir;
       return (va - vb) * dir;
     });
     return arr;
   }, [topMotoristas, sortConfig]);
 
+  const headerSubAcompanhamento = {
+    RESUMO_INSTRUTOR: {
+      titulo: "Resumo por Instrutor",
+      subtitulo:
+        "Consolida volume, tempo gasto, status e linhas atendidas no mês de referência.",
+    },
+    TEMPO_DIA: {
+      titulo: "Tempo por Dia",
+      subtitulo:
+        "Mostra o esforço diário por instrutor, com quantidade de acompanhamentos, tempo total e tempo médio.",
+    },
+    CHECKPOINT_LINHA: {
+      titulo: "Check Point por Linha",
+      subtitulo:
+        "Compara antes x pós acompanhamento por tipo de prontuário, com Δ KM/L, Δ desperdício e resultado operacional.",
+    },
+    ACOMPANHAMENTOS: {
+      titulo: "Acompanhamentos",
+      subtitulo:
+        "Lista todas as ordens do mês, inclusive finalizadas, com evolução operacional e status final.",
+    },
+  };
+
+  const analiseLinhas = useMemo(() => {
+    if (!linhasTabelaOrdenada.length) return null;
+    const piorDesperdicio = linhasTabelaOrdenada[0];
+    const melhorVariacao = [...linhasTabelaOrdenada].sort(
+      (a, b) => b.Variacao_Pct - a.Variacao_Pct
+    )[0];
+    const piorVariacao = [...linhasTabelaOrdenada].sort(
+      (a, b) => a.Variacao_Pct - b.Variacao_Pct
+    )[0];
+
+    return {
+      piorDesperdicio,
+      melhorVariacao,
+      piorVariacao,
+    };
+  }, [linhasTabelaOrdenada]);
+
+  const analiseMotoristas = useMemo(() => {
+    if (!motoristasOrdenados.length) return null;
+    const maiorImpacto = [...motoristasOrdenados].sort(
+      (a, b) => b.Impacto_Pct - a.Impacto_Pct
+    )[0];
+    const maiorDesperdicio = [...motoristasOrdenados].sort(
+      (a, b) => b.Litros_Desp_Meta - a.Litros_Desp_Meta
+    )[0];
+    return { maiorImpacto, maiorDesperdicio };
+  }, [motoristasOrdenados]);
+
+  const analiseCarros = useMemo(() => {
+    if (!veiculosOrdenados.length) return null;
+    const pior = veiculosOrdenados[0];
+    const melhorKml = [...veiculosOrdenados].sort(
+      (a, b) => b.KML_Real - a.KML_Real
+    )[0];
+    return { pior, melhorKml };
+  }, [veiculosOrdenados]);
+
+  const analiseCheckpoint = useMemo(() => {
+    if (!resumoPorLinhaCheckpoint.length) return null;
+    const melhorLinha = [...resumoPorLinhaCheckpoint].sort(
+      (a, b) => a.delta_desperdicio - b.delta_desperdicio
+    )[0];
+    const piorLinha = [...resumoPorLinhaCheckpoint].sort(
+      (a, b) => b.delta_desperdicio - a.delta_desperdicio
+    )[0];
+    return { melhorLinha, piorLinha };
+  }, [resumoPorLinhaCheckpoint]);
+
+  const analiseInstrutor = useMemo(() => {
+    if (!resumoInstrutor.length) return null;
+    const maiorVolume = [...resumoInstrutor].sort(
+      (a, b) => b.total_acompanhamentos - a.total_acompanhamentos
+    )[0];
+    const maiorTempo = [...resumoInstrutor].sort(
+      (a, b) => b.total_minutos - a.total_minutos
+    )[0];
+    return { maiorVolume, maiorTempo };
+  }, [resumoInstrutor]);
+
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
+    <div className="p-4 md:p-6 space-y-6 max-w-[96rem] mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
@@ -968,7 +1188,9 @@ export default function DesempenhoDieselAnalise() {
           <div>
             <p className="text-sm text-gray-500 font-bold">Acompanhamentos</p>
             <p className="text-2xl font-black text-slate-800">{fmtInt(cards.acompanhamentos)}</p>
-            <p className="text-xs text-gray-500 mt-1">tempo total: {formatMinutes(totalMinutosAcompanhamentos)}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              tempo total: {formatMinutes(totalMinutosAcompanhamentos)}
+            </p>
           </div>
           <FaClock className="text-4xl text-amber-50" />
         </div>
@@ -994,7 +1216,10 @@ export default function DesempenhoDieselAnalise() {
             key={key}
             onClick={() => {
               setAbaAtiva(key);
-              setSortConfig({ key: key === "LINHAS" ? "Desperdicio" : "Litros_Desp_Meta", direction: "desc" });
+              setSortConfig({
+                key: key === "LINHAS" ? "Desperdicio" : "Litros_Desp_Meta",
+                direction: "desc",
+              });
             }}
             className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${
               abaAtiva === key ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700"
@@ -1050,21 +1275,37 @@ export default function DesempenhoDieselAnalise() {
         </div>
 
         {abaAtiva === "ACOMPANHAMENTOS" && (
-          <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-            <FaFilter className="text-gray-400 ml-2" />
-            <select
-              value={filtroInstrutor}
-              onChange={(e) => setFiltroInstrutor(e.target.value)}
-              className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-44 font-medium text-slate-600"
-            >
-              <option value="">Todos Instrutores</option>
-              {instrutoresUnicos.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-          </div>
+          <>
+            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
+              <FaFilter className="text-gray-400 ml-2" />
+              <select
+                value={filtroInstrutor}
+                onChange={(e) => setFiltroInstrutor(e.target.value)}
+                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-44 font-medium text-slate-600"
+              >
+                <option value="">Todos Instrutores</option>
+                {instrutoresUnicos.map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
+              <FaFilter className="text-gray-400 ml-2" />
+              <select
+                value={filtroProntuario}
+                onChange={(e) => setFiltroProntuario(e.target.value)}
+                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-40 font-medium text-slate-600"
+              >
+                <option value="">Todos Prontuários</option>
+                <option value="PRONTUARIO_10">Prontuário 10</option>
+                <option value="PRONTUARIO_20">Prontuário 20</option>
+                <option value="PRONTUARIO_30">Prontuário 30</option>
+              </select>
+            </div>
+          </>
         )}
 
         <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
@@ -1096,6 +1337,30 @@ export default function DesempenhoDieselAnalise() {
 
       {abaAtiva === "LINHAS" && (
         <>
+          {analiseLinhas && (
+            <div className="bg-white rounded-xl border shadow-sm p-4">
+              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
+                <FaInfoCircle className="text-blue-600" />
+                Leitura Analítica
+              </div>
+              <div className="text-sm text-slate-600 space-y-1">
+                <p>
+                  Maior pressão de desperdício na linha{" "}
+                  <b>{analiseLinhas.piorDesperdicio.linha}</b>, com{" "}
+                  <b>{fmtNum(analiseLinhas.piorDesperdicio.Desperdicio)} L</b>.
+                </p>
+                <p>
+                  Melhor evolução percentual em <b>{analiseLinhas.melhorVariacao.linha}</b>, com{" "}
+                  <b>{fmtNum(analiseLinhas.melhorVariacao.Variacao_Pct)}%</b>.
+                </p>
+                <p>
+                  Pior variação no período em <b>{analiseLinhas.piorVariacao.linha}</b>, com{" "}
+                  <b>{fmtNum(analiseLinhas.piorVariacao.Variacao_Pct)}%</b>.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-xl border shadow-sm">
               <p className="text-sm text-gray-500 font-bold">KM/L Mês Referência</p>
@@ -1152,7 +1417,9 @@ export default function DesempenhoDieselAnalise() {
                       <EvolucaoBadge value={row.Variacao_Pct} percent />
                     </td>
                     <td className="px-4 py-4">{fmtNum(row.Meta_Ponderada)}</td>
-                    <td className="px-4 py-4 font-bold text-rose-700">{fmtNum(row.Desperdicio)} L</td>
+                    <td className="px-4 py-4 font-bold text-rose-700">
+                      {fmtNum(row.Desperdicio)} L
+                    </td>
                     <td className="px-4 py-4">{fmtInt(row.Km)}</td>
                     <td className="px-4 py-4">{fmtNum(row.Comb)} L</td>
                   </tr>
@@ -1171,117 +1438,163 @@ export default function DesempenhoDieselAnalise() {
       )}
 
       {abaAtiva === "MOTORISTAS" && (
-        <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-          <table className="w-full text-left min-w-[1250px]">
-            <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
-              <tr>
-                {[
-                  ["Motorista", "Motorista"],
-                  ["chapa", "Chapa"],
-                  ["linha", "Linha"],
-                  ["Cluster", "Cluster"],
-                  ["KML_Real", "KM/L Real"],
-                  ["KML_Meta", "KM/L Ref"],
-                  ["Litros_Desp_Meta", "Desperdício"],
-                  ["Impacto_Pct", "Impacto %"],
-                  ["Km", "KM"],
-                ].map(([key, label]) => (
-                  <th
-                    key={key}
-                    className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                    onClick={() => handleSort(key)}
-                  >
-                    <div className="flex items-center">
-                      {label}
-                      <SortIcon active={sortConfig.key === key} direction={sortConfig.direction} />
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {motoristasOrdenados.map((row) => (
-                <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="px-4 py-4">
-                    <div className="font-black text-slate-900">{row.Motorista}</div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                      {row.chapa}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">{row.linha}</td>
-                  <td className="px-4 py-4">{row.Cluster}</td>
-                  <td className="px-4 py-4">{fmtNum(row.KML_Real)}</td>
-                  <td className="px-4 py-4">{fmtNum(row.KML_Meta)}</td>
-                  <td className="px-4 py-4 font-bold text-rose-700">{fmtNum(row.Litros_Desp_Meta)} L</td>
-                  <td className="px-4 py-4">{fmtNum(row.Impacto_Pct)}%</td>
-                  <td className="px-4 py-4">{fmtInt(row.Km)}</td>
-                </tr>
-              ))}
-              {motoristasOrdenados.length === 0 && (
+        <>
+          {analiseMotoristas && (
+            <div className="bg-white rounded-xl border shadow-sm p-4">
+              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
+                <FaInfoCircle className="text-blue-600" />
+                Leitura Analítica
+              </div>
+              <div className="text-sm text-slate-600 space-y-1">
+                <p>
+                  Maior impacto operacional: <b>{analiseMotoristas.maiorImpacto.Motorista}</b>, com{" "}
+                  <b>{fmtNum(analiseMotoristas.maiorImpacto.Impacto_Pct)}%</b> do KM da linha.
+                </p>
+                <p>
+                  Maior desperdício individual: <b>{analiseMotoristas.maiorDesperdicio.Motorista}</b>, com{" "}
+                  <b>{fmtNum(analiseMotoristas.maiorDesperdicio.Litros_Desp_Meta)} L</b>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+            <table className="w-full text-left min-w-[1500px]">
+              <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-slate-500 font-bold">
-                    Nenhum motorista encontrado.
-                  </td>
+                  {[
+                    ["Motorista", "Motorista"],
+                    ["chapa", "Chapa"],
+                    ["linha", "Linha"],
+                    ["Cluster", "Cluster"],
+                    ["KML_Real", "KM/L Real"],
+                    ["KML_Meta", "KM/L Ref"],
+                    ["Litros_Desp_Meta", "Desperdício"],
+                    ["Impacto_Pct", "Impacto %"],
+                    ["Km", "KM"],
+                  ].map(([key, label]) => (
+                    <th
+                      key={key}
+                      className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleSort(key)}
+                    >
+                      <div className="flex items-center">
+                        {label}
+                        <SortIcon active={sortConfig.key === key} direction={sortConfig.direction} />
+                      </div>
+                    </th>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {motoristasOrdenados.map((row) => (
+                  <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
+                    <td className="px-4 py-4">
+                      <div className="font-black text-slate-900">{row.Motorista}</div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        {row.chapa}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">{row.linha}</td>
+                    <td className="px-4 py-4">{row.Cluster}</td>
+                    <td className="px-4 py-4">{fmtNum(row.KML_Real)}</td>
+                    <td className="px-4 py-4">{fmtNum(row.KML_Meta)}</td>
+                    <td className="px-4 py-4 font-bold text-rose-700">
+                      {fmtNum(row.Litros_Desp_Meta)} L
+                    </td>
+                    <td className="px-4 py-4">{fmtNum(row.Impacto_Pct)}%</td>
+                    <td className="px-4 py-4">{fmtInt(row.Km)}</td>
+                  </tr>
+                ))}
+                {motoristasOrdenados.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-12 text-center text-slate-500 font-bold">
+                      Nenhum motorista encontrado.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {abaAtiva === "CARROS" && (
-        <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-          <table className="w-full text-left min-w-[1200px]">
-            <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
-              <tr>
-                {[
-                  ["veiculo", "Carro"],
-                  ["linha", "Linha"],
-                  ["Cluster", "Cluster"],
-                  ["KML_Real", "KM/L Real"],
-                  ["KML_Meta", "KM/L Ref"],
-                  ["Litros_Desp_Meta", "Desperdício"],
-                  ["Km", "KM"],
-                  ["Comb", "Comb."],
-                ].map(([key, label]) => (
-                  <th
-                    key={key}
-                    className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                    onClick={() => handleSort(key)}
-                  >
-                    <div className="flex items-center">
-                      {label}
-                      <SortIcon active={sortConfig.key === key} direction={sortConfig.direction} />
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {veiculosOrdenados.map((row) => (
-                <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="px-4 py-4 font-black text-slate-900">{row.veiculo}</td>
-                  <td className="px-4 py-4">{row.linha}</td>
-                  <td className="px-4 py-4">{row.Cluster}</td>
-                  <td className="px-4 py-4">{fmtNum(row.KML_Real)}</td>
-                  <td className="px-4 py-4">{fmtNum(row.KML_Meta)}</td>
-                  <td className="px-4 py-4 font-bold text-rose-700">{fmtNum(row.Litros_Desp_Meta)} L</td>
-                  <td className="px-4 py-4">{fmtInt(row.Km)}</td>
-                  <td className="px-4 py-4">{fmtNum(row.Comb)} L</td>
-                </tr>
-              ))}
-              {veiculosOrdenados.length === 0 && (
+        <>
+          {analiseCarros && (
+            <div className="bg-white rounded-xl border shadow-sm p-4">
+              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
+                <FaInfoCircle className="text-blue-600" />
+                Leitura Analítica
+              </div>
+              <div className="text-sm text-slate-600 space-y-1">
+                <p>
+                  Maior desperdício de frota no veículo <b>{analiseCarros.pior.veiculo}</b>, com{" "}
+                  <b>{fmtNum(analiseCarros.pior.Litros_Desp_Meta)} L</b>.
+                </p>
+                <p>
+                  Melhor KM/L real no período no veículo <b>{analiseCarros.melhorKml.veiculo}</b>, com{" "}
+                  <b>{fmtNum(analiseCarros.melhorKml.KML_Real)}</b>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+            <table className="w-full text-left min-w-[1200px]">
+              <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-slate-500 font-bold">
-                    Nenhum carro encontrado.
-                  </td>
+                  {[
+                    ["veiculo", "Carro"],
+                    ["linha", "Linha"],
+                    ["Cluster", "Cluster"],
+                    ["KML_Real", "KM/L Real"],
+                    ["KML_Meta", "KM/L Ref"],
+                    ["Litros_Desp_Meta", "Desperdício"],
+                    ["Km", "KM"],
+                    ["Comb", "Comb."],
+                  ].map(([key, label]) => (
+                    <th
+                      key={key}
+                      className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleSort(key)}
+                    >
+                      <div className="flex items-center">
+                        {label}
+                        <SortIcon active={sortConfig.key === key} direction={sortConfig.direction} />
+                      </div>
+                    </th>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {veiculosOrdenados.map((row) => (
+                  <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
+                    <td className="px-4 py-4 font-black text-slate-900">{row.veiculo}</td>
+                    <td className="px-4 py-4">{row.linha}</td>
+                    <td className="px-4 py-4">{row.Cluster}</td>
+                    <td className="px-4 py-4">{fmtNum(row.KML_Real)}</td>
+                    <td className="px-4 py-4">{fmtNum(row.KML_Meta)}</td>
+                    <td className="px-4 py-4 font-bold text-rose-700">
+                      {fmtNum(row.Litros_Desp_Meta)} L
+                    </td>
+                    <td className="px-4 py-4">{fmtInt(row.Km)}</td>
+                    <td className="px-4 py-4">{fmtNum(row.Comb)} L</td>
+                  </tr>
+                ))}
+                {veiculosOrdenados.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-12 text-center text-slate-500 font-bold">
+                      Nenhum carro encontrado.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {abaAtiva === "ACOMPANHAMENTOS" && (
@@ -1305,7 +1618,90 @@ export default function DesempenhoDieselAnalise() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl border shadow-sm p-4">
+            <p className="text-base font-extrabold text-slate-800">
+              {headerSubAcompanhamento[subAcompanhamento].titulo}
+            </p>
+            <p className="text-sm text-slate-500 mt-1">
+              {headerSubAcompanhamento[subAcompanhamento].subtitulo}
+            </p>
+          </div>
+
+          {subAcompanhamento === "CHECKPOINT_LINHA" && analiseCheckpoint && (
+            <div className="bg-white rounded-xl border shadow-sm p-4">
+              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
+                <FaInfoCircle className="text-blue-600" />
+                Leitura Analítica
+              </div>
+              <div className="text-sm text-slate-600 space-y-1">
+                <p>
+                  Melhor recuperação em <b>{analiseCheckpoint.melhorLinha.linha_foco}</b> no{" "}
+                  <b>{analiseCheckpoint.melhorLinha.tipo}</b>, com Δ desperdício de{" "}
+                  <b>{fmtNum(analiseCheckpoint.melhorLinha.delta_desperdicio)} L</b>.
+                </p>
+                <p>
+                  Ponto crítico em <b>{analiseCheckpoint.piorLinha.linha_foco}</b> no{" "}
+                  <b>{analiseCheckpoint.piorLinha.tipo}</b>, com Δ desperdício de{" "}
+                  <b>{fmtNum(analiseCheckpoint.piorLinha.delta_desperdicio)} L</b>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {subAcompanhamento === "RESUMO_INSTRUTOR" && analiseInstrutor && (
+            <div className="bg-white rounded-xl border shadow-sm p-4">
+              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
+                <FaInfoCircle className="text-blue-600" />
+                Leitura Analítica
+              </div>
+              <div className="text-sm text-slate-600 space-y-1">
+                <p>
+                  Maior volume de atuação: <b>{analiseInstrutor.maiorVolume.instrutor_nome}</b>, com{" "}
+                  <b>{fmtInt(analiseInstrutor.maiorVolume.total_acompanhamentos)}</b> acompanhamentos.
+                </p>
+                <p>
+                  Maior esforço de campo: <b>{analiseInstrutor.maiorTempo.instrutor_nome}</b>, com{" "}
+                  <b>{formatMinutes(analiseInstrutor.maiorTempo.total_minutos)}</b>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {subAcompanhamento === "ACOMPANHAMENTOS" && (
+            <div className="bg-white rounded-xl border shadow-sm p-4">
+              <div className="flex items-center gap-2 text-slate-800 font-extrabold mb-2">
+                <FaInfoCircle className="text-blue-600" />
+                Leitura Analítica
+              </div>
+              <div className="text-sm text-slate-600 space-y-1">
+                <p>
+                  Total no mês: <b>{fmtInt(acompanhamentosComEvolucao.length)}</b> acompanhamentos.
+                </p>
+                <p>
+                  Finalizados (OK / ENCERRADO / ATAS):{" "}
+                  <b>
+                    {fmtInt(
+                      acompanhamentosComEvolucao.filter((x) =>
+                        ["OK", "ENCERRADO", "ATAS"].includes(x.status_norm)
+                      ).length
+                    )}
+                  </b>
+                  .
+                </p>
+                <p>
+                  Em monitoramento:{" "}
+                  <b>
+                    {fmtInt(
+                      acompanhamentosComEvolucao.filter((x) => x.status_norm === "EM_MONITORAMENTO").length
+                    )}
+                  </b>
+                  .
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white p-4 rounded-xl border shadow-sm">
               <p className="text-sm text-gray-500 font-bold">Melhoraram KM/L</p>
               <p className="text-2xl font-black text-slate-800">{fmtInt(checkpointResumo.melhoraramKml)}</p>
@@ -1319,6 +1715,10 @@ export default function DesempenhoDieselAnalise() {
               <p className="text-2xl font-black text-slate-800">{fmtInt(checkpointResumo.reduziramDesperdicio)}</p>
             </div>
             <div className="bg-white p-4 rounded-xl border shadow-sm">
+              <p className="text-sm text-gray-500 font-bold">Aumentaram desperdício</p>
+              <p className="text-2xl font-black text-slate-800">{fmtInt(checkpointResumo.aumentaramDesperdicio)}</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border shadow-sm">
               <p className="text-sm text-gray-500 font-bold">Δ Desperdício Médio</p>
               <p className="text-2xl font-black text-slate-800">{fmtNum(checkpointResumo.mediaDeltaDesp)} L</p>
             </div>
@@ -1326,7 +1726,6 @@ export default function DesempenhoDieselAnalise() {
 
           {subAcompanhamento === "RESUMO_INSTRUTOR" && (
             <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-              <div className="px-4 py-4 border-b bg-slate-50 font-extrabold text-slate-800">Resumo por Instrutor</div>
               <table className="w-full text-left min-w-[1000px]">
                 <thead className="bg-white text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
                   <tr>
@@ -1367,7 +1766,6 @@ export default function DesempenhoDieselAnalise() {
 
           {subAcompanhamento === "TEMPO_DIA" && (
             <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-              <div className="px-4 py-4 border-b bg-slate-50 font-extrabold text-slate-800">Tempo por Dia</div>
               <table className="w-full text-left min-w-[900px]">
                 <thead className="bg-white text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
                   <tr>
@@ -1402,7 +1800,6 @@ export default function DesempenhoDieselAnalise() {
 
           {subAcompanhamento === "CHECKPOINT_LINHA" && (
             <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-              <div className="px-4 py-4 border-b bg-slate-50 font-extrabold text-slate-800">Check Point por Linha</div>
               <table className="w-full text-left min-w-[1250px]">
                 <thead className="bg-white text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
                   <tr>
@@ -1451,10 +1848,7 @@ export default function DesempenhoDieselAnalise() {
 
           {subAcompanhamento === "ACOMPANHAMENTOS" && (
             <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-              <div className="px-4 py-4 border-b bg-slate-50 font-extrabold text-slate-800">
-                Acompanhamentos (inclusive finalizados)
-              </div>
-              <table className="w-full text-left min-w-[1200px]">
+              <table className="w-full text-left min-w-[1600px]">
                 <thead className="bg-white text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-4">Data</th>
@@ -1463,12 +1857,18 @@ export default function DesempenhoDieselAnalise() {
                     <th className="px-4 py-4">Instrutor</th>
                     <th className="px-4 py-4">Status</th>
                     <th className="px-4 py-4">Tempo</th>
-                    <th className="px-4 py-4">KM/L Inicial</th>
-                    <th className="px-4 py-4">KM/L Meta</th>
+                    <th className="px-4 py-4">Prontuário</th>
+                    <th className="px-4 py-4">KM/L Antes</th>
+                    <th className="px-4 py-4">KM/L Pós</th>
+                    <th className="px-4 py-4">Δ KM/L</th>
+                    <th className="px-4 py-4">Desp. Antes</th>
+                    <th className="px-4 py-4">Desp. Pós</th>
+                    <th className="px-4 py-4">Δ Desp.</th>
+                    <th className="px-4 py-4">Conclusão</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {acompanhamentosFiltrados.map((row) => (
+                  {acompanhamentosComEvolucao.map((row) => (
                     <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
                       <td className="px-4 py-4">{fmtDateBr(row.data_ref)}</td>
                       <td className="px-4 py-4">
@@ -1489,13 +1889,35 @@ export default function DesempenhoDieselAnalise() {
                         </span>
                       </td>
                       <td className="px-4 py-4">{formatMinutes(row.duracao_min)}</td>
-                      <td className="px-4 py-4">{fmtNum(row.kml_inicial)}</td>
-                      <td className="px-4 py-4">{fmtNum(row.kml_meta)}</td>
+                      <td className="px-4 py-4">{row.checkpoint_tipo || "-"}</td>
+                      <td className="px-4 py-4">
+                        {row.antes_kml == null ? "-" : fmtNum(row.antes_kml)}
+                      </td>
+                      <td className="px-4 py-4">
+                        {row.depois_kml == null ? "-" : fmtNum(row.depois_kml)}
+                      </td>
+                      <td className="px-4 py-4">
+                        {row.delta_kml == null ? "-" : <EvolucaoBadge value={row.delta_kml} />}
+                      </td>
+                      <td className="px-4 py-4">
+                        {row.antes_desp == null ? "-" : `${fmtNum(row.antes_desp)} L`}
+                      </td>
+                      <td className="px-4 py-4">
+                        {row.depois_desp == null ? "-" : `${fmtNum(row.depois_desp)} L`}
+                      </td>
+                      <td className="px-4 py-4">
+                        {row.delta_desperdicio == null ? (
+                          "-"
+                        ) : (
+                          <EvolucaoBadge value={row.delta_desperdicio} invert />
+                        )}
+                      </td>
+                      <td className="px-4 py-4">{row.conclusao_checkpoint || "-"}</td>
                     </tr>
                   ))}
-                  {acompanhamentosFiltrados.length === 0 && (
+                  {acompanhamentosComEvolucao.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500 font-bold">
+                      <td colSpan={14} className="px-6 py-12 text-center text-slate-500 font-bold">
                         Nenhum acompanhamento encontrado.
                       </td>
                     </tr>

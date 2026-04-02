@@ -89,7 +89,6 @@ function CardResumo({ titulo, valor, subtitulo, icon: Icon, destaque = "slate" }
     amber: "bg-amber-50 border-amber-200 text-amber-700",
     cyan: "bg-cyan-50 border-cyan-200 text-cyan-700",
     violet: "bg-violet-50 border-violet-200 text-violet-700",
-    blue: "bg-blue-50 border-blue-200 text-blue-700",
   };
 
   return (
@@ -854,35 +853,35 @@ export default function DesempenhoDieselAnalise() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
             <CardResumo
               titulo="Melhoraram KM/L"
-              valor={n(checkpointResumo.melhoraramKml).toFixed(0)}
+              valor={String(checkpointResumo.melhoraramKml)}
               subtitulo="Δ KML maior que zero"
               icon={FaArrowUp}
               destaque="emerald"
             />
             <CardResumo
               titulo="Pioraram KM/L"
-              valor={n(checkpointResumo.pioraramKml).toFixed(0)}
+              valor={String(checkpointResumo.pioraramKml)}
               subtitulo="Δ KML menor que zero"
               icon={FaArrowDown}
               destaque="rose"
             />
             <CardResumo
               titulo="Estáveis KM/L"
-              valor={n(checkpointResumo.estavelKml).toFixed(0)}
+              valor={String(checkpointResumo.estavelKml)}
               subtitulo="Δ KML igual a zero"
               icon={FaEquals}
               destaque="slate"
             />
             <CardResumo
               titulo="Reduziram desperdício"
-              valor={n(checkpointResumo.reduziramDesperdicio).toFixed(0)}
+              valor={String(checkpointResumo.reduziramDesperdicio)}
               subtitulo="Δ Desp. menor que zero"
               icon={FaArrowDown}
               destaque="emerald"
             />
             <CardResumo
               titulo="Aumentaram desperdício"
-              valor={n(checkpointResumo.aumentaramDesperdicio).toFixed(0)}
+              valor={String(checkpointResumo.aumentaramDesperdicio)}
               subtitulo="Δ Desp. maior que zero"
               icon={FaArrowUp}
               destaque="rose"
@@ -947,24 +946,30 @@ export default function DesempenhoDieselAnalise() {
                   label: "Δ KML",
                   align: "right",
                   className: "font-extrabold",
-                  render: (r) => (
-                    <span className={n(r.delta_kml) > 0 ? "text-emerald-700" : n(r.delta_kml) < 0 ? "text-rose-700" : "text-slate-700"}>
-                      {n(r.delta_kml) > 0 ? "+" : ""}
-                      {n(r.delta_kml).toFixed(2)}
-                    </span>
-                  ),
+                  render: (r) => {
+                    const v = n(r.delta_kml);
+                    return (
+                      <span className={v > 0 ? "text-emerald-700" : v < 0 ? "text-rose-700" : "text-slate-700"}>
+                        {v > 0 ? "+" : ""}
+                        {v.toFixed(2)}
+                      </span>
+                    );
+                  },
                 },
                 {
                   key: "delta_desperdicio",
                   label: "Δ Desp.",
                   align: "right",
                   className: "font-extrabold",
-                  render: (r) => (
-                    <span className={n(r.delta_desperdicio) < 0 ? "text-emerald-700" : n(r.delta_desperdicio) > 0 ? "text-rose-700" : "text-slate-700"}>
-                      {n(r.delta_desperdicio) > 0 ? "+" : ""}
-                      {n(r.delta_desperdicio).toFixed(1)}
-                    </span>
-                  ),
+                  render: (r) => {
+                    const v = n(r.delta_desperdicio);
+                    return (
+                      <span className={v < 0 ? "text-emerald-700" : v > 0 ? "text-rose-700" : "text-slate-700"}>
+                        {v > 0 ? "+" : ""}
+                        {v.toFixed(1)}
+                      </span>
+                    );
+                  },
                 },
                 { key: "conclusao", label: "Conclusão", render: (r) => <span className="font-bold">{r.conclusao}</span> },
               ]}

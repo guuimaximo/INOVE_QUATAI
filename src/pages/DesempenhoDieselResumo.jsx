@@ -7,7 +7,6 @@ import {
   FaTruck,
   FaUser,
   FaClipboardList,
-  FaClock,
   FaArrowUp,
   FaArrowDown,
   FaEquals,
@@ -299,8 +298,19 @@ export default function DesempenhoDieselAnalise() {
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroConclusao, setFiltroConclusao] = useState("");
   const [mesReferencia, setMesReferencia] = useState("");
-  const [sortConfig, setSortConfig] = useState({
+
+  const [sortLinhas, setSortLinhas] = useState({
     key: "Desperdicio",
+    direction: "desc",
+  });
+
+  const [sortMotoristas, setSortMotoristas] = useState({
+    key: "Litros_Desp_Meta",
+    direction: "desc",
+  });
+
+  const [sortCarros, setSortCarros] = useState({
+    key: "Litros_Desp_Meta",
     direction: "desc",
   });
 
@@ -550,8 +560,7 @@ export default function DesempenhoDieselAnalise() {
     return dataset.filter((r) => {
       if (filtroLinha && r.linha !== filtroLinha) return false;
       if (filtroCluster && r.Cluster !== filtroCluster) return false;
-      if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.Mes_Ano))
-        return false;
+      if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.Mes_Ano)) return false;
 
       const q = busca.toLowerCase().trim();
       if (!q) return true;
@@ -580,13 +589,14 @@ export default function DesempenhoDieselAnalise() {
     const map = new Map();
     datasetFiltrado.forEach((r) => {
       const key = `${r.linha}__${r.Mes_Ano}`;
-      if (!map.has(key))
+      if (!map.has(key)) {
         map.set(key, {
           Km: 0,
           Comb: 0,
           Litros_Esperados: 0,
           Litros_Desp_Meta: 0,
         });
+      }
       const item = map.get(key);
       item.Km += r.Km;
       item.Comb += r.Comb;
@@ -1013,11 +1023,7 @@ export default function DesempenhoDieselAnalise() {
         return {
           ...a,
           checkpoint_tipo:
-            novo?.checkpoint_tipo ||
-            cp?.tipo ||
-            a.prontuario_label ||
-            "SEM_DADOS",
-
+            novo?.checkpoint_tipo || cp?.tipo || a.prontuario_label || "SEM_DADOS",
           antes_kml: novo?.antes_kml ?? cp?.antes_kml ?? null,
           depois_kml: novo?.depois_kml ?? cp?.depois_kml ?? null,
           delta_kml: novo?.delta_kml ?? cp?.delta_kml ?? null,
@@ -1207,385 +1213,303 @@ export default function DesempenhoDieselAnalise() {
   }, [rowsComparacao]);
 
   const variacaoGeral = useMemo(() => {
-    return kmlComparacaoGeral > 0
-      ? ((kmlReferenciaGeral - kmlComparacaoGeral) / kmlComparacaoGeral) * 100
-      : 0;
+    if (!kmlComparacaoGeral) return 0;
+    return ((kmlReferenciaGeral - kmlComparacaoGeral) / kmlComparacaoGeral) * 100;
   }, [kmlReferenciaGeral, kmlComparacaoGeral]);
 
-  const totalMinutosAcompanhamentos = useMemo(() => {
-    return acompanhamentosComEvolucao.reduce((acc, r) => acc + n(r.duracao_min), 0);
-  }, [acompanhamentosComEvolucao]);
+  function ordenarLista(lista, sortConfigAtual) {
+    const { key, direction } = sortConfigAtual;
+    const sorted = [...lista].sort((a, b) => {
+      const va = a?.[key];
+      const vb = b?.[key];
 
-  const cards = useMemo(
-    () => ({
-      linhas: tabelaLinhas.length,
-      motoristas: topMotoristas.length,
-      veiculos: topVeiculos.length,
-      acompanhamentos: acompanhamentosComEvolucao.length,
-      checkpoints: checkpointResumo.total,
-    }),
-    [
-      tabelaLinhas,
-      topMotoristas,
-      topVeiculos,
-      acompanhamentosComEvolucao,
-      checkpointResumo,
-    ]
-  );
+      const na = Number(va);
+      const nb = Number(vb);
+      const ambosNumericos = Number.isFinite(na) && Number.isFinite(nb);
 
-  function handleSort(key) {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
-    }));
+      let cmp = 0;
+      if (ambosNumericos) {
+        cmp = na - nb;
+      } else {
+        cmp = String(va ?? "").localeCompare(String(vb ?? ""), "pt-BR", {
+          numeric: true,
+          sensitivity: "base",
+        });
+      }
+
+      return direction === "asc" ? cmp : -cmp;
+    });
+
+    return sorted;
   }
 
-  const linhasTabelaOrdenada = useMemo(() => {
-    const arr = [...tabelaLinhas];
-    arr.sort((a, b) => {
-      const dir = sortConfig.direction === "asc" ? 1 : -1;
-      const va = a[sortConfig.key] ?? 0;
-      const vb = b[sortConfig.key] ?? 0;
-      if (typeof va === "string") return va.localeCompare(vb, "pt-BR") * dir;
-      return (va - vb) * dir;
-    });
-    return arr;
-  }, [tabelaLinhas, sortConfig]);
+  const linhasTabelaOrdenada = useMemo(
+    () => ordenarLista(tabelaLinhas, sortLinhas),
+    [tabelaLinhas, sortLinhas]
+  );
 
-  const veiculosOrdenados = useMemo(() => {
-    const arr = [...topVeiculos];
-    arr.sort((a, b) => {
-      const dir = sortConfig.direction === "asc" ? 1 : -1;
-      const va = a[sortConfig.key] ?? 0;
-      const vb = b[sortConfig.key] ?? 0;
-      if (typeof va === "string") return va.localeCompare(vb, "pt-BR") * dir;
-      return (va - vb) * dir;
-    });
-    return arr;
-  }, [topVeiculos, sortConfig]);
+  const motoristasOrdenados = useMemo(
+    () => ordenarLista(topMotoristas, sortMotoristas),
+    [topMotoristas, sortMotoristas]
+  );
 
-  const motoristasOrdenados = useMemo(() => {
-    const arr = [...topMotoristas];
-    arr.sort((a, b) => {
-      const dir = sortConfig.direction === "asc" ? 1 : -1;
-      const va = a[sortConfig.key] ?? 0;
-      const vb = b[sortConfig.key] ?? 0;
-      if (typeof va === "string")
-        return String(va).localeCompare(String(vb), "pt-BR") * dir;
-      return (va - vb) * dir;
-    });
-    return arr;
-  }, [topMotoristas, sortConfig]);
+  const veiculosOrdenados = useMemo(
+    () => ordenarLista(topVeiculos, sortCarros),
+    [topVeiculos, sortCarros]
+  );
+
+  function toggleSort(setter, key) {
+    setter((prev) => ({
+      key,
+      direction:
+        prev.key === key ? (prev.direction === "asc" ? "desc" : "asc") : "desc",
+    }));
+  }
 
   const headerSubAcompanhamento = {
     RESUMO_INSTRUTOR: {
       titulo: "Resumo por Instrutor",
-      subtitulo:
-        "Consolida volume, tempo gasto, status e linhas atendidas no mês de referência.",
+      subtitulo: "Visão consolidada de volume, tempo e distribuição dos acompanhamentos.",
     },
     TEMPO_DIA: {
       titulo: "Tempo por Dia",
-      subtitulo:
-        "Mostra o esforço diário por instrutor, com quantidade de acompanhamentos, tempo total e tempo médio.",
+      subtitulo: "Tempo consumido por instrutor em cada dia de acompanhamento.",
     },
     CHECKPOINT_LINHA: {
       titulo: "Check Point por Linha",
-      subtitulo:
-        "Compara antes x pós acompanhamento por tipo de prontuário, com Δ KM/L, Δ desperdício e resultado operacional.",
+      subtitulo: "Evolução de KM/L e desperdício por linha e prontuário.",
     },
     ACOMPANHAMENTOS: {
       titulo: "Acompanhamentos",
-      subtitulo:
-        "Lista todas as ordens do mês, inclusive finalizadas, com evolução operacional e status final.",
+      subtitulo: "Detalhamento individual por motorista, linha, instrutor e evolução.",
     },
   };
 
+  const abas = [
+    { key: "LINHAS", label: "Análise de Linhas", icon: <FaRoad /> },
+    { key: "MOTORISTAS", label: "Ranking de Motoristas", icon: <FaUser /> },
+    { key: "CARROS", label: "Ranking de Carros", icon: <FaTruck /> },
+    { key: "ACOMPANHAMENTOS", label: "Acompanhamentos", icon: <FaClipboardList /> },
+  ];
+
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-[96rem] mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <FaBolt className="text-yellow-500" /> Análise Gerencial Diesel
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Painel analítico por mês fechado.
-          </p>
-        </div>
-
-        <button
-          onClick={carregarTudo}
-          className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm font-bold w-full md:w-auto justify-center"
-        >
-          <FaSync className={loading ? "animate-spin" : ""} /> Atualizar
-        </button>
-      </div>
-
-      {erro ? (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-4 text-sm font-bold">
-          {erro}
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-4">
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-blue-500">
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl border shadow-sm p-4 md:p-5">
+        <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
           <div>
-            <p className="text-sm text-gray-500 font-bold">Linhas</p>
-            <p className="text-2xl font-black text-slate-800">{fmtInt(cards.linhas)}</p>
-            <p className="text-xs text-gray-500 mt-1">referência: {mesReferencia || "-"}</p>
-          </div>
-          <FaRoad className="text-4xl text-blue-50" />
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-violet-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Ranking Motoristas</p>
-            <p className="text-2xl font-black text-slate-800">{fmtInt(cards.motoristas)}</p>
-            <p className="text-xs text-gray-500 mt-1">KM/L ref.: {fmtNum(kmlReferenciaGeral)}</p>
-          </div>
-          <FaUser className="text-4xl text-violet-50" />
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-cyan-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Ranking Carros</p>
-            <p className="text-2xl font-black text-slate-800">{fmtInt(cards.veiculos)}</p>
-            <p className="text-xs text-gray-500 mt-1">desp.: {fmtNum(totalDesperdicioMeta)} L</p>
-          </div>
-          <FaTruck className="text-4xl text-cyan-50" />
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-amber-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Acompanhamentos</p>
-            <p className="text-2xl font-black text-slate-800">{fmtInt(cards.acompanhamentos)}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              tempo total: {formatMinutes(totalMinutosAcompanhamentos)}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
+              <FaBolt />
+              Análise Diesel
+            </div>
+            <h1 className="text-2xl md:text-3xl font-black text-slate-800 mt-3">
+              Painel de Análises
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              A página atua como container. Toda a renderização fica nos 4 componentes.
             </p>
           </div>
-          <FaClock className="text-4xl text-amber-50" />
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={carregarTudo}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-700 transition"
+            >
+              <FaSync />
+              Atualizar
+            </button>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-emerald-500">
-          <div>
-            <p className="text-sm text-gray-500 font-bold">Checkpoints</p>
-            <p className="text-2xl font-black text-slate-800">{fmtInt(cards.checkpoints)}</p>
-            <p className="text-xs text-gray-500 mt-1">comparação: {mesComparacao || "-"}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-5">
+          <div className="relative">
+            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar linha, carro, motorista..."
+              className="w-full pl-10 pr-3 py-2.5 rounded-lg border bg-white"
+            />
           </div>
-          <FaClipboardList className="text-4xl text-emerald-50" />
+
+          <select
+            value={mesReferencia}
+            onChange={(e) => setMesReferencia(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-lg border bg-white"
+          >
+            <option value="">Selecione o mês</option>
+            {mesesDisponiveis.map((mes) => (
+              <option key={mes} value={mes}>
+                {mes}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filtroLinha}
+            onChange={(e) => setFiltroLinha(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-lg border bg-white"
+          >
+            <option value="">Todas as linhas</option>
+            {linhasUnicas.map((linha) => (
+              <option key={linha} value={linha}>
+                {linha}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filtroCluster}
+            onChange={(e) => setFiltroCluster(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-lg border bg-white"
+          >
+            <option value="">Todos os clusters</option>
+            {clustersUnicos.map((cluster) => (
+              <option key={cluster} value={cluster}>
+                {cluster}
+              </option>
+            ))}
+          </select>
+
+          {abaAtiva === "ACOMPANHAMENTOS" && (
+            <>
+              <select
+                value={filtroInstrutor}
+                onChange={(e) => setFiltroInstrutor(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border bg-white"
+              >
+                <option value="">Todos os instrutores</option>
+                {instrutoresUnicos.map((instrutor) => (
+                  <option key={instrutor} value={instrutor}>
+                    {instrutor}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filtroProntuario}
+                onChange={(e) => setFiltroProntuario(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border bg-white"
+              >
+                <option value="">Todos os prontuários</option>
+                <option value="PRONTUARIO_10">PRONTUARIO_10</option>
+                <option value="PRONTUARIO_20">PRONTUARIO_20</option>
+                <option value="PRONTUARIO_30">PRONTUARIO_30</option>
+              </select>
+
+              <select
+                value={filtroStatus}
+                onChange={(e) => setFiltroStatus(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border bg-white"
+              >
+                <option value="">Todos os status</option>
+                <option value="AGUARDANDO_INSTRUTOR">AGUARDANDO_INSTRUTOR</option>
+                <option value="EM_MONITORAMENTO">EM_MONITORAMENTO</option>
+                <option value="EM_ANALISE">EM_ANALISE</option>
+                <option value="OK">OK</option>
+                <option value="ENCERRADO">ENCERRADO</option>
+                <option value="ATAS">ATAS</option>
+              </select>
+
+              <select
+                value={filtroConclusao}
+                onChange={(e) => setFiltroConclusao(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border bg-white"
+              >
+                <option value="">Todas as conclusões</option>
+                <option value="MELHOROU">MELHOROU</option>
+                <option value="PIOROU">PIOROU</option>
+                <option value="SEM_EVOLUCAO">SEM_EVOLUCAO</option>
+                <option value="SEM_DADOS">SEM_DADOS</option>
+              </select>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-wrap bg-slate-200/50 p-1 rounded-lg w-fit gap-1">
-        {[
-          ["LINHAS", "📈 Análise de Linhas"],
-          ["MOTORISTAS", "👤 Ranking de Motoristas"],
-          ["CARROS", "🚌 Ranking de Carros"],
-          ["ACOMPANHAMENTOS", "🧭 Acompanhamentos"],
-        ].map(([key, label]) => (
+      <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1">
+        {abas.map((aba) => (
           <button
-            key={key}
-            onClick={() => {
-              setAbaAtiva(key);
-              setSortConfig({
-                key: key === "LINHAS" ? "Desperdicio" : "Litros_Desp_Meta",
-                direction: "desc",
-              });
-            }}
-            className={`px-4 md:px-6 py-2 rounded-md text-sm md:text-base font-bold transition-all ${
-              abaAtiva === key ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700"
+            key={aba.key}
+            onClick={() => setAbaAtiva(aba.key)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-black transition ${
+              abaAtiva === aba.key
+                ? "bg-white shadow-sm text-slate-800"
+                : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            {label}
+            {aba.icon}
+            {aba.label}
           </button>
         ))}
       </div>
 
-      <div className="bg-white p-3 md:p-4 rounded-lg border shadow-sm">
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="relative min-w-[220px] flex-1">
-            <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar linha, motorista, carro, chapa..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+      {erro && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-rose-700 font-bold">
+          {erro}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="bg-white rounded-xl border shadow-sm p-10 text-center text-slate-500 font-bold">
+          Carregando dados...
+        </div>
+      ) : (
+        <>
+          {abaAtiva === "LINHAS" && (
+            <AnaliseLinhasModal
+              kmlReferenciaGeral={kmlReferenciaGeral}
+              kmlComparacaoGeral={kmlComparacaoGeral}
+              variacaoGeral={variacaoGeral}
+              totalDesperdicioMeta={totalDesperdicioMeta}
+              linhasTabelaOrdenada={linhasTabelaOrdenada}
+              sortConfig={sortLinhas}
+              handleSort={(key) => toggleSort(setSortLinhas, key)}
+              fmtNum={fmtNum}
+              fmtInt={fmtInt}
+              EvolucaoBadge={EvolucaoBadge}
+              SortIcon={SortIcon}
             />
-          </div>
-
-          <div className="min-w-[180px]">
-            <select
-              value={filtroLinha}
-              onChange={(e) => setFiltroLinha(e.target.value)}
-              className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
-            >
-              <option value="">Todas Linhas</option>
-              {linhasUnicas.map((ln) => (
-                <option key={ln} value={ln}>
-                  {ln}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="min-w-[180px]">
-            <select
-              value={filtroCluster}
-              onChange={(e) => setFiltroCluster(e.target.value)}
-              className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
-            >
-              <option value="">Todos Clusters</option>
-              {clustersUnicos.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {abaAtiva === "ACOMPANHAMENTOS" && (
-            <>
-              <div className="min-w-[190px]">
-                <select
-                  value={filtroInstrutor}
-                  onChange={(e) => setFiltroInstrutor(e.target.value)}
-                  className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
-                >
-                  <option value="">Todos Instrutores</option>
-                  {instrutoresUnicos.map((x) => (
-                    <option key={x} value={x}>
-                      {x}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="min-w-[180px]">
-                <select
-                  value={filtroProntuario}
-                  onChange={(e) => setFiltroProntuario(e.target.value)}
-                  className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
-                >
-                  <option value="">Todos Prontuários</option>
-                  <option value="PRONTUARIO_10">Prontuário 10</option>
-                  <option value="PRONTUARIO_20">Prontuário 20</option>
-                  <option value="PRONTUARIO_30">Prontuário 30</option>
-                  <option value="SEM_DADOS">Sem dados</option>
-                </select>
-              </div>
-
-              <div className="min-w-[180px]">
-                <select
-                  value={filtroStatus}
-                  onChange={(e) => setFiltroStatus(e.target.value)}
-                  className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
-                >
-                  <option value="">Todos Status</option>
-                  <option value="AGUARDANDO_INSTRUTOR">Aguardando Instrutor</option>
-                  <option value="EM_MONITORAMENTO">Em Monitoramento</option>
-                  <option value="EM_ANALISE">Em Análise</option>
-                  <option value="OK">OK</option>
-                  <option value="ENCERRADO">Encerrado</option>
-                  <option value="ATAS">ATAS</option>
-                </select>
-              </div>
-
-              <div className="min-w-[180px]">
-                <select
-                  value={filtroConclusao}
-                  onChange={(e) => setFiltroConclusao(e.target.value)}
-                  className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
-                >
-                  <option value="">Todas Conclusões</option>
-                  <option value="MELHOROU">Melhorou</option>
-                  <option value="PIOROU">Piorou</option>
-                  <option value="SEM_EVOLUCAO">Sem evolução</option>
-                  <option value="SEM_DADOS">Sem dados</option>
-                </select>
-              </div>
-            </>
           )}
 
-          <div className="min-w-[140px]">
-            <select
-              value={mesReferencia}
-              onChange={(e) => setMesReferencia(e.target.value)}
-              className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
-            >
-              {mesesDisponiveis.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
+          {abaAtiva === "MOTORISTAS" && (
+            <RankingMotoristasModal
+              motoristasOrdenados={motoristasOrdenados}
+              sortConfig={sortMotoristas}
+              handleSort={(key) => toggleSort(setSortMotoristas, key)}
+              fmtNum={fmtNum}
+              SortIcon={SortIcon}
+            />
+          )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <p className="text-sm text-gray-500 font-bold">Mês de Referência</p>
-          <p className="text-xl font-black text-slate-800">{mesReferencia || "-"}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <p className="text-sm text-gray-500 font-bold">Mês de Comparação</p>
-          <p className="text-xl font-black text-slate-800">{mesComparacao || "-"}</p>
-        </div>
-      </div>
+          {abaAtiva === "CARROS" && (
+            <RankingCarrosModal
+              veiculosOrdenados={veiculosOrdenados}
+              sortConfig={sortCarros}
+              handleSort={(key) => toggleSort(setSortCarros, key)}
+              fmtNum={fmtNum}
+              SortIcon={SortIcon}
+            />
+          )}
 
-      {abaAtiva === "LINHAS" && (
-        <AnaliseLinhasModal
-          kmlReferenciaGeral={kmlReferenciaGeral}
-          kmlComparacaoGeral={kmlComparacaoGeral}
-          variacaoGeral={variacaoGeral}
-          totalDesperdicioMeta={totalDesperdicioMeta}
-          linhasTabelaOrdenada={linhasTabelaOrdenada}
-          sortConfig={sortConfig}
-          handleSort={handleSort}
-          fmtNum={fmtNum}
-          fmtInt={fmtInt}
-          EvolucaoBadge={EvolucaoBadge}
-          SortIcon={SortIcon}
-        />
-      )}
-
-      {abaAtiva === "MOTORISTAS" && (
-        <RankingMotoristasModal
-          motoristasOrdenados={motoristasOrdenados}
-          sortConfig={sortConfig}
-          handleSort={handleSort}
-          fmtNum={fmtNum}
-          SortIcon={SortIcon}
-        />
-      )}
-
-      {abaAtiva === "CARROS" && (
-        <RankingCarrosModal
-          veiculosOrdenados={veiculosOrdenados}
-          sortConfig={sortConfig}
-          handleSort={handleSort}
-          fmtNum={fmtNum}
-          SortIcon={SortIcon}
-        />
-      )}
-
-      {abaAtiva === "ACOMPANHAMENTOS" && (
-        <AcompanhamentosModal
-          subAcompanhamento={subAcompanhamento}
-          setSubAcompanhamento={setSubAcompanhamento}
-          headerSubAcompanhamento={headerSubAcompanhamento}
-          checkpointResumo={checkpointResumo}
-          resumoInstrutor={resumoInstrutor}
-          tempoPorDia={tempoPorDia}
-          resumoPorLinhaCheckpoint={resumoPorLinhaCheckpoint}
-          acompanhamentosComEvolucao={acompanhamentosComEvolucao}
-          fmtNum={fmtNum}
-          fmtInt={fmtInt}
-          fmtDateBr={fmtDateBr}
-          formatMinutes={formatMinutes}
-          statusBadgeClass={statusBadgeClass}
-          EvolucaoBadge={EvolucaoBadge}
-        />
+          {abaAtiva === "ACOMPANHAMENTOS" && (
+            <AcompanhamentosModal
+              subAcompanhamento={subAcompanhamento}
+              setSubAcompanhamento={setSubAcompanhamento}
+              headerSubAcompanhamento={headerSubAcompanhamento}
+              checkpointResumo={checkpointResumo}
+              resumoInstrutor={resumoInstrutor}
+              tempoPorDia={tempoPorDia}
+              resumoPorLinhaCheckpoint={resumoPorLinhaCheckpoint}
+              acompanhamentosComEvolucao={acompanhamentosComEvolucao}
+              fmtNum={fmtNum}
+              fmtInt={fmtInt}
+              fmtDateBr={fmtDateBr}
+              formatMinutes={formatMinutes}
+              statusBadgeClass={statusBadgeClass}
+              EvolucaoBadge={EvolucaoBadge}
+            />
+          )}
+        </>
       )}
     </div>
   );

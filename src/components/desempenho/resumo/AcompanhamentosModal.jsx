@@ -1,4 +1,5 @@
 import React from "react";
+import { FaInfoCircle } from "react-icons/fa";
 
 export default function AcompanhamentosModal({
   subAcompanhamento,
@@ -16,12 +17,19 @@ export default function AcompanhamentosModal({
   statusBadgeClass,
   EvolucaoBadge,
 }) {
+  const tabs = [
+    ["RESUMO_INSTRUTOR", "Resumo por Instrutor"],
+    ["TEMPO_DIA", "Tempo por Dia"],
+    ["CHECKPOINT_LINHA", "Check Point por Linha"],
+    ["ACOMPANHAMENTOS", "Acompanhamentos"],
+  ];
+
   return (
-    <>
-      <div className="bg-white rounded-xl shadow-sm border p-4">
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border shadow-sm p-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h2 className="text-lg md:text-xl font-black text-slate-800">
+            <h2 className="text-xl font-black text-slate-800">
               {headerSubAcompanhamento[subAcompanhamento]?.titulo || "Acompanhamentos"}
             </h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -30,16 +38,11 @@ export default function AcompanhamentosModal({
           </div>
 
           <div className="flex flex-wrap bg-slate-100 p-1 rounded-lg gap-1">
-            {[
-              ["RESUMO_INSTRUTOR", "Resumo por Instrutor"],
-              ["TEMPO_DIA", "Tempo por Dia"],
-              ["CHECKPOINT_LINHA", "Check Point por Linha"],
-              ["ACOMPANHAMENTOS", "Acompanhamentos"],
-            ].map(([key, label]) => (
+            {tabs.map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => setSubAcompanhamento(key)}
-                className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${
+                className={`px-4 py-2 rounded-md text-sm font-bold transition ${
                   subAcompanhamento === key
                     ? "bg-white shadow-sm text-slate-800"
                     : "text-slate-500 hover:text-slate-700"
@@ -55,7 +58,9 @@ export default function AcompanhamentosModal({
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="bg-white p-4 rounded-xl border shadow-sm">
           <p className="text-sm text-gray-500 font-bold">Checkpoints</p>
-          <p className="text-2xl font-black text-slate-800">{fmtInt(checkpointResumo.total)}</p>
+          <p className="text-2xl font-black text-slate-800">
+            {fmtInt(checkpointResumo.total)}
+          </p>
         </div>
 
         <div className="bg-white p-4 rounded-xl border shadow-sm">
@@ -96,8 +101,8 @@ export default function AcompanhamentosModal({
 
       {subAcompanhamento === "RESUMO_INSTRUTOR" && (
         <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-          <table className="w-full text-left min-w-[1000px]">
-            <thead className="bg-white text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
+          <table className="w-full text-left min-w-[1100px]">
+            <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-4">Instrutor</th>
                 <th className="px-4 py-4">Acompanhamentos</th>
@@ -122,6 +127,14 @@ export default function AcompanhamentosModal({
                   <td className="px-4 py-4">{fmtInt(row.qtd_linhas)}</td>
                 </tr>
               ))}
+
+              {resumoInstrutor.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-500 font-bold">
+                    Nenhum registro encontrado.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -129,8 +142,8 @@ export default function AcompanhamentosModal({
 
       {subAcompanhamento === "TEMPO_DIA" && (
         <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-          <table className="w-full text-left min-w-[900px]">
-            <thead className="bg-white text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
+          <table className="w-full text-left min-w-[1000px]">
+            <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-4">Data</th>
                 <th className="px-4 py-4">Instrutor</th>
@@ -149,6 +162,14 @@ export default function AcompanhamentosModal({
                   <td className="px-4 py-4">{formatMinutes(row.media_minutos)}</td>
                 </tr>
               ))}
+
+              {tempoPorDia.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500 font-bold">
+                    Nenhum registro encontrado.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -156,8 +177,8 @@ export default function AcompanhamentosModal({
 
       {subAcompanhamento === "CHECKPOINT_LINHA" && (
         <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-          <table className="w-full text-left min-w-[1100px]">
-            <thead className="bg-white text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
+          <table className="w-full text-left min-w-[1450px]">
+            <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-4">Linha</th>
                 <th className="px-4 py-4">Prontuário</th>
@@ -165,12 +186,15 @@ export default function AcompanhamentosModal({
                 <th className="px-4 py-4">Antes KM/L</th>
                 <th className="px-4 py-4">Depois KM/L</th>
                 <th className="px-4 py-4">Δ KM/L</th>
+                <th className="px-4 py-4">Antes Desp.</th>
+                <th className="px-4 py-4">Depois Desp.</th>
                 <th className="px-4 py-4">Δ Desp.</th>
                 <th className="px-4 py-4">Melhorou</th>
                 <th className="px-4 py-4">Piorou</th>
                 <th className="px-4 py-4">Sem Evolução</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-100">
               {resumoPorLinhaCheckpoint.map((row) => (
                 <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
@@ -182,94 +206,119 @@ export default function AcompanhamentosModal({
                   <td className="px-4 py-4">
                     <EvolucaoBadge value={row.delta_kml} />
                   </td>
+                  <td className="px-4 py-4">{fmtNum(row.antes_desp)}</td>
+                  <td className="px-4 py-4">{fmtNum(row.depois_desp)}</td>
                   <td className="px-4 py-4">
                     <EvolucaoBadge value={row.delta_desperdicio} invert />
                   </td>
-                  <td className="px-4 py-4">{fmtInt(row.melhorou)}</td>
-                  <td className="px-4 py-4">{fmtInt(row.piorou)}</td>
-                  <td className="px-4 py-4">{fmtInt(row.sem_evolucao)}</td>
+                  <td className="px-4 py-4 text-emerald-700 font-bold">
+                    {fmtInt(row.melhorou)}
+                  </td>
+                  <td className="px-4 py-4 text-rose-700 font-bold">
+                    {fmtInt(row.piorou)}
+                  </td>
+                  <td className="px-4 py-4 text-slate-700 font-bold">
+                    {fmtInt(row.sem_evolucao)}
+                  </td>
                 </tr>
               ))}
+
+              {resumoPorLinhaCheckpoint.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="px-6 py-12 text-center text-slate-500 font-bold">
+                    Nenhum checkpoint encontrado.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       )}
 
       {subAcompanhamento === "ACOMPANHAMENTOS" && (
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-          <div className="grid grid-cols-12 bg-white text-slate-600 font-extrabold border-b text-[11px] md:text-xs uppercase tracking-wider">
-            <div className="col-span-1 px-3 py-3">Data</div>
-            <div className="col-span-2 px-3 py-3">Motorista</div>
-            <div className="col-span-1 px-3 py-3">Linha</div>
-            <div className="col-span-2 px-3 py-3">Instrutor</div>
-            <div className="col-span-1 px-3 py-3">Status</div>
-            <div className="col-span-1 px-3 py-3">Prontuário</div>
-            <div className="col-span-1 px-3 py-3">Antes</div>
-            <div className="col-span-1 px-3 py-3">Depois</div>
-            <div className="col-span-1 px-3 py-3">Desp. Ajust.</div>
-            <div className="col-span-1 px-3 py-3">Conclusão</div>
-          </div>
+        <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+          <table className="w-full text-left min-w-[1700px]">
+            <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
+              <tr>
+                <th className="px-4 py-4">Motorista</th>
+                <th className="px-4 py-4">Chapa</th>
+                <th className="px-4 py-4">Linha</th>
+                <th className="px-4 py-4">Instrutor</th>
+                <th className="px-4 py-4">Status</th>
+                <th className="px-4 py-4">Início</th>
+                <th className="px-4 py-4">Tempo</th>
+                <th className="px-4 py-4">Prontuário</th>
+                <th className="px-4 py-4">Antes KM/L</th>
+                <th className="px-4 py-4">Depois KM/L</th>
+                <th className="px-4 py-4">Δ KM/L</th>
+                <th className="px-4 py-4">Antes Desp.</th>
+                <th className="px-4 py-4">Depois Desp.</th>
+                <th className="px-4 py-4">Δ Desp.</th>
+                <th className="px-4 py-4">Conclusão</th>
+              </tr>
+            </thead>
 
-          <div className="divide-y divide-gray-100">
-            {acompanhamentosComEvolucao.map((row) => (
-              <div key={row.id} className="grid grid-cols-12 hover:bg-blue-50/50 transition-colors">
-                <div className="col-span-1 px-3 py-3 text-xs md:text-sm break-words">
-                  {fmtDateBr(row.data_ref)}
-                </div>
+            <tbody className="divide-y divide-gray-100">
+              {acompanhamentosComEvolucao.map((row) => (
+                <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
+                  <td className="px-4 py-4 font-black text-slate-900">
+                    {row.motorista_nome || "-"}
+                  </td>
 
-                <div className="col-span-2 px-3 py-3 text-xs md:text-sm break-words">
-                  <div className="font-black text-slate-900">{row.motorista_nome || "-"}</div>
-                  <div className="text-xs text-slate-600 mt-1">{row.motorista_chapa || "-"}</div>
-                </div>
+                  <td className="px-4 py-4">
+                    <span className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      {row.motorista_chapa || "-"}
+                    </span>
+                  </td>
 
-                <div className="col-span-1 px-3 py-3 text-xs md:text-sm break-words">
-                  {row.linha_resolvida || "-"}
-                </div>
+                  <td className="px-4 py-4">{row.linha_resolvida || "-"}</td>
+                  <td className="px-4 py-4">{row.instrutor_nome || "-"}</td>
 
-                <div className="col-span-2 px-3 py-3 text-xs md:text-sm break-words">
-                  {row.instrutor_nome || "-"}
-                </div>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`inline-flex px-2.5 py-1 rounded-lg border text-xs font-bold ${statusBadgeClass(
+                        row.status_norm
+                      )}`}
+                    >
+                      {row.status_norm}
+                    </span>
+                  </td>
 
-                <div className="col-span-1 px-3 py-3 text-xs md:text-sm break-words">
-                  <span
-                    className={`px-2 py-1 rounded-lg text-[11px] font-bold border inline-flex items-center ${statusBadgeClass(
-                      row.status_norm
-                    )}`}
-                  >
-                    {row.status_norm}
-                  </span>
-                </div>
+                  <td className="px-4 py-4">{fmtDateBr(row.data_ref)}</td>
+                  <td className="px-4 py-4">{formatMinutes(row.duracao_min)}</td>
+                  <td className="px-4 py-4">{row.checkpoint_tipo || "-"}</td>
+                  <td className="px-4 py-4">{row.antes_kml == null ? "-" : fmtNum(row.antes_kml)}</td>
+                  <td className="px-4 py-4">{row.depois_kml == null ? "-" : fmtNum(row.depois_kml)}</td>
+                  <td className="px-4 py-4">
+                    {row.delta_kml == null ? "-" : <EvolucaoBadge value={row.delta_kml} />}
+                  </td>
+                  <td className="px-4 py-4">{row.antes_desp == null ? "-" : fmtNum(row.antes_desp)}</td>
+                  <td className="px-4 py-4">{row.depois_desp == null ? "-" : fmtNum(row.depois_desp)}</td>
+                  <td className="px-4 py-4">
+                    {row.delta_desperdicio == null ? "-" : (
+                      <EvolucaoBadge value={row.delta_desperdicio} invert />
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-2">
+                      <FaInfoCircle className="text-slate-400" />
+                      <span className="font-bold">{row.conclusao_checkpoint || "-"}</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
 
-                <div className="col-span-1 px-3 py-3 text-xs md:text-sm break-words">
-                  {row.prontuario_label || "-"}
-                </div>
-
-                <div className="col-span-1 px-3 py-3 text-xs md:text-sm break-words">
-                  {row.antes_kml == null ? "-" : fmtNum(row.antes_kml)}
-                </div>
-
-                <div className="col-span-1 px-3 py-3 text-xs md:text-sm break-words">
-                  {row.depois_kml == null ? "-" : fmtNum(row.depois_kml)}
-                </div>
-
-                <div className="col-span-1 px-3 py-3 text-xs md:text-sm break-words">
-                  {row.depois_desp == null ? "-" : `${fmtNum(row.depois_desp)} L`}
-                </div>
-
-                <div className="col-span-1 px-3 py-3 text-xs md:text-sm break-words">
-                  {row.conclusao_checkpoint || "-"}
-                </div>
-              </div>
-            ))}
-
-            {acompanhamentosComEvolucao.length === 0 && (
-              <div className="px-6 py-12 text-center text-slate-500 font-bold">
-                Nenhum acompanhamento encontrado.
-              </div>
-            )}
-          </div>
+              {acompanhamentosComEvolucao.length === 0 && (
+                <tr>
+                  <td colSpan={15} className="px-6 py-12 text-center text-slate-500 font-bold">
+                    Nenhum acompanhamento encontrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
-    </>
+    </div>
   );
 }

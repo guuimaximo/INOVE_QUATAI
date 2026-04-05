@@ -272,7 +272,6 @@ function agruparPorDia(rows) {
 
 function calcularConclusao(antesDesp, depoisDespAjustado, deltaKml) {
   if (antesDesp == null || depoisDespAjustado == null) return "SEM_DADOS";
-
   if (depoisDespAjustado < antesDesp && deltaKml > 0) return "MELHOROU";
   if (depoisDespAjustado > antesDesp && deltaKml < 0) return "PIOROU";
   if (depoisDespAjustado < antesDesp) return "MELHOROU";
@@ -286,6 +285,7 @@ export default function DesempenhoDieselAnalise() {
 
   const [rowsBase, setRowsBase] = useState([]);
   const [acompanhamentos, setAcompanhamentos] = useState([]);
+  const [eventos, setEventos] = useState([]);
   const [funcionarios, setFuncionarios] = useState([]);
 
   const [abaAtiva, setAbaAtiva] = useState("LINHAS");
@@ -411,18 +411,32 @@ export default function DesempenhoDieselAnalise() {
     return data || [];
   }
 
+  async function carregarEventos() {
+    const { data, error } = await supabase
+      .from("diesel_acompanhamento_eventos")
+      .select("id, acompanhamento_id, created_at, tipo, observacoes, extra")
+      .in("tipo", ["PRONTUARIO_10", "PRONTUARIO_20", "PRONTUARIO_30"])
+      .order("created_at", { ascending: false })
+      .limit(8000);
+
+    if (error) throw error;
+    return data || [];
+  }
+
   async function carregarTudo() {
     setLoading(true);
     setErro("");
     try {
-      const [premiacao, acomp, funcs] = await Promise.all([
+      const [premiacao, acomp, evts, funcs] = await Promise.all([
         carregarPremiacao(),
         carregarAcompanhamentos(),
+        carregarEventos(),
         carregarFuncionarios(),
       ]);
 
       setRowsBase(premiacao);
       setAcompanhamentos(acomp);
+      setEventos(evts);
       setFuncionarios(funcs);
     } catch (e) {
       console.error(e);
@@ -566,14 +580,13 @@ export default function DesempenhoDieselAnalise() {
     const map = new Map();
     datasetFiltrado.forEach((r) => {
       const key = `${r.linha}__${r.Mes_Ano}`;
-      if (!map.has(key)) {
+      if (!map.has(key))
         map.set(key, {
           Km: 0,
           Comb: 0,
           Litros_Esperados: 0,
           Litros_Desp_Meta: 0,
         });
-      }
       const item = map.get(key);
       item.Km += r.Km;
       item.Comb += r.Comb;
@@ -773,6 +786,118 @@ export default function DesempenhoDieselAnalise() {
     });
   }, [acompanhamentos]);
 
+  const eventosTratados = useMemo(() => {
+    const mapaAcomp = new Map(acompanhamentosTratados.map((a) => [a.id, a]));
+
+    return (eventos || []).map((ev) => {
+      const extra = ev?.extra && typeof ev.extra === "object" ? ev.extra : {};
+      const comparativo =
+        extra?.comparativo && typeof extra.comparativo === "object"
+          ? extra.comparativo
+          : {};
+      const antes =
+        comparativo?.antes_periodo &&
+        typeof comparativo.antes_periodo === "object"
+          ? comparativo.antes_periodo
+          : {};
+      const depois =
+        comparativo?.depois_periodo &&
+        typeof comparativo.depois_periodo === "object"
+          ? comparativo.depois_periodo
+          : {};
+      const acomp = mapaAcomp.get(ev.acompanhamento_id);
+
+      return {
+        ...ev,
+        created_at_dt: ev.created_at,
+        tipo: normalize(ev.tipo),
+        motorista_nome: acomp?.motorista_nome || "-",
+        motorista_chapa: acomp?.motorista_chapa || "-",
+        linha_foco: acomp?.linha_resolvida || "SEM LINHA",
+        instrutor_nome: acomp?.instrutor_nome || "",
+        conclusao: normalize(comparativo?.conclusao || "SEM_EVOLUCAO"),
+        delta_kml: n(comparativo?.delta_kml),
+        delta_desperdicio: n(comparativo?.delta_desperdicio),
+        antes_kml: n(antes?.kml_real),
+        depois_kml: n(depois?.kml_real),
+        antes_desp: n(antes?.desperdicio),
+        depois_desp: n(depois?.desperdicio),
+        acompanhamento_id: ev.acompanhamento_id,
+      };
+    });
+  }, [eventos, acompanhamentosTratados]);
+
+  const acompanhamentosFiltrados = useMemo(() => {
+    return acompanhamentosTratados.filter((a) => {
+      if (filtroLinha && a.linha_resolvida !== filtroLinha) return false;
+
+      if (filtroCluster) {
+        const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
+        if (c !== filtroCluster) return false;
+      }
+
+      if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor) {
+        return false;
+      }
+
+      if (filtroStatus && a.status_norm !== filtroStatus) return false;
+      if (filtroProntuario && a.prontuario_label !== filtroProntuario) return false;
+
+      if (mesReferencia) {
+        const mesItem = a.data_ref ? String(a.data_ref).slice(0, 7) : "";
+        if (mesItem !== mesReferencia) return false;
+      }
+
+      const q = busca.toLowerCase().trim();
+      if (!q) return true;
+
+      return (
+        String(a.motorista_nome || "").toLowerCase().includes(q) ||
+        String(a.motorista_chapa || "").toLowerCase().includes(q) ||
+        String(a.linha_resolvida || "").toLowerCase().includes(q) ||
+        String(a.instrutor_nome || "").toLowerCase().includes(q)
+      );
+    });
+  }, [
+    acompanhamentosTratados,
+    filtroLinha,
+    filtroCluster,
+    filtroInstrutor,
+    filtroStatus,
+    filtroProntuario,
+    mesReferencia,
+    busca,
+  ]);
+
+  const eventosFiltrados = useMemo(() => {
+    return eventosTratados.filter((e) => {
+      if (filtroLinha && e.linha_foco !== filtroLinha) return false;
+      if (filtroInstrutor && e.instrutor_nome !== filtroInstrutor) return false;
+      if (filtroProntuario && e.tipo !== filtroProntuario) return false;
+
+      if (mesReferencia) {
+        const mesItem = dateOnly(e.created_at_dt).slice(0, 7);
+        if (mesItem !== mesReferencia) return false;
+      }
+
+      const q = busca.toLowerCase().trim();
+      if (!q) return true;
+
+      return (
+        String(e.motorista_nome || "").toLowerCase().includes(q) ||
+        String(e.motorista_chapa || "").toLowerCase().includes(q) ||
+        String(e.linha_foco || "").toLowerCase().includes(q)
+      );
+    });
+  }, [
+    eventosTratados,
+    filtroLinha,
+    filtroInstrutor,
+    filtroProntuario,
+    mesReferencia,
+    busca,
+  ]);
+
   const acompanhamentosComEvolucaoBase = useMemo(() => {
     return acompanhamentosTratados.map((a) => {
       const janela = n(a.janela_analise_dias);
@@ -789,8 +914,6 @@ export default function DesempenhoDieselAnalise() {
           depois_desp: null,
           delta_desperdicio: null,
           conclusao_checkpoint: "SEM_DADOS",
-          km_base: null,
-          litros_meta_base: null,
         };
       }
 
@@ -811,7 +934,6 @@ export default function DesempenhoDieselAnalise() {
       }
 
       const diasAgrupados = agruparPorDia(baseMotorista);
-
       const diasAntes = diasAgrupados.filter((d) => d.data < dtInicio).slice(-janela);
       const diasDepois = diasAgrupados.filter((d) => d.data >= dtInicio).slice(-janela);
 
@@ -826,19 +948,13 @@ export default function DesempenhoDieselAnalise() {
           depois_desp: null,
           delta_desperdicio: null,
           conclusao_checkpoint: "SEM_DADOS",
-          km_base: null,
-          litros_meta_base: null,
         };
       }
 
-      const antesRows = diasAntes.flatMap((d) => d.rows);
-      const depoisRows = diasDepois.flatMap((d) => d.rows);
-
-      const antes = aggregatePeriodo(antesRows);
-      const depois = aggregatePeriodo(depoisRows);
+      const antes = aggregatePeriodo(diasAntes.flatMap((d) => d.rows));
+      const depois = aggregatePeriodo(diasDepois.flatMap((d) => d.rows));
 
       const deltaKml = n(depois.kml) - n(antes.kml);
-
       const kmBase = n(antes.km);
       const litrosMetaBase = n(antes.litrosMeta);
 
@@ -846,15 +962,9 @@ export default function DesempenhoDieselAnalise() {
         n(depois.kml) > 0 && kmBase > 0 ? kmBase / n(depois.kml) : null;
 
       const desperdicioDepoisAjustado =
-        litrosEquivDepoisNoKmBase != null
-          ? Math.max(0, litrosEquivDepoisNoKmBase - litrosMetaBase)
-          : null;
-
-      const conclusao = calcularConclusao(
-        n(antes.desperdicio),
-        desperdicioDepoisAjustado,
-        deltaKml
-      );
+        litrosEquivDepoisNoKmBase == null
+          ? null
+          : Math.max(0, litrosEquivDepoisNoKmBase - litrosMetaBase);
 
       return {
         ...a,
@@ -868,55 +978,66 @@ export default function DesempenhoDieselAnalise() {
           desperdicioDepoisAjustado == null
             ? null
             : desperdicioDepoisAjustado - n(antes.desperdicio),
-        conclusao_checkpoint: conclusao,
-        km_base: kmBase,
-        litros_meta_base: litrosMetaBase,
+        conclusao_checkpoint: calcularConclusao(
+          n(antes.desperdicio),
+          desperdicioDepoisAjustado,
+          deltaKml
+        ),
       };
     });
   }, [acompanhamentosTratados, dataset]);
 
-  const acompanhamentosComEvolucao = useMemo(() => {
-    return acompanhamentosComEvolucaoBase.filter((a) => {
-      if (filtroLinha && a.linha_resolvida !== filtroLinha) return false;
+  const mapaNovaEvolucao = useMemo(() => {
+    return new Map(acompanhamentosComEvolucaoBase.map((a) => [a.id, a]));
+  }, [acompanhamentosComEvolucaoBase]);
 
-      if (filtroCluster) {
-        const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
-        if (c !== filtroCluster) return false;
+  const mapaUltimoCheckpoint = useMemo(() => {
+    const map = new Map();
+
+    eventosFiltrados.forEach((ev) => {
+      const atual = map.get(ev.acompanhamento_id);
+      if (!atual || String(ev.created_at_dt) > String(atual.created_at_dt)) {
+        map.set(ev.acompanhamento_id, ev);
       }
-
-      if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor) {
-        return false;
-      }
-
-      if (filtroStatus && a.status_norm !== filtroStatus) return false;
-      if (filtroProntuario && a.prontuario_label !== filtroProntuario) return false;
-      if (filtroConclusao && a.conclusao_checkpoint !== filtroConclusao) return false;
-
-      if (mesReferencia) {
-        const mesItem = a.data_ref ? String(a.data_ref).slice(0, 7) : "";
-        if (mesItem !== mesReferencia) return false;
-      }
-
-      const q = busca.toLowerCase().trim();
-      if (!q) return true;
-
-      return (
-        String(a.motorista_nome || "").toLowerCase().includes(q) ||
-        String(a.motorista_chapa || "").toLowerCase().includes(q) ||
-        String(a.linha_resolvida || "").toLowerCase().includes(q) ||
-        String(a.instrutor_nome || "").toLowerCase().includes(q)
-      );
     });
+
+    return map;
+  }, [eventosFiltrados]);
+
+  const acompanhamentosComEvolucao = useMemo(() => {
+    return acompanhamentosFiltrados
+      .map((a) => {
+        const novo = mapaNovaEvolucao.get(a.id);
+        const cp = mapaUltimoCheckpoint.get(a.id);
+
+        return {
+          ...a,
+          checkpoint_tipo:
+            novo?.checkpoint_tipo ||
+            cp?.tipo ||
+            a.prontuario_label ||
+            "SEM_DADOS",
+
+          antes_kml: novo?.antes_kml ?? cp?.antes_kml ?? null,
+          depois_kml: novo?.depois_kml ?? cp?.depois_kml ?? null,
+          delta_kml: novo?.delta_kml ?? cp?.delta_kml ?? null,
+          antes_desp: novo?.antes_desp ?? cp?.antes_desp ?? null,
+          depois_desp: novo?.depois_desp ?? cp?.depois_desp ?? null,
+          delta_desperdicio:
+            novo?.delta_desperdicio ?? cp?.delta_desperdicio ?? null,
+          conclusao_checkpoint:
+            novo?.conclusao_checkpoint || cp?.conclusao || "SEM_DADOS",
+        };
+      })
+      .filter((a) => {
+        if (filtroConclusao && a.conclusao_checkpoint !== filtroConclusao) return false;
+        return true;
+      });
   }, [
-    acompanhamentosComEvolucaoBase,
-    filtroLinha,
-    filtroCluster,
-    filtroInstrutor,
-    filtroStatus,
-    filtroProntuario,
+    acompanhamentosFiltrados,
+    mapaNovaEvolucao,
+    mapaUltimoCheckpoint,
     filtroConclusao,
-    mesReferencia,
-    busca,
   ]);
 
   const checkpointResumo = useMemo(() => {
@@ -1300,7 +1421,9 @@ export default function DesempenhoDieselAnalise() {
             >
               <option value="">Todas Linhas</option>
               {linhasUnicas.map((ln) => (
-                <option key={ln} value={ln}>{ln}</option>
+                <option key={ln} value={ln}>
+                  {ln}
+                </option>
               ))}
             </select>
           </div>
@@ -1313,7 +1436,9 @@ export default function DesempenhoDieselAnalise() {
             >
               <option value="">Todos Clusters</option>
               {clustersUnicos.map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>
+                  {c}
+                </option>
               ))}
             </select>
           </div>
@@ -1328,7 +1453,9 @@ export default function DesempenhoDieselAnalise() {
                 >
                   <option value="">Todos Instrutores</option>
                   {instrutoresUnicos.map((x) => (
-                    <option key={x} value={x}>{x}</option>
+                    <option key={x} value={x}>
+                      {x}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -1386,7 +1513,9 @@ export default function DesempenhoDieselAnalise() {
               className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
             >
               {mesesDisponiveis.map((m) => (
-                <option key={m} value={m}>{m}</option>
+                <option key={m} value={m}>
+                  {m}
+                </option>
               ))}
             </select>
           </div>

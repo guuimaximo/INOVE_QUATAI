@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 import { createClient } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
+
 import AnaliseLinhasModal from "../components/desempenho/resumo/AnaliseLinhasModal";
 import RankingMotoristasModal from "../components/desempenho/resumo/RankingMotoristasModal";
 import RankingCarrosModal from "../components/desempenho/resumo/RankingCarrosModal";
@@ -194,13 +195,99 @@ function EvolucaoBadge({ value, invert = false, percent = false }) {
   );
 }
 
+function toDateOnlyTs(v) {
+  if (!v) return null;
+  const txt = String(v).slice(0, 10);
+  const d = new Date(`${txt}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function diffDaysInclusive(start, end = new Date()) {
+  const s = toDateOnlyTs(start);
+  const e = toDateOnlyTs(end);
+  if (!s || !e) return 0;
+  const ms = e.getTime() - s.getTime();
+  return Math.max(0, Math.floor(ms / 86400000));
+}
+
+function getJanelaDiasMonitoramento(dtInicio) {
+  const dias = diffDaysInclusive(dtInicio);
+  if (dias >= 30) return 30;
+  if (dias >= 20) return 20;
+  if (dias >= 10) return 10;
+  return 0;
+}
+
+function getProntuarioLabelByJanela(janela) {
+  if (janela === 10) return "PRONTUARIO_10";
+  if (janela === 20) return "PRONTUARIO_20";
+  if (janela === 30) return "PRONTUARIO_30";
+  return "SEM_DADOS";
+}
+
+function aggregatePeriodo(rows) {
+  const km = rows.reduce((acc, r) => acc + n(r.Km), 0);
+  const comb = rows.reduce((acc, r) => acc + n(r.Comb), 0);
+  const litrosMeta = rows.reduce((acc, r) => {
+    const metaDireta = n(r.Litros_Esperados);
+    if (metaDireta > 0) return acc + metaDireta;
+
+    const metaLinha = n(r.Meta_Linha);
+    if (metaLinha > 0 && n(r.Km) > 0) return acc + n(r.Km) / metaLinha;
+
+    return acc;
+  }, 0);
+
+  const kml = comb > 0 ? km / comb : 0;
+  const metaKml = litrosMeta > 0 ? km / litrosMeta : 0;
+  const desperdicio = Math.max(0, comb - litrosMeta);
+
+  return {
+    km,
+    comb,
+    litrosMeta,
+    kml,
+    metaKml,
+    desperdicio,
+  };
+}
+
+function agruparPorDia(rows) {
+  const map = new Map();
+
+  rows.forEach((r) => {
+    const chaveDia = dateOnly(r.Date || r.dateOnly);
+    if (!chaveDia) return;
+
+    if (!map.has(chaveDia)) map.set(chaveDia, []);
+    map.get(chaveDia).push(r);
+  });
+
+  return [...map.entries()]
+    .map(([dia, itens]) => ({
+      dia,
+      data: toDateOnlyTs(dia),
+      rows: itens,
+    }))
+    .filter((x) => x.data)
+    .sort((a, b) => a.data - b.data);
+}
+
+function calcularConclusao(antes, depoisAjustado, deltaKml) {
+  if (antes == null || depoisAjustado == null) return "SEM_DADOS";
+  if (depoisAjustado < antes && deltaKml > 0) return "MELHOROU";
+  if (depoisAjustado > antes && deltaKml < 0) return "PIOROU";
+  if (depoisAjustado < antes) return "MELHOROU";
+  if (depoisAjustado > antes) return "PIOROU";
+  return "SEM_EVOLUCAO";
+}
+
 export default function DesempenhoDieselAnalise() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
 
   const [rowsBase, setRowsBase] = useState([]);
   const [acompanhamentos, setAcompanhamentos] = useState([]);
-  const [eventos, setEventos] = useState([]);
   const [funcionarios, setFuncionarios] = useState([]);
 
   const [abaAtiva, setAbaAtiva] = useState("LINHAS");
@@ -211,6 +298,8 @@ export default function DesempenhoDieselAnalise() {
   const [filtroCluster, setFiltroCluster] = useState("");
   const [filtroInstrutor, setFiltroInstrutor] = useState("");
   const [filtroProntuario, setFiltroProntuario] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState("");
+  const [filtroConclusao, setFiltroConclusao] = useState("");
   const [mesReferencia, setMesReferencia] = useState("");
   const [sortConfig, setSortConfig] = useState({
     key: "Desperdicio",
@@ -324,32 +413,18 @@ export default function DesempenhoDieselAnalise() {
     return data || [];
   }
 
-  async function carregarEventos() {
-    const { data, error } = await supabase
-      .from("diesel_acompanhamento_eventos")
-      .select("id, acompanhamento_id, created_at, tipo, observacoes, extra")
-      .in("tipo", ["PRONTUARIO_10", "PRONTUARIO_20", "PRONTUARIO_30"])
-      .order("created_at", { ascending: false })
-      .limit(8000);
-
-    if (error) throw error;
-    return data || [];
-  }
-
   async function carregarTudo() {
     setLoading(true);
     setErro("");
     try {
-      const [premiacao, acomp, evts, funcs] = await Promise.all([
+      const [premiacao, acomp, funcs] = await Promise.all([
         carregarPremiacao(),
         carregarAcompanhamentos(),
-        carregarEventos(),
         carregarFuncionarios(),
       ]);
 
       setRowsBase(premiacao);
       setAcompanhamentos(acomp);
-      setEventos(evts);
       setFuncionarios(funcs);
     } catch (e) {
       console.error(e);
@@ -441,8 +516,13 @@ export default function DesempenhoDieselAnalise() {
   }, [dataset, acompanhamentos]);
 
   const clustersUnicos = useMemo(() => {
-    return [...new Set(dataset.map((r) => r.Cluster).filter(Boolean))].sort();
-  }, [dataset]);
+    const set = new Set(dataset.map((r) => r.Cluster).filter(Boolean));
+    acompanhamentos.forEach((a) => {
+      const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
+      if (c) set.add(c);
+    });
+    return [...set].filter(Boolean).sort();
+  }, [dataset, acompanhamentos]);
 
   const instrutoresUnicos = useMemo(() => {
     return [
@@ -488,13 +568,14 @@ export default function DesempenhoDieselAnalise() {
     const map = new Map();
     datasetFiltrado.forEach((r) => {
       const key = `${r.linha}__${r.Mes_Ano}`;
-      if (!map.has(key))
+      if (!map.has(key)) {
         map.set(key, {
           Km: 0,
           Comb: 0,
           Litros_Esperados: 0,
           Litros_Desp_Meta: 0,
         });
+      }
       const item = map.get(key);
       item.Km += r.Km;
       item.Comb += r.Comb;
@@ -676,66 +757,147 @@ export default function DesempenhoDieselAnalise() {
       const duracaoMin =
         iniMin != null && fimMin != null && fimMin >= iniMin ? fimMin - iniMin : 0;
 
+      const diasMonitoramento = diffDaysInclusive(a.dt_inicio_monitoramento || a.created_at);
+      const janelaDias = getJanelaDiasMonitoramento(a.dt_inicio_monitoramento || a.created_at);
+      const prontuarioLabel = getProntuarioLabelByJanela(janelaDias);
+
       return {
         ...a,
         status_norm: statusNorm(a.status),
         linha_resolvida: getLinhaFocoAcompanhamento(a),
         data_ref: dateOnly(a.dt_inicio_monitoramento || a.created_at),
         duracao_min: duracaoMin,
+        dias_monitoramento: diasMonitoramento,
+        janela_analise_dias: janelaDias,
+        prontuario_label: prontuarioLabel,
       };
     });
   }, [acompanhamentos]);
 
-  const eventosTratados = useMemo(() => {
-    const mapaAcomp = new Map(acompanhamentosTratados.map((a) => [a.id, a]));
+  const acompanhamentosComEvolucaoBase = useMemo(() => {
+    return acompanhamentosTratados.map((a) => {
+      const janela = n(a.janela_analise_dias);
+      const dtInicio = toDateOnlyTs(a.dt_inicio_monitoramento || a.created_at);
 
-    return (eventos || []).map((ev) => {
-      const extra = ev?.extra && typeof ev.extra === "object" ? ev.extra : {};
-      const comparativo =
-        extra?.comparativo && typeof extra.comparativo === "object"
-          ? extra.comparativo
-          : {};
-      const antes =
-        comparativo?.antes_periodo &&
-        typeof comparativo.antes_periodo === "object"
-          ? comparativo.antes_periodo
-          : {};
-      const depois =
-        comparativo?.depois_periodo &&
-        typeof comparativo.depois_periodo === "object"
-          ? comparativo.depois_periodo
-          : {};
-      const acomp = mapaAcomp.get(ev.acompanhamento_id);
+      if (!dtInicio || janela === 0) {
+        return {
+          ...a,
+          checkpoint_tipo: "SEM_DADOS",
+          antes_kml: null,
+          depois_kml: null,
+          delta_kml: null,
+          antes_desp: null,
+          depois_desp: null,
+          delta_desperdicio: null,
+          conclusao_checkpoint: "SEM_DADOS",
+          km_base: null,
+          litros_meta_base: null,
+        };
+      }
+
+      const linhaFoco = normalize(a.linha_resolvida);
+      const clusterFoco = normalize(a.cluster_foco || a.metadata?.cluster_foco);
+      const chapa = String(a.motorista_chapa || "").trim();
+
+      let baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
+
+      if (linhaFoco && linhaFoco !== "SEM LINHA") {
+        const filtradoLinha = baseMotorista.filter((r) => normalize(r.linha) === linhaFoco);
+        if (filtradoLinha.length) baseMotorista = filtradoLinha;
+      }
+
+      if (clusterFoco) {
+        const filtradoCluster = baseMotorista.filter((r) => normalize(r.Cluster) === clusterFoco);
+        if (filtradoCluster.length) baseMotorista = filtradoCluster;
+      }
+
+      const diasAgrupados = agruparPorDia(baseMotorista);
+
+      const diasAntes = diasAgrupados
+        .filter((d) => d.data < dtInicio)
+        .slice(-janela);
+
+      const diasDepois = diasAgrupados
+        .filter((d) => d.data >= dtInicio)
+        .slice(-janela);
+
+      if (diasAntes.length < janela || diasDepois.length < janela) {
+        return {
+          ...a,
+          checkpoint_tipo: a.prontuario_label,
+          antes_kml: null,
+          depois_kml: null,
+          delta_kml: null,
+          antes_desp: null,
+          depois_desp: null,
+          delta_desperdicio: null,
+          conclusao_checkpoint: "SEM_DADOS",
+          km_base: null,
+          litros_meta_base: null,
+        };
+      }
+
+      const antesRows = diasAntes.flatMap((d) => d.rows);
+      const depoisRows = diasDepois.flatMap((d) => d.rows);
+
+      const antes = aggregatePeriodo(antesRows);
+      const depois = aggregatePeriodo(depoisRows);
+
+      const deltaKml = n(depois.kml) - n(antes.kml);
+
+      const kmBase = n(antes.km);
+      const litrosMetaBase = n(antes.litrosMeta);
+
+      const litrosEquivDepoisNoKmBase =
+        n(depois.kml) > 0 && kmBase > 0 ? kmBase / n(depois.kml) : 0;
+
+      const desperdicioDepoisAjustado = Math.max(
+        0,
+        litrosEquivDepoisNoKmBase - litrosMetaBase
+      );
+
+      const conclusao = calcularConclusao(
+        n(antes.desperdicio),
+        desperdicioDepoisAjustado,
+        deltaKml
+      );
 
       return {
-        ...ev,
-        created_at_dt: ev.created_at,
-        tipo: normalize(ev.tipo),
-        motorista_nome: acomp?.motorista_nome || "-",
-        motorista_chapa: acomp?.motorista_chapa || "-",
-        linha_foco: acomp?.linha_resolvida || "SEM LINHA",
-        instrutor_nome: acomp?.instrutor_nome || "",
-        conclusao: normalize(comparativo?.conclusao || "SEM_EVOLUCAO"),
-        delta_kml: n(comparativo?.delta_kml),
-        delta_desperdicio: n(comparativo?.delta_desperdicio),
-        antes_kml: n(antes?.kml_real),
-        depois_kml: n(depois?.kml_real),
-        antes_desp: n(antes?.desperdicio),
-        depois_desp: n(depois?.desperdicio),
-        acompanhamento_id: ev.acompanhamento_id,
+        ...a,
+        checkpoint_tipo: a.prontuario_label,
+        antes_kml: n(antes.kml),
+        depois_kml: n(depois.kml),
+        delta_kml: deltaKml,
+        antes_desp: n(antes.desperdicio),
+        depois_desp: desperdicioDepoisAjustado,
+        delta_desperdicio:
+          desperdicioDepoisAjustado != null && antes.desperdicio != null
+            ? desperdicioDepoisAjustado - n(antes.desperdicio)
+            : null,
+        conclusao_checkpoint: conclusao,
+        km_base: kmBase,
+        litros_meta_base: litrosMetaBase,
       };
     });
-  }, [eventos, acompanhamentosTratados]);
+  }, [acompanhamentosTratados, dataset]);
 
-  const acompanhamentosFiltrados = useMemo(() => {
-    return acompanhamentosTratados.filter((a) => {
+  const acompanhamentosComEvolucao = useMemo(() => {
+    return acompanhamentosComEvolucaoBase.filter((a) => {
       if (filtroLinha && a.linha_resolvida !== filtroLinha) return false;
+
       if (filtroCluster) {
         const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
         if (c !== filtroCluster) return false;
       }
-      if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor)
+
+      if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor) {
         return false;
+      }
+
+      if (filtroStatus && a.status_norm !== filtroStatus) return false;
+      if (filtroProntuario && a.prontuario_label !== filtroProntuario) return false;
+      if (filtroConclusao && a.conclusao_checkpoint !== filtroConclusao) return false;
+
       if (mesReferencia) {
         const mesItem = a.data_ref ? String(a.data_ref).slice(0, 7) : "";
         if (mesItem !== mesReferencia) return false;
@@ -752,51 +914,29 @@ export default function DesempenhoDieselAnalise() {
       );
     });
   }, [
-    acompanhamentosTratados,
+    acompanhamentosComEvolucaoBase,
     filtroLinha,
     filtroCluster,
     filtroInstrutor,
-    mesReferencia,
-    busca,
-  ]);
-
-  const eventosFiltrados = useMemo(() => {
-    return eventosTratados.filter((e) => {
-      if (filtroLinha && e.linha_foco !== filtroLinha) return false;
-      if (filtroInstrutor && e.instrutor_nome !== filtroInstrutor) return false;
-      if (filtroProntuario && e.tipo !== filtroProntuario) return false;
-      if (mesReferencia) {
-        const mesItem = dateOnly(e.created_at_dt).slice(0, 7);
-        if (mesItem !== mesReferencia) return false;
-      }
-
-      const q = busca.toLowerCase().trim();
-      if (!q) return true;
-
-      return (
-        String(e.motorista_nome || "").toLowerCase().includes(q) ||
-        String(e.motorista_chapa || "").toLowerCase().includes(q) ||
-        String(e.linha_foco || "").toLowerCase().includes(q)
-      );
-    });
-  }, [
-    eventosTratados,
-    filtroLinha,
-    filtroInstrutor,
+    filtroStatus,
     filtroProntuario,
+    filtroConclusao,
     mesReferencia,
     busca,
   ]);
 
   const checkpointResumo = useMemo(() => {
-    const rows = eventosFiltrados;
+    const rows = acompanhamentosComEvolucao.filter(
+      (r) => r.checkpoint_tipo !== "SEM_DADOS" && r.delta_kml != null
+    );
+
     return {
       total: rows.length,
       melhoraramKml: rows.filter((r) => n(r.delta_kml) > 0).length,
       pioraramKml: rows.filter((r) => n(r.delta_kml) < 0).length,
       estavelKml: rows.filter((r) => n(r.delta_kml) === 0).length,
-      reduziramDesperdicio: rows.filter((r) => n(r.delta_desperdicio) < 0).length,
-      aumentaramDesperdicio: rows.filter((r) => n(r.delta_desperdicio) > 0).length,
+      reduziramDesperdicio: rows.filter((r) => n(r.depois_desp) < n(r.antes_desp)).length,
+      aumentaramDesperdicio: rows.filter((r) => n(r.depois_desp) > n(r.antes_desp)).length,
       mediaDeltaKml: rows.length
         ? rows.reduce((acc, r) => acc + n(r.delta_kml), 0) / rows.length
         : 0,
@@ -804,44 +944,45 @@ export default function DesempenhoDieselAnalise() {
         ? rows.reduce((acc, r) => acc + n(r.delta_desperdicio), 0) / rows.length
         : 0,
     };
-  }, [eventosFiltrados]);
+  }, [acompanhamentosComEvolucao]);
 
   const resumoPorLinhaCheckpoint = useMemo(() => {
     const map = new Map();
 
-    eventosFiltrados.forEach((r) => {
-      const key = `${r.linha_foco}__${r.tipo}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          id: key,
-          linha_foco: r.linha_foco,
-          tipo: r.tipo,
-          qtd_motoristas: 0,
-          antes_kml: 0,
-          depois_kml: 0,
-          delta_kml: 0,
-          antes_desp: 0,
-          depois_desp: 0,
-          delta_desperdicio: 0,
-          melhorou: 0,
-          piorou: 0,
-          sem_evolucao: 0,
-        });
-      }
+    acompanhamentosComEvolucao
+      .filter((r) => r.checkpoint_tipo !== "SEM_DADOS" && r.delta_kml != null)
+      .forEach((r) => {
+        const key = `${r.linha_resolvida}__${r.checkpoint_tipo}`;
 
-      const item = map.get(key);
-      item.qtd_motoristas += 1;
-      item.antes_kml += r.antes_kml;
-      item.depois_kml += r.depois_kml;
-      item.delta_kml += r.delta_kml;
-      item.antes_desp += r.antes_desp;
-      item.depois_desp += r.depois_desp;
-      item.delta_desperdicio += r.delta_desperdicio;
+        if (!map.has(key)) {
+          map.set(key, {
+            id: key,
+            linha_foco: r.linha_resolvida,
+            tipo: r.checkpoint_tipo,
+            qtd_motoristas: 0,
+            antes_kml: 0,
+            depois_kml: 0,
+            delta_kml: 0,
+            antes_desp: 0,
+            depois_desp: 0,
+            melhorou: 0,
+            piorou: 0,
+            sem_evolucao: 0,
+          });
+        }
 
-      if (r.conclusao === "MELHOROU") item.melhorou += 1;
-      else if (r.conclusao === "PIOROU") item.piorou += 1;
-      else item.sem_evolucao += 1;
-    });
+        const item = map.get(key);
+        item.qtd_motoristas += 1;
+        item.antes_kml += n(r.antes_kml);
+        item.depois_kml += n(r.depois_kml);
+        item.delta_kml += n(r.delta_kml);
+        item.antes_desp += n(r.antes_desp);
+        item.depois_desp += n(r.depois_desp);
+
+        if (r.conclusao_checkpoint === "MELHOROU") item.melhorou += 1;
+        else if (r.conclusao_checkpoint === "PIOROU") item.piorou += 1;
+        else item.sem_evolucao += 1;
+      });
 
     return [...map.values()]
       .map((r) => ({
@@ -852,16 +993,16 @@ export default function DesempenhoDieselAnalise() {
         antes_desp: r.qtd_motoristas ? r.antes_desp / r.qtd_motoristas : 0,
         depois_desp: r.qtd_motoristas ? r.depois_desp / r.qtd_motoristas : 0,
         delta_desperdicio: r.qtd_motoristas
-          ? r.delta_desperdicio / r.qtd_motoristas
+          ? (r.depois_desp - r.antes_desp) / r.qtd_motoristas
           : 0,
       }))
       .sort((a, b) => a.delta_desperdicio - b.delta_desperdicio);
-  }, [eventosFiltrados]);
+  }, [acompanhamentosComEvolucao]);
 
   const resumoInstrutor = useMemo(() => {
     const map = new Map();
 
-    acompanhamentosFiltrados.forEach((r) => {
+    acompanhamentosComEvolucao.forEach((r) => {
       const key = String(r.instrutor_nome || "Sem instrutor").trim() || "Sem instrutor";
       if (!map.has(key)) {
         map.set(key, {
@@ -893,13 +1034,13 @@ export default function DesempenhoDieselAnalise() {
           : 0,
         qtd_linhas: r.linhas.size,
       }))
-      .sort((a, b) => b.total_minutos - a.totalMinutos);
-  }, [acompanhamentosFiltrados]);
+      .sort((a, b) => b.total_minutos - a.total_minutos);
+  }, [acompanhamentosComEvolucao]);
 
   const tempoPorDia = useMemo(() => {
     const map = new Map();
 
-    acompanhamentosFiltrados.forEach((r) => {
+    acompanhamentosComEvolucao.forEach((r) => {
       const key = `${r.data_ref}__${r.instrutor_nome || "Sem instrutor"}`;
       if (!map.has(key)) {
         map.set(key, {
@@ -923,44 +1064,15 @@ export default function DesempenhoDieselAnalise() {
           : 0,
       }))
       .sort((a, b) => {
-        if (a.data_ref === b.data_ref)
+        if (a.data_ref === b.data_ref) {
           return String(a.instrutor_nome).localeCompare(
             String(b.instrutor_nome),
             "pt-BR"
           );
+        }
         return String(b.data_ref).localeCompare(String(a.data_ref));
       });
-  }, [acompanhamentosFiltrados]);
-
-  const mapaUltimoCheckpoint = useMemo(() => {
-    const map = new Map();
-
-    eventosFiltrados.forEach((ev) => {
-      const atual = map.get(ev.acompanhamento_id);
-      if (!atual || String(ev.created_at_dt) > String(atual.created_at_dt)) {
-        map.set(ev.acompanhamento_id, ev);
-      }
-    });
-
-    return map;
-  }, [eventosFiltrados]);
-
-  const acompanhamentosComEvolucao = useMemo(() => {
-    return acompanhamentosFiltrados.map((a) => {
-      const cp = mapaUltimoCheckpoint.get(a.id);
-      return {
-        ...a,
-        checkpoint_tipo: cp?.tipo || "",
-        antes_kml: cp?.antes_kml ?? null,
-        depois_kml: cp?.depois_kml ?? null,
-        delta_kml: cp?.delta_kml ?? null,
-        antes_desp: cp?.antes_desp ?? null,
-        depois_desp: cp?.depois_desp ?? null,
-        delta_desperdicio: cp?.delta_desperdicio ?? null,
-        conclusao_checkpoint: cp?.conclusao || "",
-      };
-    });
-  }, [acompanhamentosFiltrados, mapaUltimoCheckpoint]);
+  }, [acompanhamentosComEvolucao]);
 
   const totalDesperdicioMeta = useMemo(() => {
     return rowsReferenciaComRef.reduce((acc, r) => acc + n(r.Litros_Desp_Meta), 0);
@@ -985,23 +1097,23 @@ export default function DesempenhoDieselAnalise() {
   }, [kmlReferenciaGeral, kmlComparacaoGeral]);
 
   const totalMinutosAcompanhamentos = useMemo(() => {
-    return acompanhamentosFiltrados.reduce((acc, r) => acc + n(r.duracao_min), 0);
-  }, [acompanhamentosFiltrados]);
+    return acompanhamentosComEvolucao.reduce((acc, r) => acc + n(r.duracao_min), 0);
+  }, [acompanhamentosComEvolucao]);
 
   const cards = useMemo(
     () => ({
       linhas: tabelaLinhas.length,
       motoristas: topMotoristas.length,
       veiculos: topVeiculos.length,
-      acompanhamentos: acompanhamentosFiltrados.length,
-      checkpoints: eventosFiltrados.length,
+      acompanhamentos: acompanhamentosComEvolucao.length,
+      checkpoints: checkpointResumo.total,
     }),
     [
       tabelaLinhas,
       topMotoristas,
       topVeiculos,
-      acompanhamentosFiltrados,
-      eventosFiltrados,
+      acompanhamentosComEvolucao,
+      checkpointResumo,
     ]
   );
 
@@ -1239,12 +1351,45 @@ export default function DesempenhoDieselAnalise() {
               <select
                 value={filtroProntuario}
                 onChange={(e) => setFiltroProntuario(e.target.value)}
-                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-40 font-medium text-slate-600"
+                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-44 font-medium text-slate-600"
               >
                 <option value="">Todos Prontuários</option>
                 <option value="PRONTUARIO_10">Prontuário 10</option>
                 <option value="PRONTUARIO_20">Prontuário 20</option>
                 <option value="PRONTUARIO_30">Prontuário 30</option>
+                <option value="SEM_DADOS">Sem dados</option>
+              </select>
+            </div>
+
+            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
+              <FaFilter className="text-gray-400 ml-2" />
+              <select
+                value={filtroStatus}
+                onChange={(e) => setFiltroStatus(e.target.value)}
+                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-44 font-medium text-slate-600"
+              >
+                <option value="">Todos Status</option>
+                <option value="AGUARDANDO_INSTRUTOR">Aguardando Instrutor</option>
+                <option value="EM_MONITORAMENTO">Em Monitoramento</option>
+                <option value="EM_ANALISE">Em Análise</option>
+                <option value="OK">OK</option>
+                <option value="ENCERRADO">Encerrado</option>
+                <option value="ATAS">ATAS</option>
+              </select>
+            </div>
+
+            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
+              <FaFilter className="text-gray-400 ml-2" />
+              <select
+                value={filtroConclusao}
+                onChange={(e) => setFiltroConclusao(e.target.value)}
+                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-44 font-medium text-slate-600"
+              >
+                <option value="">Todas Conclusões</option>
+                <option value="MELHOROU">Melhorou</option>
+                <option value="PIOROU">Piorou</option>
+                <option value="SEM_EVOLUCAO">Sem evolução</option>
+                <option value="SEM_DADOS">Sem dados</option>
               </select>
             </div>
           </>
@@ -1324,6 +1469,7 @@ export default function DesempenhoDieselAnalise() {
           resumoPorLinhaCheckpoint={resumoPorLinhaCheckpoint}
           acompanhamentosComEvolucao={acompanhamentosComEvolucao}
           fmtNum={fmtNum}
+          fmtInt={fmtInt}
           fmtDateBr={fmtDateBr}
           formatMinutes={formatMinutes}
           statusBadgeClass={statusBadgeClass}

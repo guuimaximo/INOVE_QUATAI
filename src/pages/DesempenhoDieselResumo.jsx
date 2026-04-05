@@ -3,7 +3,6 @@ import {
   FaBolt,
   FaSync,
   FaSearch,
-  FaFilter,
   FaRoad,
   FaTruck,
   FaUser,
@@ -228,9 +227,10 @@ function getProntuarioLabelByJanela(janela) {
 function aggregatePeriodo(rows) {
   const km = rows.reduce((acc, r) => acc + n(r.Km), 0);
   const comb = rows.reduce((acc, r) => acc + n(r.Comb), 0);
+
   const litrosMeta = rows.reduce((acc, r) => {
-    const metaDireta = n(r.Litros_Esperados);
-    if (metaDireta > 0) return acc + metaDireta;
+    const litrosEsperados = n(r.Litros_Esperados);
+    if (litrosEsperados > 0) return acc + litrosEsperados;
 
     const metaLinha = n(r.Meta_Linha);
     if (metaLinha > 0 && n(r.Km) > 0) return acc + n(r.Km) / metaLinha;
@@ -239,7 +239,6 @@ function aggregatePeriodo(rows) {
   }, 0);
 
   const kml = comb > 0 ? km / comb : 0;
-  const metaKml = litrosMeta > 0 ? km / litrosMeta : 0;
   const desperdicio = Math.max(0, comb - litrosMeta);
 
   return {
@@ -247,7 +246,6 @@ function aggregatePeriodo(rows) {
     comb,
     litrosMeta,
     kml,
-    metaKml,
     desperdicio,
   };
 }
@@ -258,7 +256,6 @@ function agruparPorDia(rows) {
   rows.forEach((r) => {
     const chaveDia = dateOnly(r.Date || r.dateOnly);
     if (!chaveDia) return;
-
     if (!map.has(chaveDia)) map.set(chaveDia, []);
     map.get(chaveDia).push(r);
   });
@@ -273,12 +270,13 @@ function agruparPorDia(rows) {
     .sort((a, b) => a.data - b.data);
 }
 
-function calcularConclusao(antes, depoisAjustado, deltaKml) {
-  if (antes == null || depoisAjustado == null) return "SEM_DADOS";
-  if (depoisAjustado < antes && deltaKml > 0) return "MELHOROU";
-  if (depoisAjustado > antes && deltaKml < 0) return "PIOROU";
-  if (depoisAjustado < antes) return "MELHOROU";
-  if (depoisAjustado > antes) return "PIOROU";
+function calcularConclusao(antesDesp, depoisDespAjustado, deltaKml) {
+  if (antesDesp == null || depoisDespAjustado == null) return "SEM_DADOS";
+
+  if (depoisDespAjustado < antesDesp && deltaKml > 0) return "MELHOROU";
+  if (depoisDespAjustado > antesDesp && deltaKml < 0) return "PIOROU";
+  if (depoisDespAjustado < antesDesp) return "MELHOROU";
+  if (depoisDespAjustado > antesDesp) return "PIOROU";
   return "SEM_EVOLUCAO";
 }
 
@@ -757,15 +755,16 @@ export default function DesempenhoDieselAnalise() {
       const duracaoMin =
         iniMin != null && fimMin != null && fimMin >= iniMin ? fimMin - iniMin : 0;
 
-      const diasMonitoramento = diffDaysInclusive(a.dt_inicio_monitoramento || a.created_at);
-      const janelaDias = getJanelaDiasMonitoramento(a.dt_inicio_monitoramento || a.created_at);
+      const dtBase = a.dt_inicio_monitoramento || a.created_at;
+      const diasMonitoramento = diffDaysInclusive(dtBase);
+      const janelaDias = getJanelaDiasMonitoramento(dtBase);
       const prontuarioLabel = getProntuarioLabelByJanela(janelaDias);
 
       return {
         ...a,
         status_norm: statusNorm(a.status),
         linha_resolvida: getLinhaFocoAcompanhamento(a),
-        data_ref: dateOnly(a.dt_inicio_monitoramento || a.created_at),
+        data_ref: dateOnly(dtBase),
         duracao_min: duracaoMin,
         dias_monitoramento: diasMonitoramento,
         janela_analise_dias: janelaDias,
@@ -782,7 +781,7 @@ export default function DesempenhoDieselAnalise() {
       if (!dtInicio || janela === 0) {
         return {
           ...a,
-          checkpoint_tipo: "SEM_DADOS",
+          checkpoint_tipo: a.prontuario_label,
           antes_kml: null,
           depois_kml: null,
           delta_kml: null,
@@ -802,24 +801,19 @@ export default function DesempenhoDieselAnalise() {
       let baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
 
       if (linhaFoco && linhaFoco !== "SEM LINHA") {
-        const filtradoLinha = baseMotorista.filter((r) => normalize(r.linha) === linhaFoco);
-        if (filtradoLinha.length) baseMotorista = filtradoLinha;
+        const porLinha = baseMotorista.filter((r) => normalize(r.linha) === linhaFoco);
+        if (porLinha.length) baseMotorista = porLinha;
       }
 
       if (clusterFoco) {
-        const filtradoCluster = baseMotorista.filter((r) => normalize(r.Cluster) === clusterFoco);
-        if (filtradoCluster.length) baseMotorista = filtradoCluster;
+        const porCluster = baseMotorista.filter((r) => normalize(r.Cluster) === clusterFoco);
+        if (porCluster.length) baseMotorista = porCluster;
       }
 
       const diasAgrupados = agruparPorDia(baseMotorista);
 
-      const diasAntes = diasAgrupados
-        .filter((d) => d.data < dtInicio)
-        .slice(-janela);
-
-      const diasDepois = diasAgrupados
-        .filter((d) => d.data >= dtInicio)
-        .slice(-janela);
+      const diasAntes = diasAgrupados.filter((d) => d.data < dtInicio).slice(-janela);
+      const diasDepois = diasAgrupados.filter((d) => d.data >= dtInicio).slice(-janela);
 
       if (diasAntes.length < janela || diasDepois.length < janela) {
         return {
@@ -849,12 +843,12 @@ export default function DesempenhoDieselAnalise() {
       const litrosMetaBase = n(antes.litrosMeta);
 
       const litrosEquivDepoisNoKmBase =
-        n(depois.kml) > 0 && kmBase > 0 ? kmBase / n(depois.kml) : 0;
+        n(depois.kml) > 0 && kmBase > 0 ? kmBase / n(depois.kml) : null;
 
-      const desperdicioDepoisAjustado = Math.max(
-        0,
-        litrosEquivDepoisNoKmBase - litrosMetaBase
-      );
+      const desperdicioDepoisAjustado =
+        litrosEquivDepoisNoKmBase != null
+          ? Math.max(0, litrosEquivDepoisNoKmBase - litrosMetaBase)
+          : null;
 
       const conclusao = calcularConclusao(
         n(antes.desperdicio),
@@ -871,9 +865,9 @@ export default function DesempenhoDieselAnalise() {
         antes_desp: n(antes.desperdicio),
         depois_desp: desperdicioDepoisAjustado,
         delta_desperdicio:
-          desperdicioDepoisAjustado != null && antes.desperdicio != null
-            ? desperdicioDepoisAjustado - n(antes.desperdicio)
-            : null,
+          desperdicioDepoisAjustado == null
+            ? null
+            : desperdicioDepoisAjustado - n(antes.desperdicio),
         conclusao_checkpoint: conclusao,
         km_base: kmBase,
         litros_meta_base: litrosMetaBase,
@@ -1051,6 +1045,7 @@ export default function DesempenhoDieselAnalise() {
           total_minutos: 0,
         });
       }
+
       const item = map.get(key);
       item.total_acompanhamentos += 1;
       item.total_minutos += n(r.duracao_min);
@@ -1284,130 +1279,117 @@ export default function DesempenhoDieselAnalise() {
         ))}
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 items-center bg-white p-3 md:p-4 rounded-lg border shadow-sm">
-        <div className="relative w-full md:flex-1">
-          <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar linha, motorista, carro, chapa..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-          />
-        </div>
+      <div className="bg-white p-3 md:p-4 rounded-lg border shadow-sm">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative min-w-[220px] flex-1">
+            <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar linha, motorista, carro, chapa..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+            />
+          </div>
 
-        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-          <FaFilter className="text-gray-400 ml-2" />
-          <select
-            value={filtroLinha}
-            onChange={(e) => setFiltroLinha(e.target.value)}
-            className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-40 font-medium text-slate-600"
-          >
-            <option value="">Todas Linhas</option>
-            {linhasUnicas.map((ln) => (
-              <option key={ln} value={ln}>
-                {ln}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div className="min-w-[180px]">
+            <select
+              value={filtroLinha}
+              onChange={(e) => setFiltroLinha(e.target.value)}
+              className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
+            >
+              <option value="">Todas Linhas</option>
+              {linhasUnicas.map((ln) => (
+                <option key={ln} value={ln}>{ln}</option>
+              ))}
+            </select>
+          </div>
 
-        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-          <FaFilter className="text-gray-400 ml-2" />
-          <select
-            value={filtroCluster}
-            onChange={(e) => setFiltroCluster(e.target.value)}
-            className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-32 font-medium text-slate-600"
-          >
-            <option value="">Todos Clusters</option>
-            {clustersUnicos.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div className="min-w-[180px]">
+            <select
+              value={filtroCluster}
+              onChange={(e) => setFiltroCluster(e.target.value)}
+              className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
+            >
+              <option value="">Todos Clusters</option>
+              {clustersUnicos.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
 
-        {abaAtiva === "ACOMPANHAMENTOS" && (
-          <>
-            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-              <FaFilter className="text-gray-400 ml-2" />
-              <select
-                value={filtroInstrutor}
-                onChange={(e) => setFiltroInstrutor(e.target.value)}
-                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-44 font-medium text-slate-600"
-              >
-                <option value="">Todos Instrutores</option>
-                {instrutoresUnicos.map((x) => (
-                  <option key={x} value={x}>
-                    {x}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {abaAtiva === "ACOMPANHAMENTOS" && (
+            <>
+              <div className="min-w-[190px]">
+                <select
+                  value={filtroInstrutor}
+                  onChange={(e) => setFiltroInstrutor(e.target.value)}
+                  className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
+                >
+                  <option value="">Todos Instrutores</option>
+                  {instrutoresUnicos.map((x) => (
+                    <option key={x} value={x}>{x}</option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-              <FaFilter className="text-gray-400 ml-2" />
-              <select
-                value={filtroProntuario}
-                onChange={(e) => setFiltroProntuario(e.target.value)}
-                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-44 font-medium text-slate-600"
-              >
-                <option value="">Todos Prontuários</option>
-                <option value="PRONTUARIO_10">Prontuário 10</option>
-                <option value="PRONTUARIO_20">Prontuário 20</option>
-                <option value="PRONTUARIO_30">Prontuário 30</option>
-                <option value="SEM_DADOS">Sem dados</option>
-              </select>
-            </div>
+              <div className="min-w-[180px]">
+                <select
+                  value={filtroProntuario}
+                  onChange={(e) => setFiltroProntuario(e.target.value)}
+                  className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
+                >
+                  <option value="">Todos Prontuários</option>
+                  <option value="PRONTUARIO_10">Prontuário 10</option>
+                  <option value="PRONTUARIO_20">Prontuário 20</option>
+                  <option value="PRONTUARIO_30">Prontuário 30</option>
+                  <option value="SEM_DADOS">Sem dados</option>
+                </select>
+              </div>
 
-            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-              <FaFilter className="text-gray-400 ml-2" />
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-44 font-medium text-slate-600"
-              >
-                <option value="">Todos Status</option>
-                <option value="AGUARDANDO_INSTRUTOR">Aguardando Instrutor</option>
-                <option value="EM_MONITORAMENTO">Em Monitoramento</option>
-                <option value="EM_ANALISE">Em Análise</option>
-                <option value="OK">OK</option>
-                <option value="ENCERRADO">Encerrado</option>
-                <option value="ATAS">ATAS</option>
-              </select>
-            </div>
+              <div className="min-w-[180px]">
+                <select
+                  value={filtroStatus}
+                  onChange={(e) => setFiltroStatus(e.target.value)}
+                  className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
+                >
+                  <option value="">Todos Status</option>
+                  <option value="AGUARDANDO_INSTRUTOR">Aguardando Instrutor</option>
+                  <option value="EM_MONITORAMENTO">Em Monitoramento</option>
+                  <option value="EM_ANALISE">Em Análise</option>
+                  <option value="OK">OK</option>
+                  <option value="ENCERRADO">Encerrado</option>
+                  <option value="ATAS">ATAS</option>
+                </select>
+              </div>
 
-            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-              <FaFilter className="text-gray-400 ml-2" />
-              <select
-                value={filtroConclusao}
-                onChange={(e) => setFiltroConclusao(e.target.value)}
-                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-44 font-medium text-slate-600"
-              >
-                <option value="">Todas Conclusões</option>
-                <option value="MELHOROU">Melhorou</option>
-                <option value="PIOROU">Piorou</option>
-                <option value="SEM_EVOLUCAO">Sem evolução</option>
-                <option value="SEM_DADOS">Sem dados</option>
-              </select>
-            </div>
-          </>
-        )}
+              <div className="min-w-[180px]">
+                <select
+                  value={filtroConclusao}
+                  onChange={(e) => setFiltroConclusao(e.target.value)}
+                  className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
+                >
+                  <option value="">Todas Conclusões</option>
+                  <option value="MELHOROU">Melhorou</option>
+                  <option value="PIOROU">Piorou</option>
+                  <option value="SEM_EVOLUCAO">Sem evolução</option>
+                  <option value="SEM_DADOS">Sem dados</option>
+                </select>
+              </div>
+            </>
+          )}
 
-        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-          <FaFilter className="text-gray-400 ml-2" />
-          <select
-            value={mesReferencia}
-            onChange={(e) => setMesReferencia(e.target.value)}
-            className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-40 font-medium text-slate-600"
-          >
-            {mesesDisponiveis.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+          <div className="min-w-[140px]">
+            <select
+              value={mesReferencia}
+              onChange={(e) => setMesReferencia(e.target.value)}
+              className="p-2.5 bg-slate-50 border rounded-lg w-full text-sm outline-none font-medium text-slate-600"
+            >
+              {mesesDisponiveis.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

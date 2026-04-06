@@ -1,11 +1,9 @@
-import React, { useState, useMemo } from "react"; // Adicionado useMemo
+import React, { useState, useMemo } from "react";
 import { 
   FaTimes, 
   FaChartBar, 
   FaFilePdf, 
   FaCode, 
-  // FaCheckCircle, // Removido
-  // FaArrowRight, // Removido
   FaInfoCircle
 } from "react-icons/fa";
 
@@ -33,7 +31,7 @@ export default function AcompanhamentosModal({
 }) {
   const [detalheModal, setDetalheModal] = useState(null);
 
-  // Estados para a ordenação (Tarefa 2)
+  // Estados para a ordenação
   const [sortConfigAcompanhamentos, setSortConfigAcompanhamentos] = useState({ key: "data_ref", direction: "desc" });
 
   const tabs = [
@@ -329,47 +327,46 @@ export default function AcompanhamentosModal({
           <table className="w-full text-left min-w-[1700px]">
             <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
               <tr>
-                {/* Adicionar cabeçalhos ordenáveis com getSortIcon e requestSort (Tarefa 2) */}
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("motorista_nome")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("motorista_nome")}>
                   Motorista {getSortIcon("motorista_nome")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("motorista_chapa")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("motorista_chapa")}>
                   Chapa {getSortIcon("motorista_chapa")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("linha_resolvida")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("linha_resolvida")}>
                   Linha {getSortIcon("linha_resolvida")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("instrutor_nome")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("instrutor_nome")}>
                   Instrutor {getSortIcon("instrutor_nome")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("status_norm")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("status_norm")}>
                   Status {getSortIcon("status_norm")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("data_ref")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("data_ref")}>
                   Início {getSortIcon("data_ref")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("duracao_min")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("duracao_min")}>
                   Tempo {getSortIcon("duracao_min")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("checkpoint_tipo")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("checkpoint_tipo")}>
                   Prontuário {getSortIcon("checkpoint_tipo")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("antes_kml")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("antes_kml")}>
                   Antes KM/L {getSortIcon("antes_kml")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("depois_kml")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("depois_kml")}>
                   Depois KM/L {getSortIcon("depois_kml")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("delta_kml")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("delta_kml")}>
                   Δ KM/L {getSortIcon("delta_kml")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("antes_desp")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("antes_desp")}>
                   Antes Desp. {getSortIcon("antes_desp")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("depois_desp")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("depois_desp")}>
                   Depois Desp. {getSortIcon("depois_desp")}
                 </th>
-                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("delta_desperdicio")}>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("delta_desperdicio")}>
                   Δ Desp. {getSortIcon("delta_desperdicio")}
                 </th>
                 <th className="px-4 py-4 text-center">Ações</th>
@@ -377,7 +374,6 @@ export default function AcompanhamentosModal({
             </thead>
 
             <tbody className="divide-y divide-gray-100">
-              {/* Usar sortedAcompanhamentosData em vez de acompanhamentosComEvolucao (Tarefa 2) */}
               {sortedAcompanhamentosData.map((row) => (
                 <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
                   <td className="px-4 py-4 font-black text-slate-900">
@@ -497,24 +493,6 @@ export default function AcompanhamentosModal({
                 </div>
               </div>
 
-              {/* REMOVIDO ESTE BLOCO: SEÇÃO DE DECISÃO DA ETAPA (Tarefa 1) */}
-              {/*
-              <div className="bg-indigo-50/50 p-5 rounded-xl border border-indigo-100">
-                <h3 className="font-black text-indigo-900 uppercase tracking-wide text-sm">Decisão da Etapa</h3>
-                <p className="text-indigo-700 text-sm mt-1 mb-4">
-                  Escolha abaixo se o caso deve ser encerrado como OK ou encaminhado para tratativa. Ambas as ações irão registrar histórico do checkpoint.
-                </p>
-                <div className="flex gap-3">
-                  <button className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-black hover:bg-emerald-500 transition shadow-sm">
-                    <FaCheckCircle /> Finalizar
-                  </button>
-                  <button className="flex items-center gap-2 bg-rose-600 text-white px-5 py-2.5 rounded-lg font-black hover:bg-rose-500 transition shadow-sm">
-                    <FaArrowRight /> Enviar para Tratativa
-                  </button>
-                </div>
-              </div>
-              */}
-
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-xl border text-center shadow-sm">
                   <p className="text-sm text-slate-500 font-bold">KM/L Antes</p>
@@ -571,11 +549,35 @@ export default function AcompanhamentosModal({
                 </table>
               </div>
 
-              {/*Observações*/}
-              <div className="bg-slate-50 p-5 rounded-xl border">
-                <h3 className="font-black text-slate-800 text-sm mb-2">Observações da Etapa</h3>
-                <p className="text-slate-600 text-sm">
-                  {detalheModal.checkpoint_tipo} gerado automaticamente. Análise de Desperdício Ajustado processada.
+              {/* SEÇÃO DINÂMICA: MEMÓRIA DE CÁLCULO DE VOLTA */}
+              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200 space-y-4">
+                <h3 className="font-black text-blue-900 text-sm uppercase tracking-wider flex items-center gap-2 mb-4">
+                  <FaInfoCircle className="text-blue-500" size={18} /> Memória de Cálculo
+                </h3>
+                
+                <p className="text-sm text-blue-800">
+                  <strong>1. Ponto de Partida (D0):</strong> O acompanhamento deste motorista iniciou no dia <strong>{fmtDateBr(detalheModal.data_ref)}</strong>.
+                </p>
+                
+                <p className="text-sm text-blue-800">
+                  <strong>2. Janela Simétrica:</strong> O algoritmo localizou <strong>{detalheModal.janela_aplicada || 0} dias trabalhados</strong> válidos antes da data de início, e {detalheModal.janela_aplicada || 0} dias trabalhados a partir dela (ignorando folgas).
+                </p>
+                
+                <p className="text-sm text-blue-800">
+                  <strong>3. Desempenho Bruto:</strong> No período "Antes", rodou {fmtInt(detalheModal.km_antes)}km consumindo {fmtInt(detalheModal.litros_antes)}L (média de <strong>{fmtNum(detalheModal.antes_kml)} km/l</strong>). 
+                  No "Depois", rodou {fmtInt(detalheModal.km_depois)}km consumindo {fmtInt(detalheModal.litros_depois)}L (média de <strong>{fmtNum(detalheModal.depois_kml)} km/l</strong>). 
+                  O KM/L sofreu uma variação de <strong>{fmtNum(detalheModal.delta_kml)}</strong>.
+                </p>
+
+                <p className="text-sm text-blue-800">
+                  <strong>4. Desperdício Ajustado:</strong> Para anular a diferença de quilometragem entre os períodos, projetamos o consumo real: 
+                  Se ele dirigisse os mesmos {fmtInt(detalheModal.km_antes)}km do passado com a habilidade atual ({fmtNum(detalheModal.depois_kml)} km/l), ele teria utilizado <strong>{fmtNum(detalheModal.km_antes / (n(detalheModal.depois_kml) || 1))} Litros</strong>. 
+                  Subtraindo a meta de combustível da época, o novo desperdício projetado cai para <strong>{fmtNum(detalheModal.desp_ajustado_depois)} Litros</strong>.
+                </p>
+
+                <p className="text-sm text-blue-800">
+                  <strong>5. Veredito Final:</strong> O desperdício ajustado ({fmtNum(detalheModal.desp_ajustado_depois)} L) comparado ao desperdício real que ele cometeu no passado ({fmtNum(detalheModal.desp_real_antes)} L) gerou um delta de <strong>{fmtNum(detalheModal.delta_desperdicio)} L</strong>. 
+                  Avaliando a variação matemática, o sistema classificou a evolução como <span className="font-black bg-blue-200 px-2 py-0.5 rounded text-blue-900">{detalheModal.conclusao_checkpoint || detalheModal.conclusao}</span>.
                 </p>
               </div>
 

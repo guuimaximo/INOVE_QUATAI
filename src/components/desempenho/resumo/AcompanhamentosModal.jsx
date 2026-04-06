@@ -9,6 +9,12 @@ import {
   FaInfoCircle
 } from "react-icons/fa";
 
+// Função local para garantir segurança matemática e evitar tela branca
+function n(v) {
+  const x = Number(v);
+  return Number.isFinite(x) ? x : 0;
+}
+
 export default function AcompanhamentosModal({
   subAcompanhamento,
   setSubAcompanhamento,
@@ -518,7 +524,7 @@ export default function AcompanhamentosModal({
                 </p>
 
                 <p className="text-sm text-blue-800">
-                  <strong>4. Desperdício Ajustado:</strong> Para anular a diferença de quilometragem entre os períodos, projetamos o consumo: 
+                  <strong>4. Desperdício Ajustado:</strong> Para anular a diferença de quilometragem entre os períodos, projetamos o consumo real: 
                   Se ele dirigisse os mesmos {fmtInt(detalheModal.km_antes)}km do passado com a habilidade atual ({fmtNum(detalheModal.depois_kml)} km/l), ele teria utilizado <strong>{fmtNum(detalheModal.km_antes / (n(detalheModal.depois_kml) || 1))} Litros</strong>. 
                   Subtraindo a meta de combustível da época, o novo desperdício projetado cai para <strong>{fmtNum(detalheModal.desp_ajustado_depois)} Litros</strong>.
                 </p>

@@ -194,32 +194,62 @@ export default function AcompanhamentosModal({
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-200">
               {resumoPorLinhaCheckpoint.map((row) => (
-                <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="px-4 py-4 font-black text-slate-900">{row.linha_foco}</td>
-                  <td className="px-4 py-4">{row.tipo}</td>
-                  <td className="px-4 py-4">{fmtInt(row.qtd_motoristas)}</td>
-                  <td className="px-4 py-4">{fmtNum(row.antes_kml)}</td>
-                  <td className="px-4 py-4">{fmtNum(row.depois_kml)}</td>
-                  <td className="px-4 py-4">
-                    <EvolucaoBadge value={row.delta_kml} />
-                  </td>
-                  <td className="px-4 py-4">{fmtNum(row.antes_desp)}</td>
-                  <td className="px-4 py-4">{fmtNum(row.depois_desp)}</td>
-                  <td className="px-4 py-4">
-                    <EvolucaoBadge value={row.delta_desperdicio} invert />
-                  </td>
-                  <td className="px-4 py-4 text-emerald-700 font-bold">
-                    {fmtInt(row.melhorou)}
-                  </td>
-                  <td className="px-4 py-4 text-rose-700 font-bold">
-                    {fmtInt(row.piorou)}
-                  </td>
-                  <td className="px-4 py-4 text-slate-700 font-bold">
-                    {fmtInt(row.sem_evolucao)}
-                  </td>
-                </tr>
+                <React.Fragment key={row.id}>
+                  {/* Linha Principal - Resumo Consolidado */}
+                  <tr className="bg-slate-50 hover:bg-slate-100 transition-colors font-semibold border-b">
+                    <td className="px-4 py-4 font-black text-slate-900">{row.linha_foco}</td>
+                    <td className="px-4 py-4 text-slate-700">{row.tipo}</td>
+                    <td className="px-4 py-4 text-slate-700">{fmtInt(row.qtd_motoristas)}</td>
+                    <td className="px-4 py-4 text-slate-700">{fmtNum(row.antes_kml)}</td>
+                    <td className="px-4 py-4 text-slate-700">{fmtNum(row.depois_kml)}</td>
+                    <td className="px-4 py-4">
+                      <EvolucaoBadge value={row.delta_kml} />
+                    </td>
+                    <td className="px-4 py-4 text-slate-700">{fmtNum(row.antes_desp)}</td>
+                    <td className="px-4 py-4 text-slate-700">{fmtNum(row.depois_desp)}</td>
+                    <td className="px-4 py-4">
+                      <EvolucaoBadge value={row.delta_desperdicio} invert />
+                    </td>
+                    <td className="px-4 py-4 text-emerald-700 font-bold">
+                      {fmtInt(row.melhorou)}
+                    </td>
+                    <td className="px-4 py-4 text-rose-700 font-bold">
+                      {fmtInt(row.piorou)}
+                    </td>
+                    <td className="px-4 py-4 text-slate-700 font-bold">
+                      {fmtInt(row.sem_evolucao)}
+                    </td>
+                  </tr>
+
+                  {/* Sub-linhas - Detalhamento por Motorista */}
+                  {row.motoristas && row.motoristas.map((mot, idx) => (
+                    <tr key={`${row.id}_mot_${idx}`} className="bg-white hover:bg-blue-50/50 transition-colors text-sm border-b border-gray-100">
+                      <td colSpan={3} className="px-4 py-3 pl-8 border-l-4 border-blue-400">
+                        <span className="font-bold text-slate-700">{mot.nome}</span>
+                        <span className="ml-2 text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                          {mot.chapa}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{mot.antes_kml == null ? "-" : fmtNum(mot.antes_kml)}</td>
+                      <td className="px-4 py-3 text-slate-600">{mot.depois_kml == null ? "-" : fmtNum(mot.depois_kml)}</td>
+                      <td className="px-4 py-3">
+                        {mot.delta_kml == null ? "-" : <EvolucaoBadge value={mot.delta_kml} />}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{mot.antes_desp == null ? "-" : fmtNum(mot.antes_desp)}</td>
+                      <td className="px-4 py-3 text-slate-600">{mot.depois_desp == null ? "-" : fmtNum(mot.depois_desp)}</td>
+                      <td className="px-4 py-3">
+                        {mot.delta_desperdicio == null ? "-" : <EvolucaoBadge value={mot.delta_desperdicio} invert />}
+                      </td>
+                      <td colSpan={3} className="px-4 py-3">
+                        <span className="font-bold text-slate-600 text-xs uppercase tracking-wide">
+                          {mot.conclusao || "-"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
               ))}
 
               {resumoPorLinhaCheckpoint.length === 0 && (

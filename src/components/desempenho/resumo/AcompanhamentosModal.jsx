@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react"; // Adicionado useMemo
 import { 
   FaTimes, 
   FaChartBar, 
   FaFilePdf, 
   FaCode, 
-  FaCheckCircle, 
-  FaArrowRight,
+  // FaCheckCircle, // Removido
+  // FaArrowRight, // Removido
   FaInfoCircle
 } from "react-icons/fa";
 
@@ -33,12 +33,47 @@ export default function AcompanhamentosModal({
 }) {
   const [detalheModal, setDetalheModal] = useState(null);
 
+  // Estados para a ordenação (Tarefa 2)
+  const [sortConfigAcompanhamentos, setSortConfigAcompanhamentos] = useState({ key: "data_ref", direction: "desc" });
+
   const tabs = [
     ["RESUMO_INSTRUTOR", "Resumo por Instrutor"],
     ["TEMPO_DIA", "Tempo por Dia"],
     ["CHECKPOINT_LINHA", "Check Point por Linha"],
     ["ACOMPANHAMENTOS", "Acompanhamentos"],
   ];
+
+  // Função genérica para gerenciar a requisição de ordenação
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfigAcompanhamentos.key === key && sortConfigAcompanhamentos.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfigAcompanhamentos({ key, direction });
+  };
+
+  // Função para retornar ícone de ordenação
+  const getSortIcon = (key) => {
+    if (sortConfigAcompanhamentos.key !== key) return <span className="ml-1 text-gray-300 text-xs">↕</span>;
+    return sortConfigAcompanhamentos.direction === 'asc' ? <span className="ml-1 text-blue-600 text-xs">▲</span> : <span className="ml-1 text-blue-600 text-xs">▼</span>;
+  };
+
+  // Função auxiliar de ordenação
+  const sortFunc = (lista, config) => {
+    const { key, direction } = config;
+    return [...lista].sort((a, b) => {
+      let va = a?.[key], vb = b?.[key];
+      const na = Number(va), nb = Number(vb);
+      const ambosNumericos = Number.isFinite(na) && Number.isFinite(nb);
+      let cmp = ambosNumericos ? na - nb : String(va ?? "").localeCompare(String(vb ?? ""), "pt-BR", { numeric: true, sensitivity: "base" });
+      return direction === "asc" ? cmp : -cmp;
+    });
+  };
+
+  // Dados ordenados para a aba "Acompanhamentos"
+  const sortedAcompanhamentosData = useMemo(() => {
+    return sortFunc(acompanhamentosComEvolucao, sortConfigAcompanhamentos);
+  }, [acompanhamentosComEvolucao, sortConfigAcompanhamentos]);
 
   return (
     <div className="space-y-4">
@@ -294,26 +329,56 @@ export default function AcompanhamentosModal({
           <table className="w-full text-left min-w-[1700px]">
             <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-4">Motorista</th>
-                <th className="px-4 py-4">Chapa</th>
-                <th className="px-4 py-4">Linha</th>
-                <th className="px-4 py-4">Instrutor</th>
-                <th className="px-4 py-4">Status</th>
-                <th className="px-4 py-4">Início</th>
-                <th className="px-4 py-4">Tempo</th>
-                <th className="px-4 py-4">Prontuário</th>
-                <th className="px-4 py-4">Antes KM/L</th>
-                <th className="px-4 py-4">Depois KM/L</th>
-                <th className="px-4 py-4">Δ KM/L</th>
-                <th className="px-4 py-4">Antes Desp.</th>
-                <th className="px-4 py-4">Depois Desp.</th>
-                <th className="px-4 py-4">Δ Desp.</th>
+                {/* Adicionar cabeçalhos ordenáveis com getSortIcon e requestSort (Tarefa 2) */}
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("motorista_nome")}>
+                  Motorista {getSortIcon("motorista_nome")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("motorista_chapa")}>
+                  Chapa {getSortIcon("motorista_chapa")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("linha_resolvida")}>
+                  Linha {getSortIcon("linha_resolvida")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("instrutor_nome")}>
+                  Instrutor {getSortIcon("instrutor_nome")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("status_norm")}>
+                  Status {getSortIcon("status_norm")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("data_ref")}>
+                  Início {getSortIcon("data_ref")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("duracao_min")}>
+                  Tempo {getSortIcon("duracao_min")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("checkpoint_tipo")}>
+                  Prontuário {getSortIcon("checkpoint_tipo")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("antes_kml")}>
+                  Antes KM/L {getSortIcon("antes_kml")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("depois_kml")}>
+                  Depois KM/L {getSortIcon("depois_kml")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("delta_kml")}>
+                  Δ KM/L {getSortIcon("delta_kml")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("antes_desp")}>
+                  Antes Desp. {getSortIcon("antes_desp")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("depois_desp")}>
+                  Depois Desp. {getSortIcon("depois_desp")}
+                </th>
+                <th className="px-4 py-4 cursor-pointer" onClick={() => requestSort("delta_desperdicio")}>
+                  Δ Desp. {getSortIcon("delta_desperdicio")}
+                </th>
                 <th className="px-4 py-4 text-center">Ações</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-gray-100">
-              {acompanhamentosComEvolucao.map((row) => (
+              {/* Usar sortedAcompanhamentosData em vez de acompanhamentosComEvolucao (Tarefa 2) */}
+              {sortedAcompanhamentosData.map((row) => (
                 <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
                   <td className="px-4 py-4 font-black text-slate-900">
                     <div className="flex items-center gap-2">
@@ -370,7 +435,7 @@ export default function AcompanhamentosModal({
                   </td>
                 </tr>
               ))}
-              {acompanhamentosComEvolucao.length === 0 && (
+              {sortedAcompanhamentosData.length === 0 && (
                 <tr>
                   <td colSpan={15} className="px-6 py-12 text-center text-slate-500 font-bold">
                     Nenhum acompanhamento encontrado.
@@ -432,6 +497,8 @@ export default function AcompanhamentosModal({
                 </div>
               </div>
 
+              {/* REMOVIDO ESTE BLOCO: SEÇÃO DE DECISÃO DA ETAPA (Tarefa 1) */}
+              {/*
               <div className="bg-indigo-50/50 p-5 rounded-xl border border-indigo-100">
                 <h3 className="font-black text-indigo-900 uppercase tracking-wide text-sm">Decisão da Etapa</h3>
                 <p className="text-indigo-700 text-sm mt-1 mb-4">
@@ -446,6 +513,7 @@ export default function AcompanhamentosModal({
                   </button>
                 </div>
               </div>
+              */}
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-xl border text-center shadow-sm">
@@ -503,35 +571,11 @@ export default function AcompanhamentosModal({
                 </table>
               </div>
 
-              {/* SEÇÃO DINÂMICA: MEMÓRIA DE CÁLCULO */}
-              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200 space-y-4">
-                <h3 className="font-black text-blue-900 text-sm uppercase tracking-wider flex items-center gap-2 mb-4">
-                  <FaInfoCircle className="text-blue-500" size={18} /> Memória de Cálculo
-                </h3>
-                
-                <p className="text-sm text-blue-800">
-                  <strong>1. Ponto de Partida (D0):</strong> O acompanhamento deste motorista iniciou no dia <strong>{fmtDateBr(detalheModal.data_ref)}</strong>.
-                </p>
-                
-                <p className="text-sm text-blue-800">
-                  <strong>2. Janela Simétrica:</strong> O algoritmo localizou <strong>{detalheModal.janela_aplicada} dias trabalhados</strong> válidos antes da data de início, e {detalheModal.janela_aplicada} dias trabalhados a partir dela (ignorando folgas).
-                </p>
-                
-                <p className="text-sm text-blue-800">
-                  <strong>3. Desempenho Bruto:</strong> No período "Antes", rodou {fmtInt(detalheModal.km_antes)}km consumindo {fmtInt(detalheModal.litros_antes)}L (média de <strong>{fmtNum(detalheModal.antes_kml)} km/l</strong>). 
-                  No "Depois", rodou {fmtInt(detalheModal.km_depois)}km consumindo {fmtInt(detalheModal.litros_depois)}L (média de <strong>{fmtNum(detalheModal.depois_kml)} km/l</strong>). 
-                  O KM/L sofreu uma variação de <strong>{fmtNum(detalheModal.delta_kml)}</strong>.
-                </p>
-
-                <p className="text-sm text-blue-800">
-                  <strong>4. Desperdício Ajustado:</strong> Para anular a diferença de quilometragem entre os períodos, projetamos o consumo real: 
-                  Se ele dirigisse os mesmos {fmtInt(detalheModal.km_antes)}km do passado com a habilidade atual ({fmtNum(detalheModal.depois_kml)} km/l), ele teria utilizado <strong>{fmtNum(detalheModal.km_antes / (n(detalheModal.depois_kml) || 1))} Litros</strong>. 
-                  Subtraindo a meta de combustível da época, o novo desperdício projetado cai para <strong>{fmtNum(detalheModal.desp_ajustado_depois)} Litros</strong>.
-                </p>
-
-                <p className="text-sm text-blue-800">
-                  <strong>5. Veredito Final:</strong> O desperdício ajustado ({fmtNum(detalheModal.desp_ajustado_depois)} L) comparado ao desperdício real que ele cometeu no passado ({fmtNum(detalheModal.desp_real_antes)} L) gerou um delta de <strong>{fmtNum(detalheModal.delta_desperdicio)} L</strong>. 
-                  Avaliando a variação matemática, o sistema classificou a evolução como <span className="font-black bg-blue-200 px-2 py-0.5 rounded text-blue-900">{detalheModal.conclusao_checkpoint || detalheModal.conclusao}</span>.
+              {/*Observações*/}
+              <div className="bg-slate-50 p-5 rounded-xl border">
+                <h3 className="font-black text-slate-800 text-sm mb-2">Observações da Etapa</h3>
+                <p className="text-slate-600 text-sm">
+                  {detalheModal.checkpoint_tipo} gerado automaticamente. Análise de Desperdício Ajustado processada.
                 </p>
               </div>
 

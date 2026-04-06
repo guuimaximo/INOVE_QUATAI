@@ -10,6 +10,7 @@ import {
   FaArrowUp,
   FaArrowDown,
   FaEquals,
+  FaInfoCircle,
 } from "react-icons/fa";
 import { createClient } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
@@ -289,15 +290,6 @@ function agruparPorDia(rows) {
     .sort((a, b) => a.data - b.data);
 }
 
-function calcularConclusao(antesDesp, depoisDespAjustado, deltaKml) {
-  if (antesDesp == null || depoisDespAjustado == null) return "SEM_DADOS";
-  if (depoisDespAjustado < antesDesp && deltaKml > 0) return "MELHOROU";
-  if (depoisDespAjustado > antesDesp && deltaKml < 0) return "PIOROU";
-  if (depoisDespAjustado < antesDesp) return "MELHOROU";
-  if (depoisDespAjustado > antesDesp) return "PIOROU";
-  return "SEM_EVOLUCAO";
-}
-
 export default function DesempenhoDieselAnalise() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
@@ -318,6 +310,9 @@ export default function DesempenhoDieselAnalise() {
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroConclusao, setFiltroConclusao] = useState("");
   const [mesReferencia, setMesReferencia] = useState("");
+
+  // Estado para exibir explicação das contas
+  const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
   const [sortLinhas, setSortLinhas] = useState({
     key: "Desperdicio",
@@ -940,28 +935,26 @@ export default function DesempenhoDieselAnalise() {
     busca,
   ]);
 
+  // AJUSTE: Regra de janela simétrica baseada nos dias reais e Desperdício Ajustado
   const acompanhamentosComEvolucaoBase = useMemo(() => {
     return acompanhamentosTratados.map((a) => {
-      const prontuarioInfo = getProntuarioInfo(a);
-      let janela = n(prontuarioInfo.janela);
-
-      const dtInicio = toDateOnlyTs(a.dt_inicio_monitoramento || a.created_at);
-
+      const dtInicio = toDateOnlyTs(a.dt_inicio_monitoramento);
+      const chapa = String(a.motorista_chapa || "").trim();
       const linhaFoco = normalize(a.linha_resolvida);
       const clusterFoco = normalize(a.cluster_foco || a.metadata?.cluster_foco);
-      const chapa = String(a.motorista_chapa || "").trim();
 
       if (!dtInicio || !chapa) {
         return {
           ...a,
-          checkpoint_tipo: prontuarioInfo.label,
+          status_calculo: "SEM_DADOS",
+          checkpoint_tipo: "SEM_DADOS",
           antes_kml: null,
           depois_kml: null,
           delta_kml: null,
           antes_desp: null,
           depois_desp: null,
           delta_desperdicio: null,
-          conclusao_checkpoint: prontuarioInfo.label === "SEM_DADOS" ? "SEM_DADOS" : "SEM_EVOLUCAO",
+          conclusao_checkpoint: "SEM_DADOS",
         };
       }
 
@@ -982,99 +975,88 @@ export default function DesempenhoDieselAnalise() {
       if (!diasAgrupados.length) {
         return {
           ...a,
-          checkpoint_tipo: prontuarioInfo.label,
+          status_calculo: "SEM_DADOS",
+          checkpoint_tipo: "SEM_DADOS",
           antes_kml: null,
           depois_kml: null,
           delta_kml: null,
           antes_desp: null,
           depois_desp: null,
           delta_desperdicio: null,
-          conclusao_checkpoint: prontuarioInfo.label === "SEM_DADOS" ? "SEM_DADOS" : "SEM_EVOLUCAO",
+          conclusao_checkpoint: "SEM_DADOS",
         };
       }
 
-      const diasAntesDisponiveis = diasAgrupados.filter((d) => d.data < dtInicio);
-      const diasDepoisDisponiveis = diasAgrupados.filter((d) => d.data >= dtInicio);
+      const diasAntesDisp = diasAgrupados.filter((d) => d.data < dtInicio);
+      const diasDepoisDisp = diasAgrupados.filter((d) => d.data >= dtInicio);
 
-      if (!janela || janela <= 0) {
-        const maxPossivel = Math.min(diasAntesDisponiveis.length, diasDepoisDisponiveis.length);
-        janela = maxPossivel >= 10 ? 10 : maxPossivel >= 5 ? 5 : maxPossivel >= 3 ? 3 : maxPossivel;
-      }
+      const maxPossivel = Math.min(diasAntesDisp.length, diasDepoisDisp.length);
 
-      if (!janela || janela <= 0) {
+      let janela = 0;
+      if (maxPossivel >= 30) janela = 30;
+      else if (maxPossivel >= 20) janela = 20;
+      else if (maxPossivel >= 10) janela = 10;
+      else if (maxPossivel >= 5) janela = 5;
+      else if (maxPossivel >= 3) janela = 3;
+
+      if (janela === 0) {
         return {
           ...a,
-          checkpoint_tipo: prontuarioInfo.label,
+          status_calculo: "JANELA_INSUFICIENTE",
+          checkpoint_tipo: "SEM_DADOS",
           antes_kml: null,
           depois_kml: null,
           delta_kml: null,
           antes_desp: null,
           depois_desp: null,
           delta_desperdicio: null,
-          conclusao_checkpoint: prontuarioInfo.label === "SEM_DADOS" ? "SEM_DADOS" : "SEM_EVOLUCAO",
+          conclusao_checkpoint: "SEM_DADOS",
         };
       }
 
-      const diasAntes = diasAntesDisponiveis.slice(-janela);
-      const diasDepois = diasDepoisDisponiveis.slice(0, janela);
-
-      if (!diasAntes.length || !diasDepois.length) {
-        return {
-          ...a,
-          checkpoint_tipo: prontuarioInfo.label,
-          antes_kml: null,
-          depois_kml: null,
-          delta_kml: null,
-          antes_desp: null,
-          depois_desp: null,
-          delta_desperdicio: null,
-          conclusao_checkpoint: prontuarioInfo.label === "SEM_DADOS" ? "SEM_DADOS" : "SEM_EVOLUCAO",
-        };
-      }
+      const diasAntes = diasAntesDisp.slice(-janela);
+      const diasDepois = diasDepoisDisp.slice(0, janela);
 
       const antes = aggregatePeriodo(diasAntes.flatMap((d) => d.rows));
       const depois = aggregatePeriodo(diasDepois.flatMap((d) => d.rows));
 
-      const deltaKml = n(depois.kml) - n(antes.kml);
-      const kmBase = n(antes.km);
-      const litrosMetaBase = n(antes.litrosMeta);
+      const antesKml = n(antes.kml);
+      const depoisKml = n(depois.kml);
+      const deltaKml = depoisKml - antesKml;
 
-      const litrosEquivDepoisNoKmBase =
-        n(depois.kml) > 0 && kmBase > 0 ? kmBase / n(depois.kml) : null;
+      const kmTotalAntes = n(antes.km);
+      const litrosIdeaisAntes = n(antes.litrosMeta);
+      const antesDesp = n(antes.desperdicio);
 
-      const desperdicioDepoisAjustado =
-        litrosEquivDepoisNoKmBase == null
-          ? null
-          : Math.max(0, litrosEquivDepoisNoKmBase - litrosMetaBase);
+      let desperdicioAjustado = null;
+      let deltaDesperdicio = null;
 
-      const labelCalculado =
-        prontuarioInfo.label !== "SEM_DADOS"
-          ? prontuarioInfo.label
-          : janela >= 30
-          ? "PRONTUARIO_30"
-          : janela >= 20
-          ? "PRONTUARIO_20"
-          : janela >= 10
-          ? "PRONTUARIO_10"
-          : `CHECKPOINT_${janela}D`;
+      if (depoisKml > 0 && kmTotalAntes > 0) {
+        const litrosSimulados = kmTotalAntes / depoisKml;
+        desperdicioAjustado = Math.max(0, litrosSimulados - litrosIdeaisAntes);
+        deltaDesperdicio = desperdicioAjustado - antesDesp;
+      }
+
+      let conclusao = "SEM_EVOLUCAO";
+      if (desperdicioAjustado != null && antesDesp != null) {
+        if (desperdicioAjustado < antesDesp && deltaKml > 0) conclusao = "MELHOROU";
+        else if (desperdicioAjustado > antesDesp && deltaKml < 0) conclusao = "PIOROU";
+      } else {
+        conclusao = "SEM_DADOS";
+      }
 
       return {
         ...a,
-        checkpoint_tipo: labelCalculado,
-        antes_kml: n(antes.kml),
-        depois_kml: n(depois.kml),
+        status_calculo: "OK",
+        janela_aplicada: janela,
+        checkpoint_tipo: `CHECKPOINT_${janela}D`,
+        antes_kml: antesKml,
+        depois_kml: depoisKml,
         delta_kml: deltaKml,
-        antes_desp: n(antes.desperdicio),
-        depois_desp: desperdicioDepoisAjustado,
-        delta_desperdicio:
-          desperdicioDepoisAjustado == null
-            ? null
-            : desperdicioDepoisAjustado - n(antes.desperdicio),
-        conclusao_checkpoint: calcularConclusao(
-          n(antes.desperdicio),
-          desperdicioDepoisAjustado,
-          deltaKml
-        ),
+        antes_desp: antesDesp,
+        depois_desp: desperdicioAjustado,
+        delta_desperdicio: deltaDesperdicio,
+        conclusao_checkpoint: conclusao,
       };
     });
   }, [acompanhamentosTratados, dataset]);
@@ -1177,6 +1159,7 @@ export default function DesempenhoDieselAnalise() {
     };
   }, [acompanhamentosComEvolucao]);
 
+  // AJUSTE: O agrupamento de linha agora engloba a lista de motoristas avaliados e as contas deles
   const resumoPorLinhaCheckpoint = useMemo(() => {
     const map = new Map();
 
@@ -1203,6 +1186,7 @@ export default function DesempenhoDieselAnalise() {
             melhorou: 0,
             piorou: 0,
             sem_evolucao: 0,
+            motoristas: [],
           });
         }
 
@@ -1217,6 +1201,19 @@ export default function DesempenhoDieselAnalise() {
         if (r.conclusao_checkpoint === "MELHOROU") item.melhorou += 1;
         else if (r.conclusao_checkpoint === "PIOROU") item.piorou += 1;
         else item.sem_evolucao += 1;
+
+        // Anexa os dados do motorista para renderização no componente filho
+        item.motoristas.push({
+          nome: r.motorista_nome || r.motorista_chapa,
+          chapa: r.motorista_chapa,
+          antes_kml: n(r.antes_kml),
+          depois_kml: n(r.depois_kml),
+          delta_kml: n(r.delta_kml),
+          antes_desp: n(r.antes_desp),
+          depois_desp: n(r.depois_desp),
+          delta_desperdicio: n(r.delta_desperdicio),
+          conclusao: r.conclusao_checkpoint,
+        });
       });
 
     return [...map.values()]
@@ -1391,7 +1388,7 @@ export default function DesempenhoDieselAnalise() {
     },
     CHECKPOINT_LINHA: {
       titulo: "Check Point por Linha",
-      subtitulo: "Evolução de KM/L e desperdício por linha e prontuário.",
+      subtitulo: "Evolução de KM/L e desperdício por linha e prontuário. Lista motoristas avaliados.",
     },
     ACOMPANHAMENTOS: {
       titulo: "Acompanhamentos",
@@ -1425,6 +1422,14 @@ export default function DesempenhoDieselAnalise() {
 
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => setMostrarExplicacao(!mostrarExplicacao)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
+            >
+              <FaInfoCircle />
+              {mostrarExplicacao ? "Ocultar Cálculos" : "Entender Cálculos"}
+            </button>
+
+            <button
               onClick={carregarTudo}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-700 transition"
             >
@@ -1433,6 +1438,26 @@ export default function DesempenhoDieselAnalise() {
             </button>
           </div>
         </div>
+
+        {mostrarExplicacao && (
+          <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm">
+            <h3 className="font-bold text-base mb-2">Como a Evolução é Calculada?</h3>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                <strong>D0 (Dia Zero):</strong> É a <code>dt_inicio_monitoramento</code>.
+              </li>
+              <li>
+                <strong>Janela Simétrica:</strong> O sistema analisa os dias estritamente trabalhados na linha analisada, ignorando datas sem viagem. Procura o maior balanço possível (30, 20, 10, 5 ou 3 dias simétricos de cada lado do D0).
+              </li>
+              <li>
+                <strong>Desperdício Ajustado:</strong> Para evitar erros por diferença de volume (KM), projetamos os litros que o motorista deveria ter usado no "Antes" caso tivesse dirigido com a habilidade do "Depois" (<code>KM_Antes / KML_Depois</code>).
+              </li>
+              <li>
+                <strong>Conclusão:</strong> Um motorista recebe <b>MELHOROU</b> apenas se o Desperdício Ajustado for estritamente MENOR que o desperdício real que ele teve no Antes, somado a um crescimento no KM/L.
+              </li>
+            </ul>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-5">
           <div className="relative">

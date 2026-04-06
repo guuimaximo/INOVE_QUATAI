@@ -296,7 +296,7 @@ function exportarParaExcel(dados, nomeArquivo) {
   
   const processarValor = (valor) => {
     if (valor == null) return "";
-    if (typeof valor === 'object') return ""; // Ignora arrays (como motoristas no resumo por linha)
+    if (typeof valor === 'object') return "";
     return String(valor).replace(/"/g, '""');
   };
 
@@ -821,28 +821,30 @@ export default function DesempenhoDieselAnalise() {
   }, [rowsReferenciaComRef, mapaKmLinhaReferencia]);
 
   const acompanhamentosTratados = useMemo(() => {
-    return (acompanhamentos || []).map((a) => {
-      const iniMin = parseHoraToMin(a.intervencao_hora_inicio);
-      const fimMin = parseHoraToMin(a.intervencao_hora_fim);
-      const duracaoMin =
-        iniMin != null && fimMin != null && fimMin >= iniMin ? fimMin - iniMin : 0;
+    return (acompanhamentos || [])
+      .filter((a) => a.dt_inicio_monitoramento) // Filtro: Apenas com data de início
+      .map((a) => {
+        const iniMin = parseHoraToMin(a.intervencao_hora_inicio);
+        const fimMin = parseHoraToMin(a.intervencao_hora_fim);
+        const duracaoMin =
+          iniMin != null && fimMin != null && fimMin >= iniMin ? fimMin - iniMin : 0;
 
-      const dtBase = a.dt_inicio_monitoramento || a.created_at;
-      const diasMonitoramento = diffDaysInclusive(dtBase);
-      const prontuarioInfo = getProntuarioInfo(a);
+        const dtBase = a.dt_inicio_monitoramento;
+        const diasMonitoramento = diffDaysInclusive(dtBase);
+        const prontuarioInfo = getProntuarioInfo(a);
 
-      return {
-        ...a,
-        status_norm: statusNorm(a.status),
-        linha_resolvida: getLinhaFocoAcompanhamento(a),
-        data_ref: dateOnly(dtBase),
-        duracao_min: duracaoMin,
-        dias_monitoramento: diasMonitoramento,
-        janela_analise_dias: prontuarioInfo.janela,
-        prontuario_label: prontuarioInfo.label,
-        prontuario_origem: prontuarioInfo.origem,
-      };
-    });
+        return {
+          ...a,
+          status_norm: statusNorm(a.status),
+          linha_resolvida: getLinhaFocoAcompanhamento(a),
+          data_ref: dateOnly(dtBase),
+          duracao_min: duracaoMin,
+          dias_monitoramento: diasMonitoramento,
+          janela_analise_dias: prontuarioInfo.janela,
+          prontuario_label: prontuarioInfo.label,
+          prontuario_origem: prontuarioInfo.origem,
+        };
+      });
   }, [acompanhamentos]);
 
   const eventosTratados = useMemo(() => {
@@ -981,6 +983,7 @@ export default function DesempenhoDieselAnalise() {
         };
       }
 
+      // Histórico global do motorista
       const baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
       const diasAgrupados = agruparPorDia(baseMotorista);
 
@@ -1002,6 +1005,7 @@ export default function DesempenhoDieselAnalise() {
       const diasAntesDisp = diasAgrupados.filter((d) => d.data < dtInicio);
       const diasDepoisDisp = diasAgrupados.filter((d) => d.data >= dtInicio);
 
+      // Janela simétrica
       const maxPossivel = Math.min(diasAntesDisp.length, diasDepoisDisp.length);
 
       let janela = 0;
@@ -1040,6 +1044,7 @@ export default function DesempenhoDieselAnalise() {
       const litrosIdeaisAntes = n(antes.litrosMeta);
       const antesDesp = n(antes.desperdicio);
 
+      // Desperdício Ajustado
       let desperdicioAjustado = null;
       let deltaDesperdicio = null;
 
@@ -1439,6 +1444,7 @@ export default function DesempenhoDieselAnalise() {
                 if (abaAtiva === "ACOMPANHAMENTOS") {
                   if (subAcompanhamento === "RESUMO_INSTRUTOR") exportarParaExcel(resumoInstrutor, "Resumo_Instrutor");
                   if (subAcompanhamento === "TEMPO_DIA") exportarParaExcel(tempoPorDia, "Tempo_Por_Dia");
+                  if (subAcompanhamento === "CHECKPOINT_LINHA") exportarParaExcel(resumoPorLinhaCheckpoint, "Checkpoint_Linha");
                   if (subAcompanhamento === "ACOMPANHAMENTOS") exportarParaExcel(acompanhamentosComEvolucao, "Acompanhamentos_Detalhado");
                 }
               }}
@@ -1471,7 +1477,7 @@ export default function DesempenhoDieselAnalise() {
             <h3 className="font-bold text-base mb-2">Como a Evolução é Calculada?</h3>
             <ul className="list-disc pl-5 space-y-2">
               <li>
-                <strong>D0 (Dia Zero):</strong> É a <code>dt_inicio_monitoramento</code>.
+                <strong>D0 (Dia Zero):</strong> É a <code>dt_inicio_monitoramento</code>. Apenas registros com esta data são validados.
               </li>
               <li>
                 <strong>Histórico Global:</strong> Para garantir os dias simétricos e a meta correta, o sistema busca o histórico de <b>todas as linhas operadas pelo motorista</b> no período de Antes e Depois, somando os Litros Ideais para meta ponderada.

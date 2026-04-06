@@ -208,6 +208,7 @@ function agruparPorDiaStr(rows) {
     .sort((a, b) => a.diaStr.localeCompare(b.diaStr));
 }
 
+// FUNÇÃO GENÉRICA DE EXPORTAÇÃO
 function exportarParaExcel(dados, nomeArquivo) {
   if (!dados || !dados.length) return;
   const processarValor = (valor) => {
@@ -691,7 +692,6 @@ export default function DesempenhoDieselAnalise() {
         else if (r.conclusao_checkpoint === "PIOROU") item.piorou += 1;
         else item.sem_evolucao += 1;
 
-        // Repassando os dados crus corretamente para o modal
         item.motoristas.push({
           nome: r.motorista_nome || r.motorista_chapa,
           chapa: r.motorista_chapa,
@@ -802,6 +802,28 @@ export default function DesempenhoDieselAnalise() {
     { key: "ACOMPANHAMENTOS", label: "Acompanhamentos", icon: <FaClipboardList /> },
   ];
 
+  // FUNÇÕES AUXILIARES PARA GERAÇÃO DE DADOS DE EXPORTAÇÃO FORMATADOS (Tarefa 3)
+  const getLinhasExport = () => linhasTabelaOrdenada.map(row => ({ Linha: row.linha, 'KML Anterior': fmtNum(row.KML_Anterior), 'KML Atual': fmtNum(row.KML_Atual), Variacao: fmtNum(row.Variacao_Pct) + '%', 'Meta Ponderada': fmtNum(row.Meta_Ponderada), Desperdicio: fmtInt(row.Desperdicio) + ' L', Km: fmtInt(row.Km), Combustivel: fmtInt(row.Comb) + ' L' }));
+  const getMotoristasExport = () => motoristasOrdenados.map(row => ({ Motorista: row.Motorista, Chapa: row.chapa, Cluster: row.Cluster, Linha: row.linha, 'KML Real': fmtNum(row.KML_Real), 'KML Meta': fmtNum(row.KML_Meta), 'Variação Litros Meta': fmtInt(row.Litros_Desp_Meta) + ' L', Km: fmtInt(row.Km), Combustivel: fmtInt(row.Comb) + ' L', 'Meta Linha': fmtNum(row.Meta_Linha), 'Impacto no Grupo': fmtNum(row.Impacto_Pct) + '%' }));
+  const getCarrosExport = () => veiculosOrdenados.map(row => ({ Veículo: row.veiculo, Cluster: row.Cluster, Linha: row.linha, 'KML Real': fmtNum(row.KML_Real), 'KML Meta': fmtNum(row.KML_Meta), 'Variação Litros Meta': fmtInt(row.Litros_Desp_Meta) + ' L', Km: fmtInt(row.Km), Combustivel: fmtInt(row.Comb) + ' L', 'Meta Linha': fmtNum(row.Meta_Linha) }));
+  
+  const getAcompanhamentosAcompanhamentosExport = () => acompanhamentosComEvolucao.map(row => ({ Motorista: row.motorista_nome, Chapa: row.motorista_chapa, Linha: row.linha_resolvida, Instrutor: row.instrutor_nome, Status: row.status_norm, Início: fmtDateBr(row.data_ref), Tempo: formatMinutes(row.duracao_min), Prontuário: row.checkpoint_tipo, 'Antes KM/L': fmtNum(row.antes_kml), 'Depois KM/L': fmtNum(row.depois_kml), 'Δ KM/L': fmtNum(row.delta_kml), 'Antes Desp.': fmtNum(row.antes_desp), 'Depois Desp.': fmtNum(row.depois_desp), 'Δ Desp.': fmtNum(row.delta_desperdicio), Conclusão: row.conclusao_checkpoint }));
+  const getAcompanhamentosInstrutorExport = () => resumoInstrutor.map(row => ({ Instrutor: row.instrutor_nome, Acompanhamentos: fmtInt(row.total_acompanhamentos), 'Tempo Total': formatMinutes(row.total_minutos), 'Tempo Médio': formatMinutes(row.media_minutos), 'Em Monitoramento': fmtInt(row.em_monitoramento), 'Em Análise': fmtInt(row.em_analise), Concluídos: fmtInt(row.concluidos), Linhas: fmtInt(row.qtd_linhas) }));
+  const getAcompanhamentosTempoExport = () => tempoPorDia.map(row => ({ Data: fmtDateBr(row.data_ref), Instrutor: row.instrutor_nome, Acompanhamentos: fmtInt(row.total_acompanhamentos), 'Tempo Total': formatMinutes(row.total_minutos), 'Tempo Médio': formatMinutes(row.media_minutos) }));
+  
+  const getAcompanhamentosCheckPointExport = () => {
+    let exportData = [];
+    resumoPorLinhaCheckpoint.forEach(linha => {
+      exportData.push({ Linha: linha.linha_foco, Prontuário: linha.tipo, Qtd: fmtInt(linha.qtd_motoristas), 'Antes KM/L': fmtNum(linha.antes_kml), 'Depois KM/L': fmtNum(linha.depois_kml), 'Δ KM/L': fmtNum(linha.delta_kml), 'Antes Desp.': fmtNum(linha.antes_desp), 'Depois Desp.': fmtNum(linha.depois_desp), 'Δ Desp.': fmtNum(linha.delta_desperdicio), Melhorou: fmtInt(linha.melhorou), Piorou: fmtInt(linha.piorou), Tipo: 'LINHA' });
+      if (linha.motoristas) {
+        linha.motoristas.forEach(mot => {
+          exportData.push({ Motorista: mot.nome, Chapa: mot.chapa, 'Início': fmtDateBr(mot.data_ref), 'Prontuário': mot.checkpoint_tipo, 'Antes KM/L': fmtNum(mot.antes_kml), 'Depois KM/L': fmtNum(mot.depois_kml), 'Δ KM/L': fmtNum(mot.delta_kml), 'Antes Desp.': fmtNum(mot.antes_desp), 'Depois Desp.': fmtNum(mot.depois_desp), 'Δ Desp.': fmtNum(mot.delta_desperdicio), 'Conclusão': mot.conclusao, Tipo: 'MOTORISTA' });
+        });
+      }
+    });
+    return exportData;
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border shadow-sm p-4 md:p-5">
@@ -815,16 +837,17 @@ export default function DesempenhoDieselAnalise() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {/* ATUALIZAR CHAMADAS DOS BOTÕES JSX (Tarefa 3) */}
             <button
               onClick={() => {
-                if (abaAtiva === "LINHAS") exportarParaExcel(linhasTabelaOrdenada, "Analise_Linhas");
-                if (abaAtiva === "MOTORISTAS") exportarParaExcel(motoristasOrdenados, "Ranking_Motoristas");
-                if (abaAtiva === "CARROS") exportarParaExcel(veiculosOrdenados, "Ranking_Carros");
+                if (abaAtiva === "LINHAS") exportarParaExcel(getLinhasExport(), "Analise_Linhas");
+                if (abaAtiva === "MOTORISTAS") exportarParaExcel(getMotoristasExport(), "Ranking_Motoristas");
+                if (abaAtiva === "CARROS") exportarParaExcel(getCarrosExport(), "Ranking_Carros");
                 if (abaAtiva === "ACOMPANHAMENTOS") {
-                  if (subAcompanhamento === "RESUMO_INSTRUTOR") exportarParaExcel(resumoInstrutor, "Resumo_Instrutor");
-                  if (subAcompanhamento === "TEMPO_DIA") exportarParaExcel(tempoPorDia, "Tempo_Por_Dia");
-                  if (subAcompanhamento === "CHECKPOINT_LINHA") exportarParaExcel(resumoPorLinhaCheckpoint, "Checkpoint_Linha");
-                  if (subAcompanhamento === "ACOMPANHAMENTOS") exportarParaExcel(acompanhamentosComEvolucao, "Acompanhamentos_Detalhado");
+                  if (subAcompanhamento === "RESUMO_INSTRUTOR") exportarParaExcel(getAcompanhamentosInstrutorExport(), "Resumo_Instrutor");
+                  if (subAcompanhamento === "TEMPO_DIA") exportarParaExcel(getAcompanhamentosTempoExport(), "Tempo_Por_Dia");
+                  if (subAcompanhamento === "CHECKPOINT_LINHA") exportarParaExcel(getAcompanhamentosCheckPointExport(), "Checkpoint_Linha");
+                  if (subAcompanhamento === "ACOMPANHAMENTOS") exportarParaExcel(getAcompanhamentosAcompanhamentosExport(), "Acompanhamentos_Detalhado");
                 }
               }}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition"

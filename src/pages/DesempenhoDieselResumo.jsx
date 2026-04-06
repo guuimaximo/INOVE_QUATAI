@@ -223,6 +223,26 @@ function getProntuarioLabelByJanela(janela) {
   return "SEM_DADOS";
 }
 
+function getProntuarioInfo(a) {
+  if (a?.prontuario_30_gerado_em) {
+    return { label: "PRONTUARIO_30", janela: 30, origem: "CAMPO_REAL" };
+  }
+  if (a?.prontuario_20_gerado_em) {
+    return { label: "PRONTUARIO_20", janela: 20, origem: "CAMPO_REAL" };
+  }
+  if (a?.prontuario_10_gerado_em) {
+    return { label: "PRONTUARIO_10", janela: 10, origem: "CAMPO_REAL" };
+  }
+
+  const dtBase = a?.dt_inicio_monitoramento || a?.created_at;
+  const janelaFallback = getJanelaDiasMonitoramento(dtBase);
+  return {
+    label: getProntuarioLabelByJanela(janelaFallback),
+    janela: janelaFallback,
+    origem: "FALLBACK_JANELA",
+  };
+}
+
 function aggregatePeriodo(rows) {
   const km = rows.reduce((acc, r) => acc + n(r.Km), 0);
   const comb = rows.reduce((acc, r) => acc + n(r.Comb), 0);
@@ -510,7 +530,13 @@ export default function DesempenhoDieselAnalise() {
     });
 
     return base.filter(
-      (r) => r.Date && r.Km > 0 && r.Comb > 0 && r.Cluster && r.kml >= 1.5 && r.kml <= 5
+      (r) =>
+        r.Date &&
+        r.Km > 0 &&
+        r.Comb > 0 &&
+        r.Cluster &&
+        r.kml >= 1.5 &&
+        r.kml <= 5
     );
   }, [rowsBase, mapaFuncionarios]);
 
@@ -560,7 +586,9 @@ export default function DesempenhoDieselAnalise() {
     return dataset.filter((r) => {
       if (filtroLinha && r.linha !== filtroLinha) return false;
       if (filtroCluster && r.Cluster !== filtroCluster) return false;
-      if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.Mes_Ano)) return false;
+      if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.Mes_Ano)) {
+        return false;
+      }
 
       const q = busca.toLowerCase().trim();
       if (!q) return true;
@@ -780,8 +808,7 @@ export default function DesempenhoDieselAnalise() {
 
       const dtBase = a.dt_inicio_monitoramento || a.created_at;
       const diasMonitoramento = diffDaysInclusive(dtBase);
-      const janelaDias = getJanelaDiasMonitoramento(dtBase);
-      const prontuarioLabel = getProntuarioLabelByJanela(janelaDias);
+      const prontuarioInfo = getProntuarioInfo(a);
 
       return {
         ...a,
@@ -790,8 +817,9 @@ export default function DesempenhoDieselAnalise() {
         data_ref: dateOnly(dtBase),
         duracao_min: duracaoMin,
         dias_monitoramento: diasMonitoramento,
-        janela_analise_dias: janelaDias,
-        prontuario_label: prontuarioLabel,
+        janela_analise_dias: prontuarioInfo.janela,
+        prontuario_label: prontuarioInfo.label,
+        prontuario_origem: prontuarioInfo.origem,
       };
     });
   }, [acompanhamentos]);
@@ -826,12 +854,16 @@ export default function DesempenhoDieselAnalise() {
         linha_foco: acomp?.linha_resolvida || "SEM LINHA",
         instrutor_nome: acomp?.instrutor_nome || "",
         conclusao: normalize(comparativo?.conclusao || "SEM_EVOLUCAO"),
-        delta_kml: n(comparativo?.delta_kml),
-        delta_desperdicio: n(comparativo?.delta_desperdicio),
-        antes_kml: n(antes?.kml_real),
-        depois_kml: n(depois?.kml_real),
-        antes_desp: n(antes?.desperdicio),
-        depois_desp: n(depois?.desperdicio),
+        delta_kml:
+          comparativo?.delta_kml == null ? null : n(comparativo?.delta_kml),
+        delta_desperdicio:
+          comparativo?.delta_desperdicio == null
+            ? null
+            : n(comparativo?.delta_desperdicio),
+        antes_kml: antes?.kml_real == null ? null : n(antes?.kml_real),
+        depois_kml: depois?.kml_real == null ? null : n(depois?.kml_real),
+        antes_desp: antes?.desperdicio == null ? null : n(antes?.desperdicio),
+        depois_desp: depois?.desperdicio == null ? null : n(depois?.desperdicio),
         acompanhamento_id: ev.acompanhamento_id,
       };
     });
@@ -910,26 +942,28 @@ export default function DesempenhoDieselAnalise() {
 
   const acompanhamentosComEvolucaoBase = useMemo(() => {
     return acompanhamentosTratados.map((a) => {
-      const janela = n(a.janela_analise_dias);
+      const prontuarioInfo = getProntuarioInfo(a);
+      let janela = n(prontuarioInfo.janela);
+
       const dtInicio = toDateOnlyTs(a.dt_inicio_monitoramento || a.created_at);
 
-      if (!dtInicio || janela === 0) {
+      const linhaFoco = normalize(a.linha_resolvida);
+      const clusterFoco = normalize(a.cluster_foco || a.metadata?.cluster_foco);
+      const chapa = String(a.motorista_chapa || "").trim();
+
+      if (!dtInicio || !chapa) {
         return {
           ...a,
-          checkpoint_tipo: a.prontuario_label,
+          checkpoint_tipo: prontuarioInfo.label,
           antes_kml: null,
           depois_kml: null,
           delta_kml: null,
           antes_desp: null,
           depois_desp: null,
           delta_desperdicio: null,
-          conclusao_checkpoint: "SEM_DADOS",
+          conclusao_checkpoint: prontuarioInfo.label === "SEM_DADOS" ? "SEM_DADOS" : "SEM_EVOLUCAO",
         };
       }
-
-      const linhaFoco = normalize(a.linha_resolvida);
-      const clusterFoco = normalize(a.cluster_foco || a.metadata?.cluster_foco);
-      const chapa = String(a.motorista_chapa || "").trim();
 
       let baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
 
@@ -944,20 +978,57 @@ export default function DesempenhoDieselAnalise() {
       }
 
       const diasAgrupados = agruparPorDia(baseMotorista);
-      const diasAntes = diasAgrupados.filter((d) => d.data < dtInicio).slice(-janela);
-      const diasDepois = diasAgrupados.filter((d) => d.data >= dtInicio).slice(-janela);
 
-      if (diasAntes.length < janela || diasDepois.length < janela) {
+      if (!diasAgrupados.length) {
         return {
           ...a,
-          checkpoint_tipo: a.prontuario_label,
+          checkpoint_tipo: prontuarioInfo.label,
           antes_kml: null,
           depois_kml: null,
           delta_kml: null,
           antes_desp: null,
           depois_desp: null,
           delta_desperdicio: null,
-          conclusao_checkpoint: "SEM_DADOS",
+          conclusao_checkpoint: prontuarioInfo.label === "SEM_DADOS" ? "SEM_DADOS" : "SEM_EVOLUCAO",
+        };
+      }
+
+      const diasAntesDisponiveis = diasAgrupados.filter((d) => d.data < dtInicio);
+      const diasDepoisDisponiveis = diasAgrupados.filter((d) => d.data >= dtInicio);
+
+      if (!janela || janela <= 0) {
+        const maxPossivel = Math.min(diasAntesDisponiveis.length, diasDepoisDisponiveis.length);
+        janela = maxPossivel >= 10 ? 10 : maxPossivel >= 5 ? 5 : maxPossivel >= 3 ? 3 : maxPossivel;
+      }
+
+      if (!janela || janela <= 0) {
+        return {
+          ...a,
+          checkpoint_tipo: prontuarioInfo.label,
+          antes_kml: null,
+          depois_kml: null,
+          delta_kml: null,
+          antes_desp: null,
+          depois_desp: null,
+          delta_desperdicio: null,
+          conclusao_checkpoint: prontuarioInfo.label === "SEM_DADOS" ? "SEM_DADOS" : "SEM_EVOLUCAO",
+        };
+      }
+
+      const diasAntes = diasAntesDisponiveis.slice(-janela);
+      const diasDepois = diasDepoisDisponiveis.slice(0, janela);
+
+      if (!diasAntes.length || !diasDepois.length) {
+        return {
+          ...a,
+          checkpoint_tipo: prontuarioInfo.label,
+          antes_kml: null,
+          depois_kml: null,
+          delta_kml: null,
+          antes_desp: null,
+          depois_desp: null,
+          delta_desperdicio: null,
+          conclusao_checkpoint: prontuarioInfo.label === "SEM_DADOS" ? "SEM_DADOS" : "SEM_EVOLUCAO",
         };
       }
 
@@ -976,9 +1047,20 @@ export default function DesempenhoDieselAnalise() {
           ? null
           : Math.max(0, litrosEquivDepoisNoKmBase - litrosMetaBase);
 
+      const labelCalculado =
+        prontuarioInfo.label !== "SEM_DADOS"
+          ? prontuarioInfo.label
+          : janela >= 30
+          ? "PRONTUARIO_30"
+          : janela >= 20
+          ? "PRONTUARIO_20"
+          : janela >= 10
+          ? "PRONTUARIO_10"
+          : `CHECKPOINT_${janela}D`;
+
       return {
         ...a,
-        checkpoint_tipo: a.prontuario_label,
+        checkpoint_tipo: labelCalculado,
         antes_kml: n(antes.kml),
         depois_kml: n(depois.kml),
         delta_kml: deltaKml,
@@ -1020,19 +1102,45 @@ export default function DesempenhoDieselAnalise() {
         const novo = mapaNovaEvolucao.get(a.id);
         const cp = mapaUltimoCheckpoint.get(a.id);
 
+        const hasEventoComparativo =
+          cp &&
+          (cp.antes_kml != null ||
+            cp.depois_kml != null ||
+            cp.delta_kml != null ||
+            cp.antes_desp != null ||
+            cp.depois_desp != null ||
+            cp.delta_desperdicio != null);
+
         return {
           ...a,
           checkpoint_tipo:
-            novo?.checkpoint_tipo || cp?.tipo || a.prontuario_label || "SEM_DADOS",
-          antes_kml: novo?.antes_kml ?? cp?.antes_kml ?? null,
-          depois_kml: novo?.depois_kml ?? cp?.depois_kml ?? null,
-          delta_kml: novo?.delta_kml ?? cp?.delta_kml ?? null,
-          antes_desp: novo?.antes_desp ?? cp?.antes_desp ?? null,
-          depois_desp: novo?.depois_desp ?? cp?.depois_desp ?? null,
-          delta_desperdicio:
-            novo?.delta_desperdicio ?? cp?.delta_desperdicio ?? null,
+            cp?.tipo ||
+            novo?.checkpoint_tipo ||
+            a.prontuario_label ||
+            "SEM_DADOS",
+
+          antes_kml: hasEventoComparativo
+            ? cp?.antes_kml
+            : novo?.antes_kml ?? null,
+          depois_kml: hasEventoComparativo
+            ? cp?.depois_kml
+            : novo?.depois_kml ?? null,
+          delta_kml: hasEventoComparativo
+            ? cp?.delta_kml
+            : novo?.delta_kml ?? null,
+          antes_desp: hasEventoComparativo
+            ? cp?.antes_desp
+            : novo?.antes_desp ?? null,
+          depois_desp: hasEventoComparativo
+            ? cp?.depois_desp
+            : novo?.depois_desp ?? null,
+          delta_desperdicio: hasEventoComparativo
+            ? cp?.delta_desperdicio
+            : novo?.delta_desperdicio ?? null,
           conclusao_checkpoint:
-            novo?.conclusao_checkpoint || cp?.conclusao || "SEM_DADOS",
+            hasEventoComparativo
+              ? cp?.conclusao || novo?.conclusao_checkpoint || "SEM_DADOS"
+              : novo?.conclusao_checkpoint || cp?.conclusao || "SEM_DADOS",
         };
       })
       .filter((a) => {
@@ -1048,7 +1156,9 @@ export default function DesempenhoDieselAnalise() {
 
   const checkpointResumo = useMemo(() => {
     const rows = acompanhamentosComEvolucao.filter(
-      (r) => r.checkpoint_tipo !== "SEM_DADOS" && r.delta_kml != null
+      (r) =>
+        r.checkpoint_tipo !== "SEM_DADOS" &&
+        (r.delta_kml != null || r.delta_desperdicio != null)
     );
 
     return {
@@ -1071,7 +1181,11 @@ export default function DesempenhoDieselAnalise() {
     const map = new Map();
 
     acompanhamentosComEvolucao
-      .filter((r) => r.checkpoint_tipo !== "SEM_DADOS" && r.delta_kml != null)
+      .filter(
+        (r) =>
+          r.checkpoint_tipo !== "SEM_DADOS" &&
+          (r.delta_kml != null || r.delta_desperdicio != null)
+      )
       .forEach((r) => {
         const key = `${r.linha_resolvida}__${r.checkpoint_tipo}`;
 
@@ -1394,6 +1508,8 @@ export default function DesempenhoDieselAnalise() {
                 <option value="PRONTUARIO_10">PRONTUARIO_10</option>
                 <option value="PRONTUARIO_20">PRONTUARIO_20</option>
                 <option value="PRONTUARIO_30">PRONTUARIO_30</option>
+                <option value="CHECKPOINT_3D">CHECKPOINT_3D</option>
+                <option value="CHECKPOINT_5D">CHECKPOINT_5D</option>
               </select>
 
               <select

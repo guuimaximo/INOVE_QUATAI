@@ -43,18 +43,26 @@ function dateOnly(v) {
   return String(v).split("T")[0].split(" ")[0];
 }
 
+// FORMATADOR DE DATA SEGURO CONTRA FUSO HORÁRIO (YYYY-MM-DD)
+function safeDateStr(v) {
+  if (!v) return "";
+  const s = String(v).trim();
+  if (s.includes("T")) return s.split("T")[0];
+  if (s.includes(" ")) return s.split(" ")[0];
+  if (s.includes("/")) {
+    const p = s.split("/");
+    if (p.length === 3) return `${p[2].substring(0, 4)}-${p[1].padStart(2, "0")}-${p[0].padStart(2, "0")}`;
+  }
+  return s;
+}
+
 function fmtDateBr(v) {
   if (!v) return "-";
-  try {
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) {
-      const p = dateOnly(v).split("-");
-      return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(v);
-    }
-    return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  } catch {
-    return String(v);
-  }
+  const s = safeDateStr(v);
+  if (!s) return "-";
+  const p = s.split("-");
+  if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+  return String(v);
 }
 
 function fmtNum(v, dec = 2) {
@@ -66,43 +74,6 @@ function fmtNum(v, dec = 2) {
 
 function fmtInt(v) {
   return Math.round(n(v)).toLocaleString("pt-BR");
-}
-
-// CORREÇÃO DE DATA: Previne falhas se o banco devolver DD/MM/YYYY
-function toDateOnlyTs(v) {
-  if (!v) return null;
-  const s = String(v);
-  if (s.includes("/")) {
-    const p = s.split(" ")[0].split("/");
-    if (p.length >= 3) {
-      const d = new Date(`${p[2].substring(0, 4)}-${p[1]}-${p[0]}T00:00:00`);
-      return Number.isNaN(d.getTime()) ? null : d;
-    }
-  }
-  const txt = s.slice(0, 10);
-  const d = new Date(`${txt}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function diffDaysInclusive(start, end = new Date()) {
-  const s = toDateOnlyTs(start);
-  const e = toDateOnlyTs(end);
-  if (!s || !e) return 0;
-  const ms = e.getTime() - s.getTime();
-  return Math.max(0, Math.floor(ms / 86400000));
-}
-
-function parseDateValue(v) {
-  if (!v) return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function monthLabelFromDate(d) {
-  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
 }
 
 function parseHoraToMin(hora) {
@@ -178,11 +149,7 @@ function statusBadgeClass(status) {
 
 function SortIcon({ active, direction }) {
   if (!active) return <span className="text-gray-300 ml-2 text-[10px]">↕</span>;
-  return direction === "asc" ? (
-    <span className="text-blue-600 ml-2 text-[10px]">▲</span>
-  ) : (
-    <span className="text-blue-600 ml-2 text-[10px]">▼</span>
-  );
+  return direction === "asc" ? <span className="text-blue-600 ml-2 text-[10px]">▲</span> : <span className="text-blue-600 ml-2 text-[10px]">▼</span>;
 }
 
 function EvolucaoBadge({ value, invert = false, percent = false }) {
@@ -196,7 +163,6 @@ function EvolucaoBadge({ value, invert = false, percent = false }) {
       </span>
     );
   }
-
   if (val < 0) {
     return (
       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border ${invert ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"}`}>
@@ -204,37 +170,11 @@ function EvolucaoBadge({ value, invert = false, percent = false }) {
       </span>
     );
   }
-
   return (
     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border bg-slate-50 text-slate-700 border-slate-200">
       <FaEquals size={10} /> 0,00{percent ? "%" : ""}
     </span>
   );
-}
-
-function getJanelaDiasMonitoramento(dtInicio) {
-  const dias = diffDaysInclusive(dtInicio);
-  if (dias >= 30) return 30;
-  if (dias >= 20) return 20;
-  if (dias >= 10) return 10;
-  return 0;
-}
-
-function getProntuarioLabelByJanela(janela) {
-  if (janela === 10) return "PRONTUARIO_10";
-  if (janela === 20) return "PRONTUARIO_20";
-  if (janela === 30) return "PRONTUARIO_30";
-  return "SEM_DADOS";
-}
-
-function getProntuarioInfo(a) {
-  if (a?.prontuario_30_gerado_em) return { label: "PRONTUARIO_30", janela: 30, origem: "CAMPO_REAL" };
-  if (a?.prontuario_20_gerado_em) return { label: "PRONTUARIO_20", janela: 20, origem: "CAMPO_REAL" };
-  if (a?.prontuario_10_gerado_em) return { label: "PRONTUARIO_10", janela: 10, origem: "CAMPO_REAL" };
-
-  const dtBase = a?.dt_inicio_monitoramento || a?.created_at;
-  const janelaFallback = getJanelaDiasMonitoramento(dtBase);
-  return { label: getProntuarioLabelByJanela(janelaFallback), janela: janelaFallback, origem: "FALLBACK_JANELA" };
 }
 
 function aggregatePeriodo(rows) {
@@ -255,19 +195,19 @@ function aggregatePeriodo(rows) {
   return { km, comb, litrosMeta, kml, desperdicio };
 }
 
-function agruparPorDia(rows) {
+// AGRUPAMENTO DE DIAS 100% STRING (Evita qualquer erro de timezone/GMT)
+function agruparPorDiaStr(rows) {
   const map = new Map();
   rows.forEach((r) => {
-    const chaveDia = dateOnly(r.Date || r.dateOnly);
-    if (!chaveDia) return;
-    if (!map.has(chaveDia)) map.set(chaveDia, []);
-    map.get(chaveDia).push(r);
+    const d = safeDateStr(r.dateOnly);
+    if (!d) return;
+    if (!map.has(d)) map.set(d, []);
+    map.get(d).push(r);
   });
 
   return [...map.entries()]
-    .map(([dia, itens]) => ({ dia, data: toDateOnlyTs(dia), rows: itens }))
-    .filter((x) => x.data)
-    .sort((a, b) => a.data - b.data);
+    .map(([d, itens]) => ({ diaStr: d, rows: itens }))
+    .sort((a, b) => a.diaStr.localeCompare(b.diaStr));
 }
 
 function exportarParaExcel(dados, nomeArquivo) {
@@ -296,7 +236,6 @@ export default function DesempenhoDieselAnalise() {
 
   const [rowsBase, setRowsBase] = useState([]);
   const [acompanhamentos, setAcompanhamentos] = useState([]);
-  const [eventos, setEventos] = useState([]);
   const [funcionarios, setFuncionarios] = useState([]);
 
   const [abaAtiva, setAbaAtiva] = useState("LINHAS");
@@ -360,20 +299,9 @@ export default function DesempenhoDieselAnalise() {
   async function carregarAcompanhamentos() {
     const { data, error } = await supabase
       .from("diesel_acompanhamentos")
-      .select("id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, dt_fim_real, dt_fim_planejado, intervencao_hora_inicio, intervencao_hora_fim, teste_kml, kml_inicial, kml_real, kml_meta, perda_litros, motivo, metadata, prontuario_10_gerado_em, prontuario_20_gerado_em, prontuario_30_gerado_em")
+      .select("id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, intervencao_hora_inicio, intervencao_hora_fim, motivo, metadata")
       .order("created_at", { ascending: false })
       .limit(6000);
-    if (error) throw error;
-    return data || [];
-  }
-
-  async function carregarEventos() {
-    const { data, error } = await supabase
-      .from("diesel_acompanhamento_eventos")
-      .select("id, acompanhamento_id, created_at, tipo, observacoes, extra")
-      .in("tipo", ["PRONTUARIO_10", "PRONTUARIO_20", "PRONTUARIO_30"])
-      .order("created_at", { ascending: false })
-      .limit(8000);
     if (error) throw error;
     return data || [];
   }
@@ -382,15 +310,13 @@ export default function DesempenhoDieselAnalise() {
     setLoading(true);
     setErro("");
     try {
-      const [premiacao, acomp, evts, funcs] = await Promise.all([
+      const [premiacao, acomp, funcs] = await Promise.all([
         carregarPremiacao(),
         carregarAcompanhamentos(),
-        carregarEventos(),
         carregarFuncionarios(),
       ]);
       setRowsBase(premiacao);
       setAcompanhamentos(acomp);
-      setEventos(evts);
       setFuncionarios(funcs);
     } catch (e) {
       console.error(e);
@@ -416,7 +342,7 @@ export default function DesempenhoDieselAnalise() {
 
   const dataset = useMemo(() => {
     const base = (rowsBase || []).map((r) => {
-      const date = parseDateValue(r.dia);
+      const dStr = safeDateStr(r.dia);
       const km = n(r.km_rodado);
       const comb = n(r.litros_consumidos);
       const kml = comb > 0 ? km / comb : 0;
@@ -431,9 +357,8 @@ export default function DesempenhoDieselAnalise() {
 
       return {
         id: r.id_premiacao_diaria,
-        Date: date,
-        dateOnly: dateOnly(r.dia),
-        Mes_Ano: date ? monthLabelFromDate(date) : "",
+        dateOnly: dStr,
+        Mes_Ano: dStr ? dStr.slice(0, 7) : "",
         Motorista: motoristaRaw,
         motoristaNome,
         chapa,
@@ -449,9 +374,7 @@ export default function DesempenhoDieselAnalise() {
       };
     });
 
-    // CORREÇÃO: Remoção do filtro "r.Cluster" obrigatório. 
-    // Garante que o motorista tenha o desempenho total contabilizado, mesmo operando fora de cluster
-    return base.filter((r) => r.Date && r.Km > 0 && r.Comb > 0 && r.kml >= 1.5 && r.kml <= 5);
+    return base.filter((r) => r.dateOnly && r.Km > 0 && r.Comb > 0 && r.kml >= 1.5 && r.kml <= 5);
   }, [rowsBase, mapaFuncionarios]);
 
   const mesesDisponiveis = useMemo(() => {
@@ -613,236 +536,139 @@ export default function DesempenhoDieselAnalise() {
       .sort((a, b) => b.Litros_Desp_Meta - a.Litros_Desp_Meta);
   }, [rowsReferenciaComRef, mapaKmLinhaReferencia]);
 
-  const acompanhamentosTratados = useMemo(() => {
-    return (acompanhamentos || [])
-      .filter((a) => a.dt_inicio_monitoramento) // CORREÇÃO: Somente acompanhamentos com data base
+  // CÁLCULO DIRETO E ABSOLUTO DA EVOLUÇÃO
+  const acompanhamentosComEvolucao = useMemo(() => {
+    return acompanhamentos
+      .filter((a) => a.dt_inicio_monitoramento) // Obrigatório ter D0
       .map((a) => {
         const iniMin = parseHoraToMin(a.intervencao_hora_inicio);
         const fimMin = parseHoraToMin(a.intervencao_hora_fim);
         const duracaoMin = iniMin != null && fimMin != null && fimMin >= iniMin ? fimMin - iniMin : 0;
-        const dtBase = a.dt_inicio_monitoramento;
-        const diasMonitoramento = diffDaysInclusive(dtBase);
-        const prontuarioInfo = getProntuarioInfo(a);
+        
+        const dtInicioStr = safeDateStr(a.dt_inicio_monitoramento);
+        const chapa = String(a.motorista_chapa || "").trim();
 
-        return {
+        const aBase = {
           ...a,
           status_norm: statusNorm(a.status),
           linha_resolvida: getLinhaFocoAcompanhamento(a),
-          data_ref: dateOnly(dtBase),
+          data_ref: dtInicioStr,
           duracao_min: duracaoMin,
-          dias_monitoramento: diasMonitoramento,
-          janela_analise_dias: prontuarioInfo.janela,
-          prontuario_label: prontuarioInfo.label,
-          prontuario_origem: prontuarioInfo.origem,
         };
-      });
-  }, [acompanhamentos]);
 
-  const eventosTratados = useMemo(() => {
-    const mapaAcomp = new Map(acompanhamentosTratados.map((a) => [a.id, a]));
-    return (eventos || []).map((ev) => {
-      const extra = ev?.extra && typeof ev.extra === "object" ? ev.extra : {};
-      const comparativo = extra?.comparativo && typeof extra.comparativo === "object" ? extra.comparativo : {};
-      const antes = comparativo?.antes_periodo && typeof comparativo.antes_periodo === "object" ? comparativo.antes_periodo : {};
-      const depois = comparativo?.depois_periodo && typeof comparativo.depois_periodo === "object" ? comparativo.depois_periodo : {};
-      const acomp = mapaAcomp.get(ev.acompanhamento_id);
-
-      return {
-        ...ev,
-        created_at_dt: ev.created_at,
-        tipo: normalize(ev.tipo),
-        motorista_nome: acomp?.motorista_nome || "-",
-        motorista_chapa: acomp?.motorista_chapa || "-",
-        linha_foco: acomp?.linha_resolvida || "SEM LINHA",
-        instrutor_nome: acomp?.instrutor_nome || "",
-        conclusao: normalize(comparativo?.conclusao || "SEM_EVOLUCAO"),
-        delta_kml: comparativo?.delta_kml == null ? null : n(comparativo?.delta_kml),
-        delta_desperdicio: comparativo?.delta_desperdicio == null ? null : n(comparativo?.delta_desperdicio),
-        antes_kml: antes?.kml_real == null ? null : n(antes?.kml_real),
-        depois_kml: depois?.kml_real == null ? null : n(depois?.kml_real),
-        antes_desp: antes?.desperdicio == null ? null : n(antes?.desperdicio),
-        depois_desp: depois?.desperdicio == null ? null : n(depois?.desperdicio),
-        acompanhamento_id: ev.acompanhamento_id,
-      };
-    });
-  }, [eventos, acompanhamentosTratados]);
-
-  const acompanhamentosFiltrados = useMemo(() => {
-    return acompanhamentosTratados.filter((a) => {
-      if (filtroLinha && a.linha_resolvida !== filtroLinha) return false;
-      if (filtroCluster) {
-        const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
-        if (c !== filtroCluster) return false;
-      }
-      if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor) return false;
-      if (filtroStatus && a.status_norm !== filtroStatus) return false;
-      if (filtroProntuario && a.prontuario_label !== filtroProntuario) return false;
-      if (mesReferencia) {
-        const mesItem = a.data_ref ? String(a.data_ref).slice(0, 7) : "";
-        if (mesItem !== mesReferencia) return false;
-      }
-      const q = busca.toLowerCase().trim();
-      if (!q) return true;
-      return (
-        String(a.motorista_nome || "").toLowerCase().includes(q) ||
-        String(a.motorista_chapa || "").toLowerCase().includes(q) ||
-        String(a.linha_resolvida || "").toLowerCase().includes(q) ||
-        String(a.instrutor_nome || "").toLowerCase().includes(q)
-      );
-    });
-  }, [acompanhamentosTratados, filtroLinha, filtroCluster, filtroInstrutor, filtroStatus, filtroProntuario, mesReferencia, busca]);
-
-  const eventosFiltrados = useMemo(() => {
-    return eventosTratados.filter((e) => {
-      if (filtroLinha && e.linha_foco !== filtroLinha) return false;
-      if (filtroInstrutor && e.instrutor_nome !== filtroInstrutor) return false;
-      if (filtroProntuario && e.tipo !== filtroProntuario) return false;
-      if (mesReferencia) {
-        const mesItem = dateOnly(e.created_at_dt).slice(0, 7);
-        if (mesItem !== mesReferencia) return false;
-      }
-      const q = busca.toLowerCase().trim();
-      if (!q) return true;
-      return (
-        String(e.motorista_nome || "").toLowerCase().includes(q) ||
-        String(e.motorista_chapa || "").toLowerCase().includes(q) ||
-        String(e.linha_foco || "").toLowerCase().includes(q)
-      );
-    });
-  }, [eventosTratados, filtroLinha, filtroInstrutor, filtroProntuario, mesReferencia, busca]);
-
-  // CORREÇÃO: Histórico Global, Janela Dinâmica por Dias Reais
-  const acompanhamentosComEvolucaoBase = useMemo(() => {
-    return acompanhamentosTratados.map((a) => {
-      const dtInicio = toDateOnlyTs(a.dt_inicio_monitoramento);
-      const chapa = String(a.motorista_chapa || "").trim();
-
-      if (!dtInicio || !chapa) return { ...a, status_calculo: "SEM_DADOS", checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
-
-      const baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
-      const diasAgrupados = agruparPorDia(baseMotorista);
-
-      if (!diasAgrupados.length) return { ...a, status_calculo: "SEM_DADOS", checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
-
-      const diasAntesDisp = diasAgrupados.filter((d) => d.data < dtInicio);
-      const diasDepoisDisp = diasAgrupados.filter((d) => d.data >= dtInicio);
-
-      const maxPossivel = Math.min(diasAntesDisp.length, diasDepoisDisp.length);
-
-      // Removemos os degraus exatos (3, 5, 10) que causavam exclusão de dados
-      let janela = maxPossivel > 30 ? 30 : maxPossivel;
-
-      if (janela === 0) return { ...a, status_calculo: "JANELA_INSUFICIENTE", checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
-
-      let labelCalculado = "SEM_DADOS";
-      if (janela >= 30) labelCalculado = "PRONTUARIO_30";
-      else if (janela >= 20) labelCalculado = "PRONTUARIO_20";
-      else if (janela >= 10) labelCalculado = "PRONTUARIO_10";
-      else labelCalculado = `CHECKPOINT_${janela}D`;
-
-      const diasAntes = diasAntesDisp.slice(-janela);
-      const diasDepois = diasDepoisDisp.slice(0, janela);
-
-      const antes = aggregatePeriodo(diasAntes.flatMap((d) => d.rows));
-      const depois = aggregatePeriodo(diasDepois.flatMap((d) => d.rows));
-
-      const antesKml = n(antes.kml);
-      const depoisKml = n(depois.kml);
-      const deltaKml = depoisKml - antesKml;
-
-      const kmTotalAntes = n(antes.km);
-      const litrosIdeaisAntes = n(antes.litrosMeta);
-      const antesDesp = n(antes.desperdicio);
-
-      let desperdicioAjustado = null;
-      let deltaDesperdicio = null;
-
-      if (depoisKml > 0 && kmTotalAntes > 0) {
-        const litrosSimulados = kmTotalAntes / depoisKml;
-        desperdicioAjustado = Math.max(0, litrosSimulados - litrosIdeaisAntes);
-        deltaDesperdicio = desperdicioAjustado - antesDesp;
-      }
-
-      let conclusao = "SEM_EVOLUCAO";
-      if (desperdicioAjustado != null && antesDesp != null) {
-        if (desperdicioAjustado < antesDesp && deltaKml > 0) conclusao = "MELHOROU";
-        else if (desperdicioAjustado > antesDesp && deltaKml < 0) conclusao = "PIOROU";
-      } else {
-        conclusao = "SEM_DADOS";
-      }
-
-      return {
-        ...a,
-        status_calculo: "OK",
-        janela_aplicada: janela,
-        checkpoint_tipo: labelCalculado,
-        antes_kml: antesKml,
-        depois_kml: depoisKml,
-        delta_kml: deltaKml,
-        antes_desp: antesDesp,
-        depois_desp: desperdicioAjustado,
-        delta_desperdicio: deltaDesperdicio,
-        conclusao_checkpoint: conclusao,
-        km_antes: kmTotalAntes,
-        litros_antes: n(antes.comb),
-        meta_kml_antes: litrosIdeaisAntes > 0 ? kmTotalAntes / litrosIdeaisAntes : 0,
-        km_depois: n(depois.km),
-        litros_depois: n(depois.comb),
-        meta_kml_depois: n(depois.litrosMeta) > 0 ? n(depois.km) / n(depois.litrosMeta) : 0,
-        desp_real_antes: antesDesp,
-        desp_real_depois: n(depois.desperdicio),
-        desp_ajustado_depois: desperdicioAjustado,
-      };
-    });
-  }, [acompanhamentosTratados, dataset]);
-
-  const mapaNovaEvolucao = useMemo(() => new Map(acompanhamentosComEvolucaoBase.map((a) => [a.id, a])), [acompanhamentosComEvolucaoBase]);
-
-  const mapaUltimoCheckpoint = useMemo(() => {
-    const map = new Map();
-    eventosFiltrados.forEach((ev) => {
-      const atual = map.get(ev.acompanhamento_id);
-      if (!atual || String(ev.created_at_dt) > String(atual.created_at_dt)) map.set(ev.acompanhamento_id, ev);
-    });
-    return map;
-  }, [eventosFiltrados]);
-
-  // CORREÇÃO: Força a leitura do cálculo ao vivo (se funcionar), matando o falso banco antigo
-  const acompanhamentosComEvolucao = useMemo(() => {
-    return acompanhamentosFiltrados
-      .map((a) => {
-        const novo = mapaNovaEvolucao.get(a.id);
-        const cp = mapaUltimoCheckpoint.get(a.id);
-
-        if (novo && novo.status_calculo === "OK") {
-          return { ...a, ...novo, checkpoint_tipo: novo.checkpoint_tipo };
+        if (!chapa) {
+          return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
         }
 
-        const hasEventoComparativo = cp && (cp.antes_kml != null || cp.depois_kml != null);
-        let conclusaoDb = "SEM_DADOS";
-        if (hasEventoComparativo) {
-          conclusaoDb = cp.conclusao;
-          if (n(cp.depois_kml) === 0) conclusaoDb = "SEM_DADOS";
+        const baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
+        const diasAgrupados = agruparPorDiaStr(baseMotorista);
+
+        if (!diasAgrupados.length) {
+          return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
         }
+
+        // Divide o tempo exatamente em strings YYYY-MM-DD
+        const diasAntesDisp = diasAgrupados.filter((d) => d.diaStr < dtInicioStr);
+        const diasDepoisDisp = diasAgrupados.filter((d) => d.diaStr >= dtInicioStr);
+
+        const maxPossivel = Math.min(diasAntesDisp.length, diasDepoisDisp.length);
+
+        let janela = 0;
+        if (maxPossivel >= 30) janela = 30;
+        else if (maxPossivel >= 20) janela = 20;
+        else if (maxPossivel >= 10) janela = 10;
+        else if (maxPossivel >= 5) janela = 5;
+        else if (maxPossivel >= 3) janela = 3;
+
+        if (janela === 0) {
+          return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
+        }
+
+        // Corta exatamente a janela simétrica
+        const diasAntes = diasAntesDisp.slice(-janela);
+        const diasDepois = diasDepoisDisp.slice(0, janela);
+
+        const antes = aggregatePeriodo(diasAntes.flatMap((d) => d.rows));
+        const depois = aggregatePeriodo(diasDepois.flatMap((d) => d.rows));
+
+        const antesKml = n(antes.kml);
+        const depoisKml = n(depois.kml);
+        const deltaKml = depoisKml - antesKml;
+
+        const kmTotalAntes = n(antes.km);
+        const litrosIdeaisAntes = n(antes.litrosMeta);
+        const antesDesp = n(antes.desperdicio);
+
+        let desperdicioAjustado = null;
+        let deltaDesperdicio = null;
+
+        if (depoisKml > 0 && kmTotalAntes > 0) {
+          const litrosSimulados = kmTotalAntes / depoisKml;
+          desperdicioAjustado = Math.max(0, litrosSimulados - litrosIdeaisAntes);
+          deltaDesperdicio = desperdicioAjustado - antesDesp;
+        }
+
+        let conclusao = "SEM_EVOLUCAO";
+        if (desperdicioAjustado != null && antesDesp != null) {
+          if (deltaKml > 0 && deltaDesperdicio <= 0) conclusao = "MELHOROU";
+          else if (deltaKml < 0 && deltaDesperdicio >= 0) conclusao = "PIOROU";
+          else if (deltaKml > 0) conclusao = "MELHOROU";
+          else if (deltaKml < 0) conclusao = "PIOROU";
+        }
+
+        let labelCalculado = "SEM_DADOS";
+        if (janela === 30) labelCalculado = "PRONTUARIO_30";
+        else if (janela === 20) labelCalculado = "PRONTUARIO_20";
+        else if (janela === 10) labelCalculado = "PRONTUARIO_10";
+        else labelCalculado = `CHECKPOINT_${janela}D`;
 
         return {
-          ...a,
-          checkpoint_tipo: cp?.tipo || a.prontuario_label || "SEM_DADOS",
-          antes_kml: hasEventoComparativo ? cp?.antes_kml : null,
-          depois_kml: hasEventoComparativo ? cp?.depois_kml : null,
-          delta_kml: hasEventoComparativo ? cp?.delta_kml : null,
-          antes_desp: hasEventoComparativo ? cp?.antes_desp : null,
-          depois_desp: hasEventoComparativo ? cp?.depois_desp : null,
-          delta_desperdicio: hasEventoComparativo ? cp?.delta_desperdicio : null,
-          conclusao_checkpoint: conclusaoDb,
-          janela_aplicada: 0,
+          ...aBase,
+          status_calculo: "OK",
+          janela_aplicada: janela,
+          checkpoint_tipo: labelCalculado,
+          antes_kml: antesKml,
+          depois_kml: depoisKml,
+          delta_kml: deltaKml,
+          antes_desp: antesDesp,
+          depois_desp: desperdicioAjustado,
+          delta_desperdicio: deltaDesperdicio,
+          conclusao_checkpoint: conclusao,
+          km_antes: kmTotalAntes,
+          litros_antes: n(antes.comb),
+          meta_kml_antes: litrosIdeaisAntes > 0 ? kmTotalAntes / litrosIdeaisAntes : 0,
+          km_depois: n(depois.km),
+          litros_depois: n(depois.comb),
+          meta_kml_depois: n(depois.litrosMeta) > 0 ? n(depois.km) / n(depois.litrosMeta) : 0,
+          desp_real_antes: antesDesp,
+          desp_real_depois: n(depois.desperdicio),
+          desp_ajustado_depois: desperdicioAjustado,
         };
       })
       .filter((a) => {
+        if (filtroLinha && a.linha_resolvida !== filtroLinha) return false;
+        if (filtroCluster) {
+          const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
+          if (c !== filtroCluster) return false;
+        }
+        if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor) return false;
+        if (filtroStatus && a.status_norm !== filtroStatus) return false;
+        if (filtroProntuario && a.checkpoint_tipo !== filtroProntuario) return false;
+        if (mesReferencia) {
+          const mesItem = a.data_ref ? String(a.data_ref).slice(0, 7) : "";
+          if (mesItem !== mesReferencia) return false;
+        }
         if (filtroConclusao && a.conclusao_checkpoint !== filtroConclusao) return false;
-        return true;
+        const q = busca.toLowerCase().trim();
+        if (!q) return true;
+        return (
+          String(a.motorista_nome || "").toLowerCase().includes(q) ||
+          String(a.motorista_chapa || "").toLowerCase().includes(q) ||
+          String(a.linha_resolvida || "").toLowerCase().includes(q) ||
+          String(a.instrutor_nome || "").toLowerCase().includes(q)
+        );
       });
-  }, [acompanhamentosFiltrados, mapaNovaEvolucao, mapaUltimoCheckpoint, filtroConclusao]);
+  }, [acompanhamentos, dataset, filtroLinha, filtroCluster, filtroInstrutor, filtroStatus, filtroProntuario, mesReferencia, filtroConclusao, busca]);
 
   const checkpointResumo = useMemo(() => {
     const rows = acompanhamentosComEvolucao.filter((r) => r.checkpoint_tipo !== "SEM_DADOS" && (r.delta_kml != null || r.delta_desperdicio != null));
@@ -1028,9 +854,9 @@ export default function DesempenhoDieselAnalise() {
             <h3 className="font-bold text-base mb-2">Como a Evolução é Calculada?</h3>
             <ul className="list-disc pl-5 space-y-2">
               <li><strong>D0 Obrigatório:</strong> Apenas acompanhamentos com data base geram análise matemática.</li>
-              <li><strong>Histórico Global:</strong> O sistema ignora restrições de cluster para o histórico do motorista. Se ele rodou, vai entrar na conta com a meta ideal apropriada.</li>
-              <li><strong>Janela Livre (Mas Simétrica):</strong> O sistema busca a quantidade de dias exatamente trabalhados para usar a mesma medida de dias <em>Antes</em> e <em>Depois</em>. Pode ser 1, 4, 12, até o limite de 30. O número real de dias aplicados molda a tag (ex: CHECKPOINT_12D).</li>
-              <li><strong>Desperdício Ajustado:</strong> Neutraliza distorções de escala (quem rodou muito pouco não ganha falsa melhora) simulando quantos litros o "Antes" gastaria com o KM/L do "Depois".</li>
+              <li><strong>Histórico Global e Simétrico:</strong> Ignora clusters e procura o número exato de dias trabalhados do motorista. O menor volume determina o "espelho" (30, 20, 10, 5 ou 3 dias simétricos exatos).</li>
+              <li><strong>Desperdício Ajustado:</strong> Neutraliza distorções de escala simulando quantos litros o "Antes" gastaria com o KM/L do "Depois".</li>
+              <li><strong>Falha do Banco Anulada:</strong> Se houver "falso MELHOROU" vindo de um registro antigo, o cálculo novo em tempo real irá esmagá-lo e assumir a métrica.</li>
             </ul>
           </div>
         )}

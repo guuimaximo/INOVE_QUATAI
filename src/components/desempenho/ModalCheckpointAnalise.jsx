@@ -110,6 +110,60 @@ function getClusterApenas(item) {
   return item?.metadata?.cluster_foco || null;
 }
 
+function getNotaInstrutorValue(nota) {
+  if (nota == null || nota === "") return null;
+  const valor = Number(nota);
+  if (!Number.isFinite(valor)) return null;
+  return Math.max(0, Math.min(100, valor));
+}
+
+function getNotaInstrutorColors(nota) {
+  const valor = getNotaInstrutorValue(nota);
+
+  if (valor == null) {
+    return {
+      box: "bg-slate-50 border-slate-200",
+      text: "text-slate-700",
+      badge: "bg-slate-100 text-slate-700 border-slate-200",
+      label: "text-slate-500",
+    };
+  }
+
+  if (valor < 50) {
+    return {
+      box: "bg-rose-50 border-rose-200",
+      text: "text-rose-700",
+      badge: "bg-rose-100 text-rose-700 border-rose-200",
+      label: "text-rose-600",
+    };
+  }
+
+  if (valor < 80) {
+    return {
+      box: "bg-amber-50 border-amber-200",
+      text: "text-amber-700",
+      badge: "bg-amber-100 text-amber-700 border-amber-200",
+      label: "text-amber-600",
+    };
+  }
+
+  return {
+    box: "bg-emerald-50 border-emerald-200",
+    text: "text-emerald-700",
+    badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    label: "text-emerald-600",
+  };
+}
+
+function getNotaInstrutorFaixa(nota) {
+  const valor = getNotaInstrutorValue(nota);
+
+  if (valor == null) return "Sem nota";
+  if (valor < 50) return "Crítica";
+  if (valor < 80) return "Atenção";
+  return "Boa";
+}
+
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
   if (!GH_USER || !GH_REPO || !GH_TOKEN) {
     throw new Error("Credenciais GitHub ausentes.");
@@ -160,6 +214,10 @@ export default function ModalCheckpointAnalise({
   const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
   const isCheckpoint30 = checkpointTipo === "PRONTUARIO_30";
+
+  const notaInstrutor = getNotaInstrutorValue(item?.intervencao_nota);
+  const notaColors = getNotaInstrutorColors(item?.intervencao_nota);
+  const notaFaixa = getNotaInstrutorFaixa(item?.intervencao_nota);
 
   useEffect(() => {
     async function carregarEvento() {
@@ -285,6 +343,8 @@ export default function ModalCheckpointAnalise({
           delta_desperdicio: comp.delta_desp,
           antes: comp.antes,
           depois: comp.depois,
+          intervencao_nota: item?.intervencao_nota ?? null,
+          intervencao_obs: item?.intervencao_obs ?? null,
         }
       );
 
@@ -366,8 +426,9 @@ export default function ModalCheckpointAnalise({
           `Meta: ${comp.depois.meta.toFixed(2)} | Real: ${comp.depois.kml.toFixed(2)}.`,
           `Delta KM/L: ${comp.delta_kml.toFixed(2)}.`,
           `Delta Desperdício: ${comp.delta_desp.toFixed(1)} L.`,
+          `Nota do Instrutor: ${notaInstrutor != null ? `${notaInstrutor}/100` : "-"}.`,
           "",
-          evento?.observacoes || "Sem observação adicional.",
+          item?.intervencao_obs || evento?.observacoes || "Sem observação adicional.",
         ].join("\n");
 
         const { data: novaTrat, error: errTrat } = await supabase
@@ -395,6 +456,10 @@ export default function ModalCheckpointAnalise({
                 delta_kml: comp.delta_kml,
                 delta_desperdicio: comp.delta_desp,
               },
+              instrutor: {
+                nota: item?.intervencao_nota ?? null,
+                observacao: item?.intervencao_obs ?? null,
+              },
             },
           })
           .select("id")
@@ -409,12 +474,12 @@ export default function ModalCheckpointAnalise({
         .insert({
           tratativa_id: tratativaId,
           acao_aplicada: "ABERTURA_AUTOMATICA",
-          observacoes: `Tratativa aberta a partir do ${checkpointTipo}. Foco: ${foco}.`,
+          observacoes: `Tratativa aberta a partir do ${checkpointTipo}. Foco: ${foco}. Nota do Instrutor: ${notaInstrutor != null ? `${notaInstrutor}/100` : "-"}.`,
           tratado_por_login: lancadorLogin,
           tratado_por_nome: lancadorNome,
         });
 
-        if (tratDetErr) throw tratDetErr;
+      if (tratDetErr) throw tratDetErr;
 
       const { data: lote, error: loteErr } = await supabase
         .from("acompanhamento_lotes")
@@ -452,6 +517,8 @@ export default function ModalCheckpointAnalise({
           delta_desperdicio: comp.delta_desp,
           antes: comp.antes,
           depois: comp.depois,
+          intervencao_nota: item?.intervencao_nota ?? null,
+          intervencao_obs: item?.intervencao_obs ?? null,
         }
       );
 
@@ -693,11 +760,57 @@ export default function ModalCheckpointAnalise({
               </div>
 
               <div className="border rounded-xl p-4 bg-slate-50 shadow-sm">
-                <div className="font-bold text-slate-800 mb-2">
-                  Observações da Etapa
+                <div className="font-bold text-slate-800 mb-3">
+                  Parecer do Instrutor & Log do Sistema
                 </div>
-                <div className="text-sm text-slate-600 leading-relaxed">
-                  {evento?.observacoes || "Sem observação registrada para esta etapa."}
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className={`rounded-lg border p-3 ${notaColors.box}`}>
+                      <div className={`text-xs font-bold uppercase tracking-wider mb-2 ${notaColors.label}`}>
+                        Nota do Instrutor (0 a 100)
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <div className={`text-2xl font-black ${notaColors.text}`}>
+                          {notaInstrutor != null ? `${notaInstrutor}/100` : "-"}
+                        </div>
+
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-black border ${notaColors.badge}`}
+                        >
+                          {notaFaixa}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg border p-3">
+                      <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Tipo do Checkpoint
+                      </div>
+                      <div className="text-lg font-black text-slate-800">
+                        {checkpointTipo || "-"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Parecer do Instrutor
+                    </div>
+                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                      {item?.intervencao_obs || "Sem parecer do instrutor registrado."}
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Log do Sistema
+                    </div>
+                    <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                      {evento?.observacoes || "Sem log registrado para esta etapa."}
+                    </div>
+                  </div>
                 </div>
               </div>
             </>

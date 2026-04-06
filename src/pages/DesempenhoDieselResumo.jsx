@@ -68,6 +68,30 @@ function fmtInt(v) {
   return Math.round(n(v)).toLocaleString("pt-BR");
 }
 
+// CORREÇÃO DE DATA: Previne falhas se o banco devolver DD/MM/YYYY
+function toDateOnlyTs(v) {
+  if (!v) return null;
+  const s = String(v);
+  if (s.includes("/")) {
+    const p = s.split(" ")[0].split("/");
+    if (p.length >= 3) {
+      const d = new Date(`${p[2].substring(0, 4)}-${p[1]}-${p[0]}T00:00:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+  }
+  const txt = s.slice(0, 10);
+  const d = new Date(`${txt}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function diffDaysInclusive(start, end = new Date()) {
+  const s = toDateOnlyTs(start);
+  const e = toDateOnlyTs(end);
+  if (!s || !e) return 0;
+  const ms = e.getTime() - s.getTime();
+  return Math.max(0, Math.floor(ms / 86400000));
+}
+
 function parseDateValue(v) {
   if (!v) return null;
   const d = new Date(v);
@@ -130,8 +154,7 @@ function statusNorm(v) {
 }
 
 function getLinhaFocoAcompanhamento(item) {
-  const meta =
-    item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
+  const meta = item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
   const linhaMeta = String(meta?.linha_foco || "").trim();
   if (linhaMeta) return linhaMeta.toUpperCase();
 
@@ -145,15 +168,11 @@ function getLinhaFocoAcompanhamento(item) {
 
 function statusBadgeClass(status) {
   const st = statusNorm(status);
-  if (st === "AGUARDANDO_INSTRUTOR")
-    return "bg-amber-50 text-amber-700 border-amber-200";
-  if (st === "EM_MONITORAMENTO")
-    return "bg-blue-50 text-blue-700 border-blue-200";
-  if (st === "EM_ANALISE")
-    return "bg-violet-50 text-violet-700 border-violet-200";
+  if (st === "AGUARDANDO_INSTRUTOR") return "bg-amber-50 text-amber-700 border-amber-200";
+  if (st === "EM_MONITORAMENTO") return "bg-blue-50 text-blue-700 border-blue-200";
+  if (st === "EM_ANALISE") return "bg-violet-50 text-violet-700 border-violet-200";
   if (st === "ATAS") return "bg-rose-50 text-rose-700 border-rose-200";
-  if (st === "OK" || st === "ENCERRADO")
-    return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (st === "OK" || st === "ENCERRADO") return "bg-emerald-50 text-emerald-700 border-emerald-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
@@ -166,7 +185,6 @@ function SortIcon({ active, direction }) {
   );
 }
 
-// CORREÇÃO: Setas apontam conforme o sinal, cor conforme o contexto (invert)
 function EvolucaoBadge({ value, invert = false, percent = false }) {
   const val = n(value);
   const txt = `${fmtNum(Math.abs(val), 2)}${percent ? "%" : ""}`;
@@ -194,21 +212,6 @@ function EvolucaoBadge({ value, invert = false, percent = false }) {
   );
 }
 
-function toDateOnlyTs(v) {
-  if (!v) return null;
-  const txt = String(v).slice(0, 10);
-  const d = new Date(`${txt}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function diffDaysInclusive(start, end = new Date()) {
-  const s = toDateOnlyTs(start);
-  const e = toDateOnlyTs(end);
-  if (!s || !e) return 0;
-  const ms = e.getTime() - s.getTime();
-  return Math.max(0, Math.floor(ms / 86400000));
-}
-
 function getJanelaDiasMonitoramento(dtInicio) {
   const dias = diffDaysInclusive(dtInicio);
   if (dias >= 30) return 30;
@@ -231,11 +234,7 @@ function getProntuarioInfo(a) {
 
   const dtBase = a?.dt_inicio_monitoramento || a?.created_at;
   const janelaFallback = getJanelaDiasMonitoramento(dtBase);
-  return {
-    label: getProntuarioLabelByJanela(janelaFallback),
-    janela: janelaFallback,
-    origem: "FALLBACK_JANELA",
-  };
+  return { label: getProntuarioLabelByJanela(janelaFallback), janela: janelaFallback, origem: "FALLBACK_JANELA" };
 }
 
 function aggregatePeriodo(rows) {
@@ -450,7 +449,9 @@ export default function DesempenhoDieselAnalise() {
       };
     });
 
-    return base.filter((r) => r.Date && r.Km > 0 && r.Comb > 0 && r.Cluster && r.kml >= 1.5 && r.kml <= 5);
+    // CORREÇÃO: Remoção do filtro "r.Cluster" obrigatório. 
+    // Garante que o motorista tenha o desempenho total contabilizado, mesmo operando fora de cluster
+    return base.filter((r) => r.Date && r.Km > 0 && r.Comb > 0 && r.kml >= 1.5 && r.kml <= 5);
   }, [rowsBase, mapaFuncionarios]);
 
   const mesesDisponiveis = useMemo(() => {
@@ -612,10 +613,9 @@ export default function DesempenhoDieselAnalise() {
       .sort((a, b) => b.Litros_Desp_Meta - a.Litros_Desp_Meta);
   }, [rowsReferenciaComRef, mapaKmLinhaReferencia]);
 
-  // CORREÇÃO: Aplica filtro rígido para só passar quem tem D0
   const acompanhamentosTratados = useMemo(() => {
     return (acompanhamentos || [])
-      .filter((a) => a.dt_inicio_monitoramento)
+      .filter((a) => a.dt_inicio_monitoramento) // CORREÇÃO: Somente acompanhamentos com data base
       .map((a) => {
         const iniMin = parseHoraToMin(a.intervencao_hora_inicio);
         const fimMin = parseHoraToMin(a.intervencao_hora_fim);
@@ -711,7 +711,7 @@ export default function DesempenhoDieselAnalise() {
     });
   }, [eventosTratados, filtroLinha, filtroInstrutor, filtroProntuario, mesReferencia, busca]);
 
-  // CORREÇÃO: Aplica Histórico Global, Janela Simétrica Exata e Desperdício Ajustado
+  // CORREÇÃO: Histórico Global, Janela Dinâmica por Dias Reais
   const acompanhamentosComEvolucaoBase = useMemo(() => {
     return acompanhamentosTratados.map((a) => {
       const dtInicio = toDateOnlyTs(a.dt_inicio_monitoramento);
@@ -729,14 +729,16 @@ export default function DesempenhoDieselAnalise() {
 
       const maxPossivel = Math.min(diasAntesDisp.length, diasDepoisDisp.length);
 
-      let janela = 0;
-      if (maxPossivel >= 30) janela = 30;
-      else if (maxPossivel >= 20) janela = 20;
-      else if (maxPossivel >= 10) janela = 10;
-      else if (maxPossivel >= 5) janela = 5;
-      else if (maxPossivel >= 3) janela = 3;
+      // Removemos os degraus exatos (3, 5, 10) que causavam exclusão de dados
+      let janela = maxPossivel > 30 ? 30 : maxPossivel;
 
       if (janela === 0) return { ...a, status_calculo: "JANELA_INSUFICIENTE", checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
+
+      let labelCalculado = "SEM_DADOS";
+      if (janela >= 30) labelCalculado = "PRONTUARIO_30";
+      else if (janela >= 20) labelCalculado = "PRONTUARIO_20";
+      else if (janela >= 10) labelCalculado = "PRONTUARIO_10";
+      else labelCalculado = `CHECKPOINT_${janela}D`;
 
       const diasAntes = diasAntesDisp.slice(-janela);
       const diasDepois = diasDepoisDisp.slice(0, janela);
@@ -773,7 +775,7 @@ export default function DesempenhoDieselAnalise() {
         ...a,
         status_calculo: "OK",
         janela_aplicada: janela,
-        checkpoint_tipo: `CHECKPOINT_${janela}D`,
+        checkpoint_tipo: labelCalculado,
         antes_kml: antesKml,
         depois_kml: depoisKml,
         delta_kml: deltaKml,
@@ -805,7 +807,7 @@ export default function DesempenhoDieselAnalise() {
     return map;
   }, [eventosFiltrados]);
 
-  // CORREÇÃO: Prioridade total no cálculo dinâmico sobre eventos gravados bugados
+  // CORREÇÃO: Força a leitura do cálculo ao vivo (se funcionar), matando o falso banco antigo
   const acompanhamentosComEvolucao = useMemo(() => {
     return acompanhamentosFiltrados
       .map((a) => {
@@ -813,7 +815,7 @@ export default function DesempenhoDieselAnalise() {
         const cp = mapaUltimoCheckpoint.get(a.id);
 
         if (novo && novo.status_calculo === "OK") {
-          return { ...a, ...novo, checkpoint_tipo: cp?.tipo || novo.checkpoint_tipo };
+          return { ...a, ...novo, checkpoint_tipo: novo.checkpoint_tipo };
         }
 
         const hasEventoComparativo = cp && (cp.antes_kml != null || cp.depois_kml != null);
@@ -1025,11 +1027,10 @@ export default function DesempenhoDieselAnalise() {
           <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm">
             <h3 className="font-bold text-base mb-2">Como a Evolução é Calculada?</h3>
             <ul className="list-disc pl-5 space-y-2">
-              <li><strong>D0 (Dia Zero):</strong> É a <code>dt_inicio_monitoramento</code>. Obrigatória.</li>
-              <li><strong>Histórico Global:</strong> Usa todas as linhas operadas para consolidar a meta ponderada em litros.</li>
-              <li><strong>Janela Simétrica:</strong> Apenas dias trabalhados. Máximo espelhamento possível: 30, 20, 10, 5 ou 3 dias simétricos de cada lado.</li>
-              <li><strong>Desperdício Ajustado:</strong> Simula os litros do "Antes" aplicando a habilidade de KM/L do "Depois" no volume de KM do "Antes".</li>
-              <li><strong>Conclusão:</strong> <b>MELHOROU</b> apenas se Desperdício Ajustado for menor que Real Antes E houver crescimento no KM/L.</li>
+              <li><strong>D0 Obrigatório:</strong> Apenas acompanhamentos com data base geram análise matemática.</li>
+              <li><strong>Histórico Global:</strong> O sistema ignora restrições de cluster para o histórico do motorista. Se ele rodou, vai entrar na conta com a meta ideal apropriada.</li>
+              <li><strong>Janela Livre (Mas Simétrica):</strong> O sistema busca a quantidade de dias exatamente trabalhados para usar a mesma medida de dias <em>Antes</em> e <em>Depois</em>. Pode ser 1, 4, 12, até o limite de 30. O número real de dias aplicados molda a tag (ex: CHECKPOINT_12D).</li>
+              <li><strong>Desperdício Ajustado:</strong> Neutraliza distorções de escala (quem rodou muito pouco não ganha falsa melhora) simulando quantos litros o "Antes" gastaria com o KM/L do "Depois".</li>
             </ul>
           </div>
         )}

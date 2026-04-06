@@ -159,6 +159,8 @@ export default function ModalCheckpointAnalise({
   const [actionLoading, setActionLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
+  const isCheckpoint30 = checkpointTipo === "PRONTUARIO_30";
+
   useEffect(() => {
     async function carregarEvento() {
       setLoading(true);
@@ -412,7 +414,7 @@ export default function ModalCheckpointAnalise({
           tratado_por_nome: lancadorNome,
         });
 
-      if (tratDetErr) throw tratDetErr;
+        if (tratDetErr) throw tratDetErr;
 
       const { data: lote, error: loteErr } = await supabase
         .from("acompanhamento_lotes")
@@ -588,32 +590,34 @@ export default function ModalCheckpointAnalise({
             </div>
           ) : (
             <>
-              <div className="border rounded-xl p-4 bg-violet-50 border-violet-200 shadow-sm">
-                <div className="font-black text-sm uppercase tracking-wider mb-2 text-violet-800">
-                  Decisão da Etapa
-                </div>
-                <div className="text-sm text-violet-800 leading-relaxed mb-4">
-                  Escolha abaixo se o caso deve ser encerrado como OK ou encaminhado para tratativa. Ambas as ações irão registrar histórico do checkpoint.
-                </div>
+              {isCheckpoint30 && (
+                <div className="border rounded-xl p-4 bg-violet-50 border-violet-200 shadow-sm">
+                  <div className="font-black text-sm uppercase tracking-wider mb-2 text-violet-800">
+                    Decisão da Etapa
+                  </div>
+                  <div className="text-sm text-violet-800 leading-relaxed mb-4">
+                    Escolha abaixo se o caso deve ser encerrado como OK ou encaminhado para tratativa. Ambas as ações irão registrar histórico do checkpoint.
+                  </div>
 
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={handleFinalizarAcompanhamento}
-                    disabled={actionLoading}
-                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-black shadow-sm hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-2"
-                  >
-                    <FaCheckCircle /> Finalizar
-                  </button>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={handleFinalizarAcompanhamento}
+                      disabled={actionLoading}
+                      className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-black shadow-sm hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-2"
+                    >
+                      <FaCheckCircle /> Finalizar
+                    </button>
 
-                  <button
-                    onClick={handleEnviarTratativa}
-                    disabled={actionLoading}
-                    className="px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-black shadow-sm hover:bg-rose-700 disabled:opacity-60 inline-flex items-center gap-2"
-                  >
-                    <FaArrowRight /> Enviar para Tratativa
-                  </button>
+                    <button
+                      onClick={handleEnviarTratativa}
+                      disabled={actionLoading}
+                      className="px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-black shadow-sm hover:bg-rose-700 disabled:opacity-60 inline-flex items-center gap-2"
+                    >
+                      <FaArrowRight /> Enviar para Tratativa
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-xl border shadow-sm">

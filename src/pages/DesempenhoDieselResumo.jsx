@@ -11,6 +11,7 @@ import {
   FaArrowDown,
   FaEquals,
   FaInfoCircle,
+  FaArrowDown as FaDownload,
 } from "react-icons/fa";
 import { createClient } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
@@ -290,6 +291,32 @@ function agruparPorDia(rows) {
     .sort((a, b) => a.data - b.data);
 }
 
+function exportarParaExcel(dados, nomeArquivo) {
+  if (!dados || !dados.length) return;
+  
+  const processarValor = (valor) => {
+    if (valor == null) return "";
+    if (typeof valor === 'object') return ""; // Ignora arrays (como motoristas no resumo por linha)
+    return String(valor).replace(/"/g, '""');
+  };
+
+  const colunas = Object.keys(dados[0]).filter(col => typeof dados[0][col] !== 'object');
+  
+  const linhas = dados.map(row => 
+    colunas.map(col => `"${processarValor(row[col])}"`).join(";")
+  );
+  
+  const csv = [colunas.join(";"), ...linhas].join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", `${nomeArquivo}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 export default function DesempenhoDieselAnalise() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
@@ -311,7 +338,6 @@ export default function DesempenhoDieselAnalise() {
   const [filtroConclusao, setFiltroConclusao] = useState("");
   const [mesReferencia, setMesReferencia] = useState("");
 
-  // Estado para exibir explicação das contas
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
   const [sortLinhas, setSortLinhas] = useState({
@@ -935,13 +961,10 @@ export default function DesempenhoDieselAnalise() {
     busca,
   ]);
 
-  // AJUSTE: Regra de janela simétrica baseada nos dias reais e Desperdício Ajustado
   const acompanhamentosComEvolucaoBase = useMemo(() => {
     return acompanhamentosTratados.map((a) => {
       const dtInicio = toDateOnlyTs(a.dt_inicio_monitoramento);
       const chapa = String(a.motorista_chapa || "").trim();
-      const linhaFoco = normalize(a.linha_resolvida);
-      const clusterFoco = normalize(a.cluster_foco || a.metadata?.cluster_foco);
 
       if (!dtInicio || !chapa) {
         return {
@@ -958,18 +981,7 @@ export default function DesempenhoDieselAnalise() {
         };
       }
 
-      let baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
-
-      if (linhaFoco && linhaFoco !== "SEM LINHA") {
-        const porLinha = baseMotorista.filter((r) => normalize(r.linha) === linhaFoco);
-        if (porLinha.length) baseMotorista = porLinha;
-      }
-
-      if (clusterFoco) {
-        const porCluster = baseMotorista.filter((r) => normalize(r.Cluster) === clusterFoco);
-        if (porCluster.length) baseMotorista = porCluster;
-      }
-
+      const baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
       const diasAgrupados = agruparPorDia(baseMotorista);
 
       if (!diasAgrupados.length) {
@@ -1159,7 +1171,6 @@ export default function DesempenhoDieselAnalise() {
     };
   }, [acompanhamentosComEvolucao]);
 
-  // AJUSTE: O agrupamento de linha agora engloba a lista de motoristas avaliados e as contas deles
   const resumoPorLinhaCheckpoint = useMemo(() => {
     const map = new Map();
 
@@ -1202,7 +1213,6 @@ export default function DesempenhoDieselAnalise() {
         else if (r.conclusao_checkpoint === "PIOROU") item.piorou += 1;
         else item.sem_evolucao += 1;
 
-        // Anexa os dados do motorista para renderização no componente filho
         item.motoristas.push({
           nome: r.motorista_nome || r.motorista_chapa,
           chapa: r.motorista_chapa,
@@ -1422,6 +1432,23 @@ export default function DesempenhoDieselAnalise() {
 
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => {
+                if (abaAtiva === "LINHAS") exportarParaExcel(linhasTabelaOrdenada, "Analise_Linhas");
+                if (abaAtiva === "MOTORISTAS") exportarParaExcel(motoristasOrdenados, "Ranking_Motoristas");
+                if (abaAtiva === "CARROS") exportarParaExcel(veiculosOrdenados, "Ranking_Carros");
+                if (abaAtiva === "ACOMPANHAMENTOS") {
+                  if (subAcompanhamento === "RESUMO_INSTRUTOR") exportarParaExcel(resumoInstrutor, "Resumo_Instrutor");
+                  if (subAcompanhamento === "TEMPO_DIA") exportarParaExcel(tempoPorDia, "Tempo_Por_Dia");
+                  if (subAcompanhamento === "ACOMPANHAMENTOS") exportarParaExcel(acompanhamentosComEvolucao, "Acompanhamentos_Detalhado");
+                }
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition"
+            >
+              <FaDownload />
+              Baixar Excel
+            </button>
+
+            <button
               onClick={() => setMostrarExplicacao(!mostrarExplicacao)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
             >
@@ -1447,7 +1474,10 @@ export default function DesempenhoDieselAnalise() {
                 <strong>D0 (Dia Zero):</strong> É a <code>dt_inicio_monitoramento</code>.
               </li>
               <li>
-                <strong>Janela Simétrica:</strong> O sistema analisa os dias estritamente trabalhados na linha analisada, ignorando datas sem viagem. Procura o maior balanço possível (30, 20, 10, 5 ou 3 dias simétricos de cada lado do D0).
+                <strong>Histórico Global:</strong> Para garantir os dias simétricos e a meta correta, o sistema busca o histórico de <b>todas as linhas operadas pelo motorista</b> no período de Antes e Depois, somando os Litros Ideais para meta ponderada.
+              </li>
+              <li>
+                <strong>Janela Simétrica:</strong> O sistema analisa os dias estritamente trabalhados. Procura o maior balanço possível (30, 20, 10, 5 ou 3 dias simétricos de cada lado do D0).
               </li>
               <li>
                 <strong>Desperdício Ajustado:</strong> Para evitar erros por diferença de volume (KM), projetamos os litros que o motorista deveria ter usado no "Antes" caso tivesse dirigido com a habilidade do "Depois" (<code>KM_Antes / KML_Depois</code>).

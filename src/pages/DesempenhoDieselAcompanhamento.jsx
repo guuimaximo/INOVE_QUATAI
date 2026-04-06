@@ -297,10 +297,9 @@ export default function DesempenhoDieselAcompanhamento() {
     (i) => !!i?.prontuario_pendente
   ).length;
 
-  const countEmAnalise = lista.filter((i) => {
-    const st = getStatusView(i);
-    return ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
-  }).length;
+  const countEmAnalise = lista.filter(
+    (i) => !!i?.prontuario_30_gerado_em
+  ).length;
 
   const countAguardandoFiltrado = listaComFiltrosSemAba.filter(
     (i) => getStatusView(i) === "AGUARDANDO_INSTRUTOR"
@@ -314,10 +313,9 @@ export default function DesempenhoDieselAcompanhamento() {
     (i) => !!i?.prontuario_pendente
   ).length;
 
-  const countEmAnaliseFiltrado = listaComFiltrosSemAba.filter((i) => {
-    const st = getStatusView(i);
-    return ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
-  }).length;
+  const countEmAnaliseFiltrado = listaComFiltrosSemAba.filter(
+    (i) => !!i?.prontuario_30_gerado_em
+  ).length;
 
   const handleExcluir = async (id) => {
     if (!podeExcluir) {
@@ -420,7 +418,7 @@ export default function DesempenhoDieselAcompanhamento() {
       } else if (abaAtiva === "MONITORAMENTO") {
         matchAba = st === "EM_MONITORAMENTO";
       } else if (abaAtiva === "ANALISE") {
-        matchAba = ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
+        matchAba = !!item?.prontuario_30_gerado_em;
       }
       if (!matchAba) return false;
 

@@ -43,7 +43,6 @@ function dateOnly(v) {
   return String(v).split("T")[0].split(" ")[0];
 }
 
-// FORMATADOR DE DATA SEGURO CONTRA FUSO HORÁRIO (YYYY-MM-DD)
 function safeDateStr(v) {
   if (!v) return "";
   const s = String(v).trim();
@@ -195,7 +194,6 @@ function aggregatePeriodo(rows) {
   return { km, comb, litrosMeta, kml, desperdicio };
 }
 
-// AGRUPAMENTO DE DIAS 100% STRING (Evita qualquer erro de timezone/GMT)
 function agruparPorDiaStr(rows) {
   const map = new Map();
   rows.forEach((r) => {
@@ -536,10 +534,9 @@ export default function DesempenhoDieselAnalise() {
       .sort((a, b) => b.Litros_Desp_Meta - a.Litros_Desp_Meta);
   }, [rowsReferenciaComRef, mapaKmLinhaReferencia]);
 
-  // CÁLCULO DIRETO E ABSOLUTO DA EVOLUÇÃO
   const acompanhamentosComEvolucao = useMemo(() => {
     return acompanhamentos
-      .filter((a) => a.dt_inicio_monitoramento) // Obrigatório ter D0
+      .filter((a) => a.dt_inicio_monitoramento)
       .map((a) => {
         const iniMin = parseHoraToMin(a.intervencao_hora_inicio);
         const fimMin = parseHoraToMin(a.intervencao_hora_fim);
@@ -556,18 +553,13 @@ export default function DesempenhoDieselAnalise() {
           duracao_min: duracaoMin,
         };
 
-        if (!chapa) {
-          return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
-        }
+        if (!chapa) return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
 
         const baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
         const diasAgrupados = agruparPorDiaStr(baseMotorista);
 
-        if (!diasAgrupados.length) {
-          return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
-        }
+        if (!diasAgrupados.length) return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
 
-        // Divide o tempo exatamente em strings YYYY-MM-DD
         const diasAntesDisp = diasAgrupados.filter((d) => d.diaStr < dtInicioStr);
         const diasDepoisDisp = diasAgrupados.filter((d) => d.diaStr >= dtInicioStr);
 
@@ -580,11 +572,8 @@ export default function DesempenhoDieselAnalise() {
         else if (maxPossivel >= 5) janela = 5;
         else if (maxPossivel >= 3) janela = 3;
 
-        if (janela === 0) {
-          return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
-        }
+        if (janela === 0) return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
 
-        // Corta exatamente a janela simétrica
         const diasAntes = diasAntesDisp.slice(-janela);
         const diasDepois = diasDepoisDisp.slice(0, janela);
 
@@ -702,6 +691,7 @@ export default function DesempenhoDieselAnalise() {
         else if (r.conclusao_checkpoint === "PIOROU") item.piorou += 1;
         else item.sem_evolucao += 1;
 
+        // Repassando os dados crus corretamente para o modal
         item.motoristas.push({
           nome: r.motorista_nome || r.motorista_chapa,
           chapa: r.motorista_chapa,
@@ -721,6 +711,9 @@ export default function DesempenhoDieselAnalise() {
           km_depois: r.km_depois,
           litros_depois: r.litros_depois,
           meta_kml_depois: r.meta_kml_depois,
+          desp_real_antes: r.desp_real_antes,
+          desp_real_depois: r.desp_real_depois,
+          desp_ajustado_depois: r.desp_ajustado_depois,
         });
       });
     return [...map.values()]
@@ -854,9 +847,9 @@ export default function DesempenhoDieselAnalise() {
             <h3 className="font-bold text-base mb-2">Como a Evolução é Calculada?</h3>
             <ul className="list-disc pl-5 space-y-2">
               <li><strong>D0 Obrigatório:</strong> Apenas acompanhamentos com data base geram análise matemática.</li>
-              <li><strong>Histórico Global e Simétrico:</strong> Ignora clusters e procura o número exato de dias trabalhados do motorista. O menor volume determina o "espelho" (30, 20, 10, 5 ou 3 dias simétricos exatos).</li>
-              <li><strong>Desperdício Ajustado:</strong> Neutraliza distorções de escala simulando quantos litros o "Antes" gastaria com o KM/L do "Depois".</li>
-              <li><strong>Falha do Banco Anulada:</strong> Se houver "falso MELHOROU" vindo de um registro antigo, o cálculo novo em tempo real irá esmagá-lo e assumir a métrica.</li>
+              <li><strong>Histórico Global:</strong> Usa todas as linhas operadas para consolidar a meta ponderada em litros.</li>
+              <li><strong>Janela Simétrica:</strong> Apenas dias trabalhados. Máximo espelhamento possível: 30, 20, 10, 5 ou 3 dias simétricos de cada lado.</li>
+              <li><strong>Desperdício Ajustado:</strong> Simula os litros do "Antes" aplicando a habilidade de KM/L do "Depois" no volume de KM do "Antes".</li>
             </ul>
           </div>
         )}

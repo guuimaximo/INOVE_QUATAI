@@ -5,7 +5,8 @@ import {
   FaFilePdf, 
   FaCode, 
   FaCheckCircle, 
-  FaArrowRight 
+  FaArrowRight,
+  FaInfoCircle
 } from "react-icons/fa";
 
 export default function AcompanhamentosModal({
@@ -227,10 +228,19 @@ export default function AcompanhamentosModal({
                   {row.motoristas && row.motoristas.map((mot, idx) => (
                     <tr key={`${row.id}_mot_${idx}`} className="bg-white hover:bg-blue-50/50 transition-colors text-sm border-b border-gray-100">
                       <td colSpan={3} className="px-4 py-3 pl-8 border-l-4 border-blue-400">
-                        <span className="font-bold text-slate-700">{mot.nome}</span>
-                        <span className="ml-2 text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                          {mot.chapa}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-700">{mot.nome}</span>
+                          <button
+                            onClick={() => setDetalheModal({ motorista_nome: mot.nome, motorista_chapa: mot.chapa, ...mot })}
+                            className="text-blue-500 hover:text-blue-700 transition-colors"
+                            title="Entender Memória de Cálculo"
+                          >
+                            <FaInfoCircle size={16} />
+                          </button>
+                          <span className="ml-2 text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                            {mot.chapa}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{mot.antes_kml == null ? "-" : fmtNum(mot.antes_kml)}</td>
                       <td className="px-4 py-3 text-slate-600">{mot.depois_kml == null ? "-" : fmtNum(mot.depois_kml)}</td>
@@ -249,12 +259,9 @@ export default function AcompanhamentosModal({
                       </td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => setDetalheModal({ 
-                            motorista_nome: mot.nome, 
-                            motorista_chapa: mot.chapa, 
-                            ...mot 
-                          })}
+                          onClick={() => setDetalheModal({ motorista_nome: mot.nome, motorista_chapa: mot.chapa, ...mot })}
                           className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-md font-bold transition border border-blue-200 hover:border-blue-600"
+                          title="Abrir Análise"
                         >
                           <FaChartBar />
                           Análise
@@ -303,7 +310,18 @@ export default function AcompanhamentosModal({
               {acompanhamentosComEvolucao.map((row) => (
                 <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
                   <td className="px-4 py-4 font-black text-slate-900">
-                    {row.motorista_nome || "-"}
+                    <div className="flex items-center gap-2">
+                      {row.motorista_nome || "-"}
+                      {row.checkpoint_tipo !== "SEM_DADOS" && (
+                        <button
+                          onClick={() => setDetalheModal(row)}
+                          className="text-blue-500 hover:text-blue-700 transition-colors"
+                          title="Entender Memória de Cálculo"
+                        >
+                          <FaInfoCircle size={16} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-4">
                     <span className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
@@ -358,11 +376,11 @@ export default function AcompanhamentosModal({
         </div>
       )}
 
+      {/* MODAL DETALHE CÁLCULO E REGRAS */}
       {detalheModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-slate-50 w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
             
-            {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 bg-white border-b">
               <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
                 <FaChartBar className="text-indigo-600" />
@@ -386,7 +404,6 @@ export default function AcompanhamentosModal({
 
             <div className="p-6 overflow-y-auto space-y-6">
               
-              {/* Identificação Section */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2 bg-white p-4 rounded-xl border">
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Motorista</p>
@@ -399,7 +416,7 @@ export default function AcompanhamentosModal({
                 </div>
                 <div className="bg-white p-4 rounded-xl border flex flex-col gap-2">
                   <div>
-                    <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Gerado em</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Início Monitoramento</p>
                     <p className="text-sm font-black text-slate-800 mt-0.5">{fmtDateBr(detalheModal.data_ref)}</p>
                   </div>
                   <div>
@@ -409,7 +426,6 @@ export default function AcompanhamentosModal({
                 </div>
               </div>
 
-              {/* Decisão Section */}
               <div className="bg-indigo-50/50 p-5 rounded-xl border border-indigo-100">
                 <h3 className="font-black text-indigo-900 uppercase tracking-wide text-sm">Decisão da Etapa</h3>
                 <p className="text-indigo-700 text-sm mt-1 mb-4">
@@ -425,7 +441,6 @@ export default function AcompanhamentosModal({
                 </div>
               </div>
 
-              {/* Métricas Cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-xl border text-center shadow-sm">
                   <p className="text-sm text-slate-500 font-bold">KM/L Antes</p>
@@ -449,7 +464,6 @@ export default function AcompanhamentosModal({
                 </div>
               </div>
 
-              {/* Tabela de Períodos */}
               <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 text-slate-500 font-black text-xs uppercase tracking-wider border-b">
@@ -483,11 +497,35 @@ export default function AcompanhamentosModal({
                 </table>
               </div>
 
-              {/* Observações */}
-              <div className="bg-slate-50 p-5 rounded-xl border">
-                <h3 className="font-black text-slate-800 text-sm mb-2">Observações da Etapa</h3>
-                <p className="text-slate-600 text-sm">
-                  {detalheModal.checkpoint_tipo} gerado automaticamente. Análise de Desperdício Ajustado processada.
+              {/* SEÇÃO DINÂMICA: MEMÓRIA DE CÁLCULO */}
+              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200 space-y-4">
+                <h3 className="font-black text-blue-900 text-sm uppercase tracking-wider flex items-center gap-2 mb-4">
+                  <FaInfoCircle className="text-blue-500" size={18} /> Memória de Cálculo
+                </h3>
+                
+                <p className="text-sm text-blue-800">
+                  <strong>1. Ponto de Partida (D0):</strong> O acompanhamento deste motorista iniciou no dia <strong>{fmtDateBr(detalheModal.data_ref)}</strong>.
+                </p>
+                
+                <p className="text-sm text-blue-800">
+                  <strong>2. Janela Simétrica:</strong> O algoritmo localizou <strong>{detalheModal.janela_aplicada} dias trabalhados</strong> válidos antes da data de início, e {detalheModal.janela_aplicada} dias trabalhados a partir dela (ignorando folgas).
+                </p>
+                
+                <p className="text-sm text-blue-800">
+                  <strong>3. Desempenho Bruto:</strong> No período "Antes", rodou {fmtInt(detalheModal.km_antes)}km consumindo {fmtInt(detalheModal.litros_antes)}L (média de <strong>{fmtNum(detalheModal.antes_kml)} km/l</strong>). 
+                  No "Depois", rodou {fmtInt(detalheModal.km_depois)}km consumindo {fmtInt(detalheModal.litros_depois)}L (média de <strong>{fmtNum(detalheModal.depois_kml)} km/l</strong>). 
+                  O KM/L sofreu uma variação de <strong>{fmtNum(detalheModal.delta_kml)}</strong>.
+                </p>
+
+                <p className="text-sm text-blue-800">
+                  <strong>4. Desperdício Ajustado:</strong> Para anular a diferença de quilometragem entre os períodos, projetamos o consumo: 
+                  Se ele dirigisse os mesmos {fmtInt(detalheModal.km_antes)}km do passado com a habilidade atual ({fmtNum(detalheModal.depois_kml)} km/l), ele teria utilizado <strong>{fmtNum(detalheModal.km_antes / (n(detalheModal.depois_kml) || 1))} Litros</strong>. 
+                  Subtraindo a meta de combustível da época, o novo desperdício projetado cai para <strong>{fmtNum(detalheModal.desp_ajustado_depois)} Litros</strong>.
+                </p>
+
+                <p className="text-sm text-blue-800">
+                  <strong>5. Veredito Final:</strong> O desperdício ajustado ({fmtNum(detalheModal.desp_ajustado_depois)} L) comparado ao desperdício real que ele cometeu no passado ({fmtNum(detalheModal.desp_real_antes)} L) gerou um delta de <strong>{fmtNum(detalheModal.delta_desperdicio)} L</strong>. 
+                  Avaliando a variação matemática, o sistema classificou a evolução como <span className="font-black bg-blue-200 px-2 py-0.5 rounded text-blue-900">{detalheModal.conclusao_checkpoint || detalheModal.conclusao}</span>.
                 </p>
               </div>
 

@@ -75,8 +75,20 @@ function fmtBRDateTime(v) {
 function getPublicUrl(bucket, path, baseUrl = SUPABASE_BASE_URL) {
   if (!path) return null;
   if (path.startsWith("http")) return path;
-  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-  return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
+
+  try {
+    if (bucket === BUCKET_PARCIAL) {
+      const { data } = supabaseBCNT.storage.from(bucket).getPublicUrl(path);
+      if (data?.publicUrl) return data.publicUrl;
+    }
+
+    const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+    return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
+  } catch {
+    const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+    return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
+  }
+}/storage/v1/object/public/${bucket}/${cleanPath}`;
 }
 
 function extractChapaFromName(name = "") {
@@ -387,30 +399,74 @@ function ParcialMeritocraciaView({ onAlert }) {
   const [resumo, setResumo] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [arquivosRaiz, setArquivosRaiz] = useState([]);
+  const [debugStorage, setDebugStorage] = useState({ root: [], individuais: [], pathRoot: "", pathIndividuais: "" });
 
   const carregarArquivos = useCallback(async () => {
     setLoading(true);
     try {
-      const [indResp, rootResp] = await Promise.all([
-        supabaseBCNT.storage.from(BUCKET_PARCIAL).list(`${mesRef}/individuais`, {
+      const rootCandidates = [mesRef, `${mesRef}/`, `/${mesRef}`];
+      const indCandidates = [`${mesRef}/individuais`, `${mesRef}/individuais/`, `/${mesRef}/individuais`];
+
+      let rootData = [];
+      let indData = [];
+      let rootPathUsed = "";
+      let indPathUsed = "";
+      let lastError = null;
+
+      for (const p of rootCandidates) {
+        const resp = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list(p, {
+          limit: 500,
+          offset: 0,
+          sortBy: { column: "name", order: "asc" },
+        });
+
+        if (!resp.error && Array.isArray(resp.data) && resp.data.length > 0) {
+          rootData = resp.data;
+          rootPathUsed = p;
+          break;
+        }
+
+        if (resp.error) lastError = resp.error;
+      }
+
+      for (const p of indCandidates) {
+        const resp = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list(p, {
           limit: 1000,
           offset: 0,
           sortBy: { column: "name", order: "asc" },
-        }),
-        supabaseBCNT.storage.from(BUCKET_PARCIAL).list(mesRef, {
-          limit: 200,
+        });
+
+        if (!resp.error && Array.isArray(resp.data) && resp.data.length > 0) {
+          indData = resp.data;
+          indPathUsed = p;
+          break;
+        }
+
+        if (resp.error) lastError = resp.error;
+      }
+
+      if (!rootData.length && !indData.length) {
+        const fallbackRoot = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list("", {
+          limit: 500,
           offset: 0,
           sortBy: { column: "name", order: "asc" },
-        }),
-      ]);
+        });
 
-      if (indResp.error) throw indResp.error;
-      if (rootResp.error) throw rootResp.error;
+        if (fallbackRoot.error && lastError) throw lastError;
 
-      const indFiles = (indResp.data || [])
+        setDebugStorage({
+          root: (fallbackRoot.data || []).map((f) => f.name),
+          individuais: [],
+          pathRoot: "[raiz bucket]",
+          pathIndividuais: "[não encontrado]",
+        });
+      }
+
+      const indFiles = (indData || [])
         .filter((f) => isPdfFile(f))
         .map((f) => {
-          const path = `${mesRef}/individuais/${f.name}`;
+          const cleanBase = indPathUsed.replace(/^\//, "").replace(/\/$/, "");
+          const path = `${cleanBase}/${f.name}`;
           return {
             fileName: f.name,
             path,
@@ -421,20 +477,26 @@ function ParcialMeritocraciaView({ onAlert }) {
           };
         });
 
-      const rootFiles = (rootResp.data || []).filter((f) => isPdfFile(f));
-
+      const rootFiles = (rootData || []).filter((f) => isPdfFile(f));
       const consolidadoFile = rootFiles.find((f) => isConsolidadoFile(f.name));
       const resumoFile = rootFiles.find((f) => isResumoFile(f.name));
+      const cleanRootBase = (rootPathUsed || mesRef).replace(/^\//, "").replace(/\/$/, "");
+
+      setDebugStorage({
+        root: (rootData || []).map((f) => f.name),
+        individuais: (indData || []).map((f) => f.name),
+        pathRoot: rootPathUsed || "[não encontrado]",
+        pathIndividuais: indPathUsed || "[não encontrado]",
+      });
 
       setArquivosRaiz(rootFiles.map((f) => f.name));
-
       setIndividuais(indFiles);
       setConsolidado(
         consolidadoFile
           ? {
               fileName: consolidadoFile.name,
-              path: `${mesRef}/${consolidadoFile.name}`,
-              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${mesRef}/${consolidadoFile.name}`, SUPABASE_BCNT_BASE_URL),
+              path: `${cleanRootBase}/${consolidadoFile.name}`,
+              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${cleanRootBase}/${consolidadoFile.name}`, SUPABASE_BCNT_BASE_URL),
               updated_at: consolidadoFile.updated_at || consolidadoFile.created_at || null,
             }
           : null
@@ -443,8 +505,8 @@ function ParcialMeritocraciaView({ onAlert }) {
         resumoFile
           ? {
               fileName: resumoFile.name,
-              path: `${mesRef}/${resumoFile.name}`,
-              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${mesRef}/${resumoFile.name}`, SUPABASE_BCNT_BASE_URL),
+              path: `${cleanRootBase}/${resumoFile.name}`,
+              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${cleanRootBase}/${resumoFile.name}`, SUPABASE_BCNT_BASE_URL),
               updated_at: resumoFile.updated_at || resumoFile.created_at || null,
             }
           : null
@@ -550,13 +612,25 @@ function ParcialMeritocraciaView({ onAlert }) {
       </div>
 
       <div className="bg-white rounded-2xl border border-dashed border-slate-300 shadow-sm p-4">
-        <div className="text-xs text-slate-500">
-          Pasta lida: <span className="font-bold text-slate-700">{mesRef}</span> / individuais e raiz do mês.
-          {arquivosRaiz.length > 0 ? (
-            <span> Arquivos PDF encontrados na raiz: <span className="font-bold text-slate-700">{arquivosRaiz.join(" | ")}</span></span>
-          ) : (
-            <span> Nenhum PDF encontrado na raiz do mês.</span>
-          )}
+        <div className="text-xs text-slate-500 space-y-1">
+          <div>
+            Pasta selecionada: <span className="font-bold text-slate-700">{mesRef}</span>
+          </div>
+          <div>
+            Path raiz lido: <span className="font-bold text-slate-700">{debugStorage.pathRoot || "-"}</span>
+          </div>
+          <div>
+            Path individuais lido: <span className="font-bold text-slate-700">{debugStorage.pathIndividuais || "-"}</span>
+          </div>
+          <div>
+            Itens encontrados na raiz: <span className="font-bold text-slate-700">{debugStorage.root.length ? debugStorage.root.join(" | ") : "nenhum"}</span>
+          </div>
+          <div>
+            Itens encontrados em individuais: <span className="font-bold text-slate-700">{debugStorage.individuais.length ? debugStorage.individuais.join(" | ") : "nenhum"}</span>
+          </div>
+          <div>
+            PDFs válidos na raiz: <span className="font-bold text-slate-700">{arquivosRaiz.length ? arquivosRaiz.join(" | ") : "nenhum"}</span>
+          </div>
         </div>
       </div>
 

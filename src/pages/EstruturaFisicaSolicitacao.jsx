@@ -27,7 +27,22 @@ function buildNomeUsuario(u) {
   return null;
 }
 
-export default function SolicitacaoEstruturaFisica() {
+const RESPONSAVEIS_AREA = ["Guilherme", "Fernando", "Larissa"];
+
+const PRIORIDADES = [
+  { value: "URGENTE", label: "Urgente", prazoDias: 5 },
+  { value: "ALTA", label: "Alta", prazoDias: 10 },
+  { value: "MEDIA", label: "Média", prazoDias: 20 },
+  { value: "BAIXA", label: "Baixa", prazoDias: 30 },
+];
+
+function addDaysToDate(dateStr, days) {
+  const dt = new Date(`${dateStr}T00:00:00`);
+  dt.setDate(dt.getDate() + Number(days || 0));
+  return dt.toISOString().slice(0, 10);
+}
+
+export default function EstruturaFisicaSolicitacao() {
   const { user } = useContext(AuthContext);
 
   const [form, setForm] = useState({
@@ -38,6 +53,7 @@ export default function SolicitacaoEstruturaFisica() {
     justificativa_impacto: "",
   });
 
+  const [setores, setSetores] = useState([]);
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -58,7 +74,23 @@ export default function SolicitacaoEstruturaFisica() {
 
   useEffect(() => {
     carregarProximoNumero();
+    carregarSetores();
   }, []);
+
+  async function carregarSetores() {
+    try {
+      const { data, error } = await supabase
+        .from("setores")
+        .select("id, nome")
+        .order("nome", { ascending: true });
+
+      if (error) throw error;
+      setSetores(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Erro ao carregar setores:", e);
+      setSetores([]);
+    }
+  }
 
   async function carregarProximoNumero() {
     try {
@@ -130,12 +162,17 @@ export default function SolicitacaoEstruturaFisica() {
   const loginSolicitante = user?.login || user?.email || null;
   const solicitanteId = pickUserUuid(user);
 
+  const prioridadeSelecionada = PRIORIDADES.find((p) => p.value === form.prioridade);
+  const prazoPreview = prioridadeSelecionada
+    ? addDaysToDate(new Date().toISOString().slice(0, 10), prioridadeSelecionada.prazoDias)
+    : "";
+
   const camposObrigatorios =
     form.setor &&
     form.responsavel_area &&
     form.descricao_demanda &&
     form.prioridade &&
-    (Number(form.prioridade) !== 5 || form.justificativa_impacto.trim());
+    (form.prioridade !== "URGENTE" || form.justificativa_impacto.trim());
 
   async function salvar() {
     if (!camposObrigatorios) {
@@ -145,19 +182,25 @@ export default function SolicitacaoEstruturaFisica() {
 
     setLoading(true);
     try {
+      const dataSolicitacao = new Date().toISOString().slice(0, 10);
+      const prazoEstimado = prioridadeSelecionada
+        ? addDaysToDate(dataSolicitacao, prioridadeSelecionada.prazoDias)
+        : null;
+
       const { data: inserted, error: insErr } = await supabase
         .from("estrutura_fisica_solicitacoes")
         .insert({
           nome_solicitante: nomeSolicitante,
           solicitante_login: loginSolicitante,
           solicitante_id: solicitanteId,
-          data_solicitacao: new Date().toISOString().slice(0, 10),
+          data_solicitacao: dataSolicitacao,
           setor: form.setor,
           responsavel_area: form.responsavel_area,
           descricao_demanda: form.descricao_demanda,
-          prioridade: Number(form.prioridade),
+          prioridade: form.prioridade,
           justificativa_impacto:
-            Number(form.prioridade) === 5 ? form.justificativa_impacto : null,
+            form.prioridade === "URGENTE" ? form.justificativa_impacto : null,
+          prazo_estimado: prazoEstimado,
           status: "PENDENTE",
           evidencias_abertura: [],
         })
@@ -254,38 +297,63 @@ export default function SolicitacaoEstruturaFisica() {
 
         <div>
           <label className="block text-sm text-gray-600 mb-1">Setor</label>
-          <input
-            className="w-full rounded-md border px-3 py-2"
+          <select
+            className="w-full rounded-md border px-3 py-2 bg-white"
             value={form.setor}
             onChange={(e) => setForm({ ...form, setor: e.target.value })}
-            placeholder="Ex.: Manutenção"
-          />
+          >
+            <option value="">Selecione...</option>
+            {setores.map((s) => (
+              <option key={s.id} value={s.nome}>
+                {s.nome}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>
           <label className="block text-sm text-gray-600 mb-1">Responsável da área</label>
-          <input
-            className="w-full rounded-md border px-3 py-2"
+          <select
+            className="w-full rounded-md border px-3 py-2 bg-white"
             value={form.responsavel_area}
             onChange={(e) => setForm({ ...form, responsavel_area: e.target.value })}
-            placeholder="Ex.: Osório"
-          />
+          >
+            <option value="">Selecione...</option>
+            {RESPONSAVEIS_AREA.map((nome) => (
+              <option key={nome} value={nome}>
+                {nome}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>
           <label className="block text-sm text-gray-600 mb-1">Prioridade</label>
           <select
-            className="w-full rounded-md border px-3 py-2"
+            className="w-full rounded-md border px-3 py-2 bg-white"
             value={form.prioridade}
             onChange={(e) => setForm({ ...form, prioridade: e.target.value })}
           >
             <option value="">Selecione...</option>
-            <option value="1">1 - baixa</option>
-            <option value="2">2 - média</option>
-            <option value="3">3 - moderada</option>
-            <option value="4">4 - alto</option>
-            <option value="5">5 - pode ser feito em até 10 dias (urgente)</option>
+            {PRIORIDADES.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label} - {p.prazoDias} dias
+              </option>
+            ))}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Prazo estimado</label>
+          <input
+            className="w-full rounded-md border px-3 py-2 bg-gray-100"
+            value={
+              prazoPreview
+                ? new Date(`${prazoPreview}T00:00:00`).toLocaleDateString("pt-BR")
+                : ""
+            }
+            disabled
+          />
         </div>
 
         <div className="md:col-span-2">
@@ -298,10 +366,10 @@ export default function SolicitacaoEstruturaFisica() {
           />
         </div>
 
-        {Number(form.prioridade) === 5 && (
+        {form.prioridade === "URGENTE" && (
           <div className="md:col-span-2">
             <label className="block text-sm text-gray-600 mb-1">
-              Em caso de 5, justifique qual o impacto
+              Justificativa do impacto
             </label>
             <textarea
               rows={3}

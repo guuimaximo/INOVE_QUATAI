@@ -88,7 +88,6 @@ function getPublicUrl(bucket, path, baseUrl = SUPABASE_BASE_URL) {
     const cleanPath = path.startsWith("/") ? path.slice(1) : path;
     return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
   }
-}/storage/v1/object/public/${bucket}/${cleanPath}`;
 }
 
 function extractChapaFromName(name = "") {
@@ -404,8 +403,8 @@ function ParcialMeritocraciaView({ onAlert }) {
   const carregarArquivos = useCallback(async () => {
     setLoading(true);
     try {
-      const rootCandidates = [mesRef, `${mesRef}/`, `/${mesRef}`];
-      const indCandidates = [`${mesRef}/individuais`, `${mesRef}/individuais/`, `/${mesRef}/individuais`];
+      const rootCandidates = [mesRef, `${mesRef}/`, `/${mesRef}`, mesRef.trim()];
+      const indCandidates = [`${mesRef}/individuais`, `${mesRef}/individuais/`, `/${mesRef}/individuais`, `${mesRef.trim()}/individuais`];
 
       let rootData = [];
       let indData = [];
@@ -454,11 +453,32 @@ function ParcialMeritocraciaView({ onAlert }) {
 
         if (fallbackRoot.error && lastError) throw lastError;
 
+        const pastaMes = (fallbackRoot.data || []).find((f) => String(f.name || "") === mesRef);
+        if (pastaMes) {
+          rootPathUsed = mesRef;
+          const retryRoot = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list(mesRef, {
+            limit: 500,
+            offset: 0,
+            sortBy: { column: "name", order: "asc" },
+          });
+          if (!retryRoot.error) rootData = retryRoot.data || [];
+
+          const retryInd = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list(`${mesRef}/individuais`, {
+            limit: 1000,
+            offset: 0,
+            sortBy: { column: "name", order: "asc" },
+          });
+          if (!retryInd.error) {
+            indData = retryInd.data || [];
+            indPathUsed = `${mesRef}/individuais`;
+          }
+        }
+
         setDebugStorage({
           root: (fallbackRoot.data || []).map((f) => f.name),
           individuais: [],
-          pathRoot: "[raiz bucket]",
-          pathIndividuais: "[não encontrado]",
+          pathRoot: rootPathUsed || "[raiz bucket]",
+          pathIndividuais: indPathUsed || "[não encontrado]",
         });
       }
 

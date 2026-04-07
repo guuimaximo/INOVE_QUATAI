@@ -9,18 +9,18 @@ import {
   FaSort,
   FaSortUp,
   FaSortDown,
-  FaInfoCircle,
   FaTimes,
-  FaChartLine,
   FaListAlt,
-  FaFilter,
   FaSearch,
+  FaTrophy,
+  FaUsers,
+  FaLayerGroup,
+  FaFolderOpen,
+  FaFilter,
+  FaCalendarAlt,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 
-// =============================================================================
-// CONFIGURAÇÕES E ENV
-// =============================================================================
 const GH_USER = import.meta.env.VITE_GITHUB_USER;
 const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
 const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
@@ -28,15 +28,19 @@ const GH_REF = "main";
 
 const WF_GERENCIAL = "relatorio_gerencial.yml";
 const WF_ACOMP = "ordem-acompanhamento.yml";
+const WF_PARCIAL = "parcial-meritocracia.yml"; // ajuste aqui se o nome real do arquivo for outro
 
 const SUPABASE_BASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const BUCKET_NAME = "relatorios";
+const BUCKET_RELATORIOS = "relatorios";
+const BUCKET_PARCIAL = "parcial_meritocracia";
 
-// =============================================================================
-// HELPERS
-// =============================================================================
 function clsx(...arr) {
   return arr.filter(Boolean).join(" ");
+}
+
+function n(v) {
+  const x = Number(v);
+  return Number.isFinite(x) ? x : 0;
 }
 
 function fmtDateInput(d) {
@@ -46,24 +50,48 @@ function fmtDateInput(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function getPublicUrl(path) {
+function fmtMesAtual(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${yyyy}-${mm}`;
+}
+
+function fmtBRDate(v) {
+  if (!v) return "-";
+  const dt = new Date(v);
+  if (Number.isNaN(dt.getTime())) return "-";
+  return dt.toLocaleDateString("pt-BR");
+}
+
+function fmtBRDateTime(v) {
+  if (!v) return "-";
+  const dt = new Date(v);
+  if (Number.isNaN(dt.getTime())) return "-";
+  return dt.toLocaleString("pt-BR");
+}
+
+function getPublicUrl(bucket, path) {
   if (!path) return null;
   if (path.startsWith("http")) return path;
   const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-  return `${SUPABASE_BASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${cleanPath}`;
+  return `${SUPABASE_BASE_URL}/storage/v1/object/public/${bucket}/${cleanPath}`;
 }
 
-function n(v) {
-  const x = Number(v);
-  return Number.isFinite(x) ? x : 0;
+function extractChapaFromName(name = "") {
+  const m = String(name).match(/^\d{3}_(\d+)_/);
+  return m?.[1] || "";
 }
 
-function normalizarLinha(v) {
-  return String(v || "").trim().toUpperCase();
+function extractNomeFromName(name = "", mesRef = "") {
+  const base = String(name).replace(/\.pdf$/i, "");
+  const semPrefixo = base.replace(/^\d{3}_\d+_/, "");
+  const semMes = mesRef ? semPrefixo.replace(new RegExp(`_${mesRef}$`), "") : semPrefixo;
+  return semMes.replaceAll("_", " ").trim();
 }
 
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
   if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes.");
+
   const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
   const response = await fetch(url, {
     method: "POST",
@@ -80,6 +108,7 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.message || `Erro GitHub: ${response.status}`);
   }
+
   return true;
 }
 
@@ -90,14 +119,74 @@ function StatusBadge({ status }) {
   if (status === "ERRO") {
     return <span className="px-2 py-1 rounded text-xs font-bold bg-rose-100 text-rose-700">ERRO</span>;
   }
+  return <span className="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700">{status || "PROCESSANDO"}</span>;
+}
+
+function TabButton({ active, icon: Icon, title, subtitle, onClick }) {
   return (
-    <span className="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700">
-      {status || "PROCESSANDO"}
-    </span>
+    <button
+      onClick={onClick}
+      className={clsx(
+        "flex items-start gap-3 rounded-2xl border p-4 text-left transition-all w-full",
+        active
+          ? "border-cyan-500 bg-cyan-50 shadow-sm"
+          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+      )}
+    >
+      <div
+        className={clsx(
+          "h-11 w-11 rounded-xl flex items-center justify-center shrink-0",
+          active ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-600"
+        )}
+      >
+        <Icon size={18} />
+      </div>
+      <div>
+        <div className={clsx("font-bold text-sm", active ? "text-cyan-800" : "text-slate-800")}>{title}</div>
+        <div className="text-xs text-slate-500 mt-1">{subtitle}</div>
+      </div>
+    </button>
   );
 }
 
-const SimpleLineChart = ({ data }) => {
+function CardResumo({ icon: Icon, titulo, valor, subtitulo, tone = "slate" }) {
+  const tones = {
+    slate: "bg-white border-slate-200 text-slate-800",
+    cyan: "bg-cyan-50 border-cyan-200 text-cyan-900",
+    amber: "bg-amber-50 border-amber-200 text-amber-900",
+    emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
+    rose: "bg-rose-50 border-rose-200 text-rose-900",
+  };
+
+  return (
+    <div className={clsx("rounded-2xl border p-4 shadow-sm", tones[tone] || tones.slate)}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide opacity-70">{titulo}</div>
+          <div className="text-2xl font-black mt-2">{valor}</div>
+          {subtitulo ? <div className="text-xs mt-2 opacity-80">{subtitulo}</div> : null}
+        </div>
+        <div className="h-10 w-10 rounded-xl bg-white/70 border flex items-center justify-center">
+          <Icon size={16} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ title, description, right }) {
+  return (
+    <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div>
+        <h3 className="text-lg font-black text-slate-800">{title}</h3>
+        {description ? <p className="text-sm text-slate-500 mt-1">{description}</p> : null}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function SimpleLineChart({ data }) {
   if (!data || data.length === 0) {
     return <div className="text-center text-xs text-slate-400 py-10">Sem dados gráficos disponíveis</div>;
   }
@@ -106,7 +195,7 @@ const SimpleLineChart = ({ data }) => {
   const height = 180;
   const padding = 30;
 
-  const allValues = data.flatMap((d) => [d.real, d.meta]);
+  const allValues = data.flatMap((d) => [n(d.real), n(d.meta)]);
   const maxVal = (Math.max(...allValues) || 5) * 1.05;
   const minVal = (Math.min(...allValues) || 0) * 0.95;
   const range = maxVal - minVal || 1;
@@ -114,8 +203,8 @@ const SimpleLineChart = ({ data }) => {
   const getX = (i) => padding + (i / Math.max(1, data.length - 1)) * (width - 2 * padding);
   const getY = (val) => height - padding - ((val - minVal) / range) * (height - 2 * padding);
 
-  const pointsReal = data.map((d, i) => `${getX(i)},${getY(d.real)}`).join(" ");
-  const pointsMeta = data.map((d, i) => `${getX(i)},${getY(d.meta)}`).join(" ");
+  const pointsReal = data.map((d, i) => `${getX(i)},${getY(n(d.real))}`).join(" ");
+  const pointsMeta = data.map((d, i) => `${getX(i)},${getY(n(d.meta))}`).join(" ");
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto border bg-white rounded-lg font-sans">
@@ -129,15 +218,13 @@ const SimpleLineChart = ({ data }) => {
 
       {data.map((d, i) => (
         <g key={i}>
-          <circle cx={getX(i)} cy={getY(d.real)} r="3" fill="#dc2626" />
-          <text x={getX(i)} y={getY(d.real) - 10} textAnchor="middle" fontSize="10" fill="#dc2626" fontWeight="bold">
+          <circle cx={getX(i)} cy={getY(n(d.real))} r="3" fill="#dc2626" />
+          <text x={getX(i)} y={getY(n(d.real)) - 10} textAnchor="middle" fontSize="10" fill="#dc2626" fontWeight="bold">
             {n(d.real).toFixed(2)}
           </text>
-
-          <text x={getX(i)} y={getY(d.meta) + 15} textAnchor="middle" fontSize="9" fill="#64748b">
+          <text x={getX(i)} y={getY(n(d.meta)) + 15} textAnchor="middle" fontSize="9" fill="#64748b">
             Ref: {n(d.meta).toFixed(2)}
           </text>
-
           <text x={getX(i)} y={height - 8} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="500">
             {d.label}
           </text>
@@ -145,12 +232,399 @@ const SimpleLineChart = ({ data }) => {
       ))}
     </svg>
   );
-};
+}
 
-export default function DesempenhoDieselAgente() {
+function ThSortable({ label, columnKey, sortConfig, onSort, align = "left" }) {
+  const isActive = sortConfig.key === columnKey;
+  return (
+    <th className={`p-3 cursor-pointer hover:bg-slate-100 text-${align}`} onClick={() => onSort(columnKey)}>
+      <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : "justify-start"}`}>
+        {label}
+        {!isActive ? (
+          <FaSort className="text-slate-300" />
+        ) : sortConfig.direction === "asc" ? (
+          <FaSortUp className="text-cyan-600" />
+        ) : (
+          <FaSortDown className="text-cyan-600" />
+        )}
+      </div>
+    </th>
+  );
+}
+
+function IndividualParcialTable({ items, busca, setBusca, mesRef }) {
+  const [sortConfig, setSortConfig] = useState({ key: "nome", direction: "asc" });
+
+  const filtrados = useMemo(() => {
+    const q = String(busca || "").toLowerCase().trim();
+    return (items || []).filter((item) => {
+      if (!q) return true;
+      return (
+        String(item.nome || "").toLowerCase().includes(q) ||
+        String(item.chapa || "").toLowerCase().includes(q) ||
+        String(item.fileName || "").toLowerCase().includes(q)
+      );
+    });
+  }, [items, busca]);
+
+  const ordenados = useMemo(() => {
+    const arr = [...filtrados];
+    arr.sort((a, b) => {
+      let av = a[sortConfig.key];
+      let bv = b[sortConfig.key];
+      av = String(av || "").toLowerCase();
+      bv = String(bv || "").toLowerCase();
+      if (av < bv) return sortConfig.direction === "asc" ? -1 : 1;
+      if (av > bv) return sortConfig.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [filtrados, sortConfig]);
+
+  const onSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div className="p-4 border-b bg-slate-50 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="font-extrabold text-slate-800">Parciais Individuais</div>
+          <div className="text-xs text-slate-500 mt-1">Busca rápida por chapa ou motorista no mês {mesRef}.</div>
+        </div>
+        <div className="w-full md:w-96 relative">
+          <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+          <input
+            type="text"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar motorista ou chapa..."
+            className="w-full border rounded-xl pl-10 pr-4 py-3 text-sm"
+          />
+        </div>
+      </div>
+
+      <div className="overflow-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-100 text-slate-700">
+            <tr>
+              <ThSortable label="Chapa" columnKey="chapa" sortConfig={sortConfig} onSort={onSort} />
+              <ThSortable label="Motorista" columnKey="nome" sortConfig={sortConfig} onSort={onSort} />
+              <ThSortable label="Arquivo" columnKey="fileName" sortConfig={sortConfig} onSort={onSort} />
+              <th className="p-3 text-right">Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ordenados.map((item) => (
+              <tr key={item.path} className="border-t hover:bg-slate-50">
+                <td className="p-3 font-bold text-slate-700">{item.chapa || "-"}</td>
+                <td className="p-3">{item.nome || "-"}</td>
+                <td className="p-3 text-slate-500">{item.fileName}</td>
+                <td className="p-3 text-right">
+                  <a
+                    href={item.publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 text-white px-3 py-2 font-bold hover:bg-cyan-700"
+                  >
+                    <FaFilePdf /> Abrir PDF
+                  </a>
+                </td>
+              </tr>
+            ))}
+
+            {ordenados.length === 0 && (
+              <tr>
+                <td colSpan={4} className="p-8 text-center text-slate-500 font-medium">
+                  Nenhuma parcial individual encontrada para o filtro informado.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ParcialMeritocraciaView({ onAlert }) {
+  const [mesRef, setMesRef] = useState(fmtMesAtual());
+  const [loading, setLoading] = useState(false);
+  const [loadingGeracao, setLoadingGeracao] = useState(false);
+  const [subTab, setSubTab] = useState("individual");
+  const [buscaIndividual, setBuscaIndividual] = useState("");
+
+  const [individuais, setIndividuais] = useState([]);
+  const [consolidado, setConsolidado] = useState(null);
+  const [resumo, setResumo] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  const carregarArquivos = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [indResp, rootResp] = await Promise.all([
+        supabase.storage.from(BUCKET_PARCIAL).list(`${mesRef}/individuais`, {
+          limit: 1000,
+          offset: 0,
+          sortBy: { column: "name", order: "asc" },
+        }),
+        supabase.storage.from(BUCKET_PARCIAL).list(mesRef, {
+          limit: 200,
+          offset: 0,
+          sortBy: { column: "name", order: "asc" },
+        }),
+      ]);
+
+      if (indResp.error) throw indResp.error;
+      if (rootResp.error) throw rootResp.error;
+
+      const indFiles = (indResp.data || [])
+        .filter((f) => f.name?.toLowerCase().endsWith(".pdf"))
+        .map((f) => {
+          const path = `${mesRef}/individuais/${f.name}`;
+          return {
+            fileName: f.name,
+            path,
+            chapa: extractChapaFromName(f.name),
+            nome: extractNomeFromName(f.name, mesRef),
+            publicUrl: getPublicUrl(BUCKET_PARCIAL, path),
+            updated_at: f.updated_at || f.created_at || null,
+          };
+        });
+
+      const rootFiles = (rootResp.data || []).filter((f) => f.name?.toLowerCase().endsWith(".pdf"));
+
+      const consolidadoFile = rootFiles.find((f) => f.name.includes("CONSOLIDADO_MOTORISTAS"));
+      const resumoFile = rootFiles.find((f) => f.name.includes("RESUMO_GERAL"));
+
+      setIndividuais(indFiles);
+      setConsolidado(
+        consolidadoFile
+          ? {
+              fileName: consolidadoFile.name,
+              path: `${mesRef}/${consolidadoFile.name}`,
+              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${mesRef}/${consolidadoFile.name}`),
+              updated_at: consolidadoFile.updated_at || consolidadoFile.created_at || null,
+            }
+          : null
+      );
+      setResumo(
+        resumoFile
+          ? {
+              fileName: resumoFile.name,
+              path: `${mesRef}/${resumoFile.name}`,
+              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${mesRef}/${resumoFile.name}`),
+              updated_at: resumoFile.updated_at || resumoFile.created_at || null,
+            }
+          : null
+      );
+      setLastUpdated(new Date().toISOString());
+    } catch (e) {
+      onAlert?.({ type: "error", message: `Erro ao carregar parciais: ${e?.message || String(e)}` });
+    } finally {
+      setLoading(false);
+    }
+  }, [mesRef, onAlert]);
+
+  useEffect(() => {
+    carregarArquivos();
+  }, [carregarArquivos]);
+
+  const dispararParcial = async () => {
+    if (loadingGeracao) return;
+    setLoadingGeracao(true);
+    try {
+      await dispatchGitHubWorkflow(WF_PARCIAL, { mes_referencia: mesRef });
+      onAlert?.({ type: "success", message: `Parcial de Meritocracia do mês ${mesRef} enviada para processamento.` });
+      setTimeout(() => {
+        carregarArquivos();
+      }, 2500);
+    } catch (e) {
+      onAlert?.({ type: "error", message: e?.message || String(e) });
+    } finally {
+      setLoadingGeracao(false);
+    }
+  };
+
+  const totalIndividuais = individuais.length;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 space-y-5">
+        <SectionHeader
+          title="Parcial de Meritocracia"
+          description="Central mensal para geração e consulta dos PDFs individuais, consolidado de motoristas e resumo geral."
+          right={
+            <button onClick={carregarArquivos} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar arquivos">
+              <FaSync className={clsx(loading && "animate-spin")} />
+            </button>
+          }
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="md:col-span-1">
+            <label className="text-xs font-bold text-slate-500 flex items-center gap-2 mb-2">
+              <FaCalendarAlt /> Mês de referência
+            </label>
+            <input
+              type="month"
+              value={mesRef}
+              onChange={(e) => setMesRef(e.target.value)}
+              className="w-full border rounded-xl px-3 py-3 text-sm"
+            />
+          </div>
+
+          <div className="md:col-span-3 flex items-center gap-3 flex-wrap">
+            <button
+              onClick={dispararParcial}
+              disabled={!mesRef || loadingGeracao}
+              className={clsx(
+                "px-5 py-3 rounded-xl font-extrabold text-sm inline-flex items-center gap-2 transition-colors",
+                !mesRef || loadingGeracao ? "bg-slate-200 text-slate-400" : "bg-amber-500 text-white hover:bg-amber-600"
+              )}
+            >
+              <FaPlay className={clsx(loadingGeracao && "animate-spin")} />
+              {loadingGeracao ? "ENVIANDO..." : "GERAR PARCIAL DO MÊS"}
+            </button>
+
+            <div className="text-xs text-slate-500">
+              Última atualização local: <span className="font-bold text-slate-700">{lastUpdated ? fmtBRDateTime(lastUpdated) : "-"}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <CardResumo
+          icon={FaUsers}
+          titulo="Parciais Individuais"
+          valor={String(totalIndividuais)}
+          subtitulo="Arquivos de motoristas encontrados no mês"
+          tone="cyan"
+        />
+        <CardResumo
+          icon={FaLayerGroup}
+          titulo="Consolidado"
+          valor={consolidado ? "Disponível" : "Pendente"}
+          subtitulo={consolidado?.updated_at ? `Atualizado em ${fmtBRDateTime(consolidado.updated_at)}` : "Arquivo único com todos os motoristas"}
+          tone={consolidado ? "emerald" : "amber"}
+        />
+        <CardResumo
+          icon={FaTrophy}
+          titulo="Resumo das Parciais"
+          valor={resumo ? "Disponível" : "Pendente"}
+          subtitulo={resumo?.updated_at ? `Atualizado em ${fmtBRDateTime(resumo.updated_at)}` : "Visão executiva consolidada do mês"}
+          tone={resumo ? "emerald" : "amber"}
+        />
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm p-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <button
+            onClick={() => setSubTab("individual")}
+            className={clsx(
+              "rounded-xl px-4 py-3 font-bold text-sm",
+              subTab === "individual" ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            )}
+          >
+            PARCIAL INDIVIDUAL
+          </button>
+          <button
+            onClick={() => setSubTab("consolidado")}
+            className={clsx(
+              "rounded-xl px-4 py-3 font-bold text-sm",
+              subTab === "consolidado" ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            )}
+          >
+            PARCIAL CONSOLIDADO
+          </button>
+          <button
+            onClick={() => setSubTab("resumo")}
+            className={clsx(
+              "rounded-xl px-4 py-3 font-bold text-sm",
+              subTab === "resumo" ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            )}
+          >
+            RESUMO PARCIAIS
+          </button>
+        </div>
+      </div>
+
+      {subTab === "individual" && (
+        <IndividualParcialTable items={individuais} busca={buscaIndividual} setBusca={setBuscaIndividual} mesRef={mesRef} />
+      )}
+
+      {subTab === "consolidado" && (
+        <div className="bg-white rounded-2xl border shadow-sm p-6">
+          <SectionHeader
+            title="Parcial Consolidado"
+            description="Arquivo consolidado com a união das parciais individuais do mês selecionado."
+          />
+
+          <div className="mt-5 rounded-2xl border bg-slate-50 p-5 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <div className="text-sm font-bold text-slate-800">{consolidado?.fileName || "Arquivo ainda não disponível"}</div>
+              <div className="text-xs text-slate-500 mt-1">
+                {consolidado?.updated_at ? `Atualizado em ${fmtBRDateTime(consolidado.updated_at)}` : "Gere a parcial do mês para disponibilizar o consolidado."}
+              </div>
+            </div>
+
+            {consolidado?.publicUrl ? (
+              <a
+                href={consolidado.publicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 text-white px-4 py-3 font-bold hover:bg-cyan-700"
+              >
+                <FaFilePdf /> Abrir Consolidado
+              </a>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {subTab === "resumo" && (
+        <div className="bg-white rounded-2xl border shadow-sm p-6">
+          <SectionHeader
+            title="Resumo das Parciais"
+            description="Material executivo com visão geral da meritocracia no mês selecionado."
+          />
+
+          <div className="mt-5 rounded-2xl border bg-slate-50 p-5 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <div className="text-sm font-bold text-slate-800">{resumo?.fileName || "Arquivo ainda não disponível"}</div>
+              <div className="text-xs text-slate-500 mt-1">
+                {resumo?.updated_at ? `Atualizado em ${fmtBRDateTime(resumo.updated_at)}` : "Gere a parcial do mês para disponibilizar o resumo executivo."}
+              </div>
+            </div>
+
+            {resumo?.publicUrl ? (
+              <a
+                href={resumo.publicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-3 font-bold hover:bg-emerald-700"
+              >
+                <FaFilePdf /> Abrir Resumo
+              </a>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DieselAgenteView({ onAlert }) {
   const mountedRef = useRef(true);
-  useEffect(() => () => {
-    mountedRef.current = false;
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const hoje = useMemo(() => new Date(), []);
@@ -161,9 +635,6 @@ export default function DesempenhoDieselAgente() {
   const [userSession, setUserSession] = useState(null);
 
   const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState(null);
-  const [sucesso, setSucesso] = useState(null);
-
   const [loadingGerencial, setLoadingGerencial] = useState(false);
   const [loadingProntuarios, setLoadingProntuarios] = useState(false);
 
@@ -175,7 +646,6 @@ export default function DesempenhoDieselAgente() {
 
   const [busca, setBusca] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
-
   const [viewingDetails, setViewingDetails] = useState(null);
   const [modalContent, setModalContent] = useState({ raioX: [], chartData: [] });
 
@@ -220,11 +690,9 @@ export default function DesempenhoDieselAgente() {
         .not("status", "in", '("OK","ENCERRADO","ATAS")');
 
       const mapStatusAtivo = {};
-      if (acompanhamentos) {
-        acompanhamentos.forEach((a) => {
-          mapStatusAtivo[a.motorista_chapa] = a.status;
-        });
-      }
+      (acompanhamentos || []).forEach((a) => {
+        mapStatusAtivo[a.motorista_chapa] = a.status;
+      });
 
       const sugestoesComStatus = (sug || []).map((s) => ({
         ...s,
@@ -234,8 +702,7 @@ export default function DesempenhoDieselAgente() {
       if (!mountedRef.current) return;
       setSugestoes(sugestoesComStatus);
     } catch (e) {
-      if (!mountedRef.current) return;
-      setErro("Erro ao carregar: " + (e?.message || String(e)));
+      onAlert?.({ type: "error", message: "Erro ao carregar: " + (e?.message || String(e)) });
     } finally {
       if (!mountedRef.current) return;
       setLoading(false);
@@ -252,7 +719,6 @@ export default function DesempenhoDieselAgente() {
 
     if (!detalhes) {
       const mesRef = motorista.mes_ref || new Date().toISOString().slice(0, 7);
-
       const { data } = await supabase
         .from("diesel_sugestoes_acompanhamento")
         .select("detalhes_json, motorista_nome")
@@ -265,39 +731,26 @@ export default function DesempenhoDieselAgente() {
     }
 
     setViewingDetails({ ...motorista, motorista_nome: nomeFallback });
-
-    if (detalhes) {
-      setModalContent({
-        raioX: detalhes.raio_x || [],
-        chartData: detalhes.grafico_semanal || [],
-      });
-    } else {
-      setModalContent({ raioX: [], chartData: [] });
-    }
+    setModalContent({
+      raioX: detalhes?.raio_x || [],
+      chartData: detalhes?.grafico_semanal || [],
+    });
   };
 
   const linhasUnicas = useMemo(() => {
-    const linhas = (sugestoes || [])
-      .map((r) => normalizarLinha(r.linha_mais_rodada))
-      .filter(Boolean);
-
+    const linhas = (sugestoes || []).map((r) => String(r.linha_mais_rodada || "").trim().toUpperCase()).filter(Boolean);
     return [...new Set(linhas)].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [sugestoes]);
 
   const sugestoesFiltradas = useMemo(() => {
     return (sugestoes || []).filter((r) => {
-      const linha = normalizarLinha(r.linha_mais_rodada);
+      const linha = String(r.linha_mais_rodada || "").trim().toUpperCase();
       const nome = String(r.motorista_nome || "").toLowerCase();
       const chapa = String(r.motorista_chapa || "").toLowerCase();
       const q = busca.toLowerCase().trim();
 
       if (filtroLinha && linha !== filtroLinha) return false;
-
-      if (q) {
-        const linhaTexto = linha.toLowerCase();
-        if (!nome.includes(q) && !chapa.includes(q) && !linhaTexto.includes(q)) return false;
-      }
-
+      if (q && !nome.includes(q) && !chapa.includes(q) && !linha.toLowerCase().includes(q)) return false;
       return true;
     });
   }, [sugestoes, busca, filtroLinha]);
@@ -311,7 +764,6 @@ export default function DesempenhoDieselAgente() {
 
   const sortedSugestoes = useMemo(() => {
     const items = [...sugestoesFiltradas];
-
     if (sortConfig.key) {
       items.sort((a, b) => {
         let aVal = a[sortConfig.key];
@@ -331,31 +783,13 @@ export default function DesempenhoDieselAgente() {
         return 0;
       });
     }
-
     return items;
   }, [sugestoesFiltradas, sortConfig]);
-
-  const ThSortable = ({ label, columnKey, align = "left" }) => (
-    <th className={`p-3 cursor-pointer hover:bg-slate-100 text-${align}`} onClick={() => handleSort(columnKey)}>
-      <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : "justify-start"}`}>
-        {label}
-        {sortConfig.key !== columnKey ? (
-          <FaSort className="text-slate-300" />
-        ) : sortConfig.direction === "asc" ? (
-          <FaSortUp className="text-cyan-600" />
-        ) : (
-          <FaSortDown className="text-cyan-600" />
-        )}
-      </div>
-    </th>
-  );
 
   const dispararGerencial = async () => {
     if (loadingGerencial) return;
     setLoadingGerencial(true);
 
-    setErro(null);
-    setSucesso(null);
     try {
       const { data: record, error } = await supabase
         .from("relatorios_gerados")
@@ -379,10 +813,10 @@ export default function DesempenhoDieselAgente() {
         report_tipo: "diesel_gerencial",
       });
 
-      setSucesso(`Relatório #${record.id} enviado.`);
+      onAlert?.({ type: "success", message: `Relatório #${record.id} enviado.` });
       setTimeout(carregarTela, 2000);
     } catch (err) {
-      setErro(err?.message || String(err));
+      onAlert?.({ type: "error", message: err?.message || String(err) });
     } finally {
       if (!mountedRef.current) return;
       setLoadingGerencial(false);
@@ -393,12 +827,9 @@ export default function DesempenhoDieselAgente() {
     if (loadingProntuarios) return;
     setLoadingProntuarios(true);
 
-    setErro(null);
-    setSucesso(null);
-
     const selecionados = sugestoesFiltradas.filter((r) => selected[r.motorista_chapa]);
     if (!selecionados.length) {
-      setErro("Selecione pelo menos 1 motorista.");
+      onAlert?.({ type: "error", message: "Selecione pelo menos 1 motorista." });
       setLoadingProntuarios(false);
       return;
     }
@@ -436,11 +867,11 @@ export default function DesempenhoDieselAgente() {
         qtd: String(selecionados.length),
       });
 
-      setSucesso(`Lote #${lote.id} enviado. Processando...`);
+      onAlert?.({ type: "success", message: `Lote #${lote.id} enviado. Processando...` });
       setSelected({});
       setTimeout(carregarTela, 2500);
     } catch (err) {
-      setErro(err?.message || String(err));
+      onAlert?.({ type: "error", message: err?.message || String(err) });
     } finally {
       if (!mountedRef.current) return;
       setLoadingProntuarios(false);
@@ -448,7 +879,6 @@ export default function DesempenhoDieselAgente() {
   };
 
   const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
-
   const allChecked = useMemo(() => {
     const disponiveis = sugestoesFiltradas.filter((r) => !r.status_atual);
     return disponiveis.length > 0 && disponiveis.every((r) => selected[r.motorista_chapa]);
@@ -457,16 +887,14 @@ export default function DesempenhoDieselAgente() {
   const toggleAll = () => {
     if (allChecked) {
       const novo = { ...selected };
-      sugestoesFiltradas.forEach((r) => {
-        delete novo[r.motorista_chapa];
-      });
+      sugestoesFiltradas.forEach((r) => delete novo[r.motorista_chapa]);
       setSelected(novo);
     } else {
-      const m = { ...selected };
+      const novo = { ...selected };
       sugestoesFiltradas.forEach((r) => {
-        if (!r.status_atual) m[r.motorista_chapa] = true;
+        if (!r.status_atual) novo[r.motorista_chapa] = true;
       });
-      setSelected(m);
+      setSelected(novo);
     }
   };
 
@@ -475,7 +903,6 @@ export default function DesempenhoDieselAgente() {
   const totalKm = modalContent.raioX?.reduce((acc, r) => acc + n(r.km), 0) || 0;
   const totalLitros = modalContent.raioX?.reduce((acc, r) => acc + n(r.litros), 0) || 0;
   const totalDesperdicio = modalContent.raioX?.reduce((acc, r) => acc + n(r.desperdicio), 0) || 0;
-
   const kmlGeralReal = totalLitros > 0 ? totalKm / totalLitros : 0;
 
   const litrosTeoricosTotal =
@@ -485,51 +912,15 @@ export default function DesempenhoDieselAgente() {
     }, 0) || 0;
 
   const kmlGeralMeta = litrosTeoricosTotal > 0 ? totalKm / litrosTeoricosTotal : 0;
-
-  const ultimoPdfUrl = getPublicUrl(ultimoGerencial?.arquivo_pdf_path);
+  const ultimoPdfUrl = getPublicUrl(BUCKET_RELATORIOS, ultimoGerencial?.arquivo_pdf_path);
   const ultimaAnaliseLabel = ultimaAnalise
-    ? `Última análise gerada: Relatório #${ultimaAnalise.report_id || "-"} · ${ultimaAnalise.mes_atual_nome || ultimaAnalise.periodo_label || "-"} · ${ultimaAnalise.created_at ? new Date(ultimaAnalise.created_at).toLocaleDateString() : "-"}`
+    ? `Última análise gerada: Relatório #${ultimaAnalise.report_id || "-"} · ${ultimaAnalise.mes_atual_nome || ultimaAnalise.periodo_label || "-"} · ${ultimaAnalise.created_at ? new Date(ultimaAnalise.created_at).toLocaleDateString("pt-BR") : "-"}`
     : "Nenhuma análise gerada até o momento.";
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto relative">
-      <div className="flex items-center justify-between gap-4 border-b pb-4">
-        <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
-            <FaBolt size={20} />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-slate-800">Agente Diesel</h2>
-            <p className="text-sm text-slate-500">Sugestões de Acompanhamento</p>
-          </div>
-        </div>
-        <button onClick={carregarTela} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar">
-          <FaSync className={clsx(loading && "animate-spin")} />
-        </button>
-      </div>
-
-      {(sucesso || erro) && (
-        <div
-          className={clsx(
-            "p-4 rounded-xl border flex items-center gap-3",
-            sucesso ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800"
-          )}
-        >
-          {sucesso ? <FaCheckCircle /> : <FaExclamationTriangle />}
-          <div>
-            <p className="font-bold text-sm">{sucesso ? "Sucesso" : "Atenção"}</p>
-            <p className="text-xs">{sucesso || erro}</p>
-          </div>
-        </div>
-      )}
-
+    <div className="space-y-6">
       <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-4">
-        <div className="flex justify-between items-center gap-4 flex-wrap">
-          <div>
-            <h3 className="font-semibold text-slate-700">Relatório Gerencial</h3>
-            <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span>
-          </div>
-        </div>
+        <SectionHeader title="Relatório Gerencial" description="Disparo mensal do relatório e acompanhamento das sugestões de acompanhamento." />
 
         <div className="flex items-center justify-between bg-slate-50 border rounded-xl px-4 py-3 gap-4 flex-wrap">
           <div className="text-sm">
@@ -537,9 +928,7 @@ export default function DesempenhoDieselAgente() {
             {ultimoGerencial ? (
               <>
                 <span className="font-extrabold text-slate-800">#{ultimoGerencial.id}</span>
-                <span className="text-slate-500 text-xs ml-2">
-                  {ultimoGerencial.created_at ? new Date(ultimoGerencial.created_at).toLocaleDateString() : "-"}
-                </span>
+                <span className="text-slate-500 text-xs ml-2">{fmtBRDate(ultimoGerencial.created_at)}</span>
                 <span className="ml-3">
                   <StatusBadge status={ultimoGerencial.status} />
                 </span>
@@ -550,12 +939,7 @@ export default function DesempenhoDieselAgente() {
           </div>
 
           {ultimoGerencial?.status === "CONCLUIDO" && ultimoPdfUrl && (
-            <a
-              href={ultimoPdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-cyan-700 font-extrabold inline-flex items-center gap-2 hover:underline"
-            >
+            <a href={ultimoPdfUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-700 font-extrabold inline-flex items-center gap-2 hover:underline">
               <FaFilePdf /> Abrir PDF
             </a>
           )}
@@ -564,29 +948,16 @@ export default function DesempenhoDieselAgente() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
           <div>
             <label className="text-xs font-bold text-slate-500">Início</label>
-            <input
-              type="date"
-              value={periodoInicio}
-              onChange={(e) => setPeriodoInicio(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
+            <input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="text-xs font-bold text-slate-500">Fim</label>
-            <input
-              type="date"
-              value={periodoFim}
-              onChange={(e) => setPeriodoFim(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
+            <input type="date" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
           <button
             onClick={dispararGerencial}
             disabled={!validarPeriodo() || loadingGerencial}
-            className={clsx(
-              "w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm transition-colors",
-              "bg-cyan-600 text-white hover:bg-cyan-700 disabled:bg-slate-300"
-            )}
+            className={clsx("w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm transition-colors", "bg-cyan-600 text-white hover:bg-cyan-700 disabled:bg-slate-300")}
           >
             <FaPlay className={clsx(loadingGerencial && "animate-spin")} /> {loadingGerencial ? "ENVIANDO..." : "DISPARAR RELATÓRIO"}
           </button>
@@ -598,25 +969,19 @@ export default function DesempenhoDieselAgente() {
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b bg-slate-50">
+        <div className="flex items-center justify-between p-4 border-b bg-slate-50 flex-wrap gap-4">
           <div>
             <h3 className="font-extrabold text-slate-800">Sugestões de Acompanhamento (30 dias)</h3>
-            <p className="text-xs text-slate-500">
-              Total: <b>{sugestoes.length}</b> | Filtrados: <b>{sugestoesFiltradas.length}</b>
-            </p>
+            <p className="text-xs text-slate-500">Total: <b>{sugestoes.length}</b> | Filtrados: <b>{sugestoesFiltradas.length}</b></p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-xs text-slate-600">
-              Selecionados: <b>{selectedCount}</b>
-            </div>
+            <div className="text-xs text-slate-600">Selecionados: <b>{selectedCount}</b></div>
             <button
               onClick={gerarFormulariosSelecionados}
               disabled={selectedCount === 0 || loadingProntuarios}
               className={clsx(
                 "px-4 py-2 rounded-xl font-extrabold text-sm transition-colors inline-flex items-center gap-2",
-                selectedCount === 0 || loadingProntuarios
-                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+                selectedCount === 0 || loadingProntuarios ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
               )}
             >
               <FaSync className={clsx(loadingProntuarios && "animate-spin")} />
@@ -626,30 +991,24 @@ export default function DesempenhoDieselAgente() {
         </div>
 
         <div className="p-4 border-b bg-white">
-          <div className="flex flex-col md:flex-row gap-3 items-center">
-            <div className="relative w-full md:flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+            <div className="relative md:col-span-2">
               <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por chapa, nome ou linha..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-cyan-500 font-medium"
+                placeholder="Buscar motorista, chapa ou linha..."
+                className="w-full border rounded-xl pl-10 pr-4 py-3 text-sm"
               />
             </div>
 
-            <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-              <FaFilter className="text-gray-400 ml-2" />
-              <select
-                value={filtroLinha}
-                onChange={(e) => setFiltroLinha(e.target.value)}
-                className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-40 font-medium text-slate-600"
-              >
-                <option value="">Todas Linhas</option>
-                {linhasUnicas.map((ln) => (
-                  <option key={ln} value={ln}>
-                    {ln}
-                  </option>
+            <div className="relative">
+              <FaFilter className="absolute left-3 top-3.5 text-gray-400" />
+              <select value={filtroLinha} onChange={(e) => setFiltroLinha(e.target.value)} className="w-full border rounded-xl pl-10 pr-4 py-3 text-sm bg-white">
+                <option value="">Todas as linhas</option>
+                {linhasUnicas.map((linha) => (
+                  <option key={linha} value={linha}>{linha}</option>
                 ))}
               </select>
             </div>
@@ -657,82 +1016,54 @@ export default function DesempenhoDieselAgente() {
         </div>
 
         <div className="overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="text-xs uppercase text-slate-500 bg-white border-b sticky top-0 z-10">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-100 text-slate-700">
               <tr>
-                <th className="p-3 w-10 text-center">
-                  <input type="checkbox" checked={!!allChecked} onChange={toggleAll} />
+                <th className="p-3 text-left">
+                  <input type="checkbox" checked={allChecked} onChange={toggleAll} />
                 </th>
-                <th className="p-3 w-10"></th>
-                <ThSortable label="Chapa" columnKey="motorista_chapa" />
-                <ThSortable label="Nome" columnKey="motorista_nome" />
-                <ThSortable label="Status" columnKey="status_atual" />
-                <ThSortable label="Linha" columnKey="linha_mais_rodada" />
-                <ThSortable label="KM" columnKey="km_percorrido" align="right" />
-                <ThSortable label="Real" columnKey="kml_realizado" align="right" />
-                <ThSortable label="Meta" columnKey="kml_meta" align="right" />
-                <ThSortable label="Desperdício" columnKey="combustivel_desperdicado" align="right" />
+                <ThSortable label="Chapa" columnKey="motorista_chapa" sortConfig={sortConfig} onSort={handleSort} />
+                <ThSortable label="Motorista" columnKey="motorista_nome" sortConfig={sortConfig} onSort={handleSort} />
+                <ThSortable label="Linha" columnKey="linha_mais_rodada" sortConfig={sortConfig} onSort={handleSort} />
+                <ThSortable label="KM" columnKey="km_percorrido" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                <ThSortable label="Litros" columnKey="combustivel_consumido" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                <ThSortable label="KM/L Real" columnKey="kml_realizado" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                <ThSortable label="KM/L Meta" columnKey="kml_meta" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                <ThSortable label="Desperdício" columnKey="combustivel_desperdicado" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                <th className="p-3 text-right">Ações</th>
               </tr>
             </thead>
-
-            <tbody className="divide-y">
+            <tbody>
               {sortedSugestoes.map((r) => {
-                const isOcupado = !!r.status_atual;
-                const statusFormatado =
-                  r.status_atual === "AGUARDANDO_INSTRUTOR"
-                    ? "AGUARDANDO INSTRUTOR"
-                    : r.status_atual === "EM_MONITORAMENTO"
-                    ? "EM MONITORAMENTO"
-                    : r.status_atual;
-
+                const disabled = !!r.status_atual;
                 return (
-                  <tr key={r.motorista_chapa} className="hover:bg-slate-50">
-                    <td className="p-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={!!selected[r.motorista_chapa]}
-                        onChange={() => toggleOne(r.motorista_chapa)}
-                        disabled={isOcupado}
-                        className={isOcupado ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}
-                        title={isOcupado ? "Motorista já possui um acompanhamento em andamento" : ""}
-                      />
-                    </td>
-                    <td className="p-3 text-center">
-                      <button onClick={() => openModal(r)} className="text-slate-400 hover:text-cyan-600" title="Ver detalhes completos">
-                        <FaInfoCircle size={18} />
-                      </button>
-                    </td>
-                    <td className="p-3 font-bold text-slate-800">{r.motorista_chapa}</td>
-                    <td className="p-3 text-slate-600 text-xs truncate max-w-[240px]" title={r.motorista_nome}>
-                      {r.motorista_nome || "-"}
-                    </td>
-
+                  <tr key={r.motorista_chapa} className="border-t hover:bg-slate-50">
                     <td className="p-3">
-                      {isOcupado ? (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
-                          {statusFormatado}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                          LIVRE
-                        </span>
-                      )}
+                      <input type="checkbox" checked={!!selected[r.motorista_chapa]} disabled={disabled} onChange={() => toggleOne(r.motorista_chapa)} />
                     </td>
-
-                    <td className="p-3 text-slate-700">{r.linha_mais_rodada || "-"}</td>
+                    <td className="p-3 font-bold">{r.motorista_chapa || "-"}</td>
+                    <td className="p-3">{r.motorista_nome || "-"}</td>
+                    <td className="p-3">{r.linha_mais_rodada || "-"}</td>
                     <td className="p-3 text-right">{n(r.km_percorrido).toFixed(0)}</td>
+                    <td className="p-3 text-right">{n(r.combustivel_consumido).toFixed(0)}</td>
                     <td className="p-3 text-right font-bold">{n(r.kml_realizado).toFixed(2)}</td>
-                    <td className="p-3 text-right text-slate-500">{n(r.kml_meta).toFixed(2)}</td>
+                    <td className="p-3 text-right">{n(r.kml_meta).toFixed(2)}</td>
                     <td className="p-3 text-right text-rose-700 font-bold">{n(r.combustivel_desperdicado).toFixed(0)} L</td>
+                    <td className="p-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {r.status_atual ? <StatusBadge status={r.status_atual} /> : null}
+                        <button onClick={() => openModal(r)} className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold hover:bg-slate-800">
+                          Detalhes
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
 
               {sortedSugestoes.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="p-8 text-center text-slate-500 font-medium">
-                    Nenhum registro encontrado com os filtros aplicados.
-                  </td>
+                  <td colSpan={10} className="p-8 text-center text-slate-500 font-medium">Nenhum registro encontrado com os filtros aplicados.</td>
                 </tr>
               )}
             </tbody>
@@ -741,16 +1072,14 @@ export default function DesempenhoDieselAgente() {
       </div>
 
       {viewingDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
             <div className="bg-slate-800 text-white p-5 flex justify-between items-start sticky top-0 z-20">
               <div>
                 <h3 className="text-lg font-bold flex items-center gap-2">
                   <FaBolt className="text-yellow-400" /> Auditoria de Eficiência
                 </h3>
-                <p className="text-slate-300 text-sm mt-1">
-                  {viewingDetails.motorista_chapa} - {viewingDetails.motorista_nome || "-"}
-                </p>
+                <p className="text-slate-300 text-sm mt-1">{viewingDetails.motorista_chapa} - {viewingDetails.motorista_nome || "-"}</p>
                 <div className="text-xs text-slate-400 mt-1">Dados processados pela IA no momento da sugestão.</div>
               </div>
               <button onClick={() => setViewingDetails(null)} className="text-slate-400 hover:text-white p-2 hover:bg-slate-700 rounded-full transition">
@@ -763,87 +1092,139 @@ export default function DesempenhoDieselAgente() {
                 <div className="flex flex-col items-center justify-center py-10 text-slate-400 gap-3 border-2 border-dashed rounded-xl bg-slate-50">
                   <FaExclamationTriangle className="text-3xl text-slate-300" />
                   <p>Detalhes não disponíveis para este registro.</p>
-                  <span className="text-xs">Execute o relatório novamente para gerar os dados detalhados.</span>
                 </div>
               ) : (
                 <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <CardResumo icon={FaLayerGroup} titulo="KM Total" valor={totalKm.toFixed(0)} tone="cyan" />
+                    <CardResumo icon={FaLayerGroup} titulo="Litros" valor={totalLitros.toFixed(0)} tone="amber" />
+                    <CardResumo icon={FaLayerGroup} titulo="Desperdício" valor={totalDesperdicio.toFixed(0)} tone="rose" />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <CardResumo icon={FaLayerGroup} titulo="KM/L Real" valor={kmlGeralReal.toFixed(2)} tone="slate" />
+                    <CardResumo icon={FaLayerGroup} titulo="KM/L Meta" valor={kmlGeralMeta.toFixed(2)} tone="emerald" />
+                  </div>
+
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-slate-700 border-b pb-2">
                       <FaListAlt />
-                      <h4 className="font-bold text-sm uppercase">1. Raio-X da Operação</h4>
+                      <h4 className="font-bold text-sm uppercase">Raio-X por linha</h4>
                     </div>
-
-                    <div className="border rounded-lg overflow-hidden">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-100 text-slate-500 font-bold uppercase">
+                    <div className="overflow-auto border rounded-xl">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-slate-100">
                           <tr>
-                            <th className="p-2 text-left">Linha</th>
-                            <th className="p-2 text-left">Cluster</th>
-                            <th className="p-2 text-right">KM</th>
-                            <th className="p-2 text-right">Litros</th>
-                            <th className="p-2 text-right">Real</th>
-                            <th className="p-2 text-right">Meta</th>
-                            <th className="p-2 text-right">Desp.</th>
+                            <th className="p-3 text-left">Linha</th>
+                            <th className="p-3 text-right">KM</th>
+                            <th className="p-3 text-right">Litros</th>
+                            <th className="p-3 text-right">KM/L Real</th>
+                            <th className="p-3 text-right">KM/L Meta</th>
+                            <th className="p-3 text-right">Desperdício</th>
                           </tr>
                         </thead>
-
-                        <tbody className="divide-y">
-                          {modalContent.raioX.map((row, idx) => (
-                            <tr key={idx} className={n(row.desperdicio) > 10 ? "bg-rose-50" : ""}>
-                              <td className="p-2 font-bold text-slate-700">{row.linha}</td>
-                              <td className="p-2 text-slate-500">{row.cluster}</td>
-                              <td className="p-2 text-right">{n(row.km).toFixed(0)}</td>
-                              <td className="p-2 text-right">{n(row.litros).toFixed(0)}</td>
-                              <td className="p-2 text-right font-bold">{n(row.kml_real).toFixed(2)}</td>
-                              <td className="p-2 text-right text-slate-500">{n(row.kml_meta).toFixed(2)}</td>
-                              <td className={clsx("p-2 text-right font-bold", n(row.desperdicio) > 0 ? "text-rose-600" : "text-emerald-600")}>
-                                {n(row.desperdicio).toFixed(1)}
-                              </td>
+                        <tbody>
+                          {modalContent.raioX.map((r, idx) => (
+                            <tr key={idx} className="border-t">
+                              <td className="p-3">{r.linha || r.cluster || "-"}</td>
+                              <td className="p-3 text-right">{n(r.km).toFixed(0)}</td>
+                              <td className="p-3 text-right">{n(r.litros).toFixed(0)}</td>
+                              <td className="p-3 text-right">{n(r.kml_real).toFixed(2)}</td>
+                              <td className="p-3 text-right">{n(r.kml_meta).toFixed(2)}</td>
+                              <td className="p-3 text-right font-bold text-rose-700">{n(r.desperdicio).toFixed(0)}</td>
                             </tr>
                           ))}
                         </tbody>
-
-                        <tfoot className="bg-slate-800 text-white font-bold border-t-2 border-slate-900">
-                          <tr>
-                            <td colSpan={2} className="p-2 text-right uppercase text-slate-300">
-                              TOTAL
-                            </td>
-                            <td className="p-2 text-right">{totalKm.toFixed(0)}</td>
-                            <td className="p-2 text-right">{totalLitros.toFixed(0)}</td>
-                            <td className="p-2 text-right text-yellow-400">{kmlGeralReal.toFixed(2)}</td>
-                            <td className="p-2 text-right text-slate-300">{kmlGeralMeta.toFixed(2)}</td>
-                            <td className="p-2 text-right bg-rose-900/50 text-rose-300">{totalDesperdicio.toFixed(1)}</td>
-                          </tr>
-                        </tfoot>
                       </table>
                     </div>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-slate-700 border-b pb-2">
-                      <FaChartLine />
-                      <h4 className="font-bold text-sm uppercase">2. Evolução Semanal</h4>
+                      <FaListAlt />
+                      <h4 className="font-bold text-sm uppercase">Evolução semanal</h4>
                     </div>
-
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                      <SimpleLineChart data={modalContent.chartData} />
-                    </div>
+                    <SimpleLineChart data={modalContent.chartData || []} />
                   </div>
                 </>
               )}
-
-              <div className="pt-4 border-t flex justify-end">
-                <button
-                  onClick={() => setViewingDetails(null)}
-                  className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-colors"
-                >
-                  Fechar Análise
-                </button>
-              </div>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+export default function DesempenhoDieselAgente() {
+  const [mainTab, setMainTab] = useState("agente");
+  const [feedback, setFeedback] = useState(null);
+
+  const handleAlert = useCallback((payload) => {
+    setFeedback(payload);
+  }, []);
+
+  useEffect(() => {
+    if (!feedback) return;
+    const t = setTimeout(() => setFeedback(null), 5000);
+    return () => clearTimeout(t);
+  }, [feedback]);
+
+  return (
+    <div className="p-6 space-y-6 max-w-7xl mx-auto relative">
+      <div className="flex items-center justify-between gap-4 border-b pb-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
+            {mainTab === "agente" ? <FaBolt size={20} /> : <FaTrophy size={20} />}
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">
+              {mainTab === "agente" ? "Agente Diesel" : "Parcial de Meritocracia"}
+            </h2>
+            <p className="text-sm text-slate-500">
+              {mainTab === "agente"
+                ? "Sugestões de acompanhamento e disparo de workflows"
+                : "Central mensal de parciais individuais, consolidado e resumo executivo"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {feedback && (
+        <div
+          className={clsx(
+            "p-4 rounded-2xl border flex items-center gap-3 shadow-sm",
+            feedback.type === "success"
+              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+              : "bg-rose-50 border-rose-200 text-rose-800"
+          )}
+        >
+          {feedback.type === "success" ? <FaCheckCircle /> : <FaExclamationTriangle />}
+          <div>
+            <p className="font-bold text-sm">{feedback.type === "success" ? "Sucesso" : "Atenção"}</p>
+            <p className="text-xs">{feedback.message}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <TabButton
+          active={mainTab === "agente"}
+          icon={FaBolt}
+          title="AGENTE DIESEL"
+          subtitle="Relatório gerencial, sugestões de acompanhamento e geração de formulários."
+          onClick={() => setMainTab("agente")}
+        />
+        <TabButton
+          active={mainTab === "parcial"}
+          icon={FaTrophy}
+          title="PARCIAL DE MERITOCRACIA"
+          subtitle="Consulta profissional das parciais individuais, consolidado mensal e resumo geral."
+          onClick={() => setMainTab("parcial")}
+        />
+      </div>
+
+      {mainTab === "agente" ? <DieselAgenteView onAlert={handleAlert} /> : <ParcialMeritocraciaView onAlert={handleAlert} />}
     </div>
   );
 }

@@ -1,4 +1,3 @@
-// src/components/Sidebar.jsx
 import { useState, useContext, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -29,6 +28,7 @@ import {
   FaMicrochip,
   FaExchangeAlt,
   FaFileInvoice,
+  FaBuilding,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -64,6 +64,14 @@ const EMBARCADOS_ROUTES = {
   movimentacoes: "/embarcados-movimentacoes",
   reparos: "/embarcados-reparos",
   envioManutencao: "/embarcados-envio-manutencao",
+};
+
+// ✅ Rotas Estrutura Física
+const ESTRUTURA_FISICA_ROUTES = {
+  solicitacao: "/estrutura-fisica/solicitacao",
+  central: "/estrutura-fisica/central",
+  consultar: "/estrutura-fisica/consultar/:id",
+  tratar: "/estrutura-fisica/tratar/:id",
 };
 
 /* =========================
@@ -116,6 +124,12 @@ const ACCESS = {
 
     // ✅ Tratativas Diesel (módulo separado)
     ...Object.values(DIESEL_TRATATIVAS_ROUTES),
+
+    // ✅ Estrutura Física
+    ESTRUTURA_FISICA_ROUTES.solicitacao,
+    ESTRUTURA_FISICA_ROUTES.central,
+    ESTRUTURA_FISICA_ROUTES.consultar,
+    ESTRUTURA_FISICA_ROUTES.tratar,
 
     // Checklists
     "/checklists",
@@ -211,6 +225,7 @@ export default function Sidebar() {
   const [checklistsOpen, setChecklistsOpen] = useState(false);
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
   const [embarcadosOpen, setEmbarcadosOpen] = useState(false);
+  const [estruturaFisicaOpen, setEstruturaFisicaOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
   const { user, logout } = useContext(AuthContext);
@@ -290,6 +305,23 @@ export default function Sidebar() {
         ],
       },
 
+      estruturaFisica: {
+        label: "Estrutura Física",
+        icon: <FaBuilding />,
+        tabs: [
+          {
+            path: ESTRUTURA_FISICA_ROUTES.solicitacao,
+            label: "Solicitação",
+            icon: <FaPenSquare />,
+          },
+          {
+            path: ESTRUTURA_FISICA_ROUTES.central,
+            label: "Central",
+            icon: <FaListAlt />,
+          },
+        ],
+      },
+
       tratativas: [
         { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie />, onlyAdminGestor: true },
         { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
@@ -341,7 +373,6 @@ export default function Sidebar() {
   const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
   const showPCM = isAdmin || isGestor || isManutencao;
 
-  // ✅ Agora mostra Embarcados para qualquer nível que tenha ao menos uma subrota liberada
   const showEmbarcados =
     isAdmin ||
     isGestor ||
@@ -350,6 +381,10 @@ export default function Sidebar() {
     isTratativa ||
     isEmbarcados ||
     links.embarcados.tabs.some((t) => canSee(user, t.path));
+
+  const showEstruturaFisica =
+    (isAdmin || isGestor) &&
+    links.estruturaFisica.tabs.some((t) => canSee(user, t.path));
 
   const showTratativas = links.tratativas.some((l) => {
     if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
@@ -480,6 +515,35 @@ export default function Sidebar() {
             {desempenhoDieselOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.desempenhoDiesel.tabs.map((t) =>
+                  canSee(user, t.path) ? (
+                    <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
+                      {t.icon}
+                      <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {showEstruturaFisica && (
+          <>
+            <button
+              onClick={() => setEstruturaFisicaOpen(!estruturaFisicaOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {links.estruturaFisica.icon}
+                <span className="whitespace-nowrap truncate">{links.estruturaFisica.label}</span>
+              </div>
+              {estruturaFisicaOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {estruturaFisicaOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.estruturaFisica.tabs.map((t) =>
                   canSee(user, t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
                       {t.icon}

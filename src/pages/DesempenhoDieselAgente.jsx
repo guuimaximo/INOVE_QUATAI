@@ -653,30 +653,6 @@ function ParcialMeritocraciaView({ onAlert }) {
           tone={resumo ? "emerald" : "amber"}
         />
       </div>
-
-      <div className="bg-white rounded-2xl border border-dashed border-slate-300 shadow-sm p-4">
-        <div className="text-xs text-slate-500 space-y-1">
-          <div>
-            Pasta selecionada: <span className="font-bold text-slate-700">{mesRef}</span>
-          </div>
-          <div>
-            Path raiz lido: <span className="font-bold text-slate-700">{debugStorage.pathRoot || "-"}</span>
-          </div>
-          <div>
-            Path individuais lido: <span className="font-bold text-slate-700">{debugStorage.pathIndividuais || "-"}</span>
-          </div>
-          <div>
-            Itens encontrados na raiz: <span className="font-bold text-slate-700">{debugStorage.root.length ? debugStorage.root.join(" | ") : "nenhum"}</span>
-          </div>
-          <div>
-            Itens encontrados em individuais: <span className="font-bold text-slate-700">{debugStorage.individuais.length ? debugStorage.individuais.join(" | ") : "nenhum"}</span>
-          </div>
-          <div>
-            PDFs válidos na raiz: <span className="font-bold text-slate-700">{arquivosRaiz.length ? arquivosRaiz.join(" | ") : "nenhum"}</span>
-          </div>
-        </div>
-      </div>
-
       <div className="bg-white rounded-2xl border shadow-sm p-2">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <button

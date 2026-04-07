@@ -122,38 +122,7 @@ function getNotaInstrutorFaixa(nota) {
   return "Boa";
 }
 
-// =====================================================================================
-// REGRAS DE CONDUÇÃO
-// =====================================================================================
-// true  => SIM é a resposta correta/boa
-// false => NÃO é a resposta correta/boa
-const CONDUCAO_SIM_E_BOM = new Set([
-  "06",
-  "12",
-  "13",
-  "14",
-  "15",
-  "18",
-  "20",
-  "21",
-  "22",
-  "23",
-]);
-
-function normalizeCodigo(codigo) {
-  return String(codigo || "").trim().padStart(2, "0");
-}
-
-function isRespostaBoaConducao(codigo, valorBool) {
-  if (valorBool !== true && valorBool !== false) return null;
-
-  const cod = normalizeCodigo(codigo);
-  const simEhBom = CONDUCAO_SIM_E_BOM.has(cod);
-
-  return simEhBom ? valorBool === true : valorBool === false;
-}
-
-function badgeConducao(codigo, val) {
+function badgeConducao(itemChecklist, val) {
   if (val !== true && val !== false) {
     return {
       label: "—",
@@ -163,7 +132,8 @@ function badgeConducao(codigo, val) {
     };
   }
 
-  const respostaBoa = isRespostaBoaConducao(codigo, val);
+  const simEhBom = itemChecklist?.bool_true_is_good !== false;
+  const respostaBoa = simEhBom ? val === true : val === false;
   const label = val ? "SIM" : "NÃO";
   const Icon = val ? FaCheck : FaX;
 
@@ -251,7 +221,9 @@ export default function ResumoLancamentoInstrutor({ item }) {
       try {
         const { data, error } = await supabase
           .from("diesel_checklist_itens")
-          .select("id, ordem, grupo, codigo, descricao, ajuda, tipo_resposta, ativo")
+          .select(
+            "id, ordem, grupo, codigo, descricao, ajuda, tipo_resposta, ativo, bool_true_is_good"
+          )
           .eq("ativo", true)
           .in("grupo", ["CONDUCAO_INTELIGENTE", "AVALIACAO_TECNICA"])
           .order("grupo", { ascending: true })
@@ -493,7 +465,7 @@ export default function ResumoLancamentoInstrutor({ item }) {
           <div className="space-y-3">
             {itensConducao.map((it) => {
               const val = getValConducaoFromItem(it);
-              const b = badgeConducao(it.codigo, val);
+              const b = badgeConducao(it, val);
               const Icon = b.Icon;
 
               return (

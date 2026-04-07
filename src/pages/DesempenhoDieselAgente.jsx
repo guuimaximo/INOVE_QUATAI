@@ -20,6 +20,7 @@ import {
   FaCalendarAlt,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
+import { supabaseBCNT } from "../supabaseBCNT";
 
 const GH_USER = import.meta.env.VITE_GITHUB_USER;
 const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
@@ -31,6 +32,7 @@ const WF_ACOMP = "ordem-acompanhamento.yml";
 const WF_PARCIAL = "parcial-meritocracia.yml"; // ajuste aqui se o nome real do arquivo for outro
 
 const SUPABASE_BASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_BCNT_BASE_URL = import.meta.env.VITE_SUPA_BASE_BCNT_URL;
 const BUCKET_RELATORIOS = "relatorios";
 const BUCKET_PARCIAL = "parcial_meritocracia";
 
@@ -70,11 +72,11 @@ function fmtBRDateTime(v) {
   return dt.toLocaleString("pt-BR");
 }
 
-function getPublicUrl(bucket, path) {
+function getPublicUrl(bucket, path, baseUrl = SUPABASE_BASE_URL) {
   if (!path) return null;
   if (path.startsWith("http")) return path;
   const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-  return `${SUPABASE_BASE_URL}/storage/v1/object/public/${bucket}/${cleanPath}`;
+  return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
 }
 
 function extractChapaFromName(name = "") {
@@ -366,12 +368,12 @@ function ParcialMeritocraciaView({ onAlert }) {
     setLoading(true);
     try {
       const [indResp, rootResp] = await Promise.all([
-        supabase.storage.from(BUCKET_PARCIAL).list(`${mesRef}/individuais`, {
+        supabaseBCNT.storage.from(BUCKET_PARCIAL).list(`${mesRef}/individuais`, {
           limit: 1000,
           offset: 0,
           sortBy: { column: "name", order: "asc" },
         }),
-        supabase.storage.from(BUCKET_PARCIAL).list(mesRef, {
+        supabaseBCNT.storage.from(BUCKET_PARCIAL).list(mesRef, {
           limit: 200,
           offset: 0,
           sortBy: { column: "name", order: "asc" },
@@ -390,7 +392,7 @@ function ParcialMeritocraciaView({ onAlert }) {
             path,
             chapa: extractChapaFromName(f.name),
             nome: extractNomeFromName(f.name, mesRef),
-            publicUrl: getPublicUrl(BUCKET_PARCIAL, path),
+            publicUrl: getPublicUrl(BUCKET_PARCIAL, path, SUPABASE_BCNT_BASE_URL),
             updated_at: f.updated_at || f.created_at || null,
           };
         });
@@ -406,7 +408,7 @@ function ParcialMeritocraciaView({ onAlert }) {
           ? {
               fileName: consolidadoFile.name,
               path: `${mesRef}/${consolidadoFile.name}`,
-              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${mesRef}/${consolidadoFile.name}`),
+              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${mesRef}/${consolidadoFile.name}`, SUPABASE_BCNT_BASE_URL),
               updated_at: consolidadoFile.updated_at || consolidadoFile.created_at || null,
             }
           : null
@@ -416,7 +418,7 @@ function ParcialMeritocraciaView({ onAlert }) {
           ? {
               fileName: resumoFile.name,
               path: `${mesRef}/${resumoFile.name}`,
-              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${mesRef}/${resumoFile.name}`),
+              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${mesRef}/${resumoFile.name}`, SUPABASE_BCNT_BASE_URL),
               updated_at: resumoFile.updated_at || resumoFile.created_at || null,
             }
           : null

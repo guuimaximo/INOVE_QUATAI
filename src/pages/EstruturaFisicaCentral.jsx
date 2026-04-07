@@ -243,310 +243,236 @@ export default function EstruturaFisicaCentral() {
   }
 
   function SortIcon({ colKey }) {
-    if (sort.key !== colKey) return <span className="ml-1 text-white/70">↕</span>;
-    return <span className="ml-1">{sort.dir === "asc" ? "↑" : "↓"}</span>;
+    if (sort.key !== colKey) return <span className="ml-1 text-slate-400">↕</span>;
+    return <span className="ml-1 text-blue-600 font-bold">{sort.dir === "asc" ? "↑" : "↓"}</span>;
   }
 
   function badgePrioridade(p) {
     const v = norm(p).toUpperCase();
-    const base = "px-2 py-1 rounded text-xs font-medium";
+    const base = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold shadow-sm border";
 
-    if (v === "URGENTE") {
-      return <span className={`${base} bg-red-100 text-red-800`}>Urgente</span>;
-    }
-    if (v === "ALTA") {
-      return <span className={`${base} bg-orange-100 text-orange-800`}>Alta</span>;
-    }
-    if (v === "MEDIA") {
-      return <span className={`${base} bg-yellow-100 text-yellow-800`}>Média</span>;
-    }
-    return <span className={`${base} bg-green-100 text-green-800`}>Baixa</span>;
+    if (v === "URGENTE") return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Urgente</span>;
+    if (v === "ALTA") return <span className={`${base} bg-orange-50 text-orange-700 border-orange-200`}>Alta</span>;
+    if (v === "MEDIA") return <span className={`${base} bg-yellow-50 text-yellow-700 border-yellow-200`}>Média</span>;
+    return <span className={`${base} bg-green-50 text-green-700 border-green-200`}>Baixa</span>;
   }
 
   function badgeStatus(row) {
     const st = norm(row?.status).toUpperCase();
+    const base = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold shadow-sm border";
 
-    if (st === "PENDENTE") {
-      return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-          Pendente
-        </span>
-      );
-    }
-    if (st === "EM_ANALISE") {
-      return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
-          Em análise
-        </span>
-      );
-    }
-    if (st === "EM_ANDAMENTO") {
-      return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-800">
-          Em andamento
-        </span>
-      );
-    }
-    if (st === "CONCLUIDO") {
-      return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
-          Concluído
-        </span>
-      );
-    }
-    if (st === "CANCELADO") {
-      return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
-          Cancelado
-        </span>
-      );
-    }
+    if (st === "PENDENTE") return <span className={`${base} bg-yellow-50 text-yellow-700 border-yellow-200`}>Pendente</span>;
+    if (st === "EM_ANALISE") return <span className={`${base} bg-blue-50 text-blue-700 border-blue-200`}>Em análise</span>;
+    if (st === "EM_ANDAMENTO") return <span className={`${base} bg-orange-50 text-orange-700 border-orange-200`}>Em andamento</span>;
+    if (st === "CONCLUIDO") return <span className={`${base} bg-green-50 text-green-700 border-green-200`}>Concluído</span>;
+    if (st === "CANCELADO") return <span className={`${base} bg-slate-100 text-slate-700 border-slate-300`}>Cancelado</span>;
 
-    return (
-      <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
-        {row?.status || "-"}
-      </span>
-    );
+    return <span className={`${base} bg-slate-100 text-slate-700 border-slate-300`}>{row?.status || "-"}</span>;
   }
 
-  const cardClass =
-    "rounded-xl border bg-white p-4 shadow-sm flex flex-col justify-center min-h-[92px]";
+  const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all";
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <h1 className="text-2xl font-bold text-gray-700">
-          Central Controle Manutenção Estrutura Física
-        </h1>
+    <div className="max-w-7xl mx-auto p-6 space-y-6 bg-slate-50 min-h-screen">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+            Controle de Manutenção
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">Gerenciamento da estrutura física</p>
+        </div>
 
-        <div className="flex items-center gap-2">
+        <div className="inline-flex bg-slate-200/50 p-1 rounded-lg border border-slate-200">
           <button
             onClick={() => setViewMode(VIEW.ALL)}
-            className={[
-              "px-3 py-2 rounded-md text-sm border",
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
               viewMode === VIEW.ALL
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
-            ].join(" ")}
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
           >
-            VER TUDO
+            Ver Tudo
           </button>
-
           <button
             onClick={() => setViewMode(VIEW.OPEN_ONLY)}
-            className={[
-              "px-3 py-2 rounded-md text-sm border",
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
               viewMode === VIEW.OPEN_ONLY
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
-            ].join(" ")}
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
           >
-            PENDENTES & ATRASADAS
+            Pendentes e Atrasadas
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
-        <div className={cardClass}>
-          <span className="text-sm text-gray-500">Total</span>
-          <span className="text-2xl font-black text-slate-800">{cards.total}</span>
-        </div>
-        <div className={cardClass}>
-          <span className="text-sm text-gray-500">Pendentes</span>
-          <span className="text-2xl font-black text-yellow-700">{cards.pendentes}</span>
-        </div>
-        <div className={cardClass}>
-          <span className="text-sm text-gray-500">Atrasadas</span>
-          <span className="text-2xl font-black text-red-700">{cards.atrasadas}</span>
-        </div>
-        <div className={cardClass}>
-          <span className="text-sm text-gray-500">Em análise</span>
-          <span className="text-2xl font-black text-blue-700">{cards.emAnalise}</span>
-        </div>
-        <div className={cardClass}>
-          <span className="text-sm text-gray-500">Em andamento</span>
-          <span className="text-2xl font-black text-orange-700">{cards.emAndamento}</span>
-        </div>
-        <div className={cardClass}>
-          <span className="text-sm text-gray-500">Concluídas</span>
-          <span className="text-2xl font-black text-green-700">{cards.concluidas}</span>
-        </div>
-        <div className={cardClass}>
-          <span className="text-sm text-gray-500">Canceladas</span>
-          <span className="text-2xl font-black text-gray-700">{cards.canceladas}</span>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
+        <Card label="Total" value={cards.total} color="text-slate-900" />
+        <Card label="Pendentes" value={cards.pendentes} color="text-yellow-600" />
+        <Card label="Atrasadas" value={cards.atrasadas} color="text-red-600" />
+        <Card label="Em análise" value={cards.emAnalise} color="text-blue-600" />
+        <Card label="Em andamento" value={cards.emAndamento} color="text-orange-600" />
+        <Card label="Concluídas" value={cards.concluidas} color="text-green-600" />
+        <Card label="Canceladas" value={cards.canceladas} color="text-slate-500" />
       </div>
 
-      <div className="bg-white shadow rounded-lg p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Filtros</h2>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">Filtros</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
           <input
             type="text"
-            placeholder="Buscar..."
+            placeholder="Buscar pedido ou setor..."
             value={filtros.busca}
             onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            className={inputClass}
           />
-
           <input
             type="date"
             value={filtros.dataInicio}
             onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            className={inputClass}
           />
-
           <input
             type="date"
             value={filtros.dataFim}
             onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            className={inputClass}
           />
-
           <select
             value={filtros.setor}
             onChange={(e) => setFiltros({ ...filtros, setor: e.target.value })}
-            className="border rounded-md px-3 py-2 bg-white"
+            className={inputClass}
           >
             <option value="">Todos os Setores</option>
             {setores.map((s) => (
-              <option key={s.id} value={s.nome}>
-                {s.nome}
-              </option>
+              <option key={s.id} value={s.nome}>{s.nome}</option>
             ))}
           </select>
-
           <select
             value={filtros.prioridade}
             onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
-            className="border rounded-md px-3 py-2 bg-white"
+            className={inputClass}
           >
-            <option value="">Todas as Prioridades</option>
+            <option value="">Prioridades</option>
             <option value="URGENTE">Urgente</option>
             <option value="ALTA">Alta</option>
             <option value="MEDIA">Média</option>
             <option value="BAIXA">Baixa</option>
           </select>
-
           <select
             value={filtros.status}
             onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
-            className="border rounded-md px-3 py-2 bg-white"
+            className={inputClass}
           >
-            <option value="">Todos os Status</option>
-            <option value="PENDENTE">PENDENTE</option>
-            <option value="EM_ANALISE">EM_ANALISE</option>
-            <option value="EM_ANDAMENTO">EM_ANDAMENTO</option>
-            <option value="CONCLUIDO">CONCLUIDO</option>
-            <option value="CANCELADO">CANCELADO</option>
+            <option value="">Status</option>
+            <option value="PENDENTE">Pendente</option>
+            <option value="EM_ANALISE">Em Análise</option>
+            <option value="EM_ANDAMENTO">Em Andamento</option>
+            <option value="CONCLUIDO">Concluído</option>
+            <option value="CANCELADO">Cancelado</option>
           </select>
         </div>
 
-        <div className="flex justify-end mt-3">
+        <div className="flex justify-end gap-3 mt-5">
           <button
             onClick={limparFiltros}
-            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
+            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
           >
             Limpar
           </button>
           <button
             onClick={aplicar}
             disabled={loading}
-            className="ml-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 shadow-sm disabled:opacity-50 transition-colors"
           >
-            {loading ? "Aplicando..." : "Aplicar"}
+            {loading ? "Aplicando..." : "Aplicar Filtros"}
           </button>
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg shadow">
-        <table className="w-full bg-white text-sm">
-          <thead className="bg-slate-700 text-white">
-            <tr>
-              <Th onClick={() => toggleSort("numero_pedido")}>
-                Nº Pedido <SortIcon colKey="numero_pedido" />
-              </Th>
-              <Th onClick={() => toggleSort("data_solicitacao")}>
-                Data <SortIcon colKey="data_solicitacao" />
-              </Th>
-              <Th onClick={() => toggleSort("nome_solicitante")}>
-                Solicitante <SortIcon colKey="nome_solicitante" />
-              </Th>
-              <Th onClick={() => toggleSort("setor")}>
-                Setor <SortIcon colKey="setor" />
-              </Th>
-              <Th onClick={() => toggleSort("prioridade")}>
-                Prioridade <SortIcon colKey="prioridade" />
-              </Th>
-              <Th>Status</Th>
-              <Th>Ações</Th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {rowsOrdenadas.length === 0 ? (
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-xs font-semibold tracking-wider">
               <tr>
-                <td colSpan={7} className="text-center p-6 text-gray-500">
-                  Nenhum registro encontrado.
-                </td>
+                <Th onClick={() => toggleSort("numero_pedido")}>Pedido <SortIcon colKey="numero_pedido" /></Th>
+                <Th onClick={() => toggleSort("data_solicitacao")}>Data <SortIcon colKey="data_solicitacao" /></Th>
+                <Th onClick={() => toggleSort("nome_solicitante")}>Solicitante <SortIcon colKey="nome_solicitante" /></Th>
+                <Th onClick={() => toggleSort("setor")}>Setor <SortIcon colKey="setor" /></Th>
+                <Th onClick={() => toggleSort("prioridade")}>Prioridade <SortIcon colKey="prioridade" /></Th>
+                <Th>Status</Th>
+                <Th className="text-right">Ações</Th>
               </tr>
-            ) : (
-              rowsOrdenadas.map((row) => (
-                <tr key={row.id} className="border-t hover:bg-slate-50">
-                  <td className="px-3 py-3 font-semibold">{row.numero_pedido}</td>
+            </thead>
 
-                  <td className="px-3 py-3">
-                    {row.data_solicitacao
-                      ? new Date(`${row.data_solicitacao}T00:00:00`).toLocaleDateString(
-                          "pt-BR"
-                        )
-                      : "-"}
-                  </td>
-
-                  <td className="px-3 py-3">{row.nome_solicitante || "-"}</td>
-
-                  <td className="px-3 py-3">{row.setor || "-"}</td>
-
-                  <td className="px-3 py-3">{badgePrioridade(row.prioridade)}</td>
-
-                  <td className="px-3 py-3">{badgeStatus(row)}</td>
-
-                  <td className="px-3 py-3">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => navigate(`/estrutura-fisica/consultar/${row.id}`)}
-                        className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200"
-                      >
-                        Consultar
-                      </button>
-
-                      {!isFinalizada(row.status) && (
-                        <button
-                          onClick={() => navigate(`/estrutura-fisica/tratar/${row.id}`)}
-                          className="px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                        >
-                          Dar Baixa
-                        </button>
-                      )}
-                    </div>
+            <tbody className="divide-y divide-slate-100">
+              {rowsOrdenadas.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
+                    Nenhum registro encontrado com os filtros atuais.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                rowsOrdenadas.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3 font-bold text-slate-700">#{row.numero_pedido}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {row.data_solicitacao
+                        ? new Date(`${row.data_solicitacao}T00:00:00`).toLocaleDateString("pt-BR")
+                        : "-"}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700 font-medium">{row.nome_solicitante || "-"}</td>
+                    <td className="px-4 py-3 text-slate-600">{row.setor || "-"}</td>
+                    <td className="px-4 py-3">{badgePrioridade(row.prioridade)}</td>
+                    <td className="px-4 py-3">{badgeStatus(row)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => navigate(`/estrutura-fisica/consultar/${row.id}`)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                        >
+                          Consultar
+                        </button>
+                        {!isFinalizada(row.status) && (
+                          <button
+                            onClick={() => navigate(`/estrutura-fisica/tratar/${row.id}`)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-colors"
+                          >
+                            Dar Baixa
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
 
-function Th({ children, onClick }) {
+function Card({ label, value, color }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center">
+      <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">{label}</span>
+      <span className={`mt-1 text-3xl font-black ${color}`}>{value}</span>
+    </div>
+  );
+}
+
+function Th({ children, onClick, className = "" }) {
   return (
     <th
       onClick={onClick}
-      className="px-3 py-3 text-left font-semibold whitespace-nowrap cursor-pointer select-none"
+      className={`px-4 py-3 font-semibold whitespace-nowrap cursor-pointer select-none hover:text-slate-700 transition-colors ${className}`}
     >
-      {children}
+      <div className={`flex items-center gap-1 ${className.includes('text-right') ? 'justify-end' : ''}`}>
+        {children}
+      </div>
     </th>
   );
 }

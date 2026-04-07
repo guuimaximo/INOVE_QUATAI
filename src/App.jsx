@@ -1,4 +1,3 @@
-// src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout";
@@ -56,6 +55,12 @@ import ReparoSolicitacaoExecucao from "./components/embarcados/ReparoSolicitacao
 import Desempenho_Diesel_Tratativas_Central from "./pages/Desempenho_Diesel_Tratativas_Central";
 import DieselTratarTratativa from "./pages/DieselTratarTratativa";
 import DieselConsultarTratativa from "./pages/DieselConsultarTratativa";
+
+// ✅ Estrutura Física
+import EstruturaFisicaSolicitacao from "./pages/EstruturaFisicaSolicitacao";
+import EstruturaFisicaCentral from "./pages/EstruturaFisicaCentral";
+import EstruturaFisicaConsultar from "./pages/EstruturaFisicaConsultar";
+import EstruturaFisicaTratar from "./pages/EstruturaFisicaTratar";
 
 import { useContext } from "react";
 import { AuthContext } from "./context/AuthContext";
@@ -140,6 +145,28 @@ export default function App() {
           <Route path="/consultar/:id" element={<ConsultarTratativa />} />
           <Route path="/solicitar" element={<SolicitacaoTratativa />} />
           <Route path="/tratativas-rh" element={<TratativasRH />} />
+
+          {/* ✅ Estrutura Física */}
+          <Route
+            path="/estrutura-fisica/solicitacao"
+            element={<EstruturaFisicaSolicitacao />}
+          />
+          <Route
+            path="/estrutura-fisica/central"
+            element={<EstruturaFisicaCentral />}
+          />
+          <Route
+            path="/estrutura-fisica/consultar/:id"
+            element={<EstruturaFisicaConsultar />}
+          />
+          <Route
+            path="/estrutura-fisica/tratar/:id"
+            element={<EstruturaFisicaTratar />}
+          />
+          <Route
+            path="/estrutura-fisica"
+            element={<Navigate to="/estrutura-fisica/central" replace />}
+          />
 
           {/* Avarias */}
           <Route path="/lancar-avaria" element={<LancarAvaria />} />

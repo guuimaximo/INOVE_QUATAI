@@ -525,7 +525,7 @@ export default function EstruturaFisicaCentral() {
                           onClick={() => navigate(`/estrutura-fisica/tratar/${row.id}`)}
                           className="px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700"
                         >
-                          Tratar
+                          Dar Baixa
                         </button>
                       )}
                     </div>

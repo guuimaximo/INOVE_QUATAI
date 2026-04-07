@@ -6,9 +6,7 @@ import { AuthContext } from "../context/AuthContext";
 function isValidUUID(v) {
   if (!v) return false;
   const s = String(v).trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    s
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
 function pickUserUuid(user) {
@@ -41,6 +39,7 @@ export default function TratarEstruturaFisica() {
     valor_gasto: "",
     comentarios_estrutura: "",
     status: "EM_ANALISE",
+    prazo_conclusao: "", // Novo campo
   });
 
   const [files, setFiles] = useState([]);
@@ -70,6 +69,7 @@ export default function TratarEstruturaFisica() {
         quem_vai_realizar: data?.quem_vai_realizar || "",
         valor_gasto: data?.valor_gasto ?? "",
         comentarios_estrutura: data?.comentarios_estrutura || "",
+        prazo_conclusao: data?.prazo_conclusao || "",
         status:
           data?.status === "EM_ANDAMENTO" || data?.status === "EM_ANALISE"
             ? data.status
@@ -191,8 +191,7 @@ export default function TratarEstruturaFisica() {
   }
 
   async function salvarHistorico({ acao, statusFinal, evidenciasNovas }) {
-    const realizadoPorNome =
-      buildNomeUsuario(user) || user?.login || user?.email || "Usuário";
+    const realizadoPorNome = buildNomeUsuario(user) || user?.login || user?.email || "Usuário";
     const realizadoPorLogin = user?.login || user?.email || null;
     const realizadoPorId = pickUserUuid(user);
 
@@ -206,6 +205,7 @@ export default function TratarEstruturaFisica() {
           ? Number(String(form.valor_gasto).replace(",", "."))
           : null,
       comentarios_estrutura: form.comentarios_estrutura || null,
+      prazo_conclusao: form.status === "EM_ANDAMENTO" ? (form.prazo_conclusao || null) : null,
       evidencias_execucao: evidenciasNovas || [],
       realizado_por_nome: realizadoPorNome,
       realizado_por_login: realizadoPorLogin,
@@ -233,6 +233,7 @@ export default function TratarEstruturaFisica() {
               ? Number(String(form.valor_gasto).replace(",", "."))
               : null,
           comentarios_estrutura: form.comentarios_estrutura || null,
+          prazo_conclusao: form.status === "EM_ANDAMENTO" ? (form.prazo_conclusao || null) : null,
           evidencias_execucao: evidencias,
           status: form.status,
         })
@@ -246,7 +247,7 @@ export default function TratarEstruturaFisica() {
         evidenciasNovas: novas,
       });
 
-      alert("Andamento salvo com sucesso!");
+      alert("Edição salva com sucesso!");
       nav("/estrutura-fisica/central");
     } catch (e) {
       console.error(e);
@@ -269,8 +270,7 @@ export default function TratarEstruturaFisica() {
       const existentes = Array.isArray(item.evidencias_execucao) ? item.evidencias_execucao : [];
       const evidencias = [...existentes, ...novas];
 
-      const concluidoPorNome =
-        buildNomeUsuario(user) || user?.login || user?.email || "Usuário";
+      const concluidoPorNome = buildNomeUsuario(user) || user?.login || user?.email || "Usuário";
       const concluidoPorLogin = user?.login || user?.email || null;
       const concluidoPorId = pickUserUuid(user);
 
@@ -283,6 +283,7 @@ export default function TratarEstruturaFisica() {
               ? Number(String(form.valor_gasto).replace(",", "."))
               : null,
           comentarios_estrutura: form.comentarios_estrutura || null,
+          prazo_conclusao: form.status === "EM_ANDAMENTO" ? (form.prazo_conclusao || null) : null,
           evidencias_execucao: evidencias,
           status: "CONCLUIDO",
           concluido_em: new Date().toISOString(),
@@ -300,7 +301,7 @@ export default function TratarEstruturaFisica() {
         evidenciasNovas: novas,
       });
 
-      alert("Concluído com sucesso!");
+      alert("Pedido concluído com sucesso!");
       nav("/estrutura-fisica/central");
     } catch (e) {
       console.error(e);
@@ -323,8 +324,7 @@ export default function TratarEstruturaFisica() {
       const existentes = Array.isArray(item.evidencias_execucao) ? item.evidencias_execucao : [];
       const evidencias = [...existentes, ...novas];
 
-      const canceladoPorNome =
-        buildNomeUsuario(user) || user?.login || user?.email || "Usuário";
+      const canceladoPorNome = buildNomeUsuario(user) || user?.login || user?.email || "Usuário";
       const canceladoPorLogin = user?.login || user?.email || null;
       const canceladoPorId = pickUserUuid(user);
 
@@ -354,7 +354,7 @@ export default function TratarEstruturaFisica() {
         evidenciasNovas: novas,
       });
 
-      alert("Cancelado com sucesso!");
+      alert("Pedido cancelado com sucesso!");
       nav("/estrutura-fisica/central");
     } catch (e) {
       console.error(e);
@@ -369,7 +369,7 @@ export default function TratarEstruturaFisica() {
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Tratar</h1>
+        <h1 className="text-2xl font-bold">Baixa na Execução</h1>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
@@ -440,6 +440,18 @@ export default function TratarEstruturaFisica() {
             </select>
           </div>
 
+          {form.status === "EM_ANDAMENTO" && (
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Prazo para conclusão</label>
+              <input
+                type="date"
+                className="w-full rounded-md border px-3 py-2"
+                value={form.prazo_conclusao}
+                onChange={(e) => setForm({ ...form, prazo_conclusao: e.target.value })}
+              />
+            </div>
+          )}
+
           <div className="md:col-span-2">
             <label className="block text-sm text-gray-600 mb-1">
               Comentários responsáveis estrutura física
@@ -448,9 +460,7 @@ export default function TratarEstruturaFisica() {
               rows={4}
               className="w-full rounded-md border px-3 py-2"
               value={form.comentarios_estrutura}
-              onChange={(e) =>
-                setForm({ ...form, comentarios_estrutura: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, comentarios_estrutura: e.target.value })}
             />
           </div>
 
@@ -521,7 +531,7 @@ export default function TratarEstruturaFisica() {
             disabled={loading}
             className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
           >
-            {loading ? "Salvando..." : "Salvar andamento"}
+            {loading ? "Salvando..." : "Salvar Edição"}
           </button>
 
           <button
@@ -529,7 +539,7 @@ export default function TratarEstruturaFisica() {
             disabled={loading}
             className="rounded-md bg-gray-700 px-4 py-2 text-white hover:bg-gray-800 disabled:opacity-60"
           >
-            Cancelar
+            Cancelar Pedido
           </button>
 
           <button
@@ -537,7 +547,7 @@ export default function TratarEstruturaFisica() {
             disabled={loading}
             className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
           >
-            Concluir
+            Concluir Pedido
           </button>
         </div>
       </div>

@@ -15,7 +15,6 @@ import {
   FaTrophy,
   FaUsers,
   FaLayerGroup,
-  FaFolderOpen,
   FaFilter,
   FaCalendarAlt,
 } from "react-icons/fa";
@@ -29,10 +28,13 @@ const GH_REF = "main";
 
 const WF_GERENCIAL = "relatorio_gerencial.yml";
 const WF_ACOMP = "ordem-acompanhamento.yml";
-const WF_PARCIAL = "parcial-meritocracia.yml"; // ajuste aqui se o nome real do arquivo for outro
+const WF_PARCIAL = "parcial-meritocracia.yml";
 
 const SUPABASE_BASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_BCNT_BASE_URL = import.meta.env.VITE_SUPA_BASE_BCNT_URL;
+const SUPABASE_BCNT_BASE_URL =
+  import.meta.env.VITE_SUPA_BASE_BCNT_URL || "https://jqolpjupgijjyrkaoxud.supabase.co";
+const BCNT_PUBLIC_BUCKET_BASE = `${SUPABASE_BCNT_BASE_URL}/storage/v1/object/public/parcial_meritocracia`;
+
 const BUCKET_RELATORIOS = "relatorios";
 const BUCKET_PARCIAL = "parcial_meritocracia";
 
@@ -76,18 +78,13 @@ function getPublicUrl(bucket, path, baseUrl = SUPABASE_BASE_URL) {
   if (!path) return null;
   if (path.startsWith("http")) return path;
 
-  try {
-    if (bucket === BUCKET_PARCIAL) {
-      const { data } = supabaseBCNT.storage.from(bucket).getPublicUrl(path);
-      if (data?.publicUrl) return data.publicUrl;
-    }
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
 
-    const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-    return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
-  } catch {
-    const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-    return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
+  if (bucket === BUCKET_PARCIAL) {
+    return `${BCNT_PUBLIC_BUCKET_BASE}/${cleanPath}`;
   }
+
+  return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
 }
 
 function extractChapaFromName(name = "") {
@@ -105,7 +102,7 @@ function extractNomeFromName(name = "", mesRef = "") {
 function normalizeFileName(name = "") {
   return String(name || "")
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/\.pdf$/i, "")
     .trim()
     .toUpperCase();
@@ -116,13 +113,21 @@ function isPdfFile(file) {
 }
 
 function isConsolidadoFile(name = "") {
-  const n = normalizeFileName(name);
-  return n.includes("CONSOLIDADO");
+  const x = normalizeFileName(name);
+  return x.includes("CONSOLIDADO");
 }
 
 function isResumoFile(name = "") {
-  const n = normalizeFileName(name);
-  return n.includes("RESUMO");
+  const x = normalizeFileName(name);
+  return x.includes("RESUMO");
+}
+
+function buildConsolidadoFileName(mesRef = "") {
+  return `00_CONSOLIDADO_MOTORISTAS_${mesRef}.pdf`;
+}
+
+function buildResumoFileName(mesRef = "") {
+  return `00_RESUMO_GERAL_${mesRef}.pdf`;
 }
 
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
@@ -398,13 +403,23 @@ function ParcialMeritocraciaView({ onAlert }) {
   const [resumo, setResumo] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [arquivosRaiz, setArquivosRaiz] = useState([]);
-  const [debugStorage, setDebugStorage] = useState({ root: [], individuais: [], pathRoot: "", pathIndividuais: "" });
+  const [debugStorage, setDebugStorage] = useState({
+    root: [],
+    individuais: [],
+    pathRoot: "",
+    pathIndividuais: "",
+  });
 
   const carregarArquivos = useCallback(async () => {
     setLoading(true);
     try {
       const rootCandidates = [mesRef, `${mesRef}/`, `/${mesRef}`, mesRef.trim()];
-      const indCandidates = [`${mesRef}/individuais`, `${mesRef}/individuais/`, `/${mesRef}/individuais`, `${mesRef.trim()}/individuais`];
+      const indCandidates = [
+        `${mesRef}/individuais`,
+        `${mesRef}/individuais/`,
+        `/${mesRef}/individuais`,
+        `${mesRef.trim()}/individuais`,
+      ];
 
       let rootData = [];
       let indData = [];
@@ -456,6 +471,7 @@ function ParcialMeritocraciaView({ onAlert }) {
         const pastaMes = (fallbackRoot.data || []).find((f) => String(f.name || "") === mesRef);
         if (pastaMes) {
           rootPathUsed = mesRef;
+
           const retryRoot = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list(mesRef, {
             limit: 500,
             offset: 0,
@@ -485,7 +501,7 @@ function ParcialMeritocraciaView({ onAlert }) {
       const indFiles = (indData || [])
         .filter((f) => isPdfFile(f))
         .map((f) => {
-          const cleanBase = indPathUsed.replace(/^\//, "").replace(/\/$/, "");
+          const cleanBase = (indPathUsed || `${mesRef}/individuais`).replace(/^\//, "").replace(/\/$/, "");
           const path = `${cleanBase}/${f.name}`;
           return {
             fileName: f.name,
@@ -500,7 +516,10 @@ function ParcialMeritocraciaView({ onAlert }) {
       const rootFiles = (rootData || []).filter((f) => isPdfFile(f));
       const consolidadoFile = rootFiles.find((f) => isConsolidadoFile(f.name));
       const resumoFile = rootFiles.find((f) => isResumoFile(f.name));
+
       const cleanRootBase = (rootPathUsed || mesRef).replace(/^\//, "").replace(/\/$/, "");
+      const consolidadoFallbackName = buildConsolidadoFileName(mesRef);
+      const resumoFallbackName = buildResumoFileName(mesRef);
 
       setDebugStorage({
         root: (rootData || []).map((f) => f.name),
@@ -511,6 +530,7 @@ function ParcialMeritocraciaView({ onAlert }) {
 
       setArquivosRaiz(rootFiles.map((f) => f.name));
       setIndividuais(indFiles);
+
       setConsolidado(
         consolidadoFile
           ? {
@@ -519,8 +539,14 @@ function ParcialMeritocraciaView({ onAlert }) {
               publicUrl: getPublicUrl(BUCKET_PARCIAL, `${cleanRootBase}/${consolidadoFile.name}`, SUPABASE_BCNT_BASE_URL),
               updated_at: consolidadoFile.updated_at || consolidadoFile.created_at || null,
             }
-          : null
+          : {
+              fileName: consolidadoFallbackName,
+              path: `${mesRef}/${consolidadoFallbackName}`,
+              publicUrl: `${BCNT_PUBLIC_BUCKET_BASE}/${mesRef}/${consolidadoFallbackName}`,
+              updated_at: null,
+            }
       );
+
       setResumo(
         resumoFile
           ? {
@@ -529,8 +555,14 @@ function ParcialMeritocraciaView({ onAlert }) {
               publicUrl: getPublicUrl(BUCKET_PARCIAL, `${cleanRootBase}/${resumoFile.name}`, SUPABASE_BCNT_BASE_URL),
               updated_at: resumoFile.updated_at || resumoFile.created_at || null,
             }
-          : null
+          : {
+              fileName: resumoFallbackName,
+              path: `${mesRef}/${resumoFallbackName}`,
+              publicUrl: `${BCNT_PUBLIC_BUCKET_BASE}/${mesRef}/${resumoFallbackName}`,
+              updated_at: null,
+            }
       );
+
       setLastUpdated(new Date().toISOString());
     } catch (e) {
       onAlert?.({ type: "error", message: `Erro ao carregar parciais: ${e?.message || String(e)}` });
@@ -650,6 +682,9 @@ function ParcialMeritocraciaView({ onAlert }) {
           </div>
           <div>
             PDFs válidos na raiz: <span className="font-bold text-slate-700">{arquivosRaiz.length ? arquivosRaiz.join(" | ") : "nenhum"}</span>
+          </div>
+          <div>
+            Base pública usada: <span className="font-bold text-slate-700">{BCNT_PUBLIC_BUCKET_BASE}</span>
           </div>
         </div>
       </div>

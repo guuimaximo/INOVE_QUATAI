@@ -653,6 +653,7 @@ function ParcialMeritocraciaView({ onAlert }) {
           tone={resumo ? "emerald" : "amber"}
         />
       </div>
+
       <div className="bg-white rounded-2xl border shadow-sm p-2">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <button

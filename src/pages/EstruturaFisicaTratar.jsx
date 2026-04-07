@@ -1,101 +1,23 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabase";
-import { AuthContext } from "../context/AuthContext";
+import {
+  FaArrowLeft,
+  FaEdit,
+  FaClipboardList,
+  FaHistory,
+  FaWrench,
+  FaFilePdf,
+  FaFileImage,
+  FaFileAlt
+} from "react-icons/fa";
 
-function isValidUUID(v) {
-  if (!v) return false;
-  const s = String(v).trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
-function pickUserUuid(user) {
-  if (isValidUUID(user?.auth_user_id)) return user.auth_user_id;
-  if (isValidUUID(user?.id)) return user.id;
-  return null;
-}
-
-function buildNomeUsuario(u) {
-  const nome = String(u?.nome || "").trim();
-  const sobrenome = String(u?.sobrenome || "").trim();
-  const nomeCompleto = String(u?.nome_completo || "").trim();
-
-  if (nomeCompleto) return nomeCompleto;
-  if (nome && sobrenome) return `${nome} ${sobrenome}`;
-  if (nome) return nome;
-  return null;
-}
-
-export default function TratarEstruturaFisica() {
+export default function ConsultarEstruturaFisica() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { user } = useContext(AuthContext);
 
   const [item, setItem] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const [form, setForm] = useState({
-    quem_vai_realizar: "",
-    valor_gasto: "",
-    comentarios_estrutura: "",
-    status: "EM_ANALISE",
-    prazo_conclusao: "", // Novo campo
-  });
-
-  const [files, setFiles] = useState([]);
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef(null);
-
-  const acceptMime = useMemo(
-    () => ["image/png", "image/jpeg", "image/jpg", "video/mp4", "video/quicktime", "application/pdf"],
-    []
-  );
-
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
-        .from("estrutura_fisica_solicitacoes")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (error) {
-        console.error(error);
-        return;
-      }
-
-      setItem(data || null);
-      setForm({
-        quem_vai_realizar: data?.quem_vai_realizar || "",
-        valor_gasto: data?.valor_gasto ?? "",
-        comentarios_estrutura: data?.comentarios_estrutura || "",
-        prazo_conclusao: data?.prazo_conclusao || "",
-        status:
-          data?.status === "EM_ANDAMENTO" || data?.status === "EM_ANALISE"
-            ? data.status
-            : "EM_ANALISE",
-      });
-    })();
-  }, [id]);
-
-  const keyFile = (f) => `${f.name}-${f.size}-${f.lastModified}`;
-
-  const addFiles = (list) => {
-    const incoming = Array.from(list || []);
-    const filtered = incoming.filter((f) => acceptMime.includes(f.type));
-    const existing = new Set(files.map(keyFile));
-    const deduped = filtered.filter((f) => !existing.has(keyFile(f)));
-    if (deduped.length > 0) setFiles((prev) => [...prev, ...deduped]);
-  };
-
-  const onPickFiles = (e) => addFiles(e.target.files || []);
-  const onDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    addFiles(e.dataTransfer.files || []);
-  };
-
-  const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
+  const [historico, setHistorico] = useState([]);
 
   const fileNameFromUrl = (u) => {
     try {
@@ -125,9 +47,9 @@ export default function TratarEstruturaFisica() {
     if (arr.length === 0) return null;
 
     return (
-      <div className="mt-2">
-        <span className="block text-sm text-gray-600 mb-2">{label}</span>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+      <div className="mt-4">
+        <span className="block text-[10px] text-slate-400 font-black uppercase tracking-widest mb-2">{label}</span>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
           {arr.map((u, i) => {
             const pdf = isPdf(u);
             const img = !pdf && isImageUrl(u);
@@ -138,21 +60,23 @@ export default function TratarEstruturaFisica() {
                 href={u}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg border bg-white p-2 hover:shadow-sm"
+                className="group flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 p-3 hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
               >
                 {img ? (
-                  <img
-                    src={u}
-                    alt={fileNameFromUrl(u)}
-                    className="h-24 w-full object-cover rounded"
-                    loading="lazy"
-                  />
+                  <div className="w-full h-20 mb-2 overflow-hidden rounded-lg border border-slate-200">
+                    <img
+                      src={u}
+                      alt={fileNameFromUrl(u)}
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                  </div>
                 ) : (
-                  <div className="h-24 flex items-center justify-center text-sm font-semibold text-gray-600">
-                    {pdf ? "PDF" : "ARQ"}
+                  <div className="h-20 w-full flex items-center justify-center text-slate-400 group-hover:text-indigo-500 mb-2 bg-white rounded-lg border border-slate-200">
+                    {pdf ? <FaFilePdf size={28} /> : <FaFileAlt size={28} />}
                   </div>
                 )}
-                <div className="mt-2 text-xs text-blue-700 underline break-words">
+                <div className="text-[10px] font-bold text-slate-600 group-hover:text-indigo-700 text-center w-full truncate">
                   {fileNameFromUrl(u)}
                 </div>
               </a>
@@ -163,392 +87,259 @@ export default function TratarEstruturaFisica() {
     );
   };
 
-  async function uploadExecucao(numeroPedido) {
-    const urls = [];
+  const fmtDataHora = (d) => {
+    if (!d) return "—";
+    const dt = new Date(d);
+    if (Number.isNaN(dt.getTime())) return "—";
+    return dt.toLocaleString("pt-BR");
+  };
 
-    for (const f of files) {
-      const safeName = (f.name || "arquivo")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, "_")
-        .replace(/[^a-zA-Z0-9._-]/g, "");
+  const getStatusColor = (status) => {
+    const s = String(status || "").toUpperCase();
+    if (s === "CONCLUIDO") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    if (s === "CANCELADO") return "bg-rose-50 text-rose-700 border-rose-200";
+    if (s.includes("ANDAMENTO") || s.includes("TRATATIVA")) return "bg-blue-50 text-blue-700 border-blue-200";
+    return "bg-slate-100 text-slate-700 border-slate-200";
+  };
 
-      const unique = `${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
-      const path = `execucao/${numeroPedido}/${unique}`;
-
-      const up = await supabase.storage.from("estrutura_fisica").upload(path, f, {
-        upsert: false,
-        contentType: f.type || undefined,
-      });
-
-      if (up.error) throw up.error;
-
-      const { data: pub } = supabase.storage.from("estrutura_fisica").getPublicUrl(path);
-      if (pub?.publicUrl) urls.push(pub.publicUrl);
-    }
-
-    return urls;
-  }
-
-  async function salvarHistorico({ acao, statusFinal, evidenciasNovas }) {
-    const realizadoPorNome = buildNomeUsuario(user) || user?.login || user?.email || "Usuário";
-    const realizadoPorLogin = user?.login || user?.email || null;
-    const realizadoPorId = pickUserUuid(user);
-
-    const { error } = await supabase.from("estrutura_fisica_historico").insert({
-      solicitacao_id: item.id,
-      acao,
-      status_aplicado: statusFinal,
-      quem_vai_realizar: form.quem_vai_realizar || null,
-      valor_gasto:
-        form.valor_gasto !== "" && form.valor_gasto != null
-          ? Number(String(form.valor_gasto).replace(",", "."))
-          : null,
-      comentarios_estrutura: form.comentarios_estrutura || null,
-      prazo_conclusao: form.status === "EM_ANDAMENTO" ? (form.prazo_conclusao || null) : null,
-      evidencias_execucao: evidenciasNovas || [],
-      realizado_por_nome: realizadoPorNome,
-      realizado_por_login: realizadoPorLogin,
-      realizado_por_id: realizadoPorId,
-    });
-
-    if (error) throw error;
-  }
-
-  async function salvarAndamento() {
-    if (!item) return;
-
-    setLoading(true);
-    try {
-      const novas = files.length ? await uploadExecucao(item.numero_pedido) : [];
-      const existentes = Array.isArray(item.evidencias_execucao) ? item.evidencias_execucao : [];
-      const evidencias = [...existentes, ...novas];
-
-      const { error } = await supabase
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
         .from("estrutura_fisica_solicitacoes")
-        .update({
-          quem_vai_realizar: form.quem_vai_realizar || null,
-          valor_gasto:
-            form.valor_gasto !== "" && form.valor_gasto != null
-              ? Number(String(form.valor_gasto).replace(",", "."))
-              : null,
-          comentarios_estrutura: form.comentarios_estrutura || null,
-          prazo_conclusao: form.status === "EM_ANDAMENTO" ? (form.prazo_conclusao || null) : null,
-          evidencias_execucao: evidencias,
-          status: form.status,
-        })
-        .eq("id", item.id);
+        .select("*")
+        .eq("id", id)
+        .single();
 
-      if (error) throw error;
+      if (error) console.error(error);
+      setItem(data || null);
 
-      await salvarHistorico({
-        acao: "ANDAMENTO",
-        statusFinal: form.status,
-        evidenciasNovas: novas,
-      });
+      const hist = await supabase
+        .from("estrutura_fisica_historico")
+        .select("*")
+        .eq("solicitacao_id", id)
+        .order("created_at", { ascending: false });
 
-      alert("Edição salva com sucesso!");
-      nav("/estrutura-fisica/central");
-    } catch (e) {
-      console.error(e);
-      alert(`Erro: ${e?.message || String(e)}`);
-    } finally {
-      setLoading(false);
-    }
-  }
+      if (hist.error) console.error(hist.error);
+      setHistorico(hist.data || []);
+    })();
+  }, [id]);
 
-  async function concluir() {
-    if (!item) return;
-    if (!form.comentarios_estrutura?.trim()) {
-      alert("Preencha os comentários antes de concluir.");
-      return;
-    }
+  const ultima = useMemo(() => {
+    if (!historico?.length) return null;
+    return historico[0];
+  }, [historico]);
 
-    setLoading(true);
-    try {
-      const novas = files.length ? await uploadExecucao(item.numero_pedido) : [];
-      const existentes = Array.isArray(item.evidencias_execucao) ? item.evidencias_execucao : [];
-      const evidencias = [...existentes, ...novas];
-
-      const concluidoPorNome = buildNomeUsuario(user) || user?.login || user?.email || "Usuário";
-      const concluidoPorLogin = user?.login || user?.email || null;
-      const concluidoPorId = pickUserUuid(user);
-
-      const { error } = await supabase
-        .from("estrutura_fisica_solicitacoes")
-        .update({
-          quem_vai_realizar: form.quem_vai_realizar || null,
-          valor_gasto:
-            form.valor_gasto !== "" && form.valor_gasto != null
-              ? Number(String(form.valor_gasto).replace(",", "."))
-              : null,
-          comentarios_estrutura: form.comentarios_estrutura || null,
-          prazo_conclusao: form.status === "EM_ANDAMENTO" ? (form.prazo_conclusao || null) : null,
-          evidencias_execucao: evidencias,
-          status: "CONCLUIDO",
-          concluido_em: new Date().toISOString(),
-          concluido_por_nome: concluidoPorNome,
-          concluido_por_login: concluidoPorLogin,
-          concluido_por_id: concluidoPorId,
-        })
-        .eq("id", item.id);
-
-      if (error) throw error;
-
-      await salvarHistorico({
-        acao: "CONCLUSAO",
-        statusFinal: "CONCLUIDO",
-        evidenciasNovas: novas,
-      });
-
-      alert("Pedido concluído com sucesso!");
-      nav("/estrutura-fisica/central");
-    } catch (e) {
-      console.error(e);
-      alert(`Erro: ${e?.message || String(e)}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function cancelar() {
-    if (!item) return;
-    if (!form.comentarios_estrutura?.trim()) {
-      alert("Preencha os comentários para justificar o cancelamento.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const novas = files.length ? await uploadExecucao(item.numero_pedido) : [];
-      const existentes = Array.isArray(item.evidencias_execucao) ? item.evidencias_execucao : [];
-      const evidencias = [...existentes, ...novas];
-
-      const canceladoPorNome = buildNomeUsuario(user) || user?.login || user?.email || "Usuário";
-      const canceladoPorLogin = user?.login || user?.email || null;
-      const canceladoPorId = pickUserUuid(user);
-
-      const { error } = await supabase
-        .from("estrutura_fisica_solicitacoes")
-        .update({
-          quem_vai_realizar: form.quem_vai_realizar || null,
-          valor_gasto:
-            form.valor_gasto !== "" && form.valor_gasto != null
-              ? Number(String(form.valor_gasto).replace(",", "."))
-              : null,
-          comentarios_estrutura: form.comentarios_estrutura || null,
-          evidencias_execucao: evidencias,
-          status: "CANCELADO",
-          cancelado_em: new Date().toISOString(),
-          cancelado_por_nome: canceladoPorNome,
-          cancelado_por_login: canceladoPorLogin,
-          cancelado_por_id: canceladoPorId,
-        })
-        .eq("id", item.id);
-
-      if (error) throw error;
-
-      await salvarHistorico({
-        acao: "CANCELAMENTO",
-        statusFinal: "CANCELADO",
-        evidenciasNovas: novas,
-      });
-
-      alert("Pedido cancelado com sucesso!");
-      nav("/estrutura-fisica/central");
-    } catch (e) {
-      console.error(e);
-      alert(`Erro: ${e?.message || String(e)}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (!item) return <div className="p-6">Carregando...</div>;
+  if (!item) return (
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="text-slate-500 font-bold animate-pulse">Carregando dados...</div>
+    </div>
+  );
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Baixa na Execução</h1>
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Detalhes da Solicitação</h2>
-
-        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Item titulo="Nº Pedido" valor={item.numero_pedido || "-"} />
-          <Item titulo="Nome do solicitante" valor={item.nome_solicitante || "-"} />
-          <Item
-            titulo="Data da solicitação"
-            valor={
-              item.data_solicitacao
-                ? new Date(`${item.data_solicitacao}T00:00:00`).toLocaleDateString("pt-BR")
-                : "-"
-            }
-          />
-          <Item titulo="Setor" valor={item.setor || "-"} />
-          <Item titulo="Responsável da área" valor={item.responsavel_area || "-"} />
-          <Item titulo="Prioridade" valor={item.prioridade || "-"} />
-          <Item
-            titulo="Justificativa do impacto"
-            valor={item.justificativa_impacto || "-"}
-            className="md:col-span-2"
-          />
-          <Item
-            titulo="Descrição da demanda"
-            valor={item.descricao_demanda || "-"}
-            className="md:col-span-2"
-          />
-          <div className="md:col-span-2">
-            {renderListaArquivos(item.evidencias_abertura, "Evidências da abertura")}
-          </div>
-        </dl>
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <h2 className="text-lg font-semibold mb-3">Tratamento</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Quem vai realizar</label>
-            <input
-              className="w-full rounded-md border px-3 py-2"
-              value={form.quem_vai_realizar}
-              onChange={(e) => setForm({ ...form, quem_vai_realizar: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Valor gasto</label>
-            <input
-              className="w-full rounded-md border px-3 py-2"
-              value={form.valor_gasto}
-              onChange={(e) => setForm({ ...form, valor_gasto: e.target.value })}
-              placeholder="0,00"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Status</label>
-            <select
-              className="w-full rounded-md border px-3 py-2"
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-            >
-              <option value="EM_ANALISE">EM_ANALISE</option>
-              <option value="EM_ANDAMENTO">EM_ANDAMENTO</option>
-            </select>
-          </div>
-
-          {form.status === "EM_ANDAMENTO" && (
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Prazo para conclusão</label>
-              <input
-                type="date"
-                className="w-full rounded-md border px-3 py-2"
-                value={form.prazo_conclusao}
-                onChange={(e) => setForm({ ...form, prazo_conclusao: e.target.value })}
-              />
-            </div>
-          )}
-
-          <div className="md:col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">
-              Comentários responsáveis estrutura física
-            </label>
-            <textarea
-              rows={4}
-              className="w-full rounded-md border px-3 py-2"
-              value={form.comentarios_estrutura}
-              onChange={(e) => setForm({ ...form, comentarios_estrutura: e.target.value })}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm text-gray-700 font-medium mb-2">
-              Evidências da execução
-            </label>
-
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={onDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={[
-                "w-full rounded-xl border-2 border-dashed transition cursor-pointer",
-                "bg-gray-50 hover:bg-gray-100",
-                isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300",
-              ].join(" ")}
-              style={{ minHeight: 140 }}
-            >
-              <div className="h-full w-full flex flex-col items-center justify-center py-8 px-4 text-center">
-                <p className="text-sm font-semibold text-gray-700">
-                  Clique para enviar ou arraste e solte
-                </p>
-                <p className="text-xs text-gray-500 mt-1">PNG, JPG, MP4, MOV ou PDF</p>
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,video/mp4,video/quicktime,application/pdf"
-                multiple
-                className="hidden"
-                onChange={onPickFiles}
-              />
-            </div>
-
-            {files.length > 0 && (
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {files.map((f, idx) => (
-                  <div
-                    key={`${f.name}-${f.size}-${idx}`}
-                    className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm"
-                  >
-                    <span className="truncate">{f.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(idx)}
-                      className="ml-3 text-red-600 hover:underline shrink-0"
-                    >
-                      remover
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {renderListaArquivos(item.evidencias_execucao, "Evidências já lançadas")}
+    <div className="mx-auto max-w-5xl p-4 md:p-6 space-y-6">
+      
+      {/* HEADER & CONTROLS */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col">
+          <button
+            onClick={() => nav(-1)}
+            className="flex items-center gap-2 text-slate-400 hover:text-indigo-600 transition-colors font-bold text-sm mb-2 self-start"
+          >
+            <FaArrowLeft /> Voltar
+          </button>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">
+              Solicitação Estrutural
+            </h1>
+            <span className="text-xs font-mono font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded border border-slate-200">
+              #{item.id}
+            </span>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 mt-6">
+        {!["CONCLUIDO", "CANCELADO"].includes(item.status) && (
           <button
-            onClick={salvarAndamento}
-            disabled={loading}
-            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
+            onClick={() => nav(`/estrutura-fisica/tratar/${id}`)}
+            className="flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-white font-bold hover:bg-indigo-700 transition shadow-sm"
           >
-            {loading ? "Salvando..." : "Salvar Edição"}
+            <FaEdit /> Editar / Tratar
           </button>
+        )}
+      </div>
 
-          <button
-            onClick={cancelar}
-            disabled={loading}
-            className="rounded-md bg-gray-700 px-4 py-2 text-white hover:bg-gray-800 disabled:opacity-60"
-          >
-            Cancelar Pedido
-          </button>
+      {/* DETALHES PRINCIPAIS */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex items-center gap-2">
+          <FaClipboardList className="text-slate-400" size={18} />
+          <h2 className="font-black text-slate-700 uppercase tracking-wider text-sm">Detalhes da Solicitação</h2>
+        </div>
+        
+        <div className="p-6">
+          <dl className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Item titulo="Status" valor={
+              <span className={`inline-flex px-2.5 py-1 rounded-md border text-[10px] font-black uppercase tracking-wider ${getStatusColor(item.status)}`}>
+                {item.status || "Pendente"}
+              </span>
+            } />
+            <Item titulo="Nº Pedido" valor={item.numero_pedido || "-"} className="font-mono text-indigo-700" />
+            <Item titulo="Prioridade" valor={
+              <span className={`font-black ${item.prioridade === 'ALTA' ? 'text-rose-600' : item.prioridade === 'MÉDIA' ? 'text-amber-600' : 'text-slate-700'}`}>
+                {item.prioridade || "-"}
+              </span>
+            } />
+            <Item
+              titulo="Data da solicitação"
+              valor={item.data_solicitacao ? new Date(`${item.data_solicitacao}T00:00:00`).toLocaleDateString("pt-BR") : "-"}
+            />
+            
+            <Item titulo="Nome do solicitante" valor={item.nome_solicitante || "-"} className="lg:col-span-2" />
+            <Item titulo="Setor" valor={item.setor || "-"} />
+            <Item titulo="Responsável da área" valor={item.responsavel_area || "-"} />
 
-          <button
-            onClick={concluir}
-            disabled={loading}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
-          >
-            Concluir Pedido
-          </button>
+            <Item
+              titulo="Prazo estimado"
+              valor={item.prazo_estimado ? new Date(`${item.prazo_estimado}T00:00:00`).toLocaleDateString("pt-BR") : "-"}
+              className="lg:col-span-4 bg-amber-50 border-amber-100"
+            />
+
+            <Item
+              titulo="Justificativa do impacto"
+              valor={item.justificativa_impacto || "-"}
+              className="md:col-span-2 lg:col-span-4"
+            />
+
+            <Item
+              titulo="Descrição da demanda"
+              valor={item.descricao_demanda || "-"}
+              className="md:col-span-2 lg:col-span-4 bg-slate-100 border-transparent"
+            />
+
+            <div className="md:col-span-2 lg:col-span-4">
+              {renderListaArquivos(item.evidencias_abertura, "Evidências da abertura")}
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      {/* ÚLTIMA ATUALIZAÇÃO */}
+      <div className="bg-indigo-50/50 rounded-2xl border border-indigo-100 overflow-hidden shadow-sm">
+        <div className="bg-indigo-100/50 border-b border-indigo-100 px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FaWrench className="text-indigo-500" size={16} />
+            <h2 className="font-black text-indigo-900 uppercase tracking-wider text-sm">Ação Mais Recente</h2>
+          </div>
+          <span className="text-xs font-bold text-indigo-500">{fmtDataHora(ultima?.created_at || item?.created_at)}</span>
+        </div>
+
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Item titulo="Ação / Tarefa" valor={ultima?.acao || "-"} className="lg:col-span-2 bg-white border-indigo-50" />
+            <Item titulo="Status Aplicado" valor={
+               <span className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-black uppercase tracking-wider ${getStatusColor(ultima?.status_aplicado || item?.status)}`}>
+                 {ultima?.status_aplicado || item?.status || "-"}
+               </span>
+            } className="bg-white border-indigo-50" />
+            <Item titulo="Responsável Execução" valor={ultima?.quem_vai_realizar || item?.quem_vai_realizar || "-"} className="bg-white border-indigo-50" />
+            
+            <Item
+              titulo="Valor Gasto"
+              valor={
+                ultima?.valor_gasto != null
+                  ? Number(ultima.valor_gasto).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                  : item?.valor_gasto != null
+                  ? Number(item.valor_gasto).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                  : "-"
+              }
+              className="font-mono font-black text-emerald-700 bg-white border-indigo-50"
+            />
+            <Item
+              titulo="Atualizado por"
+              valor={ultima?.realizado_por_nome || item?.concluido_por_nome || item?.cancelado_por_nome || "-"}
+              className="lg:col-span-3 bg-white border-indigo-50"
+            />
+            
+            <Item
+              titulo="Comentários / Observações"
+              valor={ultima?.comentarios_estrutura || item?.comentarios_estrutura || "Sem comentários."}
+              className="md:col-span-2 lg:col-span-4 bg-white border-indigo-50"
+            />
+
+            <div className="md:col-span-2 lg:col-span-4">
+              {renderListaArquivos(
+                ultima?.evidencias_execucao?.length ? ultima.evidencias_execucao : item.evidencias_execucao,
+                "Evidências da execução"
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* HISTÓRICO / TIMELINE */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex items-center gap-2">
+          <FaHistory className="text-slate-400" size={16} />
+          <h2 className="font-black text-slate-700 uppercase tracking-wider text-sm">Histórico de Movimentações</h2>
+        </div>
+
+        <div className="p-6">
+          {historico.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-xl">
+              Nenhuma movimentação registrada.
+            </div>
+          ) : (
+            <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-slate-200 before:via-slate-200 before:to-transparent">
+              {historico.map((h, index) => (
+                <div key={h.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white bg-slate-100 text-slate-500 font-black shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10 text-xs">
+                    {historico.length - index}
+                  </div>
+                  
+                  <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-indigo-200 transition-colors">
+                    <div className="flex justify-between items-start mb-3 border-b border-slate-100 pb-3">
+                      <div>
+                        <p className="font-black text-slate-800 leading-tight">{h.acao || "Atualização de Status"}</p>
+                        <p className="text-xs text-slate-400 font-bold mt-1">{fmtDataHora(h.created_at)}</p>
+                      </div>
+                      <span className={`inline-flex px-2 py-0.5 rounded border text-[9px] font-black uppercase tracking-wider ${getStatusColor(h.status_aplicado)}`}>
+                        {h.status_aplicado || "-"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Atualizado por</p>
+                          <p className="text-sm font-bold text-slate-700">{h.realizado_por_nome || "-"}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Responsável</p>
+                          <p className="text-sm font-bold text-slate-700">{h.quem_vai_realizar || "-"}</p>
+                        </div>
+                      </div>
+                      
+                      {h.valor_gasto != null && (
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Valor Gasto</p>
+                          <p className="text-sm font-mono font-black text-emerald-600">
+                            {Number(h.valor_gasto).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          </p>
+                        </div>
+                      )}
+
+                      {h.comentarios_estrutura && (
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Comentários</p>
+                          <p className="text-sm text-slate-600 whitespace-pre-wrap">{h.comentarios_estrutura}</p>
+                        </div>
+                      )}
+
+                      {renderListaArquivos(h.evidencias_execucao, "Evidências anexadas")}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -557,9 +348,9 @@ export default function TratarEstruturaFisica() {
 
 function Item({ titulo, valor, className = "" }) {
   return (
-    <div className={className}>
-      <dt className="text-sm text-gray-500">{titulo}</dt>
-      <dd className="font-medium whitespace-pre-wrap">{valor}</dd>
+    <div className={`bg-slate-50 p-3.5 rounded-xl border border-slate-100 flex flex-col justify-center ${className}`}>
+      <dt className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">{titulo}</dt>
+      <dd className="text-sm font-bold text-slate-800 whitespace-pre-wrap">{valor}</dd>
     </div>
   );
 }

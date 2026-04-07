@@ -16,22 +16,7 @@ function isFinalizada(status) {
   return st === "CONCLUIDO" || st === "CANCELADO";
 }
 
-function isAtrasada(row) {
-  if (isFinalizada(row?.status)) return false;
-  if (!row?.prazo_estimado) return false;
-  const prazo = new Date(`${row.prazo_estimado}T00:00:00`);
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  return prazo < hoje;
-}
-
-function situacaoRank(row) {
-  if (isAtrasada(row)) return 0;
-  if (isFinalizada(row?.status)) return 2;
-  return 1;
-}
-
-export default function CentralEstruturaFisica() {
+export default function EstruturaFisicaCentral() {
   const navigate = useNavigate();
 
   const [rows, setRows] = useState([]);
@@ -64,17 +49,33 @@ export default function CentralEstruturaFisica() {
     canceladas: 0,
   });
 
+  function isAtrasada(row) {
+    if (isFinalizada(row?.status)) return false;
+    if (!row?.prazo_estimado) return false;
+    const prazo = new Date(`${row.prazo_estimado}T00:00:00`);
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    return prazo < hoje;
+  }
+
   function applyCommonFilters(query) {
     const f = filtros;
 
     if (f.busca) {
-      query = query.or(
-        `numero_pedido.eq.${Number(f.busca) || 0},nome_solicitante.ilike.%${f.busca}%,responsavel_area.ilike.%${f.busca}%,descricao_demanda.ilike.%${f.busca}%`
-      );
+      const buscaNum = Number(f.busca);
+      if (!Number.isNaN(buscaNum) && String(buscaNum) === String(f.busca).trim()) {
+        query = query.or(
+          `numero_pedido.eq.${buscaNum},nome_solicitante.ilike.%${f.busca}%,setor.ilike.%${f.busca}%`
+        );
+      } else {
+        query = query.or(
+          `nome_solicitante.ilike.%${f.busca}%,setor.ilike.%${f.busca}%`
+        );
+      }
     }
 
     if (f.setor) query = query.eq("setor", f.setor);
-    if (f.prioridade) query = query.eq("prioridade", Number(f.prioridade));
+    if (f.prioridade) query = query.eq("prioridade", f.prioridade);
     if (f.status) query = query.eq("status", f.status);
 
     if (f.dataInicio) query = query.gte("data_solicitacao", f.dataInicio);
@@ -91,18 +92,12 @@ export default function CentralEstruturaFisica() {
   async function carregarSetores() {
     try {
       const { data, error } = await supabase
-        .from("estrutura_fisica_solicitacoes")
-        .select("setor")
-        .not("setor", "is", null)
-        .limit(10000);
+        .from("setores")
+        .select("id, nome")
+        .order("nome", { ascending: true });
 
       if (error) throw error;
-
-      const lista = Array.from(
-        new Set((data || []).map((x) => String(x.setor || "").trim()).filter(Boolean))
-      ).sort((a, b) => a.localeCompare(b, "pt-BR"));
-
-      setSetores(lista);
+      setSetores(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("Erro ao carregar setores:", e);
       setSetores([]);
@@ -180,12 +175,18 @@ export default function CentralEstruturaFisica() {
   }, [rows, viewMode]);
 
   function defaultComparator(a, b) {
-    const sa = situacaoRank(a);
-    const sb = situacaoRank(b);
-    if (sa !== sb) return sa - sb;
+    const prioridadeOrdem = { URGENTE: 4, ALTA: 3, MEDIA: 2, BAIXA: 1 };
 
-    const pa = Number(a?.prioridade || 0);
-    const pb = Number(b?.prioridade || 0);
+    const atrasadaA = isAtrasada(a) ? 1 : 0;
+    const atrasadaB = isAtrasada(b) ? 1 : 0;
+    if (atrasadaA !== atrasadaB) return atrasadaB - atrasadaA;
+
+    const finalizadaA = isFinalizada(a?.status) ? 1 : 0;
+    const finalizadaB = isFinalizada(b?.status) ? 1 : 0;
+    if (finalizadaA !== finalizadaB) return finalizadaA - finalizadaB;
+
+    const pa = prioridadeOrdem[a?.prioridade] || 0;
+    const pb = prioridadeOrdem[b?.prioridade] || 0;
     if (pa !== pb) return pb - pa;
 
     const da = a?.data_solicitacao ? new Date(a.data_solicitacao).getTime() : 0;
@@ -205,15 +206,22 @@ export default function CentralEstruturaFisica() {
       let va = a?.[sort.key];
       let vb = b?.[sort.key];
 
-      if (sort.key === "prioridade" || sort.key === "numero_pedido") {
+      if (sort.key === "numero_pedido") {
         va = Number(va || 0);
         vb = Number(vb || 0);
         return sort.dir === "asc" ? va - vb : vb - va;
       }
 
-      if (sort.key === "data_solicitacao" || sort.key === "prazo_estimado") {
+      if (sort.key === "data_solicitacao") {
         va = va ? new Date(va).getTime() : 0;
         vb = vb ? new Date(vb).getTime() : 0;
+        return sort.dir === "asc" ? va - vb : vb - va;
+      }
+
+      const prioridadeOrdem = { URGENTE: 4, ALTA: 3, MEDIA: 2, BAIXA: 1 };
+      if (sort.key === "prioridade") {
+        va = prioridadeOrdem[va] || 0;
+        vb = prioridadeOrdem[vb] || 0;
         return sort.dir === "asc" ? va - vb : vb - va;
       }
 
@@ -240,13 +248,19 @@ export default function CentralEstruturaFisica() {
   }
 
   function badgePrioridade(p) {
-    const v = Number(p);
+    const v = norm(p).toUpperCase();
     const base = "px-2 py-1 rounded text-xs font-medium";
-    if (v === 5) return <span className={`${base} bg-red-100 text-red-800`}>5</span>;
-    if (v === 4) return <span className={`${base} bg-orange-100 text-orange-800`}>4</span>;
-    if (v === 3) return <span className={`${base} bg-yellow-100 text-yellow-800`}>3</span>;
-    if (v === 2) return <span className={`${base} bg-blue-100 text-blue-800`}>2</span>;
-    return <span className={`${base} bg-green-100 text-green-800`}>1</span>;
+
+    if (v === "URGENTE") {
+      return <span className={`${base} bg-red-100 text-red-800`}>Urgente</span>;
+    }
+    if (v === "ALTA") {
+      return <span className={`${base} bg-orange-100 text-orange-800`}>Alta</span>;
+    }
+    if (v === "MEDIA") {
+      return <span className={`${base} bg-yellow-100 text-yellow-800`}>Média</span>;
+    }
+    return <span className={`${base} bg-green-100 text-green-800`}>Baixa</span>;
   }
 
   function badgeStatus(row) {
@@ -291,28 +305,6 @@ export default function CentralEstruturaFisica() {
     return (
       <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
         {row?.status || "-"}
-      </span>
-    );
-  }
-
-  function badgeSituacao(row) {
-    if (isFinalizada(row?.status)) {
-      return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
-          Finalizada
-        </span>
-      );
-    }
-    if (isAtrasada(row)) {
-      return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
-          Atrasada
-        </span>
-      );
-    }
-    return (
-      <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-        Pendente
       </span>
     );
   }
@@ -418,8 +410,8 @@ export default function CentralEstruturaFisica() {
           >
             <option value="">Todos os Setores</option>
             {setores.map((s) => (
-              <option key={s} value={s}>
-                {s}
+              <option key={s.id} value={s.nome}>
+                {s.nome}
               </option>
             ))}
           </select>
@@ -430,11 +422,10 @@ export default function CentralEstruturaFisica() {
             className="border rounded-md px-3 py-2 bg-white"
           >
             <option value="">Todas as Prioridades</option>
-            <option value="5">5</option>
-            <option value="4">4</option>
-            <option value="3">3</option>
-            <option value="2">2</option>
-            <option value="1">1</option>
+            <option value="URGENTE">Urgente</option>
+            <option value="ALTA">Alta</option>
+            <option value="MEDIA">Média</option>
+            <option value="BAIXA">Baixa</option>
           </select>
 
           <select
@@ -484,20 +475,10 @@ export default function CentralEstruturaFisica() {
               <Th onClick={() => toggleSort("setor")}>
                 Setor <SortIcon colKey="setor" />
               </Th>
-              <Th onClick={() => toggleSort("responsavel_area")}>
-                Responsável <SortIcon colKey="responsavel_area" />
-              </Th>
-              <Th>Demanda</Th>
               <Th onClick={() => toggleSort("prioridade")}>
                 Prioridade <SortIcon colKey="prioridade" />
               </Th>
-              <Th onClick={() => toggleSort("prazo_estimado")}>
-                Prazo <SortIcon colKey="prazo_estimado" />
-              </Th>
               <Th>Status</Th>
-              <Th>Situação</Th>
-              <Th>Quem vai realizar</Th>
-              <Th>Valor gasto</Th>
               <Th>Ações</Th>
             </tr>
           </thead>
@@ -505,7 +486,7 @@ export default function CentralEstruturaFisica() {
           <tbody>
             {rowsOrdenadas.length === 0 ? (
               <tr>
-                <td colSpan={13} className="text-center p-6 text-gray-500">
+                <td colSpan={7} className="text-center p-6 text-gray-500">
                   Nenhum registro encontrado.
                 </td>
               </tr>
@@ -513,6 +494,7 @@ export default function CentralEstruturaFisica() {
               rowsOrdenadas.map((row) => (
                 <tr key={row.id} className="border-t hover:bg-slate-50">
                   <td className="px-3 py-3 font-semibold">{row.numero_pedido}</td>
+
                   <td className="px-3 py-3">
                     {row.data_solicitacao
                       ? new Date(`${row.data_solicitacao}T00:00:00`).toLocaleDateString(
@@ -520,29 +502,15 @@ export default function CentralEstruturaFisica() {
                         )
                       : "-"}
                   </td>
+
                   <td className="px-3 py-3">{row.nome_solicitante || "-"}</td>
+
                   <td className="px-3 py-3">{row.setor || "-"}</td>
-                  <td className="px-3 py-3">{row.responsavel_area || "-"}</td>
-                  <td className="px-3 py-3 max-w-[260px] truncate" title={row.descricao_demanda}>
-                    {row.descricao_demanda || "-"}
-                  </td>
+
                   <td className="px-3 py-3">{badgePrioridade(row.prioridade)}</td>
-                  <td className="px-3 py-3">
-                    {row.prazo_estimado
-                      ? new Date(`${row.prazo_estimado}T00:00:00`).toLocaleDateString("pt-BR")
-                      : "-"}
-                  </td>
+
                   <td className="px-3 py-3">{badgeStatus(row)}</td>
-                  <td className="px-3 py-3">{badgeSituacao(row)}</td>
-                  <td className="px-3 py-3">{row.quem_vai_realizar || "-"}</td>
-                  <td className="px-3 py-3">
-                    {row.valor_gasto != null
-                      ? Number(row.valor_gasto).toLocaleString("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                        })
-                      : "-"}
-                  </td>
+
                   <td className="px-3 py-3">
                     <div className="flex gap-2">
                       <button

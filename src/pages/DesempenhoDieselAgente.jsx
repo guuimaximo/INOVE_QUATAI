@@ -91,6 +91,29 @@ function extractNomeFromName(name = "", mesRef = "") {
   return semMes.replaceAll("_", " ").trim();
 }
 
+function normalizeFileName(name = "") {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\.pdf$/i, "")
+    .trim()
+    .toUpperCase();
+}
+
+function isPdfFile(file) {
+  return !!file?.name && String(file.name).toLowerCase().endsWith(".pdf");
+}
+
+function isConsolidadoFile(name = "") {
+  const n = normalizeFileName(name);
+  return n.includes("CONSOLIDADO");
+}
+
+function isResumoFile(name = "") {
+  const n = normalizeFileName(name);
+  return n.includes("RESUMO");
+}
+
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
   if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes.");
 
@@ -363,6 +386,7 @@ function ParcialMeritocraciaView({ onAlert }) {
   const [consolidado, setConsolidado] = useState(null);
   const [resumo, setResumo] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [arquivosRaiz, setArquivosRaiz] = useState([]);
 
   const carregarArquivos = useCallback(async () => {
     setLoading(true);
@@ -384,7 +408,7 @@ function ParcialMeritocraciaView({ onAlert }) {
       if (rootResp.error) throw rootResp.error;
 
       const indFiles = (indResp.data || [])
-        .filter((f) => f.name?.toLowerCase().endsWith(".pdf"))
+        .filter((f) => isPdfFile(f))
         .map((f) => {
           const path = `${mesRef}/individuais/${f.name}`;
           return {
@@ -397,10 +421,12 @@ function ParcialMeritocraciaView({ onAlert }) {
           };
         });
 
-      const rootFiles = (rootResp.data || []).filter((f) => f.name?.toLowerCase().endsWith(".pdf"));
+      const rootFiles = (rootResp.data || []).filter((f) => isPdfFile(f));
 
-      const consolidadoFile = rootFiles.find((f) => f.name.includes("CONSOLIDADO_MOTORISTAS"));
-      const resumoFile = rootFiles.find((f) => f.name.includes("RESUMO_GERAL"));
+      const consolidadoFile = rootFiles.find((f) => isConsolidadoFile(f.name));
+      const resumoFile = rootFiles.find((f) => isResumoFile(f.name));
+
+      setArquivosRaiz(rootFiles.map((f) => f.name));
 
       setIndividuais(indFiles);
       setConsolidado(
@@ -521,6 +547,17 @@ function ParcialMeritocraciaView({ onAlert }) {
           subtitulo={resumo?.updated_at ? `Atualizado em ${fmtBRDateTime(resumo.updated_at)}` : "Visão executiva consolidada do mês"}
           tone={resumo ? "emerald" : "amber"}
         />
+      </div>
+
+      <div className="bg-white rounded-2xl border border-dashed border-slate-300 shadow-sm p-4">
+        <div className="text-xs text-slate-500">
+          Pasta lida: <span className="font-bold text-slate-700">{mesRef}</span> / individuais e raiz do mês.
+          {arquivosRaiz.length > 0 ? (
+            <span> Arquivos PDF encontrados na raiz: <span className="font-bold text-slate-700">{arquivosRaiz.join(" | ")}</span></span>
+          ) : (
+            <span> Nenhum PDF encontrado na raiz do mês.</span>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm p-2">

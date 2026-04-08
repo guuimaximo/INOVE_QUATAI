@@ -18,7 +18,7 @@ export default function RankingMotoristasModal({
               ["linha", "Linha"],
               ["Cluster", "Cluster"],
               ["KML_Real", "KM/L Real"],
-              ["KML_Meta", "KM/L Ref"],
+              ["KML_Meta", "KM/L Meta"],
               ["Litros_Desp_Meta", "Desperdício"],
               ["Impacto_Pct", "Impacto %"],
               ["Km", "KM"],

@@ -2,6 +2,23 @@ import { useEffect, useMemo, useState, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabase";
 import { AuthContext } from "../context/AuthContext";
+import {
+  FaGavel,
+  FaUser,
+  FaIdBadge,
+  FaExclamationTriangle,
+  FaFlag,
+  FaBuilding,
+  FaBus,
+  FaInfoCircle,
+  FaCalendarAlt,
+  FaClipboardList,
+  FaPaperclip,
+  FaFilePdf,
+  FaImage,
+  FaSave,
+  FaEdit,
+} from "react-icons/fa";
 
 const acoes = [
   "Orientação",
@@ -28,6 +45,10 @@ function pickUserUuid(user) {
   return null;
 }
 
+function norm(v) {
+  return String(v || "").trim();
+}
+
 export default function TratarTratativa() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -37,16 +58,14 @@ export default function TratarTratativa() {
   const [resumo, setResumo] = useState("");
   const [acao, setAcao] = useState("Orientação");
 
-  // ✅ Conclusão: APENAS Anexo da Tratativa (imagem/pdf)
   const [anexoTratativa, setAnexoTratativa] = useState(null);
+  const [anexoVale, setAnexoVale] = useState(null);
 
   const [loading, setLoading] = useState(false);
 
-  // Complementos
   const [linhaDescricao, setLinhaDescricao] = useState("");
   const [cargoMotorista, setCargoMotorista] = useState("MOTORISTA");
 
-  // Edição inline
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     tipo_ocorrencia: "",
@@ -56,11 +75,17 @@ export default function TratarTratativa() {
     descricao: "",
   });
 
-  // ---- Controles de Suspensão ----
-  const [diasSusp, setDiasSusp] = useState(1); // 1,3,5,7
+  const [diasSusp, setDiasSusp] = useState(1);
   const [dataSuspensao, setDataSuspensao] = useState(() =>
     new Date().toISOString().slice(0, 10)
-  ); // yyyy-mm-dd
+  );
+
+  const isFaltaDeFeria = useMemo(() => {
+    const ocorr = norm(
+      isEditing ? editForm.tipo_ocorrencia : t?.tipo_ocorrencia
+    ).toLowerCase();
+    return ocorr === "falta de féria" || ocorr === "falta de feria";
+  }, [t?.tipo_ocorrencia, editForm.tipo_ocorrencia, isEditing]);
 
   const dataPtCompletaUpper = (d = new Date()) => {
     const meses = [
@@ -97,7 +122,6 @@ export default function TratarTratativa() {
     return dt.toLocaleString("pt-BR");
   };
 
-  // ===== Ajuste de datas da suspensão (LOCAL, sem shift UTC) =====
   const parseDateLocal = (dateStr) => {
     if (!dateStr) return new Date();
     const [yyyy, mm, dd] = String(dateStr).split("-").map(Number);
@@ -111,7 +135,6 @@ export default function TratarTratativa() {
     return base;
   };
 
-  // Regras: início = data da suspensão; fim = início + (dias - 1); retorno = início + dias
   const inicioSusp = useMemo(() => parseDateLocal(dataSuspensao), [dataSuspensao]);
 
   const fimSusp = useMemo(
@@ -124,7 +147,6 @@ export default function TratarTratativa() {
     [inicioSusp, diasSusp]
   );
 
-  // ===== Helpers de evidência =====
   const fileNameFromUrl = (u) => {
     try {
       const raw = String(u || "");
@@ -151,14 +173,13 @@ export default function TratarTratativa() {
     return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s);
   };
 
-  // ✅ Grid de evidências com miniaturas (IMAGEM) e cards (PDF/outros)
   const renderEvidenciasGrid = (urls, label) => {
     const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
     if (arr.length === 0) return null;
 
     return (
       <div className="mt-3">
-        <span className="block text-sm text-gray-600 mb-2">{label}</span>
+        <span className="block text-sm text-slate-500 mb-2 font-semibold">{label}</span>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {arr.map((u, i) => {
@@ -173,36 +194,33 @@ export default function TratarTratativa() {
                   href={u}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group rounded-lg border bg-white overflow-hidden hover:shadow-sm"
+                  className="group rounded-xl border bg-white overflow-hidden hover:shadow-sm"
                   title="Abrir evidência"
                 >
-                  <div className="relative">
-                    <img
-                      src={u}
-                      alt={name}
-                      className="h-24 w-full object-cover group-hover:opacity-95"
-                      loading="lazy"
-                    />
-                  </div>
-                  <div className="px-2 py-1.5 text-xs text-gray-700 truncate">
+                  <img
+                    src={u}
+                    alt={name}
+                    className="h-24 w-full object-cover group-hover:opacity-95"
+                    loading="lazy"
+                  />
+                  <div className="px-2 py-1.5 text-xs text-slate-700 truncate">
                     {name}
                   </div>
                 </a>
               );
             }
 
-            // PDF / outros
             return (
               <a
                 key={`${u}-${i}`}
                 href={u}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg border bg-white p-3 hover:shadow-sm"
+                className="rounded-xl border bg-white p-3 hover:shadow-sm"
                 title="Abrir evidência"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                     {pdf ? "PDF" : "ARQ"}
                   </span>
                 </div>
@@ -217,7 +235,6 @@ export default function TratarTratativa() {
     );
   };
 
-  // ====== Arquivo único -> PDF mostra card | imagem mostra miniatura clicável ======
   const renderArquivoOuThumb = (url, label) => {
     if (!url) return null;
 
@@ -227,18 +244,18 @@ export default function TratarTratativa() {
 
     return (
       <div className="mt-2">
-        <span className="block text-sm text-gray-600 mb-2">{label}</span>
+        <span className="block text-sm text-slate-500 mb-2 font-semibold">{label}</span>
 
         {pdf || !img ? (
           <a
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="block rounded-lg border bg-white p-3 hover:shadow-sm"
+            className="block rounded-xl border bg-white p-3 hover:shadow-sm"
             title="Abrir arquivo"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                 {pdf ? "PDF" : "ARQ"}
               </span>
             </div>
@@ -255,7 +272,7 @@ export default function TratarTratativa() {
             <img
               src={url}
               alt={name}
-              className="h-24 w-24 rounded-lg border object-cover hover:opacity-90"
+              className="h-24 w-24 rounded-xl border object-cover hover:opacity-90"
               loading="lazy"
             />
           </a>
@@ -264,16 +281,17 @@ export default function TratarTratativa() {
     );
   };
 
-  // ✅ Preview do arquivo selecionado (File) para conclusão
-  const [previewObjUrl, setPreviewObjUrl] = useState(null);
+  const [previewTratativaUrl, setPreviewTratativaUrl] = useState(null);
+  const [previewValeUrl, setPreviewValeUrl] = useState(null);
+
   useEffect(() => {
     if (!anexoTratativa) {
-      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
-      setPreviewObjUrl(null);
+      if (previewTratativaUrl) URL.revokeObjectURL(previewTratativaUrl);
+      setPreviewTratativaUrl(null);
       return;
     }
     const url = URL.createObjectURL(anexoTratativa);
-    setPreviewObjUrl((prev) => {
+    setPreviewTratativaUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return url;
     });
@@ -281,58 +299,70 @@ export default function TratarTratativa() {
   }, [anexoTratativa]);
 
   useEffect(() => {
+    if (!anexoVale) {
+      if (previewValeUrl) URL.revokeObjectURL(previewValeUrl);
+      setPreviewValeUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(anexoVale);
+    setPreviewValeUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anexoVale]);
+
+  useEffect(() => {
     return () => {
-      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
+      if (previewTratativaUrl) URL.revokeObjectURL(previewTratativaUrl);
+      if (previewValeUrl) URL.revokeObjectURL(previewValeUrl);
     };
-  }, [previewObjUrl]);
+  }, [previewTratativaUrl, previewValeUrl]);
 
-  const renderPreviewSelecionado = () => {
-    if (!anexoTratativa) return null;
+  const renderPreviewSelecionado = (arquivo, previewUrl, setArquivo) => {
+    if (!arquivo) return null;
 
-    const pdf = isPdf(anexoTratativa);
-    const name = anexoTratativa.name || "arquivo";
+    const pdf = isPdf(arquivo);
+    const name = arquivo.name || "arquivo";
 
     if (pdf) {
       return (
-        <div className="mt-3 rounded-lg border bg-white p-3">
+        <div className="mt-3 rounded-xl border bg-white p-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
               PDF
             </span>
             <button
               type="button"
-              onClick={() => setAnexoTratativa(null)}
-              className="text-xs text-gray-500 hover:text-gray-700"
-              title="Remover arquivo"
+              onClick={() => setArquivo(null)}
+              className="text-xs text-slate-500 hover:text-slate-700"
             >
               Remover
             </button>
           </div>
-          <div className="mt-2 text-sm text-gray-700 break-words">{name}</div>
+          <div className="mt-2 text-sm text-slate-700 break-words">{name}</div>
         </div>
       );
     }
 
-    // imagem
     return (
       <div className="mt-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-500">Pré-visualização</span>
+          <span className="text-xs text-slate-500">Pré-visualização</span>
           <button
             type="button"
-            onClick={() => setAnexoTratativa(null)}
-            className="text-xs text-gray-500 hover:text-gray-700"
-            title="Remover arquivo"
+            onClick={() => setArquivo(null)}
+            className="text-xs text-slate-500 hover:text-slate-700"
           >
             Remover
           </button>
         </div>
         <img
-          src={previewObjUrl}
+          src={previewUrl}
           alt={name}
-          className="mt-2 h-28 w-28 rounded-lg border object-cover"
+          className="mt-2 h-28 w-28 rounded-xl border object-cover"
         />
-        <div className="mt-1 text-xs text-gray-600 break-words">{name}</div>
+        <div className="mt-1 text-xs text-slate-600 break-words">{name}</div>
       </div>
     );
   };
@@ -344,10 +374,12 @@ export default function TratarTratativa() {
         .select("*")
         .eq("id", id)
         .single();
+
       if (error) {
         console.error(error);
         return;
       }
+
       setT(data || null);
 
       setEditForm({
@@ -358,7 +390,6 @@ export default function TratarTratativa() {
         descricao: data?.descricao || "",
       });
 
-      // Linha (código -> descrição)
       if (data?.linha) {
         const { data: row } = await supabase
           .from("linhas")
@@ -366,9 +397,10 @@ export default function TratarTratativa() {
           .eq("codigo", data.linha)
           .maybeSingle();
         setLinhaDescricao(row?.descricao || "");
-      } else setLinhaDescricao("");
+      } else {
+        setLinhaDescricao("");
+      }
 
-      // Cargo (por registro/chapa)
       if (data?.motorista_chapa) {
         const { data: m } = await supabase
           .from("motoristas")
@@ -396,6 +428,7 @@ export default function TratarTratativa() {
           descricao: editForm.descricao || null,
         })
         .eq("id", t.id);
+
       if (error) throw error;
 
       setT((prev) => (prev ? { ...prev, ...editForm } : prev));
@@ -407,7 +440,9 @@ export default function TratarTratativa() {
           .eq("codigo", editForm.linha)
           .maybeSingle();
         setLinhaDescricao(row?.descricao || "");
-      } else setLinhaDescricao("");
+      } else {
+        setLinhaDescricao("");
+      }
 
       setIsEditing(false);
       alert("Dados atualizados!");
@@ -418,7 +453,18 @@ export default function TratarTratativa() {
     }
   }
 
-async function concluir() {
+  async function uploadArquivoTratativa(file, prefixo) {
+    if (!file) return null;
+    const safe = `${prefixo}_${Date.now()}_${file.name}`.replace(/\s+/g, "_");
+    const up = await supabase.storage.from("tratativas").upload(safe, file, {
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+    if (up.error) throw up.error;
+    return supabase.storage.from("tratativas").getPublicUrl(safe).data.publicUrl;
+  }
+
+  async function concluir() {
     if (!t) return;
     if (!resumo) {
       alert("Informe o resumo/observações");
@@ -427,51 +473,37 @@ async function concluir() {
 
     setLoading(true);
     try {
-      // ✅ Upload do Anexo da Tratativa (imagem/pdf) -> salva em tratativas_detalhes.anexo_tratativa
-      let anexo_tratativa_url = null;
-      if (anexoTratativa) {
-        const safe = `anexo_${Date.now()}_${anexoTratativa.name}`.replace(/\s+/g, "_");
-        const up = await supabase.storage.from("tratativas").upload(safe, anexoTratativa, {
-          upsert: false,
-          contentType: anexoTratativa.type || undefined,
-        });
-        if (up.error) throw up.error;
+      const anexo_tratativa_url = await uploadArquivoTratativa(
+        anexoTratativa,
+        "anexo_tratativa"
+      );
 
-        anexo_tratativa_url =
-          supabase.storage.from("tratativas").getPublicUrl(safe).data.publicUrl;
-      }
+      const anexo_vale_url = isFaltaDeFeria
+        ? await uploadArquivoTratativa(anexoVale, "anexo_vale")
+        : null;
 
-      // Auditoria segura
       const tratadoPorId = pickUserUuid(user);
       const tratadoPorLogin = user?.login || user?.email || null;
       const tratadoPorNome =
-        user?.nome_completo ||
-        user?.nome ||
-        user?.login ||
-        user?.email ||
-        null;
+        user?.nome_completo || user?.nome || user?.login || user?.email || null;
 
-      // detalhe/histórico (AQUI JÁ ESTÁ SALVANDO O ANEXO CORRETAMENTE)
       const ins = await supabase.from("tratativas_detalhes").insert({
         tratativa_id: t.id,
         acao_aplicada: acao,
         observacoes: resumo,
-        anexo_tratativa: anexo_tratativa_url, // ✅ Salvo no histórico
-
-        // ✅ quem tratou (auditoria)
+        anexo_tratativa: anexo_tratativa_url,
+        anexo_vale: anexo_vale_url,
         tratado_por_login: tratadoPorLogin,
         tratado_por_nome: tratadoPorNome,
         tratado_por_id: tratadoPorId,
       });
+
       if (ins.error) throw ins.error;
 
-      // atualiza status
       const upd = await supabase
         .from("tratativas")
         .update({
           status: "Concluída",
-          // ❌ REMOVIDO: anexo_tratativa: anexo_tratativa_url || t.anexo_tratativa || null, 
-          // (Isso causava o erro pois a coluna não existe na tabela tratativas)
         })
         .eq("id", t.id);
 
@@ -486,7 +518,6 @@ async function concluir() {
     }
   }
 
-  // ======== Impressão – CSS base ========
   function baseCssCourier() {
     return `
       <style>
@@ -678,7 +709,6 @@ async function concluir() {
     `;
   }
 
-  // ======== Geradores ========
   function gerarOrientacao() {
     if (!t) return;
     if (!resumo.trim()) {
@@ -785,7 +815,6 @@ async function concluir() {
 
   if (!t) return <div className="p-6">Carregando…</div>;
 
-  // Evidências da solicitação (múltiplas) – prefere evidencias_urls, senão cai em imagem_url (legado)
   const evidenciasSolicitacao =
     Array.isArray(t.evidencias_urls) && t.evidencias_urls.length > 0
       ? t.evidencias_urls
@@ -793,33 +822,72 @@ async function concluir() {
       ? [t.imagem_url]
       : [];
 
-  // Topo (Nome + Data/Hora)
   const criadoPor = t.criado_por_nome || t.criado_por_login || "—";
   const criadoEm = brDateTime(t.created_at);
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <h1 className="text-2xl font-bold mb-2">Tratar</h1>
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+            <FaGavel className="text-violet-500" /> Tratar Tratativa
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Revise os dados, registre a ação aplicada e conclua a tratativa.
+          </p>
+        </div>
 
-      <div className="text-sm text-blue-700 mb-4">
-        <span className="font-semibold">Criado por:</span> {criadoPor}{" "}
-        <span className="mx-2 text-blue-300">•</span>
-        <span className="font-semibold">Data/Hora:</span> {criadoEm}
+        <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          <span className="font-semibold">Criado por:</span> {criadoPor}
+          <span className="mx-2 text-blue-300">•</span>
+          <span className="font-semibold">Data/Hora:</span> {criadoEm}
+        </div>
       </div>
 
-      <p className="text-gray-600 mb-6">
-        Revise os dados, anexe o anexo da tratativa e gere a medida.
-      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <ResumoCard
+          titulo="Motorista"
+          valor={t.motorista_nome || "-"}
+          subtitulo={t.motorista_chapa || "-"}
+          icon={<FaUser className="text-3xl text-blue-100" />}
+          border="border-l-blue-500"
+        />
+        <ResumoCard
+          titulo="Ocorrência"
+          valor={t.tipo_ocorrencia || "-"}
+          subtitulo={t.prioridade || "-"}
+          icon={<FaExclamationTriangle className="text-3xl text-amber-100" />}
+          border="border-l-amber-500"
+        />
+        <ResumoCard
+          titulo="Setor / Linha"
+          valor={t.setor_origem || "-"}
+          subtitulo={t.linha ? `${t.linha}${linhaDescricao ? ` - ${linhaDescricao}` : ""}` : "-"}
+          icon={<FaBuilding className="text-3xl text-violet-100" />}
+          border="border-l-violet-500"
+        />
+        <ResumoCard
+          titulo="Status"
+          valor={t.status || "-"}
+          subtitulo={`${t.data_ocorrido || "-"} ${t.hora_ocorrido || ""}`}
+          icon={<FaInfoCircle className="text-3xl text-emerald-100" />}
+          border="border-l-emerald-500"
+        />
+      </div>
 
-      {/* ====== DETALHES DA TRATATIVA (EM CIMA) ====== */}
-      <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
-        <div className="flex items-center justify-between gap-4 mb-3">
-          <h2 className="text-lg font-semibold">Detalhes da tratativa</h2>
+      <div className="bg-white rounded-xl shadow-sm border p-5">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <FaClipboardList className="text-slate-500" />
+            <h2 className="text-lg font-bold text-slate-800">Detalhes da tratativa</h2>
+          </div>
+
           {!isEditing ? (
             <button
               onClick={() => setIsEditing(true)}
-              className="rounded-md bg-yellow-500 px-3 py-2 text-white hover:bg-yellow-600"
+              className="rounded-lg bg-yellow-500 px-3 py-2 text-white hover:bg-yellow-600 font-bold text-sm flex items-center gap-2"
             >
+              <FaEdit />
               Editar dados
             </button>
           ) : (
@@ -827,8 +895,9 @@ async function concluir() {
               <button
                 onClick={salvarEdicao}
                 disabled={loading}
-                className="rounded-md bg-emerald-600 px-3 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
+                className="rounded-lg bg-emerald-600 px-3 py-2 text-white hover:bg-emerald-700 disabled:opacity-60 font-bold text-sm flex items-center gap-2"
               >
+                <FaSave />
                 Salvar
               </button>
               <button
@@ -842,7 +911,7 @@ async function concluir() {
                     descricao: t.descricao || "",
                   });
                 }}
-                className="rounded-md bg-gray-400 px-3 py-2 text-white hover:bg-gray-500"
+                className="rounded-lg bg-slate-400 px-3 py-2 text-white hover:bg-slate-500 font-bold text-sm"
               >
                 Cancelar
               </button>
@@ -851,32 +920,34 @@ async function concluir() {
         </div>
 
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Item titulo="Motorista" valor={`${t.motorista_nome || "-"}`} />
-          <Item titulo="Registro" valor={t.motorista_chapa || "-"} />
+          <Item titulo="Motorista" valor={t.motorista_nome || "-"} icon={<FaUser />} />
+          <Item titulo="Registro" valor={t.motorista_chapa || "-"} icon={<FaIdBadge />} />
 
           <Item
             titulo="Ocorrência"
+            icon={<FaExclamationTriangle />}
             valor={
               isEditing ? (
                 <input
-                  className="w-full border rounded px-2 py-1"
+                  className="w-full border rounded-lg px-3 py-2"
                   value={editForm.tipo_ocorrencia}
                   onChange={(e) =>
                     setEditForm((s) => ({ ...s, tipo_ocorrencia: e.target.value }))
                   }
                 />
               ) : (
-                t.tipo_ocorrencia
+                t.tipo_ocorrencia || "-"
               )
             }
           />
 
           <Item
             titulo="Prioridade"
+            icon={<FaFlag />}
             valor={
               isEditing ? (
                 <select
-                  className="w-full border rounded px-2 py-1"
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
                   value={editForm.prioridade}
                   onChange={(e) =>
                     setEditForm((s) => ({ ...s, prioridade: e.target.value }))
@@ -888,34 +959,36 @@ async function concluir() {
                   <option>Gravíssima</option>
                 </select>
               ) : (
-                t.prioridade
+                t.prioridade || "-"
               )
             }
           />
 
           <Item
             titulo="Setor"
+            icon={<FaBuilding />}
             valor={
               isEditing ? (
                 <input
-                  className="w-full border rounded px-2 py-1"
+                  className="w-full border rounded-lg px-3 py-2"
                   value={editForm.setor_origem}
                   onChange={(e) =>
                     setEditForm((s) => ({ ...s, setor_origem: e.target.value }))
                   }
                 />
               ) : (
-                t.setor_origem
+                t.setor_origem || "-"
               )
             }
           />
 
           <Item
             titulo="Linha"
+            icon={<FaBus />}
             valor={
               isEditing ? (
                 <input
-                  className="w-full border rounded px-2 py-1"
+                  className="w-full border rounded-lg px-3 py-2"
                   placeholder="Código ex.: 01TR ou NA"
                   value={editForm.linha}
                   onChange={(e) => setEditForm((s) => ({ ...s, linha: e.target.value }))}
@@ -928,8 +1001,12 @@ async function concluir() {
             }
           />
 
-          <Item titulo="Status" valor={t.status} />
-          <Item titulo="Data/Hora" valor={`${t.data_ocorrido || "-"} ${t.hora_ocorrido || ""}`} />
+          <Item titulo="Status" valor={t.status || "-"} icon={<FaInfoCircle />} />
+          <Item
+            titulo="Data/Hora"
+            valor={`${t.data_ocorrido || "-"} ${t.hora_ocorrido || ""}`}
+            icon={<FaCalendarAlt />}
+          />
 
           <Item
             className="md:col-span-2"
@@ -937,7 +1014,7 @@ async function concluir() {
             valor={
               isEditing ? (
                 <textarea
-                  className="w-full border rounded px-2 py-1"
+                  className="w-full border rounded-lg px-3 py-2"
                   rows={3}
                   value={editForm.descricao}
                   onChange={(e) =>
@@ -950,7 +1027,6 @@ async function concluir() {
             }
           />
 
-          {/* ✅ EVIDÊNCIAS EM MINIATURA */}
           <div className="md:col-span-2">
             {renderEvidenciasGrid(
               evidenciasSolicitacao,
@@ -960,15 +1036,19 @@ async function concluir() {
         </dl>
       </div>
 
-      {/* ====== CONCLUSÃO (EM BAIXO) ====== */}
-      <div className="bg-white rounded-lg shadow-sm p-5">
-        <h2 className="text-lg font-semibold mb-3">Conclusão</h2>
+      <div className="bg-white rounded-xl shadow-sm border p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <FaClipboardList className="text-slate-500" />
+          <h2 className="text-lg font-bold text-slate-800">Conclusão</h2>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Ação aplicada</label>
+            <label className="block text-sm font-semibold text-slate-600 mb-1">
+              Ação aplicada
+            </label>
             <select
-              className="w-full rounded-md border px-3 py-2"
+              className="w-full rounded-lg border px-3 py-2 bg-white"
               value={acao}
               onChange={(e) => setAcao(e.target.value)}
             >
@@ -983,9 +1063,11 @@ async function concluir() {
           {acao === "Suspensão" && (
             <>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Dias de Suspensão</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1">
+                  Dias de Suspensão
+                </label>
                 <select
-                  className="w-full rounded-md border px-3 py-2"
+                  className="w-full rounded-lg border px-3 py-2 bg-white"
                   value={diasSusp}
                   onChange={(e) => setDiasSusp(Number(e.target.value))}
                 >
@@ -998,74 +1080,99 @@ async function concluir() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-1">
+                <label className="block text-sm font-semibold text-slate-600 mb-1">
                   Data da Suspensão (emissão)
                 </label>
                 <input
                   type="date"
-                  className="w-full rounded-md border px-3 py-2"
+                  className="w-full rounded-lg border px-3 py-2"
                   value={dataSuspensao}
                   onChange={(e) => setDataSuspensao(e.target.value)}
                 />
               </div>
 
               <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Item titulo="Início" valor={br(inicioSusp)} />
-                <Item titulo="Fim" valor={br(fimSusp)} />
-                <Item titulo="Retorno" valor={br(retornoSusp)} />
+                <ResumoMini titulo="Início" valor={br(inicioSusp)} />
+                <ResumoMini titulo="Fim" valor={br(fimSusp)} />
+                <ResumoMini titulo="Retorno" valor={br(retornoSusp)} />
               </div>
             </>
           )}
         </div>
 
-        {/* ✅ Layout melhor: Observações + Anexo lado a lado */}
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Observações */}
-          <div className="rounded-lg border bg-gray-50 p-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+          <div className="rounded-xl border bg-slate-50 p-4">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
               Resumo / Observações
             </label>
             <textarea
               rows={6}
-              className="w-full rounded-md border bg-white px-3 py-2"
+              className="w-full rounded-lg border bg-white px-3 py-2"
               value={resumo}
               onChange={(e) => setResumo(e.target.value)}
               placeholder="Descreva o que foi feito, conclusão, orientações, etc."
             />
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-slate-500 mt-2">
               Esse texto vai para <b>tratativas_detalhes.observacoes</b>.
             </p>
           </div>
 
-          {/* Anexo */}
-          <div className="rounded-lg border bg-gray-50 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <label className="block text-sm font-semibold text-gray-700">
-                Anexo da Tratativa (opcional)
-              </label>
-              <span className="text-xs text-gray-500">imagem ou PDF</span>
+          <div className="rounded-xl border bg-slate-50 p-4 space-y-4">
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Anexo da Tratativa
+                </label>
+                <span className="text-xs text-slate-500">imagem ou PDF</span>
+              </div>
+
+              <div className="mt-3 rounded-xl border-2 border-dashed bg-white p-4">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setAnexoTratativa(e.target.files?.[0] || null)}
+                  className="block w-full text-sm text-slate-700
+                    file:mr-3 file:rounded-md file:border-0
+                    file:bg-blue-600 file:px-4 file:py-2
+                    file:text-white hover:file:bg-blue-700"
+                />
+                <p className="text-xs text-slate-500 mt-2">
+                  Será salvo em <b>tratativas_detalhes.anexo_tratativa</b>.
+                </p>
+                {renderPreviewSelecionado(
+                  anexoTratativa,
+                  previewTratativaUrl,
+                  setAnexoTratativa
+                )}
+              </div>
             </div>
 
-            <div className="mt-3 rounded-lg border-2 border-dashed bg-white p-4">
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                onChange={(e) => setAnexoTratativa(e.target.files?.[0] || null)}
-                className="block w-full text-sm text-gray-700
-                  file:mr-3 file:rounded-md file:border-0
-                  file:bg-blue-600 file:px-4 file:py-2
-                  file:text-white hover:file:bg-blue-700"
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                Será salvo no histórico como <b>tratativas_detalhes.anexo_tratativa</b>.
-              </p>
+            {isFaltaDeFeria && (
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Anexo do Vale
+                  </label>
+                  <span className="text-xs text-slate-500">somente para Falta de Féria</span>
+                </div>
 
-              {/* ✅ Preview do selecionado */}
-              {renderPreviewSelecionado()}
-            </div>
-
-            {/* ✅ Já anexado (se houver) */}
-            {renderArquivoOuThumb(t.anexo_tratativa || null, "Anexo já anexado (se houver)")}
+                <div className="mt-3 rounded-xl border-2 border-dashed bg-white p-4">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setAnexoVale(e.target.files?.[0] || null)}
+                    className="block w-full text-sm text-slate-700
+                      file:mr-3 file:rounded-md file:border-0
+                      file:bg-emerald-600 file:px-4 file:py-2
+                      file:text-white hover:file:bg-emerald-700"
+                  />
+                  <p className="text-xs text-slate-500 mt-2">
+                    Será salvo em <b>tratativas_detalhes.anexo_vale</b>.
+                  </p>
+                  {renderPreviewSelecionado(anexoVale, previewValeUrl, setAnexoVale)}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1073,7 +1180,7 @@ async function concluir() {
           <button
             onClick={concluir}
             disabled={loading}
-            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60 font-bold"
           >
             {loading ? "Salvando…" : "Concluir"}
           </button>
@@ -1086,7 +1193,7 @@ async function concluir() {
               if (acao === "Suspensão") return gerarSuspensao();
               alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento.');
             }}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700 font-bold"
             title="Gerar documento conforme a ação selecionada"
           >
             GERAR MEDIDA DISCIPLINAR
@@ -1097,11 +1204,38 @@ async function concluir() {
   );
 }
 
-function Item({ titulo, valor, className }) {
+function ResumoCard({ titulo, valor, subtitulo, icon, border }) {
+  return (
+    <div className={`bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 ${border}`}>
+      <div className="min-w-0">
+        <p className="text-sm text-slate-500 font-bold">{titulo}</p>
+        <p className="text-xl font-black text-slate-800 break-words">{valor}</p>
+        {subtitulo ? (
+          <p className="text-xs text-slate-500 mt-1 font-semibold break-words">{subtitulo}</p>
+        ) : null}
+      </div>
+      <div>{icon}</div>
+    </div>
+  );
+}
+
+function ResumoMini({ titulo, valor }) {
+  return (
+    <div className="rounded-xl border bg-slate-50 p-3">
+      <div className="text-xs font-bold text-slate-500">{titulo}</div>
+      <div className="text-base font-black text-slate-800 mt-1">{valor}</div>
+    </div>
+  );
+}
+
+function Item({ titulo, valor, className, icon }) {
   return (
     <div className={className}>
-      <dt className="text-sm text-gray-600">{titulo}</dt>
-      <dd className="font-medium break-words">{valor}</dd>
+      <dt className="text-sm text-slate-500 flex items-center gap-2 font-semibold">
+        {icon ? <span className="text-slate-400">{icon}</span> : null}
+        {titulo}
+      </dt>
+      <dd className="font-bold text-slate-800 break-words mt-1">{valor}</dd>
     </div>
   );
 }

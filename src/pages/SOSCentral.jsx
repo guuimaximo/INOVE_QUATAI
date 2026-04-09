@@ -42,7 +42,9 @@ function pickBestDate(row) {
 function parseToDate(value) {
   if (!value) return null;
 
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
 
   const s = String(value).trim();
 
@@ -50,19 +52,18 @@ function parseToDate(value) {
   const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (br) {
     const [, dd, mm, yyyy] = br;
-    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd)); // local
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  // YYYY-MM-DD (local)  ✅ evita “-1 dia”
+  // YYYY-MM-DD (local)
   const isoDate = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (isoDate) {
     const [, yyyy, mm, dd] = isoDate;
-    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd)); // local
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  // Timestamp ISO (com horário / timezone)
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -79,11 +80,25 @@ function monthRange(yyyyMm) {
   const pad2 = (n) => String(n).padStart(2, "0");
   const start = `${y}-${pad2(m)}-01`;
 
-  // último dia do mês
   const lastDay = new Date(y, m, 0).getDate();
   const end = `${y}-${pad2(m)}-${pad2(lastDay)}`;
 
   return { start, end };
+}
+
+function calcularDiasDecorridos(data) {
+  if (!data) return null;
+
+  const hoje = new Date();
+  const base = new Date(`${data}T00:00:00`);
+
+  if (Number.isNaN(base.getTime())) return null;
+
+  hoje.setHours(0, 0, 0, 0);
+  base.setHours(0, 0, 0, 0);
+
+  const diffMs = hoje.getTime() - base.getTime();
+  return diffMs < 0 ? 0 : Math.floor(diffMs / 86400000);
 }
 
 /* =======================
@@ -93,7 +108,7 @@ function statusLabel(status) {
   const s = String(status || "").toUpperCase().trim();
   if (s === "ABERTO") return "AG. OPERAÇÃO";
   if (s === "EM ANDAMENTO") return "AG. MANUTENÇÃO";
-  return ""; // Fechado ou outros
+  return "";
 }
 
 function StatusTag({ status }) {
@@ -190,10 +205,15 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   }
 
   async function salvarAlteracoes() {
+    const dataPrev = formData.data_ultima_preventiva || null;
+    const dataInsp = formData.data_ultima_inspecao || null;
+
     const { error } = await supabase
       .from("sos_acionamentos")
       .update({
         ...formData,
+        dias_ultima_preventiva: calcularDiasDecorridos(dataPrev),
+        dias_ultima_inspecao: calcularDiasDecorridos(dataInsp),
         atualizado_em: new Date().toISOString(),
       })
       .eq("id", sos.id);
@@ -209,10 +229,16 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
     onClose();
   }
 
-  const renderField = (label, field, multiline = false) => (
+  const renderField = (
+    label,
+    field,
+    multiline = false,
+    type = "text",
+    readOnly = false
+  ) => (
     <div>
       <label className="text-sm text-gray-500">{label}</label>
-      {editMode ? (
+      {editMode && !readOnly ? (
         multiline ? (
           <textarea
             className="border p-2 rounded w-full"
@@ -224,7 +250,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           />
         ) : (
           <input
-            type="text"
+            type={type}
             className="border p-2 rounded w-full"
             value={formData[field] || ""}
             onChange={(e) =>
@@ -233,10 +259,84 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           />
         )
       ) : (
-        <p className="bg-gray-50 p-2 border rounded">{formData[field] || "—"}</p>
+        <p className="bg-gray-50 p-2 border rounded">
+          {formData[field] || "—"}
+        </p>
       )}
     </div>
   );
+
+  const renderReadCalcField = (label, value) => (
+    <div>
+      <label className="text-sm text-gray-500">{label}</label>
+      <p className="bg-gray-50 p-2 border rounded">{value ?? "—"}</p>
+    </div>
+  );
+
+  const renderControlabilidadeField = () => (
+    <div>
+      <label className="text-sm text-gray-500">Classificação</label>
+      {editMode ? (
+        <div className="flex flex-wrap gap-2 mt-1">
+          <button
+            type="button"
+            onClick={() =>
+              setFormData({
+                ...formData,
+                classificacao_controlabilidade: "Não Controlável",
+              })
+            }
+            className={`px-3 py-2 rounded text-sm font-semibold border transition ${
+              formData.classificacao_controlabilidade === "Não Controlável"
+                ? "bg-yellow-400 border-yellow-500 text-gray-900"
+                : "bg-white border-yellow-300 text-yellow-700 hover:bg-yellow-50"
+            }`}
+          >
+            Não controlável
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setFormData({
+                ...formData,
+                classificacao_controlabilidade: "Controlável",
+              })
+            }
+            className={`px-3 py-2 rounded text-sm font-semibold border transition ${
+              formData.classificacao_controlabilidade === "Controlável"
+                ? "bg-red-600 border-red-700 text-white"
+                : "bg-white border-red-300 text-red-700 hover:bg-red-50"
+            }`}
+          >
+            Controlável
+          </button>
+        </div>
+      ) : (
+        <div className="mt-1">
+          {formData.classificacao_controlabilidade === "Não Controlável" ? (
+            <span className="inline-flex bg-yellow-400 text-gray-900 px-3 py-2 rounded text-sm font-semibold">
+              Não controlável
+            </span>
+          ) : formData.classificacao_controlabilidade === "Controlável" ? (
+            <span className="inline-flex bg-red-600 text-white px-3 py-2 rounded text-sm font-semibold">
+              Controlável
+            </span>
+          ) : (
+            <p className="bg-gray-50 p-2 border rounded">—</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const diasPreventiva =
+    formData.dias_ultima_preventiva ??
+    calcularDiasDecorridos(formData.data_ultima_preventiva);
+
+  const diasInspecao =
+    formData.dias_ultima_inspecao ??
+    calcularDiasDecorridos(formData.data_ultima_inspecao);
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-40 p-4">
@@ -276,7 +376,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             {renderField("Criado em", "created_at")}
             {renderField("Número SOS", "numero_sos")}
             {renderField("Plantonista", "plantonista")}
-            {renderField("Data SOS", "data_sos")}
+            {renderField("Data SOS", "data_sos", false, "date")}
             {renderField("Hora SOS", "hora_sos")}
             {renderField("Veículo", "veiculo")}
           </div>
@@ -304,6 +404,38 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             {renderField("Setor Manutenção", "setor_manutencao")}
             {renderField("Grupo Manutenção", "grupo_manutencao")}
             {renderField("Problema Encontrado", "problema_encontrado", true)}
+            {renderField("Mecânico Executor", "mecanico_executor")}
+            {renderField("Número OS Corretiva", "numero_os_corretiva")}
+          </div>
+
+          <h3 className="font-semibold text-orange-700 mt-4">
+            Preventiva e Inspeção
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {renderField(
+              "Data da Última Preventiva",
+              "data_ultima_preventiva",
+              false,
+              "date"
+            )}
+            {renderField("KM Rodado Preventiva", "km_rodado_preventiva")}
+            {renderReadCalcField("Dias desde a Preventiva", diasPreventiva)}
+
+            {renderField(
+              "Data da Última Inspeção",
+              "data_ultima_inspecao",
+              false,
+              "date"
+            )}
+            {renderField("KM Rodado Inspeção", "km_rodado_inspecao")}
+            {renderReadCalcField("Dias desde a Inspeção", diasInspecao)}
+          </div>
+
+          <h3 className="font-semibold text-purple-700 mt-4">
+            Classificação
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {renderControlabilidadeField()}
           </div>
 
           <h3 className="font-semibold text-red-700 mt-4">Fechamento</h3>
@@ -329,7 +461,6 @@ export default function SOSCentral() {
   const PAGE_SIZE = 200;
 
   const [sosList, setSosList] = useState([]);
-  const [counts, setCounts] = useState({});
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -340,65 +471,33 @@ export default function SOSCentral() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
 
-  const [mesRef, setMesRef] = useState(""); // filtro por mês (YYYY-MM)
+  const [mesRef, setMesRef] = useState("");
+  const [ocorrenciaFiltro, setOcorrenciaFiltro] = useState("");
 
-  // ordenação server-side
   const [sortBy, setSortBy] = useState(DATE_FIELD);
   const [sortAsc, setSortAsc] = useState(false);
 
-  // página atual (offset)
   const [page, setPage] = useState(0);
 
   function buildQuery() {
-    // ✅ AGORA TRAZ TUDO (sem filtrar Fechado)
     let query = supabase.from("sos_acionamentos").select("*");
 
-    // filtro por mês (em cima de data_sos)
     if (mesRef) {
       const { start, end } = monthRange(mesRef);
       if (start) query = query.gte(DATE_FIELD, start);
       if (end) query = query.lte(DATE_FIELD, end);
     }
 
-    // filtros por intervalo (em cima de data_sos)
     if (dataInicio) query = query.gte(DATE_FIELD, dataInicio);
     if (dataFim) query = query.lte(DATE_FIELD, dataFim);
 
-    // order precisa vir antes do range
+    if (ocorrenciaFiltro) {
+      query = query.ilike("ocorrencia", ocorrenciaFiltro);
+    }
+
     query = query.order(sortBy, { ascending: sortAsc, nullsFirst: false });
 
     return query;
-  }
-
-  async function carregarCounts() {
-    // ✅ Mantém cards por ocorrência, mas agora contando TODOS os status
-    const promises = OCORRENCIAS_CARDS.map(async (key) => {
-      let q = supabase
-        .from("sos_acionamentos")
-        .select("id", { count: "exact", head: true })
-        .ilike("ocorrencia", key);
-
-      // mesmos filtros (em cima de data_sos)
-      if (mesRef) {
-        const { start, end } = monthRange(mesRef);
-        if (start) q = q.gte(DATE_FIELD, start);
-        if (end) q = q.lte(DATE_FIELD, end);
-      }
-      if (dataInicio) q = q.gte(DATE_FIELD, dataInicio);
-      if (dataFim) q = q.lte(DATE_FIELD, dataFim);
-
-      const { count, error } = await q;
-      if (error) {
-        console.error("Erro count", key, error.message);
-        return [key, 0];
-      }
-      return [key, count || 0];
-    });
-
-    const entries = await Promise.all(promises);
-    const obj = {};
-    entries.forEach(([k, v]) => (obj[k] = v));
-    setCounts(obj);
   }
 
   async function carregarSOS(reset = false) {
@@ -436,27 +535,37 @@ export default function SOSCentral() {
 
   useEffect(() => {
     carregarSOS(true);
-    carregarCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     carregarSOS(true);
-    carregarCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataInicio, dataFim, mesRef, sortBy, sortAsc]);
+  }, [dataInicio, dataFim, mesRef, sortBy, sortAsc, ocorrenciaFiltro]);
 
   const filtrados = useMemo(() => {
     const termo = busca.toLowerCase().trim();
     if (!termo) return sosList;
+
     return sosList.filter((s) => {
       return (
-        s.numero_sos?.toString().includes(termo) ||
+        s.numero_sos?.toString().toLowerCase().includes(termo) ||
         s.veiculo?.toLowerCase().includes(termo) ||
-        s.motorista_nome?.toLowerCase().includes(termo)
+        s.motorista_nome?.toLowerCase().includes(termo) ||
+        s.ocorrencia?.toLowerCase().includes(termo)
       );
     });
   }, [busca, sosList]);
+
+  const counts = useMemo(() => {
+    const obj = {};
+    OCORRENCIAS_CARDS.forEach((key) => {
+      obj[key] = filtrados.filter(
+        (item) => String(item.ocorrencia || "").toUpperCase().trim() === key
+      ).length;
+    });
+    return obj;
+  }, [filtrados]);
 
   function toggleSort(field) {
     if (sortBy === field) {
@@ -476,13 +585,16 @@ export default function SOSCentral() {
     );
   }
 
+  function handleCardClick(card) {
+    setOcorrenciaFiltro((prev) => (prev === card ? "" : card));
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">
         Central de Intervenções
       </h1>
 
-      {/* 🔢 Cards de Resumo (mantidos como estavam; você não pediu pra mudar) */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         {OCORRENCIAS_CARDS.map((key) => (
           <CardResumo
@@ -490,16 +602,17 @@ export default function SOSCentral() {
             titulo={key}
             valor={counts[key] || 0}
             cor={cores[key]}
+            ativo={ocorrenciaFiltro === key}
+            onClick={() => handleCardClick(key)}
           />
         ))}
       </div>
 
-      {/* 🔍 Filtros */}
       <div className="bg-white shadow rounded-lg p-4 mb-6 flex flex-wrap gap-3 items-center">
         <FaSearch className="text-gray-500" />
         <input
           type="text"
-          placeholder="Buscar por número, veículo ou motorista..."
+          placeholder="Buscar por número, veículo, motorista ou ocorrência..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           className="border rounded-md px-3 py-2 flex-1"
@@ -526,18 +639,27 @@ export default function SOSCentral() {
           className="border rounded-md px-3 py-2"
         />
 
+        <select
+          value={ocorrenciaFiltro}
+          onChange={(e) => setOcorrenciaFiltro(e.target.value)}
+          className="border rounded-md px-3 py-2"
+        >
+          <option value="">Todas ocorrências</option>
+          {OCORRENCIAS_CARDS.map((oc) => (
+            <option key={oc} value={oc}>
+              {oc}
+            </option>
+          ))}
+        </select>
+
         <button
-          onClick={() => {
-            carregarSOS(true);
-            carregarCounts();
-          }}
+          onClick={() => carregarSOS(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
         >
           Aplicar
         </button>
       </div>
 
-      {/* 📋 Lista */}
       <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
@@ -588,8 +710,7 @@ export default function SOSCentral() {
             ) : (
               filtrados.map((s) => {
                 const st = String(s.status || "").toUpperCase().trim();
-                const isPendente =
-                  st === "ABERTO" || st === "EM ANDAMENTO";
+                const isPendente = st === "ABERTO" || st === "EM ANDAMENTO";
 
                 return (
                   <tr
@@ -612,7 +733,6 @@ export default function SOSCentral() {
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2 flex-wrap">
                         <OcorrenciaTag ocorrencia={s.ocorrencia} />
-                        {/* ✅ Aberto / Em andamento */}
                         <StatusTag status={s.status} />
                       </div>
                     </td>
@@ -632,7 +752,6 @@ export default function SOSCentral() {
           </tbody>
         </table>
 
-        {/* Carregar mais */}
         {!loading && hasMore && (
           <div className="p-4 border-t flex justify-center">
             <button
@@ -652,7 +771,6 @@ export default function SOSCentral() {
           onClose={() => setSelected(null)}
           onAtualizar={() => {
             carregarSOS(true);
-            carregarCounts();
           }}
         />
       )}
@@ -675,7 +793,6 @@ function ThSortable({ label, onClick, children }) {
   );
 }
 
-/* --- CardResumo e OcorrenciaTag --- */
 const cores = {
   SOS: "bg-red-600 text-white",
   RECOLHEU: "bg-blue-600 text-white",
@@ -685,12 +802,18 @@ const cores = {
   "SEGUIU VIAGEM": "bg-green-600 text-white",
 };
 
-function CardResumo({ titulo, valor, cor }) {
+function CardResumo({ titulo, valor, cor, ativo, onClick }) {
   return (
-    <div className={`${cor} rounded-lg shadow p-3 text-center`}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${cor} rounded-lg shadow p-3 text-center transition w-full ${
+        ativo ? "ring-4 ring-offset-2 ring-blue-300 scale-[1.02]" : "opacity-95 hover:opacity-100"
+      }`}
+    >
       <h3 className="text-xs font-medium">{titulo}</h3>
       <p className="text-2xl font-bold mt-1">{valor}</p>
-    </div>
+    </button>
   );
 }
 

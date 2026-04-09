@@ -126,15 +126,30 @@ export default function ConsultarTratativa() {
 
   useEffect(() => {
     ;(async () => {
-      const { data, error } = await supabase.from('tratativas').select('*').eq('id', id).single()
+      const { data, error } = await supabase
+        .from('tratativas')
+        .select('*')
+        .eq('id', id)
+        .single()
+
       if (error) console.error(error)
       setT(data || null)
 
       const h = await supabase
         .from('tratativas_detalhes')
-        .select(
-          'id, created_at, tratativa_id, acao_aplicada, observacoes, imagem_tratativa, anexo_tratativa, anexo_vale, tratado_por_login, tratado_por_nome, tratado_por_id'
-        )
+        .select(`
+          id,
+          created_at,
+          tratativa_id,
+          acao_aplicada,
+          observacoes,
+          imagem_tratativa,
+          anexo_tratativa,
+          anexo_vale,
+          tratado_por_login,
+          tratado_por_nome,
+          tratado_por_id
+        `)
         .eq('tratativa_id', id)
         .order('created_at', { ascending: false })
 

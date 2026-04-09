@@ -14,20 +14,20 @@ function n(v) {
 }
 
 export default function AcompanhamentosModal({
-  subAcompanhamento,
-  setSubAcompanhamento,
-  headerSubAcompanhamento,
-  checkpointResumo,
-  resumoInstrutor,
-  tempoPorDia,
-  resumoPorLinhaCheckpoint,
-  acompanhamentosComEvolucao,
-  fmtNum,
-  fmtInt,
-  fmtDateBr,
-  formatMinutes,
-  statusBadgeClass,
-  EvolucaoBadge,
+  subAcompanhamento = "ACOMPANHAMENTOS",
+  setSubAcompanhamento = () => {},
+  headerSubAcompanhamento = {},
+  checkpointResumo = { total: 0, melhoraramKml: 0, pioraramKml: 0, reduziramDesperdicio: 0, aumentaramDesperdicio: 0, mediaDeltaKml: 0 },
+  resumoInstrutor = [],
+  tempoPorDia = [],
+  resumoPorLinhaCheckpoint = [],
+  acompanhamentosComEvolucao = [],
+  fmtNum = (v) => v,
+  fmtInt = (v) => v,
+  fmtDateBr = (v) => v,
+  formatMinutes = (v) => v,
+  statusBadgeClass = () => "",
+  EvolucaoBadge = () => null,
 }) {
   const [detalheModal, setDetalheModal] = useState(null);
 
@@ -59,7 +59,7 @@ export default function AcompanhamentosModal({
   // Função auxiliar de ordenação
   const sortFunc = (lista, config) => {
     const { key, direction } = config;
-    return [...lista].sort((a, b) => {
+    return [...(lista || [])].sort((a, b) => {
       let va = a?.[key], vb = b?.[key];
       const na = Number(va), nb = Number(vb);
       const ambosNumericos = Number.isFinite(na) && Number.isFinite(nb);

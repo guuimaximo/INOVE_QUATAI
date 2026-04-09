@@ -1,8 +1,3 @@
-// src/pages/Desempenho_Diesel_Tratativas_Central.jsx
-// ✅ AJUSTE: apenas APARÊNCIA para seguir o MESMO PADRÃO do layout da CentralTratativas
-// - Mantém: lógica, filtros, SLA, ordenação, contadores head:true, rotas, tabela e propriedades
-// - Ajusta: classes Tailwind + estrutura visual (container, header, filtros, cards e tabela)
-
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
@@ -21,11 +16,10 @@ import {
 } from "react-icons/fa";
 
 const VIEW = {
-  OPEN_ONLY: "open_only", // Pendentes & Atrasadas
-  ALL: "all", // Ver tudo
+  OPEN_ONLY: "open_only",
+  ALL: "all",
 };
 
-// SLA por prioridade (dias)
 const SLA_DIAS = {
   "Gravíssima": 1,
   Gravissima: 1,
@@ -35,7 +29,6 @@ const SLA_DIAS = {
   Baixa: 15,
 };
 
-// Ordem de prioridade (maior urgência primeiro)
 const PRIORIDADE_RANK = {
   "Gravíssima": 0,
   Gravissima: 0,
@@ -77,9 +70,13 @@ function isAtrasadaBySLA(row) {
   return daysDiffFromNow(row?.created_at) > sla;
 }
 
+function isPendenteNoPrazo(row) {
+  return isPendente(row?.status) && !isAtrasadaBySLA(row);
+}
+
 function statusRank(row) {
   if (isAtrasadaBySLA(row)) return 0;
-  if (isPendente(row?.status)) return 1;
+  if (isPendenteNoPrazo(row)) return 1;
   if (isConcluidaOuResolvida(row?.status)) return 2;
   return 3;
 }
@@ -95,21 +92,16 @@ export default function Desempenho_Diesel_Tratativas_Central() {
   });
   const [loading, setLoading] = useState(false);
 
-  // Botão topo
   const [viewMode, setViewMode] = useState(VIEW.OPEN_ONLY);
 
-  // Ordenação da tabela
   const [sort, setSort] = useState({
     key: "default",
     dir: "asc",
   });
 
-  // Contadores head:true
   const [totalCount, setTotalCount] = useState(0);
   const [pendentesCount, setPendentesCount] = useState(0);
   const [concluidasCount, setConcluidasCount] = useState(0);
-
-  // Atrasadas por SLA (client-side)
   const [atrasadasCount, setAtrasadasCount] = useState(0);
 
   const navigate = useNavigate();
@@ -147,22 +139,12 @@ export default function Desempenho_Diesel_Tratativas_Central() {
   }
 
   async function carregarContadoresHead() {
-    // Total
     let qTotal = supabase
       .from("diesel_tratativas")
       .select("id", { count: "exact", head: true });
     qTotal = applyCommonFilters(qTotal);
     const { count: total } = await qTotal;
 
-    // Pendentes
-    let qPend = supabase
-      .from("diesel_tratativas")
-      .select("id", { count: "exact", head: true })
-      .ilike("status", "%pendente%");
-    qPend = applyCommonFilters(qPend);
-    const { count: pend } = await qPend;
-
-    // Concluídas/Resolvidas
     let qConc = supabase
       .from("diesel_tratativas")
       .select("id", { count: "exact", head: true })
@@ -171,7 +153,6 @@ export default function Desempenho_Diesel_Tratativas_Central() {
     const { count: conc } = await qConc;
 
     setTotalCount(total || 0);
-    setPendentesCount(pend || 0);
     setConcluidasCount(conc || 0);
   }
 
@@ -192,20 +173,35 @@ export default function Desempenho_Diesel_Tratativas_Central() {
   }, []);
 
   function limparFiltros() {
-    setFiltros({ busca: "", dataInicio: "", dataFim: "", status: "", prioridade: "" });
+    setFiltros({
+      busca: "",
+      dataInicio: "",
+      dataFim: "",
+      status: "",
+      prioridade: "",
+    });
     setTimeout(() => aplicar(), 0);
   }
+
+  const tratativasFiltradasClient = useMemo(() => {
+    return Array.isArray(tratativas) ? tratativas : [];
+  }, [tratativas]);
+
+  useEffect(() => {
+    const rows = Array.isArray(tratativasFiltradasClient) ? tratativasFiltradasClient : [];
+
+    const pendentesSomente = rows.filter((r) => isPendenteNoPrazo(r)).length;
+    const atrasadasSomente = rows.filter((r) => isAtrasadaBySLA(r)).length;
+
+    setPendentesCount(pendentesSomente);
+    setAtrasadasCount(atrasadasSomente);
+  }, [tratativasFiltradasClient]);
 
   const tratativasView = useMemo(() => {
     const rows = Array.isArray(tratativas) ? tratativas : [];
     if (viewMode === VIEW.ALL) return rows;
     return rows.filter((r) => isPendente(r?.status));
   }, [tratativas, viewMode]);
-
-  useEffect(() => {
-    const rows = Array.isArray(tratativasView) ? tratativasView : [];
-    setAtrasadasCount(rows.filter((r) => isAtrasadaBySLA(r)).length);
-  }, [tratativasView]);
 
   function defaultComparator(a, b) {
     const pa = PRIORIDADE_RANK[norm(a?.prioridade)] ?? 99;
@@ -277,27 +273,31 @@ export default function Desempenho_Diesel_Tratativas_Central() {
 
   function SortIcon({ colKey }) {
     if (sort.key !== colKey || sort.key === "default") {
-      return <FaSort className="inline ml-1 text-white/70" />;
+      return <FaSort className="inline ml-1 text-slate-400" />;
     }
     return sort.dir === "asc" ? (
-      <FaSortUp className="inline ml-1" />
+      <FaSortUp className="inline ml-1 text-blue-600" />
     ) : (
-      <FaSortDown className="inline ml-1" />
+      <FaSortDown className="inline ml-1 text-blue-600" />
     );
   }
 
   function badgePrioridade(p) {
     const v = norm(p);
-    const base = "px-2 py-1 rounded text-xs font-medium";
+    const base = "px-2 py-1 rounded-lg text-xs font-bold border";
     if (v === "Gravíssima" || v === "Gravissima") {
-      return <span className={`${base} bg-red-100 text-red-800`}>Gravíssima</span>;
+      return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Gravíssima</span>;
     }
-    if (v === "Alta") return <span className={`${base} bg-orange-100 text-orange-800`}>Alta</span>;
+    if (v === "Alta") {
+      return <span className={`${base} bg-orange-50 text-orange-700 border-orange-200`}>Alta</span>;
+    }
     if (v === "Média" || v === "Media") {
-      return <span className={`${base} bg-yellow-100 text-yellow-800`}>Média</span>;
+      return <span className={`${base} bg-yellow-50 text-yellow-700 border-yellow-200`}>Média</span>;
     }
-    if (v === "Baixa") return <span className={`${base} bg-green-100 text-green-800`}>Baixa</span>;
-    return <span className={`${base} bg-gray-100 text-gray-700`}>{v || "-"}</span>;
+    if (v === "Baixa") {
+      return <span className={`${base} bg-green-50 text-green-700 border-green-200`}>Baixa</span>;
+    }
+    return <span className={`${base} bg-slate-50 text-slate-700 border-slate-200`}>{v || "-"}</span>;
   }
 
   function badgeStatus(row) {
@@ -306,270 +306,323 @@ export default function Desempenho_Diesel_Tratativas_Central() {
 
     if (atrasada) {
       return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
-          Atraso
+        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-700 border-red-200">
+          Atrasada
         </span>
       );
     }
     if (st.includes("pendente")) {
       return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-yellow-50 text-yellow-700 border-yellow-200">
           Pendente
         </span>
       );
     }
     if (st.includes("resolvido") || st.includes("conclu")) {
       return (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
           Resolvido
         </span>
       );
     }
     return (
-      <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
+      <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-slate-50 text-slate-700 border-slate-200">
         {row?.status || "-"}
       </span>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      {/* HEADER (mesmo padrão do layout da CentralTratativas) */}
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <FaGavel className="text-gray-400" />
-          <h1 className="text-2xl font-bold text-gray-700">Central de Tratativas — Diesel</h1>
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+            <FaGavel className="text-violet-500" /> Central de Tratativas — Diesel
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Acompanhe pendências, atrasos por SLA e resoluções das tratativas.
+          </p>
         </div>
 
-        {/* ✅ Botões simples no canto */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setViewMode(VIEW.ALL)}
-            className={[
-              "px-3 py-2 rounded-md text-sm border",
+            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
               viewMode === VIEW.ALL
                 ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
-            ].join(" ")}
+                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+            }`}
           >
             VER TUDO
           </button>
 
           <button
             onClick={() => setViewMode(VIEW.OPEN_ONLY)}
-            className={[
-              "px-3 py-2 rounded-md text-sm border",
+            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
               viewMode === VIEW.OPEN_ONLY
                 ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
-            ].join(" ")}
+                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+            }`}
           >
             PENDENTES & ATRASADAS
           </button>
         </div>
       </div>
 
-      {/* 🔍 FILTROS (mesmo padrão do layout base) */}
-      <div className="bg-white shadow rounded-lg p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Filtros</h2>
+      <div className="bg-white p-4 rounded-xl border shadow-sm space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-800">Filtros</h2>
+          <p className="text-sm text-slate-500">
+            Refine a visualização por texto, período, prioridade e status.
+          </p>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <input
-            type="text"
-            placeholder="Buscar (nome, chapa, descrição, ocorrência...)"
-            value={filtros.busca}
-            onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-            className="border rounded-md px-3 py-2"
-          />
+          <div className="relative md:col-span-2">
+            <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar (nome, chapa, descrição, ocorrência...)"
+              value={filtros.busca}
+              onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+            />
+          </div>
 
           <input
             type="date"
             value={filtros.dataInicio}
             onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
           />
 
           <input
             type="date"
             value={filtros.dataFim}
             onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
           />
 
-          <select
-            value={filtros.prioridade}
-            onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
-            className="border rounded-md px-3 py-2 bg-white"
-          >
-            <option value="">Todas as Prioridades</option>
-            <option value="Gravíssima">Gravíssima</option>
-            <option value="Alta">Alta</option>
-            <option value="Média">Média</option>
-            <option value="Baixa">Baixa</option>
-          </select>
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.prioridade}
+              onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+            >
+              <option value="">Todas as Prioridades</option>
+              <option value="Gravíssima">Gravíssima</option>
+              <option value="Alta">Alta</option>
+              <option value="Média">Média</option>
+              <option value="Baixa">Baixa</option>
+            </select>
+          </div>
 
-          <select
-            value={filtros.status}
-            onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
-            className="border rounded-md px-3 py-2 bg-white"
-          >
-            <option value="">Todos os Status</option>
-            <option value="Pendente">Pendente</option>
-            <option value="Resolvido">Resolvido</option>
-            <option value="Concluída">Concluída</option>
-          </select>
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.status}
+              onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+            >
+              <option value="">Todos os Status</option>
+              <option value="Pendente">Pendente</option>
+              <option value="Resolvido">Resolvido</option>
+              <option value="Concluída">Concluída</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex justify-end mt-3">
+        <div className="flex justify-end gap-2 flex-wrap">
           <button
             onClick={limparFiltros}
-            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
+            className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-bold text-sm"
           >
             Limpar
           </button>
           <button
             onClick={aplicar}
             disabled={loading}
-            className="ml-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-400 font-bold text-sm"
           >
             {loading ? "Aplicando..." : "Aplicar"}
           </button>
         </div>
 
-        {/* ✅ Regras visíveis (igual layout base) */}
-        <div className="mt-4">
-          <div className="text-xs text-gray-500">
-            Ordenação padrão: <b>Prioridade</b> → <b>Status</b> → <b>Mais recentes</b>. Clique no
-            cabeçalho da tabela para ordenar; clique novamente para inverter; terceira vez volta ao
-            padrão.
+        <div className="text-xs text-slate-500">
+          Ordenação padrão: <b>Prioridade</b> → <b>Status</b> → <b>Mais recentes</b>.
+          Clique no cabeçalho da tabela para ordenar; clique novamente para inverter; na
+          terceira volta ao padrão.
+        </div>
+
+        <div className="rounded-xl border bg-slate-50 p-3">
+          <div className="text-xs font-bold text-slate-700 mb-2">
+            Regra de SLA para considerar como <span className="text-red-700">ATRASADA</span>
           </div>
 
-          <div className="mt-2 rounded-lg border bg-gray-50 px-3 py-2">
-            <div className="text-xs font-semibold text-gray-700">
-              Regra de SLA para considerar como <span className="text-red-700">ATRASO</span>
-            </div>
-
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-700">
-              <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-medium">
-                Gravíssima: 1 dia
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 font-medium">
-                Alta: 3 dias
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">
-                Média: 7 dias
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-medium">
-                Baixa: 15 dias
-              </span>
-
-              <span className="text-gray-500 ml-1">
-                (Atraso é calculado apenas quando o status está <b>Pendente</b>)
-              </span>
-            </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+            <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 font-bold">
+              Gravíssima: 1 dia
+            </span>
+            <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-bold">
+              Alta: 3 dias
+            </span>
+            <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-bold">
+              Média: 7 dias
+            </span>
+            <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 font-bold">
+              Baixa: 15 dias
+            </span>
+            <span className="text-slate-500">
+              (Atraso é calculado apenas quando o status está <b>Pendente</b>)
+            </span>
           </div>
         </div>
       </div>
 
-      {/* 🧾 Resumo (mesmo padrão de cards do layout base) */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100 text-blue-700" />
-        <CardResumo titulo="Pendentes" valor={pendentesCount} cor="bg-yellow-100 text-yellow-700" />
-        <CardResumo titulo="Concluídas" valor={concluidasCount} cor="bg-green-100 text-green-700" />
-        <CardResumo titulo="Atrasadas (SLA)" valor={atrasadasCount} cor="bg-red-100 text-red-700" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardResumo
+          titulo="Total"
+          valor={totalCount}
+          icone={<FaFolderOpen className="text-4xl text-blue-50" />}
+          border="border-l-blue-500"
+          badgeClass="bg-blue-50 text-blue-700 border-blue-200"
+        />
+
+        <CardResumo
+          titulo="Pendentes"
+          valor={pendentesCount}
+          icone={<FaClock className="text-4xl text-yellow-50" />}
+          border="border-l-yellow-500"
+          badgeClass="bg-yellow-50 text-yellow-700 border-yellow-200"
+        />
+
+        <CardResumo
+          titulo="Concluídas"
+          valor={concluidasCount}
+          icone={<FaCheckCircle className="text-4xl text-emerald-50" />}
+          border="border-l-emerald-500"
+          badgeClass="bg-emerald-50 text-emerald-700 border-emerald-200"
+        />
+
+        <CardResumo
+          titulo="Atrasadas (SLA)"
+          valor={atrasadasCount}
+          icone={<FaExclamationCircle className="text-4xl text-red-50" />}
+          border="border-l-red-500"
+          badgeClass="bg-red-50 text-red-700 border-red-200"
+        />
       </div>
 
-      {/* 📋 Lista (mesmo padrão da tabela base: header azul) */}
-      <div className="bg-white shadow rounded-lg overflow-x-auto">
-        <table className="min-w-full">
-          <thead className="bg-blue-600 text-white">
+      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+        <table className="w-full text-left min-w-[1100px]">
+          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
             <tr>
               <th
-                className="py-2 px-3 text-left cursor-pointer select-none"
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
                 onClick={() => toggleSort("created_at")}
               >
-                Data de Abertura <SortIcon colKey="created_at" />
+                <div className="flex items-center">
+                  Data de Abertura <SortIcon colKey="created_at" />
+                </div>
               </th>
 
               <th
-                className="py-2 px-3 text-left cursor-pointer select-none"
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
                 onClick={() => toggleSort("motorista_nome")}
               >
-                Motorista <SortIcon colKey="motorista_nome" />
+                <div className="flex items-center">
+                  Motorista <SortIcon colKey="motorista_nome" />
+                </div>
               </th>
 
               <th
-                className="py-2 px-3 text-left cursor-pointer select-none"
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
                 onClick={() => toggleSort("tipo_ocorrencia")}
               >
-                Ocorrência <SortIcon colKey="tipo_ocorrencia" />
+                <div className="flex items-center">
+                  Ocorrência <SortIcon colKey="tipo_ocorrencia" />
+                </div>
               </th>
 
               <th
-                className="py-2 px-3 text-left cursor-pointer select-none"
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
                 onClick={() => toggleSort("prioridade")}
               >
-                Prioridade <SortIcon colKey="prioridade" />
+                <div className="flex items-center">
+                  Prioridade <SortIcon colKey="prioridade" />
+                </div>
               </th>
 
               <th
-                className="py-2 px-3 text-left cursor-pointer select-none"
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
                 onClick={() => toggleSort("status")}
               >
-                Status <SortIcon colKey="status" />
+                <div className="flex items-center">
+                  Status <SortIcon colKey="status" />
+                </div>
               </th>
 
-              <th className="py-2 px-3 text-left">Ações</th>
+              <th className="px-4 py-4">Ações</th>
             </tr>
           </thead>
 
-          <tbody>
+          <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan="6" className="text-center p-4 text-gray-500">
+                <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
                   Carregando...
                 </td>
               </tr>
             ) : tratativasOrdenadas.length === 0 ? (
               <tr>
-                <td colSpan="6" className="text-center p-4 text-gray-500">
+                <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
                   Nenhuma tratativa encontrada.
                 </td>
               </tr>
             ) : (
               tratativasOrdenadas.map((t) => {
                 const concluida = isConcluidaOuResolvida(t?.status);
+
                 return (
-                  <tr key={t.id} className="border-t hover:bg-gray-50">
-                    <td className="py-2 px-3 text-gray-600">
-                      {t.created_at ? new Date(t.created_at).toLocaleDateString("pt-BR") : "-"}
+                  <tr key={t.id} className="hover:bg-blue-50/40 transition-colors">
+                    <td className="px-4 py-4 text-slate-500 font-mono text-sm whitespace-nowrap">
+                      {t.created_at
+                        ? new Date(t.created_at).toLocaleDateString("pt-BR")
+                        : "-"}
                     </td>
 
-                    <td className="py-2 px-3 text-gray-700">
-                      <div className="font-medium">{t.motorista_nome || "-"}</div>
-                      <div className="text-xs text-gray-400">{t.motorista_chapa || ""}</div>
+                    <td className="px-4 py-4">
+                      <div className="font-black text-slate-900 text-sm md:text-base">
+                        {t.motorista_nome || "-"}
+                      </div>
+                      <div className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
+                        {t.motorista_chapa || ""}
+                      </div>
                     </td>
 
-                    <td className="py-2 px-3 text-gray-700">{t.tipo_ocorrencia || "-"}</td>
+                    <td className="px-4 py-4 text-slate-700">
+                      {t.tipo_ocorrencia || "-"}
+                    </td>
 
-                    <td className="py-2 px-3">{badgePrioridade(t.prioridade)}</td>
+                    <td className="px-4 py-4">{badgePrioridade(t.prioridade)}</td>
 
-                    <td className="py-2 px-3">{badgeStatus(t)}</td>
+                    <td className="px-4 py-4">{badgeStatus(t)}</td>
 
-                    <td className="py-2 px-3">
+                    <td className="px-4 py-4">
                       {concluida ? (
                         <button
                           onClick={() => navigate(`/diesel-consultar/${t.id}`)}
-                          className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600 text-sm inline-flex items-center gap-2"
+                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 text-white rounded font-bold text-xs shadow-sm hover:bg-slate-800 transition-all whitespace-nowrap"
                         >
-                          <FaEye /> Consultar
+                          <FaEye size={12} /> Consultar
                         </button>
                       ) : (
                         <button
                           onClick={() => navigate(`/diesel-tratar/${t.id}`)}
-                          className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm inline-flex items-center gap-2"
+                          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded font-bold text-xs shadow-sm hover:bg-blue-700 transition-all whitespace-nowrap"
                         >
-                          <FaGavel /> Tratar
+                          <FaGavel size={12} /> Tratar
                         </button>
                       )}
                     </td>
@@ -584,12 +637,14 @@ export default function Desempenho_Diesel_Tratativas_Central() {
   );
 }
 
-// Card resumo (mantém assinatura, apenas estilo igual ao base)
-function CardResumo({ titulo, valor, cor }) {
+function CardResumo({ titulo, valor, icone, border }) {
   return (
-    <div className={`${cor} rounded-lg shadow p-5 text-center`}>
-      <h3 className="text-sm font-medium text-gray-600">{titulo}</h3>
-      <p className="text-3xl font-bold mt-2 text-gray-800">{valor}</p>
+    <div className={`bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 ${border}`}>
+      <div>
+        <p className="text-sm text-slate-500 font-bold">{titulo}</p>
+        <p className="text-2xl font-black text-slate-800">{valor}</p>
+      </div>
+      {icone}
     </div>
   );
 }

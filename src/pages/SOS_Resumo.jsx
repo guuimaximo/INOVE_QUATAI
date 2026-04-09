@@ -1,83 +1,89 @@
+// src/pages/SOSResumo.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabase";
 import {
-  FaBolt,
-  FaSync,
-  FaDownload,
-  FaSearch,
-  FaChartLine,
-  FaRoad,
-  FaBus,
   FaTools,
-  FaExclamationTriangle,
-  FaInfoCircle,
+  FaSync,
+  FaSearch,
+  FaBus,
+  FaRoute,
+  FaWrench,
+  FaClipboardList,
   FaArrowUp,
   FaArrowDown,
   FaEquals,
-  FaChartPie,
-  FaCogs,
-  FaClipboardList,
-  FaWrench,
+  FaInfoCircle,
+  FaArrowDown as FaDownload,
+  FaExclamationTriangle,
+  FaClock,
+  FaShieldAlt,
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
   LineChart,
   Line,
   CartesianGrid,
+  Tooltip,
   XAxis,
   YAxis,
-  Tooltip,
-  Legend,
   BarChart,
   Bar,
+  Legend,
+  Cell,
 } from "recharts";
-import { supabase } from "../supabase";
-
-const MKBF_META = 7000;
-const TIPOS_GRAFICO = ["RECOLHEU", "SOS", "AVARIA", "TROCA", "IMPROCEDENTE"];
 
 function n(v) {
   const x = Number(v);
   return Number.isFinite(x) ? x : 0;
 }
 
+function s(v) {
+  return String(v || "").trim();
+}
+
 function normalize(v) {
-  return String(v || "").trim().toUpperCase();
+  return s(v).toUpperCase();
 }
 
 function safeDateStr(v) {
   if (!v) return "";
-  const s = String(v).trim();
-  if (s.includes("T")) return s.split("T")[0];
-  if (s.includes(" ")) return s.split(" ")[0];
-  if (s.includes("/")) {
-    const p = s.split("/");
-    if (p.length === 3) {
-      return `${p[2].slice(0, 4)}-${p[1].padStart(2, "0")}-${p[0].padStart(2, "0")}`;
-    }
+  const txt = String(v).trim();
+  if (!txt) return "";
+  if (txt.includes("T")) return txt.split("T")[0];
+  if (txt.includes(" ")) return txt.split(" ")[0];
+
+  const br = txt.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) {
+    const [, dd, mm, yyyy] = br;
+    return `${yyyy}-${mm}-${dd}`;
   }
-  return s;
+  return txt;
 }
 
 function parseDateOnly(v) {
-  const s = safeDateStr(v);
-  if (!s) return null;
-  const d = new Date(`${s}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
+  const d = safeDateStr(v);
+  if (!d) return null;
+  const [y, m, day] = d.split("-").map(Number);
+  if (!y || !m || !day) return null;
+  const dt = new Date(y, m - 1, day);
+  return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
-function diffDays(dateA, dateB) {
-  const a = parseDateOnly(dateA);
-  const b = parseDateOnly(dateB);
-  if (!a || !b) return null;
-  const ms = a.getTime() - b.getTime();
-  return Math.floor(ms / 86400000);
+function diffDays(a, b) {
+  const da = parseDateOnly(a);
+  const db = parseDateOnly(b);
+  if (!da || !db) return null;
+  da.setHours(0, 0, 0, 0);
+  db.setHours(0, 0, 0, 0);
+  return Math.floor((da.getTime() - db.getTime()) / 86400000);
 }
 
 function fmtDateBr(v) {
-  const s = safeDateStr(v);
-  if (!s) return "-";
-  const [y, m, d] = s.split("-");
-  return y && m && d ? `${d}/${m}/${y}` : s;
+  const d = safeDateStr(v);
+  if (!d) return "-";
+  const p = d.split("-");
+  if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+  return d;
 }
 
 function fmtNum(v, dec = 2) {
@@ -91,42 +97,57 @@ function fmtInt(v) {
   return Math.round(n(v)).toLocaleString("pt-BR");
 }
 
-function fmtPct(v) {
-  return `${fmtNum(v, 1)}%`;
+function fmtPct(v, dec = 1) {
+  return `${fmtNum(v, dec)}%`;
 }
 
-function monthKey(date) {
-  if (!date) return "";
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+function fmtHoras(v) {
+  const total = n(v);
+  if (!total) return "0h";
+  if (total < 1) return `${fmtInt(total * 60)} min`;
+  return `${fmtNum(total, 2)} h`;
 }
 
-function monthLabelFromKey(key) {
-  if (!key) return "";
-  const [y, m] = key.split("-");
-  const meses = [
-    "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
-    "JUL", "AGO", "SET", "OUT", "NOV", "DEZ",
+function monthStart(yyyyMm) {
+  if (!yyyyMm) return "";
+  return `${yyyyMm}-01`;
+}
+
+function monthEnd(yyyyMm) {
+  if (!yyyyMm) return "";
+  const [y, m] = yyyyMm.split("-").map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return `${yyyyMm}-${String(last).padStart(2, "0")}`;
+}
+
+function previousMonth(yyyyMm) {
+  if (!yyyyMm) return "";
+  const [y, m] = yyyyMm.split("-").map(Number);
+  const dt = new Date(y, m - 2, 1);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  return `${yy}-${mm}`;
+}
+
+function monthLabelPt(yyyyMm) {
+  if (!yyyyMm) return "";
+  const [y, m] = yyyyMm.split("-").map(Number);
+  const nomes = [
+    "",
+    "JAN",
+    "FEV",
+    "MAR",
+    "ABR",
+    "MAI",
+    "JUN",
+    "JUL",
+    "AGO",
+    "SET",
+    "OUT",
+    "NOV",
+    "DEZ",
   ];
-  return `${meses[n(m) - 1] || m}/${String(y).slice(2)}`;
-}
-
-function firstDayOfMonth(key) {
-  return key ? new Date(`${key}-01T00:00:00`) : null;
-}
-
-function addMonths(date, months) {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1);
-}
-
-function deriveCluster(prefixo) {
-  const v = normalize(prefixo);
-  if (!v) return "OUTROS";
-  if (v.startsWith("2216")) return "C8";
-  if (v.startsWith("2222")) return "C9";
-  if (v.startsWith("2224")) return "C10";
-  if (v.startsWith("2425")) return "C11";
-  if (v.startsWith("W")) return "C6";
-  return "OUTROS";
+  return `${nomes[m] || ""}/${String(y).slice(2)}`;
 }
 
 function normalizeTipo(oc) {
@@ -142,36 +163,58 @@ function normalizeTipo(oc) {
   return o;
 }
 
-function isOcorrenciaValidaParaMkbf(oc) {
+function isOcorrenciaValida(oc) {
   const tipo = normalizeTipo(oc);
   return !!tipo && tipo !== "SEGUIU VIAGEM";
 }
 
-function variancePct(atual, anterior) {
-  if (!anterior) return 0;
-  return ((atual - anterior) / anterior) * 100;
+function parseHoraToMinutes(hora) {
+  const txt = s(hora);
+  if (!txt) return null;
+  const parts = txt.split(":");
+  if (parts.length < 2) return null;
+  const hh = Number(parts[0]);
+  const mm = Number(parts[1]);
+  const ss = Number(parts[2] || 0);
+  if (![hh, mm, ss].every(Number.isFinite)) return null;
+  return hh * 60 + mm + ss / 60;
 }
 
-function faixaDias(v) {
-  const x = n(v);
-  if (!x) return "Sem informação";
-  if (x <= 7) return "0-7 dias";
-  if (x <= 15) return "8-15 dias";
-  if (x <= 30) return "16-30 dias";
-  if (x <= 60) return "31-60 dias";
-  return "60+ dias";
+function horaFaixa(hora) {
+  const mins = parseHoraToMinutes(hora);
+  if (mins == null) return "Sem hora";
+  const h = Math.floor(mins / 60);
+  return `${String(h).padStart(2, "0")}:00`;
 }
 
-function exportarCSV(dados, nomeArquivo) {
+function calcTempoSolucaoHoras(dataSOS, horaSOS, dataFim) {
+  const iniDate = safeDateStr(dataSOS);
+  const fimDate = safeDateStr(dataFim);
+
+  if (!iniDate || !fimDate) return 0;
+
+  const start = new Date(`${iniDate}T${s(horaSOS) || "00:00:00"}`);
+  const end = new Date(`${fimDate}T23:59:59`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  const hours = (end.getTime() - start.getTime()) / 36e5;
+  return hours > 0 ? hours : 0;
+}
+
+function calcVariacaoPct(atual, anterior) {
+  const a = n(atual);
+  const b = n(anterior);
+  if (!b) return 0;
+  return ((a - b) / b) * 100;
+}
+
+function exportarParaExcel(dados, nomeArquivo) {
   if (!dados?.length) return;
-  const cols = Object.keys(dados[0]).filter((k) => typeof dados[0][k] !== "object");
-  const csv = [
-    cols.join(";"),
-    ...dados.map((row) =>
-      cols.map((col) => `"${String(row[col] ?? "").replace(/"/g, '""')}"`).join(";")
-    ),
-  ].join("\n");
-
+  const cols = Object.keys(dados[0]);
+  const linhas = dados.map((row) =>
+    cols.map((c) => `"${String(row[c] ?? "").replace(/"/g, '""')}"`).join(";")
+  );
+  const csv = [cols.join(";"), ...linhas].join("\n");
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -182,47 +225,18 @@ function exportarCSV(dados, nomeArquivo) {
   document.body.removeChild(a);
 }
 
-function CardKPI({ title, value, sub, icon, tone = "blue" }) {
-  const tones = {
-    blue: "from-blue-50 to-cyan-50 border-blue-200 text-blue-700",
-    emerald: "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700",
-    amber: "from-amber-50 to-orange-50 border-amber-200 text-amber-700",
-    rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
-    violet: "from-violet-50 to-fuchsia-50 border-violet-200 text-violet-700",
-  };
-
-  return (
-    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-4 shadow-sm`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
-          <p className="text-2xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
-          <p className="text-xs mt-2 text-slate-600 font-semibold">{sub}</p>
-        </div>
-        <div className="text-xl mt-1">{icon}</div>
-      </div>
-    </div>
-  );
-}
-
-function TabButton({ active, onClick, icon, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-black transition ${
-        active
-          ? "bg-slate-800 text-white border-slate-800 shadow"
-          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-      }`}
-    >
-      {icon}
-      {children}
-    </button>
+function SortIcon({ active, direction }) {
+  if (!active) return <span className="text-gray-300 ml-2 text-[10px]">↕</span>;
+  return direction === "asc" ? (
+    <span className="text-blue-600 ml-2 text-[10px]">▲</span>
+  ) : (
+    <span className="text-blue-600 ml-2 text-[10px]">▼</span>
   );
 }
 
 function EvolucaoBadge({ value, invert = false }) {
   const val = n(value);
+  const txt = `${fmtNum(Math.abs(val), 1)}%`;
 
   if (val > 0) {
     return (
@@ -233,7 +247,7 @@ function EvolucaoBadge({ value, invert = false }) {
             : "bg-emerald-50 text-emerald-700 border-emerald-200"
         }`}
       >
-        <FaArrowUp size={10} /> {fmtPct(Math.abs(val))}
+        <FaArrowUp size={10} /> {txt}
       </span>
     );
   }
@@ -247,7 +261,7 @@ function EvolucaoBadge({ value, invert = false }) {
             : "bg-rose-50 text-rose-700 border-rose-200"
         }`}
       >
-        <FaArrowDown size={10} /> {fmtPct(Math.abs(val))}
+        <FaArrowDown size={10} /> {txt}
       </span>
     );
   }
@@ -259,36 +273,86 @@ function EvolucaoBadge({ value, invert = false }) {
   );
 }
 
-export default function SOS_Resumo() {
+function CardKPI({ icon: Icon, title, value, aux, badge }) {
+  return (
+    <div className="bg-white rounded-2xl border shadow-sm p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            {title}
+          </div>
+          <div className="text-2xl font-black text-slate-800 mt-1">{value}</div>
+          {aux ? <div className="text-xs text-slate-500 mt-1">{aux}</div> : null}
+        </div>
+        <div className="w-10 h-10 rounded-xl bg-slate-50 border flex items-center justify-center text-slate-700">
+          <Icon />
+        </div>
+      </div>
+      {badge ? <div className="mt-3">{badge}</div> : null}
+    </div>
+  );
+}
+
+function TableCard({ title, children, right }) {
+  return (
+    <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b bg-slate-50 flex items-center justify-between gap-3">
+        <h3 className="font-black text-slate-800">{title}</h3>
+        {right}
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
+  );
+}
+
+function ThSortable({ label, sortKey, sortConfig, onSort }) {
+  return (
+    <th
+      className="text-left px-3 py-2 cursor-pointer select-none"
+      onClick={() => onSort(sortKey)}
+    >
+      <span className="inline-flex items-center">
+        {label}
+        <SortIcon
+          active={sortConfig.key === sortKey}
+          direction={sortConfig.direction}
+        />
+      </span>
+    </th>
+  );
+}
+
+export default function SOSResumo() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
-  const [kmRows, setKmRows] = useState([]);
-  const [sosRows, setSosRows] = useState([]);
 
+  const [rowsBase, setRowsBase] = useState([]);
   const [abaAtiva, setAbaAtiva] = useState("EXECUTIVO");
+
   const [busca, setBusca] = useState("");
+  const [mesReferencia, setMesReferencia] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
   const [filtroSetor, setFiltroSetor] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState("");
-  const [filtroCluster, setFiltroCluster] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("");
-  const [mesReferencia, setMesReferencia] = useState("");
+  const [filtroOcorrencia, setFiltroOcorrencia] = useState("");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
+
+  const [sortReinc, setSortReinc] = useState({ key: "qtde_sos", direction: "desc" });
+  const [sortVeic, setSortVeic] = useState({ key: "int_ref", direction: "desc" });
+  const [sortLinha, setSortLinha] = useState({ key: "int_ref", direction: "desc" });
+  const [sortDefeito, setSortDefeito] = useState({ key: "total", direction: "desc" });
 
   async function carregarTudo() {
     setLoading(true);
     setErro("");
-
     try {
-      const [kmRes, sosRes] = await Promise.all([
-        supabase.from("km_rodado_diario").select("*").limit(50000),
-        supabase.from("sos_acionamentos").select("*").order("data_sos", { ascending: false }).limit(50000)
-      ]);
+      const { data, error } = await supabase
+        .from("sos_acionamentos")
+        .select("*")
+        .order("data_sos", { ascending: false })
+        .limit(50000);
 
-      if (sosRes.error) throw sosRes.error;
-
-      setKmRows(kmRes.data || []);
-      setSosRows(sosRes.data || []);
+      if (error) throw error;
+      setRowsBase(data || []);
     } catch (e) {
       console.error(e);
       setErro(e?.message || String(e));
@@ -301,67 +365,53 @@ export default function SOS_Resumo() {
     carregarTudo();
   }, []);
 
-  const kmProcessado = useMemo(() => {
-    const map = new Map();
-    (kmRows || []).forEach((r) => {
-      const data = safeDateStr(r.data);
-      if (!data) return;
-      map.set(data, n(map.get(data)) + n(r.km_total));
-    });
-
-    return [...map.entries()]
-      .map(([data, km_total]) => ({ data, km_total }))
-      .sort((a, b) => a.data.localeCompare(b.data));
-  }, [kmRows]);
-
-  const sosProcessado = useMemo(() => {
-    return (sosRows || [])
+  const dataset = useMemo(() => {
+    return (rowsBase || [])
       .map((r) => {
-        const data_sos = safeDateStr(r.data_sos || r.created_at);
+        const dataSOS = safeDateStr(r.data_sos || r.created_at);
+        const mesAno = dataSOS ? dataSOS.slice(0, 7) : "";
         const tipo_norm = normalizeTipo(r.ocorrencia);
-        const classificacao = normalize(r.classificacao_controlabilidade);
-        const diasPrev =
-          n(r.dias_ultima_preventiva) > 0
-            ? n(r.dias_ultima_preventiva)
-            : Math.max(0, n(diffDays(data_sos, r.data_ultima_preventiva)));
-        const diasInsp =
-          n(r.dias_ultima_inspecao) > 0
-            ? n(r.dias_ultima_inspecao)
-            : Math.max(0, n(diffDays(data_sos, r.data_ultima_inspecao)));
+        const valida_mkbf = isOcorrenciaValida(r.ocorrencia);
+        const classificacao = s(r.classificacao_controlabilidade);
+        const controlavel = normalize(classificacao) === normalize("Controlável");
+        const tempo_solucao_horas = calcTempoSolucaoHoras(
+          r.data_sos || r.created_at,
+          r.hora_sos,
+          r.data_encerramento || r.data_fechamento
+        );
+
+        const dias_pos_preventiva = diffDays(dataSOS, r.data_ultima_preventiva);
+        const dias_pos_inspecao = diffDays(dataSOS, r.data_ultima_inspecao);
+
+        const km_preventiva = Number(r.km_rodado_preventiva);
+        const km_inspecao = Number(r.km_rodado_inspecao);
 
         return {
           ...r,
-          data_sos,
+          dataSOS,
+          Mes_Ano: mesAno,
           tipo_norm,
-          valida_mkbf: isOcorrenciaValidaParaMkbf(r.ocorrencia),
-          linha: normalize(r.linha) || "N/D",
-          veiculo: String(r.veiculo || "").trim() || "N/D",
-          status: normalize(r.status) || "N/D",
-          problema_encontrado: String(r.problema_encontrado || "").trim() || "N/D",
-          setor_manutencao: String(r.setor_manutencao || "").trim() || "N/D",
-          grupo_manutencao: String(r.grupo_manutencao || "").trim() || "N/D",
-          cluster: deriveCluster(r.veiculo),
-          classificacao_controlabilidade: classificacao,
-          controlavel: classificacao === "CONTROLÁVEL" || classificacao === "CONTROLAVEL",
-          dias_ultima_preventiva_calc: diasPrev || 0,
-          dias_ultima_inspecao_calc: diasInsp || 0,
-          faixa_preventiva: faixaDias(diasPrev),
-          faixa_inspecao: faixaDias(diasInsp),
-          mes_key: data_sos ? data_sos.slice(0, 7) : "",
+          valida_mkbf,
+          controlavel,
+          veiculo_norm: s(r.veiculo) || "N/D",
+          linha_norm: normalize(r.linha) || "N/D",
+          setor_norm: s(r.setor_manutencao) || "N/D",
+          defeito_norm: s(r.problema_encontrado) || "N/D",
+          classificacao_norm: classificacao || "N/D",
+          faixa_horaria: horaFaixa(r.hora_sos),
+          tempo_solucao_horas,
+          dias_pos_preventiva,
+          dias_pos_inspecao,
+          km_rodado_preventiva_num: Number.isFinite(km_preventiva) ? km_preventiva : null,
+          km_rodado_inspecao_num: Number.isFinite(km_inspecao) ? km_inspecao : null,
         };
       })
-      .filter((r) => r.data_sos);
-  }, [sosRows]);
+      .filter((r) => r.dataSOS && r.controlavel);
+  }, [rowsBase]);
 
   const mesesDisponiveis = useMemo(() => {
-    const set = new Set(
-      [
-        ...kmProcessado.map((r) => String(r.data).slice(0, 7)),
-        ...sosProcessado.map((r) => r.mes_key),
-      ].filter(Boolean)
-    );
-    return [...set].sort();
-  }, [kmProcessado, sosProcessado]);
+    return [...new Set(dataset.map((r) => r.Mes_Ano).filter(Boolean))].sort();
+  }, [dataset]);
 
   useEffect(() => {
     if (!mesReferencia && mesesDisponiveis.length) {
@@ -369,751 +419,666 @@ export default function SOS_Resumo() {
     }
   }, [mesReferencia, mesesDisponiveis]);
 
-  const mesComparacao = useMemo(() => {
-    const idx = mesesDisponiveis.indexOf(mesReferencia);
-    return idx > 0 ? mesesDisponiveis[idx - 1] : "";
-  }, [mesReferencia, mesesDisponiveis]);
+  const mesComparacao = useMemo(() => previousMonth(mesReferencia), [mesReferencia]);
+  const mes2Atras = useMemo(() => previousMonth(mesComparacao), [mesComparacao]);
 
-  const linhaOptions = useMemo(
-    () => [...new Set(sosProcessado.map((r) => r.linha).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR")),
-    [sosProcessado]
-  );
+  const linhasUnicas = useMemo(() => {
+    return [...new Set(dataset.map((r) => r.linha_norm).filter(Boolean))].sort();
+  }, [dataset]);
 
-  const setorOptions = useMemo(
-    () =>
-      [...new Set(sosProcessado.map((r) => r.setor_manutencao).filter(Boolean))].sort((a, b) =>
-        a.localeCompare(b, "pt-BR")
-      ),
-    [sosProcessado]
-  );
+  const setoresUnicos = useMemo(() => {
+    return [...new Set(dataset.map((r) => r.setor_norm).filter(Boolean))].sort();
+  }, [dataset]);
 
-  const clusterOptions = useMemo(
-    () => [...new Set(sosProcessado.map((r) => r.cluster).filter(Boolean))].sort(),
-    [sosProcessado]
-  );
+  const ocorrenciasUnicas = useMemo(() => {
+    return [...new Set(dataset.map((r) => r.tipo_norm).filter(Boolean))].sort();
+  }, [dataset]);
 
-  const tipoOptions = useMemo(
-    () =>
-      [...new Set(sosProcessado.map((r) => r.tipo_norm).filter(Boolean))].sort((a, b) =>
-        a.localeCompare(b, "pt-BR")
-      ),
-    [sosProcessado]
-  );
+  const datasetFiltrado = useMemo(() => {
+    const q = busca.toLowerCase().trim();
 
-  const baseControlavel = useMemo(() => sosProcessado.filter((r) => r.controlavel), [sosProcessado]);
-
-  const baseFiltrada = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-
-    return baseControlavel.filter((r) => {
-      if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.mes_key)) return false;
-      if (filtroLinha && r.linha !== filtroLinha) return false;
-      if (filtroSetor && r.setor_manutencao !== filtroSetor) return false;
-      if (filtroTipo && r.tipo_norm !== filtroTipo) return false;
-      if (filtroCluster && r.cluster !== filtroCluster) return false;
-      if (filtroStatus && r.status !== normalize(filtroStatus)) return false;
+    return dataset.filter((r) => {
+      if (mesReferencia && ![mesReferencia, mesComparacao, mes2Atras].includes(r.Mes_Ano)) return false;
+      if (filtroLinha && r.linha_norm !== filtroLinha) return false;
+      if (filtroSetor && r.setor_norm !== filtroSetor) return false;
+      if (filtroOcorrencia && r.tipo_norm !== filtroOcorrencia) return false;
 
       if (!q) return true;
 
-      return [
-        r.numero_sos,
-        r.veiculo,
-        r.linha,
-        r.tipo_norm,
-        r.problema_encontrado,
-        r.setor_manutencao,
-        r.status,
-      ].some((v) => String(v || "").toLowerCase().includes(q));
+      return (
+        String(r.numero_sos || "").toLowerCase().includes(q) ||
+        String(r.veiculo_norm || "").toLowerCase().includes(q) ||
+        String(r.motorista_nome || "").toLowerCase().includes(q) ||
+        String(r.linha_norm || "").toLowerCase().includes(q) ||
+        String(r.setor_norm || "").toLowerCase().includes(q) ||
+        String(r.defeito_norm || "").toLowerCase().includes(q) ||
+        String(r.tipo_norm || "").toLowerCase().includes(q)
+      );
     });
-  }, [
-    baseControlavel,
-    busca,
-    mesReferencia,
-    mesComparacao,
-    filtroLinha,
-    filtroSetor,
-    filtroTipo,
-    filtroCluster,
-    filtroStatus,
-  ]);
+  }, [dataset, busca, mesReferencia, mesComparacao, mes2Atras, filtroLinha, filtroSetor, filtroOcorrencia]);
 
-  const baseRef = useMemo(
-    () => baseFiltrada.filter((r) => r.mes_key === mesReferencia),
-    [baseFiltrada, mesReferencia]
+  const rowsRef = useMemo(
+    () => datasetFiltrado.filter((r) => r.Mes_Ano === mesReferencia),
+    [datasetFiltrado, mesReferencia]
+  );
+  const rowsComp = useMemo(
+    () => datasetFiltrado.filter((r) => r.Mes_Ano === mesComparacao),
+    [datasetFiltrado, mesComparacao]
+  );
+  const rows3m = useMemo(
+    () => datasetFiltrado.filter((r) => [mes2Atras, mesComparacao, mesReferencia].includes(r.Mes_Ano)),
+    [datasetFiltrado, mes2Atras, mesComparacao, mesReferencia]
   );
 
-  const baseComp = useMemo(
-    () => baseFiltrada.filter((r) => r.mes_key === mesComparacao),
-    [baseFiltrada, mesComparacao]
-  );
+  const datasetReinc = useMemo(() => {
+    const byVehicle = new Map();
 
-  const kmMesMap = useMemo(() => {
-    const map = new Map();
-    kmProcessado.forEach((r) => {
-      const key = String(r.data).slice(0, 7);
-      map.set(key, n(map.get(key)) + n(r.km_total));
-    });
-    return map;
-  }, [kmProcessado]);
-
-  const baseRefOrdenada = useMemo(() => {
-    return [...baseRef].sort((a, b) => a.data_sos.localeCompare(b.data_sos));
-  }, [baseRef]);
-
-  const reincidenciaCalcRef = useMemo(() => {
-    const porVeiculo = new Map();
-
-    baseRefOrdenada.forEach((r) => {
-      if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
-      porVeiculo.get(r.veiculo).push(r);
-    });
-
-    let totalReincVeiculo = 0;
-    let totalReincTecnica = 0;
-    let totalReincSetorial = 0;
-    let somaIntervalos = 0;
-    let qtdIntervalos = 0;
-
-    const detalhesVeiculo = [];
-    const detalhesTecnicos = [];
-    const detalhesSetores = [];
-
-    porVeiculo.forEach((eventos, veiculo) => {
-      const sorted = [...eventos].sort((a, b) => a.data_sos.localeCompare(b.data_sos));
-      let reincVeiculo = 0;
-      let reincTecnica = 0;
-      let reincSetorial = 0;
-      let intervaloSoma = 0;
-      let intervaloQtd = 0;
-
-      for (let i = 1; i < sorted.length; i += 1) {
-        const atual = sorted[i];
-        const anterior = sorted[i - 1];
-        const delta = diffDays(atual.data_sos, anterior.data_sos);
-
-        if (delta != null) {
-          intervaloSoma += delta;
-          intervaloQtd += 1;
-          somaIntervalos += delta;
-          qtdIntervalos += 1;
-
-          if (delta <= 30) {
-            reincVeiculo += 1;
-            totalReincVeiculo += 1;
-
-            if (
-              normalize(atual.problema_encontrado) === normalize(anterior.problema_encontrado) &&
-              normalize(atual.problema_encontrado) !== "N/D"
-            ) {
-              reincTecnica += 1;
-              totalReincTecnica += 1;
-            }
-
-            if (
-              normalize(atual.setor_manutencao) === normalize(anterior.setor_manutencao) &&
-              normalize(atual.setor_manutencao) !== "N/D"
-            ) {
-              reincSetorial += 1;
-              totalReincSetorial += 1;
-            }
-          }
-        }
-      }
-
-      detalhesVeiculo.push({
-        veiculo,
-        cluster: sorted[0]?.cluster || "OUTROS",
-        linhaTop: sorted[sorted.length - 1]?.linha || "N/D",
-        totalSOS: sorted.length,
-        reincVeiculo,
-        reincTecnica,
-        reincSetorial,
-        intervaloMedio: intervaloQtd > 0 ? intervaloSoma / intervaloQtd : 0,
-        defeitoTop:
-          Object.entries(
-            sorted.reduce((acc, r) => {
-              acc[r.problema_encontrado] = n(acc[r.problema_encontrado]) + 1;
-              return acc;
-            }, {})
-          ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
-        setorTop:
-          Object.entries(
-            sorted.reduce((acc, r) => {
-              acc[r.setor_manutencao] = n(acc[r.setor_manutencao]) + 1;
-              return acc;
-            }, {})
-          ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+    [...rows3m]
+      .sort((a, b) => {
+        if (a.veiculo_norm !== b.veiculo_norm) return a.veiculo_norm.localeCompare(b.veiculo_norm);
+        return a.dataSOS.localeCompare(b.dataSOS);
+      })
+      .forEach((r) => {
+        const key = r.veiculo_norm;
+        if (!byVehicle.has(key)) byVehicle.set(key, []);
+        byVehicle.get(key).push(r);
       });
 
-      sorted.forEach((r) => {
-        detalhesTecnicos.push({
-          veiculo,
-          defeito: r.problema_encontrado,
-          setor: r.setor_manutencao,
+    const out = [];
+
+    byVehicle.forEach((items, veiculo) => {
+      let prev = null;
+
+      items.forEach((curr) => {
+        const diasEntreSOS = prev ? diffDays(curr.dataSOS, prev.dataSOS) : null;
+        const mesmoDefeito = prev ? normalize(curr.defeito_norm) === normalize(prev.defeito_norm) : false;
+
+        out.push({
+          ...curr,
+          veiculo_reinc: veiculo,
+          data_anterior: prev?.dataSOS || "",
+          defeito_anterior: prev?.defeito_norm || "",
+          dias_entre_sos: diasEntreSOS,
+          reinc_7d: diasEntreSOS != null && diasEntreSOS <= 7,
+          reinc_15d: diasEntreSOS != null && diasEntreSOS <= 15,
+          mesmo_defeito_reincidente: !!(mesmoDefeito && diasEntreSOS != null && diasEntreSOS <= 15),
         });
-        detalhesSetores.push({
-          veiculo,
-          setor: r.setor_manutencao,
-          defeito: r.problema_encontrado,
-        });
+
+        prev = curr;
       });
     });
 
-    const veiculosComSOS = detalhesVeiculo.length;
-    const veiculosReincidentes = detalhesVeiculo.filter((v) => v.reincVeiculo > 0).length;
-    const taxaReincidencia = veiculosComSOS > 0 ? (veiculosReincidentes / veiculosComSOS) * 100 : 0;
-    const intervaloMedioGeral = qtdIntervalos > 0 ? somaIntervalos / qtdIntervalos : 0;
+    return out;
+  }, [rows3m]);
 
-    return {
-      totalReincVeiculo,
-      totalReincTecnica,
-      totalReincSetorial,
-      veiculosComSOS,
-      veiculosReincidentes,
-      taxaReincidencia,
-      intervaloMedioGeral,
-      detalhesVeiculo: detalhesVeiculo.sort((a, b) => b.reincVeiculo - a.reincVeiculo || b.totalSOS - a.totalSOS),
-    };
-  }, [baseRefOrdenada]);
+  const reincRef = useMemo(
+    () => datasetReinc.filter((r) => r.Mes_Ano === mesReferencia),
+    [datasetReinc, mesReferencia]
+  );
 
   const resumoAtual = useMemo(() => {
-    const kmTotal = n(kmMesMap.get(mesReferencia));
-    const interv = baseRef.filter((r) => r.valida_mkbf).length;
-    const mkbf = interv > 0 ? kmTotal / interv : 0;
+    const total = rowsRef.length;
+    const tempoMedio = total
+      ? rowsRef.reduce((acc, r) => acc + n(r.tempo_solucao_horas), 0) / total
+      : 0;
 
-    const porTipoMap = {};
-    TIPOS_GRAFICO.forEach((t) => (porTipoMap[t] = 0));
-    baseRef.forEach((r) => {
-      if (TIPOS_GRAFICO.includes(r.tipo_norm)) porTipoMap[r.tipo_norm] += 1;
-    });
+    const reinc7 = reincRef.filter((r) => r.reinc_7d).length;
+    const reinc15 = reincRef.filter((r) => r.reinc_15d).length;
+    const mesmoDefeito = reincRef.filter((r) => r.mesmo_defeito_reincidente).length;
 
-    const mediaPrev =
-      baseRef.filter((r) => n(r.dias_ultima_preventiva_calc) > 0).reduce((acc, r) => acc + n(r.dias_ultima_preventiva_calc), 0) /
-      Math.max(1, baseRef.filter((r) => n(r.dias_ultima_preventiva_calc) > 0).length);
+    const veiculosRef = [...new Set(rowsRef.map((r) => r.veiculo_norm))].filter(Boolean);
+    const veiculosReincidentes = [...new Set(reincRef.filter((r) => r.reinc_15d).map((r) => r.veiculo_norm))];
+    const taxaVeicReinc = veiculosRef.length ? (veiculosReincidentes.length / veiculosRef.length) * 100 : 0;
 
-    const mediaInsp =
-      baseRef.filter((r) => n(r.dias_ultima_inspecao_calc) > 0).reduce((acc, r) => acc + n(r.dias_ultima_inspecao_calc), 0) /
-      Math.max(1, baseRef.filter((r) => n(r.dias_ultima_inspecao_calc) > 0).length);
+    const diasPosPreventivaValidos = rowsRef
+      .map((r) => r.dias_pos_preventiva)
+      .filter((v) => v != null && v >= 0);
+
+    const diasPosInspecaoValidos = rowsRef
+      .map((r) => r.dias_pos_inspecao)
+      .filter((v) => v != null && v >= 0);
+
+    const diasEntreSOSValidos = reincRef
+      .map((r) => r.dias_entre_sos)
+      .filter((v) => v != null && v >= 0);
+
+    const mediaPosPreventiva = diasPosPreventivaValidos.length
+      ? diasPosPreventivaValidos.reduce((a, b) => a + b, 0) / diasPosPreventivaValidos.length
+      : 0;
+
+    const mediaPosInspecao = diasPosInspecaoValidos.length
+      ? diasPosInspecaoValidos.reduce((a, b) => a + b, 0) / diasPosInspecaoValidos.length
+      : 0;
+
+    const mediaEntreSOS = diasEntreSOSValidos.length
+      ? diasEntreSOSValidos.reduce((a, b) => a + b, 0) / diasEntreSOSValidos.length
+      : 0;
 
     return {
-      kmTotal,
-      interv,
-      mkbf,
-      porTipoMap,
-      mediaPrev,
-      mediaInsp,
-      ...reincidenciaCalcRef,
+      total,
+      tempoMedio,
+      reinc7,
+      reinc15,
+      mesmoDefeito,
+      taxaVeicReinc,
+      mediaPosPreventiva,
+      mediaPosInspecao,
+      mediaEntreSOS,
     };
-  }, [kmMesMap, mesReferencia, baseRef, reincidenciaCalcRef]);
+  }, [rowsRef, reincRef]);
 
-  const resumoComp = useMemo(() => {
-    const kmTotal = n(kmMesMap.get(mesComparacao));
-    const interv = baseComp.filter((r) => r.valida_mkbf).length;
-    const mkbf = interv > 0 ? kmTotal / interv : 0;
-    const porTipoMap = {};
-    TIPOS_GRAFICO.forEach((t) => (porTipoMap[t] = 0));
-    baseComp.forEach((r) => {
-      if (TIPOS_GRAFICO.includes(r.tipo_norm)) porTipoMap[r.tipo_norm] += 1;
-    });
+  const resumoAnterior = useMemo(() => {
+    const reincComp = datasetReinc.filter((r) => r.Mes_Ano === mesComparacao);
+    const total = rowsComp.length;
+    const tempoMedio = total
+      ? rowsComp.reduce((acc, r) => acc + n(r.tempo_solucao_horas), 0) / total
+      : 0;
 
-    const porVeiculo = new Map();
-    [...baseComp]
-      .sort((a, b) => a.data_sos.localeCompare(b.data_sos))
-      .forEach((r) => {
-        if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
-        porVeiculo.get(r.veiculo).push(r);
-      });
+    const reinc7 = reincComp.filter((r) => r.reinc_7d).length;
+    const reinc15 = reincComp.filter((r) => r.reinc_15d).length;
+    const mesmoDefeito = reincComp.filter((r) => r.mesmo_defeito_reincidente).length;
 
-    let veiculosReincidentes = 0;
-    porVeiculo.forEach((eventos) => {
-      let reinc = false;
-      for (let i = 1; i < eventos.length; i += 1) {
-        const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-        if (delta != null && delta <= 30) {
-          reinc = true;
-          break;
-        }
-      }
-      if (reinc) veiculosReincidentes += 1;
-    });
+    const veiculosComp = [...new Set(rowsComp.map((r) => r.veiculo_norm))].filter(Boolean);
+    const veiculosReincComp = [...new Set(reincComp.filter((r) => r.reinc_15d).map((r) => r.veiculo_norm))];
+    const taxaVeicReinc = veiculosComp.length ? (veiculosReincComp.length / veiculosComp.length) * 100 : 0;
 
-    const veiculosComSOS = porVeiculo.size;
-    const taxaReincidencia = veiculosComSOS > 0 ? (veiculosReincidentes / veiculosComSOS) * 100 : 0;
+    const diasPosPreventivaValidos = rowsComp
+      .map((r) => r.dias_pos_preventiva)
+      .filter((v) => v != null && v >= 0);
 
-    return { kmTotal, interv, mkbf, porTipoMap, taxaReincidencia };
-  }, [kmMesMap, mesComparacao, baseComp]);
+    const diasPosInspecaoValidos = rowsComp
+      .map((r) => r.dias_pos_inspecao)
+      .filter((v) => v != null && v >= 0);
 
-  const historico12m = useMemo(() => {
-    return mesesDisponiveis.slice(-12).map((mes) => {
-      const baseMes = baseControlavel.filter((r) => r.mes_key === mes);
-      const kmTotal = n(kmMesMap.get(mes));
-      const interv = baseMes.filter((r) => r.valida_mkbf).length;
+    const diasEntreSOSValidos = reincComp
+      .map((r) => r.dias_entre_sos)
+      .filter((v) => v != null && v >= 0);
 
-      const porVeiculo = new Map();
-      [...baseMes]
-        .sort((a, b) => a.data_sos.localeCompare(b.data_sos))
-        .forEach((r) => {
-          if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
-          porVeiculo.get(r.veiculo).push(r);
-        });
+    const mediaPosPreventiva = diasPosPreventivaValidos.length
+      ? diasPosPreventivaValidos.reduce((a, b) => a + b, 0) / diasPosPreventivaValidos.length
+      : 0;
 
-      let veiculosReincidentes = 0;
-      porVeiculo.forEach((eventos) => {
-        let reinc = false;
-        for (let i = 1; i < eventos.length; i += 1) {
-          const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-          if (delta != null && delta <= 30) {
-            reinc = true;
-            break;
-          }
-        }
-        if (reinc) veiculosReincidentes += 1;
-      });
+    const mediaPosInspecao = diasPosInspecaoValidos.length
+      ? diasPosInspecaoValidos.reduce((a, b) => a + b, 0) / diasPosInspecaoValidos.length
+      : 0;
 
-      const taxaReincidencia = porVeiculo.size > 0 ? (veiculosReincidentes / porVeiculo.size) * 100 : 0;
+    const mediaEntreSOS = diasEntreSOSValidos.length
+      ? diasEntreSOSValidos.reduce((a, b) => a + b, 0) / diasEntreSOSValidos.length
+      : 0;
 
+    return {
+      total,
+      tempoMedio,
+      reinc7,
+      reinc15,
+      mesmoDefeito,
+      taxaVeicReinc,
+      mediaPosPreventiva,
+      mediaPosInspecao,
+      mediaEntreSOS,
+    };
+  }, [rowsComp, datasetReinc, mesComparacao]);
+
+  const cards = useMemo(() => {
+    return [
+      {
+        title: "SOS Controláveis",
+        value: fmtInt(resumoAtual.total),
+        aux: `Mês ${monthLabelPt(mesReferencia)}`,
+        icon: FaTools,
+        badge: <EvolucaoBadge value={calcVariacaoPct(resumoAtual.total, resumoAnterior.total)} invert />,
+      },
+      {
+        title: "Reincidência 7 dias",
+        value: fmtInt(resumoAtual.reinc7),
+        aux: "Novo SOS até 7 dias",
+        icon: FaSync,
+        badge: <EvolucaoBadge value={calcVariacaoPct(resumoAtual.reinc7, resumoAnterior.reinc7)} invert />,
+      },
+      {
+        title: "Reincidência 15 dias",
+        value: fmtInt(resumoAtual.reinc15),
+        aux: "Novo SOS até 15 dias",
+        icon: FaBus,
+        badge: <EvolucaoBadge value={calcVariacaoPct(resumoAtual.reinc15, resumoAnterior.reinc15)} invert />,
+      },
+      {
+        title: "Mesmo defeito",
+        value: fmtInt(resumoAtual.mesmoDefeito),
+        aux: "Reincidência do mesmo defeito",
+        icon: FaExclamationTriangle,
+        badge: (
+          <EvolucaoBadge
+            value={calcVariacaoPct(resumoAtual.mesmoDefeito, resumoAnterior.mesmoDefeito)}
+            invert
+          />
+        ),
+      },
+      {
+        title: "Dias pós-preventiva",
+        value: fmtNum(resumoAtual.mediaPosPreventiva, 1),
+        aux: "Média até o SOS",
+        icon: FaClipboardList,
+        badge: (
+          <EvolucaoBadge
+            value={calcVariacaoPct(resumoAtual.mediaPosPreventiva, resumoAnterior.mediaPosPreventiva)}
+            invert
+          />
+        ),
+      },
+      {
+        title: "Dias pós-inspeção",
+        value: fmtNum(resumoAtual.mediaPosInspecao, 1),
+        aux: "Média até o SOS",
+        icon: FaShieldAlt,
+        badge: (
+          <EvolucaoBadge
+            value={calcVariacaoPct(resumoAtual.mediaPosInspecao, resumoAnterior.mediaPosInspecao)}
+            invert
+          />
+        ),
+      },
+      {
+        title: "Dias entre SOS",
+        value: fmtNum(resumoAtual.mediaEntreSOS, 1),
+        aux: "Intervalo médio por veículo",
+        icon: FaClock,
+        badge: (
+          <EvolucaoBadge
+            value={calcVariacaoPct(resumoAtual.mediaEntreSOS, resumoAnterior.mediaEntreSOS)}
+            invert
+          />
+        ),
+      },
+      {
+        title: "Tempo médio solução",
+        value: fmtHoras(resumoAtual.tempoMedio),
+        aux: "Abertura até fechamento",
+        icon: FaWrench,
+        badge: (
+          <EvolucaoBadge
+            value={calcVariacaoPct(resumoAtual.tempoMedio, resumoAnterior.tempoMedio)}
+            invert
+          />
+        ),
+      },
+    ];
+  }, [resumoAtual, resumoAnterior, mesReferencia]);
+
+  const kpisExecutivos = useMemo(() => {
+    const topDefeito = rowsRef.reduce((acc, r) => {
+      acc[r.defeito_norm] = n(acc[r.defeito_norm]) + 1;
+      return acc;
+    }, {});
+    const topSetor = rowsRef.reduce((acc, r) => {
+      acc[r.setor_norm] = n(acc[r.setor_norm]) + 1;
+      return acc;
+    }, {});
+    const topVeiculo = rowsRef.reduce((acc, r) => {
+      acc[r.veiculo_norm] = n(acc[r.veiculo_norm]) + 1;
+      return acc;
+    }, {});
+    const topLinha = rowsRef.reduce((acc, r) => {
+      acc[r.linha_norm] = n(acc[r.linha_norm]) + 1;
+      return acc;
+    }, {});
+
+    const pickTop = (obj) => {
+      const entries = Object.entries(obj);
+      if (!entries.length) return { nome: "N/D", total: 0 };
+      const [nome, total] = entries.sort((a, b) => b[1] - a[1])[0];
+      return { nome, total };
+    };
+
+    return {
+      topDefeito: pickTop(topDefeito),
+      topSetor: pickTop(topSetor),
+      topVeiculo: pickTop(topVeiculo),
+      topLinha: pickTop(topLinha),
+    };
+  }, [rowsRef]);
+
+  const chartMensal3m = useMemo(() => {
+    const meses = [mes2Atras, mesComparacao, mesReferencia].filter(Boolean);
+    return meses.map((m) => {
+      const rows = rows3m.filter((r) => r.Mes_Ano === m);
+      const reinc15 = datasetReinc.filter((r) => r.Mes_Ano === m && r.reinc_15d).length;
       return {
-        mes,
-        mesLabel: monthLabelFromKey(mes),
-        controlaveis: baseMes.length,
-        reincidentes: veiculosReincidentes,
-        taxaReincidencia,
-        kmTotal,
-        mkbf: interv > 0 ? kmTotal / interv : 0,
-        meta: MKBF_META,
+        mes: monthLabelPt(m),
+        controlaveis: rows.length,
+        reinc15,
       };
     });
-  }, [mesesDisponiveis, baseControlavel, kmMesMap]);
+  }, [rows3m, mes2Atras, mesComparacao, mesReferencia, datasetReinc]);
 
-  const graficoTipos = useMemo(() => {
-    return TIPOS_GRAFICO.map((tipo) => ({
-      tipo,
-      anterior: n(resumoComp.porTipoMap?.[tipo]),
-      atual: n(resumoAtual.porTipoMap?.[tipo]),
-    }));
-  }, [resumoAtual, resumoComp]);
-
-  const graficoFaixaPreventiva = useMemo(() => {
-    const counts = {};
-    ["0-7 dias", "8-15 dias", "16-30 dias", "31-60 dias", "60+ dias", "Sem informação"].forEach(
-      (f) => (counts[f] = 0)
-    );
-    baseRef.forEach((r) => {
-      counts[r.faixa_preventiva] = n(counts[r.faixa_preventiva]) + 1;
-    });
-    return Object.entries(counts).map(([faixa, total]) => ({ faixa, total }));
-  }, [baseRef]);
-
-  const graficoFaixaInspecao = useMemo(() => {
-    const counts = {};
-    ["0-7 dias", "8-15 dias", "16-30 dias", "31-60 dias", "60+ dias", "Sem informação"].forEach(
-      (f) => (counts[f] = 0)
-    );
-    baseRef.forEach((r) => {
-      counts[r.faixa_inspecao] = n(counts[r.faixa_inspecao]) + 1;
-    });
-    return Object.entries(counts).map(([faixa, total]) => ({ faixa, total }));
-  }, [baseRef]);
-
-  const tabelaLinhas = useMemo(() => {
-    const linhas = [...new Set(baseRef.map((r) => r.linha))];
-
-    return linhas
-      .map((linha) => {
-        const atual = baseRef.filter((r) => r.linha === linha);
-        const anterior = baseComp.filter((r) => r.linha === linha);
-
-        const porVeiculo = new Map();
-        [...atual]
-          .sort((a, b) => a.data_sos.localeCompare(b.data_sos))
-          .forEach((r) => {
-            if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
-            porVeiculo.get(r.veiculo).push(r);
-          });
-
-        let veiculosReincidentes = 0;
-        porVeiculo.forEach((eventos) => {
-          let reinc = false;
-          for (let i = 1; i < eventos.length; i += 1) {
-            const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-            if (delta != null && delta <= 30) {
-              reinc = true;
-              break;
-            }
-          }
-          if (reinc) veiculosReincidentes += 1;
-        });
-
-        const defeitoTop =
-          Object.entries(
-            atual.reduce((acc, r) => {
-              acc[r.problema_encontrado] = n(acc[r.problema_encontrado]) + 1;
-              return acc;
-            }, {})
-          ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D";
-
-        return {
-          linha,
-          totalAtual: atual.length,
-          totalAnterior: anterior.length,
-          variacao_pct: variancePct(atual.length, anterior.length),
-          veiculosReincidentes,
-          taxaReincidencia:
-            porVeiculo.size > 0 ? (veiculosReincidentes / porVeiculo.size) * 100 : 0,
-          defeitoTop,
-          setorTop:
-            Object.entries(
-              atual.reduce((acc, r) => {
-                acc[r.setor_manutencao] = n(acc[r.setor_manutencao]) + 1;
-                return acc;
-              }, {})
-            ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
-        };
-      })
-      .sort((a, b) => b.veiculosReincidentes - a.veiculosReincidentes || b.totalAtual - a.totalAtual);
-  }, [baseRef, baseComp]);
-
-  const tabelaVeiculos = useMemo(() => reincidenciaCalcRef.detalhesVeiculo, [reincidenciaCalcRef]);
-
-  const tabelaSetores = useMemo(() => {
+  const chartHorario = useMemo(() => {
     const map = new Map();
-    baseRef.forEach((r) => {
-      const key = r.setor_manutencao;
+
+    rows3m.forEach((r) => {
+      const key = r.faixa_horaria || "Sem hora";
+      if (!map.has(key)) {
+        map.set(key, { faixa: key, total_3m: 0, ref: 0 });
+      }
+      const item = map.get(key);
+      item.total_3m += 1;
+      if (r.Mes_Ano === mesReferencia) item.ref += 1;
+    });
+
+    return [...map.values()]
+      .sort((a, b) => a.faixa.localeCompare(b.faixa))
+      .filter((r) => r.faixa !== "Sem hora" || r.total_3m > 0);
+  }, [rows3m, mesReferencia]);
+
+  const topLinhasFlash = useMemo(() => {
+    const map = new Map();
+
+    rows3m.forEach((r) => {
+      const key = r.linha_norm;
+      if (!map.has(key)) {
+        map.set(key, { linha: key, int_total: 0, int_ref: 0, defeitos: {} });
+      }
+      const item = map.get(key);
+      item.int_total += 1;
+      if (r.Mes_Ano === mesReferencia) item.int_ref += 1;
+      item.defeitos[r.defeito_norm] = n(item.defeitos[r.defeito_norm]) + 1;
+    });
+
+    return [...map.values()]
+      .map((r) => {
+        const topDefeito = Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D";
+        return { ...r, top_defeito: topDefeito };
+      })
+      .sort((a, b) => b.int_ref - a.int_ref || b.int_total - a.int_total)
+      .slice(0, 10);
+  }, [rows3m, mesReferencia]);
+
+  const topVeiculosFlash = useMemo(() => {
+    const map = new Map();
+
+    rows3m.forEach((r) => {
+      const key = r.veiculo_norm;
       if (!map.has(key)) {
         map.set(key, {
-          setor: key,
-          total: 0,
-          linhas: new Set(),
-          veiculos: new Set(),
+          veiculo: key,
+          int_total: 0,
+          int_ref: 0,
           defeitos: {},
-          reincTecnica: 0,
-          reincSetorial: 0,
+          setores: {},
+          por_mes: {},
         });
       }
       const item = map.get(key);
-      item.total += 1;
-      item.linhas.add(r.linha);
-      item.veiculos.add(r.veiculo);
-      item.defeitos[r.problema_encontrado] = n(item.defeitos[r.problema_encontrado]) + 1;
-    });
-
-    const porVeiculoSetor = new Map();
-    [...baseRef]
-      .sort((a, b) => a.data_sos.localeCompare(b.data_sos))
-      .forEach((r) => {
-        const key = `${r.veiculo}__${r.setor_manutencao}`;
-        if (!porVeiculoSetor.has(key)) porVeiculoSetor.set(key, []);
-        porVeiculoSetor.get(key).push(r);
-      });
-
-    porVeiculoSetor.forEach((eventos, key) => {
-      let reinc = 0;
-      for (let i = 1; i < eventos.length; i += 1) {
-        const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-        if (delta != null && delta <= 30) reinc += 1;
-      }
-      const setor = key.split("__")[1];
-      if (map.has(setor)) {
-        map.get(setor).reincSetorial += reinc;
-      }
+      item.int_total += 1;
+      if (r.Mes_Ano === mesReferencia) item.int_ref += 1;
+      item.defeitos[r.defeito_norm] = n(item.defeitos[r.defeito_norm]) + 1;
+      item.setores[r.setor_norm] = n(item.setores[r.setor_norm]) + 1;
+      item.por_mes[r.Mes_Ano] = n(item.por_mes[r.Mes_Ano]) + 1;
     });
 
     return [...map.values()]
       .map((r) => ({
-        setor: r.setor,
-        total: r.total,
-        linhas: r.linhas.size,
-        veiculos: r.veiculos.size,
-        reincSetorial: r.reincSetorial,
-        defeitoTop:
-          Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+        ...r,
+        top_defeito: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+        top_setor: Object.entries(r.setores).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+        mes_m2: n(r.por_mes[mes2Atras]),
+        mes_m1: n(r.por_mes[mesComparacao]),
+        mes_ref: n(r.por_mes[mesReferencia]),
       }))
-      .sort((a, b) => b.reincSetorial - a.reincSetorial || b.total - a.total);
-  }, [baseRef]);
+      .sort((a, b) => b.int_ref - a.int_ref || b.int_total - a.int_total)
+      .slice(0, 10);
+  }, [rows3m, mesReferencia, mesComparacao, mes2Atras]);
 
-  const tabelaDefeitos = useMemo(() => {
+  const clusterRows = useMemo(() => {
+    const deriveCluster = (veiculo) => {
+      const v = normalize(veiculo);
+      if (!v) return "OUTROS";
+      if (v.startsWith("2216")) return "C8";
+      if (v.startsWith("2222")) return "C9";
+      if (v.startsWith("2224")) return "C10";
+      if (v.startsWith("2425")) return "C11";
+      if (v.startsWith("W")) return "C6";
+      return "OUTROS";
+    };
+
     const map = new Map();
-    baseRef.forEach((r) => {
-      const key = r.problema_encontrado;
+
+    rows3m.forEach((r) => {
+      const c = deriveCluster(r.veiculo_norm);
+      if (!map.has(c)) {
+        map.set(c, {
+          cluster: c,
+          [mes2Atras]: 0,
+          [mesComparacao]: 0,
+          [mesReferencia]: 0,
+          veiculosRef: new Set(),
+        });
+      }
+      const item = map.get(c);
+      item[r.Mes_Ano] = n(item[r.Mes_Ano]) + 1;
+      if (r.Mes_Ano === mesReferencia) item.veiculosRef.add(r.veiculo_norm);
+    });
+
+    return [...map.values()]
+      .map((r) => ({
+        cluster: r.cluster,
+        mes2: n(r[mes2Atras]),
+        mes1: n(r[mesComparacao]),
+        mesRef: n(r[mesReferencia]),
+        frotaRef: r.veiculosRef.size,
+        intVeicRef: r.veiculosRef.size ? n(r[mesReferencia]) / r.veiculosRef.size : 0,
+      }))
+      .sort((a, b) => b.mesRef - a.mesRef);
+  }, [rows3m, mes2Atras, mesComparacao, mesReferencia]);
+
+  const faixasTempo = useMemo(() => {
+    const montar = (arr, campo) => {
+      const buckets = {
+        "0-7": 0,
+        "8-15": 0,
+        "16-30": 0,
+        "31+": 0,
+        "Sem base": 0,
+      };
+
+      arr.forEach((r) => {
+        const v = r[campo];
+        if (v == null || v < 0) {
+          buckets["Sem base"] += 1;
+        } else if (v <= 7) {
+          buckets["0-7"] += 1;
+        } else if (v <= 15) {
+          buckets["8-15"] += 1;
+        } else if (v <= 30) {
+          buckets["16-30"] += 1;
+        } else {
+          buckets["31+"] += 1;
+        }
+      });
+
+      return Object.entries(buckets).map(([faixa, total]) => ({ faixa, total }));
+    };
+
+    return {
+      preventiva: montar(rowsRef, "dias_pos_preventiva"),
+      inspecao: montar(rowsRef, "dias_pos_inspecao"),
+      entreSOS: montar(reincRef, "dias_entre_sos"),
+    };
+  }, [rowsRef, reincRef]);
+
+  const consolidadoReinc = useMemo(() => {
+    const map = new Map();
+
+    reincRef.forEach((r) => {
+      const key = r.veiculo_reinc || r.veiculo_norm;
+      if (!map.has(key)) {
+        map.set(key, {
+          veiculo: key,
+          qtde_sos: 0,
+          reinc_7d: 0,
+          reinc_15d: 0,
+          mesmo_defeito: 0,
+          ultimo_sos: "",
+          sos_anterior: "",
+          dias_medio_entre: 0,
+          dias_count: 0,
+          top_defeito: {},
+          linha: {},
+        });
+      }
+
+      const item = map.get(key);
+      item.qtde_sos += 1;
+      if (r.reinc_7d) item.reinc_7d += 1;
+      if (r.reinc_15d) item.reinc_15d += 1;
+      if (r.mesmo_defeito_reincidente) item.mesmo_defeito += 1;
+      item.ultimo_sos = r.dataSOS || item.ultimo_sos;
+      item.sos_anterior = r.data_anterior || item.sos_anterior;
+
+      if (r.dias_entre_sos != null && r.dias_entre_sos >= 0) {
+        item.dias_medio_entre += r.dias_entre_sos;
+        item.dias_count += 1;
+      }
+
+      item.top_defeito[r.defeito_norm] = n(item.top_defeito[r.defeito_norm]) + 1;
+      item.linha[r.linha_norm] = n(item.linha[r.linha_norm]) + 1;
+    });
+
+    return [...map.values()].map((r) => ({
+      ...r,
+      dias_medio_entre: r.dias_count ? r.dias_medio_entre / r.dias_count : 0,
+      top_defeito: Object.entries(r.top_defeito).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+      linha_top: Object.entries(r.linha).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+    }));
+  }, [reincRef]);
+
+  const sortedReinc = useMemo(() => {
+    const rows = [...consolidadoReinc];
+    rows.sort((a, b) => {
+      const av = a[sortReinc.key];
+      const bv = b[sortReinc.key];
+      const dir = sortReinc.direction === "asc" ? 1 : -1;
+      if (typeof av === "string") return av.localeCompare(String(bv || "")) * dir;
+      return (n(av) - n(bv)) * dir;
+    });
+    return rows;
+  }, [consolidadoReinc, sortReinc]);
+
+  const sortedVeic = useMemo(() => {
+    const rows = [...topVeiculosFlash];
+    rows.sort((a, b) => {
+      const av = a[sortVeic.key];
+      const bv = b[sortVeic.key];
+      const dir = sortVeic.direction === "asc" ? 1 : -1;
+      if (typeof av === "string") return av.localeCompare(String(bv || "")) * dir;
+      return (n(av) - n(bv)) * dir;
+    });
+    return rows;
+  }, [topVeiculosFlash, sortVeic]);
+
+  const sortedLinha = useMemo(() => {
+    const rows = [...topLinhasFlash];
+    rows.sort((a, b) => {
+      const av = a[sortLinha.key];
+      const bv = b[sortLinha.key];
+      const dir = sortLinha.direction === "asc" ? 1 : -1;
+      if (typeof av === "string") return av.localeCompare(String(bv || "")) * dir;
+      return (n(av) - n(bv)) * dir;
+    });
+    return rows;
+  }, [topLinhasFlash, sortLinha]);
+
+  const rankingDefeitos = useMemo(() => {
+    const map = new Map();
+
+    rowsRef.forEach((r) => {
+      const key = r.defeito_norm;
       if (!map.has(key)) {
         map.set(key, {
           defeito: key,
           total: 0,
-          veiculos: new Set(),
-          setores: new Set(),
-          linhas: new Set(),
-          diasPrevSoma: 0,
-          diasPrevQtd: 0,
-          diasInspSoma: 0,
-          diasInspQtd: 0,
+          setor: {},
+          linha: {},
+          preventiva7: 0,
+          inspecao7: 0,
         });
       }
       const item = map.get(key);
       item.total += 1;
-      item.veiculos.add(r.veiculo);
-      item.setores.add(r.setor_manutencao);
-      item.linhas.add(r.linha);
-      if (n(r.dias_ultima_preventiva_calc) > 0) {
-        item.diasPrevSoma += n(r.dias_ultima_preventiva_calc);
-        item.diasPrevQtd += 1;
-      }
-      if (n(r.dias_ultima_inspecao_calc) > 0) {
-        item.diasInspSoma += n(r.dias_ultima_inspecao_calc);
-        item.diasInspQtd += 1;
-      }
+      item.setor[r.setor_norm] = n(item.setor[r.setor_norm]) + 1;
+      item.linha[r.linha_norm] = n(item.linha[r.linha_norm]) + 1;
+      if (r.dias_pos_preventiva != null && r.dias_pos_preventiva <= 7) item.preventiva7 += 1;
+      if (r.dias_pos_inspecao != null && r.dias_pos_inspecao <= 7) item.inspecao7 += 1;
     });
 
-    const porVeiculoDefeito = new Map();
-    [...baseRef]
-      .sort((a, b) => a.data_sos.localeCompare(b.data_sos))
-      .forEach((r) => {
-        const key = `${r.veiculo}__${r.problema_encontrado}`;
-        if (!porVeiculoDefeito.has(key)) porVeiculoDefeito.set(key, []);
-        porVeiculoDefeito.get(key).push(r);
-      });
+    return [...map.values()].map((r) => ({
+      ...r,
+      top_setor: Object.entries(r.setor).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+      top_linha: Object.entries(r.linha).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+    }));
+  }, [rowsRef]);
 
-    const reincPorDefeito = new Map();
-    porVeiculoDefeito.forEach((eventos, key) => {
-      let reinc = 0;
-      for (let i = 1; i < eventos.length; i += 1) {
-        const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-        if (delta != null && delta <= 30) reinc += 1;
-      }
-      const defeito = key.split("__")[1];
-      reincPorDefeito.set(defeito, n(reincPorDefeito.get(defeito)) + reinc);
+  const sortedDefeitos = useMemo(() => {
+    const rows = [...rankingDefeitos];
+    rows.sort((a, b) => {
+      const av = a[sortDefeito.key];
+      const bv = b[sortDefeito.key];
+      const dir = sortDefeito.direction === "asc" ? 1 : -1;
+      if (typeof av === "string") return av.localeCompare(String(bv || "")) * dir;
+      return (n(av) - n(bv)) * dir;
     });
+    return rows;
+  }, [rankingDefeitos, sortDefeito]);
 
-    return [...map.values()]
-      .map((r) => ({
-        defeito: r.defeito,
-        total: r.total,
-        veiculos: r.veiculos.size,
-        setores: r.setores.size,
-        linhas: r.linhas.size,
-        reincTecnica: n(reincPorDefeito.get(r.defeito)),
-        mediaPrev: r.diasPrevQtd > 0 ? r.diasPrevSoma / r.diasPrevQtd : 0,
-        mediaInsp: r.diasInspQtd > 0 ? r.diasInspSoma / r.diasInspQtd : 0,
-      }))
-      .sort((a, b) => b.reincTecnica - a.reincTecnica || b.total - a.total);
-  }, [baseRef]);
-
-  const top5Veiculos3m = useMemo(() => {
-    if (!mesReferencia) return [];
-    const ref = firstDayOfMonth(mesReferencia);
-    if (!ref) return [];
-    const months3 = [addMonths(ref, -2), addMonths(ref, -1), ref].map(monthKey);
-    const base = baseControlavel.filter((r) => months3.includes(r.mes_key));
-    const counts = new Map();
-
-    base.forEach((r) => {
-      if (!counts.has(r.veiculo)) counts.set(r.veiculo, []);
-      counts.get(r.veiculo).push(r);
-    });
-
-    return [...counts.entries()]
-      .map(([veiculo, itens]) => {
-        const porMes = Object.fromEntries(months3.map((m) => [monthLabelFromKey(m), 0]));
-        itens.forEach((r) => {
-          porMes[monthLabelFromKey(r.mes_key)] = n(porMes[monthLabelFromKey(r.mes_key)]) + 1;
-        });
-
-        const topDefeitos = Object.entries(
-          itens.reduce((acc, r) => {
-            acc[r.problema_encontrado] = n(acc[r.problema_encontrado]) + 1;
-            return acc;
-          }, {})
-        )
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 3)
-          .map(([k, v]) => `${k} (${v})`)
-          .join(" | ");
-
-        return {
-          veiculo,
-          total: itens.length,
-          cluster: itens[0]?.cluster || "OUTROS",
-          ...porMes,
-          topDefeitos: topDefeitos || "N/D",
-        };
-      })
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5);
-  }, [mesReferencia, baseControlavel]);
-
-  const leituraAnalitica = useMemo(() => {
-    const linhaTop = tabelaLinhas[0]?.linha || "N/D";
-    const defeitoTop = tabelaDefeitos[0]?.defeito || "N/D";
-    const setorTop = tabelaSetores[0]?.setor || "N/D";
-    const faixaPrevTop =
-      [...graficoFaixaPreventiva].sort((a, b) => b.total - a.total)[0]?.faixa || "N/D";
-    const faixaInspTop =
-      [...graficoFaixaInspecao].sort((a, b) => b.total - a.total)[0]?.faixa || "N/D";
-
-    return [
-      `A pressão do mês está concentrada na linha ${linhaTop}, com ${fmtInt(
-        tabelaLinhas[0]?.totalAtual || 0
-      )} SOS controláveis e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
-      `O defeito mais reincidente é "${defeitoTop}", puxado principalmente pelo setor ${setorTop}.`,
-      `A faixa mais crítica após preventiva ficou em ${faixaPrevTop}, enquanto após inspeção a maior concentração ficou em ${faixaInspTop}.`,
-      `O intervalo médio entre SOS do mesmo veículo está em ${fmtNum(
-        resumoAtual.intervaloMedioGeral || 0,
-        1
-      )} dias, com taxa de reincidência de ${fmtPct(resumoAtual.taxaReincidencia || 0)}.`,
-    ];
-  }, [
-    tabelaLinhas,
-    tabelaDefeitos,
-    tabelaSetores,
-    graficoFaixaPreventiva,
-    graficoFaixaInspecao,
-    resumoAtual.intervaloMedioGeral,
-    resumoAtual.taxaReincidencia,
-  ]);
-
-  const exportAtual = () => {
-    if (abaAtiva === "EXECUTIVO") {
-      exportarCSV(
-        historico12m.map((r) => ({
-          Mês: r.mesLabel,
-          "SOS Controláveis": fmtInt(r.controlaveis),
-          "Veículos Reincidentes": fmtInt(r.reincidentes),
-          "Taxa Reincidência %": fmtNum(r.taxaReincidencia, 1),
-          KM: fmtInt(r.kmTotal),
-          MKBF: fmtNum(r.mkbf),
-          Meta: fmtNum(r.meta),
-        })),
-        "SOS_Resumo_Executivo"
-      );
+  function toggleSort(current, setter, key) {
+    if (current.key === key) {
+      setter({ key, direction: current.direction === "asc" ? "desc" : "asc" });
+    } else {
+      setter({ key, direction: "desc" });
     }
-
-    if (abaAtiva === "REINCIDENCIA") {
-      exportarCSV(
-        tabelaVeiculos.map((r) => ({
-          Veículo: r.veiculo,
-          Cluster: r.cluster,
-          Linha: r.linhaTop,
-          "SOS Total": r.totalSOS,
-          "Reinc. Veículo": r.reincVeiculo,
-          "Reinc. Técnica": r.reincTecnica,
-          "Reinc. Setorial": r.reincSetorial,
-          "Intervalo Médio": fmtNum(r.intervaloMedio, 1),
-          "Defeito Top": r.defeitoTop,
-          "Setor Top": r.setorTop,
-        })),
-        "SOS_Resumo_Reincidencia"
-      );
-    }
-
-    if (abaAtiva === "PREV_INSPEC") {
-      exportarCSV(
-        baseRef.map((r) => ({
-          Data: fmtDateBr(r.data_sos),
-          SOS: r.numero_sos || "-",
-          Veículo: r.veiculo,
-          Linha: r.linha,
-          Defeito: r.problema_encontrado,
-          Setor: r.setor_manutencao,
-          "Dias após Preventiva": r.dias_ultima_preventiva_calc,
-          "Faixa Preventiva": r.faixa_preventiva,
-          "Dias após Inspeção": r.dias_ultima_inspecao_calc,
-          "Faixa Inspeção": r.faixa_inspecao,
-        })),
-        "SOS_Resumo_Prev_Inspec"
-      );
-    }
-
-    if (abaAtiva === "LINHAS") {
-      exportarCSV(
-        tabelaLinhas.map((r) => ({
-          Linha: r.linha,
-          "SOS Atual": r.totalAtual,
-          "SOS Anterior": r.totalAnterior,
-          "Variação %": fmtNum(r.variacao_pct, 1),
-          "Veículos Reincidentes": r.veiculosReincidentes,
-          "Taxa Reincidência %": fmtNum(r.taxaReincidencia, 1),
-          "Defeito Top": r.defeitoTop,
-          "Setor Top": r.setorTop,
-        })),
-        "SOS_Resumo_Linhas"
-      );
-    }
-
-    if (abaAtiva === "VEICULOS") {
-      exportarCSV(
-        tabelaVeiculos.map((r) => ({
-          Veículo: r.veiculo,
-          Cluster: r.cluster,
-          Linha: r.linhaTop,
-          "SOS Total": r.totalSOS,
-          "Reinc. Veículo": r.reincVeiculo,
-          "Reinc. Técnica": r.reincTecnica,
-          "Reinc. Setorial": r.reincSetorial,
-          "Intervalo Médio": fmtNum(r.intervaloMedio, 1),
-          "Defeito Top": r.defeitoTop,
-          "Setor Top": r.setorTop,
-        })),
-        "SOS_Resumo_Veiculos"
-      );
-    }
-
-    if (abaAtiva === "SETORES") {
-      exportarCSV(
-        tabelaSetores.map((r) => ({
-          Setor: r.setor,
-          Total: r.total,
-          Linhas: r.linhas,
-          Veículos: r.veiculos,
-          "Reincidência Setorial": r.reincSetorial,
-          "Defeito Top": r.defeitoTop,
-        })),
-        "SOS_Resumo_Setores"
-      );
-    }
-
-    if (abaAtiva === "DEFEITOS") {
-      exportarCSV(
-        tabelaDefeitos.map((r) => ({
-          Defeito: r.defeito,
-          Total: r.total,
-          Veículos: r.veiculos,
-          Setores: r.setores,
-          Linhas: r.linhas,
-          "Reincidência Técnica": r.reincTecnica,
-          "Média após Preventiva": fmtNum(r.mediaPrev, 1),
-          "Média após Inspeção": fmtNum(r.mediaInsp, 1),
-        })),
-        "SOS_Resumo_Defeitos"
-      );
-    }
-  };
+  }
 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border shadow-sm p-4 md:p-5">
         <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-black border border-amber-200">
-              <FaBolt /> Resumo SOS / Reincidência / Controláveis
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
+              <FaTools /> Resumo SOS
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-slate-800 mt-3">
-              Painel SOS_Resumo
+              SOSResumo
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              Visão analítica focada em reincidência, pós-preventiva, pós-inspeção e
-              robustez da manutenção.
+              Painel executivo e analítico de SOS controláveis com visão de flash report.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={exportAtual}
+              onClick={() =>
+                exportarParaExcel(
+                  rowsRef.map((r) => ({
+                    Número: r.numero_sos,
+                    Data: fmtDateBr(r.dataSOS),
+                    Prefixo: r.veiculo_norm,
+                    Linha: r.linha_norm,
+                    Ocorrência: r.tipo_norm,
+                    Setor: r.setor_norm,
+                    Problema: r.defeito_norm,
+                    "Dias pós Preventiva": r.dias_pos_preventiva ?? "",
+                    "Dias pós Inspeção": r.dias_pos_inspecao ?? "",
+                    "Tempo Solução (h)": fmtNum(r.tempo_solucao_horas, 2),
+                  })),
+                  "SOSResumo_Base_Controlaveis"
+                )
+              }
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition"
             >
               <FaDownload /> Baixar Excel
             </button>
 
             <button
-              onClick={() => setMostrarExplicacao((v) => !v)}
+              onClick={() => setMostrarExplicacao(!mostrarExplicacao)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
             >
               <FaInfoCircle /> {mostrarExplicacao ? "Ocultar Cálculos" : "Entender Cálculos"}
@@ -1129,653 +1094,475 @@ export default function SOS_Resumo() {
         </div>
 
         {mostrarExplicacao && (
-          <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm space-y-2">
-            <p>
-              <strong>Base da tela:</strong> apenas SOS classificados como Controlável.
-            </p>
-            <p>
-              <strong>Reincidência operacional:</strong> mesmo veículo com novo SOS em até 30 dias.
-            </p>
-            <p>
-              <strong>Reincidência técnica:</strong> mesmo veículo + mesmo defeito em até 30 dias.
-            </p>
-            <p>
-              <strong>Reincidência setorial:</strong> mesmo veículo + mesmo setor em até 30 dias.
-            </p>
-            <p>
-              <strong>Pós-preventiva e pós-inspeção:</strong> usa os dias registrados no tratamento ou recalcula pela diferença entre a data do SOS e a data da última preventiva/inspeção.
-            </p>
+          <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm">
+            <h3 className="font-bold text-base mb-2">Metodologia do SOSResumo</h3>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>O painel considera apenas registros classificados como <strong>Controlável</strong>.</li>
+              <li>As ocorrências são normalizadas no front para consolidar RECOLHEU, SOS, TROCA, AVARIA e IMPROCEDENTE.</li>
+              <li>O comparativo principal usa <strong>mês referência x mês anterior</strong>.</li>
+              <li>Os gráficos de linha, horário, veículo e cluster seguem a mesma leitura do flash report.</li>
+              <li>Reincidência é calculada por veículo, usando <strong>dias entre SOS</strong>, com flags de <strong>7 dias</strong>, <strong>15 dias</strong> e <strong>mesmo defeito</strong>.</li>
+              <li>Os indicadores de pós-preventiva e pós-inspeção usam a diferença entre <strong>data_sos</strong> e as datas informadas no tratamento.</li>
+            </ul>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">
-          <div className="xl:col-span-2 relative">
-            <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar SOS, veículo, linha, defeito, setor..."
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+          <div className="xl:col-span-2">
+            <label className="text-xs font-bold text-slate-500">Busca</label>
+            <div className="mt-1 relative">
+              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Número, prefixo, linha, setor, problema..."
+                className="w-full border rounded-xl pl-10 pr-3 py-2.5 text-sm"
+              />
+            </div>
           </div>
 
-          <select
-            value={mesReferencia}
-            onChange={(e) => setMesReferencia(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
-            <option value="">Mês referência</option>
-            {mesesDisponiveis.map((m) => (
-              <option key={m} value={m}>
-                {monthLabelFromKey(m)}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label className="text-xs font-bold text-slate-500">Mês referência</label>
+            <select
+              value={mesReferencia}
+              onChange={(e) => setMesReferencia(e.target.value)}
+              className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+            >
+              {mesesDisponiveis.map((m) => (
+                <option key={m} value={m}>
+                  {monthLabelPt(m)}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <select
-            value={filtroLinha}
-            onChange={(e) => setFiltroLinha(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
-            <option value="">Todas as linhas</option>
-            {linhaOptions.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label className="text-xs font-bold text-slate-500">Ocorrência</label>
+            <select
+              value={filtroOcorrencia}
+              onChange={(e) => setFiltroOcorrencia(e.target.value)}
+              className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+            >
+              <option value="">Todas</option>
+              {ocorrenciasUnicas.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <select
-            value={filtroSetor}
-            onChange={(e) => setFiltroSetor(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
-            <option value="">Todos os setores</option>
-            {setorOptions.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label className="text-xs font-bold text-slate-500">Linha</label>
+            <select
+              value={filtroLinha}
+              onChange={(e) => setFiltroLinha(e.target.value)}
+              className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+            >
+              <option value="">Todas</option>
+              {linhasUnicas.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <select
-            value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
-            <option value="">Todos os tipos</option>
-            {tipoOptions.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-          <select
-            value={filtroCluster}
-            onChange={(e) => setFiltroCluster(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
-            <option value="">Todos os clusters</option>
-            {clusterOptions.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
-            <option value="">Todos os status</option>
-            <option value="ABERTO">ABERTO</option>
-            <option value="EM ANDAMENTO">EM ANDAMENTO</option>
-            <option value="FECHADO">FECHADO</option>
-          </select>
-
-          <button
-            onClick={() => {
-              setBusca("");
-              setFiltroLinha("");
-              setFiltroSetor("");
-              setFiltroTipo("");
-              setFiltroCluster("");
-              setFiltroStatus("");
-            }}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-slate-700"
-          >
-            Limpar filtros
-          </button>
+          <div>
+            <label className="text-xs font-bold text-slate-500">Setor</label>
+            <select
+              value={filtroSetor}
+              onChange={(e) => setFiltroSetor(e.target.value)}
+              className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+            >
+              <option value="">Todos</option>
+              {setoresUnicos.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      {erro && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 text-rose-800 px-4 py-3 font-semibold">
-          Erro ao carregar dados: {erro}
+      {erro ? (
+        <div className="bg-red-50 text-red-700 border border-red-200 rounded-2xl p-4">
+          {erro}
         </div>
-      )}
+      ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
-        <CardKPI
-          title="SOS Controláveis"
-          value={fmtInt(resumoAtual.interv)}
-          sub={`Mês ${monthLabelFromKey(mesReferencia)}`}
-          icon={<FaExclamationTriangle />}
-          tone="rose"
-        />
-        <CardKPI
-          title="Veículos Reincidentes"
-          value={fmtInt(resumoAtual.veiculosReincidentes)}
-          sub="Mesmo veículo com novo SOS em até 30 dias"
-          icon={<FaBus />}
-          tone="violet"
-        />
-        <CardKPI
-          title="Taxa Reincidência"
-          value={fmtPct(resumoAtual.taxaReincidencia)}
-          sub="Sobre veículos com SOS controlável"
-          icon={<FaChartLine />}
-          tone="amber"
-        />
-        <CardKPI
-          title="MKBF Controlável"
-          value={fmtNum(resumoAtual.mkbf)}
-          sub={`Meta ${fmtNum(MKBF_META)}`}
-          icon={<FaBolt />}
-          tone="blue"
-        />
-        <CardKPI
-          title="Dias após Preventiva"
-          value={fmtNum(resumoAtual.mediaPrev, 1)}
-          sub="Média do mês"
-          icon={<FaWrench />}
-          tone="emerald"
-        />
-        <CardKPI
-          title="Dias entre SOS"
-          value={fmtNum(resumoAtual.intervaloMedioGeral, 1)}
-          sub="Intervalo médio do mesmo veículo"
-          icon={<FaRoad />}
-          tone="violet"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        {leituraAnalitica.map((txt, i) => (
-          <div key={i} className="bg-white rounded-2xl border shadow-sm p-4">
-            <p className="text-sm text-slate-700 font-semibold leading-6">{txt}</p>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {cards.map((card) => (
+          <CardKPI key={card.title} {...card} />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              MKBF vs mês anterior
-            </p>
-            <p className="text-xl font-black text-slate-800 mt-1">
-              {fmtNum(resumoComp.mkbf)} → {fmtNum(resumoAtual.mkbf)}
-            </p>
-          </div>
-          <EvolucaoBadge value={variancePct(resumoAtual.mkbf, resumoComp.mkbf)} />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <CardKPI
+          icon={FaExclamationTriangle}
+          title="Principal defeito"
+          value={kpisExecutivos.topDefeito.nome}
+          aux={`${fmtInt(kpisExecutivos.topDefeito.total)} ocorrências`}
+        />
+        <CardKPI
+          icon={FaWrench}
+          title="Principal setor"
+          value={kpisExecutivos.topSetor.nome}
+          aux={`${fmtInt(kpisExecutivos.topSetor.total)} ocorrências`}
+        />
+        <CardKPI
+          icon={FaBus}
+          title="Pior veículo"
+          value={kpisExecutivos.topVeiculo.nome}
+          aux={`${fmtInt(kpisExecutivos.topVeiculo.total)} ocorrências`}
+        />
+        <CardKPI
+          icon={FaRoute}
+          title="Linha mais ofensora"
+          value={kpisExecutivos.topLinha.nome}
+          aux={`${fmtInt(kpisExecutivos.topLinha.total)} ocorrências`}
+        />
+      </div>
 
-        <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              Controláveis vs mês anterior
-            </p>
-            <p className="text-xl font-black text-slate-800 mt-1">
-              {fmtInt(resumoComp.interv)} → {fmtInt(resumoAtual.interv)}
-            </p>
-          </div>
-          <EvolucaoBadge value={variancePct(resumoAtual.interv, resumoComp.interv)} invert />
-        </div>
-
-        <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              Taxa reincidência vs mês anterior
-            </p>
-            <p className="text-xl font-black text-slate-800 mt-1">
-              {fmtPct(resumoComp.taxaReincidencia)} → {fmtPct(resumoAtual.taxaReincidencia)}
-            </p>
-          </div>
-          <EvolucaoBadge
-            value={variancePct(resumoAtual.taxaReincidencia, resumoComp.taxaReincidencia)}
-            invert
-          />
+      <div className="bg-white rounded-2xl border shadow-sm p-2">
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["EXECUTIVO", "Executivo"],
+            ["REINCIDENCIA", "Reincidência"],
+            ["PREVENTIVA", "Preventiva / Inspeção"],
+            ["OFENSORES", "Ofensores"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setAbaAtiva(key)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition ${
+                abaAtiva === key
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <TabButton active={abaAtiva === "EXECUTIVO"} onClick={() => setAbaAtiva("EXECUTIVO")} icon={<FaChartPie />}>
-          Executivo
-        </TabButton>
-        <TabButton active={abaAtiva === "REINCIDENCIA"} onClick={() => setAbaAtiva("REINCIDENCIA")} icon={<FaClipboardList />}>
-          Reincidência
-        </TabButton>
-        <TabButton active={abaAtiva === "PREV_INSPEC"} onClick={() => setAbaAtiva("PREV_INSPEC")} icon={<FaWrench />}>
-          Preventiva / Inspeção
-        </TabButton>
-        <TabButton active={abaAtiva === "LINHAS"} onClick={() => setAbaAtiva("LINHAS")} icon={<FaBus />}>
-          Linhas
-        </TabButton>
-        <TabButton active={abaAtiva === "VEICULOS"} onClick={() => setAbaAtiva("VEICULOS")} icon={<FaBus />}>
-          Veículos
-        </TabButton>
-        <TabButton active={abaAtiva === "SETORES"} onClick={() => setAbaAtiva("SETORES")} icon={<FaCogs />}>
-          Setores
-        </TabButton>
-        <TabButton active={abaAtiva === "DEFEITOS"} onClick={() => setAbaAtiva("DEFEITOS")} icon={<FaTools />}>
-          Defeitos
-        </TabButton>
-      </div>
+      {loading ? (
+        <div className="bg-white rounded-2xl border shadow-sm p-10 text-center text-slate-500">
+          Carregando dados...
+        </div>
+      ) : null}
 
-      {abaAtiva === "EXECUTIVO" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="bg-white rounded-2xl border shadow-sm p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-black text-slate-800">Histórico 12 meses</h3>
-                <span className="text-xs font-bold text-slate-500">Controláveis + reincidência</span>
-              </div>
-              <div className="h-80">
+      {!loading && abaAtiva === "EXECUTIVO" && (
+        <div className="space-y-6">
+          <TableCard title="Evolução mensal de SOS controláveis e reincidência 15 dias">
+            <div className="h-[340px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartMensal3m}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="controlaveis" name="Controláveis" strokeWidth={3} />
+                  <Line type="monotone" dataKey="reinc15" name="Reincidência 15d" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </TableCard>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <TableCard title="Faixa horária — 3 meses x mês atual">
+              <div className="h-[320px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historico12m}>
+                  <BarChart data={chartHorario}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="mesLabel" />
-                    <YAxis />
+                    <XAxis dataKey="faixa" />
+                    <YAxis allowDecimals={false} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="controlaveis" name="SOS Controláveis" strokeWidth={3} />
-                    <Line type="monotone" dataKey="reincidentes" name="Veículos Reincidentes" strokeWidth={3} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border shadow-sm p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-black text-slate-800">MKBF e taxa de reincidência</h3>
-                <span className="text-xs font-bold text-slate-500">Visão mensal</span>
-              </div>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historico12m}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="mesLabel" />
-                    <YAxis />
-                    <Tooltip formatter={(v) => fmtNum(v)} />
-                    <Legend />
-                    <Line type="monotone" dataKey="mkbf" name="MKBF" strokeWidth={3} />
-                    <Line type="monotone" dataKey="meta" name="Meta MKBF" strokeDasharray="6 4" strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="bg-white rounded-2xl border shadow-sm p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-black text-slate-800">Tipos de ocorrência</h3>
-                <span className="text-xs font-bold text-slate-500">Mês atual x anterior</span>
-              </div>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={graficoTipos}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="tipo" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="anterior" name="Anterior" />
-                    <Bar dataKey="atual" name="Atual" />
+                    <Bar dataKey="total_3m" name="3 meses" />
+                    <Bar dataKey="ref" name={monthLabelPt(mesReferencia)} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+            </TableCard>
 
-            <div className="bg-white rounded-2xl border shadow-sm p-4">
-              <h3 className="text-lg font-black text-slate-800 mb-3">
-                Top 5 veículos - últimos 3 meses
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[950px] text-sm">
-                  <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
+            <TableCard title="Cluster — 3 meses e intervenção por veículo">
+              <div className="overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-3 py-3 text-left">Veículo</th>
-                      <th className="px-3 py-3 text-left">Cluster</th>
-                      <th className="px-3 py-3 text-left">Total</th>
-                      {top5Veiculos3m[0] &&
-                        Object.keys(top5Veiculos3m[0])
-                          .filter((k) => k.includes("/"))
-                          .map((m) => (
-                            <th key={m} className="px-3 py-3 text-left">
-                              {m}
-                            </th>
-                          ))}
-                      <th className="px-3 py-3 text-left">Top defeitos</th>
+                      <th className="text-left px-3 py-2">Cluster</th>
+                      <th className="text-right px-3 py-2">{monthLabelPt(mes2Atras)}</th>
+                      <th className="text-right px-3 py-2">{monthLabelPt(mesComparacao)}</th>
+                      <th className="text-right px-3 py-2">{monthLabelPt(mesReferencia)}</th>
+                      <th className="text-right px-3 py-2">Frota mês</th>
+                      <th className="text-right px-3 py-2">Int/veículo</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {top5Veiculos3m.map((r) => (
-                      <tr key={r.veiculo} className="border-b last:border-b-0">
-                        <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
-                        <td className="px-3 py-3">{r.cluster}</td>
-                        <td className="px-3 py-3">{fmtInt(r.total)}</td>
-                        {Object.keys(r)
-                          .filter((k) => k.includes("/"))
-                          .map((m) => (
-                            <td key={m} className="px-3 py-3">
-                              {fmtInt(r[m])}
-                            </td>
-                          ))}
-                        <td className="px-3 py-3">{r.topDefeitos}</td>
+                    {clusterRows.map((r) => (
+                      <tr key={r.cluster} className="border-t">
+                        <td className="px-3 py-2 font-bold">{r.cluster}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.mes2)}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.mes1)}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.mesRef)}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.frotaRef)}</td>
+                        <td className="px-3 py-2 text-right">{fmtNum(r.intVeicRef, 2)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </TableCard>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <TableCard title="Top linhas — visão flash report">
+              <div className="overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="text-left px-3 py-2">Linha</th>
+                      <th className="text-right px-3 py-2">3 meses</th>
+                      <th className="text-right px-3 py-2">{monthLabelPt(mesReferencia)}</th>
+                      <th className="text-left px-3 py-2">Maior defeito</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topLinhasFlash.slice(0, 5).map((r) => (
+                      <tr key={r.linha} className="border-t">
+                        <td className="px-3 py-2 font-bold">{r.linha}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.int_total)}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.int_ref)}</td>
+                        <td className="px-3 py-2">{r.top_defeito}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </TableCard>
+
+            <TableCard title="Top veículos — visão flash report">
+              <div className="overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="text-left px-3 py-2">Veículo</th>
+                      <th className="text-right px-3 py-2">{monthLabelPt(mes2Atras)}</th>
+                      <th className="text-right px-3 py-2">{monthLabelPt(mesComparacao)}</th>
+                      <th className="text-right px-3 py-2">{monthLabelPt(mesReferencia)}</th>
+                      <th className="text-left px-3 py-2">Top defeito</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topVeiculosFlash.slice(0, 5).map((r) => (
+                      <tr key={r.veiculo} className="border-t">
+                        <td className="px-3 py-2 font-bold">{r.veiculo}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.mes_m2)}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.mes_m1)}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.mes_ref)}</td>
+                        <td className="px-3 py-2">{r.top_defeito}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </TableCard>
           </div>
         </div>
       )}
 
-      {abaAtiva === "REINCIDENCIA" && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl border shadow-sm p-4">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Top linhas reincidentes</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={tabelaLinhas.slice(0, 10)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="linha" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="veiculosReincidentes" name="Veículos Reincidentes" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+      {!loading && abaAtiva === "REINCIDENCIA" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <TableCard title="Faixa de dias entre SOS">
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={faixasTempo.entreSOS}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="faixa" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="total" name="Qtde" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </TableCard>
+
+            <TableCard title="Consolidado de reincidência">
+              <div className="grid grid-cols-2 gap-3">
+                <CardKPI icon={FaSync} title="Reinc. 7 dias" value={fmtInt(resumoAtual.reinc7)} />
+                <CardKPI icon={FaBus} title="Reinc. 15 dias" value={fmtInt(resumoAtual.reinc15)} />
+                <CardKPI icon={FaExclamationTriangle} title="Mesmo defeito" value={fmtInt(resumoAtual.mesmoDefeito)} />
+                <CardKPI icon={FaClock} title="% veículos reincidentes" value={fmtPct(resumoAtual.taxaVeicReinc, 1)} />
+              </div>
+            </TableCard>
           </div>
 
-          <div className="bg-white rounded-2xl border shadow-sm p-4">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Top veículos reincidentes</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={tabelaVeiculos.slice(0, 10)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="veiculo" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="reincVeiculo" name="Reincidência Veículo" />
-                  <Bar dataKey="reincTecnica" name="Reincidência Técnica" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border shadow-sm p-4 xl:col-span-2 overflow-x-auto">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Detalhe por veículo</h3>
-            <table className="w-full min-w-[1200px] text-sm">
-              <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-3 py-3 text-left">Veículo</th>
-                  <th className="px-3 py-3 text-left">Cluster</th>
-                  <th className="px-3 py-3 text-left">Linha</th>
-                  <th className="px-3 py-3 text-left">SOS Total</th>
-                  <th className="px-3 py-3 text-left">Reinc. Veículo</th>
-                  <th className="px-3 py-3 text-left">Reinc. Técnica</th>
-                  <th className="px-3 py-3 text-left">Reinc. Setorial</th>
-                  <th className="px-3 py-3 text-left">Intervalo Médio</th>
-                  <th className="px-3 py-3 text-left">Defeito Top</th>
-                  <th className="px-3 py-3 text-left">Setor Top</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tabelaVeiculos.map((r) => (
-                  <tr key={r.veiculo} className="border-b last:border-b-0">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
-                    <td className="px-3 py-3">{r.cluster}</td>
-                    <td className="px-3 py-3">{r.linhaTop}</td>
-                    <td className="px-3 py-3">{fmtInt(r.totalSOS)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.reincTecnica)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td>
-                    <td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td>
-                    <td className="px-3 py-3">{r.defeitoTop}</td>
-                    <td className="px-3 py-3">{r.setorTop}</td>
+          <TableCard title="Veículos reincidentes">
+            <div className="overflow-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <ThSortable label="Veículo" sortKey="veiculo" sortConfig={sortReinc} onSort={(k) => toggleSort(sortReinc, setSortReinc, k)} />
+                    <ThSortable label="SOS" sortKey="qtde_sos" sortConfig={sortReinc} onSort={(k) => toggleSort(sortReinc, setSortReinc, k)} />
+                    <ThSortable label="Reinc. 7d" sortKey="reinc_7d" sortConfig={sortReinc} onSort={(k) => toggleSort(sortReinc, setSortReinc, k)} />
+                    <ThSortable label="Reinc. 15d" sortKey="reinc_15d" sortConfig={sortReinc} onSort={(k) => toggleSort(sortReinc, setSortReinc, k)} />
+                    <ThSortable label="Mesmo defeito" sortKey="mesmo_defeito" sortConfig={sortReinc} onSort={(k) => toggleSort(sortReinc, setSortReinc, k)} />
+                    <ThSortable label="Dias médios" sortKey="dias_medio_entre" sortConfig={sortReinc} onSort={(k) => toggleSort(sortReinc, setSortReinc, k)} />
+                    <th className="text-left px-3 py-2">Linha top</th>
+                    <th className="text-left px-3 py-2">Defeito top</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sortedReinc.map((r) => (
+                    <tr key={r.veiculo} className="border-t">
+                      <td className="px-3 py-2 font-bold">{r.veiculo}</td>
+                      <td className="px-3 py-2 text-right">{fmtInt(r.qtde_sos)}</td>
+                      <td className="px-3 py-2 text-right">{fmtInt(r.reinc_7d)}</td>
+                      <td className="px-3 py-2 text-right">{fmtInt(r.reinc_15d)}</td>
+                      <td className="px-3 py-2 text-right">{fmtInt(r.mesmo_defeito)}</td>
+                      <td className="px-3 py-2 text-right">{fmtNum(r.dias_medio_entre, 1)}</td>
+                      <td className="px-3 py-2">{r.linha_top}</td>
+                      <td className="px-3 py-2">{r.top_defeito}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </TableCard>
+        </div>
+      )}
+
+      {!loading && abaAtiva === "PREVENTIVA" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <TableCard title="Faixa pós-preventiva">
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={faixasTempo.preventiva}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="faixa" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="total" name="Qtde" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </TableCard>
+
+            <TableCard title="Faixa pós-inspeção">
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={faixasTempo.inspecao}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="faixa" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="total" name="Qtde" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </TableCard>
+
+            <TableCard title="Indicadores consolidados">
+              <div className="grid grid-cols-1 gap-3">
+                <CardKPI icon={FaClipboardList} title="Dias médios pós-preventiva" value={fmtNum(resumoAtual.mediaPosPreventiva, 1)} />
+                <CardKPI icon={FaShieldAlt} title="Dias médios pós-inspeção" value={fmtNum(resumoAtual.mediaPosInspecao, 1)} />
+                <CardKPI icon={FaClock} title="Dias médios entre SOS" value={fmtNum(resumoAtual.mediaEntreSOS, 1)} />
+              </div>
+            </TableCard>
           </div>
         </div>
       )}
 
-      {abaAtiva === "PREV_INSPEC" && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl border shadow-sm p-4">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Faixa após preventiva</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficoFaixaPreventiva}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="faixa" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="total" name="SOS" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+      {!loading && abaAtiva === "OFENSORES" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <TableCard title="Top veículos">
+              <div className="overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <ThSortable label="Veículo" sortKey="veiculo" sortConfig={sortVeic} onSort={(k) => toggleSort(sortVeic, setSortVeic, k)} />
+                      <ThSortable label="3 meses" sortKey="int_total" sortConfig={sortVeic} onSort={(k) => toggleSort(sortVeic, setSortVeic, k)} />
+                      <ThSortable label={monthLabelPt(mesReferencia)} sortKey="int_ref" sortConfig={sortVeic} onSort={(k) => toggleSort(sortVeic, setSortVeic, k)} />
+                      <th className="text-left px-3 py-2">Top defeito</th>
+                      <th className="text-left px-3 py-2">Top setor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedVeic.map((r) => (
+                      <tr key={r.veiculo} className="border-t">
+                        <td className="px-3 py-2 font-bold">{r.veiculo}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.int_total)}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.int_ref)}</td>
+                        <td className="px-3 py-2">{r.top_defeito}</td>
+                        <td className="px-3 py-2">{r.top_setor}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </TableCard>
+
+            <TableCard title="Top linhas">
+              <div className="overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <ThSortable label="Linha" sortKey="linha" sortConfig={sortLinha} onSort={(k) => toggleSort(sortLinha, setSortLinha, k)} />
+                      <ThSortable label="3 meses" sortKey="int_total" sortConfig={sortLinha} onSort={(k) => toggleSort(sortLinha, setSortLinha, k)} />
+                      <ThSortable label={monthLabelPt(mesReferencia)} sortKey="int_ref" sortConfig={sortLinha} onSort={(k) => toggleSort(sortLinha, setSortLinha, k)} />
+                      <th className="text-left px-3 py-2">Top defeito</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedLinha.map((r) => (
+                      <tr key={r.linha} className="border-t">
+                        <td className="px-3 py-2 font-bold">{r.linha}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.int_total)}</td>
+                        <td className="px-3 py-2 text-right">{fmtInt(r.int_ref)}</td>
+                        <td className="px-3 py-2">{r.top_defeito}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </TableCard>
           </div>
 
-          <div className="bg-white rounded-2xl border shadow-sm p-4">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Faixa após inspeção</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficoFaixaInspecao}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="faixa" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="total" name="SOS" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border shadow-sm p-4 xl:col-span-2 overflow-x-auto">
-            <h3 className="text-lg font-black text-slate-800 mb-3">
-              Base detalhada pós-preventiva / pós-inspeção
-            </h3>
-            <table className="w-full min-w-[1200px] text-sm">
-              <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-3 py-3 text-left">Data</th>
-                  <th className="px-3 py-3 text-left">SOS</th>
-                  <th className="px-3 py-3 text-left">Veículo</th>
-                  <th className="px-3 py-3 text-left">Linha</th>
-                  <th className="px-3 py-3 text-left">Defeito</th>
-                  <th className="px-3 py-3 text-left">Setor</th>
-                  <th className="px-3 py-3 text-left">Dias Pós Prev.</th>
-                  <th className="px-3 py-3 text-left">Faixa Prev.</th>
-                  <th className="px-3 py-3 text-left">Dias Pós Insp.</th>
-                  <th className="px-3 py-3 text-left">Faixa Insp.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {baseRef.map((r) => (
-                  <tr key={r.id} className="border-b last:border-b-0">
-                    <td className="px-3 py-3">{fmtDateBr(r.data_sos)}</td>
-                    <td className="px-3 py-3 font-semibold">{r.numero_sos || "-"}</td>
-                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
-                    <td className="px-3 py-3">{r.linha}</td>
-                    <td className="px-3 py-3">{r.problema_encontrado}</td>
-                    <td className="px-3 py-3">{r.setor_manutencao}</td>
-                    <td className="px-3 py-3">{fmtInt(r.dias_ultima_preventiva_calc)}</td>
-                    <td className="px-3 py-3">{r.faixa_preventiva}</td>
-                    <td className="px-3 py-3">{fmtInt(r.dias_ultima_inspecao_calc)}</td>
-                    <td className="px-3 py-3">{r.faixa_inspecao}</td>
+          <TableCard title="Ranking de defeitos">
+            <div className="overflow-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <ThSortable label="Defeito" sortKey="defeito" sortConfig={sortDefeito} onSort={(k) => toggleSort(sortDefeito, setSortDefeito, k)} />
+                    <ThSortable label="Total" sortKey="total" sortConfig={sortDefeito} onSort={(k) => toggleSort(sortDefeito, setSortDefeito, k)} />
+                    <th className="text-left px-3 py-2">Top setor</th>
+                    <th className="text-left px-3 py-2">Top linha</th>
+                    <th className="text-right px-3 py-2">Até 7d pós-prev.</th>
+                    <th className="text-right px-3 py-2">Até 7d pós-insp.</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {abaAtiva === "LINHAS" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
-          <h3 className="text-lg font-black text-slate-800 mb-3">Leitura por linha</h3>
-          <table className="w-full min-w-[1100px] text-sm">
-            <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-              <tr>
-                <th className="px-3 py-3 text-left">Linha</th>
-                <th className="px-3 py-3 text-left">SOS Atual</th>
-                <th className="px-3 py-3 text-left">SOS Anterior</th>
-                <th className="px-3 py-3 text-left">Variação</th>
-                <th className="px-3 py-3 text-left">Veíc. Reincidentes</th>
-                <th className="px-3 py-3 text-left">Taxa Reinc.</th>
-                <th className="px-3 py-3 text-left">Defeito Top</th>
-                <th className="px-3 py-3 text-left">Setor Top</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabelaLinhas.map((r) => (
-                <tr key={r.linha} className="border-b last:border-b-0">
-                  <td className="px-3 py-3 font-black text-slate-800">{r.linha}</td>
-                  <td className="px-3 py-3">{fmtInt(r.totalAtual)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.totalAnterior)}</td>
-                  <td className="px-3 py-3">
-                    <EvolucaoBadge value={r.variacao_pct} invert />
-                  </td>
-                  <td className="px-3 py-3">{fmtInt(r.veiculosReincidentes)}</td>
-                  <td className="px-3 py-3">{fmtPct(r.taxaReincidencia)}</td>
-                  <td className="px-3 py-3">{r.defeitoTop}</td>
-                  <td className="px-3 py-3">{r.setorTop}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {abaAtiva === "VEICULOS" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
-          <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por veículo</h3>
-          <table className="w-full min-w-[1100px] text-sm">
-            <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-              <tr>
-                <th className="px-3 py-3 text-left">Veículo</th>
-                <th className="px-3 py-3 text-left">Cluster</th>
-                <th className="px-3 py-3 text-left">Linha</th>
-                <th className="px-3 py-3 text-left">SOS Total</th>
-                <th className="px-3 py-3 text-left">Reinc. Veículo</th>
-                <th className="px-3 py-3 text-left">Reinc. Técnica</th>
-                <th className="px-3 py-3 text-left">Reinc. Setorial</th>
-                <th className="px-3 py-3 text-left">Intervalo Médio</th>
-                <th className="px-3 py-3 text-left">Defeito Top</th>
-                <th className="px-3 py-3 text-left">Setor Top</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabelaVeiculos.map((r) => (
-                <tr key={r.veiculo} className="border-b last:border-b-0">
-                  <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
-                  <td className="px-3 py-3">{r.cluster}</td>
-                  <td className="px-3 py-3">{r.linhaTop}</td>
-                  <td className="px-3 py-3">{fmtInt(r.totalSOS)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincTecnica)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td>
-                  <td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td>
-                  <td className="px-3 py-3">{r.defeitoTop}</td>
-                  <td className="px-3 py-3">{r.setorTop}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {abaAtiva === "SETORES" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
-          <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por setor</h3>
-          <table className="w-full min-w-[1000px] text-sm">
-            <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-              <tr>
-                <th className="px-3 py-3 text-left">Setor</th>
-                <th className="px-3 py-3 text-left">Total</th>
-                <th className="px-3 py-3 text-left">Linhas</th>
-                <th className="px-3 py-3 text-left">Veículos</th>
-                <th className="px-3 py-3 text-left">Reinc. Setorial</th>
-                <th className="px-3 py-3 text-left">Defeito Top</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabelaSetores.map((r) => (
-                <tr key={r.setor} className="border-b last:border-b-0">
-                  <td className="px-3 py-3 font-black text-slate-800">{r.setor}</td>
-                  <td className="px-3 py-3">{fmtInt(r.total)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td>
-                  <td className="px-3 py-3">{r.defeitoTop}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {abaAtiva === "DEFEITOS" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
-          <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por defeito</h3>
-          <table className="w-full min-w-[1100px] text-sm">
-            <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-              <tr>
-                <th className="px-3 py-3 text-left">Defeito</th>
-                <th className="px-3 py-3 text-left">Total</th>
-                <th className="px-3 py-3 text-left">Veículos</th>
-                <th className="px-3 py-3 text-left">Setores</th>
-                <th className="px-3 py-3 text-left">Linhas</th>
-                <th className="px-3 py-3 text-left">Reinc. Técnica</th>
-                <th className="px-3 py-3 text-left">Média Pós Prev.</th>
-                <th className="px-3 py-3 text-left">Média Pós Insp.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabelaDefeitos.map((r) => (
-                <tr key={r.defeito} className="border-b last:border-b-0">
-                  <td className="px-3 py-3 font-black text-slate-800">{r.defeito}</td>
-                  <td className="px-3 py-3">{fmtInt(r.total)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.setores)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincTecnica)}</td>
-                  <td className="px-3 py-3">{fmtNum(r.mediaPrev, 1)}</td>
-                  <td className="px-3 py-3">{fmtNum(r.mediaInsp, 1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {loading && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-[1px] flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl px-6 py-4 shadow-xl border font-black text-slate-800">
-            Carregando SOS_Resumo...
-          </div>
+                </thead>
+                <tbody>
+                  {sortedDefeitos.map((r) => (
+                    <tr key={r.defeito} className="border-t">
+                      <td className="px-3 py-2 font-bold">{r.defeito}</td>
+                      <td className="px-3 py-2 text-right">{fmtInt(r.total)}</td>
+                      <td className="px-3 py-2">{r.top_setor}</td>
+                      <td className="px-3 py-2">{r.top_linha}</td>
+                      <td className="px-3 py-2 text-right">{fmtInt(r.preventiva7)}</td>
+                      <td className="px-3 py-2 text-right">{fmtInt(r.inspecao7)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </TableCard>
         </div>
       )}
     </div>

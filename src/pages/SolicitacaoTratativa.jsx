@@ -55,6 +55,7 @@ export default function SolicitacaoTratativa() {
     (motorista.chapa || motorista.nome) &&
     form.tipo_ocorrencia &&
     form.setor_origem &&
+    form.prioridade &&
     form.descricao;
 
   // Aceita PNG/JPG, MP4/MOV, PDF

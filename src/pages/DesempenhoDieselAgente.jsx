@@ -407,6 +407,7 @@ function IndividualParcialTable({ items, busca, setBusca, mesRef }) {
 
 function ParcialMeritocraciaView({ onAlert }) {
   const [mesRef, setMesRef] = useState(fmtMesAtual());
+  const [chapasExcluir, setChapasExcluir] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingGeracao, setLoadingGeracao] = useState(false);
   const [subTab, setSubTab] = useState("individual");
@@ -418,6 +419,14 @@ function ParcialMeritocraciaView({ onAlert }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [arquivosRaiz, setArquivosRaiz] = useState([]);
   const [debugStorage, setDebugStorage] = useState({ root: [], individuais: [], pathRoot: "", pathIndividuais: "" });
+
+  const normalizarChapasExcluir = useCallback((valor) => {
+    return String(valor || "")
+      .split(",")
+      .map((x) => x.replace(/\D/g, "").trim())
+      .filter(Boolean)
+      .join(",");
+  }, []);
 
   const carregarArquivos = useCallback(async () => {
     setLoading(true);
@@ -570,8 +579,20 @@ function ParcialMeritocraciaView({ onAlert }) {
     if (loadingGeracao) return;
     setLoadingGeracao(true);
     try {
-      await dispatchGitHubWorkflow(WF_PARCIAL, { mes_referencia: mesRef });
-      onAlert?.({ type: "success", message: `Parcial de Meritocracia do mês ${mesRef} enviada para processamento.` });
+      const chapasNormalizadas = normalizarChapasExcluir(chapasExcluir);
+
+      await dispatchGitHubWorkflow(WF_PARCIAL, {
+        mes_referencia: mesRef,
+        chapas_excluir: chapasNormalizadas,
+      });
+
+      onAlert?.({
+        type: "success",
+        message: chapasNormalizadas
+          ? `Parcial de Meritocracia do mês ${mesRef} enviada com exclusão das chapas: ${chapasNormalizadas}`
+          : `Parcial de Meritocracia do mês ${mesRef} enviada para processamento.`,
+      });
+
       setTimeout(() => {
         carregarArquivos();
       }, 2500);
@@ -610,23 +631,39 @@ function ParcialMeritocraciaView({ onAlert }) {
             />
           </div>
 
-          <div className="md:col-span-3 flex items-center gap-3 flex-wrap">
+          <div className="md:col-span-2">
+            <label className="text-xs font-bold text-slate-500 flex items-center gap-2 mb-2">
+              <FaUsers /> Chapas para excluir
+            </label>
+            <textarea
+              value={chapasExcluir}
+              onChange={(e) => setChapasExcluir(e.target.value)}
+              placeholder="Ex.: 30012345,30067890,30011111"
+              rows={3}
+              className="w-full border rounded-xl px-3 py-3 text-sm resize-none"
+            />
+            <div className="text-[11px] text-slate-500 mt-2">
+              Informe as chapas separadas por vírgula. Elas não entrarão na parcial individual nem no consolidado.
+            </div>
+          </div>
+
+          <div className="md:col-span-1 flex items-end">
             <button
               onClick={dispararParcial}
               disabled={!mesRef || loadingGeracao}
               className={clsx(
-                "px-5 py-3 rounded-xl font-extrabold text-sm inline-flex items-center gap-2 transition-colors",
+                "w-full px-5 py-3 rounded-xl font-extrabold text-sm inline-flex items-center justify-center gap-2 transition-colors",
                 !mesRef || loadingGeracao ? "bg-slate-200 text-slate-400" : "bg-amber-500 text-white hover:bg-amber-600"
               )}
             >
               <FaPlay className={clsx(loadingGeracao && "animate-spin")} />
               {loadingGeracao ? "ENVIANDO..." : "GERAR PARCIAL DO MÊS"}
             </button>
-
-            <div className="text-xs text-slate-500">
-              Última atualização local: <span className="font-bold text-slate-700">{lastUpdated ? fmtBRDateTime(lastUpdated) : "-"}</span>
-            </div>
           </div>
+        </div>
+
+        <div className="text-xs text-slate-500">
+          Última atualização local: <span className="font-bold text-slate-700">{lastUpdated ? fmtBRDateTime(lastUpdated) : "-"}</span>
         </div>
       </div>
 

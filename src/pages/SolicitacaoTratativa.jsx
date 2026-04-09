@@ -253,7 +253,7 @@ export default function SolicitacaoTratativa() {
       setMotorista({ chapa: "", nome: "" });
       setForm({
         tipo_ocorrencia: "",
-        prioridade: "Média",
+        prioridade: "",
         setor_origem: "",
         linha: "",
         descricao: "",
@@ -284,6 +284,7 @@ export default function SolicitacaoTratativa() {
             onChange={(e) => setForm({ ...form, tipo_ocorrencia: e.target.value })}
           >
             <option value="">Selecione...</option>
+            <option value="Colisão">Colisão</option>
             {tiposOcorrencia.map((t) => (
               <option key={t.id} value={t.nome}>
                 {t.nome}
@@ -335,10 +336,11 @@ export default function SolicitacaoTratativa() {
             value={form.prioridade}
             onChange={(e) => setForm({ ...form, prioridade: e.target.value })}
           >
-            <option>Baixa</option>
-            <option>Média</option>
-            <option>Alta</option>
-            <option>Gravíssima</option>
+            <option value="">Selecione...</option>
+            <option value="Baixa">Baixa</option>
+            <option value="Média">Média</option>
+            <option value="Alta">Alta</option>
+            <option value="Gravíssima">Gravíssima</option>
           </select>
         </div>
 

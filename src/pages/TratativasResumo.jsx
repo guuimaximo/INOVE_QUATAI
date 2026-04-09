@@ -1,7 +1,20 @@
-// src/pages/AtasResumo.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 import * as XLSX from "xlsx";
+import {
+  FaClipboardList,
+  FaDownload,
+  FaFilter,
+  FaSearch,
+  FaUsers,
+  FaExclamationTriangle,
+  FaRoad,
+  FaTasks,
+  FaClock,
+  FaCheckCircle,
+  FaFolderOpen,
+  FaExclamationCircle,
+} from "react-icons/fa";
 
 function toISODateOnly(d) {
   if (!d) return "";
@@ -40,27 +53,30 @@ function sortMapDesc(m) {
 function Badge({ children, tone = "gray" }) {
   const cls =
     {
-      gray: "bg-gray-100 text-gray-700 border-gray-200",
+      gray: "bg-slate-100 text-slate-700 border-slate-200",
       blue: "bg-blue-50 text-blue-700 border-blue-200",
       green: "bg-green-50 text-green-700 border-green-200",
       yellow: "bg-yellow-50 text-yellow-700 border-yellow-200",
       red: "bg-red-50 text-red-700 border-red-200",
       purple: "bg-purple-50 text-purple-700 border-purple-200",
       indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    }[tone] || "bg-gray-100 text-gray-700 border-gray-200";
+    }[tone] || "bg-slate-100 text-slate-700 border-slate-200";
 
   return (
-    <span className={`inline-flex items-center px-2 py-1 text-xs border rounded ${cls}`}>
+    <span className={`inline-flex items-center px-2 py-1 text-xs border rounded-lg font-semibold ${cls}`}>
       {children}
     </span>
   );
 }
 
-function Card({ title, children, right = null }) {
+function Card({ title, children, right = null, icon = null }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
-        <div className="font-semibold text-gray-800">{title}</div>
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {icon ? <span className="text-slate-400">{icon}</span> : null}
+          <div className="font-bold text-slate-800 truncate">{title}</div>
+        </div>
         {right}
       </div>
       <div className="p-4">{children}</div>
@@ -68,11 +84,14 @@ function Card({ title, children, right = null }) {
   );
 }
 
-function CardResumo({ titulo, valor, cor }) {
+function CardResumo({ titulo, valor, icon, border }) {
   return (
-    <div className={`${cor} rounded-xl shadow-sm border border-gray-200 p-6 text-center`}>
-      <h3 className="text-sm font-medium text-gray-700">{titulo}</h3>
-      <p className="text-4xl font-extrabold mt-2 text-gray-900">{valor}</p>
+    <div className={`bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 ${border}`}>
+      <div className="min-w-0">
+        <p className="text-sm text-slate-500 font-bold">{titulo}</p>
+        <p className="text-2xl font-black text-slate-800">{valor}</p>
+      </div>
+      <div>{icon}</div>
     </div>
   );
 }
@@ -81,17 +100,17 @@ function ListItemButton({ label, value, onClick, active = false, sub = null }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left flex items-center justify-between gap-3 px-3 py-3 rounded-lg border transition ${
-        active ? "bg-blue-50 border-blue-200" : "bg-white border-gray-200 hover:bg-gray-50"
+      className={`w-full text-left flex items-center justify-between gap-3 px-3 py-3 rounded-xl border transition ${
+        active ? "bg-blue-50 border-blue-200" : "bg-white border-slate-200 hover:bg-slate-50"
       }`}
     >
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-gray-800 truncate">{label}</div>
-        {sub ? <div className="text-xs text-gray-500 truncate">{sub}</div> : null}
+        <div className="text-sm font-semibold text-slate-800 truncate">{label}</div>
+        {sub ? <div className="text-xs text-slate-500 truncate">{sub}</div> : null}
       </div>
 
-      <div className="shrink-0 max-w-[180px] text-right">
-        <span className="text-xs font-semibold px-2 py-1 rounded bg-gray-100 text-gray-700 whitespace-nowrap">
+      <div className="shrink-0 max-w-[200px] text-right">
+        <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-100 text-slate-700 whitespace-nowrap">
           {value}
         </span>
       </div>
@@ -109,7 +128,6 @@ export default function AtasResumo() {
   });
 
   const [setoresDisponiveis, setSetoresDisponiveis] = useState([]);
-
   const [loading, setLoading] = useState(false);
   const [atas, setAtas] = useState([]);
   const [detalhes, setDetalhes] = useState([]);
@@ -465,11 +483,14 @@ export default function AtasResumo() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="flex items-start justify-between gap-4 mb-4">
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Resumo de Atas</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+            <FaClipboardList className="text-violet-500" />
+            Resumo de Atas
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
             Clique nos TOPs para filtrar como BI e exporte um único Excel unificado.
           </p>
         </div>
@@ -477,58 +498,79 @@ export default function AtasResumo() {
         <button
           onClick={baixarExcelUnificado}
           disabled={loading || atas.length === 0}
-          className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-300"
+          className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300 font-bold text-sm flex items-center gap-2 shadow-sm"
         >
+          <FaDownload />
           Baixar Excel (Unificado)
         </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
+      <div className="bg-white p-4 rounded-xl border shadow-sm space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-800">Filtros</h2>
+          <p className="text-sm text-slate-500">
+            Refine a visualização por período, texto, setor e status.
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <input
             type="date"
             value={filtros.dataInicio}
             onChange={(e) => setFiltros((f) => ({ ...f, dataInicio: e.target.value }))}
-            className="border rounded-md px-3 py-2"
+            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
           />
+
           <input
             type="date"
             value={filtros.dataFim}
             onChange={(e) => setFiltros((f) => ({ ...f, dataFim: e.target.value }))}
-            className="border rounded-md px-3 py-2"
+            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
           />
-          <input
-            type="text"
-            placeholder="Busca (motorista, ocorrência, descrição...)"
-            value={filtros.busca}
-            onChange={(e) => setFiltros((f) => ({ ...f, busca: e.target.value }))}
-            className="border rounded-md px-3 py-2"
-          />
-          <select
-            value={filtros.setor}
-            onChange={(e) => setFiltros((f) => ({ ...f, setor: e.target.value }))}
-            className="border rounded-md px-3 py-2 bg-white"
-          >
-            <option value="">Todos os Setores</option>
-            {setoresDisponiveis.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filtros.status}
-            onChange={(e) => setFiltros((f) => ({ ...f, status: e.target.value }))}
-            className="border rounded-md px-3 py-2 bg-white"
-          >
-            <option value="">Todos os Status</option>
-            <option value="Pendente">Pendente</option>
-            <option value="Resolvido">Resolvido</option>
-            <option value="Concluída">Concluída</option>
-          </select>
+
+          <div className="relative">
+            <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Busca (motorista, ocorrência, descrição...)"
+              value={filtros.busca}
+              onChange={(e) => setFiltros((f) => ({ ...f, busca: e.target.value }))}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+            />
+          </div>
+
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.setor}
+              onChange={(e) => setFiltros((f) => ({ ...f, setor: e.target.value }))}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+            >
+              <option value="">Todos os Setores</option>
+              {setoresDisponiveis.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.status}
+              onChange={(e) => setFiltros((f) => ({ ...f, status: e.target.value }))}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+            >
+              <option value="">Todos os Status</option>
+              <option value="Pendente">Pendente</option>
+              <option value="Resolvido">Resolvido</option>
+              <option value="Concluída">Concluída</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between mt-4 gap-3">
+        <div className="flex items-center justify-between mt-1 gap-3 flex-wrap">
           <div className="flex flex-wrap gap-2">
             {headerChips.map((c) => (
               <Badge key={c.k} tone={c.tone}>
@@ -538,7 +580,7 @@ export default function AtasResumo() {
             {(selOcorrencia || selLinha || selMotorista || selAcao) && (
               <button
                 onClick={resetDrill}
-                className="text-xs px-3 py-1 rounded border border-gray-200 hover:bg-gray-50"
+                className="text-xs px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50"
               >
                 Limpar seleção
               </button>
@@ -548,29 +590,50 @@ export default function AtasResumo() {
           <button
             onClick={aplicar}
             disabled={loading}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300"
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300 font-bold text-sm"
           >
             {loading ? "Carregando..." : "Aplicar"}
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100" />
-        <CardResumo titulo="Pendentes" valor={pendentesCount} cor="bg-yellow-100" />
-        <CardResumo titulo="Concluídas" valor={concluidasCount} cor="bg-green-100" />
-        <CardResumo titulo="Atrasadas (>10d)" valor={atrasadasCount} cor="bg-red-100" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardResumo
+          titulo="Total"
+          valor={totalCount}
+          icon={<FaFolderOpen className="text-4xl text-blue-50" />}
+          border="border-l-blue-500"
+        />
+        <CardResumo
+          titulo="Pendentes"
+          valor={pendentesCount}
+          icon={<FaClock className="text-4xl text-yellow-50" />}
+          border="border-l-yellow-500"
+        />
+        <CardResumo
+          titulo="Concluídas"
+          valor={concluidasCount}
+          icon={<FaCheckCircle className="text-4xl text-emerald-50" />}
+          border="border-l-emerald-500"
+        />
+        <CardResumo
+          titulo="Atrasadas (>10d)"
+          valor={atrasadasCount}
+          icon={<FaExclamationCircle className="text-4xl text-red-50" />}
+          border="border-l-red-500"
+        />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         <div className="xl:col-span-5">
           <Card
             title="Top Motoristas (Atas)"
+            icon={<FaUsers />}
             right={<Badge tone="blue">{recorteDrill.baseAtas.length} atas</Badge>}
           >
             <div className="space-y-2">
               {topMotoristas.length === 0 ? (
-                <div className="text-sm text-gray-500">Sem dados no recorte.</div>
+                <div className="text-sm text-slate-500">Sem dados no recorte.</div>
               ) : (
                 topMotoristas.map((m) => (
                   <ListItemButton
@@ -593,11 +656,12 @@ export default function AtasResumo() {
         <div className="xl:col-span-2">
           <Card
             title="Top Ocorrências"
+            icon={<FaExclamationTriangle />}
             right={<Badge tone="purple">{topOcorrencias.reduce((a, b) => a + b[1], 0)}</Badge>}
           >
             <div className="space-y-2">
               {topOcorrencias.length === 0 ? (
-                <div className="text-sm text-gray-500">Sem dados no recorte.</div>
+                <div className="text-sm text-slate-500">Sem dados no recorte.</div>
               ) : (
                 topOcorrencias.map(([label, qtd]) => (
                   <ListItemButton
@@ -620,11 +684,12 @@ export default function AtasResumo() {
         <div className="xl:col-span-2">
           <Card
             title="Top Linhas"
+            icon={<FaRoad />}
             right={<Badge tone="indigo">{topLinhas.reduce((a, b) => a + b[1], 0)}</Badge>}
           >
             <div className="space-y-2">
               {topLinhas.length === 0 ? (
-                <div className="text-sm text-gray-500">Sem linhas no recorte.</div>
+                <div className="text-sm text-slate-500">Sem linhas no recorte.</div>
               ) : (
                 topLinhas.map(([label, qtd]) => (
                   <ListItemButton
@@ -647,11 +712,12 @@ export default function AtasResumo() {
         <div className="xl:col-span-3">
           <Card
             title="Top Ações Aplicadas (Detalhes)"
+            icon={<FaTasks />}
             right={<Badge tone="green">{recorteDrill.baseDet.length} ações</Badge>}
           >
             <div className="space-y-2">
               {topAcoes.length === 0 ? (
-                <div className="text-sm text-gray-500">Sem ações no recorte.</div>
+                <div className="text-sm text-slate-500">Sem ações no recorte.</div>
               ) : (
                 topAcoes.map(([label, qtd]) => (
                   <ListItemButton

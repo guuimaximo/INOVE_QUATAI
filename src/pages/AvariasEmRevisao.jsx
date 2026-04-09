@@ -1,609 +1,672 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../supabase';
-import { FaUndo, FaEdit, FaSave, FaPlus, FaTrash, FaLock } from 'react-icons/fa';
+// src/pages/AtasResumo.jsx
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabase";
+import * as XLSX from "xlsx";
 
-// ======================================================================
-// ========================== MODAL LOGIN (GESTOR) =======================
-// ======================================================================
-function LoginModal({
-  onConfirm,
-  onCancel,
-  title = 'Exclusão Restrita (Gestor)',
-  actionLabel = 'Autorizar exclusão',
-}) {
-  const [login, setLogin] = useState('');
-  const [senha, setSenha] = useState('');
-  const [loading, setLoading] = useState(false);
+function toISODateOnly(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toISOString().slice(0, 10);
+}
 
-  async function handleLogin() {
-    setLoading(true);
+function addDays(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return toISODateOnly(d);
+}
 
-    const { data, error } = await supabase
-      .from('usuarios_aprovadores')
-      .select('nome, login, nivel, ativo')
-      .eq('login', login)
-      .eq('senha', senha)
-      .eq('ativo', true)
-      .single();
+function normStr(v) {
+  return String(v ?? "").trim();
+}
 
-    setLoading(false);
+function ilikeContains(hay, needle) {
+  return normStr(hay).toLowerCase().includes(normStr(needle).toLowerCase());
+}
 
-    if (error || !data) {
-      alert('Login ou senha incorretos (ou usuário inativo).');
-      return;
-    }
-
-    const nivel = String(data.nivel || '').trim().toLowerCase();
-    if (nivel !== 'gestor') {
-      alert('Sem permissão. Apenas Gestor pode excluir.');
-      return;
-    }
-
-    onConfirm({ nome: data.nome, login: data.login, nivel: data.nivel });
+function countBy(arr, keyFn) {
+  const m = new Map();
+  for (const it of arr) {
+    const k = keyFn(it);
+    m.set(k, (m.get(k) || 0) + 1);
   }
+  return m;
+}
+
+function sortMapDesc(m) {
+  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function Badge({ children, tone = "gray" }) {
+  const cls =
+    {
+      gray: "bg-gray-100 text-gray-700 border-gray-200",
+      blue: "bg-blue-50 text-blue-700 border-blue-200",
+      green: "bg-green-50 text-green-700 border-green-200",
+      yellow: "bg-yellow-50 text-yellow-700 border-yellow-200",
+      red: "bg-red-50 text-red-700 border-red-200",
+      purple: "bg-purple-50 text-purple-700 border-purple-200",
+      indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    }[tone] || "bg-gray-100 text-gray-700 border-gray-200";
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-4">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
-        <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
-          <FaLock /> {title}
-        </h2>
+    <span className={`inline-flex items-center px-2 py-1 text-xs border rounded ${cls}`}>
+      {children}
+    </span>
+  );
+}
 
-        <input
-          type="text"
-          placeholder="Login"
-          className="w-full mb-3 p-2 border rounded"
-          value={login}
-          onChange={(e) => setLogin(e.target.value)}
-        />
-
-        <input
-          type="password"
-          placeholder="Senha"
-          className="w-full mb-4 p-2 border rounded"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-        />
-
-        <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">
-            Cancelar
-          </button>
-          <button
-            onClick={handleLogin}
-            disabled={loading}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            {loading ? 'Verificando...' : actionLabel}
-          </button>
-        </div>
+function Card({ title, children, right = null }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+        <div className="font-semibold text-gray-800">{title}</div>
+        {right}
       </div>
+      <div className="p-4">{children}</div>
     </div>
   );
 }
 
-// ======================================================================
-// ======================= MODAL DE EDIÇÃO TOTAL =========================
-// ======================================================================
-function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
-  const [itens, setItens] = useState([]);
-  const [loadingItens, setLoadingItens] = useState(false);
+function CardResumo({ titulo, valor, cor }) {
+  return (
+    <div className={`${cor} rounded-xl shadow-sm border border-gray-200 p-6 text-center`}>
+      <h3 className="text-sm font-medium text-gray-700">{titulo}</h3>
+      <p className="text-4xl font-extrabold mt-2 text-gray-900">{valor}</p>
+    </div>
+  );
+}
 
-  const [prefixo, setPrefixo] = useState('');
-  const [motoristaId, setMotoristaId] = useState('');
-  const [tipoOcorrencia, setTipoOcorrencia] = useState('');
-  const [numeroAvaria, setNumeroAvaria] = useState('');
-  const [dataAvaria, setDataAvaria] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [observacao, setObservacao] = useState('');
-  const [valorTotal, setValorTotal] = useState(0);
+function ListItemButton({ label, value, onClick, active = false, sub = null }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left flex items-center justify-between gap-3 px-3 py-3 rounded-lg border transition ${
+        active ? "bg-blue-50 border-blue-200" : "bg-white border-gray-200 hover:bg-gray-50"
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-gray-800 truncate">{label}</div>
+        {sub ? <div className="text-xs text-gray-500 truncate">{sub}</div> : null}
+      </div>
 
-  const [urlsEvidencias, setUrlsEvidencias] = useState([]);
+      <div className="shrink-0 max-w-[180px] text-right">
+        <span className="text-xs font-semibold px-2 py-1 rounded bg-gray-100 text-gray-700 whitespace-nowrap">
+          {value}
+        </span>
+      </div>
+    </button>
+  );
+}
 
-  const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [acaoPendente, setAcaoPendente] = useState(null); // excluir_item | excluir_evidencia | excluir_avaria
-  const [pendencia, setPendencia] = useState(null); // { id, novo } | { idx } | { avariaId }
+export default function AtasResumo() {
+  const [filtros, setFiltros] = useState({
+    dataInicio: "",
+    dataFim: "",
+    busca: "",
+    setor: "",
+    status: "",
+  });
+
+  const [setoresDisponiveis, setSetoresDisponiveis] = useState([]);
+
+  const [loading, setLoading] = useState(false);
+  const [atas, setAtas] = useState([]);
+  const [detalhes, setDetalhes] = useState([]);
+
+  const [selOcorrencia, setSelOcorrencia] = useState("");
+  const [selMotorista, setSelMotorista] = useState("");
+  const [selAcao, setSelAcao] = useState("");
+  const [selLinha, setSelLinha] = useState("");
+
+  const [totalCount, setTotalCount] = useState(0);
+  const [pendentesCount, setPendentesCount] = useState(0);
+  const [concluidasCount, setConcluidasCount] = useState(0);
+  const [atrasadasCount, setAtrasadasCount] = useState(0);
 
   useEffect(() => {
-    if (avaria) carregarItens();
-  }, [avaria]);
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    setFiltros((f) => ({
+      ...f,
+      dataInicio: toISODateOnly(start),
+      dataFim: toISODateOnly(end),
+    }));
 
-  async function carregarItens() {
-    setLoadingItens(true);
-
-    const { data } = await supabase
-      .from('cobrancas_avarias')
-      .select('*')
-      .eq('avaria_id', avaria.id);
-
-    setItens(data || []);
-
-    setPrefixo(avaria.prefixo || '');
-    setMotoristaId(avaria.motoristaId || '');
-    setTipoOcorrencia(avaria.tipoOcorrencia || '');
-    setNumeroAvaria(avaria.numero_da_avaria || '');
-    setDataAvaria(avaria.dataAvaria?.split("T")[0] || '');
-    setDescricao(avaria.descricao || '');
-    setObservacao(avaria.observacao_operacao || '');
-    setValorTotal(avaria.valor_total_orcamento || 0);
-
-    let urls = [];
-    if (Array.isArray(avaria.urls_evidencias)) urls = avaria.urls_evidencias;
-    else if (typeof avaria.urls_evidencias === 'string')
-      urls = avaria.urls_evidencias.split(',').map(u => u.trim());
-
-    setUrlsEvidencias(urls.filter(Boolean));
-    setLoadingItens(false);
-  }
-
-  const handleItemChange = (id, field, value) => {
-    setItens(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
-  };
-
-  const adicionarEvidencia = (url) => {
-    if (!url) return;
-    setUrlsEvidencias(prev => [...prev, url]);
-  };
-
-  const pedirExcluirEvidencia = (idx) => {
-    setAcaoPendente('excluir_evidencia');
-    setPendencia({ idx });
-    setLoginModalOpen(true);
-  };
-
-  const removerEvidencia = (idx) => {
-    setUrlsEvidencias(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const adicionarItem = () => {
-    setItens(prev => [
-      ...prev,
-      {
-        id: Date.now(),
-        descricao: '',
-        qtd: 1,
-        valorUnitario: 0,
-        tipo: 'Peca',
-        novo: true,
-        avaria_id: avaria.id
-      }
-    ]);
-  };
-
-  const pedirExcluirItem = (id, novo) => {
-    setAcaoPendente('excluir_item');
-    setPendencia({ id, novo });
-    setLoginModalOpen(true);
-  };
-
-  const removerItem = async (id, novo) => {
-    if (!novo) {
-      const { error } = await supabase.from('cobrancas_avarias').delete().eq('id', id);
-      if (error) {
-        alert('Erro ao excluir item: ' + error.message);
-        return;
-      }
-    }
-    setItens(prev => prev.filter(i => i.id !== id));
-  };
-
-  const pedirExcluirAvaria = () => {
-    setAcaoPendente('excluir_avaria');
-    setPendencia({ avariaId: avaria.id });
-    setLoginModalOpen(true);
-  };
-
-  const excluirAvariaCompleta = async (avariaId) => {
-    const confirm = window.confirm(
-      'Tem certeza que deseja excluir esta avaria por completo? Essa ação remove a avaria e seus itens.'
-    );
-    if (!confirm) return;
-
-    const { error: errItens } = await supabase
-      .from('cobrancas_avarias')
-      .delete()
-      .eq('avaria_id', avariaId);
-
-    if (errItens) {
-      alert('Erro ao excluir itens da avaria: ' + errItens.message);
-      return;
-    }
-
-    const { error: errAvaria } = await supabase
-      .from('avarias')
-      .delete()
-      .eq('id', avariaId);
-
-    if (errAvaria) {
-      alert('Erro ao excluir avaria: ' + errAvaria.message);
-      return;
-    }
-
-    alert('Avaria excluída com sucesso.');
-    onAtualizarLista();
-    onClose();
-  };
-
-  async function onLoginConfirm() {
-    setLoginModalOpen(false);
-
-    if (acaoPendente === 'excluir_item' && pendencia?.id) {
-      await removerItem(pendencia.id, pendencia.novo);
-    }
-
-    if (acaoPendente === 'excluir_evidencia' && typeof pendencia?.idx === 'number') {
-      removerEvidencia(pendencia.idx);
-    }
-
-    if (acaoPendente === 'excluir_avaria' && pendencia?.avariaId) {
-      await excluirAvariaCompleta(pendencia.avariaId);
-    }
-
-    setPendencia(null);
-    setAcaoPendente(null);
-  }
-
-  async function salvarAlteracoes(statusFinal = null) {
-    for (const item of itens) {
-      if (item.novo) {
-        const { error } = await supabase.from('cobrancas_avarias').insert([{
-          descricao: item.descricao,
-          qtd: item.qtd,
-          valorUnitario: item.valorUnitario,
-          tipo: item.tipo,
-          avaria_id: avaria.id
-        }]);
-        if (error) {
-          alert('Erro ao inserir item: ' + error.message);
-          return;
-        }
-      } else {
-        const { error } = await supabase.from('cobrancas_avarias')
-          .update({
-            descricao: item.descricao,
-            qtd: item.qtd,
-            valorUnitario: item.valorUnitario,
-            tipo: item.tipo
-          })
-          .eq('id', item.id);
-
-        if (error) {
-          alert('Erro ao atualizar item: ' + error.message);
-          return;
-        }
+    async function carregarSetores() {
+      const { data } = await supabase.from("tratativas").select("setor_origem");
+      if (data) {
+        const unicos = [...new Set(data.map((d) => d.setor_origem).filter(Boolean))];
+        setSetoresDisponiveis(unicos.sort());
       }
     }
 
-    const updateData = {
-      prefixo,
-      motoristaId,
-      tipoOcorrencia,
-      numero_da_avaria: numeroAvaria,
-      dataAvaria,
-      descricao,
-      observacao_operacao: observacao,
-      valor_total_orcamento: valorTotal,
-      urls_evidencias: urlsEvidencias
-    };
+    carregarSetores();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    if (statusFinal) updateData.status = statusFinal;
-
-    const { error } = await supabase.from('avarias').update(updateData).eq('id', avaria.id);
-    if (error) {
-      alert('Erro ao salvar avaria: ' + error.message);
-      return;
-    }
-
-    onAtualizarLista();
-    onClose();
+  function resetDrill() {
+    setSelOcorrencia("");
+    setSelMotorista("");
+    setSelAcao("");
+    setSelLinha("");
   }
 
-  if (!avaria) return null;
+  function computeCardsFromList(list) {
+    const total = list.length;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-40">
-      <div className="bg-white w-full max-w-5xl rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+    const pend = list.filter((t) => ilikeContains(t.status, "pend")).length;
 
-        <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-2xl font-bold">Editar Avaria #{avaria.id}</h2>
-          <button onClick={onClose} className="text-gray-700 hover:text-black text-xl">✕</button>
-        </div>
+    const conc = list.filter(
+      (t) => ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid")
+    ).length;
 
-        <div className="p-6 space-y-6">
+    const date10DaysAgo = new Date();
+    date10DaysAgo.setDate(date10DaysAgo.getDate() - 10);
+    const atr = list.filter((t) => {
+      if (!ilikeContains(t.status, "pend")) return false;
+      if (!t.created_at) return false;
+      const d = new Date(t.created_at);
+      return !Number.isNaN(d.getTime()) && d < date10DaysAgo;
+    }).length;
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm text-gray-500">Prefixo</label>
-              <input className="border p-2 rounded w-full" value={prefixo} onChange={(e) => setPrefixo(e.target.value)} />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-500">Motorista</label>
-              <input className="border p-2 rounded w-full" value={motoristaId} onChange={(e) => setMotoristaId(e.target.value)} />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-500">Tipo da Ocorrência</label>
-              <input className="border p-2 rounded w-full" value={tipoOcorrencia} onChange={(e) => setTipoOcorrencia(e.target.value)} />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-500">Nº da Avaria</label>
-              <input className="border p-2 rounded w-full" value={numeroAvaria} onChange={(e) => setNumeroAvaria(e.target.value)} />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-500">Data da Avaria</label>
-              <input type="date" className="border p-2 rounded w-full" value={dataAvaria} onChange={(e) => setDataAvaria(e.target.value)} />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-500">Descrição</label>
-            <textarea
-              className="border rounded p-2 w-full"
-              rows={3}
-              value={descricao}
-              onChange={e => setDescricao(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-500">Observação / Motivo</label>
-            <textarea
-              className="border rounded p-2 w-full bg-yellow-50"
-              rows={3}
-              value={observacao}
-              onChange={e => setObservacao(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <h3 className="font-semibold mb-2">Evidências</h3>
-
-            <div className="flex gap-2 mb-2">
-              <input
-                id="novaEvidencia"
-                className="border p-2 rounded w-full"
-                placeholder="Cole a URL da imagem ou vídeo"
-              />
-              <button
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                onClick={() => {
-                  const url = document.getElementById("novaEvidencia").value;
-                  adicionarEvidencia(url);
-                  document.getElementById("novaEvidencia").value = "";
-                }}
-              >
-                Adicionar
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {urlsEvidencias.map((url, index) => (
-                <div key={index} className="relative border rounded overflow-hidden">
-                  <button
-                    onClick={() => pedirExcluirEvidencia(index)}
-                    className="absolute top-1 right-1 bg-red-600 text-white rounded px-2 text-xs flex items-center gap-1"
-                    title="Excluir evidência (Gestor)"
-                  >
-                    <FaTrash /> Excluir
-                  </button>
-
-                  {url.match(/\.(mp4|mov|webm)$/i) ? (
-                    <video controls src={url} className="w-full h-32 object-cover" />
-                  ) : (
-                    <img src={url} alt="" className="w-full h-32 object-cover" />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-semibold text-gray-800">Itens do Orçamento</h3>
-              <button
-                onClick={adicionarItem}
-                className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
-              >
-                <FaPlus /> Adicionar Item
-              </button>
-            </div>
-
-            {loadingItens ? (
-              <p>Carregando...</p>
-            ) : (
-              itens.map(item => (
-                <div key={item.id} className="grid grid-cols-5 gap-2 p-2 bg-gray-50 rounded mb-1">
-                  <input
-                    className="border p-1 rounded"
-                    value={item.descricao}
-                    onChange={(e) => handleItemChange(item.id, 'descricao', e.target.value)}
-                    placeholder="Descrição"
-                  />
-
-                  <input
-                    className="border p-1 rounded text-center"
-                    type="number"
-                    value={item.qtd}
-                    onChange={(e) => handleItemChange(item.id, 'qtd', e.target.value)}
-                  />
-
-                  <input
-                    className="border p-1 rounded text-center"
-                    type="number"
-                    value={item.valorUnitario}
-                    onChange={(e) => handleItemChange(item.id, 'valorUnitario', e.target.value)}
-                  />
-
-                  <select
-                    className="border p-1 rounded"
-                    value={item.tipo}
-                    onChange={(e) => handleItemChange(item.id, 'tipo', e.target.value)}
-                  >
-                    <option value="Peca">Peça</option>
-                    <option value="Servico">Serviço</option>
-                  </select>
-
-                  <button
-                    onClick={() => pedirExcluirItem(item.id, item.novo)}
-                    className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 flex items-center justify-center gap-2"
-                    title="Excluir item (Gestor)"
-                  >
-                    <FaTrash /> <span className="hidden md:inline">Excluir</span>
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="text-right text-xl font-bold">
-            Total:
-            <input
-              type="number"
-              className="border ml-2 p-2 rounded text-right w-40"
-              value={valorTotal}
-              onChange={(e) => setValorTotal(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-between p-4 border-t bg-gray-50">
-          <button
-            onClick={pedirExcluirAvaria}
-            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 flex items-center gap-2"
-          >
-            <FaTrash /> Excluir Avaria
-          </button>
-
-          <div className="flex gap-3">
-            <button
-              onClick={() => salvarAlteracoes()}
-              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 flex items-center gap-2"
-            >
-              <FaSave /> Salvar
-            </button>
-
-            <button
-              onClick={() => salvarAlteracoes('Pendente de Aprovação')}
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
-            >
-              <FaUndo /> Salvar e Reenviar
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {loginModalOpen && (
-        <LoginModal
-          title="Exclusão Restrita (Gestor)"
-          actionLabel="Autorizar exclusão"
-          onConfirm={onLoginConfirm}
-          onCancel={() => {
-            setLoginModalOpen(false);
-            setPendencia(null);
-            setAcaoPendente(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// ======================================================================
-// =========================== PÁGINA PRINCIPAL ===========================
-// ======================================================================
-export default function AvariasEmRevisao() {
-  const [avarias, setAvarias] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
+    setTotalCount(total);
+    setPendentesCount(pend);
+    setConcluidasCount(conc);
+    setAtrasadasCount(atr);
+  }
 
   async function carregar() {
     setLoading(true);
-    const { data } = await supabase
-      .from('avarias')
-      .select('*')
-      .eq('status', 'Reprovado')
-      .order('aprovado_em', { ascending: false });
+    try {
+      resetDrill();
 
-    setAvarias(data || []);
-    setLoading(false);
+      const LINHA_FIELD = "linha";
+
+      let q = supabase.from("tratativas").select(
+        `
+          id,
+          motorista_id,
+          motorista_nome,
+          motorista_chapa,
+          tipo_ocorrencia,
+          setor_origem,
+          prioridade,
+          status,
+          descricao,
+          ${LINHA_FIELD},
+          created_at
+        `
+      );
+
+      if (filtros.busca) {
+        const b = filtros.busca.trim();
+        q = q.or(
+          `motorista_nome.ilike.%${b}%,motorista_chapa.ilike.%${b}%,descricao.ilike.%${b}%,tipo_ocorrencia.ilike.%${b}%,${LINHA_FIELD}.ilike.%${b}%`
+        );
+      }
+      if (filtros.setor) q = q.eq("setor_origem", filtros.setor);
+      if (filtros.status) q = q.ilike("status", `%${filtros.status}%`);
+
+      if (filtros.dataInicio) q = q.gte("created_at", filtros.dataInicio);
+      if (filtros.dataFim) q = q.lt("created_at", addDays(filtros.dataFim, 1));
+
+      const { data: tData, error: tErr } = await q
+        .order("created_at", { ascending: false })
+        .limit(100000);
+      if (tErr) throw tErr;
+
+      const listAtas = tData || [];
+      setAtas(listAtas);
+      computeCardsFromList(listAtas);
+
+      const ids = listAtas.map((x) => x.id).filter(Boolean);
+      if (!ids.length) {
+        setDetalhes([]);
+        return;
+      }
+
+      const CHUNK = 500;
+      const allDet = [];
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const part = ids.slice(i, i + CHUNK);
+        const { data: dData, error: dErr } = await supabase
+          .from("tratativas_detalhes")
+          .select(
+            `
+              id,
+              created_at,
+              tratativa_id,
+              acao_aplicada,
+              observacoes,
+              tratado_por_login,
+              tratado_por_nome
+            `
+          )
+          .in("tratativa_id", part)
+          .order("created_at", { ascending: false });
+
+        if (dErr) throw dErr;
+        allDet.push(...(dData || []));
+      }
+
+      setDetalhes(allDet);
+    } catch (e) {
+      console.error("Erro ao carregar resumo de atas:", e);
+      alert("Erro ao carregar Resumo de Atas. Verifique o console.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  useEffect(() => {
-    carregar();
-  }, []);
+  async function aplicar() {
+    await carregar();
+  }
+
+  const ataById = useMemo(() => {
+    const m = new Map();
+    for (const t of atas) m.set(t.id, t);
+    return m;
+  }, [atas]);
+
+  const detalhesJoin = useMemo(() => {
+    return (detalhes || []).map((d) => {
+      const t = ataById.get(d.tratativa_id);
+      return {
+        ...d,
+        motorista_nome: t?.motorista_nome ?? "",
+        motorista_chapa: t?.motorista_chapa ?? "",
+        motorista_id: t?.motorista_id ?? "",
+        tipo_ocorrencia: t?.tipo_ocorrencia ?? "",
+        setor_origem: t?.setor_origem ?? "",
+        prioridade: t?.prioridade ?? "",
+        status: t?.status ?? "",
+        linha: t?.linha ?? "",
+        ata_created_at: t?.created_at ?? "",
+      };
+    });
+  }, [detalhes, ataById]);
+
+  const recorteDrill = useMemo(() => {
+    let baseAtas = [...atas];
+    let baseDet = [...detalhesJoin];
+
+    if (selOcorrencia) {
+      baseAtas = baseAtas.filter((t) => normStr(t.tipo_ocorrencia) === normStr(selOcorrencia));
+      const ids = new Set(baseAtas.map((t) => t.id));
+      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
+    }
+
+    if (selLinha) {
+      baseAtas = baseAtas.filter((t) => normStr(t.linha) === normStr(selLinha));
+      const ids = new Set(baseAtas.map((t) => t.id));
+      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
+    }
+
+    if (selMotorista) {
+      baseAtas = baseAtas.filter(
+        (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === selMotorista
+      );
+      const ids = new Set(baseAtas.map((t) => t.id));
+      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
+    }
+
+    if (selAcao) {
+      baseDet = baseDet.filter((d) => normStr(d.acao_aplicada) === normStr(selAcao));
+      const ids = new Set(baseDet.map((d) => d.tratativa_id));
+      baseAtas = baseAtas.filter((t) => ids.has(t.id));
+    }
+
+    return { baseAtas, baseDet };
+  }, [atas, detalhesJoin, selOcorrencia, selLinha, selMotorista, selAcao]);
+
+  const topOcorrencias = useMemo(() => {
+    const m = countBy(recorteDrill.baseAtas, (t) => normStr(t.tipo_ocorrencia) || "Sem ocorrência");
+    return sortMapDesc(m).slice(0, 12);
+  }, [recorteDrill.baseAtas]);
+
+  const topLinhas = useMemo(() => {
+    const m = countBy(recorteDrill.baseAtas, (t) => normStr(t.linha) || "Sem linha");
+    return sortMapDesc(m).slice(0, 12);
+  }, [recorteDrill.baseAtas]);
+
+  const topMotoristas = useMemo(() => {
+    const key = (t) =>
+      `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}`.trim() || "Sem motorista";
+
+    const m = countBy(recorteDrill.baseAtas, (t) => key(t));
+
+    return sortMapDesc(m)
+      .slice(0, 12)
+      .map(([k, total]) => {
+        const [chapa, nome] = k.split("|");
+        const pend = recorteDrill.baseAtas.filter(
+          (t) =>
+            `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k &&
+            ilikeContains(t.status, "pend")
+        ).length;
+
+        const conc = recorteDrill.baseAtas.filter(
+          (t) =>
+            `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k &&
+            (ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid"))
+        ).length;
+
+        return { k, chapa, nome, total, pend, conc };
+      });
+  }, [recorteDrill.baseAtas]);
+
+  const topAcoes = useMemo(() => {
+    const m = countBy(recorteDrill.baseDet, (d) => normStr(d.acao_aplicada) || "Não aplicada");
+    return sortMapDesc(m).slice(0, 12);
+  }, [recorteDrill.baseDet]);
+
+  const headerChips = useMemo(() => {
+    const chips = [];
+    if (selOcorrencia) chips.push({ k: "oc", label: `Ocorrência: ${selOcorrencia}`, tone: "purple" });
+    if (selLinha) chips.push({ k: "li", label: `Linha: ${selLinha}`, tone: "indigo" });
+    if (selMotorista) {
+      const [chapa, nome] = selMotorista.split("|");
+      chips.push({ k: "mo", label: `Motorista: ${nome} (${chapa})`, tone: "blue" });
+    }
+    if (selAcao) chips.push({ k: "ac", label: `Ação: ${selAcao}`, tone: "green" });
+    return chips;
+  }, [selOcorrencia, selLinha, selMotorista, selAcao]);
+
+  function baixarExcelUnificado() {
+    const { baseAtas } = recorteDrill;
+
+    const ids = new Set(baseAtas.map((t) => t.id));
+    const detFiltrado = detalhesJoin.filter((d) => ids.has(d.tratativa_id));
+
+    const sheetAtas = baseAtas.map((t) => ({
+      id: t.id,
+      created_at: t.created_at,
+      motorista_chapa: t.motorista_chapa,
+      motorista_nome: t.motorista_nome,
+      linha: t.linha,
+      tipo_ocorrencia: t.tipo_ocorrencia,
+      setor_origem: t.setor_origem,
+      prioridade: t.prioridade,
+      status: t.status,
+      descricao: t.descricao,
+    }));
+
+    const sheetDet = detFiltrado.map((d) => ({
+      id: d.id,
+      created_at: d.created_at,
+      ata_id: d.tratativa_id,
+      acao_aplicada: d.acao_aplicada,
+      observacoes: d.observacoes,
+      tratado_por_login: d.tratado_por_login,
+      tratado_por_nome: d.tratado_por_nome,
+    }));
+
+    const detByAta = new Map();
+    for (const d of detFiltrado) {
+      if (!detByAta.has(d.tratativa_id)) detByAta.set(d.tratativa_id, []);
+      detByAta.get(d.tratativa_id).push(d);
+    }
+
+    const sheetUni = [];
+    for (const t of baseAtas) {
+      const list = detByAta.get(t.id) || [];
+      if (!list.length) {
+        sheetUni.push({
+          ata_id: t.id,
+          ata_created_at: t.created_at,
+          motorista_chapa: t.motorista_chapa,
+          motorista_nome: t.motorista_nome,
+          linha: t.linha,
+          tipo_ocorrencia: t.tipo_ocorrencia,
+          setor_origem: t.setor_origem,
+          prioridade: t.prioridade,
+          status: t.status,
+          descricao: t.descricao,
+          detalhe_id: "",
+          detalhe_created_at: "",
+          acao_aplicada: "",
+          observacoes: "",
+          tratado_por_login: "",
+          tratado_por_nome: "",
+        });
+      } else {
+        for (const d of list) {
+          sheetUni.push({
+            ata_id: t.id,
+            ata_created_at: t.created_at,
+            motorista_chapa: t.motorista_chapa,
+            motorista_nome: t.motorista_nome,
+            linha: t.linha,
+            tipo_ocorrencia: t.tipo_ocorrencia,
+            setor_origem: t.setor_origem,
+            prioridade: t.prioridade,
+            status: t.status,
+            descricao: t.descricao,
+            detalhe_id: d.id,
+            detalhe_created_at: d.created_at,
+            acao_aplicada: d.acao_aplicada,
+            observacoes: d.observacoes,
+            tratado_por_login: d.tratado_por_login,
+            tratado_por_nome: d.tratado_por_nome,
+          });
+        }
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetAtas), "Atas");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetDet), "Detalhes");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetUni), "Unificado");
+
+    const nome = `atas_resumo_${filtros.dataInicio || "inicio"}_${filtros.dataFim || "fim"}.xlsx`;
+    XLSX.writeFile(wb, nome);
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Pendências de Revisão</h1>
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Resumo de Atas</h1>
+          <p className="text-sm text-gray-500">
+            Clique nos TOPs para filtrar como BI e exporte um único Excel unificado.
+          </p>
+        </div>
 
-      <div className="bg-white shadow rounded-lg overflow-x-auto">
-        <table className="min-w-full border">
-          <thead className="bg-yellow-600 text-white">
-            <tr>
-              <th className="py-2 px-3 text-left">Data</th>
-              <th className="py-2 px-3 text-left">Prefixo</th>
-              <th className="py-2 px-3 text-left">Nº Avaria</th>
-              <th className="py-2 px-3 text-left">Tipo</th>
-              <th className="py-2 px-3 text-left">Valor</th>
-              <th className="py-2 px-3 text-left">Reprovado por</th>
-              <th className="py-2 px-3 text-left w-80">Motivo / Observação</th>
-              <th className="py-2 px-3 text-left">Ações</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="8" className="text-center p-4">Carregando...</td></tr>
-            ) : avarias.length === 0 ? (
-              <tr><td colSpan="8" className="text-center p-4 text-gray-600">Nenhuma pendência.</td></tr>
-            ) : (
-              avarias.map(a => (
-                <tr key={a.id} className="border-t">
-                  <td className="py-2 px-3">{new Date(a.dataAvaria).toLocaleDateString('pt-BR')}</td>
-                  <td className="py-2 px-3">{a.prefixo}</td>
-                  <td className="py-2 px-3">{a.numero_da_avaria || '-'}</td>
-                  <td className="py-2 px-3">{a.tipoOcorrencia}</td>
-
-                  <td className="py-2 px-3 font-medium">
-                    {(a.valor_total_orcamento || 0).toLocaleString('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL'
-                    })}
-                  </td>
-
-                  <td className="py-2 px-3">{a.aprovado_por || '—'}</td>
-
-                  <td className="py-2 px-3">
-                    <p className="text-sm bg-yellow-50 border rounded p-2 min-h-[48px]">
-                      {a.observacao_operacao || 'Sem observação.'}
-                    </p>
-                  </td>
-
-                  <td className="py-2 px-3">
-                    <button
-                      onClick={() => setSelected(a)}
-                      className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-sm flex items-center gap-1"
-                    >
-                      <FaEdit /> Editar
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        <button
+          onClick={baixarExcelUnificado}
+          disabled={loading || atas.length === 0}
+          className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-300"
+        >
+          Baixar Excel (Unificado)
+        </button>
       </div>
 
-      {selected && (
-        <EditarAvariaModal
-          avaria={selected}
-          onClose={() => setSelected(null)}
-          onAtualizarLista={carregar}
-        />
-      )}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <input
+            type="date"
+            value={filtros.dataInicio}
+            onChange={(e) => setFiltros((f) => ({ ...f, dataInicio: e.target.value }))}
+            className="border rounded-md px-3 py-2"
+          />
+          <input
+            type="date"
+            value={filtros.dataFim}
+            onChange={(e) => setFiltros((f) => ({ ...f, dataFim: e.target.value }))}
+            className="border rounded-md px-3 py-2"
+          />
+          <input
+            type="text"
+            placeholder="Busca (motorista, ocorrência, descrição...)"
+            value={filtros.busca}
+            onChange={(e) => setFiltros((f) => ({ ...f, busca: e.target.value }))}
+            className="border rounded-md px-3 py-2"
+          />
+          <select
+            value={filtros.setor}
+            onChange={(e) => setFiltros((f) => ({ ...f, setor: e.target.value }))}
+            className="border rounded-md px-3 py-2 bg-white"
+          >
+            <option value="">Todos os Setores</option>
+            {setoresDisponiveis.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filtros.status}
+            onChange={(e) => setFiltros((f) => ({ ...f, status: e.target.value }))}
+            className="border rounded-md px-3 py-2 bg-white"
+          >
+            <option value="">Todos os Status</option>
+            <option value="Pendente">Pendente</option>
+            <option value="Resolvido">Resolvido</option>
+            <option value="Concluída">Concluída</option>
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between mt-4 gap-3">
+          <div className="flex flex-wrap gap-2">
+            {headerChips.map((c) => (
+              <Badge key={c.k} tone={c.tone}>
+                {c.label}
+              </Badge>
+            ))}
+            {(selOcorrencia || selLinha || selMotorista || selAcao) && (
+              <button
+                onClick={resetDrill}
+                className="text-xs px-3 py-1 rounded border border-gray-200 hover:bg-gray-50"
+              >
+                Limpar seleção
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={aplicar}
+            disabled={loading}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300"
+          >
+            {loading ? "Carregando..." : "Aplicar"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100" />
+        <CardResumo titulo="Pendentes" valor={pendentesCount} cor="bg-yellow-100" />
+        <CardResumo titulo="Concluídas" valor={concluidasCount} cor="bg-green-100" />
+        <CardResumo titulo="Atrasadas (>10d)" valor={atrasadasCount} cor="bg-red-100" />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <div className="xl:col-span-5">
+          <Card
+            title="Top Motoristas (Atas)"
+            right={<Badge tone="blue">{recorteDrill.baseAtas.length} atas</Badge>}
+          >
+            <div className="space-y-2">
+              {topMotoristas.length === 0 ? (
+                <div className="text-sm text-gray-500">Sem dados no recorte.</div>
+              ) : (
+                topMotoristas.map((m) => (
+                  <ListItemButton
+                    key={m.k}
+                    label={m.nome || "Sem nome"}
+                    sub={m.chapa ? `Chapa ${m.chapa}` : "Chapa -"}
+                    value={`Total ${m.total} | Pend ${m.pend} | Conc ${m.conc}`}
+                    active={selMotorista === m.k}
+                    onClick={() => {
+                      setSelMotorista((cur) => (cur === m.k ? "" : m.k));
+                      setSelAcao("");
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
+
+        <div className="xl:col-span-2">
+          <Card
+            title="Top Ocorrências"
+            right={<Badge tone="purple">{topOcorrencias.reduce((a, b) => a + b[1], 0)}</Badge>}
+          >
+            <div className="space-y-2">
+              {topOcorrencias.length === 0 ? (
+                <div className="text-sm text-gray-500">Sem dados no recorte.</div>
+              ) : (
+                topOcorrencias.map(([label, qtd]) => (
+                  <ListItemButton
+                    key={label}
+                    label={label}
+                    value={qtd}
+                    active={selOcorrencia === label}
+                    onClick={() => {
+                      setSelOcorrencia((cur) => (cur === label ? "" : label));
+                      setSelMotorista("");
+                      setSelAcao("");
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
+
+        <div className="xl:col-span-2">
+          <Card
+            title="Top Linhas"
+            right={<Badge tone="indigo">{topLinhas.reduce((a, b) => a + b[1], 0)}</Badge>}
+          >
+            <div className="space-y-2">
+              {topLinhas.length === 0 ? (
+                <div className="text-sm text-gray-500">Sem linhas no recorte.</div>
+              ) : (
+                topLinhas.map(([label, qtd]) => (
+                  <ListItemButton
+                    key={label}
+                    label={label}
+                    value={qtd}
+                    active={selLinha === label}
+                    onClick={() => {
+                      setSelLinha((cur) => (cur === label ? "" : label));
+                      setSelMotorista("");
+                      setSelAcao("");
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
+
+        <div className="xl:col-span-3">
+          <Card
+            title="Top Ações Aplicadas (Detalhes)"
+            right={<Badge tone="green">{recorteDrill.baseDet.length} ações</Badge>}
+          >
+            <div className="space-y-2">
+              {topAcoes.length === 0 ? (
+                <div className="text-sm text-gray-500">Sem ações no recorte.</div>
+              ) : (
+                topAcoes.map(([label, qtd]) => (
+                  <ListItemButton
+                    key={label}
+                    label={label}
+                    value={qtd}
+                    active={selAcao === label}
+                    onClick={() => setSelAcao((cur) => (cur === label ? "" : label))}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

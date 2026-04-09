@@ -13,11 +13,9 @@ import {
   FaInfoCircle,
   FaCalendarAlt,
   FaClipboardList,
-  FaPaperclip,
-  FaFilePdf,
-  FaImage,
   FaSave,
   FaEdit,
+  FaArrowLeft,
 } from "react-icons/fa";
 
 const acoes = [
@@ -510,7 +508,7 @@ export default function TratarTratativa() {
       if (upd.error) throw upd.error;
 
       alert("Tratativa concluída com sucesso!");
-      nav("/central");
+      nav(-1);
     } catch (e) {
       alert(`Erro: ${e.message}`);
     } finally {
@@ -828,13 +826,23 @@ export default function TratarTratativa() {
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <FaGavel className="text-violet-500" /> Tratar Tratativa
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Revise os dados, registre a ação aplicada e conclua a tratativa.
-          </p>
+        <div className="space-y-3">
+          <button
+            onClick={() => nav(-1)}
+            className="px-4 py-2 bg-white border rounded-lg shadow-sm hover:bg-slate-50 font-bold text-sm flex items-center gap-2"
+          >
+            <FaArrowLeft />
+            Voltar
+          </button>
+
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+              <FaGavel className="text-violet-500" /> Tratar Tratativa
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Revise os dados, registre a ação aplicada e conclua a tratativa.
+            </p>
+          </div>
         </div>
 
         <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
@@ -1173,6 +1181,8 @@ export default function TratarTratativa() {
                 </div>
               </div>
             )}
+
+            {renderArquivoOuThumb(t.anexo_tratativa || null, "Anexo já anexado (se houver)")}
           </div>
         </div>
 

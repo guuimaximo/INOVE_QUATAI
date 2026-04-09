@@ -38,11 +38,6 @@ function normalize(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-function dateOnly(v) {
-  if (!v) return "";
-  return String(v).split("T")[0].split(" ")[0];
-}
-
 function safeDateStr(v) {
   if (!v) return "";
   const s = String(v).trim();
@@ -274,8 +269,14 @@ export default function DesempenhoDieselAnalise() {
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
   const [sortLinhas, setSortLinhas] = useState({ key: "Desperdicio", direction: "desc" });
-  const [sortMotoristas, setSortMotoristas] = useState({ key: "Litros_Desp_Meta", direction: "desc" });
-  const [sortCarros, setSortCarros] = useState({ key: "Litros_Desp_Meta", direction: "desc" });
+  const [sortMotoristas, setSortMotoristas] = useState({
+    key: "Litros_Desp_Meta",
+    direction: "desc",
+  });
+  const [sortCarros, setSortCarros] = useState({
+    key: "Litros_Desp_Meta",
+    direction: "desc",
+  });
 
   async function carregarPremiacao() {
     if (!supabaseA) throw new Error("Supabase A não configurado.");
@@ -454,11 +455,13 @@ export default function DesempenhoDieselAnalise() {
   }, [dataset, acompanhamentos]);
 
   const instrutoresUnicos = useMemo(() => {
-    return [...new Set(
-      acompanhamentos
-        .map((a) => String(a.instrutor_nome || "").trim())
-        .filter(Boolean)
-    )].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    return [
+      ...new Set(
+        acompanhamentos
+          .map((a) => String(a.instrutor_nome || "").trim())
+          .filter(Boolean)
+      ),
+    ].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [acompanhamentos]);
 
   const datasetFiltrado = useMemo(() => {
@@ -622,57 +625,135 @@ export default function DesempenhoDieselAnalise() {
       .sort((a, b) => b.Litros_Desp_Meta - a.Litros_Desp_Meta);
   }, [rowsReferenciaComRef]);
 
-  // AJUSTE PRINCIPAL AQUI
   const topMotoristas = useMemo(() => {
     const map = new Map();
 
     rowsReferenciaComRef.forEach((r) => {
-      const key = `${r.chapa}__${r.linha}__${r.Cluster}`;
+      const key = String(r.chapa || "").trim() || "SEM_CHAPA";
 
       if (!map.has(key)) {
         map.set(key, {
           id: key,
           Motorista: r.motoristaNome,
           chapa: r.chapa,
-          Cluster: r.Cluster,
-          linha: r.linha,
+          ClusterSet: new Set(),
+          LinhaSet: new Set(),
           Litros_Desperdicio: 0,
           Litros_Desp_Meta: 0,
           Km: 0,
           Comb: 0,
-          KML_Ref: 0,
-          Meta_Linha: 0,
+          KML_Ref_Soma: 0,
+          Meta_Linha_Soma: 0,
           Litros_Esperados: 0,
           count: 0,
         });
       }
 
       const item = map.get(key);
-      item.Litros_Desperdicio += r.Litros_Desperdicio;
-      item.Litros_Desp_Meta += r.Litros_Desp_Meta;
-      item.Km += r.Km;
-      item.Comb += r.Comb;
-      item.KML_Ref += r.KML_Ref;
-      item.Meta_Linha += r.Meta_Linha;
+
+      item.Motorista = item.Motorista || r.motoristaNome;
+      item.chapa = item.chapa || r.chapa;
+
+      if (r.Cluster) item.ClusterSet.add(r.Cluster);
+      if (r.linha) item.LinhaSet.add(r.linha);
+
+      item.Litros_Desperdicio += n(r.Litros_Desperdicio);
+      item.Litros_Desp_Meta += n(r.Litros_Desp_Meta);
+      item.Km += n(r.Km);
+      item.Comb += n(r.Comb);
+      item.KML_Ref_Soma += n(r.KML_Ref);
+      item.Meta_Linha_Soma += n(r.Meta_Linha);
       item.Litros_Esperados += n(r.Litros_Esperados);
       item.count += 1;
     });
 
-    return [...map.values()]
-      .map((r) => {
-        const kmTotalLinha = n(mapaKmLinhaReferencia.get(r.linha));
+    const kmTotalGeral = rowsReferenciaComRef.reduce((acc, r) => acc + n(r.Km), 0);
 
-        return {
-          ...r,
-          KML_Real: r.Comb > 0 ? r.Km / r.Comb : 0,
-          KML_Meta: r.Litros_Esperados > 0 ? r.Km / r.Litros_Esperados : 0,
-          KML_Ref: r.count > 0 ? r.KML_Ref / r.count : 0,
-          Meta_Linha: r.count > 0 ? r.Meta_Linha / r.count : 0,
-          Impacto_Pct: kmTotalLinha > 0 ? (r.Km / kmTotalLinha) * 100 : 0,
-        };
-      })
+    return [...map.values()]
+      .map((r) => ({
+        ...r,
+        Cluster:
+          r.ClusterSet.size === 1
+            ? [...r.ClusterSet][0]
+            : [...r.ClusterSet].sort().join(", "),
+        linha:
+          r.LinhaSet.size === 1
+            ? [...r.LinhaSet][0]
+            : [...r.LinhaSet].sort((a, b) => a.localeCompare(b, "pt-BR")).join(", "),
+        KML_Real: r.Comb > 0 ? r.Km / r.Comb : 0,
+        KML_Meta: r.Litros_Esperados > 0 ? r.Km / r.Litros_Esperados : 0,
+        KML_Ref: r.count > 0 ? r.KML_Ref_Soma / r.count : 0,
+        Meta_Linha: r.count > 0 ? r.Meta_Linha_Soma / r.count : 0,
+        Impacto_Pct: kmTotalGeral > 0 ? (r.Km / kmTotalGeral) * 100 : 0,
+      }))
       .sort((a, b) => b.Litros_Desp_Meta - a.Litros_Desp_Meta);
-  }, [rowsReferenciaComRef, mapaKmLinhaReferencia]);
+  }, [rowsReferenciaComRef]);
+
+  function calcularJanelaSimetricaPorDias(chapa, dataRef, janelaDias) {
+    const chapaNorm = String(chapa || "").trim();
+    const dtRef = safeDateStr(dataRef);
+
+    if (!chapaNorm || !dtRef || !janelaDias) {
+      return {
+        janela: janelaDias,
+        disponivel: false,
+        antes_kml: null,
+        depois_kml: null,
+        delta_kml: null,
+        dias_antes_usados: 0,
+        dias_depois_usados: 0,
+      };
+    }
+
+    const baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapaNorm);
+    const diasAgrupados = agruparPorDiaStr(baseMotorista);
+
+    if (!diasAgrupados.length) {
+      return {
+        janela: janelaDias,
+        disponivel: false,
+        antes_kml: null,
+        depois_kml: null,
+        delta_kml: null,
+        dias_antes_usados: 0,
+        dias_depois_usados: 0,
+      };
+    }
+
+    const diasAntesDisp = diasAgrupados.filter((d) => d.diaStr < dtRef);
+    const diasDepoisDisp = diasAgrupados.filter((d) => d.diaStr >= dtRef);
+
+    if (diasAntesDisp.length < janelaDias || diasDepoisDisp.length < janelaDias) {
+      return {
+        janela: janelaDias,
+        disponivel: false,
+        antes_kml: null,
+        depois_kml: null,
+        delta_kml: null,
+        dias_antes_usados: Math.min(diasAntesDisp.length, janelaDias),
+        dias_depois_usados: Math.min(diasDepoisDisp.length, janelaDias),
+      };
+    }
+
+    const diasAntes = diasAntesDisp.slice(-janelaDias);
+    const diasDepois = diasDepoisDisp.slice(0, janelaDias);
+
+    const antes = aggregatePeriodo(diasAntes.flatMap((d) => d.rows));
+    const depois = aggregatePeriodo(diasDepois.flatMap((d) => d.rows));
+
+    const antesKml = n(antes.kml);
+    const depoisKml = n(depois.kml);
+
+    return {
+      janela: janelaDias,
+      disponivel: true,
+      antes_kml: antesKml,
+      depois_kml: depoisKml,
+      delta_kml: depoisKml - antesKml,
+      dias_antes_usados: diasAntes.length,
+      dias_depois_usados: diasDepois.length,
+    };
+  }
 
   const acompanhamentosComEvolucao = useMemo(() => {
     return acompanhamentos
@@ -694,12 +775,32 @@ export default function DesempenhoDieselAnalise() {
           duracao_min: duracaoMin,
         };
 
-        if (!chapa) return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
+        if (!chapa) {
+          return {
+            ...aBase,
+            checkpoint_tipo: "SEM_DADOS",
+            conclusao_checkpoint: "SEM_DADOS",
+            janela_5: calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 5),
+            janela_10: calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 10),
+            janela_20: calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 20),
+            janela_30: calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 30),
+          };
+        }
 
         const baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
         const diasAgrupados = agruparPorDiaStr(baseMotorista);
 
-        if (!diasAgrupados.length) return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
+        if (!diasAgrupados.length) {
+          return {
+            ...aBase,
+            checkpoint_tipo: "SEM_DADOS",
+            conclusao_checkpoint: "SEM_DADOS",
+            janela_5: calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 5),
+            janela_10: calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 10),
+            janela_20: calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 20),
+            janela_30: calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 30),
+          };
+        }
 
         const diasAntesDisp = diasAgrupados.filter((d) => d.diaStr < dtInicioStr);
         const diasDepoisDisp = diasAgrupados.filter((d) => d.diaStr >= dtInicioStr);
@@ -713,7 +814,22 @@ export default function DesempenhoDieselAnalise() {
         else if (maxPossivel >= 5) janela = 5;
         else if (maxPossivel >= 3) janela = 3;
 
-        if (janela === 0) return { ...aBase, checkpoint_tipo: "SEM_DADOS", conclusao_checkpoint: "SEM_DADOS" };
+        const janela5 = calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 5);
+        const janela10 = calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 10);
+        const janela20 = calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 20);
+        const janela30 = calcularJanelaSimetricaPorDias(chapa, dtInicioStr, 30);
+
+        if (janela === 0) {
+          return {
+            ...aBase,
+            checkpoint_tipo: "SEM_DADOS",
+            conclusao_checkpoint: "SEM_DADOS",
+            janela_5: janela5,
+            janela_10: janela10,
+            janela_20: janela20,
+            janela_30: janela30,
+          };
+        }
 
         const diasAntes = diasAntesDisp.slice(-janela);
         const diasDepois = diasDepoisDisp.slice(0, janela);
@@ -773,6 +889,10 @@ export default function DesempenhoDieselAnalise() {
           desp_real_antes: antesDesp,
           desp_real_depois: n(depois.desperdicio),
           desp_ajustado_depois: desperdicioAjustado,
+          janela_5: janela5,
+          janela_10: janela10,
+          janela_20: janela20,
+          janela_30: janela30,
         };
       })
       .filter((a) => {
@@ -781,7 +901,8 @@ export default function DesempenhoDieselAnalise() {
           const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
           if (c !== filtroCluster) return false;
         }
-        if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor) return false;
+        if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor)
+          return false;
         if (filtroStatus && a.status_norm !== filtroStatus) return false;
         if (filtroProntuario && a.checkpoint_tipo !== filtroProntuario) return false;
         if (mesReferencia) {
@@ -825,7 +946,9 @@ export default function DesempenhoDieselAnalise() {
       reduziramDesperdicio: rows.filter((r) => n(r.depois_desp) < n(r.antes_desp)).length,
       aumentaramDesperdicio: rows.filter((r) => n(r.depois_desp) > n(r.antes_desp)).length,
       mediaDeltaKml: rows.length ? rows.reduce((acc, r) => acc + n(r.delta_kml), 0) / rows.length : 0,
-      mediaDeltaDesp: rows.length ? rows.reduce((acc, r) => acc + n(r.delta_desperdicio), 0) / rows.length : 0,
+      mediaDeltaDesp: rows.length
+        ? rows.reduce((acc, r) => acc + n(r.delta_desperdicio), 0) / rows.length
+        : 0,
     };
   }, [acompanhamentosComEvolucao]);
 
@@ -1107,6 +1230,7 @@ export default function DesempenhoDieselAnalise() {
       Início: fmtDateBr(row.data_ref),
       Tempo: formatMinutes(row.duracao_min),
       Prontuário: row.checkpoint_tipo,
+
       "Antes KM/L": fmtNum(row.antes_kml),
       "Depois KM/L": fmtNum(row.depois_kml),
       "Δ KM/L": fmtNum(row.delta_kml),
@@ -1114,6 +1238,22 @@ export default function DesempenhoDieselAnalise() {
       "Depois Desp.": fmtNum(row.depois_desp),
       "Δ Desp.": fmtNum(row.delta_desperdicio),
       Conclusão: row.conclusao_checkpoint,
+
+      "5D Antes KM/L": row.janela_5?.disponivel ? fmtNum(row.janela_5.antes_kml) : "",
+      "5D Depois KM/L": row.janela_5?.disponivel ? fmtNum(row.janela_5.depois_kml) : "",
+      "5D Δ KM/L": row.janela_5?.disponivel ? fmtNum(row.janela_5.delta_kml) : "",
+
+      "10D Antes KM/L": row.janela_10?.disponivel ? fmtNum(row.janela_10.antes_kml) : "",
+      "10D Depois KM/L": row.janela_10?.disponivel ? fmtNum(row.janela_10.depois_kml) : "",
+      "10D Δ KM/L": row.janela_10?.disponivel ? fmtNum(row.janela_10.delta_kml) : "",
+
+      "20D Antes KM/L": row.janela_20?.disponivel ? fmtNum(row.janela_20.antes_kml) : "",
+      "20D Depois KM/L": row.janela_20?.disponivel ? fmtNum(row.janela_20.depois_kml) : "",
+      "20D Δ KM/L": row.janela_20?.disponivel ? fmtNum(row.janela_20.delta_kml) : "",
+
+      "30D Antes KM/L": row.janela_30?.disponivel ? fmtNum(row.janela_30.antes_kml) : "",
+      "30D Depois KM/L": row.janela_30?.disponivel ? fmtNum(row.janela_30.depois_kml) : "",
+      "30D Δ KM/L": row.janela_30?.disponivel ? fmtNum(row.janela_30.delta_kml) : "",
     }));
 
   const getAcompanhamentosInstrutorExport = () =>
@@ -1199,7 +1339,8 @@ export default function DesempenhoDieselAnalise() {
             <button
               onClick={() => {
                 if (abaAtiva === "LINHAS") exportarParaExcel(getLinhasExport(), "Analise_Linhas");
-                if (abaAtiva === "MOTORISTAS") exportarParaExcel(getMotoristasExport(), "Ranking_Motoristas");
+                if (abaAtiva === "MOTORISTAS")
+                  exportarParaExcel(getMotoristasExport(), "Ranking_Motoristas");
                 if (abaAtiva === "CARROS") exportarParaExcel(getCarrosExport(), "Ranking_Carros");
                 if (abaAtiva === "ACOMPANHAMENTOS") {
                   if (subAcompanhamento === "RESUMO_INSTRUTOR") {
@@ -1212,7 +1353,10 @@ export default function DesempenhoDieselAnalise() {
                     exportarParaExcel(getAcompanhamentosCheckPointExport(), "Checkpoint_Linha");
                   }
                   if (subAcompanhamento === "ACOMPANHAMENTOS") {
-                    exportarParaExcel(getAcompanhamentosAcompanhamentosExport(), "Acompanhamentos_Detalhado");
+                    exportarParaExcel(
+                      getAcompanhamentosAcompanhamentosExport(),
+                      "Acompanhamentos_Detalhado"
+                    );
                   }
                 }
               }}
@@ -1241,10 +1385,18 @@ export default function DesempenhoDieselAnalise() {
           <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm">
             <h3 className="font-bold text-base mb-2">Como a Evolução é Calculada?</h3>
             <ul className="list-disc pl-5 space-y-2">
-              <li><strong>D0 Obrigatório:</strong> Apenas acompanhamentos com data base geram análise matemática.</li>
-              <li><strong>Histórico Global:</strong> Usa todas as linhas operadas para consolidar a meta ponderada em litros.</li>
-              <li><strong>Janela Simétrica:</strong> Apenas dias trabalhados. Máximo espelhamento possível: 30, 20, 10, 5 ou 3 dias simétricos de cada lado.</li>
-              <li><strong>Desperdício Ajustado:</strong> Simula os litros do "Antes" aplicando a habilidade de KM/L do "Depois" no volume de KM do "Antes".</li>
+              <li>
+                <strong>D0 Obrigatório:</strong> Apenas acompanhamentos com data base geram análise matemática.
+              </li>
+              <li>
+                <strong>Histórico Global:</strong> Usa todas as linhas operadas para consolidar a meta ponderada em litros.
+              </li>
+              <li>
+                <strong>Janela Simétrica:</strong> Apenas dias trabalhados. Máximo espelhamento possível: 30, 20, 10, 5 ou 3 dias simétricos de cada lado.
+              </li>
+              <li>
+                <strong>Desperdício Ajustado:</strong> Simula os litros do "Antes" aplicando a habilidade de KM/L do "Depois" no volume de KM do "Antes".
+              </li>
             </ul>
           </div>
         )}
@@ -1350,22 +1502,21 @@ export default function DesempenhoDieselAnalise() {
                 <option value="MELHOROU">MELHOROU</option>
                 <option value="PIOROU">PIOROU</option>
                 <option value="SEM_EVOLUCAO">SEM_EVOLUCAO</option>
-                <option value="SEM_DADOS">SEM_DADOS</option>
               </select>
             </>
           )}
         </div>
       </div>
 
-      <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1">
+      <div className="flex flex-wrap gap-2">
         {abas.map((aba) => (
           <button
             key={aba.key}
             onClick={() => setAbaAtiva(aba.key)}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-black transition ${
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-bold border transition ${
               abaAtiva === aba.key
-                ? "bg-white shadow-sm text-slate-800"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-slate-800 text-white border-slate-800"
+                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
             }`}
           >
             {aba.icon} {aba.label}
@@ -1373,73 +1524,102 @@ export default function DesempenhoDieselAnalise() {
         ))}
       </div>
 
-      {erro && (
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-rose-700 font-bold">
-          {erro}
+      {abaAtiva === "ACOMPANHAMENTOS" && (
+        <div className="bg-white rounded-2xl border shadow-sm p-4 md:p-5 space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: "RESUMO_INSTRUTOR", label: "Resumo por Instrutor" },
+              { key: "TEMPO_DIA", label: "Tempo por Dia" },
+              { key: "CHECKPOINT_LINHA", label: "Check Point por Linha" },
+              { key: "ACOMPANHAMENTOS", label: "Acompanhamentos" },
+            ].map((sub) => (
+              <button
+                key={sub.key}
+                onClick={() => setSubAcompanhamento(sub.key)}
+                className={`px-3 py-2 rounded-lg font-bold border transition ${
+                  subAcompanhamento === sub.key
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="rounded-xl border bg-slate-50 p-4">
+            <h2 className="text-lg font-black text-slate-800">
+              {headerSubAcompanhamento[subAcompanhamento]?.titulo}
+            </h2>
+            <p className="text-sm text-slate-500">
+              {headerSubAcompanhamento[subAcompanhamento]?.subtitulo}
+            </p>
+          </div>
+
+          <AcompanhamentosModal
+            subAcompanhamento={subAcompanhamento}
+            resumoInstrutor={resumoInstrutor}
+            tempoPorDia={tempoPorDia}
+            resumoPorLinhaCheckpoint={resumoPorLinhaCheckpoint}
+            acompanhamentosComEvolucao={acompanhamentosComEvolucao}
+            checkpointResumo={checkpointResumo}
+            fmtNum={fmtNum}
+            fmtInt={fmtInt}
+            fmtDateBr={fmtDateBr}
+            formatMinutes={formatMinutes}
+            statusBadgeClass={statusBadgeClass}
+            EvolucaoBadge={EvolucaoBadge}
+            SortIcon={SortIcon}
+          />
         </div>
       )}
 
-      {loading ? (
-        <div className="bg-white rounded-xl border shadow-sm p-10 text-center text-slate-500 font-bold">
+      {abaAtiva === "LINHAS" && (
+        <AnaliseLinhasModal
+          kmlReferenciaGeral={kmlReferenciaGeral}
+          kmlComparacaoGeral={kmlComparacaoGeral}
+          variacaoGeral={variacaoGeral}
+          totalDesperdicioMeta={totalDesperdicioMeta}
+          linhasTabelaOrdenada={linhasTabelaOrdenada}
+          sortConfig={sortLinhas}
+          handleSort={(key) => toggleSort(setSortLinhas, key)}
+          fmtNum={fmtNum}
+          fmtInt={fmtInt}
+          EvolucaoBadge={EvolucaoBadge}
+          SortIcon={SortIcon}
+        />
+      )}
+
+      {abaAtiva === "MOTORISTAS" && (
+        <RankingMotoristasModal
+          motoristasOrdenados={motoristasOrdenados}
+          sortConfig={sortMotoristas}
+          handleSort={(key) => toggleSort(setSortMotoristas, key)}
+          fmtNum={fmtNum}
+          SortIcon={SortIcon}
+        />
+      )}
+
+      {abaAtiva === "CARROS" && (
+        <RankingCarrosModal
+          veiculosOrdenados={veiculosOrdenados}
+          sortConfig={sortCarros}
+          handleSort={(key) => toggleSort(setSortCarros, key)}
+          fmtNum={fmtNum}
+          SortIcon={SortIcon}
+        />
+      )}
+
+      {loading && (
+        <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-500 font-semibold">
           Carregando dados...
         </div>
-      ) : (
-        <>
-          {abaAtiva === "LINHAS" && (
-            <AnaliseLinhasModal
-              kmlReferenciaGeral={kmlReferenciaGeral}
-              kmlComparacaoGeral={kmlComparacaoGeral}
-              variacaoGeral={variacaoGeral}
-              totalDesperdicioMeta={totalDesperdicioMeta}
-              linhasTabelaOrdenada={linhasTabelaOrdenada}
-              sortConfig={sortLinhas}
-              handleSort={(key) => toggleSort(setSortLinhas, key)}
-              fmtNum={fmtNum}
-              fmtInt={fmtInt}
-              EvolucaoBadge={EvolucaoBadge}
-              SortIcon={SortIcon}
-            />
-          )}
+      )}
 
-          {abaAtiva === "MOTORISTAS" && (
-            <RankingMotoristasModal
-              motoristasOrdenados={motoristasOrdenados}
-              sortConfig={sortMotoristas}
-              handleSort={(key) => toggleSort(setSortMotoristas, key)}
-              fmtNum={fmtNum}
-              SortIcon={SortIcon}
-            />
-          )}
-
-          {abaAtiva === "CARROS" && (
-            <RankingCarrosModal
-              veiculosOrdenados={veiculosOrdenados}
-              sortConfig={sortCarros}
-              handleSort={(key) => toggleSort(setSortCarros, key)}
-              fmtNum={fmtNum}
-              SortIcon={SortIcon}
-            />
-          )}
-
-          {abaAtiva === "ACOMPANHAMENTOS" && (
-            <AcompanhamentosModal
-              subAcompanhamento={subAcompanhamento}
-              setSubAcompanhamento={setSubAcompanhamento}
-              headerSubAcompanhamento={headerSubAcompanhamento}
-              checkpointResumo={checkpointResumo}
-              resumoInstrutor={resumoInstrutor}
-              tempoPorDia={tempoPorDia}
-              resumoPorLinhaCheckpoint={resumoPorLinhaCheckpoint}
-              acompanhamentosComEvolucao={acompanhamentosComEvolucao}
-              fmtNum={fmtNum}
-              fmtInt={fmtInt}
-              fmtDateBr={fmtDateBr}
-              formatMinutes={formatMinutes}
-              statusBadgeClass={statusBadgeClass}
-              EvolucaoBadge={EvolucaoBadge}
-            />
-          )}
-        </>
+      {!!erro && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl p-4 font-semibold">
+          {erro}
+        </div>
       )}
     </div>
   );

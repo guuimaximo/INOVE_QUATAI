@@ -44,9 +44,6 @@ function normalize(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-// ----------------------------------------------------
-// Lógica de Datas 100% igual ao código que funciona
-// ----------------------------------------------------
 function safeDateStr(v) {
   if (!v) return "";
   const txt = String(v).trim();
@@ -263,9 +260,6 @@ function EvolucaoBadge({ value, invert = false }) {
   );
 }
 
-// ----------------------------------------------------
-// COMPONENTE PRINCIPAL
-// ----------------------------------------------------
 export default function SOS_Resumo() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
@@ -282,49 +276,35 @@ export default function SOS_Resumo() {
   const [mesReferencia, setMesReferencia] = useState("");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
-  // ----------------------------------------------------
-  // NOVA BUSCA EM BLOCO (PAGINAÇÃO COMPLETA)
-  // Contorna limites restritos do PostgREST
-  // ----------------------------------------------------
-  async function fetchAll(table, limit = 1000) {
-    let allData = [];
-    let start = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from(table)
-        .select("*")
-        .range(start, start + limit - 1);
-        
-      if (error) throw error;
-      if (!data || data.length === 0) break;
-      
-      allData = allData.concat(data);
-      if (data.length < limit) break; 
-      start += limit;
-    }
-    return allData;
-  }
-
+  // Busca de dados idêntica ao SOSResumo que funciona
   async function carregarTudo() {
     setLoading(true);
     setErro("");
 
     try {
-      // 1. Busca todos os SOS
-      const sosData = await fetchAll("sos_acionamentos");
-      
-      // 2. Busca todos os KMs (ignora se der erro para não quebrar a tela)
+      const { data: sosData, error: sosErr } = await supabase
+        .from("sos_acionamentos")
+        .select("*")
+        .order("data_sos", { ascending: false })
+        .limit(50000);
+
+      if (sosErr) throw sosErr;
+
       let kmData = [];
       try {
-        kmData = await fetchAll("km_rodado_diario");
+        const { data: kmRes } = await supabase
+          .from("km_rodado_diario")
+          .select("*")
+          .limit(50000);
+        if (kmRes) kmData = kmRes;
       } catch (e) {
-        console.warn("Aviso: Tabela km_rodado_diario indisponível ou vazia.");
+        console.warn("Aviso: Tabela km_rodado_diario indisponível.");
       }
 
       setSosRows(sosData || []);
       setKmRows(kmData || []);
     } catch (e) {
-      console.error("Erro fatal ao carregar dados:", e);
+      console.error(e);
       setErro(e?.message || String(e));
     } finally {
       setLoading(false);
@@ -352,7 +332,7 @@ export default function SOS_Resumo() {
     return (sosRows || [])
       .map((r) => {
         const data_sos = safeDateStr(r.data_sos || r.created_at);
-        if (!data_sos) return null; // Filtro protetor
+        if (!data_sos) return null;
 
         const tipo_norm = normalizeTipo(r.ocorrencia);
         const classificacao = normalize(r.classificacao_controlabilidade);
@@ -378,7 +358,7 @@ export default function SOS_Resumo() {
           grupo_manutencao: String(r.grupo_manutencao || "").trim() || "N/D",
           cluster: deriveCluster(r.veiculo),
           classificacao_controlabilidade: classificacao,
-          controlavel: classificacao === "CONTROLÁVEL" || classificacao === "CONTROLAVEL",
+          controlavel: classificacao.includes("CONTROLÁVEL") || classificacao.includes("CONTROLAVEL"),
           dias_ultima_preventiva_calc: diasPrev || 0,
           dias_ultima_inspecao_calc: diasInsp || 0,
           faixa_preventiva: faixaDias(diasPrev),
@@ -386,7 +366,7 @@ export default function SOS_Resumo() {
           mes_key: data_sos.slice(0, 7),
         };
       })
-      .filter(Boolean); // Remove nulos
+      .filter(Boolean);
   }, [sosRows]);
 
   const mesesDisponiveis = useMemo(() => {
@@ -436,12 +416,11 @@ export default function SOS_Resumo() {
     [sosProcessado]
   );
 
-  const baseControlavel = useMemo(() => sosProcessado.filter((r) => r.controlavel), [sosProcessado]);
-
+  // Removido o filtro drástico que esvaziava a tela se a flag não batesse
   const baseFiltrada = useMemo(() => {
     const q = busca.trim().toLowerCase();
 
-    return baseControlavel.filter((r) => {
+    return sosProcessado.filter((r) => {
       if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.mes_key)) return false;
       if (filtroLinha && r.linha !== filtroLinha) return false;
       if (filtroSetor && r.setor_manutencao !== filtroSetor) return false;
@@ -462,7 +441,7 @@ export default function SOS_Resumo() {
       ].some((v) => String(v || "").toLowerCase().includes(q));
     });
   }, [
-    baseControlavel,
+    sosProcessado,
     busca,
     mesReferencia,
     mesComparacao,
@@ -615,6 +594,7 @@ export default function SOS_Resumo() {
   const resumoAtual = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesReferencia));
     const interv = baseRef.filter((r) => r.valida_mkbf).length;
+    const countControlaveis = baseRef.filter((r) => r.controlavel).length;
     const mkbf = interv > 0 ? kmTotal / interv : 0;
 
     const porTipoMap = {};
@@ -634,6 +614,7 @@ export default function SOS_Resumo() {
     return {
       kmTotal,
       interv,
+      countControlaveis,
       mkbf,
       porTipoMap,
       mediaPrev,
@@ -645,7 +626,9 @@ export default function SOS_Resumo() {
   const resumoComp = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesComparacao));
     const interv = baseComp.filter((r) => r.valida_mkbf).length;
+    const countControlaveis = baseComp.filter((r) => r.controlavel).length;
     const mkbf = interv > 0 ? kmTotal / interv : 0;
+    
     const porTipoMap = {};
     TIPOS_GRAFICO.forEach((t) => (porTipoMap[t] = 0));
     baseComp.forEach((r) => {
@@ -676,12 +659,12 @@ export default function SOS_Resumo() {
     const veiculosComSOS = porVeiculo.size;
     const taxaReincidencia = veiculosComSOS > 0 ? (veiculosReincidentes / veiculosComSOS) * 100 : 0;
 
-    return { kmTotal, interv, mkbf, porTipoMap, taxaReincidencia };
+    return { kmTotal, interv, countControlaveis, mkbf, porTipoMap, taxaReincidencia };
   }, [kmMesMap, mesComparacao, baseComp]);
 
   const historico12m = useMemo(() => {
     return mesesDisponiveis.slice(-12).map((mes) => {
-      const baseMes = baseControlavel.filter((r) => r.mes_key === mes);
+      const baseMes = sosProcessado.filter((r) => r.mes_key === mes);
       const kmTotal = n(kmMesMap.get(mes));
       const interv = baseMes.filter((r) => r.valida_mkbf).length;
 
@@ -711,7 +694,7 @@ export default function SOS_Resumo() {
       return {
         mes,
         mesLabel: monthLabelFromKey(mes),
-        controlaveis: baseMes.length,
+        intervTotal: baseMes.length,
         reincidentes: veiculosReincidentes,
         taxaReincidencia,
         kmTotal,
@@ -719,7 +702,7 @@ export default function SOS_Resumo() {
         meta: MKBF_META,
       };
     });
-  }, [mesesDisponiveis, baseControlavel, kmMesMap]);
+  }, [mesesDisponiveis, sosProcessado, kmMesMap]);
 
   const graficoTipos = useMemo(() => {
     return TIPOS_GRAFICO.map((tipo) => ({
@@ -938,7 +921,7 @@ export default function SOS_Resumo() {
     const ref = firstDayOfMonth(mesReferencia);
     if (!ref) return [];
     const months3 = [addMonths(ref, -2), addMonths(ref, -1), ref].map(monthKey);
-    const base = baseControlavel.filter((r) => months3.includes(r.mes_key));
+    const base = sosProcessado.filter((r) => months3.includes(r.mes_key));
     const counts = new Map();
 
     base.forEach((r) => {
@@ -974,7 +957,7 @@ export default function SOS_Resumo() {
       })
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
-  }, [mesReferencia, baseControlavel]);
+  }, [mesReferencia, sosProcessado]);
 
   const leituraAnalitica = useMemo(() => {
     const linhaTop = tabelaLinhas[0]?.linha || "N/D";
@@ -988,7 +971,7 @@ export default function SOS_Resumo() {
     return [
       `A pressão do mês está concentrada na linha ${linhaTop}, com ${fmtInt(
         tabelaLinhas[0]?.totalAtual || 0
-      )} SOS controláveis e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
+      )} SOS válidos e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
       `O defeito mais reincidente é "${defeitoTop}", puxado principalmente pelo setor ${setorTop}.`,
       `A faixa mais crítica após preventiva ficou em ${faixaPrevTop}, enquanto após inspeção a maior concentração ficou em ${faixaInspTop}.`,
       `O intervalo médio entre SOS do mesmo veículo está em ${fmtNum(
@@ -1011,7 +994,7 @@ export default function SOS_Resumo() {
       exportarCSV(
         historico12m.map((r) => ({
           Mês: r.mesLabel,
-          "SOS Controláveis": fmtInt(r.controlaveis),
+          "Total SOS": fmtInt(r.intervTotal),
           "Veículos Reincidentes": fmtInt(r.reincidentes),
           "Taxa Reincidência %": fmtNum(r.taxaReincidencia, 1),
           KM: fmtInt(r.kmTotal),
@@ -1167,7 +1150,7 @@ export default function SOS_Resumo() {
         {mostrarExplicacao && (
           <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm space-y-2">
             <p>
-              <strong>Base da tela:</strong> apenas SOS classificados como Controlável.
+              <strong>Base da tela:</strong> Traz a base consolidada de todos os SOS válidos.
             </p>
             <p>
               <strong>Reincidência operacional:</strong> mesmo veículo com novo SOS em até 30 dias.
@@ -1297,9 +1280,9 @@ export default function SOS_Resumo() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
         <CardKPI
-          title="SOS Controláveis"
+          title="Total SOS Válidos"
           value={fmtInt(resumoAtual.interv)}
-          sub={`Mês ${monthLabelFromKey(mesReferencia)}`}
+          sub={`${fmtInt(resumoAtual.countControlaveis)} controláveis`}
           icon={<FaExclamationTriangle />}
           tone="rose"
         />
@@ -1313,12 +1296,12 @@ export default function SOS_Resumo() {
         <CardKPI
           title="Taxa Reincidência"
           value={fmtPct(resumoAtual.taxaReincidencia)}
-          sub="Sobre veículos com SOS controlável"
+          sub="Sobre o total de veículos com SOS"
           icon={<FaChartLine />}
           tone="amber"
         />
         <CardKPI
-          title="MKBF Controlável"
+          title="MKBF"
           value={fmtNum(resumoAtual.mkbf)}
           sub={`Meta ${fmtNum(MKBF_META)}`}
           icon={<FaBolt />}
@@ -1364,7 +1347,7 @@ export default function SOS_Resumo() {
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              Controláveis vs mês anterior
+              Total Válidos vs mês anterior
             </p>
             <p className="text-xl font-black text-slate-800 mt-1">
               {fmtInt(resumoComp.interv)} → {fmtInt(resumoAtual.interv)}
@@ -1419,7 +1402,7 @@ export default function SOS_Resumo() {
             <div className="bg-white rounded-2xl border shadow-sm p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-black text-slate-800">Histórico 12 meses</h3>
-                <span className="text-xs font-bold text-slate-500">Controláveis + reincidência</span>
+                <span className="text-xs font-bold text-slate-500">SOS + reincidência</span>
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1429,7 +1412,7 @@ export default function SOS_Resumo() {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="controlaveis" name="SOS Controláveis" strokeWidth={3} />
+                    <Line type="monotone" dataKey="intervTotal" name="Total SOS" strokeWidth={3} />
                     <Line type="monotone" dataKey="reincidentes" name="Veículos Reincidentes" strokeWidth={3} />
                   </LineChart>
                 </ResponsiveContainer>

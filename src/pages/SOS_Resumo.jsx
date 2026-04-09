@@ -29,7 +29,6 @@ import {
   Legend,
   BarChart,
   Bar,
-  Cell,
 } from "recharts";
 import { supabase } from "../supabase";
 
@@ -105,30 +104,14 @@ function monthLabelFromKey(key) {
   if (!key) return "";
   const [y, m] = key.split("-");
   const meses = [
-    "JAN",
-    "FEV",
-    "MAR",
-    "ABR",
-    "MAI",
-    "JUN",
-    "JUL",
-    "AGO",
-    "SET",
-    "OUT",
-    "NOV",
-    "DEZ",
+    "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
+    "JUL", "AGO", "SET", "OUT", "NOV", "DEZ",
   ];
   return `${meses[n(m) - 1] || m}/${String(y).slice(2)}`;
 }
 
 function firstDayOfMonth(key) {
   return key ? new Date(`${key}-01T00:00:00`) : null;
-}
-
-function lastDayOfMonth(key) {
-  const start = firstDayOfMonth(key);
-  if (!start) return null;
-  return new Date(start.getFullYear(), start.getMonth() + 1, 0);
 }
 
 function addMonths(date, months) {
@@ -169,14 +152,6 @@ function variancePct(atual, anterior) {
   return ((atual - anterior) / anterior) * 100;
 }
 
-function statusBadge(status) {
-  const s = normalize(status);
-  if (s === "FECHADO") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (s === "EM ANDAMENTO") return "bg-amber-50 text-amber-700 border-amber-200";
-  if (s === "ABERTO") return "bg-amber-50 text-amber-700 border-amber-200";
-  return "bg-slate-50 text-slate-700 border-slate-200";
-}
-
 function faixaDias(v) {
   const x = n(v);
   if (!x) return "Sem informação";
@@ -205,45 +180,6 @@ function exportarCSV(dados, nomeArquivo) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-}
-
-async function fetchAllPeriod({
-  table,
-  select,
-  dateField,
-  startDate,
-  endDate,
-  pageSize = 1000,
-  maxRows = 200000,
-}) {
-  let all = [];
-  let from = 0;
-
-  while (true) {
-    const to = from + pageSize - 1;
-    const { data, error } = await supabase
-      .from(table)
-      .select(select)
-      .gte(dateField, startDate)
-      .lte(dateField, endDate)
-      .order(dateField, { ascending: true })
-      .range(from, to);
-
-    if (error) throw error;
-
-    const chunk = data || [];
-    all = all.concat(chunk);
-
-    if (chunk.length < pageSize) break;
-    if (all.length >= maxRows) {
-      all = all.slice(0, maxRows);
-      break;
-    }
-
-    from += pageSize;
-  }
-
-  return all;
 }
 
 function CardKPI({ title, value, sub, icon, tone = "blue" }) {
@@ -344,39 +280,15 @@ export default function SOS_Resumo() {
     setErro("");
 
     try {
-      const hoje = new Date();
-      const inicioHist = new Date(hoje.getFullYear(), hoje.getMonth() - 11, 1);
-      const fimHist = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-
-      const iniStr = `${inicioHist.getFullYear()}-${String(
-        inicioHist.getMonth() + 1
-      ).padStart(2, "0")}-01`;
-
-      const fimStr = `${fimHist.getFullYear()}-${String(fimHist.getMonth() + 1).padStart(
-        2,
-        "0"
-      )}-${String(fimHist.getDate()).padStart(2, "0")}`;
-
-      const [kmData, sosData] = await Promise.all([
-        fetchAllPeriod({
-          table: "km_rodado_diario",
-          select: "data, km_total",
-          dateField: "data",
-          startDate: iniStr,
-          endDate: fimStr,
-        }),
-        fetchAllPeriod({
-          table: "sos_acionamentos",
-          select:
-            "id, numero_sos, data_sos, hora_sos, veiculo, linha, ocorrencia, status, problema_encontrado, setor_manutencao, grupo_manutencao, classificacao_controlabilidade, data_ultima_preventiva, km_rodado_preventiva, dias_ultima_preventiva, data_ultima_inspecao, km_rodado_inspecao, dias_ultima_inspecao, data_fechamento",
-          dateField: "data_sos",
-          startDate: iniStr,
-          endDate: fimStr,
-        }),
+      const [kmRes, sosRes] = await Promise.all([
+        supabase.from("km_rodado_diario").select("*").limit(50000),
+        supabase.from("sos_acionamentos").select("*").order("data_sos", { ascending: false }).limit(50000)
       ]);
 
-      setKmRows(kmData || []);
-      setSosRows(sosData || []);
+      if (sosRes.error) throw sosRes.error;
+
+      setKmRows(kmRes.data || []);
+      setSosRows(sosRes.data || []);
     } catch (e) {
       console.error(e);
       setErro(e?.message || String(e));
@@ -405,7 +317,7 @@ export default function SOS_Resumo() {
   const sosProcessado = useMemo(() => {
     return (sosRows || [])
       .map((r) => {
-        const data_sos = safeDateStr(r.data_sos);
+        const data_sos = safeDateStr(r.data_sos || r.created_at);
         const tipo_norm = normalizeTipo(r.ocorrencia);
         const classificacao = normalize(r.classificacao_controlabilidade);
         const diasPrev =
@@ -731,11 +643,6 @@ export default function SOS_Resumo() {
     return { kmTotal, interv, mkbf, porTipoMap, taxaReincidencia };
   }, [kmMesMap, mesComparacao, baseComp]);
 
-  const aderenciaMetaPct = useMemo(
-    () => (MKBF_META > 0 ? (resumoAtual.mkbf / MKBF_META) * 100 : 0),
-    [resumoAtual.mkbf]
-  );
-
   const historico12m = useMemo(() => {
     return mesesDisponiveis.slice(-12).map((mes) => {
       const baseMes = baseControlavel.filter((r) => r.mes_key === mes);
@@ -989,35 +896,6 @@ export default function SOS_Resumo() {
       }))
       .sort((a, b) => b.reincTecnica - a.reincTecnica || b.total - a.total);
   }, [baseRef]);
-
-  const top5Linhas3m = useMemo(() => {
-    if (!mesReferencia) return [];
-    const ref = firstDayOfMonth(mesReferencia);
-    if (!ref) return [];
-    const months3 = [addMonths(ref, -2), addMonths(ref, -1), ref].map(monthKey);
-    const base = baseControlavel.filter((r) => months3.includes(r.mes_key));
-    const counts = new Map();
-
-    base.forEach((r) => {
-      if (!counts.has(r.linha)) counts.set(r.linha, []);
-      counts.get(r.linha).push(r);
-    });
-
-    return [...counts.entries()]
-      .map(([linha, itens]) => ({
-        linha,
-        total: itens.length,
-        maiorDefeito:
-          Object.entries(
-            itens.reduce((acc, r) => {
-              acc[r.problema_encontrado] = n(acc[r.problema_encontrado]) + 1;
-              return acc;
-            }, {})
-          ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
-      }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5);
-  }, [mesReferencia, baseControlavel]);
 
   const top5Veiculos3m = useMemo(() => {
     if (!mesReferencia) return [];

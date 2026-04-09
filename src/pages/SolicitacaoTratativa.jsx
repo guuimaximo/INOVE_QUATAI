@@ -34,7 +34,7 @@ export default function SolicitacaoTratativa() {
   const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
   const [form, setForm] = useState({
     tipo_ocorrencia: "",
-    prioridade: "Média",
+    prioridade: "",
     setor_origem: "",
     linha: "",
     descricao: "",

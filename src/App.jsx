@@ -24,6 +24,7 @@ import SOSFechamento from "./pages/SOSFechamento";
 import SOSTratamento from "./pages/SOSTratamento";
 import SOSCentral from "./pages/SOSCentral";
 import SOSDashboard from "./pages/SOSDashboard";
+import SOS_Resumo from "./pages/SOS_Resumo";
 
 import KMRodado from "./pages/KMRodado";
 
@@ -181,6 +182,7 @@ export default function App() {
           <Route path="/sos-tratamento" element={<SOSTratamento />} />
           <Route path="/sos-central" element={<SOSCentral />} />
           <Route path="/sos-dashboard" element={<SOSDashboard />} />
+          <Route path="/sos-resumo" element={<SOS_Resumo />} />
 
           {/* KM Rodado */}
           <Route path="/km-rodado" element={<KMRodado />} />

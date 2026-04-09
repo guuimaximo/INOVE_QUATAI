@@ -49,13 +49,17 @@ function Badge({ children, tone = "gray" }) {
       indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
     }[tone] || "bg-gray-100 text-gray-700 border-gray-200";
 
-  return <span className={`inline-flex items-center px-2 py-1 text-xs border rounded ${cls}`}>{children}</span>;
+  return (
+    <span className={`inline-flex items-center px-2 py-1 text-xs border rounded ${cls}`}>
+      {children}
+    </span>
+  );
 }
 
 function Card({ title, children, right = null }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
         <div className="font-semibold text-gray-800">{title}</div>
         {right}
       </div>
@@ -77,16 +81,19 @@ function ListItemButton({ label, value, onClick, active = false, sub = null }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left flex items-center justify-between gap-3 px-3 py-2 rounded-lg border transition ${
+      className={`w-full text-left flex items-center justify-between gap-3 px-3 py-3 rounded-lg border transition ${
         active ? "bg-blue-50 border-blue-200" : "bg-white border-gray-200 hover:bg-gray-50"
       }`}
     >
-      <div className="min-w-0">
-        <div className="text-sm font-medium text-gray-800 truncate">{label}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-gray-800 truncate">{label}</div>
         {sub ? <div className="text-xs text-gray-500 truncate">{sub}</div> : null}
       </div>
-      <div className="shrink-0">
-        <span className="text-xs font-semibold px-2 py-1 rounded bg-gray-100 text-gray-700">{value}</span>
+
+      <div className="shrink-0 max-w-[180px] text-right">
+        <span className="text-xs font-semibold px-2 py-1 rounded bg-gray-100 text-gray-700 whitespace-nowrap">
+          {value}
+        </span>
       </div>
     </button>
   );
@@ -107,19 +114,16 @@ export default function AtasResumo() {
   const [atas, setAtas] = useState([]);
   const [detalhes, setDetalhes] = useState([]);
 
-  // Drill-down (cliques)
   const [selOcorrencia, setSelOcorrencia] = useState("");
-  const [selMotorista, setSelMotorista] = useState(""); // chave: chapa|nome
+  const [selMotorista, setSelMotorista] = useState("");
   const [selAcao, setSelAcao] = useState("");
-  const [selLinha, setSelLinha] = useState(""); 
+  const [selLinha, setSelLinha] = useState("");
 
-  // Cards (igual Central)
   const [totalCount, setTotalCount] = useState(0);
   const [pendentesCount, setPendentesCount] = useState(0);
   const [concluidasCount, setConcluidasCount] = useState(0);
   const [atrasadasCount, setAtrasadasCount] = useState(0);
 
-  // default período: mês atual e carrega setores
   useEffect(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -137,7 +141,7 @@ export default function AtasResumo() {
         setSetoresDisponiveis(unicos.sort());
       }
     }
-    
+
     carregarSetores();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -146,7 +150,7 @@ export default function AtasResumo() {
     setSelOcorrencia("");
     setSelMotorista("");
     setSelAcao("");
-    setSelLinha(""); 
+    setSelLinha("");
   }
 
   function computeCardsFromList(list) {
@@ -178,7 +182,7 @@ export default function AtasResumo() {
     try {
       resetDrill();
 
-      const LINHA_FIELD = "linha"; 
+      const LINHA_FIELD = "linha";
 
       let q = supabase.from("tratativas").select(
         `
@@ -208,7 +212,9 @@ export default function AtasResumo() {
       if (filtros.dataInicio) q = q.gte("created_at", filtros.dataInicio);
       if (filtros.dataFim) q = q.lt("created_at", addDays(filtros.dataFim, 1));
 
-      const { data: tData, error: tErr } = await q.order("created_at", { ascending: false }).limit(100000);
+      const { data: tData, error: tErr } = await q
+        .order("created_at", { ascending: false })
+        .limit(100000);
       if (tErr) throw tErr;
 
       const listAtas = tData || [];
@@ -326,14 +332,19 @@ export default function AtasResumo() {
   }, [recorteDrill.baseAtas]);
 
   const topMotoristas = useMemo(() => {
-    const key = (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}`.trim() || "Sem motorista";
+    const key = (t) =>
+      `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}`.trim() || "Sem motorista";
+
     const m = countBy(recorteDrill.baseAtas, (t) => key(t));
+
     return sortMapDesc(m)
       .slice(0, 12)
       .map(([k, total]) => {
         const [chapa, nome] = k.split("|");
         const pend = recorteDrill.baseAtas.filter(
-          (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k && ilikeContains(t.status, "pend")
+          (t) =>
+            `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k &&
+            ilikeContains(t.status, "pend")
         ).length;
 
         const conc = recorteDrill.baseAtas.filter(
@@ -458,7 +469,9 @@ export default function AtasResumo() {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Resumo de Atas</h1>
-          <p className="text-sm text-gray-500">Clique nos TOPs para filtrar como BI e exporte um único Excel unificado.</p>
+          <p className="text-sm text-gray-500">
+            Clique nos TOPs para filtrar como BI e exporte um único Excel unificado.
+          </p>
         </div>
 
         <button
@@ -523,7 +536,10 @@ export default function AtasResumo() {
               </Badge>
             ))}
             {(selOcorrencia || selLinha || selMotorista || selAcao) && (
-              <button onClick={resetDrill} className="text-xs px-3 py-1 rounded border border-gray-200 hover:bg-gray-50">
+              <button
+                onClick={resetDrill}
+                className="text-xs px-3 py-1 rounded border border-gray-200 hover:bg-gray-50"
+              >
                 Limpar seleção
               </button>
             )}
@@ -546,92 +562,110 @@ export default function AtasResumo() {
         <CardResumo titulo="Atrasadas (>10d)" valor={atrasadasCount} cor="bg-red-100" />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        <Card title="Top Motoristas (Atas)" right={<Badge tone="blue">{recorteDrill.baseAtas.length} atas</Badge>}>
-          <div className="space-y-2">
-            {topMotoristas.length === 0 ? (
-              <div className="text-sm text-gray-500">Sem dados no recorte.</div>
-            ) : (
-              topMotoristas.map((m) => (
-                <ListItemButton
-                  key={m.k}
-                  label={m.nome || "Sem nome"}
-                  sub={m.chapa ? `Chapa ${m.chapa}` : "Chapa -"}
-                  value={`Total ${m.total} | Pend ${m.pend} | Conc ${m.conc}`}
-                  active={selMotorista === m.k}
-                  onClick={() => {
-                    setSelMotorista((cur) => (cur === m.k ? "" : m.k));
-                    setSelAcao("");
-                  }}
-                />
-              ))
-            )}
-          </div>
-        </Card>
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <div className="xl:col-span-5">
+          <Card
+            title="Top Motoristas (Atas)"
+            right={<Badge tone="blue">{recorteDrill.baseAtas.length} atas</Badge>}
+          >
+            <div className="space-y-2">
+              {topMotoristas.length === 0 ? (
+                <div className="text-sm text-gray-500">Sem dados no recorte.</div>
+              ) : (
+                topMotoristas.map((m) => (
+                  <ListItemButton
+                    key={m.k}
+                    label={m.nome || "Sem nome"}
+                    sub={m.chapa ? `Chapa ${m.chapa}` : "Chapa -"}
+                    value={`Total ${m.total} | Pend ${m.pend} | Conc ${m.conc}`}
+                    active={selMotorista === m.k}
+                    onClick={() => {
+                      setSelMotorista((cur) => (cur === m.k ? "" : m.k));
+                      setSelAcao("");
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
 
-        <Card title="Top Ocorrências" right={<Badge tone="purple">{topOcorrencias.reduce((a, b) => a + b[1], 0)}</Badge>}>
-          <div className="space-y-2">
-            {topOcorrencias.length === 0 ? (
-              <div className="text-sm text-gray-500">Sem dados no recorte.</div>
-            ) : (
-              topOcorrencias.map(([label, qtd]) => (
-                <ListItemButton
-                  key={label}
-                  label={label}
-                  value={qtd}
-                  active={selOcorrencia === label}
-                  onClick={() => {
-                    setSelOcorrencia((cur) => (cur === label ? "" : label));
-                    setSelMotorista("");
-                    setSelAcao("");
-                  }}
-                />
-              ))
-            )}
-          </div>
-        </Card>
+        <div className="xl:col-span-2">
+          <Card
+            title="Top Ocorrências"
+            right={<Badge tone="purple">{topOcorrencias.reduce((a, b) => a + b[1], 0)}</Badge>}
+          >
+            <div className="space-y-2">
+              {topOcorrencias.length === 0 ? (
+                <div className="text-sm text-gray-500">Sem dados no recorte.</div>
+              ) : (
+                topOcorrencias.map(([label, qtd]) => (
+                  <ListItemButton
+                    key={label}
+                    label={label}
+                    value={qtd}
+                    active={selOcorrencia === label}
+                    onClick={() => {
+                      setSelOcorrencia((cur) => (cur === label ? "" : label));
+                      setSelMotorista("");
+                      setSelAcao("");
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
 
-        <Card title="Top Linhas" right={<Badge tone="indigo">{topLinhas.reduce((a, b) => a + b[1], 0)}</Badge>}>
-          <div className="space-y-2">
-            {topLinhas.length === 0 ? (
-              <div className="text-sm text-gray-500">Sem linhas no recorte.</div>
-            ) : (
-              topLinhas.map(([label, qtd]) => (
-                <ListItemButton
-                  key={label}
-                  label={label}
-                  value={qtd}
-                  active={selLinha === label}
-                  onClick={() => {
-                    setSelLinha((cur) => (cur === label ? "" : label));
-                    setSelMotorista("");
-                    setSelAcao("");
-                  }}
-                />
-              ))
-            )}
-          </div>
-        </Card>
+        <div className="xl:col-span-2">
+          <Card
+            title="Top Linhas"
+            right={<Badge tone="indigo">{topLinhas.reduce((a, b) => a + b[1], 0)}</Badge>}
+          >
+            <div className="space-y-2">
+              {topLinhas.length === 0 ? (
+                <div className="text-sm text-gray-500">Sem linhas no recorte.</div>
+              ) : (
+                topLinhas.map(([label, qtd]) => (
+                  <ListItemButton
+                    key={label}
+                    label={label}
+                    value={qtd}
+                    active={selLinha === label}
+                    onClick={() => {
+                      setSelLinha((cur) => (cur === label ? "" : label));
+                      setSelMotorista("");
+                      setSelAcao("");
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
 
-        <Card title="Top Ações Aplicadas (Detalhes)" right={<Badge tone="green">{recorteDrill.baseDet.length} ações</Badge>}>
-          <div className="space-y-2">
-            {topAcoes.length === 0 ? (
-              <div className="text-sm text-gray-500">
-                Sem ações no recorte.
-              </div>
-            ) : (
-              topAcoes.map(([label, qtd]) => (
-                <ListItemButton
-                  key={label}
-                  label={label}
-                  value={qtd}
-                  active={selAcao === label}
-                  onClick={() => setSelAcao((cur) => (cur === label ? "" : label))}
-                />
-              ))
-            )}
-          </div>
-        </Card>
+        <div className="xl:col-span-3">
+          <Card
+            title="Top Ações Aplicadas (Detalhes)"
+            right={<Badge tone="green">{recorteDrill.baseDet.length} ações</Badge>}
+          >
+            <div className="space-y-2">
+              {topAcoes.length === 0 ? (
+                <div className="text-sm text-gray-500">Sem ações no recorte.</div>
+              ) : (
+                topAcoes.map(([label, qtd]) => (
+                  <ListItemButton
+                    key={label}
+                    label={label}
+                    value={qtd}
+                    active={selAcao === label}
+                    onClick={() => setSelAcao((cur) => (cur === label ? "" : label))}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

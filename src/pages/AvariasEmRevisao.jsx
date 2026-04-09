@@ -1,722 +1,646 @@
-import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabase";
-import {
-  FaSearch,
-  FaFilter,
-  FaClock,
-  FaExclamationCircle,
-  FaCheckCircle,
-  FaFolderOpen,
-  FaGavel,
-  FaEye,
-  FaSort,
-  FaSortUp,
-  FaSortDown,
-} from "react-icons/fa";
+import React, { useEffect, useState } from 'react';
+import { supabase } from '../supabase';
+import { FaUndo, FaEdit, FaSave, FaPlus, FaTrash, FaLock } from 'react-icons/fa';
 
-const VIEW = {
-  OPEN_ONLY: "open_only",
-  ALL: "all",
-};
-
-const SLA_DIAS = {
-  "Gravíssima": 1,
-  Gravissima: 1,
-  Alta: 3,
-  "Média": 7,
-  Media: 7,
-  Baixa: 15,
-};
-
-const PRIORIDADE_RANK = {
-  "Gravíssima": 0,
-  Gravissima: 0,
-  Alta: 1,
-  "Média": 2,
-  Media: 2,
-  Baixa: 3,
-};
-
-function norm(s) {
-  return String(s || "").trim();
-}
-
-function isPendente(status) {
-  return norm(status).toLowerCase().includes("pendente");
-}
-
-function isConcluidaOuResolvida(status) {
-  const st = norm(status).toLowerCase();
-  return st.includes("conclu") || st.includes("resolvid");
-}
-
-function daysDiffFromNow(createdAtISO) {
-  const dt = createdAtISO ? new Date(createdAtISO) : null;
-  if (!dt || Number.isNaN(dt.getTime())) return 0;
-  const now = new Date();
-  const diffMs = now.getTime() - dt.getTime();
-  return diffMs / (1000 * 60 * 60 * 24);
-}
-
-function getSlaDias(prioridade) {
-  const p = norm(prioridade);
-  return SLA_DIAS[p] ?? 7;
-}
-
-function isAtrasadaBySLA(row) {
-  if (!isPendente(row?.status)) return false;
-  const sla = getSlaDias(row?.prioridade);
-  return daysDiffFromNow(row?.created_at) > sla;
-}
-
-function isPendenteNoPrazo(row) {
-  return isPendente(row?.status) && !isAtrasadaBySLA(row);
-}
-
-function statusRank(row) {
-  if (isAtrasadaBySLA(row)) return 0;
-  if (isPendenteNoPrazo(row)) return 1;
-  if (isConcluidaOuResolvida(row?.status)) return 2;
-  return 3;
-}
-
-export default function CentralTratativas() {
-  const [tratativas, setTratativas] = useState([]);
-  const [filtros, setFiltros] = useState({
-    busca: "",
-    dataInicio: "",
-    dataFim: "",
-    setor: "",
-    status: "",
-    prioridade: "",
-  });
+// ======================================================================
+// ========================== MODAL LOGIN (PERMISSÃO) ====================
+// ======================================================================
+function LoginModal({
+  onConfirm,
+  onCancel,
+  title = 'Exclusão Restrita (Gestor/Administrador)',
+  actionLabel = 'Autorizar exclusão',
+}) {
+  const [login, setLogin] = useState('');
+  const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const [setores, setSetores] = useState([]);
-  const [viewMode, setViewMode] = useState(VIEW.OPEN_ONLY);
-
-  const [sort, setSort] = useState({
-    key: "default",
-    dir: "asc",
-  });
-
-  const [totalCount, setTotalCount] = useState(0);
-  const [pendentesCount, setPendentesCount] = useState(0);
-  const [concluidasCount, setConcluidasCount] = useState(0);
-  const [atrasadasCount, setAtrasadasCount] = useState(0);
-
-  const navigate = useNavigate();
-
-  function applyCommonFilters(query) {
-    const f = filtros;
-
-    if (f.busca) {
-      query = query.or(
-        `motorista_nome.ilike.%${f.busca}%,motorista_chapa.ilike.%${f.busca}%,descricao.ilike.%${f.busca}%`
-      );
-    }
-
-    if (f.setor) query = query.eq("setor_origem", f.setor);
-    if (f.status) query = query.ilike("status", `%${f.status}%`);
-    if (f.prioridade) query = query.eq("prioridade", f.prioridade);
-
-    if (f.dataInicio) query = query.gte("created_at", f.dataInicio);
-
-    if (f.dataFim) {
-      const dataFimAjustada = new Date(f.dataFim);
-      dataFimAjustada.setDate(dataFimAjustada.getDate() + 1);
-      query = query.lt("created_at", dataFimAjustada.toISOString().split("T")[0]);
-    }
-
-    return query;
-  }
-
-  async function carregarSetoresFiltro() {
-    try {
-      const { data: setoresData, error: eSet } = await supabase
-        .from("setores")
-        .select("nome")
-        .order("nome", { ascending: true });
-
-      if (!eSet && Array.isArray(setoresData) && setoresData.length > 0) {
-        const lista = setoresData
-          .map((s) => String(s?.nome || "").trim())
-          .filter(Boolean);
-
-        setSetores(Array.from(new Set(lista)));
-        return;
-      }
-
-      const { data: trat, error: eTrat } = await supabase
-        .from("tratativas")
-        .select("setor_origem")
-        .not("setor_origem", "is", null)
-        .limit(10000);
-
-      if (eTrat) throw eTrat;
-
-      const lista2 = (trat || [])
-        .map((r) => String(r?.setor_origem || "").trim())
-        .filter(Boolean);
-
-      setSetores(Array.from(new Set(lista2)).sort((a, b) => a.localeCompare(b)));
-    } catch (err) {
-      console.error("Erro carregando setores do filtro:", err);
-      setSetores([]);
-    }
-  }
-
-  async function carregarLista() {
-    let query = supabase.from("tratativas").select("*").limit(100000);
-    query = applyCommonFilters(query);
-
-    const { data, error } = await query.order("created_at", { ascending: false });
-    if (!error) setTratativas(data || []);
-    else console.error("Erro ao carregar lista de tratativas:", error);
-  }
-
-  async function carregarContadoresHead() {
-    let qTotal = supabase
-      .from("tratativas")
-      .select("id", { count: "exact", head: true });
-    qTotal = applyCommonFilters(qTotal);
-    const { count: total } = await qTotal;
-
-    let qConc = supabase
-      .from("tratativas")
-      .select("id", { count: "exact", head: true })
-      .or("status.ilike.%conclu%,status.ilike.%resolvid%");
-    qConc = applyCommonFilters(qConc);
-    const { count: conc } = await qConc;
-
-    setTotalCount(total || 0);
-    setConcluidasCount(conc || 0);
-  }
-
-  async function aplicar() {
+  async function handleLogin() {
     setLoading(true);
-    try {
-      await Promise.all([carregarLista(), carregarContadoresHead()]);
-    } catch (e) {
-      console.error("Erro ao aplicar filtros:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
 
-  useEffect(() => {
-    carregarSetoresFiltro();
-    aplicar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const { data, error } = await supabase
+      .from('usuarios_aprovadores')
+      .select('nome, login, nivel, ativo')
+      .eq('login', login)
+      .eq('senha', senha)
+      .eq('ativo', true)
+      .single();
 
-  function limparFiltros() {
-    setFiltros({
-      busca: "",
-      dataInicio: "",
-      dataFim: "",
-      setor: "",
-      status: "",
-      prioridade: "",
-    });
-    setTimeout(() => aplicar(), 0);
-  }
+    setLoading(false);
 
-  const tratativasFiltradasClient = useMemo(() => {
-    return Array.isArray(tratativas) ? tratativas : [];
-  }, [tratativas]);
-
-  useEffect(() => {
-    const rows = Array.isArray(tratativasFiltradasClient) ? tratativasFiltradasClient : [];
-
-    const pendentesSomente = rows.filter((r) => isPendenteNoPrazo(r)).length;
-    const atrasadasSomente = rows.filter((r) => isAtrasadaBySLA(r)).length;
-
-    setPendentesCount(pendentesSomente);
-    setAtrasadasCount(atrasadasSomente);
-  }, [tratativasFiltradasClient]);
-
-  const tratativasView = useMemo(() => {
-    const rows = Array.isArray(tratativas) ? tratativas : [];
-    if (viewMode === VIEW.ALL) return rows;
-    return rows.filter((r) => isPendente(r?.status));
-  }, [tratativas, viewMode]);
-
-  function defaultComparator(a, b) {
-    const pa = PRIORIDADE_RANK[norm(a?.prioridade)] ?? 99;
-    const pb = PRIORIDADE_RANK[norm(b?.prioridade)] ?? 99;
-    if (pa !== pb) return pa - pb;
-
-    const sa = statusRank(a);
-    const sb = statusRank(b);
-    if (sa !== sb) return sa - sb;
-
-    const da = a?.created_at ? new Date(a.created_at).getTime() : 0;
-    const db = b?.created_at ? new Date(b.created_at).getTime() : 0;
-    return db - da;
-  }
-
-  function stringComparator(getter, dir, a, b) {
-    const va = norm(getter(a)).toLowerCase();
-    const vb = norm(getter(b)).toLowerCase();
-    const r = va.localeCompare(vb, "pt-BR");
-    return dir === "asc" ? r : -r;
-  }
-
-  const tratativasOrdenadas = useMemo(() => {
-    const rows = [...(tratativasView || [])];
-
-    if (sort.key === "default") {
-      rows.sort(defaultComparator);
-      return rows;
+    if (error || !data) {
+      alert('Login ou senha incorretos (ou usuário inativo).');
+      return;
     }
 
-    rows.sort((a, b) => {
-      if (sort.key === "created_at") {
-        const da = a?.created_at ? new Date(a.created_at).getTime() : 0;
-        const db = b?.created_at ? new Date(b.created_at).getTime() : 0;
-        const r = da - db;
-        return sort.dir === "asc" ? r : -r;
-      }
+    const nivel = String(data.nivel || '')
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
 
-      if (sort.key === "prioridade") {
-        const pa = PRIORIDADE_RANK[norm(a?.prioridade)] ?? 99;
-        const pb = PRIORIDADE_RANK[norm(b?.prioridade)] ?? 99;
-        const r = pa - pb;
-        return sort.dir === "asc" ? r : -r;
-      }
-
-      if (sort.key === "status") {
-        const ra = statusRank(a);
-        const rb = statusRank(b);
-        const r = ra - rb;
-        return sort.dir === "asc" ? r : -r;
-      }
-
-      if (sort.key === "motorista_nome") {
-        return stringComparator((x) => x?.motorista_nome, sort.dir, a, b);
-      }
-      if (sort.key === "tipo_ocorrencia") {
-        return stringComparator((x) => x?.tipo_ocorrencia, sort.dir, a, b);
-      }
-      if (sort.key === "setor_origem") {
-        return stringComparator((x) => x?.setor_origem, sort.dir, a, b);
-      }
-
-      return 0;
-    });
-
-    return rows;
-  }, [tratativasView, sort]);
-
-  function toggleSort(key) {
-    setSort((prev) => {
-      if (prev.key !== key) return { key, dir: "asc" };
-      if (prev.dir === "asc") return { key, dir: "desc" };
-      return { key: "default", dir: "asc" };
-    });
-  }
-
-  function SortIcon({ colKey }) {
-    if (sort.key !== colKey || sort.key === "default") {
-      return <FaSort className="inline ml-1 text-slate-400" />;
+    if (!['gestor', 'administrador', 'adm'].includes(nivel)) {
+      alert('Sem permissão. Apenas Gestor ou Administrador podem excluir.');
+      return;
     }
-    return sort.dir === "asc" ? (
-      <FaSortUp className="inline ml-1 text-blue-600" />
-    ) : (
-      <FaSortDown className="inline ml-1 text-blue-600" />
-    );
-  }
 
-  function badgePrioridade(p) {
-    const v = norm(p);
-    const base = "px-2 py-1 rounded-lg text-xs font-bold border";
-    if (v === "Gravíssima" || v === "Gravissima") {
-      return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Gravíssima</span>;
-    }
-    if (v === "Alta") {
-      return <span className={`${base} bg-orange-50 text-orange-700 border-orange-200`}>Alta</span>;
-    }
-    if (v === "Média" || v === "Media") {
-      return <span className={`${base} bg-yellow-50 text-yellow-700 border-yellow-200`}>Média</span>;
-    }
-    if (v === "Baixa") {
-      return <span className={`${base} bg-green-50 text-green-700 border-green-200`}>Baixa</span>;
-    }
-    return <span className={`${base} bg-slate-50 text-slate-700 border-slate-200`}>{v || "-"}</span>;
-  }
-
-  function badgeStatus(row) {
-    const st = norm(row?.status).toLowerCase();
-    const atrasada = isAtrasadaBySLA(row);
-
-    if (atrasada) {
-      return (
-        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-700 border-red-200">
-          Atrasada
-        </span>
-      );
-    }
-    if (st.includes("pendente")) {
-      return (
-        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-yellow-50 text-yellow-700 border-yellow-200">
-          Pendente
-        </span>
-      );
-    }
-    if (st.includes("resolvido") || st.includes("conclu")) {
-      return (
-        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
-          Resolvido
-        </span>
-      );
-    }
-    return (
-      <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-slate-50 text-slate-700 border-slate-200">
-        {row?.status || "-"}
-      </span>
-    );
+    onConfirm({ nome: data.nome, login: data.login, nivel: data.nivel });
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <FaGavel className="text-violet-500" /> Central de Tratativas
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Acompanhe pendências, atrasos por SLA e resoluções das tratativas.
-          </p>
-        </div>
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-4">
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+        <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+          <FaLock /> {title}
+        </h2>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setViewMode(VIEW.ALL)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
-              viewMode === VIEW.ALL
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-            }`}
-          >
-            VER TUDO
-          </button>
+        <input
+          type="text"
+          placeholder="Login"
+          className="w-full mb-3 p-2 border rounded"
+          value={login}
+          onChange={(e) => setLogin(e.target.value)}
+        />
 
-          <button
-            onClick={() => setViewMode(VIEW.OPEN_ONLY)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
-              viewMode === VIEW.OPEN_ONLY
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-            }`}
-          >
-            PENDENTES & ATRASADAS
-          </button>
-        </div>
-      </div>
+        <input
+          type="password"
+          placeholder="Senha"
+          className="w-full mb-4 p-2 border rounded"
+          value={senha}
+          onChange={(e) => setSenha(e.target.value)}
+        />
 
-      <div className="bg-white p-4 rounded-xl border shadow-sm space-y-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-800">Filtros</h2>
-          <p className="text-sm text-slate-500">
-            Refine a visualização por texto, período, setor, prioridade e status.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <div className="relative md:col-span-2">
-            <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar (nome, chapa, descrição...)"
-              value={filtros.busca}
-              onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-            />
-          </div>
-
-          <input
-            type="date"
-            value={filtros.dataInicio}
-            onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-          />
-
-          <input
-            type="date"
-            value={filtros.dataFim}
-            onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-          />
-
-          <div className="relative">
-            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
-            <select
-              value={filtros.setor}
-              onChange={(e) => setFiltros({ ...filtros, setor: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
-            >
-              <option value="">Todos os Setores</option>
-              {setores.map((nome) => (
-                <option key={nome} value={nome}>
-                  {nome}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="relative">
-            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
-            <select
-              value={filtros.prioridade}
-              onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
-            >
-              <option value="">Todas as Prioridades</option>
-              <option value="Gravíssima">Gravíssima</option>
-              <option value="Alta">Alta</option>
-              <option value="Média">Média</option>
-              <option value="Baixa">Baixa</option>
-            </select>
-          </div>
-
-          <div className="relative">
-            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
-            <select
-              value={filtros.status}
-              onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
-            >
-              <option value="">Todos os Status</option>
-              <option value="Pendente">Pendente</option>
-              <option value="Resolvido">Resolvido</option>
-              <option value="Concluída">Concluída</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 flex-wrap">
-          <button
-            onClick={limparFiltros}
-            className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-bold text-sm"
-          >
-            Limpar
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">
+            Cancelar
           </button>
           <button
-            onClick={aplicar}
+            onClick={handleLogin}
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-400 font-bold text-sm"
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
-            {loading ? "Aplicando..." : "Aplicar"}
+            {loading ? 'Verificando...' : actionLabel}
           </button>
         </div>
-
-        <div className="text-xs text-slate-500">
-          Ordenação padrão: <b>Prioridade</b> → <b>Status</b> → <b>Mais recentes</b>.
-          Clique no cabeçalho da tabela para ordenar; clique novamente para inverter; na
-          terceira volta ao padrão.
-        </div>
-
-        <div className="rounded-xl border bg-slate-50 p-3">
-          <div className="text-xs font-bold text-slate-700 mb-2">
-            Regra de SLA para considerar como <span className="text-red-700">ATRASADA</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
-            <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 font-bold">
-              Gravíssima: 1 dia
-            </span>
-            <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-bold">
-              Alta: 3 dias
-            </span>
-            <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-bold">
-              Média: 7 dias
-            </span>
-            <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 font-bold">
-              Baixa: 15 dias
-            </span>
-            <span className="text-slate-500">
-              (Atraso é calculado apenas quando o status está <b>Pendente</b>)
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <CardResumo
-          titulo="Total"
-          valor={totalCount}
-          icone={<FaFolderOpen className="text-4xl text-blue-50" />}
-          border="border-l-blue-500"
-        />
-
-        <CardResumo
-          titulo="Pendentes"
-          valor={pendentesCount}
-          icone={<FaClock className="text-4xl text-yellow-50" />}
-          border="border-l-yellow-500"
-        />
-
-        <CardResumo
-          titulo="Concluídas"
-          valor={concluidasCount}
-          icone={<FaCheckCircle className="text-4xl text-emerald-50" />}
-          border="border-l-emerald-500"
-        />
-
-        <CardResumo
-          titulo="Atrasadas (SLA)"
-          valor={atrasadasCount}
-          icone={<FaExclamationCircle className="text-4xl text-red-50" />}
-          border="border-l-red-500"
-        />
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-        <table className="w-full text-left min-w-[1200px]">
-          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
-            <tr>
-              <th
-                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => toggleSort("created_at")}
-              >
-                <div className="flex items-center">
-                  Data de Abertura <SortIcon colKey="created_at" />
-                </div>
-              </th>
-
-              <th
-                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => toggleSort("motorista_nome")}
-              >
-                <div className="flex items-center">
-                  Motorista <SortIcon colKey="motorista_nome" />
-                </div>
-              </th>
-
-              <th
-                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => toggleSort("tipo_ocorrencia")}
-              >
-                <div className="flex items-center">
-                  Ocorrência <SortIcon colKey="tipo_ocorrencia" />
-                </div>
-              </th>
-
-              <th
-                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => toggleSort("prioridade")}
-              >
-                <div className="flex items-center">
-                  Prioridade <SortIcon colKey="prioridade" />
-                </div>
-              </th>
-
-              <th
-                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => toggleSort("setor_origem")}
-              >
-                <div className="flex items-center">
-                  Setor <SortIcon colKey="setor_origem" />
-                </div>
-              </th>
-
-              <th
-                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => toggleSort("status")}
-              >
-                <div className="flex items-center">
-                  Status <SortIcon colKey="status" />
-                </div>
-              </th>
-
-              <th className="px-4 py-4">Ações</th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-gray-100">
-            {loading ? (
-              <tr>
-                <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
-                  Carregando...
-                </td>
-              </tr>
-            ) : tratativasOrdenadas.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
-                  Nenhuma tratativa encontrada.
-                </td>
-              </tr>
-            ) : (
-              tratativasOrdenadas.map((t) => {
-                const concluida = isConcluidaOuResolvida(t?.status);
-
-                return (
-                  <tr key={t.id} className="hover:bg-blue-50/40 transition-colors">
-                    <td className="px-4 py-4 text-slate-500 font-mono text-sm whitespace-nowrap">
-                      {t.created_at
-                        ? new Date(t.created_at).toLocaleDateString("pt-BR")
-                        : "-"}
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <div className="font-black text-slate-900 text-sm md:text-base">
-                        {t.motorista_nome || "-"}
-                      </div>
-                      <div className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
-                        {t.motorista_chapa || ""}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-4 text-slate-700">
-                      {t.tipo_ocorrencia || "-"}
-                    </td>
-
-                    <td className="px-4 py-4">{badgePrioridade(t.prioridade)}</td>
-
-                    <td className="px-4 py-4 text-slate-700">
-                      {t.setor_origem || "-"}
-                    </td>
-
-                    <td className="px-4 py-4">{badgeStatus(t)}</td>
-
-                    <td className="px-4 py-4">
-                      {concluida ? (
-                        <button
-                          onClick={() => navigate(`/consultar/${t.id}`)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 text-white rounded font-bold text-xs shadow-sm hover:bg-slate-800 transition-all whitespace-nowrap"
-                        >
-                          <FaEye size={12} /> Consultar
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => navigate(`/tratar/${t.id}`)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded font-bold text-xs shadow-sm hover:bg-blue-700 transition-all whitespace-nowrap"
-                        >
-                          <FaGavel size={12} /> Tratar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
       </div>
     </div>
   );
 }
 
-function CardResumo({ titulo, valor, icone, border }) {
+// ======================================================================
+// ======================= MODAL DE EDIÇÃO TOTAL =========================
+// ======================================================================
+function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
+  const [itens, setItens] = useState([]);
+  const [loadingItens, setLoadingItens] = useState(false);
+
+  const [prefixo, setPrefixo] = useState('');
+  const [motoristaId, setMotoristaId] = useState('');
+  const [tipoOcorrencia, setTipoOcorrencia] = useState('');
+  const [numeroAvaria, setNumeroAvaria] = useState('');
+  const [dataAvaria, setDataAvaria] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [observacao, setObservacao] = useState('');
+  const [valorTotal, setValorTotal] = useState(0);
+
+  const [urlsEvidencias, setUrlsEvidencias] = useState([]);
+
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [acaoPendente, setAcaoPendente] = useState(null); // excluir_item | excluir_evidencia | excluir_avaria
+  const [pendencia, setPendencia] = useState(null); // { id, novo } | { idx } | { avariaId }
+
+  useEffect(() => {
+    if (avaria) carregarItens();
+  }, [avaria]);
+
+  async function carregarItens() {
+    setLoadingItens(true);
+
+    const { data } = await supabase
+      .from('cobrancas_avarias')
+      .select('*')
+      .eq('avaria_id', avaria.id);
+
+    setItens(data || []);
+
+    setPrefixo(avaria.prefixo || '');
+    setMotoristaId(avaria.motoristaId || '');
+    setTipoOcorrencia(avaria.tipoOcorrencia || '');
+    setNumeroAvaria(avaria.numero_da_avaria || '');
+    setDataAvaria(avaria.dataAvaria?.split('T')[0] || '');
+    setDescricao(avaria.descricao || '');
+    setObservacao(avaria.observacao_operacao || '');
+    setValorTotal(avaria.valor_total_orcamento || 0);
+
+    let urls = [];
+    if (Array.isArray(avaria.urls_evidencias)) urls = avaria.urls_evidencias;
+    else if (typeof avaria.urls_evidencias === 'string') {
+      urls = avaria.urls_evidencias.split(',').map((u) => u.trim());
+    }
+
+    setUrlsEvidencias(urls.filter(Boolean));
+    setLoadingItens(false);
+  }
+
+  const handleItemChange = (id, field, value) => {
+    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
+  };
+
+  const adicionarEvidencia = (url) => {
+    if (!url) return;
+    setUrlsEvidencias((prev) => [...prev, url]);
+  };
+
+  const pedirExcluirEvidencia = (idx) => {
+    setAcaoPendente('excluir_evidencia');
+    setPendencia({ idx });
+    setLoginModalOpen(true);
+  };
+
+  const removerEvidencia = (idx) => {
+    setUrlsEvidencias((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const adicionarItem = () => {
+    setItens((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        descricao: '',
+        qtd: 1,
+        valorUnitario: 0,
+        tipo: 'Peca',
+        novo: true,
+        avaria_id: avaria.id,
+      },
+    ]);
+  };
+
+  const pedirExcluirItem = (id, novo) => {
+    setAcaoPendente('excluir_item');
+    setPendencia({ id, novo });
+    setLoginModalOpen(true);
+  };
+
+  const removerItem = async (id, novo) => {
+    if (!novo) {
+      const { error } = await supabase.from('cobrancas_avarias').delete().eq('id', id);
+      if (error) {
+        alert('Erro ao excluir item: ' + error.message);
+        return;
+      }
+    }
+    setItens((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const pedirExcluirAvaria = () => {
+    setAcaoPendente('excluir_avaria');
+    setPendencia({ avariaId: avaria.id });
+    setLoginModalOpen(true);
+  };
+
+  const excluirAvariaCompleta = async (avariaId) => {
+    const confirm = window.confirm(
+      'Tem certeza que deseja excluir esta avaria por completo? Essa ação remove a avaria e seus itens.'
+    );
+    if (!confirm) return;
+
+    const { error: errItens } = await supabase
+      .from('cobrancas_avarias')
+      .delete()
+      .eq('avaria_id', avariaId);
+
+    if (errItens) {
+      alert('Erro ao excluir itens da avaria: ' + errItens.message);
+      return;
+    }
+
+    const { error: errAvaria } = await supabase.from('avarias').delete().eq('id', avariaId);
+
+    if (errAvaria) {
+      alert('Erro ao excluir avaria: ' + errAvaria.message);
+      return;
+    }
+
+    alert('Avaria excluída com sucesso.');
+    onAtualizarLista();
+    onClose();
+  };
+
+  async function onLoginConfirm() {
+    setLoginModalOpen(false);
+
+    if (acaoPendente === 'excluir_item' && pendencia?.id) {
+      await removerItem(pendencia.id, pendencia.novo);
+    }
+
+    if (acaoPendente === 'excluir_evidencia' && typeof pendencia?.idx === 'number') {
+      removerEvidencia(pendencia.idx);
+    }
+
+    if (acaoPendente === 'excluir_avaria' && pendencia?.avariaId) {
+      await excluirAvariaCompleta(pendencia.avariaId);
+    }
+
+    setPendencia(null);
+    setAcaoPendente(null);
+  }
+
+  async function salvarAlteracoes(statusFinal = null) {
+    for (const item of itens) {
+      if (item.novo) {
+        const { error } = await supabase.from('cobrancas_avarias').insert([
+          {
+            descricao: item.descricao,
+            qtd: item.qtd,
+            valorUnitario: item.valorUnitario,
+            tipo: item.tipo,
+            avaria_id: avaria.id,
+          },
+        ]);
+        if (error) {
+          alert('Erro ao inserir item: ' + error.message);
+          return;
+        }
+      } else {
+        const { error } = await supabase
+          .from('cobrancas_avarias')
+          .update({
+            descricao: item.descricao,
+            qtd: item.qtd,
+            valorUnitario: item.valorUnitario,
+            tipo: item.tipo,
+          })
+          .eq('id', item.id);
+
+        if (error) {
+          alert('Erro ao atualizar item: ' + error.message);
+          return;
+        }
+      }
+    }
+
+    const updateData = {
+      prefixo,
+      motoristaId,
+      tipoOcorrencia,
+      numero_da_avaria: numeroAvaria,
+      dataAvaria,
+      descricao,
+      observacao_operacao: observacao,
+      valor_total_orcamento: valorTotal,
+      urls_evidencias: urlsEvidencias,
+    };
+
+    if (statusFinal) updateData.status = statusFinal;
+
+    const { error } = await supabase.from('avarias').update(updateData).eq('id', avaria.id);
+    if (error) {
+      alert('Erro ao salvar avaria: ' + error.message);
+      return;
+    }
+
+    onAtualizarLista();
+    onClose();
+  }
+
+  if (!avaria) return null;
+
   return (
-    <div className={`bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 ${border}`}>
-      <div>
-        <p className="text-sm text-slate-500 font-bold">{titulo}</p>
-        <p className="text-2xl font-black text-slate-800">{valor}</p>
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-40">
+      <div className="bg-white w-full max-w-5xl rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center p-4 border-b">
+          <h2 className="text-2xl font-bold">Editar Avaria #{avaria.id}</h2>
+          <button onClick={onClose} className="text-gray-700 hover:text-black text-xl">
+            ✕
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm text-gray-500">Prefixo</label>
+              <input
+                className="border p-2 rounded w-full"
+                value={prefixo}
+                onChange={(e) => setPrefixo(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-500">Motorista</label>
+              <input
+                className="border p-2 rounded w-full"
+                value={motoristaId}
+                onChange={(e) => setMotoristaId(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-500">Tipo da Ocorrência</label>
+              <input
+                className="border p-2 rounded w-full"
+                value={tipoOcorrencia}
+                onChange={(e) => setTipoOcorrencia(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-500">Nº da Avaria</label>
+              <input
+                className="border p-2 rounded w-full"
+                value={numeroAvaria}
+                onChange={(e) => setNumeroAvaria(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-500">Data da Avaria</label>
+              <input
+                type="date"
+                className="border p-2 rounded w-full"
+                value={dataAvaria}
+                onChange={(e) => setDataAvaria(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-500">Descrição</label>
+            <textarea
+              className="border rounded p-2 w-full"
+              rows={3}
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-500">Observação / Motivo</label>
+            <textarea
+              className="border rounded p-2 w-full bg-yellow-50"
+              rows={3}
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <h3 className="font-semibold mb-2">Evidências</h3>
+
+            <div className="flex gap-2 mb-2">
+              <input
+                id="novaEvidencia"
+                className="border p-2 rounded w-full"
+                placeholder="Cole a URL da imagem ou vídeo"
+              />
+              <button
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                onClick={() => {
+                  const url = document.getElementById('novaEvidencia').value;
+                  adicionarEvidencia(url);
+                  document.getElementById('novaEvidencia').value = '';
+                }}
+              >
+                Adicionar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {urlsEvidencias.map((url, index) => (
+                <div key={index} className="relative border rounded overflow-hidden">
+                  <button
+                    onClick={() => pedirExcluirEvidencia(index)}
+                    className="absolute top-1 right-1 bg-red-600 text-white rounded px-2 text-xs flex items-center gap-1"
+                    title="Excluir evidência (Gestor/Administrador)"
+                  >
+                    <FaTrash /> Excluir
+                  </button>
+
+                  {url.match(/\.(mp4|mov|webm)$/i) ? (
+                    <video controls src={url} className="w-full h-32 object-cover" />
+                  ) : (
+                    <img src={url} alt="" className="w-full h-32 object-cover" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-semibold text-gray-800">Itens do Orçamento</h3>
+              <button
+                onClick={adicionarItem}
+                className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+              >
+                <FaPlus /> Adicionar Item
+              </button>
+            </div>
+
+            {loadingItens ? (
+              <p>Carregando...</p>
+            ) : (
+              itens.map((item) => (
+                <div key={item.id} className="grid grid-cols-5 gap-2 p-2 bg-gray-50 rounded mb-1">
+                  <input
+                    className="border p-1 rounded"
+                    value={item.descricao}
+                    onChange={(e) => handleItemChange(item.id, 'descricao', e.target.value)}
+                    placeholder="Descrição"
+                  />
+
+                  <input
+                    className="border p-1 rounded text-center"
+                    type="number"
+                    value={item.qtd}
+                    onChange={(e) => handleItemChange(item.id, 'qtd', e.target.value)}
+                  />
+
+                  <input
+                    className="border p-1 rounded text-center"
+                    type="number"
+                    value={item.valorUnitario}
+                    onChange={(e) => handleItemChange(item.id, 'valorUnitario', e.target.value)}
+                  />
+
+                  <select
+                    className="border p-1 rounded"
+                    value={item.tipo}
+                    onChange={(e) => handleItemChange(item.id, 'tipo', e.target.value)}
+                  >
+                    <option value="Peca">Peça</option>
+                    <option value="Servico">Serviço</option>
+                  </select>
+
+                  <button
+                    onClick={() => pedirExcluirItem(item.id, item.novo)}
+                    className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 flex items-center justify-center gap-2"
+                    title="Excluir item (Gestor/Administrador)"
+                  >
+                    <FaTrash /> <span className="hidden md:inline">Excluir</span>
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="text-right text-xl font-bold">
+            Total:
+            <input
+              type="number"
+              className="border ml-2 p-2 rounded text-right w-40"
+              value={valorTotal}
+              onChange={(e) => setValorTotal(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-between p-4 border-t bg-gray-50">
+          <button
+            onClick={pedirExcluirAvaria}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 flex items-center gap-2"
+          >
+            <FaTrash /> Excluir Avaria
+          </button>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => salvarAlteracoes()}
+              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 flex items-center gap-2"
+            >
+              <FaSave /> Salvar
+            </button>
+
+            <button
+              onClick={() => salvarAlteracoes('Pendente de Aprovação')}
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
+            >
+              <FaUndo /> Salvar e Reenviar
+            </button>
+          </div>
+        </div>
       </div>
-      {icone}
+
+      {loginModalOpen && (
+        <LoginModal
+          title="Exclusão Restrita (Gestor/Administrador)"
+          actionLabel="Autorizar exclusão"
+          onConfirm={onLoginConfirm}
+          onCancel={() => {
+            setLoginModalOpen(false);
+            setPendencia(null);
+            setAcaoPendente(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ======================================================================
+// =========================== PÁGINA PRINCIPAL ===========================
+// ======================================================================
+export default function AvariasEmRevisao() {
+  const [avarias, setAvarias] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  async function carregar() {
+    setLoading(true);
+    const { data } = await supabase
+      .from('avarias')
+      .select('*')
+      .eq('status', 'Reprovado')
+      .order('aprovado_em', { ascending: false });
+
+    setAvarias(data || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  return (
+    <div className="max-w-7xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-4 text-gray-800">Pendências de Revisão</h1>
+
+      <div className="bg-white shadow rounded-lg overflow-x-auto">
+        <table className="min-w-full border">
+          <thead className="bg-yellow-600 text-white">
+            <tr>
+              <th className="py-2 px-3 text-left">Data</th>
+              <th className="py-2 px-3 text-left">Prefixo</th>
+              <th className="py-2 px-3 text-left">Nº Avaria</th>
+              <th className="py-2 px-3 text-left">Tipo</th>
+              <th className="py-2 px-3 text-left">Valor</th>
+              <th className="py-2 px-3 text-left">Reprovado por</th>
+              <th className="py-2 px-3 text-left w-80">Motivo / Observação</th>
+              <th className="py-2 px-3 text-left">Ações</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan="8" className="text-center p-4">
+                  Carregando...
+                </td>
+              </tr>
+            ) : avarias.length === 0 ? (
+              <tr>
+                <td colSpan="8" className="text-center p-4 text-gray-600">
+                  Nenhuma pendência.
+                </td>
+              </tr>
+            ) : (
+              avarias.map((a) => (
+                <tr key={a.id} className="border-t">
+                  <td className="py-2 px-3">
+                    {a.dataAvaria ? new Date(a.dataAvaria).toLocaleDateString('pt-BR') : '—'}
+                  </td>
+                  <td className="py-2 px-3">{a.prefixo}</td>
+                  <td className="py-2 px-3">{a.numero_da_avaria || '-'}</td>
+                  <td className="py-2 px-3">{a.tipoOcorrencia}</td>
+
+                  <td className="py-2 px-3 font-medium">
+                    {(a.valor_total_orcamento || 0).toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                    })}
+                  </td>
+
+                  <td className="py-2 px-3">{a.aprovado_por || '—'}</td>
+
+                  <td className="py-2 px-3">
+                    <p className="text-sm bg-yellow-50 border rounded p-2 min-h-[48px]">
+                      {a.observacao_operacao || 'Sem observação.'}
+                    </p>
+                  </td>
+
+                  <td className="py-2 px-3">
+                    <button
+                      onClick={() => setSelected(a)}
+                      className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-sm flex items-center gap-1"
+                    >
+                      <FaEdit /> Editar
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {selected && (
+        <EditarAvariaModal
+          avaria={selected}
+          onClose={() => setSelected(null)}
+          onAtualizarLista={carregar}
+        />
+      )}
     </div>
   );
 }

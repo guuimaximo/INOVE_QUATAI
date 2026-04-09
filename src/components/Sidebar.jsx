@@ -103,6 +103,7 @@ const ACCESS = {
     "/cobrancas",
     "/avarias-resumo",
 
+    "/sos-resumo",
     "/sos-solicitacao",
     "/sos-fechamento",
     "/sos-tratamento",
@@ -165,6 +166,7 @@ const ACCESS = {
     "/avarias-em-revisao",
     "/aprovar-avarias",
 
+    "/sos-resumo",
     "/sos-fechamento",
     "/sos-tratamento",
     "/sos-central",
@@ -340,6 +342,7 @@ export default function Sidebar() {
       checklists: [{ path: "/checklists", label: "Central", icon: <FaClipboardCheck /> }],
 
       sos: [
+        { path: "/sos-resumo", label: "Resumo", icon: <FaChartPie /> },
         { path: "/sos-solicitacao", label: "Solicitação", icon: <FaPenSquare /> },
         { path: "/sos-fechamento", label: "Fechamento", icon: <FaCheckDouble /> },
         { path: "/sos-tratamento", label: "Manutenção", icon: <FaScrewdriver /> },

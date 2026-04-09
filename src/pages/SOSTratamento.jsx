@@ -1,7 +1,22 @@
 // src/pages/SOSTratamento.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 import { FaTools, FaCheckCircle, FaTimes } from "react-icons/fa";
+
+function calcularDiasDecorridos(data) {
+  if (!data) return null;
+
+  const hoje = new Date();
+  const base = new Date(`${data}T00:00:00`);
+
+  if (Number.isNaN(base.getTime())) return null;
+
+  hoje.setHours(0, 0, 0, 0);
+  base.setHours(0, 0, 0, 0);
+
+  const diffMs = hoje.getTime() - base.getTime();
+  return diffMs < 0 ? 0 : Math.floor(diffMs / 86400000);
+}
 
 export default function SOSTratamento() {
   const [acionamentos, setAcionamentos] = useState([]);
@@ -39,10 +54,7 @@ export default function SOSTratamento() {
               <th className="py-3 px-4 text-left text-sm font-semibold">Prefixo</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Motorista</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Linha</th>
-
-              {/* ✅ ALTERADO: Local -> Reclamação */}
               <th className="py-3 px-4 text-left text-sm font-semibold">Reclamação</th>
-
               <th className="py-3 px-4 text-left text-sm font-semibold">Ocorrência</th>
               <th className="py-3 px-4 text-center text-sm font-semibold">Ações</th>
             </tr>
@@ -73,10 +85,7 @@ export default function SOSTratamento() {
                   <td className="py-3 px-4">{a.veiculo}</td>
                   <td className="py-3 px-4">{a.motorista_nome}</td>
                   <td className="py-3 px-4">{a.linha}</td>
-
-                  {/* ✅ ALTERADO: agora mostra a coluna reclamacao_motorista */}
                   <td className="py-3 px-4">{a.reclamacao_motorista}</td>
-
                   <td className="py-3 px-4">{a.ocorrencia}</td>
                   <td className="py-3 px-4 text-center">
                     <button
@@ -105,11 +114,8 @@ export default function SOSTratamento() {
 }
 
 // ===============================
-// Campo de Mecânico (seleção) - ATUALIZADO
+// Campo de Mecânico (seleção)
 // ===============================
-// Busca na tabela: "motoristas"
-// Filtra: cargo NÃO inicia com "MOTORISTA"
-// Colunas: chapa, nome, cargo
 function CampoMecanico({ value, onChange }) {
   const [busca, setBusca] = useState(value?.nome || value?.chapa || "");
   const [opcoes, setOpcoes] = useState([]);
@@ -222,7 +228,6 @@ function CampoMecanico({ value, onChange }) {
   );
 }
 
-// 🟦 Modal de Tratamento da Manutenção
 function TratamentoModal({ sos, onClose, onAtualizar }) {
   const [form, setForm] = useState({
     setor_manutencao: "",
@@ -230,10 +235,14 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
     problema_encontrado: "",
     solucao: "",
     solucionador: "",
-
-    // ✅ NOVOS CAMPOS
     mecanico_executor: { chapa: "", nome: "" },
     numero_os_corretiva: "",
+
+    data_ultima_preventiva: "",
+    km_rodado_preventiva: "",
+    data_ultima_inspecao: "",
+    km_rodado_inspecao: "",
+    classificacao_controlabilidade: "",
   });
 
   const [saving, setSaving] = useState(false);
@@ -252,6 +261,74 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
     carregarCatalogo();
   }, []);
 
+  useEffect(() => {
+    const mecanicoTexto = String(sos?.mecanico_executor || "").trim();
+    let chapa = "";
+    let nome = "";
+
+    if (mecanicoTexto.includes(" - ")) {
+      const [ch, ...rest] = mecanicoTexto.split(" - ");
+      chapa = ch || "";
+      nome = rest.join(" - ") || "";
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      setor_manutencao: sos?.setor_manutencao || "",
+      grupo_manutencao: sos?.grupo_manutencao || "",
+      problema_encontrado: sos?.problema_encontrado || "",
+      solucao: sos?.solucao || "",
+      solucionador: sos?.solucionador || "",
+      mecanico_executor: {
+        chapa,
+        nome,
+      },
+      numero_os_corretiva: sos?.numero_os_corretiva || "",
+
+      data_ultima_preventiva: sos?.data_ultima_preventiva || "",
+      km_rodado_preventiva: sos?.km_rodado_preventiva || "",
+      data_ultima_inspecao: sos?.data_ultima_inspecao || "",
+      km_rodado_inspecao: sos?.km_rodado_inspecao || "",
+      classificacao_controlabilidade: sos?.classificacao_controlabilidade || "",
+    }));
+  }, [sos]);
+
+  useEffect(() => {
+    if (!catalogo.length || !form.setor_manutencao) {
+      setGrupos([]);
+      return;
+    }
+
+    const gruposUnicos = Array.from(
+      new Set(
+        catalogo
+          .filter((c) => c.setor_macro === form.setor_manutencao)
+          .map((c) => c.grupo)
+      )
+    );
+    setGrupos(gruposUnicos);
+  }, [catalogo, form.setor_manutencao]);
+
+  useEffect(() => {
+    if (!catalogo.length || !form.setor_manutencao || !form.grupo_manutencao) {
+      setDefeitos([]);
+      return;
+    }
+
+    const defeitosUnicos = Array.from(
+      new Set(
+        catalogo
+          .filter(
+            (c) =>
+              c.setor_macro === form.setor_manutencao &&
+              c.grupo === form.grupo_manutencao
+          )
+          .map((c) => c.defeito)
+      )
+    );
+    setDefeitos(defeitosUnicos);
+  }, [catalogo, form.setor_manutencao, form.grupo_manutencao]);
+
   function handleSetorChange(setor) {
     setForm((prev) => ({
       ...prev,
@@ -259,25 +336,25 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
       grupo_manutencao: "",
       problema_encontrado: "",
     }));
-
-    const gruposUnicos = Array.from(
-      new Set(catalogo.filter((c) => c.setor_macro === setor).map((c) => c.grupo))
-    );
-    setGrupos(gruposUnicos);
   }
 
   function handleGrupoChange(grupo) {
-    setForm((prev) => ({ ...prev, grupo_manutencao: grupo, problema_encontrado: "" }));
-
-    const defeitosUnicos = Array.from(
-      new Set(
-        catalogo
-          .filter((c) => c.setor_macro === form.setor_manutencao && c.grupo === grupo)
-          .map((c) => c.defeito)
-      )
-    );
-    setDefeitos(defeitosUnicos);
+    setForm((prev) => ({
+      ...prev,
+      grupo_manutencao: grupo,
+      problema_encontrado: "",
+    }));
   }
+
+  const diasUltimaPreventiva = useMemo(
+    () => calcularDiasDecorridos(form.data_ultima_preventiva),
+    [form.data_ultima_preventiva]
+  );
+
+  const diasUltimaInspecao = useMemo(
+    () => calcularDiasDecorridos(form.data_ultima_inspecao),
+    [form.data_ultima_inspecao]
+  );
 
   async function salvarTratamento() {
     const mecanicoOk =
@@ -289,7 +366,8 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
       !form.grupo_manutencao ||
       !form.problema_encontrado ||
       !form.solucionador ||
-      !mecanicoOk
+      !mecanicoOk ||
+      !form.classificacao_controlabilidade
     ) {
       alert("Preencha todos os campos obrigatórios!");
       return;
@@ -308,6 +386,16 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
 
         mecanico_executor: `${form.mecanico_executor.chapa} - ${form.mecanico_executor.nome}`,
         numero_os_corretiva: form.numero_os_corretiva || null,
+
+        data_ultima_preventiva: form.data_ultima_preventiva || null,
+        km_rodado_preventiva: form.km_rodado_preventiva || null,
+        dias_ultima_preventiva: diasUltimaPreventiva,
+
+        data_ultima_inspecao: form.data_ultima_inspecao || null,
+        km_rodado_inspecao: form.km_rodado_inspecao || null,
+        dias_ultima_inspecao: diasUltimaInspecao,
+
+        classificacao_controlabilidade: form.classificacao_controlabilidade,
 
         data_fechamento: new Date().toISOString(),
         status: "Fechado",
@@ -328,8 +416,7 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 p-4 z-50">
-      <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full animate-fadeIn">
-        {/* Header */}
+      <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full animate-fadeIn max-h-[95vh] overflow-y-auto">
         <div className="flex justify-between items-center p-4 border-b bg-gray-100 rounded-t-lg">
           <h2 className="text-xl font-semibold text-gray-800">
             Tratamento do SOS #{sos.numero_sos}
@@ -342,7 +429,6 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
           </button>
         </div>
 
-        {/* Formulário */}
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -449,9 +535,154 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
               placeholder="Ex: Fernando, Clécio..."
             />
           </div>
+
+          <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
+            <h3 className="text-sm font-bold text-gray-700">
+              Informações complementares
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="md:col-span-4">
+                <label className="block text-sm text-gray-500 mb-1">
+                  Data da Última Preventiva
+                </label>
+                <input
+                  type="date"
+                  className="w-full border rounded p-2 bg-white"
+                  value={form.data_ultima_preventiva}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      data_ultima_preventiva: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="block text-sm text-gray-500 mb-1">
+                  KM Rodado
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded p-2 bg-white"
+                  placeholder="Ex: 125000"
+                  value={form.km_rodado_preventiva}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      km_rodado_preventiva: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="block text-sm text-gray-500 mb-1">
+                  Dias desde a Preventiva
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded p-2 bg-gray-100 text-gray-700 font-semibold"
+                  value={diasUltimaPreventiva ?? ""}
+                  readOnly
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="md:col-span-4">
+                <label className="block text-sm text-gray-500 mb-1">
+                  Data da Última Inspeção
+                </label>
+                <input
+                  type="date"
+                  className="w-full border rounded p-2 bg-white"
+                  value={form.data_ultima_inspecao}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      data_ultima_inspecao: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="block text-sm text-gray-500 mb-1">
+                  KM Rodado
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded p-2 bg-white"
+                  placeholder="Ex: 125000"
+                  value={form.km_rodado_inspecao}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      km_rodado_inspecao: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="block text-sm text-gray-500 mb-1">
+                  Dias desde a Inspeção
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded p-2 bg-gray-100 text-gray-700 font-semibold"
+                  value={diasUltimaInspecao ?? ""}
+                  readOnly
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-500 mb-2">
+                Classificação <span className="text-red-600">*</span>
+              </label>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      classificacao_controlabilidade: "Não Controlável",
+                    }))
+                  }
+                  className={`px-4 py-2 rounded-lg font-semibold border transition ${
+                    form.classificacao_controlabilidade === "Não Controlável"
+                      ? "bg-yellow-400 border-yellow-500 text-gray-900 shadow"
+                      : "bg-white border-yellow-300 text-yellow-700 hover:bg-yellow-50"
+                  }`}
+                >
+                  Não controlável
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      classificacao_controlabilidade: "Controlável",
+                    }))
+                  }
+                  className={`px-4 py-2 rounded-lg font-semibold border transition ${
+                    form.classificacao_controlabilidade === "Controlável"
+                      ? "bg-red-600 border-red-700 text-white shadow"
+                      : "bg-white border-red-300 text-red-700 hover:bg-red-50"
+                  }`}
+                >
+                  Controlável
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Footer */}
         <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-lg">
           <button
             onClick={salvarTratamento}

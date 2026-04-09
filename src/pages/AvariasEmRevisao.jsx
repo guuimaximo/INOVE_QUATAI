@@ -1,672 +1,722 @@
-// src/pages/AtasResumo.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
-import * as XLSX from "xlsx";
+import {
+  FaSearch,
+  FaFilter,
+  FaClock,
+  FaExclamationCircle,
+  FaCheckCircle,
+  FaFolderOpen,
+  FaGavel,
+  FaEye,
+  FaSort,
+  FaSortUp,
+  FaSortDown,
+} from "react-icons/fa";
 
-function toISODateOnly(d) {
-  if (!d) return "";
-  const dt = new Date(d);
-  if (Number.isNaN(dt.getTime())) return "";
-  return dt.toISOString().slice(0, 10);
+const VIEW = {
+  OPEN_ONLY: "open_only",
+  ALL: "all",
+};
+
+const SLA_DIAS = {
+  "Gravíssima": 1,
+  Gravissima: 1,
+  Alta: 3,
+  "Média": 7,
+  Media: 7,
+  Baixa: 15,
+};
+
+const PRIORIDADE_RANK = {
+  "Gravíssima": 0,
+  Gravissima: 0,
+  Alta: 1,
+  "Média": 2,
+  Media: 2,
+  Baixa: 3,
+};
+
+function norm(s) {
+  return String(s || "").trim();
 }
 
-function addDays(dateStr, days) {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return toISODateOnly(d);
+function isPendente(status) {
+  return norm(status).toLowerCase().includes("pendente");
 }
 
-function normStr(v) {
-  return String(v ?? "").trim();
+function isConcluidaOuResolvida(status) {
+  const st = norm(status).toLowerCase();
+  return st.includes("conclu") || st.includes("resolvid");
 }
 
-function ilikeContains(hay, needle) {
-  return normStr(hay).toLowerCase().includes(normStr(needle).toLowerCase());
+function daysDiffFromNow(createdAtISO) {
+  const dt = createdAtISO ? new Date(createdAtISO) : null;
+  if (!dt || Number.isNaN(dt.getTime())) return 0;
+  const now = new Date();
+  const diffMs = now.getTime() - dt.getTime();
+  return diffMs / (1000 * 60 * 60 * 24);
 }
 
-function countBy(arr, keyFn) {
-  const m = new Map();
-  for (const it of arr) {
-    const k = keyFn(it);
-    m.set(k, (m.get(k) || 0) + 1);
-  }
-  return m;
+function getSlaDias(prioridade) {
+  const p = norm(prioridade);
+  return SLA_DIAS[p] ?? 7;
 }
 
-function sortMapDesc(m) {
-  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+function isAtrasadaBySLA(row) {
+  if (!isPendente(row?.status)) return false;
+  const sla = getSlaDias(row?.prioridade);
+  return daysDiffFromNow(row?.created_at) > sla;
 }
 
-function Badge({ children, tone = "gray" }) {
-  const cls =
-    {
-      gray: "bg-gray-100 text-gray-700 border-gray-200",
-      blue: "bg-blue-50 text-blue-700 border-blue-200",
-      green: "bg-green-50 text-green-700 border-green-200",
-      yellow: "bg-yellow-50 text-yellow-700 border-yellow-200",
-      red: "bg-red-50 text-red-700 border-red-200",
-      purple: "bg-purple-50 text-purple-700 border-purple-200",
-      indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    }[tone] || "bg-gray-100 text-gray-700 border-gray-200";
-
-  return (
-    <span className={`inline-flex items-center px-2 py-1 text-xs border rounded ${cls}`}>
-      {children}
-    </span>
-  );
+function isPendenteNoPrazo(row) {
+  return isPendente(row?.status) && !isAtrasadaBySLA(row);
 }
 
-function Card({ title, children, right = null }) {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
-        <div className="font-semibold text-gray-800">{title}</div>
-        {right}
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
+function statusRank(row) {
+  if (isAtrasadaBySLA(row)) return 0;
+  if (isPendenteNoPrazo(row)) return 1;
+  if (isConcluidaOuResolvida(row?.status)) return 2;
+  return 3;
 }
 
-function CardResumo({ titulo, valor, cor }) {
-  return (
-    <div className={`${cor} rounded-xl shadow-sm border border-gray-200 p-6 text-center`}>
-      <h3 className="text-sm font-medium text-gray-700">{titulo}</h3>
-      <p className="text-4xl font-extrabold mt-2 text-gray-900">{valor}</p>
-    </div>
-  );
-}
-
-function ListItemButton({ label, value, onClick, active = false, sub = null }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left flex items-center justify-between gap-3 px-3 py-3 rounded-lg border transition ${
-        active ? "bg-blue-50 border-blue-200" : "bg-white border-gray-200 hover:bg-gray-50"
-      }`}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-gray-800 truncate">{label}</div>
-        {sub ? <div className="text-xs text-gray-500 truncate">{sub}</div> : null}
-      </div>
-
-      <div className="shrink-0 max-w-[180px] text-right">
-        <span className="text-xs font-semibold px-2 py-1 rounded bg-gray-100 text-gray-700 whitespace-nowrap">
-          {value}
-        </span>
-      </div>
-    </button>
-  );
-}
-
-export default function AtasResumo() {
+export default function CentralTratativas() {
+  const [tratativas, setTratativas] = useState([]);
   const [filtros, setFiltros] = useState({
+    busca: "",
     dataInicio: "",
     dataFim: "",
-    busca: "",
     setor: "",
     status: "",
+    prioridade: "",
   });
-
-  const [setoresDisponiveis, setSetoresDisponiveis] = useState([]);
-
   const [loading, setLoading] = useState(false);
-  const [atas, setAtas] = useState([]);
-  const [detalhes, setDetalhes] = useState([]);
 
-  const [selOcorrencia, setSelOcorrencia] = useState("");
-  const [selMotorista, setSelMotorista] = useState("");
-  const [selAcao, setSelAcao] = useState("");
-  const [selLinha, setSelLinha] = useState("");
+  const [setores, setSetores] = useState([]);
+  const [viewMode, setViewMode] = useState(VIEW.OPEN_ONLY);
+
+  const [sort, setSort] = useState({
+    key: "default",
+    dir: "asc",
+  });
 
   const [totalCount, setTotalCount] = useState(0);
   const [pendentesCount, setPendentesCount] = useState(0);
   const [concluidasCount, setConcluidasCount] = useState(0);
   const [atrasadasCount, setAtrasadasCount] = useState(0);
 
-  useEffect(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    setFiltros((f) => ({
-      ...f,
-      dataInicio: toISODateOnly(start),
-      dataFim: toISODateOnly(end),
-    }));
+  const navigate = useNavigate();
 
-    async function carregarSetores() {
-      const { data } = await supabase.from("tratativas").select("setor_origem");
-      if (data) {
-        const unicos = [...new Set(data.map((d) => d.setor_origem).filter(Boolean))];
-        setSetoresDisponiveis(unicos.sort());
-      }
+  function applyCommonFilters(query) {
+    const f = filtros;
+
+    if (f.busca) {
+      query = query.or(
+        `motorista_nome.ilike.%${f.busca}%,motorista_chapa.ilike.%${f.busca}%,descricao.ilike.%${f.busca}%`
+      );
     }
 
-    carregarSetores();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (f.setor) query = query.eq("setor_origem", f.setor);
+    if (f.status) query = query.ilike("status", `%${f.status}%`);
+    if (f.prioridade) query = query.eq("prioridade", f.prioridade);
 
-  function resetDrill() {
-    setSelOcorrencia("");
-    setSelMotorista("");
-    setSelAcao("");
-    setSelLinha("");
+    if (f.dataInicio) query = query.gte("created_at", f.dataInicio);
+
+    if (f.dataFim) {
+      const dataFimAjustada = new Date(f.dataFim);
+      dataFimAjustada.setDate(dataFimAjustada.getDate() + 1);
+      query = query.lt("created_at", dataFimAjustada.toISOString().split("T")[0]);
+    }
+
+    return query;
   }
 
-  function computeCardsFromList(list) {
-    const total = list.length;
-
-    const pend = list.filter((t) => ilikeContains(t.status, "pend")).length;
-
-    const conc = list.filter(
-      (t) => ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid")
-    ).length;
-
-    const date10DaysAgo = new Date();
-    date10DaysAgo.setDate(date10DaysAgo.getDate() - 10);
-    const atr = list.filter((t) => {
-      if (!ilikeContains(t.status, "pend")) return false;
-      if (!t.created_at) return false;
-      const d = new Date(t.created_at);
-      return !Number.isNaN(d.getTime()) && d < date10DaysAgo;
-    }).length;
-
-    setTotalCount(total);
-    setPendentesCount(pend);
-    setConcluidasCount(conc);
-    setAtrasadasCount(atr);
-  }
-
-  async function carregar() {
-    setLoading(true);
+  async function carregarSetoresFiltro() {
     try {
-      resetDrill();
+      const { data: setoresData, error: eSet } = await supabase
+        .from("setores")
+        .select("nome")
+        .order("nome", { ascending: true });
 
-      const LINHA_FIELD = "linha";
+      if (!eSet && Array.isArray(setoresData) && setoresData.length > 0) {
+        const lista = setoresData
+          .map((s) => String(s?.nome || "").trim())
+          .filter(Boolean);
 
-      let q = supabase.from("tratativas").select(
-        `
-          id,
-          motorista_id,
-          motorista_nome,
-          motorista_chapa,
-          tipo_ocorrencia,
-          setor_origem,
-          prioridade,
-          status,
-          descricao,
-          ${LINHA_FIELD},
-          created_at
-        `
-      );
-
-      if (filtros.busca) {
-        const b = filtros.busca.trim();
-        q = q.or(
-          `motorista_nome.ilike.%${b}%,motorista_chapa.ilike.%${b}%,descricao.ilike.%${b}%,tipo_ocorrencia.ilike.%${b}%,${LINHA_FIELD}.ilike.%${b}%`
-        );
-      }
-      if (filtros.setor) q = q.eq("setor_origem", filtros.setor);
-      if (filtros.status) q = q.ilike("status", `%${filtros.status}%`);
-
-      if (filtros.dataInicio) q = q.gte("created_at", filtros.dataInicio);
-      if (filtros.dataFim) q = q.lt("created_at", addDays(filtros.dataFim, 1));
-
-      const { data: tData, error: tErr } = await q
-        .order("created_at", { ascending: false })
-        .limit(100000);
-      if (tErr) throw tErr;
-
-      const listAtas = tData || [];
-      setAtas(listAtas);
-      computeCardsFromList(listAtas);
-
-      const ids = listAtas.map((x) => x.id).filter(Boolean);
-      if (!ids.length) {
-        setDetalhes([]);
+        setSetores(Array.from(new Set(lista)));
         return;
       }
 
-      const CHUNK = 500;
-      const allDet = [];
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        const part = ids.slice(i, i + CHUNK);
-        const { data: dData, error: dErr } = await supabase
-          .from("tratativas_detalhes")
-          .select(
-            `
-              id,
-              created_at,
-              tratativa_id,
-              acao_aplicada,
-              observacoes,
-              tratado_por_login,
-              tratado_por_nome
-            `
-          )
-          .in("tratativa_id", part)
-          .order("created_at", { ascending: false });
+      const { data: trat, error: eTrat } = await supabase
+        .from("tratativas")
+        .select("setor_origem")
+        .not("setor_origem", "is", null)
+        .limit(10000);
 
-        if (dErr) throw dErr;
-        allDet.push(...(dData || []));
-      }
+      if (eTrat) throw eTrat;
 
-      setDetalhes(allDet);
+      const lista2 = (trat || [])
+        .map((r) => String(r?.setor_origem || "").trim())
+        .filter(Boolean);
+
+      setSetores(Array.from(new Set(lista2)).sort((a, b) => a.localeCompare(b)));
+    } catch (err) {
+      console.error("Erro carregando setores do filtro:", err);
+      setSetores([]);
+    }
+  }
+
+  async function carregarLista() {
+    let query = supabase.from("tratativas").select("*").limit(100000);
+    query = applyCommonFilters(query);
+
+    const { data, error } = await query.order("created_at", { ascending: false });
+    if (!error) setTratativas(data || []);
+    else console.error("Erro ao carregar lista de tratativas:", error);
+  }
+
+  async function carregarContadoresHead() {
+    let qTotal = supabase
+      .from("tratativas")
+      .select("id", { count: "exact", head: true });
+    qTotal = applyCommonFilters(qTotal);
+    const { count: total } = await qTotal;
+
+    let qConc = supabase
+      .from("tratativas")
+      .select("id", { count: "exact", head: true })
+      .or("status.ilike.%conclu%,status.ilike.%resolvid%");
+    qConc = applyCommonFilters(qConc);
+    const { count: conc } = await qConc;
+
+    setTotalCount(total || 0);
+    setConcluidasCount(conc || 0);
+  }
+
+  async function aplicar() {
+    setLoading(true);
+    try {
+      await Promise.all([carregarLista(), carregarContadoresHead()]);
     } catch (e) {
-      console.error("Erro ao carregar resumo de atas:", e);
-      alert("Erro ao carregar Resumo de Atas. Verifique o console.");
+      console.error("Erro ao aplicar filtros:", e);
     } finally {
       setLoading(false);
     }
   }
 
-  async function aplicar() {
-    await carregar();
+  useEffect(() => {
+    carregarSetoresFiltro();
+    aplicar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function limparFiltros() {
+    setFiltros({
+      busca: "",
+      dataInicio: "",
+      dataFim: "",
+      setor: "",
+      status: "",
+      prioridade: "",
+    });
+    setTimeout(() => aplicar(), 0);
   }
 
-  const ataById = useMemo(() => {
-    const m = new Map();
-    for (const t of atas) m.set(t.id, t);
-    return m;
-  }, [atas]);
+  const tratativasFiltradasClient = useMemo(() => {
+    return Array.isArray(tratativas) ? tratativas : [];
+  }, [tratativas]);
 
-  const detalhesJoin = useMemo(() => {
-    return (detalhes || []).map((d) => {
-      const t = ataById.get(d.tratativa_id);
-      return {
-        ...d,
-        motorista_nome: t?.motorista_nome ?? "",
-        motorista_chapa: t?.motorista_chapa ?? "",
-        motorista_id: t?.motorista_id ?? "",
-        tipo_ocorrencia: t?.tipo_ocorrencia ?? "",
-        setor_origem: t?.setor_origem ?? "",
-        prioridade: t?.prioridade ?? "",
-        status: t?.status ?? "",
-        linha: t?.linha ?? "",
-        ata_created_at: t?.created_at ?? "",
-      };
-    });
-  }, [detalhes, ataById]);
+  useEffect(() => {
+    const rows = Array.isArray(tratativasFiltradasClient) ? tratativasFiltradasClient : [];
 
-  const recorteDrill = useMemo(() => {
-    let baseAtas = [...atas];
-    let baseDet = [...detalhesJoin];
+    const pendentesSomente = rows.filter((r) => isPendenteNoPrazo(r)).length;
+    const atrasadasSomente = rows.filter((r) => isAtrasadaBySLA(r)).length;
 
-    if (selOcorrencia) {
-      baseAtas = baseAtas.filter((t) => normStr(t.tipo_ocorrencia) === normStr(selOcorrencia));
-      const ids = new Set(baseAtas.map((t) => t.id));
-      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
+    setPendentesCount(pendentesSomente);
+    setAtrasadasCount(atrasadasSomente);
+  }, [tratativasFiltradasClient]);
+
+  const tratativasView = useMemo(() => {
+    const rows = Array.isArray(tratativas) ? tratativas : [];
+    if (viewMode === VIEW.ALL) return rows;
+    return rows.filter((r) => isPendente(r?.status));
+  }, [tratativas, viewMode]);
+
+  function defaultComparator(a, b) {
+    const pa = PRIORIDADE_RANK[norm(a?.prioridade)] ?? 99;
+    const pb = PRIORIDADE_RANK[norm(b?.prioridade)] ?? 99;
+    if (pa !== pb) return pa - pb;
+
+    const sa = statusRank(a);
+    const sb = statusRank(b);
+    if (sa !== sb) return sa - sb;
+
+    const da = a?.created_at ? new Date(a.created_at).getTime() : 0;
+    const db = b?.created_at ? new Date(b.created_at).getTime() : 0;
+    return db - da;
+  }
+
+  function stringComparator(getter, dir, a, b) {
+    const va = norm(getter(a)).toLowerCase();
+    const vb = norm(getter(b)).toLowerCase();
+    const r = va.localeCompare(vb, "pt-BR");
+    return dir === "asc" ? r : -r;
+  }
+
+  const tratativasOrdenadas = useMemo(() => {
+    const rows = [...(tratativasView || [])];
+
+    if (sort.key === "default") {
+      rows.sort(defaultComparator);
+      return rows;
     }
 
-    if (selLinha) {
-      baseAtas = baseAtas.filter((t) => normStr(t.linha) === normStr(selLinha));
-      const ids = new Set(baseAtas.map((t) => t.id));
-      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
-    }
-
-    if (selMotorista) {
-      baseAtas = baseAtas.filter(
-        (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === selMotorista
-      );
-      const ids = new Set(baseAtas.map((t) => t.id));
-      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
-    }
-
-    if (selAcao) {
-      baseDet = baseDet.filter((d) => normStr(d.acao_aplicada) === normStr(selAcao));
-      const ids = new Set(baseDet.map((d) => d.tratativa_id));
-      baseAtas = baseAtas.filter((t) => ids.has(t.id));
-    }
-
-    return { baseAtas, baseDet };
-  }, [atas, detalhesJoin, selOcorrencia, selLinha, selMotorista, selAcao]);
-
-  const topOcorrencias = useMemo(() => {
-    const m = countBy(recorteDrill.baseAtas, (t) => normStr(t.tipo_ocorrencia) || "Sem ocorrência");
-    return sortMapDesc(m).slice(0, 12);
-  }, [recorteDrill.baseAtas]);
-
-  const topLinhas = useMemo(() => {
-    const m = countBy(recorteDrill.baseAtas, (t) => normStr(t.linha) || "Sem linha");
-    return sortMapDesc(m).slice(0, 12);
-  }, [recorteDrill.baseAtas]);
-
-  const topMotoristas = useMemo(() => {
-    const key = (t) =>
-      `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}`.trim() || "Sem motorista";
-
-    const m = countBy(recorteDrill.baseAtas, (t) => key(t));
-
-    return sortMapDesc(m)
-      .slice(0, 12)
-      .map(([k, total]) => {
-        const [chapa, nome] = k.split("|");
-        const pend = recorteDrill.baseAtas.filter(
-          (t) =>
-            `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k &&
-            ilikeContains(t.status, "pend")
-        ).length;
-
-        const conc = recorteDrill.baseAtas.filter(
-          (t) =>
-            `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k &&
-            (ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid"))
-        ).length;
-
-        return { k, chapa, nome, total, pend, conc };
-      });
-  }, [recorteDrill.baseAtas]);
-
-  const topAcoes = useMemo(() => {
-    const m = countBy(recorteDrill.baseDet, (d) => normStr(d.acao_aplicada) || "Não aplicada");
-    return sortMapDesc(m).slice(0, 12);
-  }, [recorteDrill.baseDet]);
-
-  const headerChips = useMemo(() => {
-    const chips = [];
-    if (selOcorrencia) chips.push({ k: "oc", label: `Ocorrência: ${selOcorrencia}`, tone: "purple" });
-    if (selLinha) chips.push({ k: "li", label: `Linha: ${selLinha}`, tone: "indigo" });
-    if (selMotorista) {
-      const [chapa, nome] = selMotorista.split("|");
-      chips.push({ k: "mo", label: `Motorista: ${nome} (${chapa})`, tone: "blue" });
-    }
-    if (selAcao) chips.push({ k: "ac", label: `Ação: ${selAcao}`, tone: "green" });
-    return chips;
-  }, [selOcorrencia, selLinha, selMotorista, selAcao]);
-
-  function baixarExcelUnificado() {
-    const { baseAtas } = recorteDrill;
-
-    const ids = new Set(baseAtas.map((t) => t.id));
-    const detFiltrado = detalhesJoin.filter((d) => ids.has(d.tratativa_id));
-
-    const sheetAtas = baseAtas.map((t) => ({
-      id: t.id,
-      created_at: t.created_at,
-      motorista_chapa: t.motorista_chapa,
-      motorista_nome: t.motorista_nome,
-      linha: t.linha,
-      tipo_ocorrencia: t.tipo_ocorrencia,
-      setor_origem: t.setor_origem,
-      prioridade: t.prioridade,
-      status: t.status,
-      descricao: t.descricao,
-    }));
-
-    const sheetDet = detFiltrado.map((d) => ({
-      id: d.id,
-      created_at: d.created_at,
-      ata_id: d.tratativa_id,
-      acao_aplicada: d.acao_aplicada,
-      observacoes: d.observacoes,
-      tratado_por_login: d.tratado_por_login,
-      tratado_por_nome: d.tratado_por_nome,
-    }));
-
-    const detByAta = new Map();
-    for (const d of detFiltrado) {
-      if (!detByAta.has(d.tratativa_id)) detByAta.set(d.tratativa_id, []);
-      detByAta.get(d.tratativa_id).push(d);
-    }
-
-    const sheetUni = [];
-    for (const t of baseAtas) {
-      const list = detByAta.get(t.id) || [];
-      if (!list.length) {
-        sheetUni.push({
-          ata_id: t.id,
-          ata_created_at: t.created_at,
-          motorista_chapa: t.motorista_chapa,
-          motorista_nome: t.motorista_nome,
-          linha: t.linha,
-          tipo_ocorrencia: t.tipo_ocorrencia,
-          setor_origem: t.setor_origem,
-          prioridade: t.prioridade,
-          status: t.status,
-          descricao: t.descricao,
-          detalhe_id: "",
-          detalhe_created_at: "",
-          acao_aplicada: "",
-          observacoes: "",
-          tratado_por_login: "",
-          tratado_por_nome: "",
-        });
-      } else {
-        for (const d of list) {
-          sheetUni.push({
-            ata_id: t.id,
-            ata_created_at: t.created_at,
-            motorista_chapa: t.motorista_chapa,
-            motorista_nome: t.motorista_nome,
-            linha: t.linha,
-            tipo_ocorrencia: t.tipo_ocorrencia,
-            setor_origem: t.setor_origem,
-            prioridade: t.prioridade,
-            status: t.status,
-            descricao: t.descricao,
-            detalhe_id: d.id,
-            detalhe_created_at: d.created_at,
-            acao_aplicada: d.acao_aplicada,
-            observacoes: d.observacoes,
-            tratado_por_login: d.tratado_por_login,
-            tratado_por_nome: d.tratado_por_nome,
-          });
-        }
+    rows.sort((a, b) => {
+      if (sort.key === "created_at") {
+        const da = a?.created_at ? new Date(a.created_at).getTime() : 0;
+        const db = b?.created_at ? new Date(b.created_at).getTime() : 0;
+        const r = da - db;
+        return sort.dir === "asc" ? r : -r;
       }
+
+      if (sort.key === "prioridade") {
+        const pa = PRIORIDADE_RANK[norm(a?.prioridade)] ?? 99;
+        const pb = PRIORIDADE_RANK[norm(b?.prioridade)] ?? 99;
+        const r = pa - pb;
+        return sort.dir === "asc" ? r : -r;
+      }
+
+      if (sort.key === "status") {
+        const ra = statusRank(a);
+        const rb = statusRank(b);
+        const r = ra - rb;
+        return sort.dir === "asc" ? r : -r;
+      }
+
+      if (sort.key === "motorista_nome") {
+        return stringComparator((x) => x?.motorista_nome, sort.dir, a, b);
+      }
+      if (sort.key === "tipo_ocorrencia") {
+        return stringComparator((x) => x?.tipo_ocorrencia, sort.dir, a, b);
+      }
+      if (sort.key === "setor_origem") {
+        return stringComparator((x) => x?.setor_origem, sort.dir, a, b);
+      }
+
+      return 0;
+    });
+
+    return rows;
+  }, [tratativasView, sort]);
+
+  function toggleSort(key) {
+    setSort((prev) => {
+      if (prev.key !== key) return { key, dir: "asc" };
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return { key: "default", dir: "asc" };
+    });
+  }
+
+  function SortIcon({ colKey }) {
+    if (sort.key !== colKey || sort.key === "default") {
+      return <FaSort className="inline ml-1 text-slate-400" />;
     }
+    return sort.dir === "asc" ? (
+      <FaSortUp className="inline ml-1 text-blue-600" />
+    ) : (
+      <FaSortDown className="inline ml-1 text-blue-600" />
+    );
+  }
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetAtas), "Atas");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetDet), "Detalhes");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetUni), "Unificado");
+  function badgePrioridade(p) {
+    const v = norm(p);
+    const base = "px-2 py-1 rounded-lg text-xs font-bold border";
+    if (v === "Gravíssima" || v === "Gravissima") {
+      return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Gravíssima</span>;
+    }
+    if (v === "Alta") {
+      return <span className={`${base} bg-orange-50 text-orange-700 border-orange-200`}>Alta</span>;
+    }
+    if (v === "Média" || v === "Media") {
+      return <span className={`${base} bg-yellow-50 text-yellow-700 border-yellow-200`}>Média</span>;
+    }
+    if (v === "Baixa") {
+      return <span className={`${base} bg-green-50 text-green-700 border-green-200`}>Baixa</span>;
+    }
+    return <span className={`${base} bg-slate-50 text-slate-700 border-slate-200`}>{v || "-"}</span>;
+  }
 
-    const nome = `atas_resumo_${filtros.dataInicio || "inicio"}_${filtros.dataFim || "fim"}.xlsx`;
-    XLSX.writeFile(wb, nome);
+  function badgeStatus(row) {
+    const st = norm(row?.status).toLowerCase();
+    const atrasada = isAtrasadaBySLA(row);
+
+    if (atrasada) {
+      return (
+        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-700 border-red-200">
+          Atrasada
+        </span>
+      );
+    }
+    if (st.includes("pendente")) {
+      return (
+        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-yellow-50 text-yellow-700 border-yellow-200">
+          Pendente
+        </span>
+      );
+    }
+    if (st.includes("resolvido") || st.includes("conclu")) {
+      return (
+        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
+          Resolvido
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-slate-50 text-slate-700 border-slate-200">
+        {row?.status || "-"}
+      </span>
+    );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="flex items-start justify-between gap-4 mb-4">
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Resumo de Atas</h1>
-          <p className="text-sm text-gray-500">
-            Clique nos TOPs para filtrar como BI e exporte um único Excel unificado.
+          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+            <FaGavel className="text-violet-500" /> Central de Tratativas
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Acompanhe pendências, atrasos por SLA e resoluções das tratativas.
           </p>
         </div>
 
-        <button
-          onClick={baixarExcelUnificado}
-          disabled={loading || atas.length === 0}
-          className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-300"
-        >
-          Baixar Excel (Unificado)
-        </button>
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <input
-            type="date"
-            value={filtros.dataInicio}
-            onChange={(e) => setFiltros((f) => ({ ...f, dataInicio: e.target.value }))}
-            className="border rounded-md px-3 py-2"
-          />
-          <input
-            type="date"
-            value={filtros.dataFim}
-            onChange={(e) => setFiltros((f) => ({ ...f, dataFim: e.target.value }))}
-            className="border rounded-md px-3 py-2"
-          />
-          <input
-            type="text"
-            placeholder="Busca (motorista, ocorrência, descrição...)"
-            value={filtros.busca}
-            onChange={(e) => setFiltros((f) => ({ ...f, busca: e.target.value }))}
-            className="border rounded-md px-3 py-2"
-          />
-          <select
-            value={filtros.setor}
-            onChange={(e) => setFiltros((f) => ({ ...f, setor: e.target.value }))}
-            className="border rounded-md px-3 py-2 bg-white"
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setViewMode(VIEW.ALL)}
+            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
+              viewMode === VIEW.ALL
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+            }`}
           >
-            <option value="">Todos os Setores</option>
-            {setoresDisponiveis.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filtros.status}
-            onChange={(e) => setFiltros((f) => ({ ...f, status: e.target.value }))}
-            className="border rounded-md px-3 py-2 bg-white"
-          >
-            <option value="">Todos os Status</option>
-            <option value="Pendente">Pendente</option>
-            <option value="Resolvido">Resolvido</option>
-            <option value="Concluída">Concluída</option>
-          </select>
-        </div>
-
-        <div className="flex items-center justify-between mt-4 gap-3">
-          <div className="flex flex-wrap gap-2">
-            {headerChips.map((c) => (
-              <Badge key={c.k} tone={c.tone}>
-                {c.label}
-              </Badge>
-            ))}
-            {(selOcorrencia || selLinha || selMotorista || selAcao) && (
-              <button
-                onClick={resetDrill}
-                className="text-xs px-3 py-1 rounded border border-gray-200 hover:bg-gray-50"
-              >
-                Limpar seleção
-              </button>
-            )}
-          </div>
+            VER TUDO
+          </button>
 
           <button
-            onClick={aplicar}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300"
+            onClick={() => setViewMode(VIEW.OPEN_ONLY)}
+            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
+              viewMode === VIEW.OPEN_ONLY
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+            }`}
           >
-            {loading ? "Carregando..." : "Aplicar"}
+            PENDENTES & ATRASADAS
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100" />
-        <CardResumo titulo="Pendentes" valor={pendentesCount} cor="bg-yellow-100" />
-        <CardResumo titulo="Concluídas" valor={concluidasCount} cor="bg-green-100" />
-        <CardResumo titulo="Atrasadas (>10d)" valor={atrasadasCount} cor="bg-red-100" />
+      <div className="bg-white p-4 rounded-xl border shadow-sm space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-800">Filtros</h2>
+          <p className="text-sm text-slate-500">
+            Refine a visualização por texto, período, setor, prioridade e status.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+          <div className="relative md:col-span-2">
+            <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar (nome, chapa, descrição...)"
+              value={filtros.busca}
+              onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+            />
+          </div>
+
+          <input
+            type="date"
+            value={filtros.dataInicio}
+            onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
+            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+          />
+
+          <input
+            type="date"
+            value={filtros.dataFim}
+            onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
+            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+          />
+
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.setor}
+              onChange={(e) => setFiltros({ ...filtros, setor: e.target.value })}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+            >
+              <option value="">Todos os Setores</option>
+              {setores.map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.prioridade}
+              onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+            >
+              <option value="">Todas as Prioridades</option>
+              <option value="Gravíssima">Gravíssima</option>
+              <option value="Alta">Alta</option>
+              <option value="Média">Média</option>
+              <option value="Baixa">Baixa</option>
+            </select>
+          </div>
+
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.status}
+              onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
+              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+            >
+              <option value="">Todos os Status</option>
+              <option value="Pendente">Pendente</option>
+              <option value="Resolvido">Resolvido</option>
+              <option value="Concluída">Concluída</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 flex-wrap">
+          <button
+            onClick={limparFiltros}
+            className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-bold text-sm"
+          >
+            Limpar
+          </button>
+          <button
+            onClick={aplicar}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-400 font-bold text-sm"
+          >
+            {loading ? "Aplicando..." : "Aplicar"}
+          </button>
+        </div>
+
+        <div className="text-xs text-slate-500">
+          Ordenação padrão: <b>Prioridade</b> → <b>Status</b> → <b>Mais recentes</b>.
+          Clique no cabeçalho da tabela para ordenar; clique novamente para inverter; na
+          terceira volta ao padrão.
+        </div>
+
+        <div className="rounded-xl border bg-slate-50 p-3">
+          <div className="text-xs font-bold text-slate-700 mb-2">
+            Regra de SLA para considerar como <span className="text-red-700">ATRASADA</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+            <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 font-bold">
+              Gravíssima: 1 dia
+            </span>
+            <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-bold">
+              Alta: 3 dias
+            </span>
+            <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-bold">
+              Média: 7 dias
+            </span>
+            <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 font-bold">
+              Baixa: 15 dias
+            </span>
+            <span className="text-slate-500">
+              (Atraso é calculado apenas quando o status está <b>Pendente</b>)
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <div className="xl:col-span-5">
-          <Card
-            title="Top Motoristas (Atas)"
-            right={<Badge tone="blue">{recorteDrill.baseAtas.length} atas</Badge>}
-          >
-            <div className="space-y-2">
-              {topMotoristas.length === 0 ? (
-                <div className="text-sm text-gray-500">Sem dados no recorte.</div>
-              ) : (
-                topMotoristas.map((m) => (
-                  <ListItemButton
-                    key={m.k}
-                    label={m.nome || "Sem nome"}
-                    sub={m.chapa ? `Chapa ${m.chapa}` : "Chapa -"}
-                    value={`Total ${m.total} | Pend ${m.pend} | Conc ${m.conc}`}
-                    active={selMotorista === m.k}
-                    onClick={() => {
-                      setSelMotorista((cur) => (cur === m.k ? "" : m.k));
-                      setSelAcao("");
-                    }}
-                  />
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardResumo
+          titulo="Total"
+          valor={totalCount}
+          icone={<FaFolderOpen className="text-4xl text-blue-50" />}
+          border="border-l-blue-500"
+        />
 
-        <div className="xl:col-span-2">
-          <Card
-            title="Top Ocorrências"
-            right={<Badge tone="purple">{topOcorrencias.reduce((a, b) => a + b[1], 0)}</Badge>}
-          >
-            <div className="space-y-2">
-              {topOcorrencias.length === 0 ? (
-                <div className="text-sm text-gray-500">Sem dados no recorte.</div>
-              ) : (
-                topOcorrencias.map(([label, qtd]) => (
-                  <ListItemButton
-                    key={label}
-                    label={label}
-                    value={qtd}
-                    active={selOcorrencia === label}
-                    onClick={() => {
-                      setSelOcorrencia((cur) => (cur === label ? "" : label));
-                      setSelMotorista("");
-                      setSelAcao("");
-                    }}
-                  />
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
+        <CardResumo
+          titulo="Pendentes"
+          valor={pendentesCount}
+          icone={<FaClock className="text-4xl text-yellow-50" />}
+          border="border-l-yellow-500"
+        />
 
-        <div className="xl:col-span-2">
-          <Card
-            title="Top Linhas"
-            right={<Badge tone="indigo">{topLinhas.reduce((a, b) => a + b[1], 0)}</Badge>}
-          >
-            <div className="space-y-2">
-              {topLinhas.length === 0 ? (
-                <div className="text-sm text-gray-500">Sem linhas no recorte.</div>
-              ) : (
-                topLinhas.map(([label, qtd]) => (
-                  <ListItemButton
-                    key={label}
-                    label={label}
-                    value={qtd}
-                    active={selLinha === label}
-                    onClick={() => {
-                      setSelLinha((cur) => (cur === label ? "" : label));
-                      setSelMotorista("");
-                      setSelAcao("");
-                    }}
-                  />
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
+        <CardResumo
+          titulo="Concluídas"
+          valor={concluidasCount}
+          icone={<FaCheckCircle className="text-4xl text-emerald-50" />}
+          border="border-l-emerald-500"
+        />
 
-        <div className="xl:col-span-3">
-          <Card
-            title="Top Ações Aplicadas (Detalhes)"
-            right={<Badge tone="green">{recorteDrill.baseDet.length} ações</Badge>}
-          >
-            <div className="space-y-2">
-              {topAcoes.length === 0 ? (
-                <div className="text-sm text-gray-500">Sem ações no recorte.</div>
-              ) : (
-                topAcoes.map(([label, qtd]) => (
-                  <ListItemButton
-                    key={label}
-                    label={label}
-                    value={qtd}
-                    active={selAcao === label}
-                    onClick={() => setSelAcao((cur) => (cur === label ? "" : label))}
-                  />
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
+        <CardResumo
+          titulo="Atrasadas (SLA)"
+          valor={atrasadasCount}
+          icone={<FaExclamationCircle className="text-4xl text-red-50" />}
+          border="border-l-red-500"
+        />
       </div>
+
+      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+        <table className="w-full text-left min-w-[1200px]">
+          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
+            <tr>
+              <th
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                onClick={() => toggleSort("created_at")}
+              >
+                <div className="flex items-center">
+                  Data de Abertura <SortIcon colKey="created_at" />
+                </div>
+              </th>
+
+              <th
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                onClick={() => toggleSort("motorista_nome")}
+              >
+                <div className="flex items-center">
+                  Motorista <SortIcon colKey="motorista_nome" />
+                </div>
+              </th>
+
+              <th
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                onClick={() => toggleSort("tipo_ocorrencia")}
+              >
+                <div className="flex items-center">
+                  Ocorrência <SortIcon colKey="tipo_ocorrencia" />
+                </div>
+              </th>
+
+              <th
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                onClick={() => toggleSort("prioridade")}
+              >
+                <div className="flex items-center">
+                  Prioridade <SortIcon colKey="prioridade" />
+                </div>
+              </th>
+
+              <th
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                onClick={() => toggleSort("setor_origem")}
+              >
+                <div className="flex items-center">
+                  Setor <SortIcon colKey="setor_origem" />
+                </div>
+              </th>
+
+              <th
+                className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                onClick={() => toggleSort("status")}
+              >
+                <div className="flex items-center">
+                  Status <SortIcon colKey="status" />
+                </div>
+              </th>
+
+              <th className="px-4 py-4">Ações</th>
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-gray-100">
+            {loading ? (
+              <tr>
+                <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
+                  Carregando...
+                </td>
+              </tr>
+            ) : tratativasOrdenadas.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
+                  Nenhuma tratativa encontrada.
+                </td>
+              </tr>
+            ) : (
+              tratativasOrdenadas.map((t) => {
+                const concluida = isConcluidaOuResolvida(t?.status);
+
+                return (
+                  <tr key={t.id} className="hover:bg-blue-50/40 transition-colors">
+                    <td className="px-4 py-4 text-slate-500 font-mono text-sm whitespace-nowrap">
+                      {t.created_at
+                        ? new Date(t.created_at).toLocaleDateString("pt-BR")
+                        : "-"}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <div className="font-black text-slate-900 text-sm md:text-base">
+                        {t.motorista_nome || "-"}
+                      </div>
+                      <div className="text-xs text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
+                        {t.motorista_chapa || ""}
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-4 text-slate-700">
+                      {t.tipo_ocorrencia || "-"}
+                    </td>
+
+                    <td className="px-4 py-4">{badgePrioridade(t.prioridade)}</td>
+
+                    <td className="px-4 py-4 text-slate-700">
+                      {t.setor_origem || "-"}
+                    </td>
+
+                    <td className="px-4 py-4">{badgeStatus(t)}</td>
+
+                    <td className="px-4 py-4">
+                      {concluida ? (
+                        <button
+                          onClick={() => navigate(`/consultar/${t.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 text-white rounded font-bold text-xs shadow-sm hover:bg-slate-800 transition-all whitespace-nowrap"
+                        >
+                          <FaEye size={12} /> Consultar
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/tratar/${t.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded font-bold text-xs shadow-sm hover:bg-blue-700 transition-all whitespace-nowrap"
+                        >
+                          <FaGavel size={12} /> Tratar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CardResumo({ titulo, valor, icone, border }) {
+  return (
+    <div className={`bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 ${border}`}>
+      <div>
+        <p className="text-sm text-slate-500 font-bold">{titulo}</p>
+        <p className="text-2xl font-black text-slate-800">{valor}</p>
+      </div>
+      {icone}
     </div>
   );
 }

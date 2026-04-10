@@ -31,6 +31,7 @@ import KMRodado from "./pages/KMRodado";
 import PCMInicio from "./pages/PCMInicio";
 import PCMDiario from "./pages/PCMDiario";
 import PCMResumo from "./pages/PCMResumo";
+import PCM_Preventivas from "./pages/PCM_Preventivas"; // ADICIONADO
 
 import Usuarios from "./pages/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
@@ -120,6 +121,7 @@ export default function App() {
           <Route path="/pcm-inicio" element={<PCMInicio />} />
           <Route path="/pcm-resumo" element={<PCMResumo />} />
           <Route path="/pcm-diario/:id" element={<PCMDiario />} />
+          <Route path="/pcm-preventivas" element={<PCM_Preventivas />} /> {/* ADICIONADO */}
 
           {/* Checklists */}
           <Route path="/checklists" element={<ChecklistCentral />} />

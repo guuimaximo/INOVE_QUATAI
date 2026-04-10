@@ -17,6 +17,8 @@ import {
   FaCogs,
   FaClipboardList,
   FaWrench,
+  FaUserTie,
+  FaClock,
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -41,13 +43,17 @@ function n(v) {
   return Number.isFinite(x) ? x : 0;
 }
 
+function s(v) {
+  return String(v || "").trim();
+}
+
 function normalize(v) {
-  return String(v || "").trim().toUpperCase();
+  return s(v).toUpperCase();
 }
 
 function safeDateStr(v) {
   if (!v) return "";
-  const txt = String(v).trim();
+  const txt = s(v);
   if (!txt) return "";
   if (txt.includes("T")) return txt.split("T")[0];
   if (txt.includes(" ")) return txt.split(" ")[0];
@@ -61,9 +67,9 @@ function safeDateStr(v) {
 }
 
 function parseDateOnly(v) {
-  const s = safeDateStr(v);
-  if (!s) return null;
-  const d = new Date(`${s}T00:00:00`);
+  const dt = safeDateStr(v);
+  if (!dt) return null;
+  const d = new Date(`${dt}T00:00:00`);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -75,11 +81,26 @@ function diffDays(dateA, dateB) {
   return Math.floor(ms / 86400000);
 }
 
+function calcDiffHours(startDate, startTime, endDate) {
+  const d1 = safeDateStr(startDate);
+  const d2 = safeDateStr(endDate);
+  const h1 = s(startTime);
+
+  if (!d1 || !d2) return 0;
+
+  const start = new Date(`${d1}T${h1 || "00:00:00"}`);
+  const end = new Date(`${d2}T23:59:59`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  const hours = (end.getTime() - start.getTime()) / 36e5;
+  return hours > 0 ? hours : 0;
+}
+
 function fmtDateBr(v) {
-  const s = safeDateStr(v);
-  if (!s) return "-";
-  const p = s.split("-");
-  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s;
+  const dt = safeDateStr(v);
+  if (!dt) return "-";
+  const p = dt.split("-");
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dt;
 }
 
 function fmtNum(v, dec = 2) {
@@ -95,6 +116,12 @@ function fmtInt(v) {
 
 function fmtPct(v) {
   return `${fmtNum(v, 1)}%`;
+}
+
+function fmtHoras(v) {
+  const h = n(v);
+  if (h < 1 && h > 0) return `${fmtNum(h * 60, 0)} min`;
+  return `${fmtNum(h, 1)} h`;
 }
 
 function monthKey(date) {
@@ -191,6 +218,7 @@ function CardKPI({ title, value, sub, icon, tone = "blue" }) {
     amber: "from-amber-50 to-orange-50 border-amber-200 text-amber-700",
     rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
     violet: "from-violet-50 to-fuchsia-50 border-violet-200 text-violet-700",
+    slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
   };
 
   return (
@@ -346,6 +374,12 @@ export default function SOS_Resumo() {
             ? n(r.dias_ultima_inspecao)
             : Math.max(0, n(diffDays(data_sos, r.data_ultima_inspecao)));
 
+        const tempo_solucao_horas = calcDiffHours(
+          r.data_sos || r.created_at,
+          r.hora_sos,
+          r.data_encerramento || r.data_fechamento
+        );
+
         return {
           ...r,
           data_sos,
@@ -353,6 +387,7 @@ export default function SOS_Resumo() {
           valida_mkbf: isOcorrenciaValidaParaMkbf(r.ocorrencia),
           linha: normalize(r.linha) || "N/D",
           veiculo: String(r.veiculo || "").trim() || "N/D",
+          motorista: normalize(r.motorista_nome) || normalize(r.motorista) || "N/D",
           status: normalize(r.status) || "N/D",
           problema_encontrado: String(r.problema_encontrado || "").trim() || "N/D",
           setor_manutencao: String(r.setor_manutencao || "").trim() || "N/D",
@@ -365,6 +400,7 @@ export default function SOS_Resumo() {
           faixa_preventiva: faixaDias(diasPrev),
           faixa_inspecao: faixaDias(diasInsp),
           mes_key: data_sos.slice(0, 7),
+          tempo_solucao_horas,
         };
       })
       .filter(Boolean);
@@ -435,6 +471,7 @@ export default function SOS_Resumo() {
       return [
         r.numero_sos,
         r.veiculo,
+        r.motorista,
         r.linha,
         r.tipo_norm,
         r.problema_encontrado,
@@ -493,8 +530,6 @@ export default function SOS_Resumo() {
     let qtdIntervalos = 0;
 
     const detalhesVeiculo = [];
-    const detalhesTecnicos = [];
-    const detalhesSetores = [];
 
     porVeiculo.forEach((eventos, veiculo) => {
       const sorted = [...eventos].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos)));
@@ -562,19 +597,6 @@ export default function SOS_Resumo() {
             }, {})
           ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
       });
-
-      sorted.forEach((r) => {
-        detalhesTecnicos.push({
-          veiculo,
-          defeito: r.problema_encontrado,
-          setor: r.setor_manutencao,
-        });
-        detalhesSetores.push({
-          veiculo,
-          setor: r.setor_manutencao,
-          defeito: r.problema_encontrado,
-        });
-      });
     });
 
     const veiculosComSOS = detalhesVeiculo.length;
@@ -597,6 +619,7 @@ export default function SOS_Resumo() {
   const resumoAtual = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesReferencia));
     const interv = baseRef.filter((r) => r.valida_mkbf).length;
+    const countControlaveis = baseRef.filter((r) => r.controlavel).length;
     const mkbf = interv > 0 ? kmTotal / interv : 0;
 
     const porTipoMap = {};
@@ -613,13 +636,19 @@ export default function SOS_Resumo() {
       baseRef.filter((r) => n(r.dias_ultima_inspecao_calc) > 0).reduce((acc, r) => acc + n(r.dias_ultima_inspecao_calc), 0) /
       Math.max(1, baseRef.filter((r) => n(r.dias_ultima_inspecao_calc) > 0).length);
 
+    const mediaFechamento =
+      baseRef.filter((r) => r.tempo_solucao_horas > 0).reduce((acc, r) => acc + r.tempo_solucao_horas, 0) /
+      Math.max(1, baseRef.filter((r) => r.tempo_solucao_horas > 0).length);
+
     return {
       kmTotal,
       interv,
+      countControlaveis,
       mkbf,
       porTipoMap,
       mediaPrev,
       mediaInsp,
+      mediaFechamento,
       ...reincidenciaCalcRef,
     };
   }, [kmMesMap, mesReferencia, baseRef, reincidenciaCalcRef]);
@@ -627,8 +656,9 @@ export default function SOS_Resumo() {
   const resumoComp = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesComparacao));
     const interv = baseComp.filter((r) => r.valida_mkbf).length;
+    const countControlaveis = baseComp.filter((r) => r.controlavel).length;
     const mkbf = interv > 0 ? kmTotal / interv : 0;
-    
+
     const porTipoMap = {};
     TIPOS_GRAFICO.forEach((t) => (porTipoMap[t] = 0));
     baseComp.forEach((r) => {
@@ -659,7 +689,11 @@ export default function SOS_Resumo() {
     const veiculosComSOS = porVeiculo.size;
     const taxaReincidencia = veiculosComSOS > 0 ? (veiculosReincidentes / veiculosComSOS) * 100 : 0;
 
-    return { kmTotal, interv, mkbf, porTipoMap, taxaReincidencia };
+    const mediaFechamento =
+      baseComp.filter((r) => r.tempo_solucao_horas > 0).reduce((acc, r) => acc + r.tempo_solucao_horas, 0) /
+      Math.max(1, baseComp.filter((r) => r.tempo_solucao_horas > 0).length);
+
+    return { kmTotal, interv, countControlaveis, mkbf, porTipoMap, taxaReincidencia, mediaFechamento };
   }, [kmMesMap, mesComparacao, baseComp]);
 
   const historico12m = useMemo(() => {
@@ -670,7 +704,7 @@ export default function SOS_Resumo() {
         if (filtroControlabilidade === "NÃO CONTROLÁVEL" && r.controlavel) return false;
         return true;
       });
-      
+
       const kmTotal = n(kmMesMap.get(mes));
       const interv = baseMes.filter((r) => r.valida_mkbf).length;
 
@@ -922,12 +956,43 @@ export default function SOS_Resumo() {
       .sort((a, b) => b.reincTecnica - a.reincTecnica || b.total - a.total);
   }, [baseRef]);
 
+  const tabelaMotoristas = useMemo(() => {
+    const map = new Map();
+    baseRef.forEach((r) => {
+      const key = r.motorista;
+      if (!map.has(key)) {
+        map.set(key, {
+          motorista: key,
+          total: 0,
+          veiculos: new Set(),
+          linhas: new Set(),
+          defeitos: {},
+        });
+      }
+      const item = map.get(key);
+      item.total += 1;
+      item.veiculos.add(r.veiculo);
+      item.linhas.add(r.linha);
+      item.defeitos[r.problema_encontrado] = n(item.defeitos[r.problema_encontrado]) + 1;
+    });
+
+    return [...map.values()]
+      .map((r) => ({
+        motorista: r.motorista,
+        total: r.total,
+        veiculos: r.veiculos.size,
+        linhas: r.linhas.size,
+        defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [baseRef]);
+
   const top5Veiculos3m = useMemo(() => {
     if (!mesReferencia) return [];
     const ref = firstDayOfMonth(mesReferencia);
     if (!ref) return [];
     const months3 = [addMonths(ref, -2), addMonths(ref, -1), ref].map(monthKey);
-    
+
     const base = sosProcessado.filter((r) => {
       if (!months3.includes(r.mes_key)) return false;
       if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
@@ -1117,6 +1182,19 @@ export default function SOS_Resumo() {
         "SOS_Resumo_Defeitos"
       );
     }
+
+    if (abaAtiva === "MOTORISTAS") {
+      exportarCSV(
+        tabelaMotoristas.map((r) => ({
+          Motorista: r.motorista,
+          Total: r.total,
+          Veículos: r.veiculos,
+          Linhas: r.linhas,
+          "Defeito Top": r.defeitoTop,
+        })),
+        "SOS_Resumo_Motoristas"
+      );
+    }
   };
 
   return (
@@ -1177,6 +1255,9 @@ export default function SOS_Resumo() {
             <p>
               <strong>Pós-preventiva e pós-inspeção:</strong> usa os dias registrados no tratamento ou recalcula pela diferença entre a data do SOS e a data da última preventiva/inspeção.
             </p>
+            <p>
+              <strong>Tempo Médio de Fechamento:</strong> Diferença em horas entre a abertura do SOS (data/hora) e a data de encerramento da etiqueta.
+            </p>
           </div>
         )}
 
@@ -1186,7 +1267,7 @@ export default function SOS_Resumo() {
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar SOS, veículo, linha, defeito, setor..."
+              placeholder="Buscar SOS, veículo, linha, defeito, motorista..."
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
@@ -1302,7 +1383,7 @@ export default function SOS_Resumo() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <CardKPI
           title="Total SOS Analisado"
           value={fmtInt(resumoAtual.interv)}
@@ -1311,16 +1392,23 @@ export default function SOS_Resumo() {
           tone="rose"
         />
         <CardKPI
+          title="Tempo Médio Fechamento"
+          value={fmtHoras(resumoAtual.mediaFechamento)}
+          sub="Desde abertura da etiqueta"
+          icon={<FaClock />}
+          tone="slate"
+        />
+        <CardKPI
           title="Veículos Reincidentes"
           value={fmtInt(resumoAtual.veiculosReincidentes)}
-          sub="Mesmo veículo com novo SOS em até 30 dias"
+          sub="Mesmo veículo em até 30 dias"
           icon={<FaBus />}
           tone="violet"
         />
         <CardKPI
           title="Taxa Reincidência"
           value={fmtPct(resumoAtual.taxaReincidencia)}
-          sub="Sobre veículos com SOS da base atual"
+          sub="Sobre veículos da base atual"
           icon={<FaChartLine />}
           tone="amber"
         />
@@ -1341,7 +1429,7 @@ export default function SOS_Resumo() {
         <CardKPI
           title="Dias entre SOS"
           value={fmtNum(resumoAtual.intervaloMedioGeral, 1)}
-          sub="Intervalo médio do mesmo veículo"
+          sub="Intervalo médio do veículo"
           icon={<FaRoad />}
           tone="violet"
         />
@@ -1355,7 +1443,7 @@ export default function SOS_Resumo() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wider text-slate-500">
@@ -1371,7 +1459,7 @@ export default function SOS_Resumo() {
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              Total Analisado vs mês anterior
+              Total vs mês anterior
             </p>
             <p className="text-xl font-black text-slate-800 mt-1">
               {fmtInt(resumoComp.interv)} → {fmtInt(resumoAtual.interv)}
@@ -1383,7 +1471,7 @@ export default function SOS_Resumo() {
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              Taxa reincidência vs mês anterior
+              Reincidência vs mês anterior
             </p>
             <p className="text-xl font-black text-slate-800 mt-1">
               {fmtPct(resumoComp.taxaReincidencia)} → {fmtPct(resumoAtual.taxaReincidencia)}
@@ -1391,6 +1479,21 @@ export default function SOS_Resumo() {
           </div>
           <EvolucaoBadge
             value={variancePct(resumoAtual.taxaReincidencia, resumoComp.taxaReincidencia)}
+            invert
+          />
+        </div>
+
+        <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+              Tempo Médio vs mês anterior
+            </p>
+            <p className="text-xl font-black text-slate-800 mt-1">
+              {fmtHoras(resumoComp.mediaFechamento)} → {fmtHoras(resumoAtual.mediaFechamento)}
+            </p>
+          </div>
+          <EvolucaoBadge
+            value={variancePct(resumoAtual.mediaFechamento, resumoComp.mediaFechamento)}
             invert
           />
         </div>
@@ -1417,6 +1520,9 @@ export default function SOS_Resumo() {
         </TabButton>
         <TabButton active={abaAtiva === "DEFEITOS"} onClick={() => setAbaAtiva("DEFEITOS")} icon={<FaTools />}>
           Defeitos
+        </TabButton>
+        <TabButton active={abaAtiva === "MOTORISTAS"} onClick={() => setAbaAtiva("MOTORISTAS")} icon={<FaUserTie />}>
+          Motoristas
         </TabButton>
       </div>
 
@@ -1693,140 +1799,268 @@ export default function SOS_Resumo() {
       )}
 
       {abaAtiva === "LINHAS" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
-          <h3 className="text-lg font-black text-slate-800 mb-3">Leitura por linha</h3>
-          <table className="w-full min-w-[1100px] text-sm">
-            <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-              <tr>
-                <th className="px-3 py-3 text-left">Linha</th>
-                <th className="px-3 py-3 text-left">SOS Atual</th>
-                <th className="px-3 py-3 text-left">SOS Anterior</th>
-                <th className="px-3 py-3 text-left">Variação</th>
-                <th className="px-3 py-3 text-left">Veíc. Reincidentes</th>
-                <th className="px-3 py-3 text-left">Taxa Reinc.</th>
-                <th className="px-3 py-3 text-left">Defeito Top</th>
-                <th className="px-3 py-3 text-left">Setor Top</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabelaLinhas.map((r) => (
-                <tr key={r.linha} className="border-b last:border-b-0 hover:bg-slate-50">
-                  <td className="px-3 py-3 font-black text-slate-800">{r.linha}</td>
-                  <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalAtual)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.totalAnterior)}</td>
-                  <td className="px-3 py-3">
-                    <EvolucaoBadge value={r.variacao_pct} invert />
-                  </td>
-                  <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.veiculosReincidentes)}</td>
-                  <td className="px-3 py-3">{fmtPct(r.taxaReincidencia)}</td>
-                  <td className="px-3 py-3">{r.defeitoTop}</td>
-                  <td className="px-3 py-3">{r.setorTop}</td>
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border shadow-sm p-4">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Linhas com mais ocorrências</h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tabelaLinhas.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="linha" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar dataKey="totalAtual" name="Volume de SOS" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={35}>
+                    <LabelList dataKey="totalAtual" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Leitura detalhada por linha</h3>
+            <table className="w-full min-w-[1100px] text-sm">
+              <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
+                <tr>
+                  <th className="px-3 py-3 text-left">Linha</th>
+                  <th className="px-3 py-3 text-left">SOS Atual</th>
+                  <th className="px-3 py-3 text-left">SOS Anterior</th>
+                  <th className="px-3 py-3 text-left">Variação</th>
+                  <th className="px-3 py-3 text-left">Veíc. Reincidentes</th>
+                  <th className="px-3 py-3 text-left">Taxa Reinc.</th>
+                  <th className="px-3 py-3 text-left">Defeito Top</th>
+                  <th className="px-3 py-3 text-left">Setor Top</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {tabelaLinhas.map((r) => (
+                  <tr key={r.linha} className="border-b last:border-b-0 hover:bg-slate-50">
+                    <td className="px-3 py-3 font-black text-slate-800">{r.linha}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalAtual)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.totalAnterior)}</td>
+                    <td className="px-3 py-3">
+                      <EvolucaoBadge value={r.variacao_pct} invert />
+                    </td>
+                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.veiculosReincidentes)}</td>
+                    <td className="px-3 py-3">{fmtPct(r.taxaReincidencia)}</td>
+                    <td className="px-3 py-3">{r.defeitoTop}</td>
+                    <td className="px-3 py-3">{r.setorTop}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {abaAtiva === "VEICULOS" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
-          <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por veículo</h3>
-          <table className="w-full min-w-[1100px] text-sm">
-            <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-              <tr>
-                <th className="px-3 py-3 text-left">Veículo</th>
-                <th className="px-3 py-3 text-left">Cluster</th>
-                <th className="px-3 py-3 text-left">Linha</th>
-                <th className="px-3 py-3 text-left">SOS Total</th>
-                <th className="px-3 py-3 text-left">Reinc. Veículo</th>
-                <th className="px-3 py-3 text-left">Reinc. Técnica</th>
-                <th className="px-3 py-3 text-left">Reinc. Setorial</th>
-                <th className="px-3 py-3 text-left">Intervalo Médio</th>
-                <th className="px-3 py-3 text-left">Defeito Top</th>
-                <th className="px-3 py-3 text-left">Setor Top</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabelaVeiculos.map((r) => (
-                <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
-                  <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
-                  <td className="px-3 py-3">{r.cluster}</td>
-                  <td className="px-3 py-3">{r.linhaTop}</td>
-                  <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td>
-                  <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td>
-                  <td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td>
-                  <td className="px-3 py-3">{r.defeitoTop}</td>
-                  <td className="px-3 py-3">{r.setorTop}</td>
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border shadow-sm p-4">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Veículos ofensores</h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tabelaVeiculos.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="veiculo" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar dataKey="totalSOS" name="Volume de SOS" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={35}>
+                    <LabelList dataKey="totalSOS" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por veículo</h3>
+            <table className="w-full min-w-[1100px] text-sm">
+              <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
+                <tr>
+                  <th className="px-3 py-3 text-left">Veículo</th>
+                  <th className="px-3 py-3 text-left">Cluster</th>
+                  <th className="px-3 py-3 text-left">Linha</th>
+                  <th className="px-3 py-3 text-left">SOS Total</th>
+                  <th className="px-3 py-3 text-left">Reinc. Veículo</th>
+                  <th className="px-3 py-3 text-left">Reinc. Técnica</th>
+                  <th className="px-3 py-3 text-left">Reinc. Setorial</th>
+                  <th className="px-3 py-3 text-left">Intervalo Médio</th>
+                  <th className="px-3 py-3 text-left">Defeito Top</th>
+                  <th className="px-3 py-3 text-left">Setor Top</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {tabelaVeiculos.map((r) => (
+                  <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
+                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
+                    <td className="px-3 py-3">{r.cluster}</td>
+                    <td className="px-3 py-3">{r.linhaTop}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td>
+                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td>
+                    <td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td>
+                    <td className="px-3 py-3">{r.defeitoTop}</td>
+                    <td className="px-3 py-3">{r.setorTop}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {abaAtiva === "SETORES" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
-          <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por setor</h3>
-          <table className="w-full min-w-[1000px] text-sm">
-            <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-              <tr>
-                <th className="px-3 py-3 text-left">Setor</th>
-                <th className="px-3 py-3 text-left">Total</th>
-                <th className="px-3 py-3 text-left">Linhas</th>
-                <th className="px-3 py-3 text-left">Veículos</th>
-                <th className="px-3 py-3 text-left">Reinc. Setorial</th>
-                <th className="px-3 py-3 text-left">Defeito Top</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabelaSetores.map((r) => (
-                <tr key={r.setor} className="border-b last:border-b-0 hover:bg-slate-50">
-                  <td className="px-3 py-3 font-black text-slate-800">{r.setor}</td>
-                  <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
-                  <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincSetorial)}</td>
-                  <td className="px-3 py-3">{r.defeitoTop}</td>
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border shadow-sm p-4">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Distribuição por Setor</h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tabelaSetores.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="setor" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar dataKey="total" name="Volume de SOS" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={35}>
+                    <LabelList dataKey="total" position="top" style={{ fill: "#8b5cf6", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por setor</h3>
+            <table className="w-full min-w-[1000px] text-sm">
+              <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
+                <tr>
+                  <th className="px-3 py-3 text-left">Setor</th>
+                  <th className="px-3 py-3 text-left">Total</th>
+                  <th className="px-3 py-3 text-left">Linhas</th>
+                  <th className="px-3 py-3 text-left">Veículos</th>
+                  <th className="px-3 py-3 text-left">Reinc. Setorial</th>
+                  <th className="px-3 py-3 text-left">Defeito Top</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {tabelaSetores.map((r) => (
+                  <tr key={r.setor} className="border-b last:border-b-0 hover:bg-slate-50">
+                    <td className="px-3 py-3 font-black text-slate-800">{r.setor}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
+                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincSetorial)}</td>
+                    <td className="px-3 py-3">{r.defeitoTop}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {abaAtiva === "DEFEITOS" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
-          <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por defeito</h3>
-          <table className="w-full min-w-[1100px] text-sm">
-            <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-              <tr>
-                <th className="px-3 py-3 text-left">Defeito</th>
-                <th className="px-3 py-3 text-left">Total</th>
-                <th className="px-3 py-3 text-left">Veículos</th>
-                <th className="px-3 py-3 text-left">Setores</th>
-                <th className="px-3 py-3 text-left">Linhas</th>
-                <th className="px-3 py-3 text-left">Reinc. Técnica</th>
-                <th className="px-3 py-3 text-left">Média Pós Prev.</th>
-                <th className="px-3 py-3 text-left">Média Pós Insp.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabelaDefeitos.map((r) => (
-                <tr key={r.defeito} className="border-b last:border-b-0 hover:bg-slate-50">
-                  <td className="px-3 py-3 font-black text-slate-800">{r.defeito}</td>
-                  <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.setores)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
-                  <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
-                  <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaPrev, 1)}</td>
-                  <td className="px-3 py-3 font-semibold text-blue-600">{fmtNum(r.mediaInsp, 1)}</td>
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border shadow-sm p-4">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Defeitos</h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tabelaDefeitos.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="defeito" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar dataKey="total" name="Volume de SOS" fill="#0f766e" radius={[4, 4, 0, 0]} barSize={35}>
+                    <LabelList dataKey="total" position="top" style={{ fill: "#0f766e", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por defeito</h3>
+            <table className="w-full min-w-[1100px] text-sm">
+              <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
+                <tr>
+                  <th className="px-3 py-3 text-left">Defeito</th>
+                  <th className="px-3 py-3 text-left">Total</th>
+                  <th className="px-3 py-3 text-left">Veículos</th>
+                  <th className="px-3 py-3 text-left">Setores</th>
+                  <th className="px-3 py-3 text-left">Linhas</th>
+                  <th className="px-3 py-3 text-left">Reinc. Técnica</th>
+                  <th className="px-3 py-3 text-left">Média Pós Prev.</th>
+                  <th className="px-3 py-3 text-left">Média Pós Insp.</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {tabelaDefeitos.map((r) => (
+                  <tr key={r.defeito} className="border-b last:border-b-0 hover:bg-slate-50">
+                    <td className="px-3 py-3 font-black text-slate-800">{r.defeito}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.setores)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
+                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
+                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaPrev, 1)}</td>
+                    <td className="px-3 py-3 font-semibold text-blue-600">{fmtNum(r.mediaInsp, 1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {abaAtiva === "MOTORISTAS" && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border shadow-sm p-4">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Motoristas</h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tabelaMotoristas.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="motorista" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar dataKey="total" name="Volume de SOS" fill="#eab308" radius={[4, 4, 0, 0]} barSize={35}>
+                    <LabelList dataKey="total" position="top" style={{ fill: "#eab308", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Detalhamento por Motorista</h3>
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
+                <tr>
+                  <th className="px-3 py-3 text-left">Motorista</th>
+                  <th className="px-3 py-3 text-left">Total de SOS</th>
+                  <th className="px-3 py-3 text-left">Veículos Distintos</th>
+                  <th className="px-3 py-3 text-left">Linhas Distintas</th>
+                  <th className="px-3 py-3 text-left">Principal Defeito Relatado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tabelaMotoristas.map((r) => (
+                  <tr key={r.motorista} className="border-b last:border-b-0 hover:bg-slate-50">
+                    <td className="px-3 py-3 font-black text-slate-800">{r.motorista}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
+                    <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
+                    <td className="px-3 py-3">{r.defeitoTop}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

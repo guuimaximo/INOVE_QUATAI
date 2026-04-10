@@ -332,7 +332,10 @@ export default function SOS_Resumo() {
             .order(dateField, { ascending: false })
             .range(start, start + limit - 1);
             
-          if (error) throw error;
+          if (error) {
+            console.error(`Erro buscando ${table}:`, error);
+            break; 
+          }
           if (!data || data.length === 0) break;
           
           allData = allData.concat(data);
@@ -342,8 +345,9 @@ export default function SOS_Resumo() {
         return allData;
       }
 
+      // IMPORTANTE: Busca por created_at garante que até chamados sem data_sos não fiquem de fora da malha
       const [sosData, kmData] = await Promise.all([
-        fetchAllPeriod("sos_acionamentos", "data_sos"),
+        fetchAllPeriod("sos_acionamentos", "created_at"),
         fetchAllPeriod("km_rodado_diario", "data").catch((e) => {
           console.warn("Aviso: Tabela km_rodado_diario indisponível ou vazia.", e);
           return [];
@@ -400,6 +404,9 @@ export default function SOS_Resumo() {
           r.data_encerramento || r.data_fechamento
         );
 
+        // CORREÇÃO DA REGRA DE CONTROLAVEL: Exige match exato para evitar falso positivo do "NÃO CONTROLÁVEL"
+        const isControlavel = classificacao === "CONTROLÁVEL" || classificacao === "CONTROLAVEL";
+
         return {
           ...r,
           data_sos,
@@ -414,7 +421,7 @@ export default function SOS_Resumo() {
           grupo_manutencao: String(r.grupo_manutencao || "").trim() || "N/D",
           cluster: deriveCluster(r.veiculo),
           classificacao_controlabilidade: classificacao,
-          controlavel: classificacao.includes("CONTROLÁVEL") || classificacao.includes("CONTROLAVEL"),
+          controlavel: isControlavel,
           dias_ultima_preventiva_calc: diasPrev || 0,
           dias_ultima_inspecao_calc: diasInsp || 0,
           faixa_preventiva: faixaDias(diasPrev),
@@ -483,6 +490,7 @@ export default function SOS_Resumo() {
       if (filtroTipo && r.tipo_norm !== filtroTipo) return false;
       if (filtroCluster && r.cluster !== filtroCluster) return false;
       if (filtroStatus && r.status !== normalize(filtroStatus)) return false;
+      
       if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
       if (filtroControlabilidade === "NÃO CONTROLÁVEL" && r.controlavel) return false;
 
@@ -638,8 +646,13 @@ export default function SOS_Resumo() {
 
   const resumoAtual = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesReferencia));
-    const interv = baseRef.filter((r) => r.valida_mkbf).length;
-    const mkbf = interv > 0 ? kmTotal / interv : 0;
+    
+    // CORREÇÃO CRÍTICA: Total analisado é o tamanho da base preenchida/filtrada e não apenas os que têm 'ocorrência' confirmada
+    const interv = baseRef.length; 
+    const validasParaMkbf = baseRef.filter((r) => r.valida_mkbf).length;
+    const mkbf = validasParaMkbf > 0 ? kmTotal / validasParaMkbf : 0;
+
+    const countControlaveis = baseRef.filter((r) => r.controlavel).length;
 
     const porTipoMap = {};
     TIPOS_GRAFICO.forEach((t) => (porTipoMap[t] = 0));
@@ -662,6 +675,7 @@ export default function SOS_Resumo() {
     return {
       kmTotal,
       interv,
+      countControlaveis,
       mkbf,
       porTipoMap,
       mediaPrev,
@@ -673,8 +687,11 @@ export default function SOS_Resumo() {
 
   const resumoComp = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesComparacao));
-    const interv = baseComp.filter((r) => r.valida_mkbf).length;
-    const mkbf = interv > 0 ? kmTotal / interv : 0;
+    const interv = baseComp.length;
+    const validasParaMkbf = baseComp.filter((r) => r.valida_mkbf).length;
+    const mkbf = validasParaMkbf > 0 ? kmTotal / validasParaMkbf : 0;
+
+    const countControlaveis = baseComp.filter((r) => r.controlavel).length;
 
     const porTipoMap = {};
     TIPOS_GRAFICO.forEach((t) => (porTipoMap[t] = 0));
@@ -710,7 +727,7 @@ export default function SOS_Resumo() {
       baseComp.filter((r) => r.tempo_solucao_horas > 0).reduce((acc, r) => acc + r.tempo_solucao_horas, 0) /
       Math.max(1, baseComp.filter((r) => r.tempo_solucao_horas > 0).length);
 
-    return { kmTotal, interv, mkbf, porTipoMap, taxaReincidencia, mediaFechamento };
+    return { kmTotal, interv, countControlaveis, mkbf, porTipoMap, taxaReincidencia, mediaFechamento };
   }, [kmMesMap, mesComparacao, baseComp]);
 
   const historico12m = useMemo(() => {
@@ -723,7 +740,9 @@ export default function SOS_Resumo() {
       });
 
       const kmTotal = n(kmMesMap.get(mes));
-      const interv = baseMes.filter((r) => r.valida_mkbf).length;
+      const intervTotal = baseMes.length;
+      const validasParaMkbf = baseMes.filter((r) => r.valida_mkbf).length;
+      const mkbf = validasParaMkbf > 0 ? kmTotal / validasParaMkbf : 0;
 
       const porVeiculo = new Map();
       [...baseMes]
@@ -751,11 +770,11 @@ export default function SOS_Resumo() {
       return {
         mes,
         mesLabel: monthLabelFromKey(mes),
-        intervTotal: baseMes.length,
+        intervTotal,
         reincidentes: veiculosReincidentes,
         taxaReincidencia,
         kmTotal,
-        mkbf: interv > 0 ? kmTotal / interv : 0,
+        mkbf,
         meta: MKBF_META,
       };
     });
@@ -1066,8 +1085,8 @@ export default function SOS_Resumo() {
     return [
       `A pressão do mês está concentrada na linha ${linhaTop}, com ${fmtInt(
         tabelaLinhas[0]?.totalAtual || 0
-      )} SOS válidos e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
-      `O defeito mais reincidente é "${defeitoTop}", puxado principalmente pelo setor ${setorTop}.`,
+      )} SOS analisados e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
+      `O defeito mais recorrente é "${defeitoTop}", puxado principalmente pelo setor ${setorTop}.`,
       `A faixa mais crítica após preventiva ficou em ${faixaPrevTop}, enquanto após inspeção a maior concentração ficou em ${faixaInspTop}.`,
       `O intervalo médio entre SOS do mesmo veículo está em ${fmtNum(
         resumoAtual.intervaloMedioGeral || 0,

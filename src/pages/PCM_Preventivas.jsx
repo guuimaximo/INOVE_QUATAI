@@ -1,23 +1,25 @@
-// src/pages/Preventivas.jsx
+// src/pages/PCM_Preventivas.jsx
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
-import { FaPlus, FaTimes, FaSearch } from "react-icons/fa";
+import { FaPlus, FaTimes } from "react-icons/fa";
+import CampoMotorista from "../components/CampoMotorista";
 
-export default function Preventivas() {
+export default function PCM_Preventivas() {
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [prefixos, setPrefixos] = useState([]);
   const [listaPreventivas, setListaPreventivas] = useState([]);
 
+  // Atualizado para usar o formato do CampoMotorista
   const [form, setForm] = useState({
     prefixo: "",
     numero_os: "",
     data_realizacao: new Date().toISOString().split("T")[0],
     tipo: "Preventiva - 10.000",
-    mecanico: "",
-    eletricista: "",
-    funilaria: "",
-    borracharia: "",
+    mecanico: { chapa: "", nome: "" },
+    eletricista: { chapa: "", nome: "" },
+    funilaria: { chapa: "", nome: "" },
+    borracharia: { chapa: "", nome: "" },
   });
 
   useEffect(() => {
@@ -32,7 +34,7 @@ export default function Preventivas() {
       .order("codigo");
     setPrefixos(prefixosData || []);
 
-    // Busca preventivas cadastradas (assumindo tabela 'preventivas')
+    // Busca preventivas cadastradas
     const { data: prevData } = await supabase
       .from("preventivas")
       .select("*")
@@ -40,8 +42,13 @@ export default function Preventivas() {
     setListaPreventivas(prevData || []);
   }
 
+  // Função auxiliar para extrair o nome ou juntar chapa + nome para o banco
+  const formatarColaborador = (colab) => {
+    return colab?.nome ? `${colab.chapa} - ${colab.nome}` : null;
+  };
+
   async function salvarPreventiva() {
-    if (!form.prefixo || !form.numero_os || !form.tipo || !form.mecanico || !form.eletricista) {
+    if (!form.prefixo || !form.numero_os || !form.tipo || !form.mecanico.nome || !form.eletricista.nome) {
       alert("Preencha os campos obrigatórios (Prefixo, OS, Tipo, Mecânico, Eletricista)!");
       return;
     }
@@ -53,10 +60,10 @@ export default function Preventivas() {
         numero_os: form.numero_os,
         data_realizacao: form.data_realizacao,
         tipo: form.tipo,
-        mecanico: form.mecanico,
-        eletricista: form.eletricista,
-        funilaria: form.tipo === "Preventiva - 10.000" ? form.funilaria : null,
-        borracharia: form.tipo === "Preventiva - 10.000" ? form.borracharia : null,
+        mecanico: formatarColaborador(form.mecanico),
+        eletricista: formatarColaborador(form.eletricista),
+        funilaria: form.tipo === "Preventiva - 10.000" ? formatarColaborador(form.funilaria) : null,
+        borracharia: form.tipo === "Preventiva - 10.000" ? formatarColaborador(form.borracharia) : null,
       };
 
       const { error } = await supabase.from("preventivas").insert(payload);
@@ -69,10 +76,10 @@ export default function Preventivas() {
         numero_os: "",
         data_realizacao: new Date().toISOString().split("T")[0],
         tipo: "Preventiva - 10.000",
-        mecanico: "",
-        eletricista: "",
-        funilaria: "",
-        borracharia: "",
+        mecanico: { chapa: "", nome: "" },
+        eletricista: { chapa: "", nome: "" },
+        funilaria: { chapa: "", nome: "" },
+        borracharia: { chapa: "", nome: "" },
       });
       carregarDados();
     } catch (err) {
@@ -143,7 +150,7 @@ export default function Preventivas() {
 
       {modalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
               <h2 className="text-xl font-black text-slate-800">Lançar Preventiva / Inspeção</h2>
               <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-rose-600 transition">
@@ -204,26 +211,20 @@ export default function Preventivas() {
               <div className="bg-slate-50 p-4 rounded-xl border space-y-4">
                 <h3 className="font-bold text-slate-700 uppercase text-xs tracking-wider">Colaboradores</h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">Mecânico</label>
-                    <input
-                      type="text"
-                      value={form.mecanico}
-                      onChange={(e) => setForm({ ...form, mecanico: e.target.value })}
-                      className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-200 outline-none"
-                      placeholder="Nome / Chapa"
+                    <CampoMotorista 
+                      value={form.mecanico} 
+                      onChange={(val) => setForm({ ...form, mecanico: val })} 
                     />
                   </div>
                   
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">Eletricista</label>
-                    <input
-                      type="text"
-                      value={form.eletricista}
-                      onChange={(e) => setForm({ ...form, eletricista: e.target.value })}
-                      className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-200 outline-none"
-                      placeholder="Nome / Chapa"
+                    <CampoMotorista 
+                      value={form.eletricista} 
+                      onChange={(val) => setForm({ ...form, eletricista: val })} 
                     />
                   </div>
 
@@ -231,22 +232,16 @@ export default function Preventivas() {
                     <>
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Funilaria</label>
-                        <input
-                          type="text"
-                          value={form.funilaria}
-                          onChange={(e) => setForm({ ...form, funilaria: e.target.value })}
-                          className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-200 outline-none"
-                          placeholder="Nome / Chapa"
+                        <CampoMotorista 
+                          value={form.funilaria} 
+                          onChange={(val) => setForm({ ...form, funilaria: val })} 
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Borracharia</label>
-                        <input
-                          type="text"
-                          value={form.borracharia}
-                          onChange={(e) => setForm({ ...form, borracharia: e.target.value })}
-                          className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-200 outline-none"
-                          placeholder="Nome / Chapa"
+                        <CampoMotorista 
+                          value={form.borracharia} 
+                          onChange={(val) => setForm({ ...form, borracharia: val })} 
                         />
                       </div>
                     </>

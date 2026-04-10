@@ -310,54 +310,47 @@ export default function SOS_Resumo() {
   const [mesReferencia, setMesReferencia] = useState("");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
+  // A REGRA DE BUSCA EM BLOCO CONTÍNUA: Garante que os dados antigos apareçam sem travar
+  async function fetchAllData(table, orderField) {
+    let allRecords = [];
+    let start = 0;
+    const limit = 1000; // Bloco seguro
+    
+    while (true) {
+      const { data, error } = await supabase
+        .from(table)
+        .select("*")
+        .order(orderField, { ascending: false })
+        .range(start, start + limit - 1);
+        
+      if (error) {
+        console.error(`Erro ao buscar dados de ${table}:`, error);
+        break;
+      }
+      if (!data || data.length === 0) break;
+      
+      allRecords = allRecords.concat(data);
+      if (data.length < limit) break; // Se vier menos que o limite, acabou a tabela
+      
+      start += limit;
+    }
+    return allRecords;
+  }
+
   async function carregarTudo() {
     setLoading(true);
     setErro("");
 
     try {
-      const dataCorte = new Date();
-      dataCorte.setMonth(dataCorte.getMonth() - 13);
-      const dataCorteStr = dataCorte.toISOString().split('T')[0];
-
-      async function fetchAllPeriod(table, dateField) {
-        let allData = [];
-        let start = 0;
-        const limit = 5000;
-        
-        while (true) {
-          const { data, error } = await supabase
-            .from(table)
-            .select("*")
-            .gte(dateField, dataCorteStr)
-            .order(dateField, { ascending: false })
-            .range(start, start + limit - 1);
-            
-          if (error) {
-            console.error(`Erro buscando ${table}:`, error);
-            break; 
-          }
-          if (!data || data.length === 0) break;
-          
-          allData = allData.concat(data);
-          if (data.length < limit) break; 
-          start += limit;
-        }
-        return allData;
-      }
-
-      // IMPORTANTE: Busca por created_at garante que até chamados sem data_sos não fiquem de fora da malha
       const [sosData, kmData] = await Promise.all([
-        fetchAllPeriod("sos_acionamentos", "created_at"),
-        fetchAllPeriod("km_rodado_diario", "data").catch((e) => {
-          console.warn("Aviso: Tabela km_rodado_diario indisponível ou vazia.", e);
-          return [];
-        })
+        fetchAllData("sos_acionamentos", "data_sos"),
+        fetchAllData("km_rodado_diario", "data").catch(() => [])
       ]);
 
       setSosRows(sosData || []);
       setKmRows(kmData || []);
     } catch (e) {
-      console.error("Erro fatal ao carregar dados:", e);
+      console.error(e);
       setErro(e?.message || String(e));
     } finally {
       setLoading(false);
@@ -404,8 +397,9 @@ export default function SOS_Resumo() {
           r.data_encerramento || r.data_fechamento
         );
 
-        // CORREÇÃO DA REGRA DE CONTROLAVEL: Exige match exato para evitar falso positivo do "NÃO CONTROLÁVEL"
+        // Correspondência Exata para evitar que "NÃO CONTROLÁVEL" passe como controlável
         const isControlavel = classificacao === "CONTROLÁVEL" || classificacao === "CONTROLAVEL";
+        const isNaoControlavel = classificacao === "NÃO CONTROLÁVEL" || classificacao === "NAO CONTROLAVEL";
 
         return {
           ...r,
@@ -422,6 +416,7 @@ export default function SOS_Resumo() {
           cluster: deriveCluster(r.veiculo),
           classificacao_controlabilidade: classificacao,
           controlavel: isControlavel,
+          nao_controlavel: isNaoControlavel,
           dias_ultima_preventiva_calc: diasPrev || 0,
           dias_ultima_inspecao_calc: diasInsp || 0,
           faixa_preventiva: faixaDias(diasPrev),
@@ -491,8 +486,9 @@ export default function SOS_Resumo() {
       if (filtroCluster && r.cluster !== filtroCluster) return false;
       if (filtroStatus && r.status !== normalize(filtroStatus)) return false;
       
+      // Validação Estrita de Controlabilidade
       if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
-      if (filtroControlabilidade === "NÃO CONTROLÁVEL" && r.controlavel) return false;
+      if (filtroControlabilidade === "NÃO CONTROLÁVEL" && !r.nao_controlavel) return false;
 
       if (!q) return true;
 
@@ -646,9 +642,7 @@ export default function SOS_Resumo() {
 
   const resumoAtual = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesReferencia));
-    
-    // CORREÇÃO CRÍTICA: Total analisado é o tamanho da base preenchida/filtrada e não apenas os que têm 'ocorrência' confirmada
-    const interv = baseRef.length; 
+    const interv = baseRef.length; // Conta a BASE INTERIA sem descarte indevido
     const validasParaMkbf = baseRef.filter((r) => r.valida_mkbf).length;
     const mkbf = validasParaMkbf > 0 ? kmTotal / validasParaMkbf : 0;
 
@@ -735,7 +729,7 @@ export default function SOS_Resumo() {
       const baseMes = sosProcessado.filter((r) => {
         if (r.mes_key !== mes) return false;
         if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
-        if (filtroControlabilidade === "NÃO CONTROLÁVEL" && r.controlavel) return false;
+        if (filtroControlabilidade === "NÃO CONTROLÁVEL" && !r.nao_controlavel) return false;
         return true;
       });
 
@@ -1032,7 +1026,7 @@ export default function SOS_Resumo() {
     const base = sosProcessado.filter((r) => {
       if (!months3.includes(r.mes_key)) return false;
       if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
-      if (filtroControlabilidade === "NÃO CONTROLÁVEL" && r.controlavel) return false;
+      if (filtroControlabilidade === "NÃO CONTROLÁVEL" && !r.nao_controlavel) return false;
       return true;
     });
 

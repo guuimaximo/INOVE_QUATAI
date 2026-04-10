@@ -1,7 +1,7 @@
 // src/pages/SOSTratamento.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
-import { FaTools, FaCheckCircle, FaTimes } from "react-icons/fa";
+import { FaTools, FaCheckCircle, FaTimes, FaBus, FaCalendarAlt, FaRoad, FaWrench, FaInfoCircle } from "react-icons/fa";
 
 function calcularDiasDecorridos(data) {
   if (!data) return null;
@@ -16,6 +16,16 @@ function calcularDiasDecorridos(data) {
 
   const diffMs = hoje.getTime() - base.getTime();
   return diffMs < 0 ? 0 : Math.floor(diffMs / 86400000);
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "-";
+  return dateStr.split("-").reverse().join("/");
+}
+
+function formatKM(km) {
+  if (!km && km !== 0) return "-";
+  return Number(km).toLocaleString("pt-BR");
 }
 
 export default function SOSTratamento() {
@@ -42,10 +52,10 @@ export default function SOSTratamento() {
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6 text-gray-800 flex items-center gap-3">
-        <FaTools /> Tratamento de Interveção — Manutenção
+        <FaTools /> Tratamento de Intervenção — Manutenção
       </h1>
 
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+      <div className="bg-white shadow-lg rounded-lg overflow-hidden border">
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
             <tr>
@@ -62,37 +72,37 @@ export default function SOSTratamento() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="8" className="text-center py-6 text-gray-600">
-                  Carregando acionamento em andamento...
+                <td colSpan="8" className="text-center py-6 text-gray-600 font-medium">
+                  Carregando acionamentos em andamento...
                 </td>
               </tr>
             ) : acionamentos.length === 0 ? (
               <tr>
-                <td colSpan="8" className="text-center py-6 text-gray-600">
-                  Nenhuma acionamento em andamento.
+                <td colSpan="8" className="text-center py-6 text-gray-600 font-medium">
+                  Nenhum acionamento em andamento.
                 </td>
               </tr>
             ) : (
               acionamentos.map((a) => (
                 <tr
                   key={a.id}
-                  className="border-t hover:bg-gray-50 transition-colors"
+                  className="border-t hover:bg-slate-50 transition-colors"
                 >
-                  <td className="py-3 px-4">{a.numero_sos}</td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 font-bold text-slate-700">#{a.numero_sos}</td>
+                  <td className="py-3 px-4 font-medium text-slate-600">
                     {new Date(a.created_at).toLocaleDateString("pt-BR")}
                   </td>
-                  <td className="py-3 px-4">{a.veiculo}</td>
-                  <td className="py-3 px-4">{a.motorista_nome}</td>
-                  <td className="py-3 px-4">{a.linha}</td>
-                  <td className="py-3 px-4">{a.reclamacao_motorista}</td>
-                  <td className="py-3 px-4">{a.ocorrencia}</td>
+                  <td className="py-3 px-4 font-black text-slate-800">{a.veiculo}</td>
+                  <td className="py-3 px-4 text-slate-600">{a.motorista_nome}</td>
+                  <td className="py-3 px-4 text-slate-600">{a.linha}</td>
+                  <td className="py-3 px-4 text-slate-600 max-w-xs truncate" title={a.reclamacao_motorista}>{a.reclamacao_motorista}</td>
+                  <td className="py-3 px-4 font-semibold text-slate-700">{a.ocorrencia}</td>
                   <td className="py-3 px-4 text-center">
                     <button
                       onClick={() => setSelected(a)}
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-2 transition"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition active:scale-95 mx-auto"
                     >
-                      <FaTools /> Tratar Acionamento
+                      <FaTools /> Tratar
                     </button>
                   </td>
                 </tr>
@@ -178,14 +188,14 @@ function CampoMecanico({ value, onChange }) {
 
   return (
     <div className="relative">
-      <label className="block text-sm text-gray-500 mb-1">
-        Mecânico Executor <span className="text-red-600">*</span>
+      <label className="block text-sm font-bold text-slate-700 mb-1">
+        Mecânico Executor <span className="text-red-500">*</span>
       </label>
 
       <div className="flex gap-2">
         <input
           type="text"
-          className="w-full border rounded p-2"
+          className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-200 transition"
           placeholder="Digite nome ou chapa..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
@@ -193,25 +203,25 @@ function CampoMecanico({ value, onChange }) {
         <button
           type="button"
           onClick={limpar}
-          className="border rounded px-3 text-sm hover:bg-gray-50"
+          className="border border-slate-300 rounded-lg px-4 text-sm font-bold text-slate-600 hover:bg-slate-50 transition"
         >
           Limpar
         </button>
       </div>
 
-      {loading && <div className="text-xs text-gray-500 mt-1">Buscando...</div>}
+      {loading && <div className="text-xs text-blue-600 font-semibold mt-1">Buscando colaborador...</div>}
 
       {opcoes.length > 0 && (
-        <div className="absolute z-50 mt-2 w-full bg-white border rounded shadow-lg overflow-hidden">
+        <div className="absolute z-50 mt-2 w-full bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
           {opcoes.map((m) => (
             <button
               key={m.chapa}
               type="button"
               onClick={() => selecionar(m)}
-              className="w-full text-left px-3 py-2 hover:bg-gray-50"
+              className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b last:border-b-0 transition"
             >
-              <div className="text-sm font-medium text-gray-800">{m.nome}</div>
-              <div className="text-xs text-gray-500">
+              <div className="text-sm font-bold text-slate-800">{m.nome}</div>
+              <div className="text-xs text-slate-500 font-medium">
                 Chapa: {m.chapa} • {m.cargo}
               </div>
             </button>
@@ -220,8 +230,8 @@ function CampoMecanico({ value, onChange }) {
       )}
 
       {value?.chapa || value?.nome ? (
-        <div className="mt-2 text-xs text-gray-600">
-          Selecionado: <strong>{value.nome}</strong> (Chapa {value.chapa})
+        <div className="mt-2 text-xs text-emerald-600 font-semibold bg-emerald-50 inline-block px-2 py-1 rounded-md border border-emerald-200">
+          ✓ Selecionado: {value.nome} ({value.chapa})
         </div>
       ) : null}
     </div>
@@ -237,11 +247,7 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
     solucionador: "",
     mecanico_executor: { chapa: "", nome: "" },
     numero_os_corretiva: "",
-
-    data_ultima_preventiva: "",
-    km_rodado_preventiva: "",
-    data_ultima_inspecao: "",
-    km_rodado_inspecao: "",
+    km_atual_veiculo: "",
     classificacao_controlabilidade: "",
   });
 
@@ -249,6 +255,13 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
   const [catalogo, setCatalogo] = useState([]);
   const [grupos, setGrupos] = useState([]);
   const [defeitos, setDefeitos] = useState([]);
+  
+  // Histórico de Manutenção Puxado Automaticamente
+  const [historicoLoading, setHistoricoLoading] = useState(true);
+  const [historico, setHistorico] = useState({
+    preventiva: null,
+    inspecao: null,
+  });
 
   useEffect(() => {
     async function carregarCatalogo() {
@@ -260,6 +273,42 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
     }
     carregarCatalogo();
   }, []);
+
+  // Buscar Histórico do Veículo na Tabela de Preventivas
+  useEffect(() => {
+    async function carregarHistorico() {
+      if (!sos?.veiculo) return;
+      setHistoricoLoading(true);
+
+      // Busca Última Preventiva
+      const { data: prevData } = await supabase
+        .from("preventivas")
+        .select("data_realizacao, km_veiculo")
+        .eq("prefixo", sos.veiculo)
+        .eq("tipo", "Preventiva - 10.000")
+        .order("data_realizacao", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Busca Última Inspeção
+      const { data: inspData } = await supabase
+        .from("preventivas")
+        .select("data_realizacao, km_veiculo")
+        .eq("prefixo", sos.veiculo)
+        .eq("tipo", "Inspeção - 5.000")
+        .order("data_realizacao", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setHistorico({
+        preventiva: prevData || null,
+        inspecao: inspData || null,
+      });
+
+      setHistoricoLoading(false);
+    }
+    carregarHistorico();
+  }, [sos?.veiculo]);
 
   useEffect(() => {
     const mecanicoTexto = String(sos?.mecanico_executor || "").trim();
@@ -284,12 +333,9 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
         nome,
       },
       numero_os_corretiva: sos?.numero_os_corretiva || "",
-
-      data_ultima_preventiva: sos?.data_ultima_preventiva || "",
-      km_rodado_preventiva: sos?.km_rodado_preventiva || "",
-      data_ultima_inspecao: sos?.data_ultima_inspecao || "",
-      km_rodado_inspecao: sos?.km_rodado_inspecao || "",
       classificacao_controlabilidade: sos?.classificacao_controlabilidade || "",
+      // Tentar pegar o km se já existia algo salvo, senão vazio
+      km_atual_veiculo: "", 
     }));
   }, [sos]);
 
@@ -347,14 +393,24 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
   }
 
   const diasUltimaPreventiva = useMemo(
-    () => calcularDiasDecorridos(form.data_ultima_preventiva),
-    [form.data_ultima_preventiva]
+    () => calcularDiasDecorridos(historico.preventiva?.data_realizacao),
+    [historico.preventiva?.data_realizacao]
   );
 
   const diasUltimaInspecao = useMemo(
-    () => calcularDiasDecorridos(form.data_ultima_inspecao),
-    [form.data_ultima_inspecao]
+    () => calcularDiasDecorridos(historico.inspecao?.data_realizacao),
+    [historico.inspecao?.data_realizacao]
   );
+
+  const kmAtual = Number(form.km_atual_veiculo) || 0;
+  
+  const kmPercorridoPreventiva = historico.preventiva?.km_veiculo && kmAtual > 0 
+    ? kmAtual - Number(historico.preventiva.km_veiculo) 
+    : 0;
+
+  const kmPercorridoInspecao = historico.inspecao?.km_veiculo && kmAtual > 0 
+    ? kmAtual - Number(historico.inspecao.km_veiculo) 
+    : 0;
 
   async function salvarTratamento() {
     const mecanicoOk =
@@ -367,39 +423,46 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
       !form.problema_encontrado ||
       !form.solucionador ||
       !mecanicoOk ||
+      !form.km_atual_veiculo ||
       !form.classificacao_controlabilidade
     ) {
-      alert("Preencha todos os campos obrigatórios!");
+      alert("Preencha todos os campos obrigatórios (incluindo KM Atual)!");
       return;
     }
 
     setSaving(true);
 
+    const payloadAtualizacao = {
+      setor_manutencao: form.setor_manutencao,
+      grupo_manutencao: form.grupo_manutencao,
+      problema_encontrado: form.problema_encontrado,
+      solucao: form.solucao,
+      solucionador: form.solucionador,
+
+      mecanico_executor: `${form.mecanico_executor.chapa} - ${form.mecanico_executor.nome}`,
+      numero_os_corretiva: form.numero_os_corretiva || null,
+
+      // Salva os dados de histórico extraídos automaticamente no próprio SOS
+      data_ultima_preventiva: historico.preventiva?.data_realizacao || null,
+      km_rodado_preventiva: historico.preventiva?.km_veiculo ? String(historico.preventiva.km_veiculo) : null,
+      dias_ultima_preventiva: diasUltimaPreventiva,
+
+      data_ultima_inspecao: historico.inspecao?.data_realizacao || null,
+      km_rodado_inspecao: historico.inspecao?.km_veiculo ? String(historico.inspecao.km_veiculo) : null,
+      dias_ultima_inspecao: diasUltimaInspecao,
+
+      classificacao_controlabilidade: form.classificacao_controlabilidade,
+      
+      // Opcional: Se existir a coluna km_veiculo_sos no supabase, você pode salvar o KM atual nela também.
+      // km_veiculo_sos: Number(form.km_atual_veiculo),
+
+      data_fechamento: new Date().toISOString(),
+      status: "Fechado",
+    };
+
     const { error } = await supabase
       .from("sos_acionamentos")
-      .update({
-        setor_manutencao: form.setor_manutencao,
-        grupo_manutencao: form.grupo_manutencao,
-        problema_encontrado: form.problema_encontrado,
-        solucao: form.solucao,
-        solucionador: form.solucionador,
-
-        mecanico_executor: `${form.mecanico_executor.chapa} - ${form.mecanico_executor.nome}`,
-        numero_os_corretiva: form.numero_os_corretiva || null,
-
-        data_ultima_preventiva: form.data_ultima_preventiva || null,
-        km_rodado_preventiva: form.km_rodado_preventiva || null,
-        dias_ultima_preventiva: diasUltimaPreventiva,
-
-        data_ultima_inspecao: form.data_ultima_inspecao || null,
-        km_rodado_inspecao: form.km_rodado_inspecao || null,
-        dias_ultima_inspecao: diasUltimaInspecao,
-
-        classificacao_controlabilidade: form.classificacao_controlabilidade,
-
-        data_fechamento: new Date().toISOString(),
-        status: "Fechado",
-      })
+      .update(payloadAtualizacao)
       .eq("id", sos.id);
 
     setSaving(false);
@@ -415,284 +478,335 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 p-4 z-50">
-      <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full animate-fadeIn max-h-[95vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-4 border-b bg-gray-100 rounded-t-lg">
-          <h2 className="text-xl font-semibold text-gray-800">
-            Tratamento do SOS #{sos.numero_sos}
-          </h2>
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 z-50 animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full animate-in zoom-in-95 max-h-[95vh] overflow-hidden flex flex-col">
+        
+        {/* Header Modal */}
+        <div className="flex justify-between items-center p-5 border-b bg-white relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-transparent opacity-50"></div>
+          <div className="relative flex items-center gap-3">
+            <div className="bg-blue-600 text-white p-2.5 rounded-lg shadow-sm">
+              <FaTools />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-800">
+                Tratamento SOS <span className="text-blue-600">#{sos.numero_sos}</span>
+              </h2>
+              <p className="text-xs font-bold text-slate-500">
+                Veículo: <span className="text-slate-700">{sos.veiculo}</span>
+              </p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-red-500 transition"
+            className="relative text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-colors"
           >
             <FaTimes size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">
-                Setor de Manutenção <span className="text-red-600">*</span>
-              </label>
-              <select
-                className="w-full border rounded p-2"
-                value={form.setor_manutencao}
-                onChange={(e) => handleSetorChange(e.target.value)}
-              >
-                <option value="">Selecione...</option>
-                {Array.from(new Set(catalogo.map((c) => c.setor_macro))).map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">
-                Grupo <span className="text-red-600">*</span>
-              </label>
-              <select
-                className="w-full border rounded p-2"
-                value={form.grupo_manutencao}
-                onChange={(e) => handleGrupoChange(e.target.value)}
-                disabled={!form.setor_manutencao}
-              >
-                <option value="">Selecione...</option>
-                {grupos.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">
-              Problema encontrado <span className="text-red-600">*</span>
-            </label>
-            <select
-              className="w-full border rounded p-2"
-              value={form.problema_encontrado}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, problema_encontrado: e.target.value }))
-              }
-              disabled={!form.grupo_manutencao}
-            >
-              <option value="">Selecione...</option>
-              {defeitos.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <CampoMecanico
-            value={form.mecanico_executor}
-            onChange={(m) => setForm((prev) => ({ ...prev, mecanico_executor: m }))}
-          />
-
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">
-              Número da OS Corretiva
-            </label>
-            <input
-              type="text"
-              className="w-full border rounded p-2"
-              placeholder="Ex: 123456"
-              value={form.numero_os_corretiva}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, numero_os_corretiva: e.target.value }))
-              }
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">Solução aplicada</label>
-            <textarea
-              className="w-full border rounded p-2"
-              rows="2"
-              placeholder="Descreva a ação ou serviço realizado..."
-              value={form.solucao}
-              onChange={(e) => setForm((prev) => ({ ...prev, solucao: e.target.value }))}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">
-              Responsável pela manutenção <span className="text-red-600">*</span>
-            </label>
-            <input
-              type="text"
-              className="w-full border rounded p-2"
-              value={form.solucionador}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, solucionador: e.target.value }))
-              }
-              placeholder="Ex: Fernando, Clécio..."
-            />
-          </div>
-
-          <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
-            <h3 className="text-sm font-bold text-gray-700">
-              Informações complementares
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-              <div className="md:col-span-4">
-                <label className="block text-sm text-gray-500 mb-1">
-                  Data da Última Preventiva
+        {/* Content Modal */}
+        <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
+          
+          {/* Sessão 1: Classificação do Defeito */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-2 border-b pb-2">Classificação Técnica</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Setor de Manutenção <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
-                  className="w-full border rounded p-2 bg-white"
-                  value={form.data_ultima_preventiva}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      data_ultima_preventiva: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div className="md:col-span-4">
-                <label className="block text-sm text-gray-500 mb-1">
-                  KM Rodado
-                </label>
-                <input
-                  type="text"
-                  className="w-full border rounded p-2 bg-white"
-                  placeholder="Ex: 125000"
-                  value={form.km_rodado_preventiva}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      km_rodado_preventiva: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div className="md:col-span-4">
-                <label className="block text-sm text-gray-500 mb-1">
-                  Dias desde a Preventiva
-                </label>
-                <input
-                  type="text"
-                  className="w-full border rounded p-2 bg-gray-100 text-gray-700 font-semibold"
-                  value={diasUltimaPreventiva ?? ""}
-                  readOnly
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-              <div className="md:col-span-4">
-                <label className="block text-sm text-gray-500 mb-1">
-                  Data da Última Inspeção
-                </label>
-                <input
-                  type="date"
-                  className="w-full border rounded p-2 bg-white"
-                  value={form.data_ultima_inspecao}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      data_ultima_inspecao: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div className="md:col-span-4">
-                <label className="block text-sm text-gray-500 mb-1">
-                  KM Rodado
-                </label>
-                <input
-                  type="text"
-                  className="w-full border rounded p-2 bg-white"
-                  placeholder="Ex: 125000"
-                  value={form.km_rodado_inspecao}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      km_rodado_inspecao: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div className="md:col-span-4">
-                <label className="block text-sm text-gray-500 mb-1">
-                  Dias desde a Inspeção
-                </label>
-                <input
-                  type="text"
-                  className="w-full border rounded p-2 bg-gray-100 text-gray-700 font-semibold"
-                  value={diasUltimaInspecao ?? ""}
-                  readOnly
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-500 mb-2">
-                Classificação <span className="text-red-600">*</span>
-              </label>
-
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      classificacao_controlabilidade: "Não Controlável",
-                    }))
-                  }
-                  className={`px-4 py-2 rounded-lg font-semibold border transition ${
-                    form.classificacao_controlabilidade === "Não Controlável"
-                      ? "bg-yellow-400 border-yellow-500 text-gray-900 shadow"
-                      : "bg-white border-yellow-300 text-yellow-700 hover:bg-yellow-50"
-                  }`}
+                <select
+                  className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-200 transition"
+                  value={form.setor_manutencao}
+                  onChange={(e) => handleSetorChange(e.target.value)}
                 >
-                  Não controlável
-                </button>
+                  <option value="">Selecione...</option>
+                  {Array.from(new Set(catalogo.map((c) => c.setor_macro))).map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      classificacao_controlabilidade: "Controlável",
-                    }))
-                  }
-                  className={`px-4 py-2 rounded-lg font-semibold border transition ${
-                    form.classificacao_controlabilidade === "Controlável"
-                      ? "bg-red-600 border-red-700 text-white shadow"
-                      : "bg-white border-red-300 text-red-700 hover:bg-red-50"
-                  }`}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Grupo <span className="text-red-500">*</span>
+                </label>
+                <select
+                  className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-200 transition disabled:bg-slate-100"
+                  value={form.grupo_manutencao}
+                  onChange={(e) => handleGrupoChange(e.target.value)}
+                  disabled={!form.setor_manutencao}
                 >
-                  Controlável
-                </button>
+                  <option value="">Selecione...</option>
+                  {grupos.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Problema encontrado <span className="text-red-500">*</span>
+                </label>
+                <select
+                  className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-200 transition disabled:bg-slate-100"
+                  value={form.problema_encontrado}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, problema_encontrado: e.target.value }))
+                  }
+                  disabled={!form.grupo_manutencao}
+                >
+                  <option value="">Selecione...</option>
+                  {defeitos.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
+          </div>
+
+          {/* Sessão 2: Execução */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-2 border-b pb-2">Solução e Execução</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <CampoMecanico
+                value={form.mecanico_executor}
+                onChange={(m) => setForm((prev) => ({ ...prev, mecanico_executor: m }))}
+              />
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Número da OS Corretiva
+                </label>
+                <input
+                  type="text"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-200 transition"
+                  placeholder="Ex: 123456"
+                  value={form.numero_os_corretiva}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, numero_os_corretiva: e.target.value }))
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Responsável pelo apontamento <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-200 transition"
+                  value={form.solucionador}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, solucionador: e.target.value }))
+                  }
+                  placeholder="Ex: Fernando, Clécio..."
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-slate-700 mb-1">Solução aplicada</label>
+                <textarea
+                  className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-200 transition"
+                  rows="2"
+                  placeholder="Descreva a ação ou serviço realizado..."
+                  value={form.solucao}
+                  onChange={(e) => setForm((prev) => ({ ...prev, solucao: e.target.value }))}
+                />
+              </div>
+
+              <div className="md:col-span-2 pt-2">
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Classificação de Controlabilidade <span className="text-red-500">*</span>
+                </label>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        classificacao_controlabilidade: "Não Controlável",
+                      }))
+                    }
+                    className={`px-4 py-2.5 rounded-lg font-bold border transition-all active:scale-95 flex items-center gap-2 ${
+                      form.classificacao_controlabilidade === "Não Controlável"
+                        ? "bg-amber-400 border-amber-500 text-amber-900 shadow-md"
+                        : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Não controlável
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        classificacao_controlabilidade: "Controlável",
+                      }))
+                    }
+                    className={`px-4 py-2.5 rounded-lg font-bold border transition-all active:scale-95 flex items-center gap-2 ${
+                      form.classificacao_controlabilidade === "Controlável"
+                        ? "bg-rose-600 border-rose-700 text-white shadow-md"
+                        : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Controlável
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sessão 3: Informações Complementares e Resumo */}
+          <div className="bg-slate-100 p-5 rounded-xl border border-slate-200 shadow-inner">
+            <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+              <FaInfoCircle className="text-slate-400" />
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Histórico de Manutenção</h3>
+            </div>
+
+            <div className="mb-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  KM Atual do Veículo <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <FaRoad className="absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="number"
+                    className="w-full md:w-64 border border-slate-300 rounded-lg py-2.5 pl-10 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition font-bold text-slate-800"
+                    placeholder="Ex: 150000"
+                    value={form.km_atual_veiculo}
+                    onChange={(e) => setForm({ ...form, km_atual_veiculo: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="text-xs font-semibold text-slate-500 bg-slate-50 p-2.5 rounded-lg border">
+                ℹ️ Digite o KM atual para calcularmos a rodagem desde as últimas manutenções.
+              </div>
+            </div>
+
+            {historicoLoading ? (
+              <div className="text-center py-4 text-sm font-bold text-slate-500 animate-pulse">
+                Consultando histórico do veículo {sos.veiculo}...
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* Card Preventiva */}
+                <div className="bg-white rounded-xl border border-blue-100 shadow-sm overflow-hidden">
+                  <div className="bg-blue-50 border-b border-blue-100 px-4 py-2.5 flex items-center gap-2">
+                    <FaWrench className="text-blue-600" />
+                    <h4 className="font-black text-blue-900 text-sm">Última Preventiva (10k)</h4>
+                  </div>
+                  <div className="p-4">
+                    {historico.preventiva ? (
+                      <ul className="space-y-2 text-sm">
+                        <li className="flex justify-between border-b border-slate-50 pb-1">
+                          <span className="text-slate-500 font-semibold flex items-center gap-1"><FaCalendarAlt/> Data</span>
+                          <span className="font-black text-slate-800">{formatDate(historico.preventiva.data_realizacao)}</span>
+                        </li>
+                        <li className="flex justify-between border-b border-slate-50 pb-1">
+                          <span className="text-slate-500 font-semibold">KM na Época</span>
+                          <span className="font-black text-slate-800">{formatKM(historico.preventiva.km_veiculo)}</span>
+                        </li>
+                        <li className="flex justify-between border-b border-slate-50 pb-1">
+                          <span className="text-slate-500 font-semibold">Dias Decorridos</span>
+                          <span className="font-black text-emerald-600">{diasUltimaPreventiva ?? "-"} dias</span>
+                        </li>
+                        <li className="flex justify-between pt-1">
+                          <span className="text-slate-500 font-semibold">KM Percorrido</span>
+                          <span className="font-black text-blue-600">
+                            {kmPercorridoPreventiva > 0 ? formatKM(kmPercorridoPreventiva) : "-"}
+                          </span>
+                        </li>
+                      </ul>
+                    ) : (
+                      <div className="text-center py-4 text-slate-400 font-bold text-sm">
+                        Nenhum registro encontrado.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card Inspeção */}
+                <div className="bg-white rounded-xl border border-emerald-100 shadow-sm overflow-hidden">
+                  <div className="bg-emerald-50 border-b border-emerald-100 px-4 py-2.5 flex items-center gap-2">
+                    <FaBus className="text-emerald-600" />
+                    <h4 className="font-black text-emerald-900 text-sm">Última Inspeção (5k)</h4>
+                  </div>
+                  <div className="p-4">
+                    {historico.inspecao ? (
+                      <ul className="space-y-2 text-sm">
+                        <li className="flex justify-between border-b border-slate-50 pb-1">
+                          <span className="text-slate-500 font-semibold flex items-center gap-1"><FaCalendarAlt/> Data</span>
+                          <span className="font-black text-slate-800">{formatDate(historico.inspecao.data_realizacao)}</span>
+                        </li>
+                        <li className="flex justify-between border-b border-slate-50 pb-1">
+                          <span className="text-slate-500 font-semibold">KM na Época</span>
+                          <span className="font-black text-slate-800">{formatKM(historico.inspecao.km_veiculo)}</span>
+                        </li>
+                        <li className="flex justify-between border-b border-slate-50 pb-1">
+                          <span className="text-slate-500 font-semibold">Dias Decorridos</span>
+                          <span className="font-black text-emerald-600">{diasUltimaInspecao ?? "-"} dias</span>
+                        </li>
+                        <li className="flex justify-between pt-1">
+                          <span className="text-slate-500 font-semibold">KM Percorrido</span>
+                          <span className="font-black text-blue-600">
+                            {kmPercorridoInspecao > 0 ? formatKM(kmPercorridoInspecao) : "-"}
+                          </span>
+                        </li>
+                      </ul>
+                    ) : (
+                      <div className="text-center py-4 text-slate-400 font-bold text-sm">
+                        Nenhum registro encontrado.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-lg">
+        {/* Footer Modal */}
+        <div className="flex justify-end gap-3 p-5 border-t bg-white relative">
+          <button
+            onClick={onClose}
+            className="px-6 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+          >
+            Cancelar
+          </button>
           <button
             onClick={salvarTratamento}
             disabled={saving}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2 transition"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-70 disabled:active:scale-100"
           >
-            <FaCheckCircle />
-            {saving ? "Salvando..." : "Confirmar Tratamento"}
+            {saving ? (
+              <>
+                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Salvando...
+              </>
+            ) : (
+              <>
+                <FaCheckCircle /> Confirmar Tratamento
+              </>
+            )}
           </button>
         </div>
+
       </div>
     </div>
   );

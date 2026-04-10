@@ -211,7 +211,7 @@ function exportarCSV(dados, nomeArquivo) {
   document.body.removeChild(a);
 }
 
-function CardKPI({ title, value, sub, icon, tone = "blue" }) {
+function CardKPI({ title, value, sub, icon, tone = "blue", className = "" }) {
   const tones = {
     blue: "from-blue-50 to-cyan-50 border-blue-200 text-blue-700",
     emerald: "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700",
@@ -222,14 +222,16 @@ function CardKPI({ title, value, sub, icon, tone = "blue" }) {
   };
 
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-4 shadow-sm`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
+    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-4 shadow-sm ${className}`}>
+      <div className="flex items-start justify-between gap-3 h-full">
+        <div className="flex flex-col justify-between h-full">
           <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
-          <p className="text-2xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
-          <p className="text-xs mt-2 text-slate-600 font-semibold">{sub}</p>
+          <div>
+            <p className="text-2xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
+            <p className="text-xs mt-1 text-slate-600 font-semibold">{sub}</p>
+          </div>
         </div>
-        <div className="text-xl mt-1">{icon}</div>
+        <div className="text-xl mt-1 opacity-80">{icon}</div>
       </div>
     </div>
   );
@@ -1206,7 +1208,7 @@ export default function SOS_Resumo() {
               <FaBolt /> Resumo SOS / Reincidência / Controláveis
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-slate-800 mt-3">
-              Painel SOS_Resumo
+              PAINEL DE INTERVENÇÕES
             </h1>
             <p className="text-sm text-slate-500 mt-1">
               Visão analítica focada em reincidência, pós-preventiva, pós-inspeção e
@@ -1383,6 +1385,7 @@ export default function SOS_Resumo() {
         </div>
       )}
 
+      {/* GRADE HARMONIZADA: 7 KPIs distribuídos em 2 linhas simétricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <CardKPI
           title="Total SOS Analisado"
@@ -1390,6 +1393,7 @@ export default function SOS_Resumo() {
           sub={filtroControlabilidade ? `Filtro: ${filtroControlabilidade}` : "Todos os SOS"}
           icon={<FaExclamationTriangle />}
           tone="rose"
+          className="md:col-span-2 xl:col-span-2"
         />
         <CardKPI
           title="Tempo Médio Fechamento"

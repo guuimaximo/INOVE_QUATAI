@@ -32,6 +32,8 @@ import {
   BarChart,
   Bar,
   LabelList,
+  ComposedChart,
+  Area,
 } from "recharts";
 import { supabase } from "../supabase";
 
@@ -304,7 +306,7 @@ export default function SOS_Resumo() {
   const [filtroTipo, setFiltroTipo] = useState("");
   const [filtroCluster, setFiltroCluster] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
-  const [filtroControlabilidade, setFiltroControlabilidade] = useState("CONTROLÁVEL");
+  const [filtroControlabilidade, setFiltroControlabilidade] = useState("");
   const [mesReferencia, setMesReferencia] = useState("");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
@@ -313,29 +315,45 @@ export default function SOS_Resumo() {
     setErro("");
 
     try {
-      const { data: sosData, error: sosErr } = await supabase
-        .from("sos_acionamentos")
-        .select("*")
-        .order("data_sos", { ascending: false })
-        .limit(50000);
+      const dataCorte = new Date();
+      dataCorte.setMonth(dataCorte.getMonth() - 13);
+      const dataCorteStr = dataCorte.toISOString().split('T')[0];
 
-      if (sosErr) throw sosErr;
-
-      let kmData = [];
-      try {
-        const { data: kmRes } = await supabase
-          .from("km_rodado_diario")
-          .select("*")
-          .limit(50000);
-        if (kmRes) kmData = kmRes;
-      } catch (e) {
-        console.warn("Aviso: Tabela km_rodado_diario indisponível.");
+      async function fetchAllPeriod(table, dateField) {
+        let allData = [];
+        let start = 0;
+        const limit = 5000;
+        
+        while (true) {
+          const { data, error } = await supabase
+            .from(table)
+            .select("*")
+            .gte(dateField, dataCorteStr)
+            .order(dateField, { ascending: false })
+            .range(start, start + limit - 1);
+            
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+          
+          allData = allData.concat(data);
+          if (data.length < limit) break; 
+          start += limit;
+        }
+        return allData;
       }
+
+      const [sosData, kmData] = await Promise.all([
+        fetchAllPeriod("sos_acionamentos", "data_sos"),
+        fetchAllPeriod("km_rodado_diario", "data").catch((e) => {
+          console.warn("Aviso: Tabela km_rodado_diario indisponível ou vazia.", e);
+          return [];
+        })
+      ]);
 
       setSosRows(sosData || []);
       setKmRows(kmData || []);
     } catch (e) {
-      console.error(e);
+      console.error("Erro fatal ao carregar dados:", e);
       setErro(e?.message || String(e));
     } finally {
       setLoading(false);
@@ -621,7 +639,6 @@ export default function SOS_Resumo() {
   const resumoAtual = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesReferencia));
     const interv = baseRef.filter((r) => r.valida_mkbf).length;
-    const countControlaveis = baseRef.filter((r) => r.controlavel).length;
     const mkbf = interv > 0 ? kmTotal / interv : 0;
 
     const porTipoMap = {};
@@ -645,7 +662,6 @@ export default function SOS_Resumo() {
     return {
       kmTotal,
       interv,
-      countControlaveis,
       mkbf,
       porTipoMap,
       mediaPrev,
@@ -658,7 +674,6 @@ export default function SOS_Resumo() {
   const resumoComp = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesComparacao));
     const interv = baseComp.filter((r) => r.valida_mkbf).length;
-    const countControlaveis = baseComp.filter((r) => r.controlavel).length;
     const mkbf = interv > 0 ? kmTotal / interv : 0;
 
     const porTipoMap = {};
@@ -695,7 +710,7 @@ export default function SOS_Resumo() {
       baseComp.filter((r) => r.tempo_solucao_horas > 0).reduce((acc, r) => acc + r.tempo_solucao_horas, 0) /
       Math.max(1, baseComp.filter((r) => r.tempo_solucao_horas > 0).length);
 
-    return { kmTotal, interv, countControlaveis, mkbf, porTipoMap, taxaReincidencia, mediaFechamento };
+    return { kmTotal, interv, mkbf, porTipoMap, taxaReincidencia, mediaFechamento };
   }, [kmMesMap, mesComparacao, baseComp]);
 
   const historico12m = useMemo(() => {
@@ -1370,7 +1385,7 @@ export default function SOS_Resumo() {
               setFiltroTipo("");
               setFiltroCluster("");
               setFiltroStatus("");
-              setFiltroControlabilidade("CONTROLÁVEL");
+              setFiltroControlabilidade("");
             }}
             className="px-3 py-3 rounded-xl border border-slate-200 bg-slate-800 text-white font-black hover:bg-slate-700 transition"
           >
@@ -1540,41 +1555,53 @@ export default function SOS_Resumo() {
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historico12m} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                  <ComposedChart data={historico12m} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#cbd5e1" stopOpacity={0.5}/>
+                        <stop offset="95%" stopColor="#cbd5e1" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                     <Tooltip cursor={{ fill: 'transparent', stroke: '#e2e8f0', strokeWidth: 2, strokeDasharray: '3 3' }} />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                    <Line type="monotone" dataKey="intervTotal" name="Total SOS" stroke="#cbd5e1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }}>
-                      <LabelList dataKey="intervTotal" position="top" formatter={(v) => fmtInt(v)} style={{ fill: "#94a3b8", fontSize: 11, fontWeight: "bold" }} />
-                    </Line>
+                    <Area type="monotone" dataKey="intervTotal" fillOpacity={1} fill="url(#colorTotal)" stroke="none" />
+                    <Line type="monotone" dataKey="intervTotal" name="Total SOS" stroke="#cbd5e1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }} />
                     <Line type="monotone" dataKey="reincidentes" name="Veículos Reincidentes" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }}>
-                      <LabelList dataKey="reincidentes" position="bottom" formatter={(v) => fmtInt(v)} style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
+                      <LabelList dataKey="reincidentes" position="top" formatter={(v) => fmtInt(v)} style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
                     </Line>
-                  </LineChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border shadow-sm p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-black text-slate-800">MKBF e taxa de reincidência</h3>
+                <h3 className="text-lg font-black text-slate-800">Evolução Histórica do MKBF</h3>
                 <span className="text-xs font-bold text-slate-500">Visão mensal</span>
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historico12m} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                  <ComposedChart data={historico12m} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorMkbf" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} domain={[0, 'auto']} />
                     <Tooltip cursor={{ fill: 'transparent', stroke: '#e2e8f0', strokeWidth: 2, strokeDasharray: '3 3' }} formatter={(v) => fmtNum(v)} />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                    <Area type="monotone" dataKey="mkbf" fillOpacity={1} fill="url(#colorMkbf)" stroke="none" />
                     <Line type="monotone" dataKey="mkbf" name="MKBF" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }}>
                       <LabelList dataKey="mkbf" position="top" formatter={(v) => fmtNum(v, 0)} style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
                     </Line>
-                    <Line type="monotone" dataKey="meta" name="Meta MKBF" stroke="#f43f5e" strokeDasharray="6 4" strokeWidth={2} dot={false} />
-                  </LineChart>
+                    <Line type="step" dataKey="meta" name="Meta" stroke="#ef4444" strokeDasharray="5 5" strokeWidth={2} dot={false} activeDot={false} />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -2071,7 +2098,7 @@ export default function SOS_Resumo() {
       {loading && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-[1px] flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl px-6 py-4 shadow-xl border font-black text-slate-800">
-            Carregando SOS_Resumo...
+            Carregando PAINEL DE INTERVENÇÕES...
           </div>
         </div>
       )}

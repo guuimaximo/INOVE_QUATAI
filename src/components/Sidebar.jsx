@@ -38,7 +38,6 @@ import { AuthContext } from "../context/AuthContext";
    ROTAS
 ========================= */
 
-// Desempenho Diesel (módulo atual)
 const DIESEL_ROUTES = {
   lancamento: "/desempenho-lancamento",
   resumo: "/desempenho-diesel-resumo",
@@ -46,19 +45,17 @@ const DIESEL_ROUTES = {
   agente: "/desempenho-diesel-agente",
 };
 
-// ✅ Tratativas Diesel (módulo separado)
 const DIESEL_TRATATIVAS_ROUTES = {
   central: "/diesel-tratativas",
 };
 
-// Rotas PCM
 const PCM_ROUTES = {
   resumo: "/pcm-resumo",
   inicio: "/pcm-inicio",
   diario: "/pcm-diario",
+  preventivas: "/pcm-preventivas",
 };
 
-// ✅ Rotas Embarcados (modelo novo)
 const EMBARCADOS_ROUTES = {
   central: "/embarcados-central",
   movimentacoes: "/embarcados-movimentacoes",
@@ -66,7 +63,6 @@ const EMBARCADOS_ROUTES = {
   envioManutencao: "/embarcados-envio-manutencao",
 };
 
-// ✅ Rotas Estrutura Física
 const ESTRUTURA_FISICA_ROUTES = {
   solicitacao: "/estrutura-fisica/solicitacao",
   central: "/estrutura-fisica/central",
@@ -116,17 +112,18 @@ const ACCESS = {
     PCM_ROUTES.resumo,
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
+    PCM_ROUTES.preventivas,
 
-    // ✅ Embarcados
+    // Embarcados
     ...Object.values(EMBARCADOS_ROUTES),
 
-    // Desempenho Diesel (módulo atual)
+    // Desempenho Diesel
     ...Object.values(DIESEL_ROUTES),
 
-    // ✅ Tratativas Diesel (módulo separado)
+    // Tratativas Diesel
     ...Object.values(DIESEL_TRATATIVAS_ROUTES),
 
-    // ✅ Estrutura Física
+    // Estrutura Física
     ESTRUTURA_FISICA_ROUTES.solicitacao,
     ESTRUTURA_FISICA_ROUTES.central,
     ESTRUTURA_FISICA_ROUTES.consultar,
@@ -144,7 +141,6 @@ const ACCESS = {
     "/avarias-resumo",
     "/cobrancas",
 
-    // ✅ Tratativas Diesel (módulo separado)
     DIESEL_TRATATIVAS_ROUTES.central,
   ],
 
@@ -154,7 +150,6 @@ const ACCESS = {
     "/central",
     "/cobrancas",
 
-    // ✅ Embarcados - apenas Reparos
     EMBARCADOS_ROUTES.reparos,
   ],
 
@@ -178,8 +173,8 @@ const ACCESS = {
     PCM_ROUTES.resumo,
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
+    PCM_ROUTES.preventivas,
 
-    // ✅ Embarcados
     ...Object.values(EMBARCADOS_ROUTES),
   ],
 
@@ -191,7 +186,6 @@ const ACCESS = {
     "/sos-dashboard",
     "/km-rodado",
 
-    // ✅ Embarcados - apenas Reparos
     EMBARCADOS_ROUTES.reparos,
   ],
 
@@ -201,11 +195,8 @@ const ACCESS = {
     DIESEL_TRATATIVAS_ROUTES.central,
   ],
 
-  // ✅ NOVO NÍVEL
   Embarcados: [
     "/inicio-rapido",
-
-    // ✅ Embarcados - acesso total ao módulo
     ...Object.values(EMBARCADOS_ROUTES),
   ],
 };
@@ -281,6 +272,7 @@ export default function Sidebar() {
         tabs: [
           { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
           { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
+          { path: PCM_ROUTES.preventivas, label: "Preventivas", icon: <FaWrench /> },
         ],
       },
 

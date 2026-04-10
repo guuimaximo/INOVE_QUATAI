@@ -310,11 +310,10 @@ export default function SOS_Resumo() {
   const [mesReferencia, setMesReferencia] = useState("");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
-  // A REGRA DE BUSCA EM BLOCO CONTÍNUA: Garante que os dados antigos apareçam sem travar
   async function fetchAllData(table, orderField) {
     let allRecords = [];
     let start = 0;
-    const limit = 1000; // Bloco seguro
+    const limit = 1000; 
     
     while (true) {
       const { data, error } = await supabase
@@ -330,7 +329,7 @@ export default function SOS_Resumo() {
       if (!data || data.length === 0) break;
       
       allRecords = allRecords.concat(data);
-      if (data.length < limit) break; // Se vier menos que o limite, acabou a tabela
+      if (data.length < limit) break; 
       
       start += limit;
     }
@@ -397,7 +396,6 @@ export default function SOS_Resumo() {
           r.data_encerramento || r.data_fechamento
         );
 
-        // Correspondência Exata para evitar que "NÃO CONTROLÁVEL" passe como controlável
         const isControlavel = classificacao === "CONTROLÁVEL" || classificacao === "CONTROLAVEL";
         const isNaoControlavel = classificacao === "NÃO CONTROLÁVEL" || classificacao === "NAO CONTROLAVEL";
 
@@ -486,7 +484,6 @@ export default function SOS_Resumo() {
       if (filtroCluster && r.cluster !== filtroCluster) return false;
       if (filtroStatus && r.status !== normalize(filtroStatus)) return false;
       
-      // Validação Estrita de Controlabilidade
       if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
       if (filtroControlabilidade === "NÃO CONTROLÁVEL" && !r.nao_controlavel) return false;
 
@@ -642,7 +639,7 @@ export default function SOS_Resumo() {
 
   const resumoAtual = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesReferencia));
-    const interv = baseRef.length; // Conta a BASE INTERIA sem descarte indevido
+    const interv = baseRef.length; 
     const validasParaMkbf = baseRef.filter((r) => r.valida_mkbf).length;
     const mkbf = validasParaMkbf > 0 ? kmTotal / validasParaMkbf : 0;
 
@@ -1413,7 +1410,6 @@ export default function SOS_Resumo() {
         </div>
       )}
 
-      {/* GRADE HARMONIZADA: 7 KPIs distribuídos em 2 linhas simétricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <CardKPI
           title="Total SOS Analisado"
@@ -1634,7 +1630,9 @@ export default function SOS_Resumo() {
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                     <Tooltip cursor={{ fill: '#f8fafc' }} />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                    <Bar dataKey="anterior" name="Anterior" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25} />
+                    <Bar dataKey="anterior" name="Anterior" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
+                      <LabelList dataKey="anterior" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
+                    </Bar>
                     <Bar dataKey="atual" name="Atual" fill="#1e293b" radius={[4, 4, 0, 0]} barSize={25}>
                       <LabelList dataKey="atual" position="top" style={{ fill: "#1e293b", fontSize: 11, fontWeight: "bold" }} />
                     </Bar>
@@ -1719,7 +1717,9 @@ export default function SOS_Resumo() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="reincVeiculo" name="Reincidência Veículo" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Bar dataKey="reincVeiculo" name="Reincidência Veículo" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20}>
+                    <LabelList dataKey="reincVeiculo" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
                   <Bar dataKey="reincTecnica" name="Reincidência Técnica" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={20}>
                     <LabelList dataKey="reincTecnica" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
                   </Bar>

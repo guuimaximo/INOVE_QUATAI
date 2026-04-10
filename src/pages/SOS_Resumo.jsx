@@ -29,6 +29,7 @@ import {
   Legend,
   BarChart,
   Bar,
+  LabelList,
 } from "recharts";
 import { supabase } from "../supabase";
 
@@ -273,10 +274,10 @@ export default function SOS_Resumo() {
   const [filtroTipo, setFiltroTipo] = useState("");
   const [filtroCluster, setFiltroCluster] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
+  const [filtroControlabilidade, setFiltroControlabilidade] = useState("CONTROLÁVEL");
   const [mesReferencia, setMesReferencia] = useState("");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
-  // Busca de dados idêntica ao SOSResumo que funciona
   async function carregarTudo() {
     setLoading(true);
     setErro("");
@@ -416,7 +417,6 @@ export default function SOS_Resumo() {
     [sosProcessado]
   );
 
-  // Removido o filtro drástico que esvaziava a tela se a flag não batesse
   const baseFiltrada = useMemo(() => {
     const q = busca.trim().toLowerCase();
 
@@ -427,6 +427,8 @@ export default function SOS_Resumo() {
       if (filtroTipo && r.tipo_norm !== filtroTipo) return false;
       if (filtroCluster && r.cluster !== filtroCluster) return false;
       if (filtroStatus && r.status !== normalize(filtroStatus)) return false;
+      if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
+      if (filtroControlabilidade === "NÃO CONTROLÁVEL" && r.controlavel) return false;
 
       if (!q) return true;
 
@@ -450,6 +452,7 @@ export default function SOS_Resumo() {
     filtroTipo,
     filtroCluster,
     filtroStatus,
+    filtroControlabilidade,
   ]);
 
   const baseRef = useMemo(
@@ -594,7 +597,6 @@ export default function SOS_Resumo() {
   const resumoAtual = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesReferencia));
     const interv = baseRef.filter((r) => r.valida_mkbf).length;
-    const countControlaveis = baseRef.filter((r) => r.controlavel).length;
     const mkbf = interv > 0 ? kmTotal / interv : 0;
 
     const porTipoMap = {};
@@ -614,7 +616,6 @@ export default function SOS_Resumo() {
     return {
       kmTotal,
       interv,
-      countControlaveis,
       mkbf,
       porTipoMap,
       mediaPrev,
@@ -626,7 +627,6 @@ export default function SOS_Resumo() {
   const resumoComp = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesComparacao));
     const interv = baseComp.filter((r) => r.valida_mkbf).length;
-    const countControlaveis = baseComp.filter((r) => r.controlavel).length;
     const mkbf = interv > 0 ? kmTotal / interv : 0;
     
     const porTipoMap = {};
@@ -659,12 +659,18 @@ export default function SOS_Resumo() {
     const veiculosComSOS = porVeiculo.size;
     const taxaReincidencia = veiculosComSOS > 0 ? (veiculosReincidentes / veiculosComSOS) * 100 : 0;
 
-    return { kmTotal, interv, countControlaveis, mkbf, porTipoMap, taxaReincidencia };
+    return { kmTotal, interv, mkbf, porTipoMap, taxaReincidencia };
   }, [kmMesMap, mesComparacao, baseComp]);
 
   const historico12m = useMemo(() => {
     return mesesDisponiveis.slice(-12).map((mes) => {
-      const baseMes = sosProcessado.filter((r) => r.mes_key === mes);
+      const baseMes = sosProcessado.filter((r) => {
+        if (r.mes_key !== mes) return false;
+        if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
+        if (filtroControlabilidade === "NÃO CONTROLÁVEL" && r.controlavel) return false;
+        return true;
+      });
+      
       const kmTotal = n(kmMesMap.get(mes));
       const interv = baseMes.filter((r) => r.valida_mkbf).length;
 
@@ -702,7 +708,7 @@ export default function SOS_Resumo() {
         meta: MKBF_META,
       };
     });
-  }, [mesesDisponiveis, sosProcessado, kmMesMap]);
+  }, [mesesDisponiveis, sosProcessado, kmMesMap, filtroControlabilidade]);
 
   const graficoTipos = useMemo(() => {
     return TIPOS_GRAFICO.map((tipo) => ({
@@ -921,7 +927,14 @@ export default function SOS_Resumo() {
     const ref = firstDayOfMonth(mesReferencia);
     if (!ref) return [];
     const months3 = [addMonths(ref, -2), addMonths(ref, -1), ref].map(monthKey);
-    const base = sosProcessado.filter((r) => months3.includes(r.mes_key));
+    
+    const base = sosProcessado.filter((r) => {
+      if (!months3.includes(r.mes_key)) return false;
+      if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
+      if (filtroControlabilidade === "NÃO CONTROLÁVEL" && r.controlavel) return false;
+      return true;
+    });
+
     const counts = new Map();
 
     base.forEach((r) => {
@@ -957,7 +970,7 @@ export default function SOS_Resumo() {
       })
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
-  }, [mesReferencia, sosProcessado]);
+  }, [mesReferencia, sosProcessado, filtroControlabilidade]);
 
   const leituraAnalitica = useMemo(() => {
     const linhaTop = tabelaLinhas[0]?.linha || "N/D";
@@ -1150,7 +1163,7 @@ export default function SOS_Resumo() {
         {mostrarExplicacao && (
           <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm space-y-2">
             <p>
-              <strong>Base da tela:</strong> Traz a base consolidada de todos os SOS válidos.
+              <strong>Base da tela:</strong> Traz a base consolidada de todos os SOS válidos, filtrada de acordo com as seleções abaixo.
             </p>
             <p>
               <strong>Reincidência operacional:</strong> mesmo veículo com novo SOS em até 30 dias.
@@ -1231,7 +1244,7 @@ export default function SOS_Resumo() {
           </select>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
           <select
             value={filtroCluster}
             onChange={(e) => setFiltroCluster(e.target.value)}
@@ -1256,6 +1269,16 @@ export default function SOS_Resumo() {
             <option value="FECHADO">FECHADO</option>
           </select>
 
+          <select
+            value={filtroControlabilidade}
+            onChange={(e) => setFiltroControlabilidade(e.target.value)}
+            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
+          >
+            <option value="">Todas classificações</option>
+            <option value="CONTROLÁVEL">Controlável</option>
+            <option value="NÃO CONTROLÁVEL">Não Controlável</option>
+          </select>
+
           <button
             onClick={() => {
               setBusca("");
@@ -1264,8 +1287,9 @@ export default function SOS_Resumo() {
               setFiltroTipo("");
               setFiltroCluster("");
               setFiltroStatus("");
+              setFiltroControlabilidade("CONTROLÁVEL");
             }}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-slate-700"
+            className="px-3 py-3 rounded-xl border border-slate-200 bg-slate-800 text-white font-black hover:bg-slate-700 transition"
           >
             Limpar filtros
           </button>
@@ -1280,9 +1304,9 @@ export default function SOS_Resumo() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
         <CardKPI
-          title="Total SOS Válidos"
+          title="Total SOS Analisado"
           value={fmtInt(resumoAtual.interv)}
-          sub={`${fmtInt(resumoAtual.countControlaveis)} controláveis`}
+          sub={filtroControlabilidade ? `Filtro: ${filtroControlabilidade}` : "Todos os SOS"}
           icon={<FaExclamationTriangle />}
           tone="rose"
         />
@@ -1296,7 +1320,7 @@ export default function SOS_Resumo() {
         <CardKPI
           title="Taxa Reincidência"
           value={fmtPct(resumoAtual.taxaReincidencia)}
-          sub="Sobre o total de veículos com SOS"
+          sub="Sobre veículos com SOS da base atual"
           icon={<FaChartLine />}
           tone="amber"
         />
@@ -1347,7 +1371,7 @@ export default function SOS_Resumo() {
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              Total Válidos vs mês anterior
+              Total Analisado vs mês anterior
             </p>
             <p className="text-xl font-black text-slate-800 mt-1">
               {fmtInt(resumoComp.interv)} → {fmtInt(resumoAtual.interv)}
@@ -1406,14 +1430,18 @@ export default function SOS_Resumo() {
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historico12m}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="mesLabel" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="intervTotal" name="Total SOS" strokeWidth={3} />
-                    <Line type="monotone" dataKey="reincidentes" name="Veículos Reincidentes" strokeWidth={3} />
+                  <LineChart data={historico12m} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                    <Tooltip cursor={{ fill: 'transparent', stroke: '#e2e8f0', strokeWidth: 2, strokeDasharray: '3 3' }} />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                    <Line type="monotone" dataKey="intervTotal" name="Total SOS" stroke="#cbd5e1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }}>
+                      <LabelList dataKey="intervTotal" position="top" formatter={(v) => fmtInt(v)} style={{ fill: "#94a3b8", fontSize: 11, fontWeight: "bold" }} />
+                    </Line>
+                    <Line type="monotone" dataKey="reincidentes" name="Veículos Reincidentes" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }}>
+                      <LabelList dataKey="reincidentes" position="bottom" formatter={(v) => fmtInt(v)} style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
+                    </Line>
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -1426,14 +1454,16 @@ export default function SOS_Resumo() {
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historico12m}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="mesLabel" />
-                    <YAxis />
-                    <Tooltip formatter={(v) => fmtNum(v)} />
-                    <Legend />
-                    <Line type="monotone" dataKey="mkbf" name="MKBF" strokeWidth={3} />
-                    <Line type="monotone" dataKey="meta" name="Meta MKBF" strokeDasharray="6 4" strokeWidth={2} />
+                  <LineChart data={historico12m} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                    <Tooltip cursor={{ fill: 'transparent', stroke: '#e2e8f0', strokeWidth: 2, strokeDasharray: '3 3' }} formatter={(v) => fmtNum(v)} />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                    <Line type="monotone" dataKey="mkbf" name="MKBF" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }}>
+                      <LabelList dataKey="mkbf" position="top" formatter={(v) => fmtNum(v, 0)} style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
+                    </Line>
+                    <Line type="monotone" dataKey="meta" name="Meta MKBF" stroke="#f43f5e" strokeDasharray="6 4" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -1448,14 +1478,16 @@ export default function SOS_Resumo() {
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={graficoTipos}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="tipo" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="anterior" name="Anterior" />
-                    <Bar dataKey="atual" name="Atual" />
+                  <BarChart data={graficoTipos} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="tipo" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                    <Tooltip cursor={{ fill: '#f8fafc' }} />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar dataKey="anterior" name="Anterior" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25} />
+                    <Bar dataKey="atual" name="Atual" fill="#1e293b" radius={[4, 4, 0, 0]} barSize={25}>
+                      <LabelList dataKey="atual" position="top" style={{ fill: "#1e293b", fontSize: 11, fontWeight: "bold" }} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1488,7 +1520,7 @@ export default function SOS_Resumo() {
                       <tr key={r.veiculo} className="border-b last:border-b-0">
                         <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
                         <td className="px-3 py-3">{r.cluster}</td>
-                        <td className="px-3 py-3">{fmtInt(r.total)}</td>
+                        <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
                         {Object.keys(r)
                           .filter((k) => k.includes("/"))
                           .map((m) => (
@@ -1496,7 +1528,7 @@ export default function SOS_Resumo() {
                               {fmtInt(r[m])}
                             </td>
                           ))}
-                        <td className="px-3 py-3">{r.topDefeitos}</td>
+                        <td className="px-3 py-3 text-slate-600">{r.topDefeitos}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1513,13 +1545,15 @@ export default function SOS_Resumo() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Top linhas reincidentes</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={tabelaLinhas.slice(0, 10)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="linha" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="veiculosReincidentes" name="Veículos Reincidentes" />
+                <BarChart data={tabelaLinhas.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="linha" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar dataKey="veiculosReincidentes" name="Veículos Reincidentes" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={35}>
+                    <LabelList dataKey="veiculosReincidentes" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1529,14 +1563,16 @@ export default function SOS_Resumo() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Top veículos reincidentes</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={tabelaVeiculos.slice(0, 10)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="veiculo" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="reincVeiculo" name="Reincidência Veículo" />
-                  <Bar dataKey="reincTecnica" name="Reincidência Técnica" />
+                <BarChart data={tabelaVeiculos.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="veiculo" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar dataKey="reincVeiculo" name="Reincidência Veículo" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Bar dataKey="reincTecnica" name="Reincidência Técnica" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={20}>
+                    <LabelList dataKey="reincTecnica" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1561,14 +1597,14 @@ export default function SOS_Resumo() {
               </thead>
               <tbody>
                 {tabelaVeiculos.map((r) => (
-                  <tr key={r.veiculo} className="border-b last:border-b-0">
+                  <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
                     <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
                     <td className="px-3 py-3">{r.cluster}</td>
                     <td className="px-3 py-3">{r.linhaTop}</td>
-                    <td className="px-3 py-3">{fmtInt(r.totalSOS)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.reincTecnica)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td>
+                    <td className="px-3 py-3 text-slate-600">{fmtInt(r.reincVeiculo)}</td>
+                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
+                    <td className="px-3 py-3 text-slate-600">{fmtInt(r.reincSetorial)}</td>
                     <td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td>
                     <td className="px-3 py-3">{r.defeitoTop}</td>
                     <td className="px-3 py-3">{r.setorTop}</td>
@@ -1586,12 +1622,14 @@ export default function SOS_Resumo() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Faixa após preventiva</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficoFaixaPreventiva}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="faixa" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="total" name="SOS" />
+                <BarChart data={graficoFaixaPreventiva} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="faixa" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Bar dataKey="total" name="SOS" fill="#10b981" radius={[4, 4, 0, 0]} barSize={35}>
+                    <LabelList dataKey="total" position="top" style={{ fill: "#10b981", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1601,12 +1639,14 @@ export default function SOS_Resumo() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Faixa após inspeção</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficoFaixaInspecao}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="faixa" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="total" name="SOS" />
+                <BarChart data={graficoFaixaInspecao} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="faixa" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Bar dataKey="total" name="SOS" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={35}>
+                    <LabelList dataKey="total" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1633,16 +1673,16 @@ export default function SOS_Resumo() {
               </thead>
               <tbody>
                 {baseRef.map((r) => (
-                  <tr key={r.id} className="border-b last:border-b-0">
+                  <tr key={r.id} className="border-b last:border-b-0 hover:bg-slate-50">
                     <td className="px-3 py-3">{fmtDateBr(r.data_sos)}</td>
                     <td className="px-3 py-3 font-semibold">{r.numero_sos || "-"}</td>
                     <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
                     <td className="px-3 py-3">{r.linha}</td>
                     <td className="px-3 py-3">{r.problema_encontrado}</td>
                     <td className="px-3 py-3">{r.setor_manutencao}</td>
-                    <td className="px-3 py-3">{fmtInt(r.dias_ultima_preventiva_calc)}</td>
+                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtInt(r.dias_ultima_preventiva_calc)}</td>
                     <td className="px-3 py-3">{r.faixa_preventiva}</td>
-                    <td className="px-3 py-3">{fmtInt(r.dias_ultima_inspecao_calc)}</td>
+                    <td className="px-3 py-3 font-semibold text-blue-600">{fmtInt(r.dias_ultima_inspecao_calc)}</td>
                     <td className="px-3 py-3">{r.faixa_inspecao}</td>
                   </tr>
                 ))}
@@ -1670,14 +1710,14 @@ export default function SOS_Resumo() {
             </thead>
             <tbody>
               {tabelaLinhas.map((r) => (
-                <tr key={r.linha} className="border-b last:border-b-0">
+                <tr key={r.linha} className="border-b last:border-b-0 hover:bg-slate-50">
                   <td className="px-3 py-3 font-black text-slate-800">{r.linha}</td>
-                  <td className="px-3 py-3">{fmtInt(r.totalAtual)}</td>
+                  <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalAtual)}</td>
                   <td className="px-3 py-3">{fmtInt(r.totalAnterior)}</td>
                   <td className="px-3 py-3">
                     <EvolucaoBadge value={r.variacao_pct} invert />
                   </td>
-                  <td className="px-3 py-3">{fmtInt(r.veiculosReincidentes)}</td>
+                  <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.veiculosReincidentes)}</td>
                   <td className="px-3 py-3">{fmtPct(r.taxaReincidencia)}</td>
                   <td className="px-3 py-3">{r.defeitoTop}</td>
                   <td className="px-3 py-3">{r.setorTop}</td>
@@ -1708,13 +1748,13 @@ export default function SOS_Resumo() {
             </thead>
             <tbody>
               {tabelaVeiculos.map((r) => (
-                <tr key={r.veiculo} className="border-b last:border-b-0">
+                <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
                   <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
                   <td className="px-3 py-3">{r.cluster}</td>
                   <td className="px-3 py-3">{r.linhaTop}</td>
-                  <td className="px-3 py-3">{fmtInt(r.totalSOS)}</td>
+                  <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td>
                   <td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincTecnica)}</td>
+                  <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
                   <td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td>
                   <td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td>
                   <td className="px-3 py-3">{r.defeitoTop}</td>
@@ -1742,12 +1782,12 @@ export default function SOS_Resumo() {
             </thead>
             <tbody>
               {tabelaSetores.map((r) => (
-                <tr key={r.setor} className="border-b last:border-b-0">
+                <tr key={r.setor} className="border-b last:border-b-0 hover:bg-slate-50">
                   <td className="px-3 py-3 font-black text-slate-800">{r.setor}</td>
-                  <td className="px-3 py-3">{fmtInt(r.total)}</td>
+                  <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
                   <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
                   <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td>
+                  <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincSetorial)}</td>
                   <td className="px-3 py-3">{r.defeitoTop}</td>
                 </tr>
               ))}
@@ -1774,15 +1814,15 @@ export default function SOS_Resumo() {
             </thead>
             <tbody>
               {tabelaDefeitos.map((r) => (
-                <tr key={r.defeito} className="border-b last:border-b-0">
+                <tr key={r.defeito} className="border-b last:border-b-0 hover:bg-slate-50">
                   <td className="px-3 py-3 font-black text-slate-800">{r.defeito}</td>
-                  <td className="px-3 py-3">{fmtInt(r.total)}</td>
+                  <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
                   <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
                   <td className="px-3 py-3">{fmtInt(r.setores)}</td>
                   <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
-                  <td className="px-3 py-3">{fmtInt(r.reincTecnica)}</td>
-                  <td className="px-3 py-3">{fmtNum(r.mediaPrev, 1)}</td>
-                  <td className="px-3 py-3">{fmtNum(r.mediaInsp, 1)}</td>
+                  <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
+                  <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaPrev, 1)}</td>
+                  <td className="px-3 py-3 font-semibold text-blue-600">{fmtNum(r.mediaInsp, 1)}</td>
                 </tr>
               ))}
             </tbody>

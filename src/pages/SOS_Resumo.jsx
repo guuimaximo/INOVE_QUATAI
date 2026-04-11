@@ -19,6 +19,7 @@ import {
   FaWrench,
   FaUserTie,
   FaClock,
+  FaUserCog
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -185,12 +186,22 @@ function variancePct(atual, anterior) {
 
 function faixaDias(v) {
   const x = n(v);
-  if (!x) return "Sem informação";
+  if (!x && x !== 0) return "Sem informação";
   if (x <= 7) return "0-7 dias";
   if (x <= 15) return "8-15 dias";
   if (x <= 30) return "16-30 dias";
   if (x <= 60) return "31-60 dias";
   return "60+ dias";
+}
+
+// Mapeia o Setor/Grupo do SOS para a coluna correspondente de responsável na Preventiva
+function mapSetorToRole(setor, grupo) {
+  const s = normalize(setor);
+  const g = normalize(grupo);
+  if (s.includes("ELÉTRICA") || s.includes("ELETRICA") || g.includes("ELÉTRICA") || g.includes("ELETRICA")) return "eletricista";
+  if (s.includes("BORRACHARIA") || g.includes("PNEU")) return "borracharia";
+  if (s.includes("FUNILARIA") || s.includes("CARROCERIA") || g.includes("CARROCERIA")) return "funilaria";
+  return "mecanico"; // Default / Mecânica / Arrefecimento / Transmissão
 }
 
 function exportarCSV(dados, nomeArquivo) {
@@ -298,6 +309,7 @@ export default function SOS_Resumo() {
   const [erro, setErro] = useState("");
   const [kmRows, setKmRows] = useState([]);
   const [sosRows, setSosRows] = useState([]);
+  const [prevRows, setPrevRows] = useState([]);
 
   const [abaAtiva, setAbaAtiva] = useState("EXECUTIVO");
   const [busca, setBusca] = useState("");
@@ -341,13 +353,15 @@ export default function SOS_Resumo() {
     setErro("");
 
     try {
-      const [sosData, kmData] = await Promise.all([
+      const [sosData, kmData, preventivaData] = await Promise.all([
         fetchAllData("sos_acionamentos", "data_sos"),
-        fetchAllData("km_rodado_diario", "data").catch(() => [])
+        fetchAllData("km_rodado_diario", "data").catch(() => []),
+        fetchAllData("preventivas", "data_realizacao").catch(() => [])
       ]);
 
       setSosRows(sosData || []);
       setKmRows(kmData || []);
+      setPrevRows(preventivaData || []);
     } catch (e) {
       console.error(e);
       setErro(e?.message || String(e));
@@ -374,6 +388,10 @@ export default function SOS_Resumo() {
   }, [kmRows]);
 
   const sosProcessado = useMemo(() => {
+    // Dicionário de Preventivas pela OS
+    const mapPrev = new Map();
+    (prevRows || []).forEach(p => mapPrev.set(s(p.numero_os), p));
+
     return (sosRows || [])
       .map((r) => {
         const data_sos = safeDateStr(r.data_sos || r.created_at);
@@ -381,14 +399,17 @@ export default function SOS_Resumo() {
 
         const tipo_norm = normalizeTipo(r.ocorrencia);
         const classificacao = normalize(r.classificacao_controlabilidade);
-        const diasPrev =
-          n(r.dias_ultima_preventiva) > 0
-            ? n(r.dias_ultima_preventiva)
-            : Math.max(0, n(diffDays(data_sos, r.data_ultima_preventiva)));
-        const diasInsp =
-          n(r.dias_ultima_inspecao) > 0
-            ? n(r.dias_ultima_inspecao)
-            : Math.max(0, n(diffDays(data_sos, r.data_ultima_inspecao)));
+        const roleResp = mapSetorToRole(r.setor_manutencao, r.grupo_manutencao);
+
+        // Busca Preventiva / Inspeção real vinculada
+        const dtPrevVinculada = mapPrev.get(s(r.os_ultima_preventiva));
+        const dtInspVinculada = mapPrev.get(s(r.os_ultima_inspecao));
+
+        const basePrev = dtPrevVinculada?.data_realizacao || r.data_ultima_preventiva;
+        const baseInsp = dtInspVinculada?.data_realizacao || r.data_ultima_inspecao;
+
+        const diasPrev = n(r.dias_ultima_preventiva) > 0 ? n(r.dias_ultima_preventiva) : Math.max(0, n(diffDays(data_sos, basePrev)));
+        const diasInsp = n(r.dias_ultima_inspecao) > 0 ? n(r.dias_ultima_inspecao) : Math.max(0, n(diffDays(data_sos, baseInsp)));
 
         const tempo_solucao_horas = calcDiffHours(
           r.data_sos || r.created_at,
@@ -398,6 +419,10 @@ export default function SOS_Resumo() {
 
         const isControlavel = classificacao === "CONTROLÁVEL" || classificacao === "CONTROLAVEL";
         const isNaoControlavel = classificacao === "NÃO CONTROLÁVEL" || classificacao === "NAO CONTROLAVEL";
+
+        // Mapear responsável
+        const funcCru = dtPrevVinculada?.[roleResp] || null;
+        const funcResp = funcCru ? funcCru.split(' - ')[1] || funcCru : "Não Identificado";
 
         return {
           ...r,
@@ -419,12 +444,14 @@ export default function SOS_Resumo() {
           dias_ultima_inspecao_calc: diasInsp || 0,
           faixa_preventiva: faixaDias(diasPrev),
           faixa_inspecao: faixaDias(diasInsp),
+          responsavel_preventiva: funcResp,
+          funcao_responsavel: roleResp.toUpperCase(),
           mes_key: data_sos.slice(0, 7),
           tempo_solucao_horas,
         };
       })
       .filter(Boolean);
-  }, [sosRows]);
+  }, [sosRows, prevRows]);
 
   const mesesDisponiveis = useMemo(() => {
     const set = new Set(
@@ -498,6 +525,7 @@ export default function SOS_Resumo() {
         r.problema_encontrado,
         r.setor_manutencao,
         r.status,
+        r.responsavel_preventiva
       ].some((v) => String(v || "").toLowerCase().includes(q));
     });
   }, [
@@ -651,13 +679,11 @@ export default function SOS_Resumo() {
       if (TIPOS_GRAFICO.includes(r.tipo_norm)) porTipoMap[r.tipo_norm] += 1;
     });
 
-    const mediaPrev =
-      baseRef.filter((r) => n(r.dias_ultima_preventiva_calc) > 0).reduce((acc, r) => acc + n(r.dias_ultima_preventiva_calc), 0) /
-      Math.max(1, baseRef.filter((r) => n(r.dias_ultima_preventiva_calc) > 0).length);
+    const prevValidos = baseRef.filter((r) => n(r.dias_ultima_preventiva_calc) > 0);
+    const inspValidos = baseRef.filter((r) => n(r.dias_ultima_inspecao_calc) > 0);
 
-    const mediaInsp =
-      baseRef.filter((r) => n(r.dias_ultima_inspecao_calc) > 0).reduce((acc, r) => acc + n(r.dias_ultima_inspecao_calc), 0) /
-      Math.max(1, baseRef.filter((r) => n(r.dias_ultima_inspecao_calc) > 0).length);
+    const mediaPrev = prevValidos.reduce((acc, r) => acc + n(r.dias_ultima_preventiva_calc), 0) / Math.max(1, prevValidos.length);
+    const mediaInsp = inspValidos.reduce((acc, r) => acc + n(r.dias_ultima_inspecao_calc), 0) / Math.max(1, inspValidos.length);
 
     const mediaFechamento =
       baseRef.filter((r) => r.tempo_solucao_horas > 0).reduce((acc, r) => acc + r.tempo_solucao_horas, 0) /
@@ -872,7 +898,6 @@ export default function SOS_Resumo() {
           linhas: new Set(),
           veiculos: new Set(),
           defeitos: {},
-          reincTecnica: 0,
           reincSetorial: 0,
         });
       }
@@ -1014,6 +1039,49 @@ export default function SOS_Resumo() {
       .sort((a, b) => b.total - a.total);
   }, [baseRef]);
 
+  // Lógica da Tabela Avaliadores/Funcionários da Manutenção (Pós-Preventiva)
+  const tabelaFuncionarios = useMemo(() => {
+    const map = new Map();
+
+    baseRef.forEach((r) => {
+      if (!r.responsavel_preventiva || r.responsavel_preventiva === "Não Identificado") return;
+
+      const key = r.responsavel_preventiva;
+      if (!map.has(key)) {
+        map.set(key, {
+          nome: key,
+          funcao: r.funcao_responsavel,
+          totalSOS: 0,
+          sosPrecoce: 0, // <= 30 dias
+          diasPrevSoma: 0,
+          defeitos: {},
+        });
+      }
+
+      const item = map.get(key);
+      item.totalSOS += 1;
+      item.diasPrevSoma += r.dias_ultima_preventiva_calc;
+
+      if (r.dias_ultima_preventiva_calc <= 30) {
+        item.sosPrecoce += 1;
+      }
+      
+      item.defeitos[r.problema_encontrado] = n(item.defeitos[r.problema_encontrado]) + 1;
+    });
+
+    return [...map.values()]
+      .map(r => ({
+        nome: r.nome,
+        funcao: r.funcao,
+        totalSOS: r.totalSOS,
+        sosPrecoce: r.sosPrecoce,
+        taxaRetrabalho: r.totalSOS > 0 ? (r.sosPrecoce / r.totalSOS) * 100 : 0,
+        mediaDiasQuebra: r.totalSOS > 0 ? (r.diasPrevSoma / r.totalSOS) : 0,
+        defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+      }))
+      .sort((a, b) => b.sosPrecoce - a.sosPrecoce || b.totalSOS - a.totalSOS);
+  }, [baseRef]);
+
   const top5Veiculos3m = useMemo(() => {
     if (!mesReferencia) return [];
     const ref = firstDayOfMonth(mesReferencia);
@@ -1068,17 +1136,14 @@ export default function SOS_Resumo() {
     const linhaTop = tabelaLinhas[0]?.linha || "N/D";
     const defeitoTop = tabelaDefeitos[0]?.defeito || "N/D";
     const setorTop = tabelaSetores[0]?.setor || "N/D";
-    const faixaPrevTop =
-      [...graficoFaixaPreventiva].sort((a, b) => b.total - a.total)[0]?.faixa || "N/D";
-    const faixaInspTop =
-      [...graficoFaixaInspecao].sort((a, b) => b.total - a.total)[0]?.faixa || "N/D";
+    const funcTop = tabelaFuncionarios[0]?.nome || "N/D";
 
     return [
       `A pressão do mês está concentrada na linha ${linhaTop}, com ${fmtInt(
         tabelaLinhas[0]?.totalAtual || 0
       )} SOS analisados e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
       `O defeito mais recorrente é "${defeitoTop}", puxado principalmente pelo setor ${setorTop}.`,
-      `A faixa mais crítica após preventiva ficou em ${faixaPrevTop}, enquanto após inspeção a maior concentração ficou em ${faixaInspTop}.`,
+      `O colaborador da preventiva com maior volume de veículos falhando em menos de 30 dias foi ${funcTop} (Taxa Falha Precoce: ${fmtPct(tabelaFuncionarios[0]?.taxaRetrabalho || 0)}).`,
       `O intervalo médio entre SOS do mesmo veículo está em ${fmtNum(
         resumoAtual.intervaloMedioGeral || 0,
         1
@@ -1088,8 +1153,7 @@ export default function SOS_Resumo() {
     tabelaLinhas,
     tabelaDefeitos,
     tabelaSetores,
-    graficoFaixaPreventiva,
-    graficoFaixaInspecao,
+    tabelaFuncionarios,
     resumoAtual.intervaloMedioGeral,
     resumoAtual.taxaReincidencia,
   ]);
@@ -1109,7 +1173,6 @@ export default function SOS_Resumo() {
         "SOS_Resumo_Executivo"
       );
     }
-
     if (abaAtiva === "REINCIDENCIA") {
       exportarCSV(
         tabelaVeiculos.map((r) => ({
@@ -1127,7 +1190,6 @@ export default function SOS_Resumo() {
         "SOS_Resumo_Reincidencia"
       );
     }
-
     if (abaAtiva === "PREV_INSPEC") {
       exportarCSV(
         baseRef.map((r) => ({
@@ -1137,6 +1199,8 @@ export default function SOS_Resumo() {
           Linha: r.linha,
           Defeito: r.problema_encontrado,
           Setor: r.setor_manutencao,
+          "Responsável Preventiva (Executor)": r.responsavel_preventiva,
+          "Função": r.funcao_responsavel,
           "Dias após Preventiva": r.dias_ultima_preventiva_calc,
           "Faixa Preventiva": r.faixa_preventiva,
           "Dias após Inspeção": r.dias_ultima_inspecao_calc,
@@ -1145,7 +1209,20 @@ export default function SOS_Resumo() {
         "SOS_Resumo_Prev_Inspec"
       );
     }
-
+    if (abaAtiva === "FUNCIONARIOS") {
+      exportarCSV(
+        tabelaFuncionarios.map((r) => ({
+          Funcionário: r.nome,
+          Função: r.funcao,
+          "SOS Totais": r.totalSOS,
+          "Falhas Precoces (<= 30d)": r.sosPrecoce,
+          "Taxa Retrabalho %": fmtNum(r.taxaRetrabalho, 1),
+          "Média Dias Pós-Prev": fmtNum(r.mediaDiasQuebra, 1),
+          "Principal Defeito": r.defeitoTop,
+        })),
+        "SOS_Resumo_Funcionarios"
+      );
+    }
     if (abaAtiva === "LINHAS") {
       exportarCSV(
         tabelaLinhas.map((r) => ({
@@ -1161,7 +1238,6 @@ export default function SOS_Resumo() {
         "SOS_Resumo_Linhas"
       );
     }
-
     if (abaAtiva === "VEICULOS") {
       exportarCSV(
         tabelaVeiculos.map((r) => ({
@@ -1179,7 +1255,6 @@ export default function SOS_Resumo() {
         "SOS_Resumo_Veiculos"
       );
     }
-
     if (abaAtiva === "SETORES") {
       exportarCSV(
         tabelaSetores.map((r) => ({
@@ -1193,7 +1268,6 @@ export default function SOS_Resumo() {
         "SOS_Resumo_Setores"
       );
     }
-
     if (abaAtiva === "DEFEITOS") {
       exportarCSV(
         tabelaDefeitos.map((r) => ({
@@ -1209,7 +1283,6 @@ export default function SOS_Resumo() {
         "SOS_Resumo_Defeitos"
       );
     }
-
     if (abaAtiva === "MOTORISTAS") {
       exportarCSV(
         tabelaMotoristas.map((r) => ({
@@ -1280,10 +1353,10 @@ export default function SOS_Resumo() {
               <strong>Reincidência setorial:</strong> mesmo veículo + mesmo setor em até 30 dias.
             </p>
             <p>
-              <strong>Pós-preventiva e pós-inspeção:</strong> usa os dias registrados no tratamento ou recalcula pela diferença entre a data do SOS e a data da última preventiva/inspeção.
+              <strong>Pós-preventiva e pós-inspeção:</strong> usa os dados nativos da tabela de preventivas associada para refazer o cálculo de dias exatos na hora.
             </p>
             <p>
-              <strong>Tempo Médio de Fechamento:</strong> Diferença em horas entre a abertura do SOS (data/hora) e a data de encerramento da etiqueta.
+              <strong>Avaliação de Funcionário:</strong> cruza o SOS com a última Preventiva e mapeia o responsável ("Mecânico", "Eletricista", etc.) para verificar "falhas precoces" em menos de 30 dias do plano.
             </p>
           </div>
         )}
@@ -1294,7 +1367,7 @@ export default function SOS_Resumo() {
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar SOS, veículo, linha, defeito, motorista..."
+              placeholder="Buscar SOS, veículo, linha, defeito, motorista, avaliador..."
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
@@ -1537,6 +1610,9 @@ export default function SOS_Resumo() {
         <TabButton active={abaAtiva === "PREV_INSPEC"} onClick={() => setAbaAtiva("PREV_INSPEC")} icon={<FaWrench />}>
           Preventiva / Inspeção
         </TabButton>
+        <TabButton active={abaAtiva === "FUNCIONARIOS"} onClick={() => setAbaAtiva("FUNCIONARIOS")} icon={<FaUserCog />}>
+          Funcionários (Retrabalho)
+        </TabButton>
         <TabButton active={abaAtiva === "LINHAS"} onClick={() => setAbaAtiva("LINHAS")} icon={<FaBus />}>
           Linhas
         </TabButton>
@@ -1687,6 +1763,61 @@ export default function SOS_Resumo() {
         </div>
       )}
 
+      {abaAtiva === "FUNCIONARIOS" && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border shadow-sm p-4">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Colaboradores c/ Retrabalho Precoce (SOS ≤ 30 dias)</h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tabelaFuncionarios.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="nome" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 10 }} dy={10} interval={0} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar dataKey="totalSOS" name="Volume Total Pós-Preventiva" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
+                    <LabelList dataKey="totalSOS" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
+                  <Bar dataKey="sosPrecoce" name="Falha Precoce (<= 30d)" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={25}>
+                    <LabelList dataKey="sosPrecoce" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Avaliação Pós-Preventiva por Colaborador</h3>
+            <table className="w-full min-w-[1100px] text-sm">
+              <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
+                <tr>
+                  <th className="px-3 py-3 text-left">Funcionário</th>
+                  <th className="px-3 py-3 text-left">Função</th>
+                  <th className="px-3 py-3 text-left">SOS Totais (Pós-Prev)</th>
+                  <th className="px-3 py-3 text-left">Falhas Precoces (≤ 30d)</th>
+                  <th className="px-3 py-3 text-left">Taxa de Retrabalho</th>
+                  <th className="px-3 py-3 text-left">Média Dias até Quebrar</th>
+                  <th className="px-3 py-3 text-left">Principal Defeito Associado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tabelaFuncionarios.map((r) => (
+                  <tr key={r.nome} className="border-b last:border-b-0 hover:bg-slate-50">
+                    <td className="px-3 py-3 font-black text-slate-800">{r.nome}</td>
+                    <td className="px-3 py-3"><span className="bg-slate-100 px-2 py-1 rounded font-bold text-slate-600 text-xs">{r.funcao}</span></td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td>
+                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.sosPrecoce)}</td>
+                    <td className="px-3 py-3">{fmtPct(r.taxaRetrabalho)}</td>
+                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaDiasQuebra, 1)} dias</td>
+                    <td className="px-3 py-3 text-slate-600">{r.defeitoTop}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {abaAtiva === "REINCIDENCIA" && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="bg-white rounded-2xl border shadow-sm p-4">
@@ -1809,12 +1940,11 @@ export default function SOS_Resumo() {
             <table className="w-full min-w-[1200px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
                 <tr>
-                  <th className="px-3 py-3 text-left">Data</th>
-                  <th className="px-3 py-3 text-left">SOS</th>
+                  <th className="px-3 py-3 text-left">Data SOS</th>
                   <th className="px-3 py-3 text-left">Veículo</th>
-                  <th className="px-3 py-3 text-left">Linha</th>
                   <th className="px-3 py-3 text-left">Defeito</th>
                   <th className="px-3 py-3 text-left">Setor</th>
+                  <th className="px-3 py-3 text-left">Resp. Preventiva (Executor)</th>
                   <th className="px-3 py-3 text-left">Dias Pós Prev.</th>
                   <th className="px-3 py-3 text-left">Faixa Prev.</th>
                   <th className="px-3 py-3 text-left">Dias Pós Insp.</th>
@@ -1825,11 +1955,10 @@ export default function SOS_Resumo() {
                 {baseRef.map((r) => (
                   <tr key={r.id} className="border-b last:border-b-0 hover:bg-slate-50">
                     <td className="px-3 py-3">{fmtDateBr(r.data_sos)}</td>
-                    <td className="px-3 py-3 font-semibold">{r.numero_sos || "-"}</td>
                     <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
-                    <td className="px-3 py-3">{r.linha}</td>
                     <td className="px-3 py-3">{r.problema_encontrado}</td>
                     <td className="px-3 py-3">{r.setor_manutencao}</td>
+                    <td className="px-3 py-3"><span className="font-semibold text-slate-700">{r.responsavel_preventiva}</span> <span className="text-[10px] text-slate-400 bg-slate-100 px-1 rounded ml-1">{r.funcao_responsavel}</span></td>
                     <td className="px-3 py-3 font-semibold text-emerald-600">{fmtInt(r.dias_ultima_preventiva_calc)}</td>
                     <td className="px-3 py-3">{r.faixa_preventiva}</td>
                     <td className="px-3 py-3 font-semibold text-blue-600">{fmtInt(r.dias_ultima_inspecao_calc)}</td>

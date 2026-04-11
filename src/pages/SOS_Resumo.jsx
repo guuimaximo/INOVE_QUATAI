@@ -1469,7 +1469,7 @@ export default function SOSCentral() {
     })).sort((a, b) => b.total - a.total);
   }, [baseRef]);
 
-  // Lógica Revisada: Avaliadores/Funcionários da Manutenção com Base Real de Preventivas
+  // =============== LÓGICA DE AVALIAÇÃO DE FUNCIONÁRIOS AJUSTADA ===============
   const tabelaFuncionarios = useMemo(() => {
     const map = new Map();
 
@@ -1494,14 +1494,20 @@ export default function SOSCentral() {
       [m, e, f, b].forEach(nome => {
           if (nome) {
               if (!map.has(nome)) {
-                  map.set(nome, { nome, totalPrevFeitas: 0, sosTotais: 0, sosPrecoce: 0, diasPrevSoma: 0, kmPrevSoma: 0, kmPrevQtd: 0, defeitos: {} });
+                  // Iniciamos a base de dados zerada para cada funcionário novo
+                  map.set(nome, { nome, totalPrevFeitas: 0, sosAtribuidosGeral: 0, sosPrecoce: 0, diasPrevSoma: 0, diasPrevQtd: 0, kmPrevSoma: 0, kmPrevQtd: 0, defeitos: {} });
               }
               map.get(nome).totalPrevFeitas += 1;
           }
       });
     });
 
-    // 2. Atribuir os Retrabalhos (SOS <= 15 dias ou <= 5.000 KM)
+    // 2. Definir Constantes para Filtragem de Outliers
+    // Apenas falhas ocorridas dentro deste limite serão cobradas do mecânico da última preventiva
+    const CICLO_MAX_KM = 12000;
+    const CICLO_MAX_DIAS = 45;
+
+    // 3. Atribuir os Retrabalhos e Quebras à Preventiva
     baseRef.forEach((r) => {
       if (!r.responsavel_preventiva || r.responsavel_preventiva === "Não Identificado") return;
 
@@ -1511,9 +1517,10 @@ export default function SOSCentral() {
           nome: key,
           funcao: r.funcao_responsavel,
           totalPrevFeitas: 0,
-          sosTotais: 0,
+          sosAtribuidosGeral: 0,
           sosPrecoce: 0,
           diasPrevSoma: 0,
+          diasPrevQtd: 0,
           kmPrevSoma: 0,
           kmPrevQtd: 0,
           defeitos: {},
@@ -1523,41 +1530,64 @@ export default function SOSCentral() {
       const item = map.get(key);
       if (!item.funcao) item.funcao = r.funcao_responsavel;
 
-      item.sosTotais += 1;
-      item.diasPrevSoma += n(r.dias_ultima_preventiva_calc);
-
-      // Cálculo de KM rodado desde a preventiva
-      const kmRodado = (n(r.km_veiculo_sos) > 0 && n(r.km_preventiva_vinculada) > 0) 
-        ? Math.max(0, n(r.km_veiculo_sos) - n(r.km_preventiva_vinculada)) 
-        : null;
-
-      if (kmRodado !== null) {
-        item.kmPrevSoma += kmRodado;
-        item.kmPrevQtd += 1;
+      // Cálculo de KM Rodado
+      let kmRodado = null;
+      if (n(r.km_veiculo_sos) > 0 && n(r.km_preventiva_vinculada) > 0) {
+        kmRodado = Math.max(0, n(r.km_veiculo_sos) - n(r.km_preventiva_vinculada));
       }
 
-      // Nova Regra de Retrabalho: <= 15 Dias OU <= 5.000 KM
-      if (n(r.dias_ultima_preventiva_calc) <= 15 || (kmRodado !== null && kmRodado <= 5000)) {
-        item.sosPrecoce += 1;
+      const diasPosPrev = n(r.dias_ultima_preventiva_calc);
+
+      // Validação de Outliers: Só atribui a culpa ao mecânico se quebrou DENTRO do ciclo esperado
+      const kmValidoParaMedia = (kmRodado !== null && kmRodado <= CICLO_MAX_KM);
+      const diasValidoParaMedia = (diasPosPrev <= CICLO_MAX_DIAS);
+
+      if (kmValidoParaMedia || diasValidoParaMedia) {
+          item.sosAtribuidosGeral += 1; // SOS válido atribuído a esta revisão
+
+          if (diasValidoParaMedia) {
+              item.diasPrevSoma += diasPosPrev;
+              item.diasPrevQtd += 1;
+          }
+
+          if (kmValidoParaMedia) {
+              item.kmPrevSoma += kmRodado;
+              item.kmPrevQtd += 1;
+          }
+
+          // Nova Regra de Retrabalho Técnico Rápido (Precoce)
+          if (diasPosPrev <= 15 || (kmValidoParaMedia && kmRodado <= 3000)) {
+              item.sosPrecoce += 1;
+          }
+
+          item.defeitos[r.problema_encontrado] = n(item.defeitos[r.problema_encontrado]) + 1;
       }
-      
-      item.defeitos[r.problema_encontrado] = n(item.defeitos[r.problema_encontrado]) + 1;
     });
 
     return [...map.values()]
-      .filter(r => r.totalPrevFeitas > 0 || r.sosTotais > 0)
-      .map(r => ({
-        nome: r.nome,
-        funcao: r.funcao || "Múltiplas",
-        totalPrevFeitas: r.totalPrevFeitas,
-        sosTotais: r.sosTotais,
-        sosPrecoce: r.sosPrecoce,
-        taxaRetrabalho: r.totalPrevFeitas > 0 ? (r.sosPrecoce / r.totalPrevFeitas) * 100 : (r.sosTotais > 0 ? (r.sosPrecoce / r.sosTotais) * 100 : 0),
-        mediaDiasQuebra: r.sosTotais > 0 ? (r.diasPrevSoma / r.sosTotais) : 0,
-        mediaKmQuebra: r.kmPrevQtd > 0 ? (r.kmPrevSoma / r.kmPrevQtd) : 0,
-        defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
-      }))
-      .sort((a, b) => b.sosPrecoce - a.sosPrecoce || b.totalPrevFeitas - a.totalPrevFeitas);
+      .filter(r => r.totalPrevFeitas > 0 || r.sosAtribuidosGeral > 0)
+      .map(r => {
+        // Eficácia da Preventiva (Carros que saíram e NÃO deram SOS dentro do ciclo)
+        let eficacia = 0;
+        if (r.totalPrevFeitas > 0) {
+            const sucessos = Math.max(0, r.totalPrevFeitas - r.sosAtribuidosGeral);
+            eficacia = (sucessos / r.totalPrevFeitas) * 100;
+        }
+
+        return {
+          nome: r.nome,
+          funcao: r.funcao || "Múltiplas",
+          totalPrevFeitas: r.totalPrevFeitas,
+          sosAtribuidosGeral: r.sosAtribuidosGeral,
+          sosPrecoce: r.sosPrecoce,
+          taxaEficacia: eficacia,
+          mediaDiasQuebra: r.diasPrevQtd > 0 ? (r.diasPrevSoma / r.diasPrevQtd) : 0,
+          mediaKmQuebra: r.kmPrevQtd > 0 ? (r.kmPrevSoma / r.kmPrevQtd) : 0,
+          defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+        };
+      })
+      // Ordenação: 1º quem tem mais retrabalho rápido, 2º a pior eficácia
+      .sort((a, b) => b.sosPrecoce - a.sosPrecoce || a.taxaEficacia - b.taxaEficacia);
   }, [baseRef, prevRows, mesReferencia]);
 
   const top5Veiculos3m = useMemo(() => {
@@ -1621,7 +1651,7 @@ export default function SOSCentral() {
         tabelaLinhas[0]?.totalAtual || 0
       )} SOS analisados e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
       `O defeito mais recorrente é "${defeitoTop}", puxado principalmente pelo setor ${setorTop}.`,
-      `O colaborador com maior volume de retrabalho (≤ 15 dias ou ≤ 5k km) foi ${funcTop} (Taxa de Retrabalho: ${fmtPct(tabelaFuncionarios[0]?.taxaRetrabalho || 0)}). Em média, a preventiva dura ${fmtNum(tabelaFuncionarios[0]?.mediaDiasQuebra || 0, 1)} dias e ${fmtInt(tabelaFuncionarios[0]?.mediaKmQuebra || 0)} km.`,
+      `O colaborador com maior volume de retrabalho precoce (≤ 15 dias ou ≤ 3k km) foi ${funcTop} (Retrabalhos: ${fmtInt(tabelaFuncionarios[0]?.sosPrecoce || 0)}). A eficácia geral de suas preventivas no ciclo foi de ${fmtPct(tabelaFuncionarios[0]?.taxaEficacia || 0)}, e os veículos rodaram em média ${fmtInt(tabelaFuncionarios[0]?.mediaKmQuebra || 0)} km pós-revisão.`,
       `O intervalo médio entre SOS do mesmo veículo está em ${fmtNum(
         resumoAtual.intervaloMedioGeral || 0,
         1
@@ -1692,9 +1722,10 @@ export default function SOSCentral() {
         tabelaFuncionarios.map((r) => ({
           Funcionário: r.nome,
           Função: r.funcao,
-          "Total Preventivas": r.totalPrevFeitas,
-          "SOS (Retrabalho)": r.sosPrecoce,
-          "Taxa Retrabalho %": fmtNum(r.taxaRetrabalho, 1),
+          "Preventivas Feitas": r.totalPrevFeitas,
+          "SOS Atribuídos (Geral)": r.sosAtribuidosGeral,
+          "Eficácia da Prev. %": fmtNum(r.taxaEficacia, 1),
+          "SOS Retrabalho (<=15d)": r.sosPrecoce,
           "Média Dias Pós-Prev": fmtNum(r.mediaDiasQuebra, 1),
           "Média KM Pós-Prev": fmtInt(r.mediaKmQuebra),
           "Principal Defeito": r.defeitoTop,
@@ -1835,7 +1866,7 @@ export default function SOSCentral() {
               <strong>Pós-preventiva e pós-inspeção:</strong> usa os dados nativos da tabela de preventivas associada para refazer o cálculo de dias exatos na hora.
             </p>
             <p>
-              <strong>Avaliação de Funcionário:</strong> O volume total de preventivas é contabilizado na tabela (Denominador). O retrabalho agora é contado apenas se o SOS ocorrer com <strong>≤ 15 dias</strong> ou se o veículo tiver rodado <strong>≤ 5.000 km</strong> após a revisão executada por aquele colaborador.
+              <strong>Avaliação de Funcionário:</strong> Remove "Outliers" (Média de KM/Dias é feita apenas sobre veículos que quebraram dentro do ciclo regular). A <strong>Taxa de Eficácia</strong> mostra o % de preventivas que sobreviveram sem acionar o socorro no período. O <strong>Retrabalho Rápido</strong> penaliza apenas falhas em ≤ 15 dias ou ≤ 3.000 KM.
             </p>
           </div>
         )}
@@ -2084,7 +2115,7 @@ export default function SOSCentral() {
           Preventiva / Inspeção
         </TabButton>
         <TabButton active={abaAtiva === "FUNCIONARIOS"} onClick={() => setAbaAtiva("FUNCIONARIOS")} icon={<FaUserCog />}>
-          Funcionários (Retrabalho)
+          Eficácia por Funcionário
         </TabButton>
         <TabButton active={abaAtiva === "LINHAS"} onClick={() => setAbaAtiva("LINHAS")} icon={<FaBus />}>
           Linhas
@@ -2103,6 +2134,7 @@ export default function SOSCentral() {
         </TabButton>
       </div>
 
+      {/* RENDERIZAÇÃO DAS ABAS (Mantido igual até FUNCIONÁRIOS) */}
       {abaAtiva === "EXECUTIVO" && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -2236,10 +2268,11 @@ export default function SOSCentral() {
         </div>
       )}
 
+      {/* NOVA VISÃO DE FUNCIONÁRIOS (EFICÁCIA) */}
       {abaAtiva === "FUNCIONARIOS" && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border shadow-sm p-4">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Colaboradores c/ Retrabalho Precoce (≤ 15 dias ou ≤ 5k km)</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Colaboradores (Eficácia: Preventivas Feitas vs SOS Atribuídos)</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tabelaFuncionarios.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
@@ -2251,8 +2284,8 @@ export default function SOSCentral() {
                   <Bar dataKey="totalPrevFeitas" name="Preventivas no Mês" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
                     <LabelList dataKey="totalPrevFeitas" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
                   </Bar>
-                  <Bar dataKey="sosPrecoce" name="Retrabalho (≤ 15d ou ≤ 5k km)" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={25}>
-                    <LabelList dataKey="sosPrecoce" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
+                  <Bar dataKey="sosAtribuidosGeral" name="SOS Atribuídos (Falhas no Ciclo)" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={25}>
+                    <LabelList dataKey="sosAtribuidosGeral" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -2266,10 +2299,10 @@ export default function SOSCentral() {
                 <tr>
                   <th className="px-3 py-3 text-left">Funcionário</th>
                   <th className="px-3 py-3 text-left">Função</th>
-                  <th className="px-3 py-3 text-left">Preventivas no Período</th>
-                  <th className="px-3 py-3 text-left">SOS Retrabalho (≤ 15d ou ≤ 5k km)</th>
-                  <th className="px-3 py-3 text-left">Taxa de Retrabalho</th>
-                  <th className="px-3 py-3 text-left">Média Dias até Quebrar</th>
+                  <th className="px-3 py-3 text-left">Preventivas Feitas</th>
+                  <th className="px-3 py-3 text-left">SOS Atribuídos (Geral)</th>
+                  <th className="px-3 py-3 text-left">Eficácia da Preventiva</th>
+                  <th className="px-3 py-3 text-left">SOS Retrabalho (≤ 15d ou ≤ 3k)</th>
                   <th className="px-3 py-3 text-left">Média KM até Quebrar</th>
                   <th className="px-3 py-3 text-left">Principal Defeito Associado</th>
                 </tr>
@@ -2280,10 +2313,10 @@ export default function SOSCentral() {
                     <td className="px-3 py-3 font-black text-slate-800">{r.nome}</td>
                     <td className="px-3 py-3"><span className="bg-slate-100 px-2 py-1 rounded font-bold text-slate-600 text-xs">{r.funcao}</span></td>
                     <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalPrevFeitas)}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.sosAtribuidosGeral)}</td>
+                    <td className="px-3 py-3 font-black text-blue-600">{fmtPct(r.taxaEficacia)}</td>
                     <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.sosPrecoce)}</td>
-                    <td className="px-3 py-3">{fmtPct(r.taxaRetrabalho)}</td>
-                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaDiasQuebra, 1)} dias</td>
-                    <td className="px-3 py-3 font-semibold text-blue-600">{fmtInt(r.mediaKmQuebra)} km</td>
+                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtInt(r.mediaKmQuebra)} km</td>
                     <td className="px-3 py-3 text-slate-600">{r.defeitoTop}</td>
                   </tr>
                 ))}

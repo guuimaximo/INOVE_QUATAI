@@ -79,15 +79,17 @@ function monthRange(yyyyMm) {
   return { start, end };
 }
 
-function calcularDiasDecorridos(data) {
-  if (!data) return null;
-  const hoje = new Date();
-  const base = new Date(`${data}T00:00:00`);
-  if (Number.isNaN(base.getTime())) return null;
-  hoje.setHours(0, 0, 0, 0);
-  base.setHours(0, 0, 0, 0);
-  const diffMs = hoje.getTime() - base.getTime();
-  return diffMs < 0 ? 0 : Math.floor(diffMs / 86400000);
+function calcularDiasDecorridos(dataInicio, dataFim) {
+    if (!dataInicio || !dataFim) return null;
+    const dt1 = new Date(`${dataInicio}T00:00:00`);
+    const dt2 = new Date(`${dataFim}T00:00:00`);
+    if (Number.isNaN(dt1.getTime()) || Number.isNaN(dt2.getTime())) return null;
+    
+    dt1.setHours(0, 0, 0, 0);
+    dt2.setHours(0, 0, 0, 0);
+    
+    const diffMs = dt2.getTime() - dt1.getTime();
+    return Math.max(0, Math.floor(diffMs / 86400000));
 }
 
 /* =======================
@@ -273,14 +275,16 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   }
 
   async function salvarAlteracoes() {
-    const dataPrev = formData.data_ultima_preventiva || null;
-    const dataInsp = formData.data_ultima_inspecao || null;
+    // Usamos a data da preventiva/inspecao encontrada para calcular os dias
+    const dataPrev = historicoPrev?.data_realizacao || formData.data_ultima_preventiva || null;
+    const dataInsp = historicoInsp?.data_realizacao || formData.data_ultima_inspecao || null;
+    const dataSosFormatada = formData.data_sos ? formData.data_sos.split('T')[0] : null;
 
     const payload = {
       ...formData,
       km_veiculo_sos: formData.km_veiculo_sos ? Number(formData.km_veiculo_sos) : null,
-      dias_ultima_preventiva: calcularDiasDecorridos(dataPrev),
-      dias_ultima_inspecao: calcularDiasDecorridos(dataInsp),
+      dias_ultima_preventiva: calcularDiasDecorridos(dataPrev, dataSosFormatada),
+      dias_ultima_inspecao: calcularDiasDecorridos(dataInsp, dataSosFormatada),
       atualizado_em: new Date().toISOString(),
     };
 
@@ -475,6 +479,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             </div>
 
             <div className="mb-5 flex flex-col md:w-1/3">
+              {/* Mantém a edição do KM no form */}
               {renderField("KM Atual do Veículo (Hora do SOS)", "km_veiculo_sos", false, "number")}
             </div>
 

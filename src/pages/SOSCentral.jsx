@@ -262,22 +262,18 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
       setFormData((prev) => ({
         ...prev,
         os_ultima_preventiva: prevData?.numero_os || prev.os_ultima_preventiva,
-        data_ultima_preventiva: prevData?.data_realizacao || prev.data_ultima_preventiva,
-        km_rodado_preventiva: prevData?.km_veiculo || prev.km_rodado_preventiva,
-
         os_ultima_inspecao: inspData?.numero_os || prev.os_ultima_inspecao,
-        data_ultima_inspecao: inspData?.data_realizacao || prev.data_ultima_inspecao,
-        km_rodado_inspecao: inspData?.km_veiculo || prev.km_rodado_inspecao,
       }));
-      alert("Histórico atrelado com sucesso! Salve para confirmar.");
+      // Como os useEffect escutam o numero_os (os_ultima_preventiva), eles já vão disparar e alimentar historicoPrev/Insp automaticamente
+      alert("OS atreladas com sucesso! Salve para confirmar.");
     }
     setBuscandoHistorico(false);
   }
 
   async function salvarAlteracoes() {
-    // Usamos a data da preventiva/inspecao encontrada para calcular os dias
-    const dataPrev = historicoPrev?.data_realizacao || formData.data_ultima_preventiva || null;
-    const dataInsp = historicoInsp?.data_realizacao || formData.data_ultima_inspecao || null;
+    // Agora usando EXCLUSIVAMENTE a data que vier da tabela preventivas (sem fallback para o formData antigo)
+    const dataPrev = historicoPrev?.data_realizacao || null;
+    const dataInsp = historicoInsp?.data_realizacao || null;
     const dataSosFormatada = formData.data_sos ? formData.data_sos.split('T')[0] : null;
 
     const payload = {
@@ -464,7 +460,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b pb-2 gap-3">
               <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                <FaWrench className="text-emerald-500" /> Histórico Atrelado (Snapshot)
+                <FaWrench className="text-emerald-500" /> Histórico Atrelado (Tabela de Preventivas)
               </h3>
               
               {editMode && (
@@ -473,13 +469,13 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
                   disabled={buscandoHistorico}
                   className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 disabled:opacity-50"
                 >
-                  {buscandoHistorico ? "Buscando..." : "Puxar Histórico Automaticamente"}
+                  {buscandoHistorico ? "Buscando..." : "Puxar OS Automaticamente"}
                 </button>
               )}
             </div>
 
             <div className="mb-5 flex flex-col md:w-1/3">
-              {/* Mantém a edição do KM no form */}
+              {/* Mantém a edição do KM Atual do form */}
               {renderField("KM Atual do Veículo (Hora do SOS)", "km_veiculo_sos", false, "number")}
             </div>
 
@@ -494,15 +490,13 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
                   <div className="col-span-1 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">Data</span>
                     <span className="font-black text-slate-800">
-                      {(historicoPrev?.data_realizacao || formData.data_ultima_preventiva) 
-                        ? formatDateBR(historicoPrev?.data_realizacao || formData.data_ultima_preventiva) 
-                        : "—"}
+                      {historicoPrev?.data_realizacao ? formatDateBR(historicoPrev.data_realizacao) : "—"}
                     </span>
                   </div>
                   <div className="col-span-1 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">KM Época</span>
                     <span className="font-black text-slate-800">
-                      {historicoPrev?.km_veiculo || formData.km_rodado_preventiva || "—"}
+                      {historicoPrev?.km_veiculo || "—"}
                     </span>
                   </div>
                   
@@ -538,15 +532,13 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
                   <div className="col-span-1 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">Data</span>
                     <span className="font-black text-slate-800">
-                      {(historicoInsp?.data_realizacao || formData.data_ultima_inspecao) 
-                        ? formatDateBR(historicoInsp?.data_realizacao || formData.data_ultima_inspecao) 
-                        : "—"}
+                      {historicoInsp?.data_realizacao ? formatDateBR(historicoInsp.data_realizacao) : "—"}
                     </span>
                   </div>
                   <div className="col-span-1 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">KM Época</span>
                     <span className="font-black text-slate-800">
-                      {historicoInsp?.km_veiculo || formData.km_rodado_inspecao || "—"}
+                      {historicoInsp?.km_veiculo || "—"}
                     </span>
                   </div>
 
@@ -563,7 +555,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
               </div>
             </div>
             <p className="text-[10px] text-slate-400 font-semibold mt-3 text-center">
-              * Estes dados representam a situação do veículo no momento exato em que este SOS foi tratado. Se não houver OS atrelada, puxe o histórico editando o registro.
+              * Estes dados representam a situação da última revisão do veículo. Se as informações não aparecerem, é porque a OS correspondente não consta na base de Preventivas do Supabase.
             </p>
           </div>
 

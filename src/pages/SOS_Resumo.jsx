@@ -8,13 +8,8 @@ import {
   FaLock,
   FaEdit,
   FaSave,
-  FaSort,
-  FaSortUp,
-  FaSortDown,
   FaBus,
-  FaCalendarAlt,
   FaTools,
-  FaInbox,
   FaWrench,
   FaRoad,
   FaUserCog,
@@ -54,7 +49,6 @@ import {
 ======================= */
 const MKBF_META = 7000;
 const TIPOS_GRAFICO = ["RECOLHEU", "SOS", "AVARIA", "TROCA", "IMPROCEDENTE"];
-const OCORRENCIAS_CARDS = ["SOS", "RECOLHEU", "TROCA", "AVARIA", "IMPROCEDENTE", "SEGUIU VIAGEM"];
 const DATE_FIELD = "data_sos";
 
 function n(v) {
@@ -373,6 +367,7 @@ function TabButton({ active, onClick, icon, children }) {
 
 /* --- Modal de Login --- */
 function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
+  // ... (Mesmo componente LoginModal)
   const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
@@ -407,29 +402,13 @@ function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
         </div>
         
         <div className="space-y-3">
-          <input
-            type="text"
-            placeholder="Login"
-            className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none"
-            value={login}
-            onChange={(e) => setLogin(e.target.value)}
-          />
-          <input
-            type="password"
-            placeholder="Senha"
-            className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-          />
+          <input type="text" placeholder="Login" className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none" value={login} onChange={(e) => setLogin(e.target.value)} />
+          <input type="password" placeholder="Senha" className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none" value={senha} onChange={(e) => setSenha(e.target.value)} />
         </div>
         
         <div className="flex justify-end gap-2 mt-6">
-          <button onClick={onCancel} className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition">
-            Cancelar
-          </button>
-          <button onClick={handleLogin} disabled={loading} className="px-4 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-md disabled:opacity-70">
-            {loading ? "Verificando..." : "Entrar"}
-          </button>
+          <button onClick={onCancel} className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition">Cancelar</button>
+          <button onClick={handleLogin} disabled={loading} className="px-4 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-md disabled:opacity-70">{loading ? "Verificando..." : "Entrar"}</button>
         </div>
       </div>
     </div>
@@ -438,70 +417,37 @@ function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
 
 /* --- Modal de Detalhes do SOS --- */
 function DetalheSOSModal({ sos, onClose, onAtualizar }) {
+  // ... (Mesmo componente DetalheSOSModal que você já tinha)
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({});
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  
   const [historicoPrev, setHistoricoPrev] = useState(null);
   const [historicoInsp, setHistoricoInsp] = useState(null);
   const [buscandoHistorico, setBuscandoHistorico] = useState(false);
 
-  useEffect(() => {
-    if (sos) setFormData(sos);
-  }, [sos]);
+  useEffect(() => { if (sos) setFormData(sos); }, [sos]);
 
   useEffect(() => {
     async function fetchLinkedPreventivas() {
       if (formData.os_ultima_preventiva) {
-        const { data } = await supabase
-          .from("preventivas")
-          .select("*")
-          .eq("numero_os", formData.os_ultima_preventiva)
-          .limit(1)
-          .maybeSingle();
+        const { data } = await supabase.from("preventivas").select("*").eq("numero_os", formData.os_ultima_preventiva).limit(1).maybeSingle();
         setHistoricoPrev(data);
       }
       if (formData.os_ultima_inspecao) {
-        const { data } = await supabase
-          .from("preventivas")
-          .select("*")
-          .eq("numero_os", formData.os_ultima_inspecao)
-          .limit(1)
-          .maybeSingle();
+        const { data } = await supabase.from("preventivas").select("*").eq("numero_os", formData.os_ultima_inspecao).limit(1).maybeSingle();
         setHistoricoInsp(data);
       }
     }
     fetchLinkedPreventivas();
   }, [formData.os_ultima_preventiva, formData.os_ultima_inspecao]);
 
-  function solicitarLogin() {
-    setLoginModalOpen(true);
-  }
-
-  async function onLoginConfirm() {
-    setLoginModalOpen(false);
-    setEditMode(true);
-  }
+  function solicitarLogin() { setLoginModalOpen(true); }
+  async function onLoginConfirm() { setLoginModalOpen(false); setEditMode(true); }
 
   async function handlePuxarHistorico() {
     setBuscandoHistorico(true);
-    const { data: prevData } = await supabase
-      .from("preventivas")
-      .select("*")
-      .eq("prefixo", sos.veiculo)
-      .eq("tipo", "Preventiva - 10.000")
-      .order("data_realizacao", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const { data: inspData } = await supabase
-      .from("preventivas")
-      .select("*")
-      .eq("prefixo", sos.veiculo)
-      .eq("tipo", "Inspeção - 5.000")
-      .order("data_realizacao", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: prevData } = await supabase.from("preventivas").select("*").eq("prefixo", sos.veiculo).eq("tipo", "Preventiva - 10.000").order("data_realizacao", { ascending: false }).limit(1).maybeSingle();
+    const { data: inspData } = await supabase.from("preventivas").select("*").eq("prefixo", sos.veiculo).eq("tipo", "Inspeção - 5.000").order("data_realizacao", { ascending: false }).limit(1).maybeSingle();
 
     if (!prevData && !inspData) {
       alert("Nenhum histórico de preventiva ou inspeção encontrado para este veículo.");
@@ -529,15 +475,8 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
       atualizado_em: new Date().toISOString(),
     };
 
-    const { error } = await supabase
-      .from("sos_acionamentos")
-      .update(payload)
-      .eq("id", sos.id);
-
-    if (error) {
-      alert("Erro ao salvar: " + error.message);
-      return;
-    }
+    const { error } = await supabase.from("sos_acionamentos").update(payload).eq("id", sos.id);
+    if (error) { alert("Erro ao salvar: " + error.message); return; }
 
     alert("Alterações salvas com sucesso ✅");
     onAtualizar(true);
@@ -550,19 +489,9 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
       <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</label>
       {editMode && !readOnly ? (
         multiline ? (
-          <textarea
-            className="border border-slate-300 p-2.5 rounded-lg w-full text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none transition"
-            rows="2"
-            value={formData[field] || ""}
-            onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
-          />
+          <textarea className="border border-slate-300 p-2.5 rounded-lg w-full text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none transition" rows="2" value={formData[field] || ""} onChange={(e) => setFormData({ ...formData, [field]: e.target.value })} />
         ) : (
-          <input
-            type={type}
-            className="border border-slate-300 p-2.5 rounded-lg w-full text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none transition"
-            value={formData[field] || ""}
-            onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
-          />
+          <input type={type} className="border border-slate-300 p-2.5 rounded-lg w-full text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none transition" value={formData[field] || ""} onChange={(e) => setFormData({ ...formData, [field]: e.target.value })} />
         )
       ) : (
         <div className="bg-slate-50 border border-slate-100 p-2.5 rounded-lg text-sm font-bold text-slate-800 min-h-[42px] flex items-center">
@@ -577,39 +506,15 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
       <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Classificação de Controlabilidade</label>
       {editMode ? (
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setFormData({ ...formData, classificacao_controlabilidade: "Não Controlável" })}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border transition ${
-              formData.classificacao_controlabilidade === "Não Controlável"
-                ? "bg-amber-400 border-amber-500 text-amber-900 shadow-sm"
-                : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            Não controlável
-          </button>
-          <button
-            type="button"
-            onClick={() => setFormData({ ...formData, classificacao_controlabilidade: "Controlável" })}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border transition ${
-              formData.classificacao_controlabilidade === "Controlável"
-                ? "bg-rose-600 border-rose-700 text-white shadow-sm"
-                : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            Controlável
-          </button>
+          <button type="button" onClick={() => setFormData({ ...formData, classificacao_controlabilidade: "Não Controlável" })} className={`px-4 py-2 rounded-lg text-sm font-bold border transition ${formData.classificacao_controlabilidade === "Não Controlável" ? "bg-amber-400 border-amber-500 text-amber-900 shadow-sm" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>Não controlável</button>
+          <button type="button" onClick={() => setFormData({ ...formData, classificacao_controlabilidade: "Controlável" })} className={`px-4 py-2 rounded-lg text-sm font-bold border transition ${formData.classificacao_controlabilidade === "Controlável" ? "bg-rose-600 border-rose-700 text-white shadow-sm" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>Controlável</button>
         </div>
       ) : (
         <div className="mt-1">
           {formData.classificacao_controlabilidade === "Não Controlável" ? (
-            <span className="inline-flex bg-amber-100 border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider">
-              Não controlável
-            </span>
+            <span className="inline-flex bg-amber-100 border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider">Não controlável</span>
           ) : formData.classificacao_controlabilidade === "Controlável" ? (
-            <span className="inline-flex bg-rose-100 border border-rose-200 text-rose-800 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider">
-              Controlável
-            </span>
+            <span className="inline-flex bg-rose-100 border border-rose-200 text-rose-800 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider">Controlável</span>
           ) : (
             <div className="bg-slate-50 border border-slate-100 p-2.5 rounded-lg text-sm font-bold text-slate-800">—</div>
           )}
@@ -621,48 +526,28 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-50 p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col animate-in zoom-in-95 duration-200">
-        
-        {/* Header Modal */}
         <div className="flex justify-between items-center p-5 border-b bg-white relative overflow-hidden shrink-0">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-transparent opacity-50"></div>
           <div className="relative flex items-center gap-3">
-            <div className="bg-blue-600 text-white p-2.5 rounded-lg shadow-sm">
-              <FaEye size={20} />
-            </div>
+            <div className="bg-blue-600 text-white p-2.5 rounded-lg shadow-sm"><FaEye size={20} /></div>
             <div>
-              <h2 className="text-xl font-black text-slate-800">
-                Detalhes SOS <span className="text-blue-600">#{sos.numero_sos}</span>
-              </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <StatusTag status={sos.status} />
-                <OcorrenciaTag ocorrencia={sos.ocorrencia} />
-              </div>
+              <h2 className="text-xl font-black text-slate-800">Detalhes SOS <span className="text-blue-600">#{sos.numero_sos}</span></h2>
+              <div className="flex items-center gap-2 mt-1"><StatusTag status={sos.status} /><OcorrenciaTag ocorrencia={sos.ocorrencia} /></div>
             </div>
           </div>
           <div className="relative flex items-center gap-2">
             {!editMode ? (
-              <button onClick={solicitarLogin} className="bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition active:scale-95">
-                <FaEdit /> Editar
-              </button>
+              <button onClick={solicitarLogin} className="bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition active:scale-95"><FaEdit /> Editar</button>
             ) : (
-              <button onClick={salvarAlteracoes} className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-md transition active:scale-95">
-                <FaSave /> Salvar
-              </button>
+              <button onClick={salvarAlteracoes} className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-md transition active:scale-95"><FaSave /> Salvar</button>
             )}
-            <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition">
-              <FaTimes size={20} />
-            </button>
+            <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition"><FaTimes size={20} /></button>
           </div>
         </div>
 
-        {/* Scrollable Content */}
         <div className="p-6 space-y-6 overflow-y-auto bg-slate-50/50 flex-1">
-          
-          {/* Seção 1: Dados da Ocorrência */}
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
-              <FaBus className="text-slate-400" /> Informações da Ocorrência
-            </h3>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2"><FaBus className="text-slate-400" /> Informações da Ocorrência</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {renderField("Criado em", "created_at", false, "date", true)}
               {renderField("Plantonista", "plantonista", false, "text", true)}
@@ -673,47 +558,31 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
               {renderField("Motorista", "motorista_nome", false, "text", true)}
               {renderField("Local", "local_ocorrencia", false, "text", true)}
               {renderField("Tabela Operacional", "tabela_operacional", false, "text", true)}
-              <div className="md:col-span-3">
-                {renderField("Reclamação do Motorista", "reclamacao_motorista", true, "text", true)}
-              </div>
+              <div className="md:col-span-3">{renderField("Reclamação do Motorista", "reclamacao_motorista", true, "text", true)}</div>
             </div>
           </div>
 
-          {/* Seção 2: Tratamento e Manutenção */}
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
-              <FaTools className="text-blue-500" /> Tratamento e Execução
-            </h3>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2"><FaTools className="text-blue-500" /> Tratamento e Execução</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {renderField("Setor Manutenção", "setor_manutencao")}
               {renderField("Grupo Manutenção", "grupo_manutencao")}
               {renderField("Problema Encontrado", "problema_encontrado")}
-              
               <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
                 {renderField("Mecânico Apontado", "mecanico_executor")}
                 {renderField("Responsável (Solucionador)", "solucionador")}
-                <div className="md:col-span-2">
-                  {renderField("Solução Aplicada", "solucao", true)}
-                </div>
+                <div className="md:col-span-2">{renderField("Solução Aplicada", "solucao", true)}</div>
                 {renderField("OS Corretiva", "numero_os_corretiva")}
                 {renderControlabilidadeField()}
               </div>
             </div>
           </div>
 
-          {/* Seção 3: Snapshot de Preventiva e Inspeção */}
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b pb-2 gap-3">
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                <FaWrench className="text-emerald-500" /> Histórico Atrelado (Tabela de Preventivas)
-              </h3>
-              
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2"><FaWrench className="text-emerald-500" /> Histórico Atrelado (Tabela de Preventivas)</h3>
               {editMode && (
-                <button
-                  onClick={handlePuxarHistorico}
-                  disabled={buscandoHistorico}
-                  className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 disabled:opacity-50"
-                >
+                <button onClick={handlePuxarHistorico} disabled={buscandoHistorico} className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 disabled:opacity-50">
                   {buscandoHistorico ? "Buscando..." : "Puxar OS Automaticamente"}
                 </button>
               )}
@@ -724,94 +593,35 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Box Preventiva */}
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
-                <h4 className="font-bold text-slate-700 text-sm border-b pb-1 flex justify-between">
-                  <span>Última Preventiva (10k)</span>
-                  <span className="text-blue-600">OS: {formData.os_ultima_preventiva || "—"}</span>
-                </h4>
+                <h4 className="font-bold text-slate-700 text-sm border-b pb-1 flex justify-between"><span>Última Preventiva (10k)</span><span className="text-blue-600">OS: {formData.os_ultima_preventiva || "—"}</span></h4>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div className="col-span-1 text-xs">
-                    <span className="block font-bold text-slate-500 uppercase">Data</span>
-                    <span className="font-black text-slate-800">
-                      {historicoPrev?.data_realizacao ? formatDateBR(historicoPrev.data_realizacao) : "—"}
-                    </span>
-                  </div>
-                  <div className="col-span-1 text-xs">
-                    <span className="block font-bold text-slate-500 uppercase">KM Época</span>
-                    <span className="font-black text-slate-800">
-                      {historicoPrev?.km_veiculo || "—"}
-                    </span>
-                  </div>
-                  
-                  {/* Dados buscados dinamicamente da tabela Preventivas */}
-                  <div className="col-span-2 text-xs">
-                    <span className="block font-bold text-slate-500 uppercase">Mecânico</span>
-                    <span className="font-black text-slate-800">{historicoPrev?.mecanico || "—"}</span>
-                  </div>
-                  <div className="col-span-2 text-xs">
-                    <span className="block font-bold text-slate-500 uppercase">Eletricista</span>
-                    <span className="font-black text-slate-800">{historicoPrev?.eletricista || "—"}</span>
-                  </div>
+                  <div className="col-span-1 text-xs"><span className="block font-bold text-slate-500 uppercase">Data</span><span className="font-black text-slate-800">{historicoPrev?.data_realizacao ? formatDateBR(historicoPrev.data_realizacao) : "—"}</span></div>
+                  <div className="col-span-1 text-xs"><span className="block font-bold text-slate-500 uppercase">KM Época</span><span className="font-black text-slate-800">{historicoPrev?.km_veiculo || "—"}</span></div>
+                  <div className="col-span-2 text-xs"><span className="block font-bold text-slate-500 uppercase">Mecânico</span><span className="font-black text-slate-800">{historicoPrev?.mecanico || "—"}</span></div>
+                  <div className="col-span-2 text-xs"><span className="block font-bold text-slate-500 uppercase">Eletricista</span><span className="font-black text-slate-800">{historicoPrev?.eletricista || "—"}</span></div>
                   <div className="col-span-2 text-xs flex gap-4">
-                    <div className="flex-1">
-                      <span className="block font-bold text-slate-500 uppercase">Funilaria</span>
-                      <span className="font-black text-slate-800">{historicoPrev?.funilaria || "—"}</span>
-                    </div>
-                    <div className="flex-1">
-                      <span className="block font-bold text-slate-500 uppercase">Borracharia</span>
-                      <span className="font-black text-slate-800">{historicoPrev?.borracharia || "—"}</span>
-                    </div>
+                    <div className="flex-1"><span className="block font-bold text-slate-500 uppercase">Funilaria</span><span className="font-black text-slate-800">{historicoPrev?.funilaria || "—"}</span></div>
+                    <div className="flex-1"><span className="block font-bold text-slate-500 uppercase">Borracharia</span><span className="font-black text-slate-800">{historicoPrev?.borracharia || "—"}</span></div>
                   </div>
                 </div>
               </div>
               
-              {/* Box Inspeção */}
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
-                <h4 className="font-bold text-slate-700 text-sm border-b pb-1 flex justify-between">
-                  <span>Última Inspeção (5k)</span>
-                  <span className="text-emerald-600">OS: {formData.os_ultima_inspecao || "—"}</span>
-                </h4>
+                <h4 className="font-bold text-slate-700 text-sm border-b pb-1 flex justify-between"><span>Última Inspeção (5k)</span><span className="text-emerald-600">OS: {formData.os_ultima_inspecao || "—"}</span></h4>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div className="col-span-1 text-xs">
-                    <span className="block font-bold text-slate-500 uppercase">Data</span>
-                    <span className="font-black text-slate-800">
-                      {historicoInsp?.data_realizacao ? formatDateBR(historicoInsp.data_realizacao) : "—"}
-                    </span>
-                  </div>
-                  <div className="col-span-1 text-xs">
-                    <span className="block font-bold text-slate-500 uppercase">KM Época</span>
-                    <span className="font-black text-slate-800">
-                      {historicoInsp?.km_veiculo || "—"}
-                    </span>
-                  </div>
-
-                  {/* Dados buscados dinamicamente da tabela Preventivas */}
-                  <div className="col-span-2 text-xs">
-                    <span className="block font-bold text-slate-500 uppercase">Mecânico</span>
-                    <span className="font-black text-slate-800">{historicoInsp?.mecanico || "—"}</span>
-                  </div>
-                  <div className="col-span-2 text-xs">
-                    <span className="block font-bold text-slate-500 uppercase">Eletricista</span>
-                    <span className="font-black text-slate-800">{historicoInsp?.eletricista || "—"}</span>
-                  </div>
+                  <div className="col-span-1 text-xs"><span className="block font-bold text-slate-500 uppercase">Data</span><span className="font-black text-slate-800">{historicoInsp?.data_realizacao ? formatDateBR(historicoInsp.data_realizacao) : "—"}</span></div>
+                  <div className="col-span-1 text-xs"><span className="block font-bold text-slate-500 uppercase">KM Época</span><span className="font-black text-slate-800">{historicoInsp?.km_veiculo || "—"}</span></div>
+                  <div className="col-span-2 text-xs"><span className="block font-bold text-slate-500 uppercase">Mecânico</span><span className="font-black text-slate-800">{historicoInsp?.mecanico || "—"}</span></div>
+                  <div className="col-span-2 text-xs"><span className="block font-bold text-slate-500 uppercase">Eletricista</span><span className="font-black text-slate-800">{historicoInsp?.eletricista || "—"}</span></div>
                 </div>
               </div>
             </div>
-            <p className="text-[10px] text-slate-400 font-semibold mt-3 text-center">
-              * Estes dados representam a situação da última revisão do veículo. Se as informações não aparecerem, é porque a OS correspondente não consta na base de Preventivas do Supabase.
-            </p>
+            <p className="text-[10px] text-slate-400 font-semibold mt-3 text-center">* Estes dados representam a situação da última revisão do veículo.</p>
           </div>
-
         </div>
       </div>
-
-      {loginModalOpen && (
-        <LoginModal
-          onConfirm={onLoginConfirm}
-          onCancel={() => setLoginModalOpen(false)}
-        />
-      )}
+      {loginModalOpen && <LoginModal onConfirm={onLoginConfirm} onCancel={() => setLoginModalOpen(false)} />}
     </div>
   );
 }
@@ -855,22 +665,15 @@ export default function SOSCentral() {
 
   function buildQuery() {
     let query = supabase.from("sos_acionamentos").select("*");
-
     if (mesRef) {
       const { start, end } = monthRange(mesRef);
       if (start) query = query.gte(DATE_FIELD, start);
       if (end) query = query.lte(DATE_FIELD, end);
     }
-
     if (dataInicio) query = query.gte(DATE_FIELD, dataInicio);
     if (dataFim) query = query.lte(DATE_FIELD, dataFim);
-
-    if (ocorrenciaFiltro) {
-      query = query.ilike("ocorrencia", ocorrenciaFiltro);
-    }
-
+    if (ocorrenciaFiltro) query = query.ilike("ocorrencia", ocorrenciaFiltro);
     query = query.order(sortBy, { ascending: sortAsc, nullsFirst: false });
-
     return query;
   }
 
@@ -878,23 +681,12 @@ export default function SOSCentral() {
     let allRecords = [];
     let start = 0;
     const limit = 1000; 
-    
     while (true) {
-      const { data, error } = await supabase
-        .from(table)
-        .select("*")
-        .order(orderField, { ascending: false })
-        .range(start, start + limit - 1);
-        
-      if (error) {
-        console.error(`Erro ao buscar dados de ${table}:`, error);
-        break;
-      }
+      const { data, error } = await supabase.from(table).select("*").order(orderField, { ascending: false }).range(start, start + limit - 1);
+      if (error) { console.error(`Erro ao buscar dados de ${table}:`, error); break; }
       if (!data || data.length === 0) break;
-      
       allRecords = allRecords.concat(data);
       if (data.length < limit) break; 
-      
       start += limit;
     }
     return allRecords;
@@ -904,7 +696,6 @@ export default function SOSCentral() {
     setLoading(true);
     setPage(0);
     setHasMore(true);
-
     try {
       const [sosData, kmData, preventivaData] = await Promise.all([
         fetchAllData("sos_acionamentos", "data_sos"),
@@ -917,7 +708,6 @@ export default function SOSCentral() {
     } catch (e) {
       console.error(e);
     }
-
     carregarSOS(true, true);
   }
 
@@ -929,11 +719,9 @@ export default function SOSCentral() {
     } else {
       setLoadingMore(true);
     }
-
     const currentPage = reset ? 0 : page;
     const from = currentPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
-
     const { data, error } = await buildQuery().range(from, to);
 
     if (error) {
@@ -942,7 +730,6 @@ export default function SOSCentral() {
       setLoadingMore(false);
       return;
     }
-
     const newRows = data || [];
     const merged = reset ? newRows : [...sosList, ...newRows];
     setSosList(merged);
@@ -952,15 +739,8 @@ export default function SOSCentral() {
     setLoadingMore(false);
   }
 
-  useEffect(() => {
-    carregarTudo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    carregarSOS(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataInicio, dataFim, mesRef, sortBy, sortAsc, ocorrenciaFiltro]);
+  useEffect(() => { carregarTudo(); }, []);
+  useEffect(() => { carregarSOS(true); }, [dataInicio, dataFim, mesRef, sortBy, sortAsc, ocorrenciaFiltro]);
 
   const kmProcessado = useMemo(() => {
     const map = new Map();
@@ -969,10 +749,7 @@ export default function SOSCentral() {
       if (!data) return;
       map.set(data, n(map.get(data)) + n(r.km_total));
     });
-
-    return [...map.entries()]
-      .map(([data, km_total]) => ({ data, km_total }))
-      .sort((a, b) => String(a.data).localeCompare(String(b.data)));
+    return [...map.entries()].map(([data, km_total]) => ({ data, km_total })).sort((a, b) => String(a.data).localeCompare(String(b.data)));
   }, [kmRows]);
 
   const sosProcessado = useMemo(() => {
@@ -1006,17 +783,24 @@ export default function SOSCentral() {
         const diasPrev = n(r.dias_ultima_preventiva) > 0 ? n(r.dias_ultima_preventiva) : Math.max(0, n(diffDays(data_sos, basePrev)));
         const diasInsp = n(r.dias_ultima_inspecao) > 0 ? n(r.dias_ultima_inspecao) : Math.max(0, n(diffDays(data_sos, baseInsp)));
 
-        const tempo_solucao_horas = calcDiffHours(
-          r.data_sos || r.created_at,
-          r.hora_sos,
-          r.data_encerramento || r.data_fechamento
-        );
+        // ======= NOVA LÓGICA: QUEM FOI O ÚLTIMO A REVISAR? (PREV ou INSP) =======
+        let isInspMaisRecente = false;
+        if (baseInsp && basePrev) {
+          isInspMaisRecente = diasInsp < diasPrev;
+        } else if (baseInsp && !basePrev) {
+          isInspMaisRecente = true;
+        }
 
+        const funcCru = isInspMaisRecente ? (dtInspVinculada?.[roleResp] || null) : (dtPrevVinculada?.[roleResp] || null);
+        const responsavel_revisao = extractName(funcCru) || "Não Identificado";
+        const tipo_revisao_atribuida = isInspMaisRecente ? "Inspeção" : "Preventiva";
+        const dias_revisao_atribuida = isInspMaisRecente ? diasInsp : diasPrev;
+        const km_vinc_revisao_atribuida = isInspMaisRecente ? kmInspVinc : kmPrevVinc;
+        // =========================================================================
+
+        const tempo_solucao_horas = calcDiffHours(r.data_sos || r.created_at, r.hora_sos, r.data_encerramento || r.data_fechamento);
         const isControlavel = classificacao === "CONTROLÁVEL" || classificacao === "CONTROLAVEL";
         const isNaoControlavel = classificacao === "NÃO CONTROLÁVEL" || classificacao === "NAO CONTROLAVEL";
-
-        const funcCru = dtPrevVinculada?.[roleResp] || null;
-        const funcResp = extractName(funcCru) || "Não Identificado";
 
         return {
           ...r,
@@ -1038,10 +822,14 @@ export default function SOSCentral() {
           dias_ultima_inspecao_calc: diasInsp || 0,
           faixa_preventiva: faixaDias(diasPrev),
           faixa_inspecao: faixaDias(diasInsp),
-          responsavel_preventiva: funcResp,
+          
+          // Dados da Revisão que "quebrou"
+          responsavel_revisao,
+          tipo_revisao_atribuida,
+          dias_revisao_atribuida,
+          km_vinc_revisao_atribuida,
           funcao_responsavel: roleResp.toUpperCase(),
-          km_preventiva_vinculada: kmPrevVinc,
-          km_inspecao_vinculada: kmInspVinc,
+          
           mes_key: data_sos.slice(0, 7),
           tempo_solucao_horas,
         };
@@ -1050,51 +838,21 @@ export default function SOSCentral() {
   }, [sosRows, prevRows]);
 
   const mesesDisponiveis = useMemo(() => {
-    const set = new Set(
-      [
-        ...kmProcessado.map((r) => String(r.data).slice(0, 7)),
-        ...sosProcessado.map((r) => r.mes_key),
-      ].filter(Boolean)
-    );
+    const set = new Set([...kmProcessado.map((r) => String(r.data).slice(0, 7)), ...sosProcessado.map((r) => r.mes_key)].filter(Boolean));
     return [...set].sort();
   }, [kmProcessado, sosProcessado]);
 
-  useEffect(() => {
-    if (!mesReferencia && mesesDisponiveis.length) {
-      setMesReferencia(mesesDisponiveis[mesesDisponiveis.length - 1]);
-    }
-  }, [mesReferencia, mesesDisponiveis]);
+  useEffect(() => { if (!mesReferencia && mesesDisponiveis.length) { setMesReferencia(mesesDisponiveis[mesesDisponiveis.length - 1]); } }, [mesReferencia, mesesDisponiveis]);
 
   const mesComparacao = useMemo(() => {
     const idx = mesesDisponiveis.indexOf(mesReferencia);
     return idx > 0 ? mesesDisponiveis[idx - 1] : "";
   }, [mesReferencia, mesesDisponiveis]);
 
-  const linhaOptions = useMemo(
-    () => [...new Set(sosProcessado.map((r) => r.linha).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "pt-BR")),
-    [sosProcessado]
-  );
-
-  const setorOptions = useMemo(
-    () =>
-      [...new Set(sosProcessado.map((r) => r.setor_manutencao).filter(Boolean))].sort((a, b) =>
-        String(a).localeCompare(String(b), "pt-BR")
-      ),
-    [sosProcessado]
-  );
-
-  const clusterOptions = useMemo(
-    () => [...new Set(sosProcessado.map((r) => r.cluster).filter(Boolean))].sort(),
-    [sosProcessado]
-  );
-
-  const tipoOptions = useMemo(
-    () =>
-      [...new Set(sosProcessado.map((r) => r.tipo_norm).filter(Boolean))].sort((a, b) =>
-        String(a).localeCompare(String(b), "pt-BR")
-      ),
-    [sosProcessado]
-  );
+  const linhaOptions = useMemo(() => [...new Set(sosProcessado.map((r) => r.linha).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "pt-BR")), [sosProcessado]);
+  const setorOptions = useMemo(() => [...new Set(sosProcessado.map((r) => r.setor_manutencao).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "pt-BR")), [sosProcessado]);
+  const clusterOptions = useMemo(() => [...new Set(sosProcessado.map((r) => r.cluster).filter(Boolean))].sort(), [sosProcessado]);
+  const tipoOptions = useMemo(() => [...new Set(sosProcessado.map((r) => r.tipo_norm).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "pt-BR")), [sosProcessado]);
 
   const baseFiltrada = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -1120,7 +878,7 @@ export default function SOSCentral() {
         r.problema_encontrado,
         r.setor_manutencao,
         r.status,
-        r.responsavel_preventiva
+        r.responsavel_revisao
       ].some((v) => String(v || "").toLowerCase().includes(q));
     });
   }, [
@@ -1469,7 +1227,7 @@ export default function SOSCentral() {
     })).sort((a, b) => b.total - a.total);
   }, [baseRef]);
 
-  // =============== LÓGICA DE AVALIAÇÃO DE FUNCIONÁRIOS AJUSTADA ===============
+  // =============== LÓGICA DE AVALIAÇÃO DE FUNCIONÁRIOS REAJUSTADA (PREV E INSP) ===============
   const tabelaFuncionarios = useMemo(() => {
     const map = new Map();
 
@@ -1479,7 +1237,7 @@ export default function SOSCentral() {
       return str.includes(' - ') ? (str.split(' - ')[1] || str).trim() : str.trim();
     };
 
-    // 1. Encontrar o Total de Preventivas Executadas no Período por cada Funcionário
+    // 1. Produtividade (Volume executado no Mês) -> Preventivas e Inspeções
     const prevsNoPeriodo = prevRows.filter(p => {
        if (mesReferencia && String(p.data_realizacao).slice(0,7) !== mesReferencia) return false;
        return true;
@@ -1494,35 +1252,31 @@ export default function SOSCentral() {
       [m, e, f, b].forEach(nome => {
           if (nome) {
               if (!map.has(nome)) {
-                  // Iniciamos a base de dados zerada para cada funcionário novo
-                  map.set(nome, { nome, totalPrevFeitas: 0, sosAtribuidosGeral: 0, sosPrecoce: 0, diasPrevSoma: 0, diasPrevQtd: 0, kmPrevSoma: 0, kmPrevQtd: 0, defeitos: {} });
+                  map.set(nome, { nome, revisoesFeitasMes: 0, sosAtribuidos: 0, sosPrecoce: 0, diasRevSoma: 0, diasRevQtd: 0, kmRevSoma: 0, kmRevQtd: 0, defeitos: {} });
               }
-              map.get(nome).totalPrevFeitas += 1;
+              map.get(nome).revisoesFeitasMes += 1;
           }
       });
     });
 
-    // 2. Definir Constantes para Filtragem de Outliers
-    // Apenas falhas ocorridas dentro deste limite serão cobradas do mecânico da última preventiva
-    const CICLO_MAX_KM = 12000;
-    const CICLO_MAX_DIAS = 45;
-
-    // 3. Atribuir os Retrabalhos e Quebras à Preventiva
+    // 2. Avaliação da Quebra (Filtrada)
+    // baseRef JÁ ESTÁ FILTRADA pelos botões da tela (Controlável, Setor, etc).
+    // O SOS que entrar aqui, entra na conta do cara que fez a última revisão.
     baseRef.forEach((r) => {
-      if (!r.responsavel_preventiva || r.responsavel_preventiva === "Não Identificado") return;
+      if (!r.responsavel_revisao || r.responsavel_revisao === "Não Identificado") return;
 
-      const key = r.responsavel_preventiva;
+      const key = r.responsavel_revisao;
       if (!map.has(key)) {
         map.set(key, {
           nome: key,
           funcao: r.funcao_responsavel,
-          totalPrevFeitas: 0,
-          sosAtribuidosGeral: 0,
+          revisoesFeitasMes: 0,
+          sosAtribuidos: 0,
           sosPrecoce: 0,
-          diasPrevSoma: 0,
-          diasPrevQtd: 0,
-          kmPrevSoma: 0,
-          kmPrevQtd: 0,
+          diasRevSoma: 0,
+          diasRevQtd: 0,
+          kmRevSoma: 0,
+          kmRevQtd: 0,
           defeitos: {},
         });
       }
@@ -1530,33 +1284,39 @@ export default function SOSCentral() {
       const item = map.get(key);
       if (!item.funcao) item.funcao = r.funcao_responsavel;
 
-      // Cálculo de KM Rodado
+      // Calcular o KM Rodado desde a última revisão (seja Prev ou Insp)
       let kmRodado = null;
-      if (n(r.km_veiculo_sos) > 0 && n(r.km_preventiva_vinculada) > 0) {
-        kmRodado = Math.max(0, n(r.km_veiculo_sos) - n(r.km_preventiva_vinculada));
+      if (n(r.km_veiculo_sos) > 0 && n(r.km_vinc_revisao_atribuida) > 0) {
+        kmRodado = Math.max(0, n(r.km_veiculo_sos) - n(r.km_vinc_revisao_atribuida));
       }
 
-      const diasPosPrev = n(r.dias_ultima_preventiva_calc);
+      const diasPosRev = r.dias_revisao_atribuida;
+      const isInsp = r.tipo_revisao_atribuida === "Inspeção";
 
-      // Validação de Outliers: Só atribui a culpa ao mecânico se quebrou DENTRO do ciclo esperado
-      const kmValidoParaMedia = (kmRodado !== null && kmRodado <= CICLO_MAX_KM);
-      const diasValidoParaMedia = (diasPosPrev <= CICLO_MAX_DIAS);
+      // 3. Constantes de Ciclo (Outliers limit)
+      // Se quebrou muito longe do que a revisão protege, não foi culpa da revisão.
+      const MAX_KM = isInsp ? 6000 : 12000;
+      const MAX_DIAS = isInsp ? 25 : 45;
 
-      if (kmValidoParaMedia || diasValidoParaMedia) {
-          item.sosAtribuidosGeral += 1; // SOS válido atribuído a esta revisão
+      const kmValido = (kmRodado !== null && kmRodado <= MAX_KM);
+      const diasValido = (diasPosRev <= MAX_DIAS);
 
-          if (diasValidoParaMedia) {
-              item.diasPrevSoma += diasPosPrev;
-              item.diasPrevQtd += 1;
+      if (kmValido || diasValido) {
+          item.sosAtribuidos += 1; // Esse SOS entra como culpa desse funcionário
+
+          if (diasValido) {
+              item.diasRevSoma += diasPosRev;
+              item.diasRevQtd += 1;
           }
 
-          if (kmValidoParaMedia) {
-              item.kmPrevSoma += kmRodado;
-              item.kmPrevQtd += 1;
+          if (kmValido) {
+              item.kmRevSoma += kmRodado;
+              item.kmRevQtd += 1;
           }
 
-          // Nova Regra de Retrabalho Técnico Rápido (Precoce)
-          if (diasPosPrev <= 15 || (kmValidoParaMedia && kmRodado <= 3000)) {
+          // 4. Regra Mestra de Retrabalho Técnico
+          // Menos de 15 dias ou menos de 3.000 KM rodados após o cara mexer.
+          if (diasPosRev <= 15 || (kmValido && kmRodado <= 3000)) {
               item.sosPrecoce += 1;
           }
 
@@ -1565,29 +1325,24 @@ export default function SOSCentral() {
     });
 
     return [...map.values()]
-      .filter(r => r.totalPrevFeitas > 0 || r.sosAtribuidosGeral > 0)
+      .filter(r => r.revisoesFeitasMes > 0 || r.sosAtribuidos > 0)
       .map(r => {
-        // Eficácia da Preventiva (Carros que saíram e NÃO deram SOS dentro do ciclo)
-        let eficacia = 0;
-        if (r.totalPrevFeitas > 0) {
-            const sucessos = Math.max(0, r.totalPrevFeitas - r.sosAtribuidosGeral);
-            eficacia = (sucessos / r.totalPrevFeitas) * 100;
-        }
+        // Taxa de Retrabalho Técnico -> Dos SOS que caíram pra ele, qual % é precoce?
+        const taxaRetrabalho = r.sosAtribuidos > 0 ? (r.sosPrecoce / r.sosAtribuidos) * 100 : 0;
 
         return {
           nome: r.nome,
           funcao: r.funcao || "Múltiplas",
-          totalPrevFeitas: r.totalPrevFeitas,
-          sosAtribuidosGeral: r.sosAtribuidosGeral,
+          revisoesFeitasMes: r.revisoesFeitasMes,
+          sosAtribuidos: r.sosAtribuidos,
           sosPrecoce: r.sosPrecoce,
-          taxaEficacia: eficacia,
-          mediaDiasQuebra: r.diasPrevQtd > 0 ? (r.diasPrevSoma / r.diasPrevQtd) : 0,
-          mediaKmQuebra: r.kmPrevQtd > 0 ? (r.kmPrevSoma / r.kmPrevQtd) : 0,
+          taxaRetrabalho: taxaRetrabalho,
+          mediaDiasQuebra: r.diasRevQtd > 0 ? (r.diasRevSoma / r.diasRevQtd) : 0,
+          mediaKmQuebra: r.kmRevQtd > 0 ? (r.kmRevSoma / r.kmRevQtd) : 0,
           defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
         };
       })
-      // Ordenação: 1º quem tem mais retrabalho rápido, 2º a pior eficácia
-      .sort((a, b) => b.sosPrecoce - a.sosPrecoce || a.taxaEficacia - b.taxaEficacia);
+      .sort((a, b) => b.sosPrecoce - a.sosPrecoce || b.sosAtribuidos - a.sosAtribuidos);
   }, [baseRef, prevRows, mesReferencia]);
 
   const top5Veiculos3m = useMemo(() => {
@@ -1651,7 +1406,7 @@ export default function SOSCentral() {
         tabelaLinhas[0]?.totalAtual || 0
       )} SOS analisados e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
       `O defeito mais recorrente é "${defeitoTop}", puxado principalmente pelo setor ${setorTop}.`,
-      `O colaborador com maior volume de retrabalho precoce (≤ 15 dias ou ≤ 3k km) foi ${funcTop} (Retrabalhos: ${fmtInt(tabelaFuncionarios[0]?.sosPrecoce || 0)}). A eficácia geral de suas preventivas no ciclo foi de ${fmtPct(tabelaFuncionarios[0]?.taxaEficacia || 0)}, e os veículos rodaram em média ${fmtInt(tabelaFuncionarios[0]?.mediaKmQuebra || 0)} km pós-revisão.`,
+      `O colaborador com mais retrabalhos precoces (≤ 15 dias ou ≤ 3k km) foi ${funcTop} (Retrabalhos: ${fmtInt(tabelaFuncionarios[0]?.sosPrecoce || 0)}). Dos SOS atribuídos a ele, ${fmtPct(tabelaFuncionarios[0]?.taxaRetrabalho || 0)} foram precoces. Os veículos rodaram em média ${fmtInt(tabelaFuncionarios[0]?.mediaKmQuebra || 0)} km pós-revisão.`,
       `O intervalo médio entre SOS do mesmo veículo está em ${fmtNum(
         resumoAtual.intervaloMedioGeral || 0,
         1
@@ -1667,6 +1422,7 @@ export default function SOSCentral() {
   ]);
 
   const exportAtual = () => {
+    // ... Exports iguais, só ajustei a aba FUNCIONARIOS ...
     if (abaAtiva === "EXECUTIVO") {
       exportarCSV(
         historico12m.map((r) => ({
@@ -1707,7 +1463,7 @@ export default function SOSCentral() {
           Linha: r.linha,
           Defeito: r.problema_encontrado,
           Setor: r.setor_manutencao,
-          "Responsável Preventiva (Executor)": r.responsavel_preventiva,
+          "Responsável Últ. Revisão": r.responsavel_revisao,
           "Função": r.funcao_responsavel,
           "Dias após Preventiva": r.dias_ultima_preventiva_calc,
           "Faixa Preventiva": r.faixa_preventiva,
@@ -1722,12 +1478,12 @@ export default function SOSCentral() {
         tabelaFuncionarios.map((r) => ({
           Funcionário: r.nome,
           Função: r.funcao,
-          "Preventivas Feitas": r.totalPrevFeitas,
-          "SOS Atribuídos (Geral)": r.sosAtribuidosGeral,
-          "Eficácia da Prev. %": fmtNum(r.taxaEficacia, 1),
-          "SOS Retrabalho (<=15d)": r.sosPrecoce,
-          "Média Dias Pós-Prev": fmtNum(r.mediaDiasQuebra, 1),
-          "Média KM Pós-Prev": fmtInt(r.mediaKmQuebra),
+          "Volume Revisões no Mês": r.revisoesFeitasMes,
+          "SOS Atribuídos no Mês": r.sosAtribuidos,
+          "SOS Retrabalho Precoce": r.sosPrecoce,
+          "Taxa de Retrabalho %": fmtNum(r.taxaRetrabalho, 1),
+          "Média Dias Pós-Revisão": fmtNum(r.mediaDiasQuebra, 1),
+          "Média KM Pós-Revisão": fmtInt(r.mediaKmQuebra),
           "Principal Defeito": r.defeitoTop,
         })),
         "SOS_Resumo_Funcionarios"
@@ -1825,24 +1581,15 @@ export default function SOSCentral() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
-              onClick={exportAtual}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition"
-            >
+            <button onClick={exportAtual} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition">
               <FaDownload /> Baixar Excel
             </button>
 
-            <button
-              onClick={() => setMostrarExplicacao((v) => !v)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
-            >
+            <button onClick={() => setMostrarExplicacao((v) => !v)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition">
               <FaInfoCircle /> {mostrarExplicacao ? "Ocultar Cálculos" : "Entender Cálculos"}
             </button>
 
-            <button
-              onClick={carregarTudo}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-700 transition"
-            >
+            <button onClick={carregarTudo} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-700 transition">
               <FaSync /> Atualizar
             </button>
           </div>
@@ -1850,307 +1597,123 @@ export default function SOSCentral() {
 
         {mostrarExplicacao && (
           <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm space-y-2">
-            <p>
-              <strong>Base da tela:</strong> Traz a base consolidada de todos os SOS válidos, filtrada de acordo com as seleções abaixo.
-            </p>
-            <p>
-              <strong>Reincidência operacional:</strong> mesmo veículo com novo SOS em até 30 dias.
-            </p>
-            <p>
-              <strong>Reincidência técnica:</strong> mesmo veículo + mesmo defeito em até 30 dias.
-            </p>
-            <p>
-              <strong>Reincidência setorial:</strong> mesmo veículo + mesmo setor em até 30 dias.
-            </p>
-            <p>
-              <strong>Pós-preventiva e pós-inspeção:</strong> usa os dados nativos da tabela de preventivas associada para refazer o cálculo de dias exatos na hora.
-            </p>
-            <p>
-              <strong>Avaliação de Funcionário:</strong> Remove "Outliers" (Média de KM/Dias é feita apenas sobre veículos que quebraram dentro do ciclo regular). A <strong>Taxa de Eficácia</strong> mostra o % de preventivas que sobreviveram sem acionar o socorro no período. O <strong>Retrabalho Rápido</strong> penaliza apenas falhas em ≤ 15 dias ou ≤ 3.000 KM.
-            </p>
+            <p><strong>Base da tela:</strong> Traz a base consolidada de todos os SOS válidos, filtrada de acordo com as seleções abaixo.</p>
+            <p><strong>Reincidência operacional:</strong> mesmo veículo com novo SOS em até 30 dias.</p>
+            <p><strong>Reincidência técnica:</strong> mesmo veículo + mesmo defeito em até 30 dias.</p>
+            <p><strong>Avaliação de Funcionário:</strong> O SOS agora é atribuído ao mecânico que executou a <strong>ÚLTIMA</strong> revisão (Preventiva ou Inspeção). "Revisões no Mês" indica apenas volume de produção. A <strong>Taxa de Retrabalho</strong> pega apenas os SOS Atribuídos (após passar nos seus filtros de tela) e calcula quantos quebraram em <strong>≤ 15 dias ou ≤ 3.000 KM</strong>.</p>
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">
           <div className="xl:col-span-2 relative">
             <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar SOS, veículo, linha, defeito, motorista, avaliador..."
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar SOS, veículo, linha, defeito, motorista, avaliador..." className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200" />
           </div>
 
-          <select
-            value={mesReferencia}
-            onChange={(e) => setMesReferencia(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
+          <select value={mesReferencia} onChange={(e) => setMesReferencia(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
             <option value="">Mês referência</option>
-            {mesesDisponiveis.map((m) => (
-              <option key={m} value={m}>
-                {monthLabelFromKey(m)}
-              </option>
-            ))}
+            {mesesDisponiveis.map((m) => (<option key={m} value={m}>{monthLabelFromKey(m)}</option>))}
           </select>
 
-          <select
-            value={filtroLinha}
-            onChange={(e) => setFiltroLinha(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
+          <select value={filtroLinha} onChange={(e) => setFiltroLinha(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
             <option value="">Todas as linhas</option>
-            {linhaOptions.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
+            {linhaOptions.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
 
-          <select
-            value={filtroSetor}
-            onChange={(e) => setFiltroSetor(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
+          <select value={filtroSetor} onChange={(e) => setFiltroSetor(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
             <option value="">Todos os setores</option>
-            {setorOptions.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
+            {setorOptions.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
 
-          <select
-            value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
+          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
             <option value="">Todos os tipos</option>
-            {tipoOptions.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
+            {tipoOptions.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
-          <select
-            value={filtroCluster}
-            onChange={(e) => setFiltroCluster(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
+          <select value={filtroCluster} onChange={(e) => setFiltroCluster(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
             <option value="">Todos os clusters</option>
-            {clusterOptions.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
+            {clusterOptions.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
 
-          <select
-            value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
+          <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
             <option value="">Todos os status</option>
             <option value="ABERTO">ABERTO</option>
             <option value="EM ANDAMENTO">EM ANDAMENTO</option>
             <option value="FECHADO">FECHADO</option>
           </select>
 
-          <select
-            value={filtroControlabilidade}
-            onChange={(e) => setFiltroControlabilidade(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold"
-          >
+          <select value={filtroControlabilidade} onChange={(e) => setFiltroControlabilidade(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
             <option value="">Todas classificações</option>
             <option value="CONTROLÁVEL">Controlável</option>
             <option value="NÃO CONTROLÁVEL">Não Controlável</option>
           </select>
 
-          <button
-            onClick={() => {
-              setBusca("");
-              setFiltroLinha("");
-              setFiltroSetor("");
-              setFiltroTipo("");
-              setFiltroCluster("");
-              setFiltroStatus("");
-              setFiltroControlabilidade("");
-            }}
-            className="px-3 py-3 rounded-xl border border-slate-200 bg-slate-800 text-white font-black hover:bg-slate-700 transition"
-          >
+          <button onClick={() => { setBusca(""); setFiltroLinha(""); setFiltroSetor(""); setFiltroTipo(""); setFiltroCluster(""); setFiltroStatus(""); setFiltroControlabilidade(""); }} className="px-3 py-3 rounded-xl border border-slate-200 bg-slate-800 text-white font-black hover:bg-slate-700 transition">
             Limpar filtros
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <CardKPI
-          title="Total SOS Analisado"
-          value={fmtInt(resumoAtual.interv)}
-          sub={filtroControlabilidade ? `Filtro: ${filtroControlabilidade}` : "Todos os SOS"}
-          icon={<FaExclamationTriangle />}
-          tone="rose"
-          className="md:col-span-2 xl:col-span-2"
-        />
-        <CardKPI
-          title="Tempo Médio Fechamento"
-          value={fmtHoras(resumoAtual.mediaFechamento)}
-          sub="Desde abertura da etiqueta"
-          icon={<FaClock />}
-          tone="slate"
-        />
-        <CardKPI
-          title="Veículos Reincidentes"
-          value={fmtInt(resumoAtual.veiculosReincidentes)}
-          sub="Mesmo veículo em até 30 dias"
-          icon={<FaBus />}
-          tone="violet"
-        />
-        <CardKPI
-          title="Taxa Reincidência"
-          value={fmtPct(resumoAtual.taxaReincidencia)}
-          sub="Sobre veículos da base atual"
-          icon={<FaChartLine />}
-          tone="amber"
-        />
-        <CardKPI
-          title="MKBF"
-          value={fmtNum(resumoAtual.mkbf)}
-          sub={`Meta ${fmtNum(MKBF_META)}`}
-          icon={<FaBolt />}
-          tone="blue"
-        />
-        <CardKPI
-          title="Dias após Preventiva"
-          value={fmtNum(resumoAtual.mediaPrev, 1)}
-          sub="Média do mês"
-          icon={<FaWrench />}
-          tone="emerald"
-        />
-        <CardKPI
-          title="Dias entre SOS"
-          value={fmtNum(resumoAtual.intervaloMedioGeral, 1)}
-          sub="Intervalo médio do veículo"
-          icon={<FaRoad />}
-          tone="violet"
-        />
+        <CardKPI title="Total SOS Analisado" value={fmtInt(resumoAtual.interv)} sub={filtroControlabilidade ? `Filtro: ${filtroControlabilidade}` : "Todos os SOS"} icon={<FaExclamationTriangle />} tone="rose" className="md:col-span-2 xl:col-span-2" />
+        <CardKPI title="Tempo Médio Fechamento" value={fmtHoras(resumoAtual.mediaFechamento)} sub="Desde abertura da etiqueta" icon={<FaClock />} tone="slate" />
+        <CardKPI title="Veículos Reincidentes" value={fmtInt(resumoAtual.veiculosReincidentes)} sub="Mesmo veículo em até 30 dias" icon={<FaBus />} tone="violet" />
+        <CardKPI title="Taxa Reincidência" value={fmtPct(resumoAtual.taxaReincidencia)} sub="Sobre veículos da base atual" icon={<FaChartLine />} tone="amber" />
+        <CardKPI title="MKBF" value={fmtNum(resumoAtual.mkbf)} sub={`Meta ${fmtNum(MKBF_META)}`} icon={<FaBolt />} tone="blue" />
+        <CardKPI title="Dias após Preventiva" value={fmtNum(resumoAtual.mediaPrev, 1)} sub="Média do mês" icon={<FaWrench />} tone="emerald" />
+        <CardKPI title="Dias entre SOS" value={fmtNum(resumoAtual.intervaloMedioGeral, 1)} sub="Intervalo médio do veículo" icon={<FaRoad />} tone="violet" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {leituraAnalitica.map((txt, i) => (
-          <div key={i} className="bg-white rounded-2xl border shadow-sm p-4">
-            <p className="text-sm text-slate-700 font-semibold leading-6">{txt}</p>
-          </div>
+          <div key={i} className="bg-white rounded-2xl border shadow-sm p-4"><p className="text-sm text-slate-700 font-semibold leading-6">{txt}</p></div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              MKBF vs mês anterior
-            </p>
-            <p className="text-xl font-black text-slate-800 mt-1">
-              {fmtNum(resumoComp.mkbf)} → {fmtNum(resumoAtual.mkbf)}
-            </p>
-          </div>
+          <div><p className="text-xs font-black uppercase tracking-wider text-slate-500">MKBF vs mês anterior</p><p className="text-xl font-black text-slate-800 mt-1">{fmtNum(resumoComp.mkbf)} → {fmtNum(resumoAtual.mkbf)}</p></div>
           <EvolucaoBadge value={variancePct(resumoAtual.mkbf, resumoComp.mkbf)} />
         </div>
-
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              Total vs mês anterior
-            </p>
-            <p className="text-xl font-black text-slate-800 mt-1">
-              {fmtInt(resumoComp.interv)} → {fmtInt(resumoAtual.interv)}
-            </p>
-          </div>
+          <div><p className="text-xs font-black uppercase tracking-wider text-slate-500">Total vs mês anterior</p><p className="text-xl font-black text-slate-800 mt-1">{fmtInt(resumoComp.interv)} → {fmtInt(resumoAtual.interv)}</p></div>
           <EvolucaoBadge value={variancePct(resumoAtual.interv, resumoComp.interv)} invert />
         </div>
-
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              Reincidência vs mês anterior
-            </p>
-            <p className="text-xl font-black text-slate-800 mt-1">
-              {fmtPct(resumoComp.taxaReincidencia)} → {fmtPct(resumoAtual.taxaReincidencia)}
-            </p>
-          </div>
-          <EvolucaoBadge
-            value={variancePct(resumoAtual.taxaReincidencia, resumoComp.taxaReincidencia)}
-            invert
-          />
+          <div><p className="text-xs font-black uppercase tracking-wider text-slate-500">Reincidência vs mês anterior</p><p className="text-xl font-black text-slate-800 mt-1">{fmtPct(resumoComp.taxaReincidencia)} → {fmtPct(resumoAtual.taxaReincidencia)}</p></div>
+          <EvolucaoBadge value={variancePct(resumoAtual.taxaReincidencia, resumoComp.taxaReincidencia)} invert />
         </div>
-
         <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              Tempo Médio vs mês anterior
-            </p>
-            <p className="text-xl font-black text-slate-800 mt-1">
-              {fmtHoras(resumoComp.mediaFechamento)} → {fmtHoras(resumoAtual.mediaFechamento)}
-            </p>
-          </div>
-          <EvolucaoBadge
-            value={variancePct(resumoAtual.mediaFechamento, resumoComp.mediaFechamento)}
-            invert
-          />
+          <div><p className="text-xs font-black uppercase tracking-wider text-slate-500">Tempo Médio vs mês anterior</p><p className="text-xl font-black text-slate-800 mt-1">{fmtHoras(resumoComp.mediaFechamento)} → {fmtHoras(resumoAtual.mediaFechamento)}</p></div>
+          <EvolucaoBadge value={variancePct(resumoAtual.mediaFechamento, resumoComp.mediaFechamento)} invert />
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <TabButton active={abaAtiva === "EXECUTIVO"} onClick={() => setAbaAtiva("EXECUTIVO")} icon={<FaChartPie />}>
-          Executivo
-        </TabButton>
-        <TabButton active={abaAtiva === "REINCIDENCIA"} onClick={() => setAbaAtiva("REINCIDENCIA")} icon={<FaClipboardList />}>
-          Reincidência
-        </TabButton>
-        <TabButton active={abaAtiva === "PREV_INSPEC"} onClick={() => setAbaAtiva("PREV_INSPEC")} icon={<FaWrench />}>
-          Preventiva / Inspeção
-        </TabButton>
-        <TabButton active={abaAtiva === "FUNCIONARIOS"} onClick={() => setAbaAtiva("FUNCIONARIOS")} icon={<FaUserCog />}>
-          Eficácia por Funcionário
-        </TabButton>
-        <TabButton active={abaAtiva === "LINHAS"} onClick={() => setAbaAtiva("LINHAS")} icon={<FaBus />}>
-          Linhas
-        </TabButton>
-        <TabButton active={abaAtiva === "VEICULOS"} onClick={() => setAbaAtiva("VEICULOS")} icon={<FaBus />}>
-          Veículos
-        </TabButton>
-        <TabButton active={abaAtiva === "SETORES"} onClick={() => setAbaAtiva("SETORES")} icon={<FaCogs />}>
-          Setores
-        </TabButton>
-        <TabButton active={abaAtiva === "DEFEITOS"} onClick={() => setAbaAtiva("DEFEITOS")} icon={<FaTools />}>
-          Defeitos
-        </TabButton>
-        <TabButton active={abaAtiva === "MOTORISTAS"} onClick={() => setAbaAtiva("MOTORISTAS")} icon={<FaUserTie />}>
-          Motoristas
-        </TabButton>
+        <TabButton active={abaAtiva === "EXECUTIVO"} onClick={() => setAbaAtiva("EXECUTIVO")} icon={<FaChartPie />}>Executivo</TabButton>
+        <TabButton active={abaAtiva === "REINCIDENCIA"} onClick={() => setAbaAtiva("REINCIDENCIA")} icon={<FaClipboardList />}>Reincidência</TabButton>
+        <TabButton active={abaAtiva === "PREV_INSPEC"} onClick={() => setAbaAtiva("PREV_INSPEC")} icon={<FaWrench />}>Preventiva / Inspeção</TabButton>
+        <TabButton active={abaAtiva === "FUNCIONARIOS"} onClick={() => setAbaAtiva("FUNCIONARIOS")} icon={<FaUserCog />}>Avaliação de Técnicos</TabButton>
+        <TabButton active={abaAtiva === "LINHAS"} onClick={() => setAbaAtiva("LINHAS")} icon={<FaBus />}>Linhas</TabButton>
+        <TabButton active={abaAtiva === "VEICULOS"} onClick={() => setAbaAtiva("VEICULOS")} icon={<FaBus />}>Veículos</TabButton>
+        <TabButton active={abaAtiva === "SETORES"} onClick={() => setAbaAtiva("SETORES")} icon={<FaCogs />}>Setores</TabButton>
+        <TabButton active={abaAtiva === "DEFEITOS"} onClick={() => setAbaAtiva("DEFEITOS")} icon={<FaTools />}>Defeitos</TabButton>
+        <TabButton active={abaAtiva === "MOTORISTAS"} onClick={() => setAbaAtiva("MOTORISTAS")} icon={<FaUserTie />}>Motoristas</TabButton>
       </div>
 
-      {/* RENDERIZAÇÃO DAS ABAS (Mantido igual até FUNCIONÁRIOS) */}
+      {/* RENDERIZAÇÃO DAS ABAS */}
       {abaAtiva === "EXECUTIVO" && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="bg-white rounded-2xl border shadow-sm p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-black text-slate-800">Histórico 12 meses</h3>
-                <span className="text-xs font-bold text-slate-500">SOS + reincidência</span>
-              </div>
+              <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black text-slate-800">Histórico 12 meses</h3><span className="text-xs font-bold text-slate-500">SOS + reincidência</span></div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={historico12m} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#cbd5e1" stopOpacity={0.5}/>
-                        <stop offset="95%" stopColor="#cbd5e1" stopOpacity={0}/>
-                      </linearGradient>
+                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#cbd5e1" stopOpacity={0.5}/><stop offset="95%" stopColor="#cbd5e1" stopOpacity={0}/></linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dy={10} />
@@ -2168,18 +1731,12 @@ export default function SOSCentral() {
             </div>
 
             <div className="bg-white rounded-2xl border shadow-sm p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-black text-slate-800">Evolução Histórica do MKBF</h3>
-                <span className="text-xs font-bold text-slate-500">Visão mensal</span>
-              </div>
+              <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black text-slate-800">Evolução Histórica do MKBF</h3><span className="text-xs font-bold text-slate-500">Visão mensal</span></div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={historico12m} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="colorMkbf" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                      </linearGradient>
+                      <linearGradient id="colorMkbf" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dy={10} />
@@ -2199,10 +1756,7 @@ export default function SOSCentral() {
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="bg-white rounded-2xl border shadow-sm p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-black text-slate-800">Tipos de ocorrência</h3>
-                <span className="text-xs font-bold text-slate-500">Mês atual x anterior</span>
-              </div>
+              <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black text-slate-800">Tipos de ocorrência</h3><span className="text-xs font-bold text-slate-500">Mês atual x anterior</span></div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={graficoTipos} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
@@ -2211,36 +1765,21 @@ export default function SOSCentral() {
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                     <Tooltip cursor={{ fill: '#f8fafc' }} />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                    <Bar dataKey="anterior" name="Anterior" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
-                      <LabelList dataKey="anterior" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
-                    </Bar>
-                    <Bar dataKey="atual" name="Atual" fill="#1e293b" radius={[4, 4, 0, 0]} barSize={25}>
-                      <LabelList dataKey="atual" position="top" style={{ fill: "#1e293b", fontSize: 11, fontWeight: "bold" }} />
-                    </Bar>
+                    <Bar dataKey="anterior" name="Anterior" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}><LabelList dataKey="anterior" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} /></Bar>
+                    <Bar dataKey="atual" name="Atual" fill="#1e293b" radius={[4, 4, 0, 0]} barSize={25}><LabelList dataKey="atual" position="top" style={{ fill: "#1e293b", fontSize: 11, fontWeight: "bold" }} /></Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border shadow-sm p-4">
-              <h3 className="text-lg font-black text-slate-800 mb-3">
-                Top 5 veículos - últimos 3 meses
-              </h3>
+              <h3 className="text-lg font-black text-slate-800 mb-3">Top 5 veículos - últimos 3 meses</h3>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[950px] text-sm">
                   <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
                     <tr>
-                      <th className="px-3 py-3 text-left">Veículo</th>
-                      <th className="px-3 py-3 text-left">Cluster</th>
-                      <th className="px-3 py-3 text-left">Total</th>
-                      {top5Veiculos3m[0] &&
-                        Object.keys(top5Veiculos3m[0])
-                          .filter((k) => k.includes("/"))
-                          .map((m) => (
-                            <th key={m} className="px-3 py-3 text-left">
-                              {m}
-                            </th>
-                          ))}
+                      <th className="px-3 py-3 text-left">Veículo</th><th className="px-3 py-3 text-left">Cluster</th><th className="px-3 py-3 text-left">Total</th>
+                      {top5Veiculos3m[0] && Object.keys(top5Veiculos3m[0]).filter((k) => k.includes("/")).map((m) => (<th key={m} className="px-3 py-3 text-left">{m}</th>))}
                       <th className="px-3 py-3 text-left">Top defeitos</th>
                     </tr>
                   </thead>
@@ -2250,13 +1789,7 @@ export default function SOSCentral() {
                         <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
                         <td className="px-3 py-3">{r.cluster}</td>
                         <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
-                        {Object.keys(r)
-                          .filter((k) => k.includes("/"))
-                          .map((m) => (
-                            <td key={m} className="px-3 py-3">
-                              {fmtInt(r[m])}
-                            </td>
-                          ))}
+                        {Object.keys(r).filter((k) => k.includes("/")).map((m) => (<td key={m} className="px-3 py-3">{fmtInt(r[m])}</td>))}
                         <td className="px-3 py-3 text-slate-600">{r.topDefeitos}</td>
                       </tr>
                     ))}
@@ -2268,11 +1801,11 @@ export default function SOSCentral() {
         </div>
       )}
 
-      {/* NOVA VISÃO DE FUNCIONÁRIOS (EFICÁCIA) */}
+      {/* NOVA VISÃO DE FUNCIONÁRIOS (TAXA DE RETRABALHO SOBRE SOS FILTRADOS) */}
       {abaAtiva === "FUNCIONARIOS" && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border shadow-sm p-4">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Colaboradores (Eficácia: Preventivas Feitas vs SOS Atribuídos)</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Colaboradores (SOS Atribuídos vs Retrabalho Precoce)</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tabelaFuncionarios.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
@@ -2281,11 +1814,11 @@ export default function SOSCentral() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="totalPrevFeitas" name="Preventivas no Mês" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
-                    <LabelList dataKey="totalPrevFeitas" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
+                  <Bar dataKey="sosAtribuidos" name="SOS Atribuídos" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
+                    <LabelList dataKey="sosAtribuidos" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
                   </Bar>
-                  <Bar dataKey="sosAtribuidosGeral" name="SOS Atribuídos (Falhas no Ciclo)" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={25}>
-                    <LabelList dataKey="sosAtribuidosGeral" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
+                  <Bar dataKey="sosPrecoce" name="Retrabalho Precoce (≤15d ou ≤3k)" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={25}>
+                    <LabelList dataKey="sosPrecoce" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -2293,16 +1826,17 @@ export default function SOSCentral() {
           </div>
 
           <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Avaliação Pós-Preventiva por Colaborador</h3>
-            <table className="w-full min-w-[1200px] text-sm">
+            <h3 className="text-lg font-black text-slate-800 mb-3">Avaliação Pós-Revisão (Prev ou Insp) por Colaborador</h3>
+            <table className="w-full min-w-[1300px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
                 <tr>
                   <th className="px-3 py-3 text-left">Funcionário</th>
                   <th className="px-3 py-3 text-left">Função</th>
-                  <th className="px-3 py-3 text-left">Preventivas Feitas</th>
-                  <th className="px-3 py-3 text-left">SOS Atribuídos (Geral)</th>
-                  <th className="px-3 py-3 text-left">Eficácia da Preventiva</th>
-                  <th className="px-3 py-3 text-left">SOS Retrabalho (≤ 15d ou ≤ 3k)</th>
+                  <th className="px-3 py-3 text-left">Volume de Revisões no Mês</th>
+                  <th className="px-3 py-3 text-left">SOS Atribuídos no Mês</th>
+                  <th className="px-3 py-3 text-left">SOS Retrabalho Precoce</th>
+                  <th className="px-3 py-3 text-left">Taxa de Retrabalho Técnico</th>
+                  <th className="px-3 py-3 text-left">Média Dias até Quebrar</th>
                   <th className="px-3 py-3 text-left">Média KM até Quebrar</th>
                   <th className="px-3 py-3 text-left">Principal Defeito Associado</th>
                 </tr>
@@ -2312,11 +1846,12 @@ export default function SOSCentral() {
                   <tr key={r.nome} className="border-b last:border-b-0 hover:bg-slate-50">
                     <td className="px-3 py-3 font-black text-slate-800">{r.nome}</td>
                     <td className="px-3 py-3"><span className="bg-slate-100 px-2 py-1 rounded font-bold text-slate-600 text-xs">{r.funcao}</span></td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalPrevFeitas)}</td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.sosAtribuidosGeral)}</td>
-                    <td className="px-3 py-3 font-black text-blue-600">{fmtPct(r.taxaEficacia)}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.revisoesFeitasMes)}</td>
+                    <td className="px-3 py-3 font-black text-blue-600">{fmtInt(r.sosAtribuidos)}</td>
                     <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.sosPrecoce)}</td>
-                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtInt(r.mediaKmQuebra)} km</td>
+                    <td className="px-3 py-3 font-bold">{fmtPct(r.taxaRetrabalho)}</td>
+                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaDiasQuebra, 1)} dias</td>
+                    <td className="px-3 py-3 font-semibold text-blue-600">{fmtInt(r.mediaKmQuebra)} km</td>
                     <td className="px-3 py-3 text-slate-600">{r.defeitoTop}</td>
                   </tr>
                 ))}
@@ -2326,6 +1861,7 @@ export default function SOSCentral() {
         </div>
       )}
 
+      {/* DEMAIS ABAS IGUAIS (Reincidência, Prev/Insp, Linhas, Veículos, Setores, Defeitos, Motoristas) */}
       {abaAtiva === "REINCIDENCIA" && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="bg-white rounded-2xl border shadow-sm p-4">
@@ -2338,9 +1874,7 @@ export default function SOSCentral() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="veiculosReincidentes" name="Veículos Reincidentes" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={35}>
-                    <LabelList dataKey="veiculosReincidentes" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
+                  <Bar dataKey="veiculosReincidentes" name="Veículos Reincidentes" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={35}><LabelList dataKey="veiculosReincidentes" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -2356,12 +1890,8 @@ export default function SOSCentral() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="reincVeiculo" name="Reincidência Veículo" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20}>
-                    <LabelList dataKey="reincVeiculo" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
-                  <Bar dataKey="reincTecnica" name="Reincidência Técnica" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={20}>
-                    <LabelList dataKey="reincTecnica" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
+                  <Bar dataKey="reincVeiculo" name="Reincidência Veículo" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20}><LabelList dataKey="reincVeiculo" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} /></Bar>
+                  <Bar dataKey="reincTecnica" name="Reincidência Técnica" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={20}><LabelList dataKey="reincTecnica" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -2371,32 +1901,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Detalhe por veículo</h3>
             <table className="w-full min-w-[1200px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-3 py-3 text-left">Veículo</th>
-                  <th className="px-3 py-3 text-left">Cluster</th>
-                  <th className="px-3 py-3 text-left">Linha</th>
-                  <th className="px-3 py-3 text-left">SOS Total</th>
-                  <th className="px-3 py-3 text-left">Reinc. Veículo</th>
-                  <th className="px-3 py-3 text-left">Reinc. Técnica</th>
-                  <th className="px-3 py-3 text-left">Reinc. Setorial</th>
-                  <th className="px-3 py-3 text-left">Intervalo Médio</th>
-                  <th className="px-3 py-3 text-left">Defeito Top</th>
-                  <th className="px-3 py-3 text-left">Setor Top</th>
-                </tr>
+                <tr><th className="px-3 py-3 text-left">Veículo</th><th className="px-3 py-3 text-left">Cluster</th><th className="px-3 py-3 text-left">Linha</th><th className="px-3 py-3 text-left">SOS Total</th><th className="px-3 py-3 text-left">Reinc. Veículo</th><th className="px-3 py-3 text-left">Reinc. Técnica</th><th className="px-3 py-3 text-left">Reinc. Setorial</th><th className="px-3 py-3 text-left">Intervalo Médio</th><th className="px-3 py-3 text-left">Defeito Top</th><th className="px-3 py-3 text-left">Setor Top</th></tr>
               </thead>
               <tbody>
                 {tabelaVeiculos.map((r) => (
                   <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
-                    <td className="px-3 py-3">{r.cluster}</td>
-                    <td className="px-3 py-3">{r.linhaTop}</td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td>
-                    <td className="px-3 py-3 text-slate-600">{fmtInt(r.reincVeiculo)}</td>
-                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
-                    <td className="px-3 py-3 text-slate-600">{fmtInt(r.reincSetorial)}</td>
-                    <td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td>
-                    <td className="px-3 py-3">{r.defeitoTop}</td>
-                    <td className="px-3 py-3">{r.setorTop}</td>
+                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{r.linhaTop}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2416,9 +1926,7 @@ export default function SOSCentral() {
                   <XAxis dataKey="faixa" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
-                  <Bar dataKey="total" name="SOS" fill="#10b981" radius={[4, 4, 0, 0]} barSize={35}>
-                    <LabelList dataKey="total" position="top" style={{ fill: "#10b981", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
+                  <Bar dataKey="total" name="SOS" fill="#10b981" radius={[4, 4, 0, 0]} barSize={35}><LabelList dataKey="total" position="top" style={{ fill: "#10b981", fontSize: 11, fontWeight: "bold" }} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -2433,44 +1941,24 @@ export default function SOSCentral() {
                   <XAxis dataKey="faixa" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} dy={10} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
-                  <Bar dataKey="total" name="SOS" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={35}>
-                    <LabelList dataKey="total" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
+                  <Bar dataKey="total" name="SOS" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={35}><LabelList dataKey="total" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl border shadow-sm p-4 xl:col-span-2 overflow-x-auto">
-            <h3 className="text-lg font-black text-slate-800 mb-3">
-              Base detalhada pós-preventiva / pós-inspeção
-            </h3>
+            <h3 className="text-lg font-black text-slate-800 mb-3">Base detalhada pós-preventiva / pós-inspeção</h3>
             <table className="w-full min-w-[1200px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-3 py-3 text-left">Data SOS</th>
-                  <th className="px-3 py-3 text-left">Veículo</th>
-                  <th className="px-3 py-3 text-left">Defeito</th>
-                  <th className="px-3 py-3 text-left">Setor</th>
-                  <th className="px-3 py-3 text-left">Resp. Preventiva (Executor)</th>
-                  <th className="px-3 py-3 text-left">Dias Pós Prev.</th>
-                  <th className="px-3 py-3 text-left">Faixa Prev.</th>
-                  <th className="px-3 py-3 text-left">Dias Pós Insp.</th>
-                  <th className="px-3 py-3 text-left">Faixa Insp.</th>
-                </tr>
+                <tr><th className="px-3 py-3 text-left">Data SOS</th><th className="px-3 py-3 text-left">Veículo</th><th className="px-3 py-3 text-left">Defeito</th><th className="px-3 py-3 text-left">Setor</th><th className="px-3 py-3 text-left">Resp. Última Revisão</th><th className="px-3 py-3 text-left">Dias Pós Prev.</th><th className="px-3 py-3 text-left">Faixa Prev.</th><th className="px-3 py-3 text-left">Dias Pós Insp.</th><th className="px-3 py-3 text-left">Faixa Insp.</th></tr>
               </thead>
               <tbody>
                 {baseRef.map((r) => (
                   <tr key={r.id} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3">{fmtDateBr(r.data_sos)}</td>
-                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
-                    <td className="px-3 py-3">{r.problema_encontrado}</td>
-                    <td className="px-3 py-3">{r.setor_manutencao}</td>
-                    <td className="px-3 py-3"><span className="font-semibold text-slate-700">{r.responsavel_preventiva}</span> <span className="text-[10px] text-slate-400 bg-slate-100 px-1 rounded ml-1">{r.funcao_responsavel}</span></td>
-                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtInt(r.dias_ultima_preventiva_calc)}</td>
-                    <td className="px-3 py-3">{r.faixa_preventiva}</td>
-                    <td className="px-3 py-3 font-semibold text-blue-600">{fmtInt(r.dias_ultima_inspecao_calc)}</td>
-                    <td className="px-3 py-3">{r.faixa_inspecao}</td>
+                    <td className="px-3 py-3">{fmtDateBr(r.data_sos)}</td><td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td><td className="px-3 py-3">{r.problema_encontrado}</td><td className="px-3 py-3">{r.setor_manutencao}</td>
+                    <td className="px-3 py-3"><span className="font-semibold text-slate-700">{r.responsavel_revisao}</span> <span className="text-[10px] text-slate-400 bg-slate-100 px-1 rounded ml-1">{r.tipo_revisao_atribuida}</span></td>
+                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtInt(r.dias_ultima_preventiva_calc)}</td><td className="px-3 py-3">{r.faixa_preventiva}</td><td className="px-3 py-3 font-semibold text-blue-600">{fmtInt(r.dias_ultima_inspecao_calc)}</td><td className="px-3 py-3">{r.faixa_inspecao}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2491,9 +1979,7 @@ export default function SOSCentral() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="totalAtual" name="Volume de SOS" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={35}>
-                    <LabelList dataKey="totalAtual" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
+                  <Bar dataKey="totalAtual" name="Volume de SOS" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={35}><LabelList dataKey="totalAtual" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -2503,30 +1989,14 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Leitura detalhada por linha</h3>
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-3 py-3 text-left">Linha</th>
-                  <th className="px-3 py-3 text-left">SOS Atual</th>
-                  <th className="px-3 py-3 text-left">SOS Anterior</th>
-                  <th className="px-3 py-3 text-left">Variação</th>
-                  <th className="px-3 py-3 text-left">Veíc. Reincidentes</th>
-                  <th className="px-3 py-3 text-left">Taxa Reinc.</th>
-                  <th className="px-3 py-3 text-left">Defeito Top</th>
-                  <th className="px-3 py-3 text-left">Setor Top</th>
-                </tr>
+                <tr><th className="px-3 py-3 text-left">Linha</th><th className="px-3 py-3 text-left">SOS Atual</th><th className="px-3 py-3 text-left">SOS Anterior</th><th className="px-3 py-3 text-left">Variação</th><th className="px-3 py-3 text-left">Veíc. Reincidentes</th><th className="px-3 py-3 text-left">Taxa Reinc.</th><th className="px-3 py-3 text-left">Defeito Top</th><th className="px-3 py-3 text-left">Setor Top</th></tr>
               </thead>
               <tbody>
                 {tabelaLinhas.map((r) => (
                   <tr key={r.linha} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.linha}</td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalAtual)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.totalAnterior)}</td>
-                    <td className="px-3 py-3">
-                      <EvolucaoBadge value={r.variacao_pct} invert />
-                    </td>
-                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.veiculosReincidentes)}</td>
-                    <td className="px-3 py-3">{fmtPct(r.taxaReincidencia)}</td>
-                    <td className="px-3 py-3">{r.defeitoTop}</td>
-                    <td className="px-3 py-3">{r.setorTop}</td>
+                    <td className="px-3 py-3 font-black text-slate-800">{r.linha}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalAtual)}</td><td className="px-3 py-3">{fmtInt(r.totalAnterior)}</td>
+                    <td className="px-3 py-3"><EvolucaoBadge value={r.variacao_pct} invert /></td>
+                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.veiculosReincidentes)}</td><td className="px-3 py-3">{fmtPct(r.taxaReincidencia)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2547,9 +2017,7 @@ export default function SOSCentral() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="totalSOS" name="Volume de SOS" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={35}>
-                    <LabelList dataKey="totalSOS" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
+                  <Bar dataKey="totalSOS" name="Volume de SOS" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={35}><LabelList dataKey="totalSOS" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -2559,32 +2027,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por veículo</h3>
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-3 py-3 text-left">Veículo</th>
-                  <th className="px-3 py-3 text-left">Cluster</th>
-                  <th className="px-3 py-3 text-left">Linha</th>
-                  <th className="px-3 py-3 text-left">SOS Total</th>
-                  <th className="px-3 py-3 text-left">Reinc. Veículo</th>
-                  <th className="px-3 py-3 text-left">Reinc. Técnica</th>
-                  <th className="px-3 py-3 text-left">Reinc. Setorial</th>
-                  <th className="px-3 py-3 text-left">Intervalo Médio</th>
-                  <th className="px-3 py-3 text-left">Defeito Top</th>
-                  <th className="px-3 py-3 text-left">Setor Top</th>
-                </tr>
+                <tr><th className="px-3 py-3 text-left">Veículo</th><th className="px-3 py-3 text-left">Cluster</th><th className="px-3 py-3 text-left">Linha</th><th className="px-3 py-3 text-left">SOS Total</th><th className="px-3 py-3 text-left">Reinc. Veículo</th><th className="px-3 py-3 text-left">Reinc. Técnica</th><th className="px-3 py-3 text-left">Reinc. Setorial</th><th className="px-3 py-3 text-left">Intervalo Médio</th><th className="px-3 py-3 text-left">Defeito Top</th><th className="px-3 py-3 text-left">Setor Top</th></tr>
               </thead>
               <tbody>
                 {tabelaVeiculos.map((r) => (
                   <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
-                    <td className="px-3 py-3">{r.cluster}</td>
-                    <td className="px-3 py-3">{r.linhaTop}</td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td>
-                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td>
-                    <td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td>
-                    <td className="px-3 py-3">{r.defeitoTop}</td>
-                    <td className="px-3 py-3">{r.setorTop}</td>
+                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{r.linhaTop}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2605,9 +2053,7 @@ export default function SOSCentral() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="total" name="Volume de SOS" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={35}>
-                    <LabelList dataKey="total" position="top" style={{ fill: "#8b5cf6", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
+                  <Bar dataKey="total" name="Volume de SOS" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={35}><LabelList dataKey="total" position="top" style={{ fill: "#8b5cf6", fontSize: 11, fontWeight: "bold" }} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -2617,24 +2063,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por setor</h3>
             <table className="w-full min-w-[1000px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-3 py-3 text-left">Setor</th>
-                  <th className="px-3 py-3 text-left">Total</th>
-                  <th className="px-3 py-3 text-left">Linhas</th>
-                  <th className="px-3 py-3 text-left">Veículos</th>
-                  <th className="px-3 py-3 text-left">Reinc. Setorial</th>
-                  <th className="px-3 py-3 text-left">Defeito Top</th>
-                </tr>
+                <tr><th className="px-3 py-3 text-left">Setor</th><th className="px-3 py-3 text-left">Total</th><th className="px-3 py-3 text-left">Linhas</th><th className="px-3 py-3 text-left">Veículos</th><th className="px-3 py-3 text-left">Reinc. Setorial</th><th className="px-3 py-3 text-left">Defeito Top</th></tr>
               </thead>
               <tbody>
                 {tabelaSetores.map((r) => (
                   <tr key={r.setor} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.setor}</td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
-                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincSetorial)}</td>
-                    <td className="px-3 py-3">{r.defeitoTop}</td>
+                    <td className="px-3 py-3 font-black text-slate-800">{r.setor}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td><td className="px-3 py-3">{fmtInt(r.linhas)}</td><td className="px-3 py-3">{fmtInt(r.veiculos)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{r.defeitoTop}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2655,9 +2089,7 @@ export default function SOSCentral() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="total" name="Volume de SOS" fill="#0f766e" radius={[4, 4, 0, 0]} barSize={35}>
-                    <LabelList dataKey="total" position="top" style={{ fill: "#0f766e", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
+                  <Bar dataKey="total" name="Volume de SOS" fill="#0f766e" radius={[4, 4, 0, 0]} barSize={35}><LabelList dataKey="total" position="top" style={{ fill: "#0f766e", fontSize: 11, fontWeight: "bold" }} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -2667,28 +2099,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por defeito</h3>
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-3 py-3 text-left">Defeito</th>
-                  <th className="px-3 py-3 text-left">Total</th>
-                  <th className="px-3 py-3 text-left">Veículos</th>
-                  <th className="px-3 py-3 text-left">Setores</th>
-                  <th className="px-3 py-3 text-left">Linhas</th>
-                  <th className="px-3 py-3 text-left">Reinc. Técnica</th>
-                  <th className="px-3 py-3 text-left">Média Pós Prev.</th>
-                  <th className="px-3 py-3 text-left">Média Pós Insp.</th>
-                </tr>
+                <tr><th className="px-3 py-3 text-left">Defeito</th><th className="px-3 py-3 text-left">Total</th><th className="px-3 py-3 text-left">Veículos</th><th className="px-3 py-3 text-left">Setores</th><th className="px-3 py-3 text-left">Linhas</th><th className="px-3 py-3 text-left">Reinc. Técnica</th><th className="px-3 py-3 text-left">Média Pós Prev.</th><th className="px-3 py-3 text-left">Média Pós Insp.</th></tr>
               </thead>
               <tbody>
                 {tabelaDefeitos.map((r) => (
                   <tr key={r.defeito} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.defeito}</td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.setores)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
-                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>
-                    <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaPrev, 1)}</td>
-                    <td className="px-3 py-3 font-semibold text-blue-600">{fmtNum(r.mediaInsp, 1)}</td>
+                    <td className="px-3 py-3 font-black text-slate-800">{r.defeito}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td><td className="px-3 py-3">{fmtInt(r.veiculos)}</td><td className="px-3 py-3">{fmtInt(r.setores)}</td><td className="px-3 py-3">{fmtInt(r.linhas)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaPrev, 1)}</td><td className="px-3 py-3 font-semibold text-blue-600">{fmtNum(r.mediaInsp, 1)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2709,9 +2125,7 @@ export default function SOSCentral() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="total" name="Volume de SOS" fill="#eab308" radius={[4, 4, 0, 0]} barSize={35}>
-                    <LabelList dataKey="total" position="top" style={{ fill: "#eab308", fontSize: 11, fontWeight: "bold" }} />
-                  </Bar>
+                  <Bar dataKey="total" name="Volume de SOS" fill="#eab308" radius={[4, 4, 0, 0]} barSize={35}><LabelList dataKey="total" position="top" style={{ fill: "#eab308", fontSize: 11, fontWeight: "bold" }} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -2721,22 +2135,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Detalhamento por Motorista</h3>
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-3 py-3 text-left">Motorista</th>
-                  <th className="px-3 py-3 text-left">Total de SOS</th>
-                  <th className="px-3 py-3 text-left">Veículos Distintos</th>
-                  <th className="px-3 py-3 text-left">Linhas Distintas</th>
-                  <th className="px-3 py-3 text-left">Principal Defeito Relatado</th>
-                </tr>
+                <tr><th className="px-3 py-3 text-left">Motorista</th><th className="px-3 py-3 text-left">Total de SOS</th><th className="px-3 py-3 text-left">Veículos Distintos</th><th className="px-3 py-3 text-left">Linhas Distintas</th><th className="px-3 py-3 text-left">Principal Defeito Relatado</th></tr>
               </thead>
               <tbody>
                 {tabelaMotoristas.map((r) => (
                   <tr key={r.motorista} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.motorista}</td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.veiculos)}</td>
-                    <td className="px-3 py-3">{fmtInt(r.linhas)}</td>
-                    <td className="px-3 py-3">{r.defeitoTop}</td>
+                    <td className="px-3 py-3 font-black text-slate-800">{r.motorista}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td><td className="px-3 py-3">{fmtInt(r.veiculos)}</td><td className="px-3 py-3">{fmtInt(r.linhas)}</td><td className="px-3 py-3">{r.defeitoTop}</td>
                   </tr>
                 ))}
               </tbody>

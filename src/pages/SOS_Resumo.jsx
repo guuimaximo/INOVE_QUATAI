@@ -209,7 +209,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   const [formData, setFormData] = useState({});
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   
-  // Histórico puxado dinamicamente da tabela 'preventivas'
   const [historicoPrev, setHistoricoPrev] = useState(null);
   const [historicoInsp, setHistoricoInsp] = useState(null);
   const [buscandoHistorico, setBuscandoHistorico] = useState(false);
@@ -218,7 +217,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
     if (sos) setFormData(sos);
   }, [sos]);
 
-  // Busca os colaboradores e dados complementares na tabela de preventivas
   useEffect(() => {
     async function fetchLinkedPreventivas() {
       if (formData.os_ultima_preventiva) {
@@ -280,14 +278,12 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
         os_ultima_preventiva: prevData?.numero_os || prev.os_ultima_preventiva,
         os_ultima_inspecao: inspData?.numero_os || prev.os_ultima_inspecao,
       }));
-      // Como os useEffect escutam o numero_os (os_ultima_preventiva), eles já vão disparar e alimentar historicoPrev/Insp automaticamente
       alert("OS atreladas com sucesso! Salve para confirmar.");
     }
     setBuscandoHistorico(false);
   }
 
   async function salvarAlteracoes() {
-    // Agora usando EXCLUSIVAMENTE a data que vier da tabela preventivas (sem fallback para o formData antigo)
     const dataPrev = historicoPrev?.data_realizacao || null;
     const dataInsp = historicoInsp?.data_realizacao || null;
     const dataSosFormatada = formData.data_sos ? formData.data_sos.split('T')[0] : null;
@@ -491,7 +487,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             </div>
 
             <div className="mb-5 flex flex-col md:w-1/3">
-              {/* Mantém a edição do KM Atual do form */}
               {renderField("KM Atual do Veículo (Hora do SOS)", "km_veiculo_sos", false, "number")}
             </div>
 
@@ -592,10 +587,12 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
 export default function SOSCentral() {
   const PAGE_SIZE = 200;
 
-  const [sosList, setSosList] = useState([]);
+  const [sosRows, setSosRows] = useState([]); // Base Completa p/ Dashboard
+  const [sosList, setSosList] = useState([]); // Base Paginada p/ Tabela
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  
   const [prevRows, setPrevRows] = useState([]);
   const [kmRows, setKmRows] = useState([]);
 
@@ -675,10 +672,12 @@ export default function SOSCentral() {
     setHasMore(true);
 
     try {
-      const [kmData, preventivaData] = await Promise.all([
+      const [sosData, kmData, preventivaData] = await Promise.all([
+        fetchAllData("sos_acionamentos", "data_sos"),
         fetchAllData("km_rodado_diario", "data").catch(() => []),
         fetchAllData("preventivas", "data_realizacao").catch(() => [])
       ]);
+      setSosRows(sosData || []);
       setKmRows(kmData || []);
       setPrevRows(preventivaData || []);
     } catch (e) {
@@ -746,7 +745,14 @@ export default function SOSCentral() {
     const mapPrev = new Map();
     (prevRows || []).forEach(p => mapPrev.set(s(p.numero_os), p));
 
-    return (sosList || [])
+    // Helper extra-seguro para limpar nomes que vêm do banco (evita crash se vier Number ou formatado diferente)
+    const extractName = (val) => {
+      if (!val) return null;
+      const str = String(val);
+      return str.includes(' - ') ? (str.split(' - ')[1] || str).trim() : str.trim();
+    };
+
+    return (sosRows || [])
       .map((r) => {
         const data_sos = safeDateStr(r.data_sos || r.created_at);
         if (!data_sos) return null;
@@ -777,7 +783,7 @@ export default function SOSCentral() {
         const isNaoControlavel = classificacao === "NÃO CONTROLÁVEL" || classificacao === "NAO CONTROLAVEL";
 
         const funcCru = dtPrevVinculada?.[roleResp] || null;
-        const funcResp = funcCru ? funcCru.split(' - ')[1] || funcCru : "Não Identificado";
+        const funcResp = extractName(funcCru) || "Não Identificado";
 
         return {
           ...r,
@@ -808,7 +814,7 @@ export default function SOSCentral() {
         };
       })
       .filter(Boolean);
-  }, [sosList, prevRows]);
+  }, [sosRows, prevRows]);
 
   const mesesDisponiveis = useMemo(() => {
     const set = new Set(
@@ -857,8 +863,9 @@ export default function SOSCentral() {
     [sosProcessado]
   );
 
-  const filtrados = useMemo(() => {
-    const termo = busca.toLowerCase().trim();
+  // Filtra toda a base de Dashboard (sosRows) e gera a baseFiltrada
+  const baseFiltrada = useMemo(() => {
+    const q = busca.trim().toLowerCase();
 
     return sosProcessado.filter((r) => {
       if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.mes_key)) return false;
@@ -870,7 +877,7 @@ export default function SOSCentral() {
       if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
       if (filtroControlabilidade === "NÃO CONTROLÁVEL" && !r.nao_controlavel) return false;
 
-      if (!termo) return true;
+      if (!q) return true;
 
       return [
         r.numero_sos,
@@ -882,7 +889,7 @@ export default function SOSCentral() {
         r.setor_manutencao,
         r.status,
         r.responsavel_preventiva
-      ].some((v) => String(v || "").toLowerCase().includes(termo));
+      ].some((v) => String(v || "").toLowerCase().includes(q));
     });
   }, [
     sosProcessado,
@@ -897,8 +904,22 @@ export default function SOSCentral() {
     filtroControlabilidade,
   ]);
 
-  const baseRef = useMemo(() => filtrados.filter((r) => r.mes_key === mesReferencia), [filtrados, mesReferencia]);
-  const baseComp = useMemo(() => filtrados.filter((r) => r.mes_key === mesComparacao), [filtrados, mesComparacao]);
+  // Filtra a base Paginada (sosList) exclusivamente para uso na Tabela inferior
+  const filtrados = useMemo(() => {
+    const termo = busca.toLowerCase().trim();
+    if (!termo) return sosList;
+    return sosList.filter((s) => {
+      return (
+        s.numero_sos?.toString().toLowerCase().includes(termo) ||
+        s.veiculo?.toLowerCase().includes(termo) ||
+        s.motorista_nome?.toLowerCase().includes(termo) ||
+        s.ocorrencia?.toLowerCase().includes(termo)
+      );
+    });
+  }, [busca, sosList]);
+
+  const baseRef = useMemo(() => baseFiltrada.filter((r) => r.mes_key === mesReferencia), [baseFiltrada, mesReferencia]);
+  const baseComp = useMemo(() => baseFiltrada.filter((r) => r.mes_key === mesComparacao), [baseFiltrada, mesComparacao]);
 
   const counts = useMemo(() => {
     const obj = {};
@@ -1242,9 +1263,10 @@ export default function SOSCentral() {
   const tabelaFuncionarios = useMemo(() => {
     const map = new Map();
 
-    const extractName = (str) => {
-      if (!str) return null;
-      return str.includes(' - ') ? str.split(' - ')[1].trim() : str.trim();
+    const extractNameSafe = (val) => {
+      if (!val) return null;
+      const str = String(val);
+      return str.includes(' - ') ? (str.split(' - ')[1] || str).trim() : str.trim();
     };
 
     // 1. Encontrar o Total de Preventivas Executadas no Período por cada Funcionário
@@ -1254,10 +1276,10 @@ export default function SOSCentral() {
     });
 
     prevsNoPeriodo.forEach(p => {
-      const m = extractName(p.mecanico);
-      const e = extractName(p.eletricista);
-      const f = extractName(p.funilaria);
-      const b = extractName(p.borracharia);
+      const m = extractNameSafe(p.mecanico);
+      const e = extractNameSafe(p.eletricista);
+      const f = extractNameSafe(p.funilaria);
+      const b = extractNameSafe(p.borracharia);
       
       [m, e, f, b].forEach(nome => {
           if (nome) {
@@ -2005,7 +2027,7 @@ export default function SOSCentral() {
       {abaAtiva === "FUNCIONARIOS" && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border shadow-sm p-4">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Colaboradores c/ Retrabalho (≤ 15 dias ou ≤ 5.000 km)</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Colaboradores c/ Retrabalho Precoce (≤ 15 dias ou ≤ 5k km)</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tabelaFuncionarios.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
@@ -2014,7 +2036,7 @@ export default function SOSCentral() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="totalPrevFeitas" name="Preventivas no Período" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
+                  <Bar dataKey="totalPrevFeitas" name="Preventivas no Mês" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
                     <LabelList dataKey="totalPrevFeitas" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
                   </Bar>
                   <Bar dataKey="sosPrecoce" name="Retrabalho (≤ 15d ou ≤ 5k km)" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={25}>

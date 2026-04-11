@@ -1,24 +1,22 @@
-import React, { useEffect, useMemo, useState } from "react";
+// src/pages/SOSCentral.jsx
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabase";
 import {
-  FaBolt,
-  FaSync,
-  FaDownload,
   FaSearch,
-  FaChartLine,
-  FaRoad,
+  FaEye,
+  FaTimes,
+  FaLock,
+  FaEdit,
+  FaSave,
+  FaSort,
+  FaSortUp,
+  FaSortDown,
   FaBus,
+  FaCalendarAlt,
   FaTools,
-  FaExclamationTriangle,
-  FaInfoCircle,
-  FaArrowUp,
-  FaArrowDown,
-  FaEquals,
-  FaChartPie,
-  FaCogs,
-  FaClipboardList,
+  FaInbox,
   FaWrench,
-  FaUserTie,
-  FaClock,
+  FaRoad,
   FaUserCog
 } from "react-icons/fa";
 import {
@@ -36,291 +34,614 @@ import {
   ComposedChart,
   Area,
 } from "recharts";
-import { supabase } from "../supabase";
 
-const MKBF_META = 7000;
-const TIPOS_GRAFICO = ["RECOLHEU", "SOS", "AVARIA", "TROCA", "IMPROCEDENTE"];
+/* =======================
+   AJUSTES GERAIS
+======================= */
+const OCORRENCIAS_CARDS = [
+  "SOS",
+  "RECOLHEU",
+  "TROCA",
+  "AVARIA",
+  "IMPROCEDENTE",
+  "SEGUIU VIAGEM",
+];
 
-function n(v) {
-  const x = Number(v);
-  return Number.isFinite(x) ? x : 0;
+const DATE_FIELD = "data_sos";
+
+function pickBestDate(row) {
+  return (
+    row?.[DATE_FIELD] ||
+    row?.data_sos ||
+    row?.data_fechamento ||
+    row?.data_encerramento ||
+    row?.created_at ||
+    null
+  );
 }
 
-function s(v) {
-  return String(v || "").trim();
-}
-
-function normalize(v) {
-  return s(v).toUpperCase();
-}
-
-function safeDateStr(v) {
-  if (!v) return "";
-  const txt = s(v);
-  if (!txt) return "";
-  if (txt.includes("T")) return txt.split("T")[0];
-  if (txt.includes(" ")) return txt.split(" ")[0];
-
-  const br = txt.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+function parseToDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const s = String(value).trim();
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (br) {
     const [, dd, mm, yyyy] = br;
-    return `${yyyy}-${mm}-${dd}`;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    return Number.isNaN(d.getTime()) ? null : d;
   }
-  return txt;
-}
-
-function parseDateOnly(v) {
-  const dt = safeDateStr(v);
-  if (!dt) return null;
-  const d = new Date(`${dt}T00:00:00`);
+  const isoDate = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDate) {
+    const [, yyyy, mm, dd] = isoDate;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function diffDays(dateA, dateB) {
-  const a = parseDateOnly(dateA);
-  const b = parseDateOnly(dateB);
-  if (!a || !b) return null;
-  const ms = a.getTime() - b.getTime();
-  return Math.floor(ms / 86400000);
+function formatDateBR(value) {
+  const d = parseToDate(value);
+  return d ? d.toLocaleDateString("pt-BR") : "—";
 }
 
-function calcDiffHours(startDate, startTime, endDate) {
-  const d1 = safeDateStr(startDate);
-  const d2 = safeDateStr(endDate);
-  const h1 = s(startTime);
-
-  if (!d1 || !d2) return 0;
-
-  const start = new Date(`${d1}T${h1 || "00:00:00"}`);
-  const end = new Date(`${d2}T23:59:59`);
-
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
-  const hours = (end.getTime() - start.getTime()) / 36e5;
-  return hours > 0 ? hours : 0;
+function monthRange(yyyyMm) {
+  if (!yyyyMm) return { start: "", end: "" };
+  const [y, m] = yyyyMm.split("-").map(Number);
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const start = `${y}-${pad2(m)}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const end = `${y}-${pad2(m)}-${pad2(lastDay)}`;
+  return { start, end };
 }
 
-function fmtDateBr(v) {
-  const dt = safeDateStr(v);
-  if (!dt) return "-";
-  const p = dt.split("-");
-  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dt;
+function calcularDiasDecorridos(dataInicio, dataFim) {
+    if (!dataInicio || !dataFim) return null;
+    const dt1 = new Date(`${dataInicio}T00:00:00`);
+    const dt2 = new Date(`${dataFim}T00:00:00`);
+    if (Number.isNaN(dt1.getTime()) || Number.isNaN(dt2.getTime())) return null;
+    
+    dt1.setHours(0, 0, 0, 0);
+    dt2.setHours(0, 0, 0, 0);
+    
+    const diffMs = dt2.getTime() - dt1.getTime();
+    return Math.max(0, Math.floor(diffMs / 86400000));
 }
 
-function fmtNum(v, dec = 2) {
-  return n(v).toLocaleString("pt-BR", {
-    minimumFractionDigits: dec,
-    maximumFractionDigits: dec,
-  });
+/* =======================
+   STATUS E TAGS
+======================= */
+const cores = {
+  SOS: "bg-rose-600 text-white",
+  RECOLHEU: "bg-blue-600 text-white",
+  TROCA: "bg-amber-400 text-amber-900",
+  AVARIA: "bg-slate-700 text-white",
+  IMPROCEDENTE: "bg-purple-600 text-white",
+  "SEGUIU VIAGEM": "bg-emerald-600 text-white",
+};
+
+function StatusTag({ status }) {
+  const s = String(status || "").toUpperCase().trim();
+  if (s === "ABERTO") return <span className="bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">AG. OPERAÇÃO</span>;
+  if (s === "EM ANDAMENTO") return <span className="bg-amber-100 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">AG. MANUTENÇÃO</span>;
+  if (s === "FECHADO") return <span className="bg-emerald-100 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">FECHADO</span>;
+  return null;
 }
 
-function fmtInt(v) {
-  return Math.round(n(v)).toLocaleString("pt-BR");
+function OcorrenciaTag({ ocorrencia }) {
+  const o = (ocorrencia || "").toUpperCase();
+  const estilo = cores[o] || "bg-slate-200 text-slate-700";
+  return (
+    <span className={`${estilo} px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm`}>
+      {o || "—"}
+    </span>
+  );
 }
 
-function fmtPct(v) {
-  return `${fmtNum(v, 1)}%`;
-}
+/* --- Modal de Login --- */
+function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
+  const [login, setLogin] = useState("");
+  const [senha, setSenha] = useState("");
+  const [loading, setLoading] = useState(false);
 
-function fmtHoras(v) {
-  const h = n(v);
-  if (h < 1 && h > 0) return `${fmtNum(h * 60, 0)} min`;
-  return `${fmtNum(h, 1)} h`;
-}
+  async function handleLogin() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("usuarios_aprovadores")
+      .select("*")
+      .eq("login", login)
+      .eq("senha", senha)
+      .eq("ativo", true)
+      .single();
+    setLoading(false);
 
-function monthKey(date) {
-  if (!date) return "";
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function monthLabelFromKey(key) {
-  if (!key) return "";
-  const [y, m] = key.split("-");
-  const meses = [
-    "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
-    "JUL", "AGO", "SET", "OUT", "NOV", "DEZ",
-  ];
-  return `${meses[n(m) - 1] || m}/${String(y).slice(2)}`;
-}
-
-function firstDayOfMonth(key) {
-  return key ? new Date(`${key}-01T00:00:00`) : null;
-}
-
-function addMonths(date, months) {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1);
-}
-
-function deriveCluster(prefixo) {
-  const v = normalize(prefixo);
-  if (!v) return "OUTROS";
-  if (v.startsWith("2216")) return "C8";
-  if (v.startsWith("2222")) return "C9";
-  if (v.startsWith("2224")) return "C10";
-  if (v.startsWith("2425")) return "C11";
-  if (v.startsWith("W")) return "C6";
-  return "OUTROS";
-}
-
-function normalizeTipo(oc) {
-  const o = normalize(oc);
-  if (!o) return "";
-  if (["RA", "R.A", "R.A."].includes(o)) return "RECOLHEU";
-  if (o.includes("RECOLH")) return "RECOLHEU";
-  if (o.includes("IMPRO")) return "IMPROCEDENTE";
-  if (o.includes("TROC")) return "TROCA";
-  if (o === "S.O.S") return "SOS";
-  if (o.includes("AVARI")) return "AVARIA";
-  if (o.includes("SEGUIU")) return "SEGUIU VIAGEM";
-  return o;
-}
-
-function isOcorrenciaValidaParaMkbf(oc) {
-  const tipo = normalizeTipo(oc);
-  return !!tipo && tipo !== "SEGUIU VIAGEM";
-}
-
-function variancePct(atual, anterior) {
-  if (!anterior) return 0;
-  return ((atual - anterior) / anterior) * 100;
-}
-
-function faixaDias(v) {
-  const x = n(v);
-  if (!x && x !== 0) return "Sem informação";
-  if (x <= 7) return "0-7 dias";
-  if (x <= 15) return "8-15 dias";
-  if (x <= 30) return "16-30 dias";
-  if (x <= 60) return "31-60 dias";
-  return "60+ dias";
-}
-
-// Mapeia o Setor/Grupo do SOS para a coluna correspondente de responsável na Preventiva
-function mapSetorToRole(setor, grupo) {
-  const s = normalize(setor);
-  const g = normalize(grupo);
-  if (s.includes("ELÉTRICA") || s.includes("ELETRICA") || g.includes("ELÉTRICA") || g.includes("ELETRICA")) return "eletricista";
-  if (s.includes("BORRACHARIA") || g.includes("PNEU")) return "borracharia";
-  if (s.includes("FUNILARIA") || s.includes("CARROCERIA") || g.includes("CARROCERIA")) return "funilaria";
-  return "mecanico"; // Default / Mecânica / Arrefecimento / Transmissão
-}
-
-function exportarCSV(dados, nomeArquivo) {
-  if (!dados?.length) return;
-  const cols = Object.keys(dados[0]).filter((k) => typeof dados[0][k] !== "object");
-  const csv = [
-    cols.join(";"),
-    ...dados.map((row) =>
-      cols.map((col) => `"${String(row[col] ?? "").replace(/"/g, '""')}"`).join(";")
-    ),
-  ].join("\n");
-
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${nomeArquivo}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
-function CardKPI({ title, value, sub, icon, tone = "blue", className = "" }) {
-  const tones = {
-    blue: "from-blue-50 to-cyan-50 border-blue-200 text-blue-700",
-    emerald: "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700",
-    amber: "from-amber-50 to-orange-50 border-amber-200 text-amber-700",
-    rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
-    violet: "from-violet-50 to-fuchsia-50 border-violet-200 text-violet-700",
-    slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
-  };
+    if (error || !data) {
+      alert("Login ou senha incorretos!");
+      return;
+    }
+    onConfirm({ nome: data.nome, login: data.login });
+  }
 
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-4 shadow-sm ${className}`}>
-      <div className="flex items-start justify-between gap-3 h-full">
-        <div className="flex flex-col justify-between h-full">
-          <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
-          <div>
-            <p className="text-2xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
-            <p className="text-xs mt-1 text-slate-600 font-semibold">{sub}</p>
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-[60] animate-in fade-in duration-200 p-4">
+      <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
+        <div className="flex flex-col items-center mb-6">
+          <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-3">
+            <FaLock size={20} />
           </div>
+          <h2 className="text-xl font-black text-slate-800 text-center">{title}</h2>
+          <p className="text-xs text-slate-500 text-center mt-1">Insira suas credenciais de aprovação para editar</p>
         </div>
-        <div className="text-xl mt-1 opacity-80">{icon}</div>
+        
+        <div className="space-y-3">
+          <input
+            type="text"
+            placeholder="Login"
+            className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none"
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Senha"
+            className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+          />
+        </div>
+        
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onCancel} className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition">
+            Cancelar
+          </button>
+          <button onClick={handleLogin} disabled={loading} className="px-4 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-md disabled:opacity-70">
+            {loading ? "Verificando..." : "Entrar"}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function TabButton({ active, onClick, icon, children }) {
+/* --- Modal de Detalhes do SOS --- */
+function DetalheSOSModal({ sos, onClose, onAtualizar }) {
+  const [editMode, setEditMode] = useState(false);
+  const [formData, setFormData] = useState({});
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+  
+  // Histórico puxado dinamicamente da tabela 'preventivas'
+  const [historicoPrev, setHistoricoPrev] = useState(null);
+  const [historicoInsp, setHistoricoInsp] = useState(null);
+  const [buscandoHistorico, setBuscandoHistorico] = useState(false);
+
+  useEffect(() => {
+    if (sos) setFormData(sos);
+  }, [sos]);
+
+  // Busca os colaboradores e dados complementares na tabela de preventivas
+  useEffect(() => {
+    async function fetchLinkedPreventivas() {
+      if (formData.os_ultima_preventiva) {
+        const { data } = await supabase
+          .from("preventivas")
+          .select("*")
+          .eq("numero_os", formData.os_ultima_preventiva)
+          .limit(1)
+          .maybeSingle();
+        setHistoricoPrev(data);
+      }
+      if (formData.os_ultima_inspecao) {
+        const { data } = await supabase
+          .from("preventivas")
+          .select("*")
+          .eq("numero_os", formData.os_ultima_inspecao)
+          .limit(1)
+          .maybeSingle();
+        setHistoricoInsp(data);
+      }
+    }
+    fetchLinkedPreventivas();
+  }, [formData.os_ultima_preventiva, formData.os_ultima_inspecao]);
+
+  function solicitarLogin() {
+    setLoginModalOpen(true);
+  }
+
+  async function onLoginConfirm() {
+    setLoginModalOpen(false);
+    setEditMode(true);
+  }
+
+  async function handlePuxarHistorico() {
+    setBuscandoHistorico(true);
+    const { data: prevData } = await supabase
+      .from("preventivas")
+      .select("*")
+      .eq("prefixo", sos.veiculo)
+      .eq("tipo", "Preventiva - 10.000")
+      .order("data_realizacao", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: inspData } = await supabase
+      .from("preventivas")
+      .select("*")
+      .eq("prefixo", sos.veiculo)
+      .eq("tipo", "Inspeção - 5.000")
+      .order("data_realizacao", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!prevData && !inspData) {
+      alert("Nenhum histórico de preventiva ou inspeção encontrado para este veículo.");
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        os_ultima_preventiva: prevData?.numero_os || prev.os_ultima_preventiva,
+        os_ultima_inspecao: inspData?.numero_os || prev.os_ultima_inspecao,
+      }));
+      // Como os useEffect escutam o numero_os (os_ultima_preventiva), eles já vão disparar e alimentar historicoPrev/Insp automaticamente
+      alert("OS atreladas com sucesso! Salve para confirmar.");
+    }
+    setBuscandoHistorico(false);
+  }
+
+  async function salvarAlteracoes() {
+    // Agora usando EXCLUSIVAMENTE a data que vier da tabela preventivas (sem fallback para o formData antigo)
+    const dataPrev = historicoPrev?.data_realizacao || null;
+    const dataInsp = historicoInsp?.data_realizacao || null;
+    const dataSosFormatada = formData.data_sos ? formData.data_sos.split('T')[0] : null;
+
+    const payload = {
+      ...formData,
+      km_veiculo_sos: formData.km_veiculo_sos ? Number(formData.km_veiculo_sos) : null,
+      dias_ultima_preventiva: calcularDiasDecorridos(dataPrev, dataSosFormatada),
+      dias_ultima_inspecao: calcularDiasDecorridos(dataInsp, dataSosFormatada),
+      atualizado_em: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from("sos_acionamentos")
+      .update(payload)
+      .eq("id", sos.id);
+
+    if (error) {
+      alert("Erro ao salvar: " + error.message);
+      return;
+    }
+
+    alert("Alterações salvas com sucesso ✅");
+    onAtualizar(true);
+    setEditMode(false);
+    onClose();
+  }
+
+  const renderField = (label, field, multiline = false, type = "text", readOnly = false) => (
+    <div className="flex flex-col">
+      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</label>
+      {editMode && !readOnly ? (
+        multiline ? (
+          <textarea
+            className="border border-slate-300 p-2.5 rounded-lg w-full text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none transition"
+            rows="2"
+            value={formData[field] || ""}
+            onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
+          />
+        ) : (
+          <input
+            type={type}
+            className="border border-slate-300 p-2.5 rounded-lg w-full text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none transition"
+            value={formData[field] || ""}
+            onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
+          />
+        )
+      ) : (
+        <div className="bg-slate-50 border border-slate-100 p-2.5 rounded-lg text-sm font-bold text-slate-800 min-h-[42px] flex items-center">
+          {formData[field] ? (type === 'date' ? formatDateBR(formData[field]) : formData[field]) : "—"}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderControlabilidadeField = () => (
+    <div className="flex flex-col md:col-span-2">
+      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Classificação de Controlabilidade</label>
+      {editMode ? (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFormData({ ...formData, classificacao_controlabilidade: "Não Controlável" })}
+            className={`px-4 py-2 rounded-lg text-sm font-bold border transition ${
+              formData.classificacao_controlabilidade === "Não Controlável"
+                ? "bg-amber-400 border-amber-500 text-amber-900 shadow-sm"
+                : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            Não controlável
+          </button>
+          <button
+            type="button"
+            onClick={() => setFormData({ ...formData, classificacao_controlabilidade: "Controlável" })}
+            className={`px-4 py-2 rounded-lg text-sm font-bold border transition ${
+              formData.classificacao_controlabilidade === "Controlável"
+                ? "bg-rose-600 border-rose-700 text-white shadow-sm"
+                : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            Controlável
+          </button>
+        </div>
+      ) : (
+        <div className="mt-1">
+          {formData.classificacao_controlabilidade === "Não Controlável" ? (
+            <span className="inline-flex bg-amber-100 border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider">
+              Não controlável
+            </span>
+          ) : formData.classificacao_controlabilidade === "Controlável" ? (
+            <span className="inline-flex bg-rose-100 border border-rose-200 text-rose-800 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider">
+              Controlável
+            </span>
+          ) : (
+            <div className="bg-slate-50 border border-slate-100 p-2.5 rounded-lg text-sm font-bold text-slate-800">—</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-black transition ${
-        active
-          ? "bg-slate-800 text-white border-slate-800 shadow"
-          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-      }`}
-    >
-      {icon}
-      {children}
-    </button>
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-50 p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col animate-in zoom-in-95 duration-200">
+        
+        {/* Header Modal */}
+        <div className="flex justify-between items-center p-5 border-b bg-white relative overflow-hidden shrink-0">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-transparent opacity-50"></div>
+          <div className="relative flex items-center gap-3">
+            <div className="bg-blue-600 text-white p-2.5 rounded-lg shadow-sm">
+              <FaEye size={20} />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-800">
+                Detalhes SOS <span className="text-blue-600">#{sos.numero_sos}</span>
+              </h2>
+              <div className="flex items-center gap-2 mt-1">
+                <StatusTag status={sos.status} />
+                <OcorrenciaTag ocorrencia={sos.ocorrencia} />
+              </div>
+            </div>
+          </div>
+          <div className="relative flex items-center gap-2">
+            {!editMode ? (
+              <button onClick={solicitarLogin} className="bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition active:scale-95">
+                <FaEdit /> Editar
+              </button>
+            ) : (
+              <button onClick={salvarAlteracoes} className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-md transition active:scale-95">
+                <FaSave /> Salvar
+              </button>
+            )}
+            <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition">
+              <FaTimes size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Content */}
+        <div className="p-6 space-y-6 overflow-y-auto bg-slate-50/50 flex-1">
+          
+          {/* Seção 1: Dados da Ocorrência */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
+              <FaBus className="text-slate-400" /> Informações da Ocorrência
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {renderField("Criado em", "created_at", false, "date", true)}
+              {renderField("Plantonista", "plantonista", false, "text", true)}
+              {renderField("Data SOS", "data_sos", false, "date", true)}
+              {renderField("Hora SOS", "hora_sos", false, "text", true)}
+              {renderField("Veículo", "veiculo", false, "text", true)}
+              {renderField("Linha", "linha", false, "text", true)}
+              {renderField("Motorista", "motorista_nome", false, "text", true)}
+              {renderField("Local", "local_ocorrencia", false, "text", true)}
+              {renderField("Tabela Operacional", "tabela_operacional", false, "text", true)}
+              <div className="md:col-span-3">
+                {renderField("Reclamação do Motorista", "reclamacao_motorista", true, "text", true)}
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 2: Tratamento e Manutenção */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
+              <FaTools className="text-blue-500" /> Tratamento e Execução
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {renderField("Setor Manutenção", "setor_manutencao")}
+              {renderField("Grupo Manutenção", "grupo_manutencao")}
+              {renderField("Problema Encontrado", "problema_encontrado")}
+              
+              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                {renderField("Mecânico Apontado", "mecanico_executor")}
+                {renderField("Responsável (Solucionador)", "solucionador")}
+                <div className="md:col-span-2">
+                  {renderField("Solução Aplicada", "solucao", true)}
+                </div>
+                {renderField("OS Corretiva", "numero_os_corretiva")}
+                {renderControlabilidadeField()}
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 3: Snapshot de Preventiva e Inspeção */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b pb-2 gap-3">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <FaWrench className="text-emerald-500" /> Histórico Atrelado (Tabela de Preventivas)
+              </h3>
+              
+              {editMode && (
+                <button
+                  onClick={handlePuxarHistorico}
+                  disabled={buscandoHistorico}
+                  className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 disabled:opacity-50"
+                >
+                  {buscandoHistorico ? "Buscando..." : "Puxar OS Automaticamente"}
+                </button>
+              )}
+            </div>
+
+            <div className="mb-5 flex flex-col md:w-1/3">
+              {/* Mantém a edição do KM Atual do form */}
+              {renderField("KM Atual do Veículo (Hora do SOS)", "km_veiculo_sos", false, "number")}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Box Preventiva */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
+                <h4 className="font-bold text-slate-700 text-sm border-b pb-1 flex justify-between">
+                  <span>Última Preventiva (10k)</span>
+                  <span className="text-blue-600">OS: {formData.os_ultima_preventiva || "—"}</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div className="col-span-1 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Data</span>
+                    <span className="font-black text-slate-800">
+                      {historicoPrev?.data_realizacao ? formatDateBR(historicoPrev.data_realizacao) : "—"}
+                    </span>
+                  </div>
+                  <div className="col-span-1 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">KM Época</span>
+                    <span className="font-black text-slate-800">
+                      {historicoPrev?.km_veiculo || "—"}
+                    </span>
+                  </div>
+                  
+                  {/* Dados buscados dinamicamente da tabela Preventivas */}
+                  <div className="col-span-2 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Mecânico</span>
+                    <span className="font-black text-slate-800">{historicoPrev?.mecanico || "—"}</span>
+                  </div>
+                  <div className="col-span-2 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Eletricista</span>
+                    <span className="font-black text-slate-800">{historicoPrev?.eletricista || "—"}</span>
+                  </div>
+                  <div className="col-span-2 text-xs flex gap-4">
+                    <div className="flex-1">
+                      <span className="block font-bold text-slate-500 uppercase">Funilaria</span>
+                      <span className="font-black text-slate-800">{historicoPrev?.funilaria || "—"}</span>
+                    </div>
+                    <div className="flex-1">
+                      <span className="block font-bold text-slate-500 uppercase">Borracharia</span>
+                      <span className="font-black text-slate-800">{historicoPrev?.borracharia || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Box Inspeção */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
+                <h4 className="font-bold text-slate-700 text-sm border-b pb-1 flex justify-between">
+                  <span>Última Inspeção (5k)</span>
+                  <span className="text-emerald-600">OS: {formData.os_ultima_inspecao || "—"}</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div className="col-span-1 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Data</span>
+                    <span className="font-black text-slate-800">
+                      {historicoInsp?.data_realizacao ? formatDateBR(historicoInsp.data_realizacao) : "—"}
+                    </span>
+                  </div>
+                  <div className="col-span-1 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">KM Época</span>
+                    <span className="font-black text-slate-800">
+                      {historicoInsp?.km_veiculo || "—"}
+                    </span>
+                  </div>
+
+                  {/* Dados buscados dinamicamente da tabela Preventivas */}
+                  <div className="col-span-2 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Mecânico</span>
+                    <span className="font-black text-slate-800">{historicoInsp?.mecanico || "—"}</span>
+                  </div>
+                  <div className="col-span-2 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Eletricista</span>
+                    <span className="font-black text-slate-800">{historicoInsp?.eletricista || "—"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-400 font-semibold mt-3 text-center">
+              * Estes dados representam a situação da última revisão do veículo. Se as informações não aparecerem, é porque a OS correspondente não consta na base de Preventivas do Supabase.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      {loginModalOpen && (
+        <LoginModal
+          onConfirm={onLoginConfirm}
+          onCancel={() => setLoginModalOpen(false)}
+        />
+      )}
+    </div>
   );
 }
 
-function EvolucaoBadge({ value, invert = false }) {
-  const val = n(value);
+/* --- Página Principal: CENTRAL SOS --- */
+export default function SOSCentral() {
+  const PAGE_SIZE = 200;
 
-  if (val > 0) {
-    return (
-      <span
-        className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border ${
-          invert
-            ? "bg-rose-50 text-rose-700 border-rose-200"
-            : "bg-emerald-50 text-emerald-700 border-emerald-200"
-        }`}
-      >
-        <FaArrowUp size={10} /> {fmtPct(Math.abs(val))}
-      </span>
-    );
-  }
-
-  if (val < 0) {
-    return (
-      <span
-        className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border ${
-          invert
-            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-            : "bg-rose-50 text-rose-700 border-rose-200"
-        }`}
-      >
-        <FaArrowDown size={10} /> {fmtPct(Math.abs(val))}
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border bg-slate-50 text-slate-700 border-slate-200">
-      <FaEquals size={10} /> 0,0%
-    </span>
-  );
-}
-
-export default function SOS_Resumo() {
+  const [sosList, setSosList] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState("");
-  const [kmRows, setKmRows] = useState([]);
-  const [sosRows, setSosRows] = useState([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [prevRows, setPrevRows] = useState([]);
+  const [kmRows, setKmRows] = useState([]);
 
-  const [abaAtiva, setAbaAtiva] = useState("EXECUTIVO");
   const [busca, setBusca] = useState("");
+  const [selected, setSelected] = useState(null);
+
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+
+  const [mesRef, setMesRef] = useState("");
+  const [ocorrenciaFiltro, setOcorrenciaFiltro] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
   const [filtroSetor, setFiltroSetor] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
   const [filtroCluster, setFiltroCluster] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroControlabilidade, setFiltroControlabilidade] = useState("");
-  const [mesReferencia, setMesReferencia] = useState("");
+  
+  const [abaAtiva, setAbaAtiva] = useState("EXECUTIVO");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
+
+  const [sortBy, setSortBy] = useState(DATE_FIELD);
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const [page, setPage] = useState(0);
+
+  function buildQuery() {
+    let query = supabase.from("sos_acionamentos").select("*");
+
+    if (mesRef) {
+      const { start, end } = monthRange(mesRef);
+      if (start) query = query.gte(DATE_FIELD, start);
+      if (end) query = query.lte(DATE_FIELD, end);
+    }
+
+    if (dataInicio) query = query.gte(DATE_FIELD, dataInicio);
+    if (dataFim) query = query.lte(DATE_FIELD, dataFim);
+
+    if (ocorrenciaFiltro) {
+      query = query.ilike("ocorrencia", ocorrenciaFiltro);
+    }
+
+    query = query.order(sortBy, { ascending: sortAsc, nullsFirst: false });
+
+    return query;
+  }
 
   async function fetchAllData(table, orderField) {
     let allRecords = [];
@@ -350,29 +671,63 @@ export default function SOS_Resumo() {
 
   async function carregarTudo() {
     setLoading(true);
-    setErro("");
+    setPage(0);
+    setHasMore(true);
 
     try {
-      const [sosData, kmData, preventivaData] = await Promise.all([
-        fetchAllData("sos_acionamentos", "data_sos"),
+      const [kmData, preventivaData] = await Promise.all([
         fetchAllData("km_rodado_diario", "data").catch(() => []),
         fetchAllData("preventivas", "data_realizacao").catch(() => [])
       ]);
-
-      setSosRows(sosData || []);
       setKmRows(kmData || []);
       setPrevRows(preventivaData || []);
     } catch (e) {
       console.error(e);
-      setErro(e?.message || String(e));
-    } finally {
-      setLoading(false);
     }
+
+    carregarSOS(true, true);
+  }
+
+  async function carregarSOS(reset = false, skipLoadingState = false) {
+    if (reset) {
+      if (!skipLoadingState) setLoading(true);
+      setPage(0);
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
+
+    const currentPage = reset ? 0 : page;
+    const from = currentPage * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, error } = await buildQuery().range(from, to);
+
+    if (error) {
+      console.error(error.message);
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
+
+    const newRows = data || [];
+    const merged = reset ? newRows : [...sosList, ...newRows];
+    setSosList(merged);
+    setHasMore(newRows.length === PAGE_SIZE);
+    setPage(currentPage + 1);
+    setLoading(false);
+    setLoadingMore(false);
   }
 
   useEffect(() => {
     carregarTudo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    carregarSOS(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataInicio, dataFim, mesRef, sortBy, sortAsc, ocorrenciaFiltro]);
 
   const kmProcessado = useMemo(() => {
     const map = new Map();
@@ -388,11 +743,10 @@ export default function SOS_Resumo() {
   }, [kmRows]);
 
   const sosProcessado = useMemo(() => {
-    // Dicionário de Preventivas pela OS
     const mapPrev = new Map();
     (prevRows || []).forEach(p => mapPrev.set(s(p.numero_os), p));
 
-    return (sosRows || [])
+    return (sosList || [])
       .map((r) => {
         const data_sos = safeDateStr(r.data_sos || r.created_at);
         if (!data_sos) return null;
@@ -401,12 +755,14 @@ export default function SOS_Resumo() {
         const classificacao = normalize(r.classificacao_controlabilidade);
         const roleResp = mapSetorToRole(r.setor_manutencao, r.grupo_manutencao);
 
-        // Busca Preventiva / Inspeção real vinculada
         const dtPrevVinculada = mapPrev.get(s(r.os_ultima_preventiva));
         const dtInspVinculada = mapPrev.get(s(r.os_ultima_inspecao));
 
         const basePrev = dtPrevVinculada?.data_realizacao || r.data_ultima_preventiva;
         const baseInsp = dtInspVinculada?.data_realizacao || r.data_ultima_inspecao;
+
+        const kmPrevVinc = dtPrevVinculada?.km_veiculo || r.km_rodado_preventiva || 0;
+        const kmInspVinc = dtInspVinculada?.km_veiculo || r.km_rodado_inspecao || 0;
 
         const diasPrev = n(r.dias_ultima_preventiva) > 0 ? n(r.dias_ultima_preventiva) : Math.max(0, n(diffDays(data_sos, basePrev)));
         const diasInsp = n(r.dias_ultima_inspecao) > 0 ? n(r.dias_ultima_inspecao) : Math.max(0, n(diffDays(data_sos, baseInsp)));
@@ -420,7 +776,6 @@ export default function SOS_Resumo() {
         const isControlavel = classificacao === "CONTROLÁVEL" || classificacao === "CONTROLAVEL";
         const isNaoControlavel = classificacao === "NÃO CONTROLÁVEL" || classificacao === "NAO CONTROLAVEL";
 
-        // Mapear responsável
         const funcCru = dtPrevVinculada?.[roleResp] || null;
         const funcResp = funcCru ? funcCru.split(' - ')[1] || funcCru : "Não Identificado";
 
@@ -446,12 +801,14 @@ export default function SOS_Resumo() {
           faixa_inspecao: faixaDias(diasInsp),
           responsavel_preventiva: funcResp,
           funcao_responsavel: roleResp.toUpperCase(),
+          km_preventiva_vinculada: kmPrevVinc,
+          km_inspecao_vinculada: kmInspVinc,
           mes_key: data_sos.slice(0, 7),
           tempo_solucao_horas,
         };
       })
       .filter(Boolean);
-  }, [sosRows, prevRows]);
+  }, [sosList, prevRows]);
 
   const mesesDisponiveis = useMemo(() => {
     const set = new Set(
@@ -500,8 +857,8 @@ export default function SOS_Resumo() {
     [sosProcessado]
   );
 
-  const baseFiltrada = useMemo(() => {
-    const q = busca.trim().toLowerCase();
+  const filtrados = useMemo(() => {
+    const termo = busca.toLowerCase().trim();
 
     return sosProcessado.filter((r) => {
       if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.mes_key)) return false;
@@ -510,11 +867,10 @@ export default function SOS_Resumo() {
       if (filtroTipo && r.tipo_norm !== filtroTipo) return false;
       if (filtroCluster && r.cluster !== filtroCluster) return false;
       if (filtroStatus && r.status !== normalize(filtroStatus)) return false;
-      
       if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
       if (filtroControlabilidade === "NÃO CONTROLÁVEL" && !r.nao_controlavel) return false;
 
-      if (!q) return true;
+      if (!termo) return true;
 
       return [
         r.numero_sos,
@@ -526,7 +882,7 @@ export default function SOS_Resumo() {
         r.setor_manutencao,
         r.status,
         r.responsavel_preventiva
-      ].some((v) => String(v || "").toLowerCase().includes(q));
+      ].some((v) => String(v || "").toLowerCase().includes(termo));
     });
   }, [
     sosProcessado,
@@ -541,15 +897,16 @@ export default function SOS_Resumo() {
     filtroControlabilidade,
   ]);
 
-  const baseRef = useMemo(
-    () => baseFiltrada.filter((r) => r.mes_key === mesReferencia),
-    [baseFiltrada, mesReferencia]
-  );
+  const baseRef = useMemo(() => filtrados.filter((r) => r.mes_key === mesReferencia), [filtrados, mesReferencia]);
+  const baseComp = useMemo(() => filtrados.filter((r) => r.mes_key === mesComparacao), [filtrados, mesComparacao]);
 
-  const baseComp = useMemo(
-    () => baseFiltrada.filter((r) => r.mes_key === mesComparacao),
-    [baseFiltrada, mesComparacao]
-  );
+  const counts = useMemo(() => {
+    const obj = {};
+    OCORRENCIAS_CARDS.forEach((key) => {
+      obj[key] = baseRef.filter((item) => item.tipo_norm === key).length;
+    });
+    return obj;
+  }, [baseRef]);
 
   const kmMesMap = useMemo(() => {
     const map = new Map();
@@ -560,14 +917,9 @@ export default function SOS_Resumo() {
     return map;
   }, [kmProcessado]);
 
-  const baseRefOrdenada = useMemo(() => {
-    return [...baseRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos)));
-  }, [baseRef]);
-
   const reincidenciaCalcRef = useMemo(() => {
     const porVeiculo = new Map();
-
-    baseRefOrdenada.forEach((r) => {
+    [...baseRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
       if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
       porVeiculo.get(r.veiculo).push(r);
     });
@@ -577,20 +929,18 @@ export default function SOS_Resumo() {
     let totalReincSetorial = 0;
     let somaIntervalos = 0;
     let qtdIntervalos = 0;
-
     const detalhesVeiculo = [];
 
     porVeiculo.forEach((eventos, veiculo) => {
-      const sorted = [...eventos].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos)));
       let reincVeiculo = 0;
       let reincTecnica = 0;
       let reincSetorial = 0;
       let intervaloSoma = 0;
       let intervaloQtd = 0;
 
-      for (let i = 1; i < sorted.length; i += 1) {
-        const atual = sorted[i];
-        const anterior = sorted[i - 1];
+      for (let i = 1; i < eventos.length; i += 1) {
+        const atual = eventos[i];
+        const anterior = eventos[i - 1];
         const delta = diffDays(atual.data_sos, anterior.data_sos);
 
         if (delta != null) {
@@ -603,18 +953,12 @@ export default function SOS_Resumo() {
             reincVeiculo += 1;
             totalReincVeiculo += 1;
 
-            if (
-              normalize(atual.problema_encontrado) === normalize(anterior.problema_encontrado) &&
-              normalize(atual.problema_encontrado) !== "N/D"
-            ) {
+            if (atual.problema_encontrado === anterior.problema_encontrado && atual.problema_encontrado !== "N/D") {
               reincTecnica += 1;
               totalReincTecnica += 1;
             }
 
-            if (
-              normalize(atual.setor_manutencao) === normalize(anterior.setor_manutencao) &&
-              normalize(atual.setor_manutencao) !== "N/D"
-            ) {
+            if (atual.setor_manutencao === anterior.setor_manutencao && atual.setor_manutencao !== "N/D") {
               reincSetorial += 1;
               totalReincSetorial += 1;
             }
@@ -624,27 +968,15 @@ export default function SOS_Resumo() {
 
       detalhesVeiculo.push({
         veiculo,
-        cluster: sorted[0]?.cluster || "OUTROS",
-        linhaTop: sorted[sorted.length - 1]?.linha || "N/D",
-        totalSOS: sorted.length,
+        cluster: eventos[0]?.cluster || "OUTROS",
+        linhaTop: eventos[eventos.length - 1]?.linha || "N/D",
+        totalSOS: eventos.length,
         reincVeiculo,
         reincTecnica,
         reincSetorial,
         intervaloMedio: intervaloQtd > 0 ? intervaloSoma / intervaloQtd : 0,
-        defeitoTop:
-          Object.entries(
-            sorted.reduce((acc, r) => {
-              acc[r.problema_encontrado] = n(acc[r.problema_encontrado]) + 1;
-              return acc;
-            }, {})
-          ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
-        setorTop:
-          Object.entries(
-            sorted.reduce((acc, r) => {
-              acc[r.setor_manutencao] = n(acc[r.setor_manutencao]) + 1;
-              return acc;
-            }, {})
-          ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+        defeitoTop: Object.entries(eventos.reduce((acc, r) => { acc[r.problema_encontrado] = n(acc[r.problema_encontrado]) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+        setorTop: Object.entries(eventos.reduce((acc, r) => { acc[r.setor_manutencao] = n(acc[r.setor_manutencao]) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
       });
     });
 
@@ -663,7 +995,7 @@ export default function SOS_Resumo() {
       intervaloMedioGeral,
       detalhesVeiculo: detalhesVeiculo.sort((a, b) => b.reincVeiculo - a.reincVeiculo || b.totalSOS - a.totalSOS),
     };
-  }, [baseRefOrdenada]);
+  }, [baseRef]);
 
   const resumoAtual = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesReferencia));
@@ -689,17 +1021,7 @@ export default function SOS_Resumo() {
       baseRef.filter((r) => r.tempo_solucao_horas > 0).reduce((acc, r) => acc + r.tempo_solucao_horas, 0) /
       Math.max(1, baseRef.filter((r) => r.tempo_solucao_horas > 0).length);
 
-    return {
-      kmTotal,
-      interv,
-      countControlaveis,
-      mkbf,
-      porTipoMap,
-      mediaPrev,
-      mediaInsp,
-      mediaFechamento,
-      ...reincidenciaCalcRef,
-    };
+    return { kmTotal, interv, countControlaveis, mkbf, porTipoMap, mediaPrev, mediaInsp, mediaFechamento, ...reincidenciaCalcRef };
   }, [kmMesMap, mesReferencia, baseRef, reincidenciaCalcRef]);
 
   const resumoComp = useMemo(() => {
@@ -708,8 +1030,6 @@ export default function SOS_Resumo() {
     const validasParaMkbf = baseComp.filter((r) => r.valida_mkbf).length;
     const mkbf = validasParaMkbf > 0 ? kmTotal / validasParaMkbf : 0;
 
-    const countControlaveis = baseComp.filter((r) => r.controlavel).length;
-
     const porTipoMap = {};
     TIPOS_GRAFICO.forEach((t) => (porTipoMap[t] = 0));
     baseComp.forEach((r) => {
@@ -717,34 +1037,26 @@ export default function SOS_Resumo() {
     });
 
     const porVeiculo = new Map();
-    [...baseComp]
-      .sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos)))
-      .forEach((r) => {
-        if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
-        porVeiculo.get(r.veiculo).push(r);
-      });
+    [...baseComp].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+      if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
+      porVeiculo.get(r.veiculo).push(r);
+    });
 
     let veiculosReincidentes = 0;
     porVeiculo.forEach((eventos) => {
       let reinc = false;
       for (let i = 1; i < eventos.length; i += 1) {
-        const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-        if (delta != null && delta <= 30) {
-          reinc = true;
-          break;
+        if (diffDays(eventos[i].data_sos, eventos[i - 1].data_sos) <= 30) {
+          reinc = true; break;
         }
       }
       if (reinc) veiculosReincidentes += 1;
     });
 
-    const veiculosComSOS = porVeiculo.size;
-    const taxaReincidencia = veiculosComSOS > 0 ? (veiculosReincidentes / veiculosComSOS) * 100 : 0;
+    const taxaReincidencia = porVeiculo.size > 0 ? (veiculosReincidentes / porVeiculo.size) * 100 : 0;
+    const mediaFechamento = baseComp.filter((r) => r.tempo_solucao_horas > 0).reduce((acc, r) => acc + r.tempo_solucao_horas, 0) / Math.max(1, baseComp.filter((r) => r.tempo_solucao_horas > 0).length);
 
-    const mediaFechamento =
-      baseComp.filter((r) => r.tempo_solucao_horas > 0).reduce((acc, r) => acc + r.tempo_solucao_horas, 0) /
-      Math.max(1, baseComp.filter((r) => r.tempo_solucao_horas > 0).length);
-
-    return { kmTotal, interv, countControlaveis, mkbf, porTipoMap, taxaReincidencia, mediaFechamento };
+    return { kmTotal, interv, mkbf, porTipoMap, taxaReincidencia, mediaFechamento };
   }, [kmMesMap, mesComparacao, baseComp]);
 
   const historico12m = useMemo(() => {
@@ -757,39 +1069,32 @@ export default function SOS_Resumo() {
       });
 
       const kmTotal = n(kmMesMap.get(mes));
-      const intervTotal = baseMes.length;
       const validasParaMkbf = baseMes.filter((r) => r.valida_mkbf).length;
       const mkbf = validasParaMkbf > 0 ? kmTotal / validasParaMkbf : 0;
 
       const porVeiculo = new Map();
-      [...baseMes]
-        .sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos)))
-        .forEach((r) => {
-          if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
-          porVeiculo.get(r.veiculo).push(r);
-        });
+      [...baseMes].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+        if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
+        porVeiculo.get(r.veiculo).push(r);
+      });
 
       let veiculosReincidentes = 0;
       porVeiculo.forEach((eventos) => {
         let reinc = false;
         for (let i = 1; i < eventos.length; i += 1) {
-          const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-          if (delta != null && delta <= 30) {
-            reinc = true;
-            break;
+          if (diffDays(eventos[i].data_sos, eventos[i - 1].data_sos) <= 30) {
+            reinc = true; break;
           }
         }
         if (reinc) veiculosReincidentes += 1;
       });
 
-      const taxaReincidencia = porVeiculo.size > 0 ? (veiculosReincidentes / porVeiculo.size) * 100 : 0;
-
       return {
         mes,
         mesLabel: monthLabelFromKey(mes),
-        intervTotal,
+        intervTotal: baseMes.length,
         reincidentes: veiculosReincidentes,
-        taxaReincidencia,
+        taxaReincidencia: porVeiculo.size > 0 ? (veiculosReincidentes / porVeiculo.size) * 100 : 0,
         kmTotal,
         mkbf,
         meta: MKBF_META,
@@ -797,92 +1102,56 @@ export default function SOS_Resumo() {
     });
   }, [mesesDisponiveis, sosProcessado, kmMesMap, filtroControlabilidade]);
 
-  const graficoTipos = useMemo(() => {
-    return TIPOS_GRAFICO.map((tipo) => ({
-      tipo,
-      anterior: n(resumoComp.porTipoMap?.[tipo]),
-      atual: n(resumoAtual.porTipoMap?.[tipo]),
-    }));
-  }, [resumoAtual, resumoComp]);
+  const graficoTipos = useMemo(() => TIPOS_GRAFICO.map((tipo) => ({
+    tipo, anterior: n(resumoComp.porTipoMap?.[tipo]), atual: n(resumoAtual.porTipoMap?.[tipo]),
+  })), [resumoAtual, resumoComp]);
 
   const graficoFaixaPreventiva = useMemo(() => {
-    const counts = {};
-    ["0-7 dias", "8-15 dias", "16-30 dias", "31-60 dias", "60+ dias", "Sem informação"].forEach(
-      (f) => (counts[f] = 0)
-    );
-    baseRef.forEach((r) => {
-      counts[r.faixa_preventiva] = n(counts[r.faixa_preventiva]) + 1;
-    });
+    const counts = { "0-7 dias":0, "8-15 dias":0, "16-30 dias":0, "31-60 dias":0, "60+ dias":0, "Sem informação":0 };
+    baseRef.forEach((r) => counts[r.faixa_preventiva] = n(counts[r.faixa_preventiva]) + 1);
     return Object.entries(counts).map(([faixa, total]) => ({ faixa, total }));
   }, [baseRef]);
 
   const graficoFaixaInspecao = useMemo(() => {
-    const counts = {};
-    ["0-7 dias", "8-15 dias", "16-30 dias", "31-60 dias", "60+ dias", "Sem informação"].forEach(
-      (f) => (counts[f] = 0)
-    );
-    baseRef.forEach((r) => {
-      counts[r.faixa_inspecao] = n(counts[r.faixa_inspecao]) + 1;
-    });
+    const counts = { "0-7 dias":0, "8-15 dias":0, "16-30 dias":0, "31-60 dias":0, "60+ dias":0, "Sem informação":0 };
+    baseRef.forEach((r) => counts[r.faixa_inspecao] = n(counts[r.faixa_inspecao]) + 1);
     return Object.entries(counts).map(([faixa, total]) => ({ faixa, total }));
   }, [baseRef]);
 
   const tabelaLinhas = useMemo(() => {
     const linhas = [...new Set(baseRef.map((r) => r.linha))];
+    return linhas.map((linha) => {
+      const atual = baseRef.filter((r) => r.linha === linha);
+      const anterior = baseComp.filter((r) => r.linha === linha);
 
-    return linhas
-      .map((linha) => {
-        const atual = baseRef.filter((r) => r.linha === linha);
-        const anterior = baseComp.filter((r) => r.linha === linha);
+      const porVeiculo = new Map();
+      [...atual].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+        if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
+        porVeiculo.get(r.veiculo).push(r);
+      });
 
-        const porVeiculo = new Map();
-        [...atual]
-          .sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos)))
-          .forEach((r) => {
-            if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
-            porVeiculo.get(r.veiculo).push(r);
-          });
-
-        let veiculosReincidentes = 0;
-        porVeiculo.forEach((eventos) => {
-          let reinc = false;
-          for (let i = 1; i < eventos.length; i += 1) {
-            const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-            if (delta != null && delta <= 30) {
-              reinc = true;
-              break;
-            }
+      let veiculosReincidentes = 0;
+      porVeiculo.forEach((eventos) => {
+        let reinc = false;
+        for (let i = 1; i < eventos.length; i += 1) {
+          if (diffDays(eventos[i].data_sos, eventos[i - 1].data_sos) <= 30) {
+            reinc = true; break;
           }
-          if (reinc) veiculosReincidentes += 1;
-        });
+        }
+        if (reinc) veiculosReincidentes += 1;
+      });
 
-        const defeitoTop =
-          Object.entries(
-            atual.reduce((acc, r) => {
-              acc[r.problema_encontrado] = n(acc[r.problema_encontrado]) + 1;
-              return acc;
-            }, {})
-          ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D";
-
-        return {
-          linha,
-          totalAtual: atual.length,
-          totalAnterior: anterior.length,
-          variacao_pct: variancePct(atual.length, anterior.length),
-          veiculosReincidentes,
-          taxaReincidencia:
-            porVeiculo.size > 0 ? (veiculosReincidentes / porVeiculo.size) * 100 : 0,
-          defeitoTop,
-          setorTop:
-            Object.entries(
-              atual.reduce((acc, r) => {
-                acc[r.setor_manutencao] = n(acc[r.setor_manutencao]) + 1;
-                return acc;
-              }, {})
-            ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
-        };
-      })
-      .sort((a, b) => b.veiculosReincidentes - a.veiculosReincidentes || b.totalAtual - a.totalAtual);
+      return {
+        linha,
+        totalAtual: atual.length,
+        totalAnterior: anterior.length,
+        variacao_pct: variancePct(atual.length, anterior.length),
+        veiculosReincidentes,
+        taxaReincidencia: porVeiculo.size > 0 ? (veiculosReincidentes / porVeiculo.size) * 100 : 0,
+        defeitoTop: Object.entries(atual.reduce((acc, r) => { acc[r.problema_encontrado] = n(acc[r.problema_encontrado]) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+        setorTop: Object.entries(atual.reduce((acc, r) => { acc[r.setor_manutencao] = n(acc[r.setor_manutencao]) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+      };
+    }).sort((a, b) => b.veiculosReincidentes - a.veiculosReincidentes || b.totalAtual - a.totalAtual);
   }, [baseRef, baseComp]);
 
   const tabelaVeiculos = useMemo(() => reincidenciaCalcRef.detalhesVeiculo, [reincidenciaCalcRef]);
@@ -891,158 +1160,116 @@ export default function SOS_Resumo() {
     const map = new Map();
     baseRef.forEach((r) => {
       const key = r.setor_manutencao;
-      if (!map.has(key)) {
-        map.set(key, {
-          setor: key,
-          total: 0,
-          linhas: new Set(),
-          veiculos: new Set(),
-          defeitos: {},
-          reincSetorial: 0,
-        });
-      }
+      if (!map.has(key)) map.set(key, { setor: key, total: 0, linhas: new Set(), veiculos: new Set(), defeitos: {}, reincSetorial: 0 });
       const item = map.get(key);
-      item.total += 1;
-      item.linhas.add(r.linha);
-      item.veiculos.add(r.veiculo);
-      item.defeitos[r.problema_encontrado] = n(item.defeitos[r.problema_encontrado]) + 1;
+      item.total += 1; item.linhas.add(r.linha); item.veiculos.add(r.veiculo); item.defeitos[r.problema_encontrado] = n(item.defeitos[r.problema_encontrado]) + 1;
     });
 
     const porVeiculoSetor = new Map();
-    [...baseRef]
-      .sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos)))
-      .forEach((r) => {
-        const key = `${r.veiculo}__${r.setor_manutencao}`;
-        if (!porVeiculoSetor.has(key)) porVeiculoSetor.set(key, []);
-        porVeiculoSetor.get(key).push(r);
-      });
+    [...baseRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+      const key = `${r.veiculo}__${r.setor_manutencao}`;
+      if (!porVeiculoSetor.has(key)) porVeiculoSetor.set(key, []);
+      porVeiculoSetor.get(key).push(r);
+    });
 
     porVeiculoSetor.forEach((eventos, key) => {
       let reinc = 0;
       for (let i = 1; i < eventos.length; i += 1) {
-        const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-        if (delta != null && delta <= 30) reinc += 1;
+        if (diffDays(eventos[i].data_sos, eventos[i - 1].data_sos) <= 30) reinc += 1;
       }
       const setor = key.split("__")[1];
-      if (map.has(setor)) {
-        map.get(setor).reincSetorial += reinc;
-      }
+      if (map.has(setor)) map.get(setor).reincSetorial += reinc;
     });
 
-    return [...map.values()]
-      .map((r) => ({
-        setor: r.setor,
-        total: r.total,
-        linhas: r.linhas.size,
-        veiculos: r.veiculos.size,
-        reincSetorial: r.reincSetorial,
-        defeitoTop:
-          Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
-      }))
-      .sort((a, b) => b.reincSetorial - a.reincSetorial || b.total - a.total);
+    return [...map.values()].map((r) => ({
+      setor: r.setor, total: r.total, linhas: r.linhas.size, veiculos: r.veiculos.size, reincSetorial: r.reincSetorial,
+      defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+    })).sort((a, b) => b.reincSetorial - a.reincSetorial || b.total - a.total);
   }, [baseRef]);
 
   const tabelaDefeitos = useMemo(() => {
     const map = new Map();
     baseRef.forEach((r) => {
       const key = r.problema_encontrado;
-      if (!map.has(key)) {
-        map.set(key, {
-          defeito: key,
-          total: 0,
-          veiculos: new Set(),
-          setores: new Set(),
-          linhas: new Set(),
-          diasPrevSoma: 0,
-          diasPrevQtd: 0,
-          diasInspSoma: 0,
-          diasInspQtd: 0,
-        });
-      }
+      if (!map.has(key)) map.set(key, { defeito: key, total: 0, veiculos: new Set(), setores: new Set(), linhas: new Set(), diasPrevSoma: 0, diasPrevQtd: 0, diasInspSoma: 0, diasInspQtd: 0 });
       const item = map.get(key);
-      item.total += 1;
-      item.veiculos.add(r.veiculo);
-      item.setores.add(r.setor_manutencao);
-      item.linhas.add(r.linha);
-      if (n(r.dias_ultima_preventiva_calc) > 0) {
-        item.diasPrevSoma += n(r.dias_ultima_preventiva_calc);
-        item.diasPrevQtd += 1;
-      }
-      if (n(r.dias_ultima_inspecao_calc) > 0) {
-        item.diasInspSoma += n(r.dias_ultima_inspecao_calc);
-        item.diasInspQtd += 1;
-      }
+      item.total += 1; item.veiculos.add(r.veiculo); item.setores.add(r.setor_manutencao); item.linhas.add(r.linha);
+      if (n(r.dias_ultima_preventiva_calc) > 0) { item.diasPrevSoma += n(r.dias_ultima_preventiva_calc); item.diasPrevQtd += 1; }
+      if (n(r.dias_ultima_inspecao_calc) > 0) { item.diasInspSoma += n(r.dias_ultima_inspecao_calc); item.diasInspQtd += 1; }
     });
 
     const porVeiculoDefeito = new Map();
-    [...baseRef]
-      .sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos)))
-      .forEach((r) => {
-        const key = `${r.veiculo}__${r.problema_encontrado}`;
-        if (!porVeiculoDefeito.has(key)) porVeiculoDefeito.set(key, []);
-        porVeiculoDefeito.get(key).push(r);
-      });
+    [...baseRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+      const key = `${r.veiculo}__${r.problema_encontrado}`;
+      if (!porVeiculoDefeito.has(key)) porVeiculoDefeito.set(key, []);
+      porVeiculoDefeito.get(key).push(r);
+    });
 
     const reincPorDefeito = new Map();
     porVeiculoDefeito.forEach((eventos, key) => {
       let reinc = 0;
       for (let i = 1; i < eventos.length; i += 1) {
-        const delta = diffDays(eventos[i].data_sos, eventos[i - 1].data_sos);
-        if (delta != null && delta <= 30) reinc += 1;
+        if (diffDays(eventos[i].data_sos, eventos[i - 1].data_sos) <= 30) reinc += 1;
       }
       const defeito = key.split("__")[1];
       reincPorDefeito.set(defeito, n(reincPorDefeito.get(defeito)) + reinc);
     });
 
-    return [...map.values()]
-      .map((r) => ({
-        defeito: r.defeito,
-        total: r.total,
-        veiculos: r.veiculos.size,
-        setores: r.setores.size,
-        linhas: r.linhas.size,
-        reincTecnica: n(reincPorDefeito.get(r.defeito)),
-        mediaPrev: r.diasPrevQtd > 0 ? r.diasPrevSoma / r.diasPrevQtd : 0,
-        mediaInsp: r.diasInspQtd > 0 ? r.diasInspSoma / r.diasInspQtd : 0,
-      }))
-      .sort((a, b) => b.reincTecnica - a.reincTecnica || b.total - a.total);
+    return [...map.values()].map((r) => ({
+      defeito: r.defeito, total: r.total, veiculos: r.veiculos.size, setores: r.setores.size, linhas: r.linhas.size,
+      reincTecnica: n(reincPorDefeito.get(r.defeito)),
+      mediaPrev: r.diasPrevQtd > 0 ? r.diasPrevSoma / r.diasPrevQtd : 0,
+      mediaInsp: r.diasInspQtd > 0 ? r.diasInspSoma / r.diasInspQtd : 0,
+    })).sort((a, b) => b.reincTecnica - a.reincTecnica || b.total - a.total);
   }, [baseRef]);
 
   const tabelaMotoristas = useMemo(() => {
     const map = new Map();
     baseRef.forEach((r) => {
       const key = r.motorista;
-      if (!map.has(key)) {
-        map.set(key, {
-          motorista: key,
-          total: 0,
-          veiculos: new Set(),
-          linhas: new Set(),
-          defeitos: {},
-        });
-      }
+      if (!map.has(key)) map.set(key, { motorista: key, total: 0, veiculos: new Set(), linhas: new Set(), defeitos: {} });
       const item = map.get(key);
-      item.total += 1;
-      item.veiculos.add(r.veiculo);
-      item.linhas.add(r.linha);
-      item.defeitos[r.problema_encontrado] = n(item.defeitos[r.problema_encontrado]) + 1;
+      item.total += 1; item.veiculos.add(r.veiculo); item.linhas.add(r.linha); item.defeitos[r.problema_encontrado] = n(item.defeitos[r.problema_encontrado]) + 1;
     });
 
-    return [...map.values()]
-      .map((r) => ({
-        motorista: r.motorista,
-        total: r.total,
-        veiculos: r.veiculos.size,
-        linhas: r.linhas.size,
-        defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
-      }))
-      .sort((a, b) => b.total - a.total);
+    return [...map.values()].map((r) => ({
+      motorista: r.motorista, total: r.total, veiculos: r.veiculos.size, linhas: r.linhas.size,
+      defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+    })).sort((a, b) => b.total - a.total);
   }, [baseRef]);
 
-  // Lógica da Tabela Avaliadores/Funcionários da Manutenção (Pós-Preventiva)
+  // Lógica Revisada: Avaliadores/Funcionários da Manutenção com Base Real de Preventivas
   const tabelaFuncionarios = useMemo(() => {
     const map = new Map();
 
+    const extractName = (str) => {
+      if (!str) return null;
+      return str.includes(' - ') ? str.split(' - ')[1].trim() : str.trim();
+    };
+
+    // 1. Encontrar o Total de Preventivas Executadas no Período por cada Funcionário
+    const prevsNoPeriodo = prevRows.filter(p => {
+       if (mesReferencia && String(p.data_realizacao).slice(0,7) !== mesReferencia) return false;
+       return true;
+    });
+
+    prevsNoPeriodo.forEach(p => {
+      const m = extractName(p.mecanico);
+      const e = extractName(p.eletricista);
+      const f = extractName(p.funilaria);
+      const b = extractName(p.borracharia);
+      
+      [m, e, f, b].forEach(nome => {
+          if (nome) {
+              if (!map.has(nome)) {
+                  map.set(nome, { nome, totalPrevFeitas: 0, sosTotais: 0, sosPrecoce: 0, diasPrevSoma: 0, defeitos: {} });
+              }
+              map.get(nome).totalPrevFeitas += 1;
+          }
+      });
+    });
+
+    // 2. Atribuir os Retrabalhos (SOS <= 15 dias ou <= 5.000 KM)
     baseRef.forEach((r) => {
       if (!r.responsavel_preventiva || r.responsavel_preventiva === "Não Identificado") return;
 
@@ -1051,18 +1278,27 @@ export default function SOS_Resumo() {
         map.set(key, {
           nome: key,
           funcao: r.funcao_responsavel,
-          totalSOS: 0,
-          sosPrecoce: 0, // <= 30 dias
+          totalPrevFeitas: 0,
+          sosTotais: 0,
+          sosPrecoce: 0,
           diasPrevSoma: 0,
           defeitos: {},
         });
       }
 
       const item = map.get(key);
-      item.totalSOS += 1;
-      item.diasPrevSoma += r.dias_ultima_preventiva_calc;
+      if (!item.funcao) item.funcao = r.funcao_responsavel;
 
-      if (r.dias_ultima_preventiva_calc <= 30) {
+      item.sosTotais += 1;
+      item.diasPrevSoma += n(r.dias_ultima_preventiva_calc);
+
+      // Cálculo de KM rodado desde a preventiva
+      const kmRodado = (n(r.km_veiculo_sos) > 0 && n(r.km_preventiva_vinculada) > 0) 
+        ? Math.max(0, n(r.km_veiculo_sos) - n(r.km_preventiva_vinculada)) 
+        : null;
+
+      // Nova Regra de Retrabalho: <= 15 Dias OU <= 5.000 KM
+      if (n(r.dias_ultima_preventiva_calc) <= 15 || (kmRodado !== null && kmRodado <= 5000)) {
         item.sosPrecoce += 1;
       }
       
@@ -1070,17 +1306,20 @@ export default function SOS_Resumo() {
     });
 
     return [...map.values()]
+      .filter(r => r.totalPrevFeitas > 0 || r.sosTotais > 0)
       .map(r => ({
         nome: r.nome,
-        funcao: r.funcao,
-        totalSOS: r.totalSOS,
+        funcao: r.funcao || "Múltiplas",
+        totalPrevFeitas: r.totalPrevFeitas,
+        sosTotais: r.sosTotais,
         sosPrecoce: r.sosPrecoce,
-        taxaRetrabalho: r.totalSOS > 0 ? (r.sosPrecoce / r.totalSOS) * 100 : 0,
-        mediaDiasQuebra: r.totalSOS > 0 ? (r.diasPrevSoma / r.totalSOS) : 0,
+        // Se ele fez preventivas no mês, a taxa é sobre elas. Se só gerou retrabalho de meses anteriores, é sobre o SOS.
+        taxaRetrabalho: r.totalPrevFeitas > 0 ? (r.sosPrecoce / r.totalPrevFeitas) * 100 : (r.sosTotais > 0 ? (r.sosPrecoce / r.sosTotais) * 100 : 0),
+        mediaDiasQuebra: r.sosTotais > 0 ? (r.diasPrevSoma / r.sosTotais) : 0,
         defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
       }))
-      .sort((a, b) => b.sosPrecoce - a.sosPrecoce || b.totalSOS - a.totalSOS);
-  }, [baseRef]);
+      .sort((a, b) => b.sosPrecoce - a.sosPrecoce || b.totalPrevFeitas - a.totalPrevFeitas);
+  }, [baseRef, prevRows, mesReferencia]);
 
   const top5Veiculos3m = useMemo(() => {
     if (!mesReferencia) return [];
@@ -1143,7 +1382,7 @@ export default function SOS_Resumo() {
         tabelaLinhas[0]?.totalAtual || 0
       )} SOS analisados e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
       `O defeito mais recorrente é "${defeitoTop}", puxado principalmente pelo setor ${setorTop}.`,
-      `O colaborador da preventiva com maior volume de veículos falhando em menos de 30 dias foi ${funcTop} (Taxa Falha Precoce: ${fmtPct(tabelaFuncionarios[0]?.taxaRetrabalho || 0)}).`,
+      `O colaborador com maior volume de retrabalho (≤ 15 dias ou ≤ 5.000 km) foi ${funcTop} (Taxa de Retrabalho: ${fmtPct(tabelaFuncionarios[0]?.taxaRetrabalho || 0)}).`,
       `O intervalo médio entre SOS do mesmo veículo está em ${fmtNum(
         resumoAtual.intervaloMedioGeral || 0,
         1
@@ -1214,8 +1453,8 @@ export default function SOS_Resumo() {
         tabelaFuncionarios.map((r) => ({
           Funcionário: r.nome,
           Função: r.funcao,
-          "SOS Totais": r.totalSOS,
-          "Falhas Precoces (<= 30d)": r.sosPrecoce,
+          "Total Preventivas": r.totalPrevFeitas,
+          "SOS (Retrabalho)": r.sosPrecoce,
           "Taxa Retrabalho %": fmtNum(r.taxaRetrabalho, 1),
           "Média Dias Pós-Prev": fmtNum(r.mediaDiasQuebra, 1),
           "Principal Defeito": r.defeitoTop,
@@ -1356,7 +1595,7 @@ export default function SOS_Resumo() {
               <strong>Pós-preventiva e pós-inspeção:</strong> usa os dados nativos da tabela de preventivas associada para refazer o cálculo de dias exatos na hora.
             </p>
             <p>
-              <strong>Avaliação de Funcionário:</strong> cruza o SOS com a última Preventiva e mapeia o responsável ("Mecânico", "Eletricista", etc.) para verificar "falhas precoces" em menos de 30 dias do plano.
+              <strong>Avaliação de Funcionário:</strong> O volume total de preventivas é contabilizado na tabela (Denominador). O retrabalho agora é contado apenas se o SOS ocorrer com <strong>≤ 15 dias</strong> ou se o veículo tiver rodado <strong>≤ 5.000 km</strong> após a revisão executada por aquele colaborador.
             </p>
           </div>
         )}
@@ -1766,7 +2005,7 @@ export default function SOS_Resumo() {
       {abaAtiva === "FUNCIONARIOS" && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border shadow-sm p-4">
-            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Colaboradores c/ Retrabalho Precoce (SOS ≤ 30 dias)</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-3">Top 10 Colaboradores c/ Retrabalho (≤ 15 dias ou ≤ 5.000 km)</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tabelaFuncionarios.slice(0, 10)} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
@@ -1775,10 +2014,10 @@ export default function SOS_Resumo() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} dx={-10} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="totalSOS" name="Volume Total Pós-Preventiva" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
-                    <LabelList dataKey="totalSOS" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
+                  <Bar dataKey="totalPrevFeitas" name="Preventivas no Período" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
+                    <LabelList dataKey="totalPrevFeitas" position="top" style={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
                   </Bar>
-                  <Bar dataKey="sosPrecoce" name="Falha Precoce (<= 30d)" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={25}>
+                  <Bar dataKey="sosPrecoce" name="Retrabalho (≤ 15d ou ≤ 5k km)" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={25}>
                     <LabelList dataKey="sosPrecoce" position="top" style={{ fill: "#f43f5e", fontSize: 11, fontWeight: "bold" }} />
                   </Bar>
                 </BarChart>
@@ -1793,8 +2032,8 @@ export default function SOS_Resumo() {
                 <tr>
                   <th className="px-3 py-3 text-left">Funcionário</th>
                   <th className="px-3 py-3 text-left">Função</th>
-                  <th className="px-3 py-3 text-left">SOS Totais (Pós-Prev)</th>
-                  <th className="px-3 py-3 text-left">Falhas Precoces (≤ 30d)</th>
+                  <th className="px-3 py-3 text-left">Preventivas no Período</th>
+                  <th className="px-3 py-3 text-left">SOS Retrabalho (≤ 15d ou ≤ 5k km)</th>
                   <th className="px-3 py-3 text-left">Taxa de Retrabalho</th>
                   <th className="px-3 py-3 text-left">Média Dias até Quebrar</th>
                   <th className="px-3 py-3 text-left">Principal Defeito Associado</th>
@@ -1805,7 +2044,7 @@ export default function SOS_Resumo() {
                   <tr key={r.nome} className="border-b last:border-b-0 hover:bg-slate-50">
                     <td className="px-3 py-3 font-black text-slate-800">{r.nome}</td>
                     <td className="px-3 py-3"><span className="bg-slate-100 px-2 py-1 rounded font-bold text-slate-600 text-xs">{r.funcao}</span></td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalPrevFeitas)}</td>
                     <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.sosPrecoce)}</td>
                     <td className="px-3 py-3">{fmtPct(r.taxaRetrabalho)}</td>
                     <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaDiasQuebra, 1)} dias</td>

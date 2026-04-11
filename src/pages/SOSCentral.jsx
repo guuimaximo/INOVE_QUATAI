@@ -13,12 +13,10 @@ import {
   FaSortDown,
   FaBus,
   FaCalendarAlt,
-  FaUserTie,
-  FaWrench,
   FaTools,
-  FaCheckCircle,
   FaInbox,
-  FaRoad
+  FaWrench,
+  FaRoad,
 } from "react-icons/fa";
 
 /* =======================
@@ -192,10 +190,40 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({});
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  
+  // Histórico puxado dinamicamente da tabela 'preventivas'
+  const [historicoPrev, setHistoricoPrev] = useState(null);
+  const [historicoInsp, setHistoricoInsp] = useState(null);
+  const [buscandoHistorico, setBuscandoHistorico] = useState(false);
 
   useEffect(() => {
     if (sos) setFormData(sos);
   }, [sos]);
+
+  // Busca os colaboradores e dados complementares na tabela de preventivas
+  useEffect(() => {
+    async function fetchLinkedPreventivas() {
+      if (formData.os_ultima_preventiva) {
+        const { data } = await supabase
+          .from("preventivas")
+          .select("*")
+          .eq("numero_os", formData.os_ultima_preventiva)
+          .limit(1)
+          .maybeSingle();
+        setHistoricoPrev(data);
+      }
+      if (formData.os_ultima_inspecao) {
+        const { data } = await supabase
+          .from("preventivas")
+          .select("*")
+          .eq("numero_os", formData.os_ultima_inspecao)
+          .limit(1)
+          .maybeSingle();
+        setHistoricoInsp(data);
+      }
+    }
+    fetchLinkedPreventivas();
+  }, [formData.os_ultima_preventiva, formData.os_ultima_inspecao]);
 
   function solicitarLogin() {
     setLoginModalOpen(true);
@@ -206,18 +234,59 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
     setEditMode(true);
   }
 
+  async function handlePuxarHistorico() {
+    setBuscandoHistorico(true);
+    const { data: prevData } = await supabase
+      .from("preventivas")
+      .select("*")
+      .eq("prefixo", sos.veiculo)
+      .eq("tipo", "Preventiva - 10.000")
+      .order("data_realizacao", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: inspData } = await supabase
+      .from("preventivas")
+      .select("*")
+      .eq("prefixo", sos.veiculo)
+      .eq("tipo", "Inspeção - 5.000")
+      .order("data_realizacao", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!prevData && !inspData) {
+      alert("Nenhum histórico de preventiva ou inspeção encontrado para este veículo.");
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        os_ultima_preventiva: prevData?.numero_os || prev.os_ultima_preventiva,
+        data_ultima_preventiva: prevData?.data_realizacao || prev.data_ultima_preventiva,
+        km_rodado_preventiva: prevData?.km_veiculo || prev.km_rodado_preventiva,
+
+        os_ultima_inspecao: inspData?.numero_os || prev.os_ultima_inspecao,
+        data_ultima_inspecao: inspData?.data_realizacao || prev.data_ultima_inspecao,
+        km_rodado_inspecao: inspData?.km_veiculo || prev.km_rodado_inspecao,
+      }));
+      alert("Histórico atrelado com sucesso! Salve para confirmar.");
+    }
+    setBuscandoHistorico(false);
+  }
+
   async function salvarAlteracoes() {
     const dataPrev = formData.data_ultima_preventiva || null;
     const dataInsp = formData.data_ultima_inspecao || null;
 
+    const payload = {
+      ...formData,
+      km_veiculo_sos: formData.km_veiculo_sos ? Number(formData.km_veiculo_sos) : null,
+      dias_ultima_preventiva: calcularDiasDecorridos(dataPrev),
+      dias_ultima_inspecao: calcularDiasDecorridos(dataInsp),
+      atualizado_em: new Date().toISOString(),
+    };
+
     const { error } = await supabase
       .from("sos_acionamentos")
-      .update({
-        ...formData,
-        dias_ultima_preventiva: calcularDiasDecorridos(dataPrev),
-        dias_ultima_inspecao: calcularDiasDecorridos(dataInsp),
-        atualizado_em: new Date().toISOString(),
-      })
+      .update(payload)
       .eq("id", sos.id);
 
     if (error) {
@@ -365,7 +434,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             </div>
           </div>
 
-          {/* Seção 2: Tratamento e Manutenção (O que foi inserido) */}
+          {/* Seção 2: Tratamento e Manutenção */}
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
               <FaTools className="text-blue-500" /> Tratamento e Execução
@@ -376,7 +445,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
               {renderField("Problema Encontrado", "problema_encontrado")}
               
               <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
-                {renderField("Mecânico Executor", "mecanico_executor")}
+                {renderField("Mecânico Apontado", "mecanico_executor")}
                 {renderField("Responsável (Solucionador)", "solucionador")}
                 <div className="md:col-span-2">
                   {renderField("Solução Aplicada", "solucao", true)}
@@ -389,32 +458,95 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
 
           {/* Seção 3: Snapshot de Preventiva e Inspeção */}
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
-              <FaWrench className="text-emerald-500" /> Histórico Atrelado (Snapshot)
-            </h3>
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b pb-2 gap-3">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <FaWrench className="text-emerald-500" /> Histórico Atrelado (Snapshot)
+              </h3>
+              
+              {editMode && (
+                <button
+                  onClick={handlePuxarHistorico}
+                  disabled={buscandoHistorico}
+                  className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 disabled:opacity-50"
+                >
+                  {buscandoHistorico ? "Buscando..." : "Puxar Histórico Automaticamente"}
+                </button>
+              )}
+            </div>
+
+            <div className="mb-5 flex flex-col md:w-1/3">
+              {renderField("KM Atual do Veículo (Hora do SOS)", "km_veiculo_sos", false, "number")}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Box Preventiva */}
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
-                <h4 className="font-bold text-slate-700 text-sm border-b pb-1">Última Preventiva (10k)</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  {renderField("Data", "data_ultima_preventiva", false, "date")}
-                  {renderField("KM na Época", "km_rodado_preventiva")}
-                  {renderField("Dias Decorridos", "dias_ultima_preventiva", false, "text", true)}
+                <h4 className="font-bold text-slate-700 text-sm border-b pb-1 flex justify-between">
+                  <span>Última Preventiva (10k)</span>
+                  <span className="text-blue-600">OS: {formData.os_ultima_preventiva || "—"}</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div className="col-span-1 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Data</span>
+                    <span className="font-black text-slate-800">{formData.data_ultima_preventiva ? formatDateBR(formData.data_ultima_preventiva) : "—"}</span>
+                  </div>
+                  <div className="col-span-1 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">KM Época</span>
+                    <span className="font-black text-slate-800">{formData.km_rodado_preventiva || "—"}</span>
+                  </div>
+                  
+                  {/* Dados buscados dinamicamente da tabela Preventivas */}
+                  <div className="col-span-2 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Mecânico</span>
+                    <span className="font-black text-slate-800">{historicoPrev?.mecanico || "—"}</span>
+                  </div>
+                  <div className="col-span-2 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Eletricista</span>
+                    <span className="font-black text-slate-800">{historicoPrev?.eletricista || "—"}</span>
+                  </div>
+                  <div className="col-span-2 text-xs flex gap-4">
+                    <div className="flex-1">
+                      <span className="block font-bold text-slate-500 uppercase">Funilaria</span>
+                      <span className="font-black text-slate-800">{historicoPrev?.funilaria || "—"}</span>
+                    </div>
+                    <div className="flex-1">
+                      <span className="block font-bold text-slate-500 uppercase">Borracharia</span>
+                      <span className="font-black text-slate-800">{historicoPrev?.borracharia || "—"}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
               
               {/* Box Inspeção */}
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
-                <h4 className="font-bold text-slate-700 text-sm border-b pb-1">Última Inspeção (5k)</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  {renderField("Data", "data_ultima_inspecao", false, "date")}
-                  {renderField("KM na Época", "km_rodado_inspecao")}
-                  {renderField("Dias Decorridos", "dias_ultima_inspecao", false, "text", true)}
+                <h4 className="font-bold text-slate-700 text-sm border-b pb-1 flex justify-between">
+                  <span>Última Inspeção (5k)</span>
+                  <span className="text-emerald-600">OS: {formData.os_ultima_inspecao || "—"}</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div className="col-span-1 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Data</span>
+                    <span className="font-black text-slate-800">{formData.data_ultima_inspecao ? formatDateBR(formData.data_ultima_inspecao) : "—"}</span>
+                  </div>
+                  <div className="col-span-1 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">KM Época</span>
+                    <span className="font-black text-slate-800">{formData.km_rodado_inspecao || "—"}</span>
+                  </div>
+
+                  {/* Dados buscados dinamicamente da tabela Preventivas */}
+                  <div className="col-span-2 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Mecânico</span>
+                    <span className="font-black text-slate-800">{historicoInsp?.mecanico || "—"}</span>
+                  </div>
+                  <div className="col-span-2 text-xs">
+                    <span className="block font-bold text-slate-500 uppercase">Eletricista</span>
+                    <span className="font-black text-slate-800">{historicoInsp?.eletricista || "—"}</span>
+                  </div>
                 </div>
               </div>
             </div>
             <p className="text-[10px] text-slate-400 font-semibold mt-3 text-center">
-              * Estes dados representam a situação do veículo no momento exato em que este SOS foi tratado.
+              * Estes dados representam a situação do veículo no momento exato em que este SOS foi tratado. Se não houver OS atrelada, puxe o histórico editando o registro.
             </p>
           </div>
 

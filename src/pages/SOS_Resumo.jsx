@@ -17,7 +17,21 @@ import {
   FaInbox,
   FaWrench,
   FaRoad,
-  FaUserCog
+  FaUserCog,
+  FaBolt,
+  FaDownload,
+  FaInfoCircle,
+  FaSync,
+  FaExclamationTriangle,
+  FaClock,
+  FaChartLine,
+  FaChartPie,
+  FaClipboardList,
+  FaCogs,
+  FaUserTie,
+  FaArrowUp,
+  FaArrowDown,
+  FaEquals
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -38,26 +52,206 @@ import {
 /* =======================
    AJUSTES GERAIS
 ======================= */
-const OCORRENCIAS_CARDS = [
-  "SOS",
-  "RECOLHEU",
-  "TROCA",
-  "AVARIA",
-  "IMPROCEDENTE",
-  "SEGUIU VIAGEM",
-];
-
+const MKBF_META = 7000;
+const TIPOS_GRAFICO = ["RECOLHEU", "SOS", "AVARIA", "TROCA", "IMPROCEDENTE"];
+const OCORRENCIAS_CARDS = ["SOS", "RECOLHEU", "TROCA", "AVARIA", "IMPROCEDENTE", "SEGUIU VIAGEM"];
 const DATE_FIELD = "data_sos";
 
-function pickBestDate(row) {
-  return (
-    row?.[DATE_FIELD] ||
-    row?.data_sos ||
-    row?.data_fechamento ||
-    row?.data_encerramento ||
-    row?.created_at ||
-    null
-  );
+function n(v) {
+  const x = Number(v);
+  return Number.isFinite(x) ? x : 0;
+}
+
+function s(v) {
+  return String(v || "").trim();
+}
+
+function normalize(v) {
+  return s(v).toUpperCase();
+}
+
+function safeDateStr(v) {
+  if (!v) return "";
+  const txt = s(v);
+  if (!txt) return "";
+  if (txt.includes("T")) return txt.split("T")[0];
+  if (txt.includes(" ")) return txt.split(" ")[0];
+
+  const br = txt.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) {
+    const [, dd, mm, yyyy] = br;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return txt;
+}
+
+function parseDateOnly(v) {
+  const dt = safeDateStr(v);
+  if (!dt) return null;
+  const d = new Date(`${dt}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function diffDays(dateA, dateB) {
+  const a = parseDateOnly(dateA);
+  const b = parseDateOnly(dateB);
+  if (!a || !b) return null;
+  const ms = a.getTime() - b.getTime();
+  return Math.floor(ms / 86400000);
+}
+
+function calcDiffHours(startDate, startTime, endDate) {
+  const d1 = safeDateStr(startDate);
+  const d2 = safeDateStr(endDate);
+  const h1 = s(startTime);
+
+  if (!d1 || !d2) return 0;
+
+  const start = new Date(`${d1}T${h1 || "00:00:00"}`);
+  const end = new Date(`${d2}T23:59:59`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  const hours = (end.getTime() - start.getTime()) / 36e5;
+  return hours > 0 ? hours : 0;
+}
+
+function fmtDateBr(v) {
+  const dt = safeDateStr(v);
+  if (!dt) return "-";
+  const p = dt.split("-");
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dt;
+}
+
+function fmtNum(v, dec = 2) {
+  return n(v).toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+function fmtInt(v) {
+  return Math.round(n(v)).toLocaleString("pt-BR");
+}
+
+function fmtPct(v) {
+  return `${fmtNum(v, 1)}%`;
+}
+
+function fmtHoras(v) {
+  const h = n(v);
+  if (h < 1 && h > 0) return `${fmtNum(h * 60, 0)} min`;
+  return `${fmtNum(h, 1)} h`;
+}
+
+function monthKey(date) {
+  if (!date) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelFromKey(key) {
+  if (!key) return "";
+  const [y, m] = key.split("-");
+  const meses = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+  return `${meses[n(m) - 1] || m}/${String(y).slice(2)}`;
+}
+
+function firstDayOfMonth(key) {
+  return key ? new Date(`${key}-01T00:00:00`) : null;
+}
+
+function addMonths(date, months) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function deriveCluster(prefixo) {
+  const v = normalize(prefixo);
+  if (!v) return "OUTROS";
+  if (v.startsWith("2216")) return "C8";
+  if (v.startsWith("2222")) return "C9";
+  if (v.startsWith("2224")) return "C10";
+  if (v.startsWith("2425")) return "C11";
+  if (v.startsWith("W")) return "C6";
+  return "OUTROS";
+}
+
+function normalizeTipo(oc) {
+  const o = normalize(oc);
+  if (!o) return "";
+  if (["RA", "R.A", "R.A."].includes(o)) return "RECOLHEU";
+  if (o.includes("RECOLH")) return "RECOLHEU";
+  if (o.includes("IMPRO")) return "IMPROCEDENTE";
+  if (o.includes("TROC")) return "TROCA";
+  if (o === "S.O.S") return "SOS";
+  if (o.includes("AVARI")) return "AVARIA";
+  if (o.includes("SEGUIU")) return "SEGUIU VIAGEM";
+  return o;
+}
+
+function isOcorrenciaValidaParaMkbf(oc) {
+  const tipo = normalizeTipo(oc);
+  return !!tipo && tipo !== "SEGUIU VIAGEM";
+}
+
+function variancePct(atual, anterior) {
+  if (!anterior) return 0;
+  return ((atual - anterior) / anterior) * 100;
+}
+
+function faixaDias(v) {
+  const x = n(v);
+  if (!x && x !== 0) return "Sem informação";
+  if (x <= 7) return "0-7 dias";
+  if (x <= 15) return "8-15 dias";
+  if (x <= 30) return "16-30 dias";
+  if (x <= 60) return "31-60 dias";
+  return "60+ dias";
+}
+
+function mapSetorToRole(setor, grupo) {
+  const s = normalize(setor);
+  const g = normalize(grupo);
+  if (s.includes("ELÉTRICA") || s.includes("ELETRICA") || g.includes("ELÉTRICA") || g.includes("ELETRICA")) return "eletricista";
+  if (s.includes("BORRACHARIA") || g.includes("PNEU")) return "borracharia";
+  if (s.includes("FUNILARIA") || s.includes("CARROCERIA") || g.includes("CARROCERIA")) return "funilaria";
+  return "mecanico";
+}
+
+function exportarCSV(dados, nomeArquivo) {
+  if (!dados?.length) return;
+  const cols = Object.keys(dados[0]).filter((k) => typeof dados[0][k] !== "object");
+  const csv = [
+    cols.join(";"),
+    ...dados.map((row) =>
+      cols.map((col) => `"${String(row[col] ?? "").replace(/"/g, '""')}"`).join(";")
+    ),
+  ].join("\n");
+
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${nomeArquivo}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function monthRange(yyyyMm) {
+  if (!yyyyMm) return { start: "", end: "" };
+  const [y, m] = yyyyMm.split("-").map(Number);
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const start = `${y}-${pad2(m)}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const end = `${y}-${pad2(m)}-${pad2(lastDay)}`;
+  return { start, end };
+}
+
+function calcularDiasDecorridos(dataInicio, dataFim) {
+  if (!dataInicio || !dataFim) return null;
+  const dt1 = new Date(`${dataInicio}T00:00:00`);
+  const dt2 = new Date(`${dataFim}T00:00:00`);
+  if (Number.isNaN(dt1.getTime()) || Number.isNaN(dt2.getTime())) return null;
+  dt1.setHours(0, 0, 0, 0);
+  dt2.setHours(0, 0, 0, 0);
+  const diffMs = dt2.getTime() - dt1.getTime();
+  return Math.max(0, Math.floor(diffMs / 86400000));
 }
 
 function parseToDate(value) {
@@ -85,31 +279,8 @@ function formatDateBR(value) {
   return d ? d.toLocaleDateString("pt-BR") : "—";
 }
 
-function monthRange(yyyyMm) {
-  if (!yyyyMm) return { start: "", end: "" };
-  const [y, m] = yyyyMm.split("-").map(Number);
-  const pad2 = (n) => String(n).padStart(2, "0");
-  const start = `${y}-${pad2(m)}-01`;
-  const lastDay = new Date(y, m, 0).getDate();
-  const end = `${y}-${pad2(m)}-${pad2(lastDay)}`;
-  return { start, end };
-}
-
-function calcularDiasDecorridos(dataInicio, dataFim) {
-    if (!dataInicio || !dataFim) return null;
-    const dt1 = new Date(`${dataInicio}T00:00:00`);
-    const dt2 = new Date(`${dataFim}T00:00:00`);
-    if (Number.isNaN(dt1.getTime()) || Number.isNaN(dt2.getTime())) return null;
-    
-    dt1.setHours(0, 0, 0, 0);
-    dt2.setHours(0, 0, 0, 0);
-    
-    const diffMs = dt2.getTime() - dt1.getTime();
-    return Math.max(0, Math.floor(diffMs / 86400000));
-}
-
 /* =======================
-   STATUS E TAGS
+   COMPONENTES UI GERAIS
 ======================= */
 const cores = {
   SOS: "bg-rose-600 text-white",
@@ -135,6 +306,68 @@ function OcorrenciaTag({ ocorrencia }) {
     <span className={`${estilo} px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm`}>
       {o || "—"}
     </span>
+  );
+}
+
+function EvolucaoBadge({ value, invert = false }) {
+  const val = n(value);
+  if (val > 0) {
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border ${invert ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
+        <FaArrowUp size={10} /> {fmtPct(Math.abs(val))}
+      </span>
+    );
+  }
+  if (val < 0) {
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border ${invert ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"}`}>
+        <FaArrowDown size={10} /> {fmtPct(Math.abs(val))}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border bg-slate-50 text-slate-700 border-slate-200">
+      <FaEquals size={10} /> 0,0%
+    </span>
+  );
+}
+
+function CardKPI({ title, value, sub, icon, tone = "blue", className = "" }) {
+  const tones = {
+    blue: "from-blue-50 to-cyan-50 border-blue-200 text-blue-700",
+    emerald: "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700",
+    amber: "from-amber-50 to-orange-50 border-amber-200 text-amber-700",
+    rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
+    violet: "from-violet-50 to-fuchsia-50 border-violet-200 text-violet-700",
+    slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
+  };
+  return (
+    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-4 shadow-sm ${className}`}>
+      <div className="flex items-start justify-between gap-3 h-full">
+        <div className="flex flex-col justify-between h-full">
+          <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
+          <div>
+            <p className="text-2xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
+            <p className="text-xs mt-1 text-slate-600 font-semibold">{sub}</p>
+          </div>
+        </div>
+        <div className="text-xl mt-1 opacity-80">{icon}</div>
+      </div>
+    </div>
+  );
+}
+
+function TabButton({ active, onClick, icon, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-black transition ${
+        active ? "bg-slate-800 text-white border-slate-800 shadow" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+      }`}
+    >
+      {icon}
+      {children}
+    </button>
   );
 }
 
@@ -587,8 +820,8 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
 export default function SOSCentral() {
   const PAGE_SIZE = 200;
 
-  const [sosRows, setSosRows] = useState([]); // Base Completa p/ Dashboard
-  const [sosList, setSosList] = useState([]); // Base Paginada p/ Tabela
+  const [sosRows, setSosRows] = useState([]); 
+  const [sosList, setSosList] = useState([]); 
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -613,6 +846,7 @@ export default function SOSCentral() {
   
   const [abaAtiva, setAbaAtiva] = useState("EXECUTIVO");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
+  const [mesReferencia, setMesReferencia] = useState("");
 
   const [sortBy, setSortBy] = useState(DATE_FIELD);
   const [sortAsc, setSortAsc] = useState(false);
@@ -745,7 +979,6 @@ export default function SOSCentral() {
     const mapPrev = new Map();
     (prevRows || []).forEach(p => mapPrev.set(s(p.numero_os), p));
 
-    // Helper extra-seguro para limpar nomes que vêm do banco (evita crash se vier Number ou formatado diferente)
     const extractName = (val) => {
       if (!val) return null;
       const str = String(val);
@@ -863,7 +1096,6 @@ export default function SOSCentral() {
     [sosProcessado]
   );
 
-  // Filtra toda a base de Dashboard (sosRows) e gera a baseFiltrada
   const baseFiltrada = useMemo(() => {
     const q = busca.trim().toLowerCase();
 
@@ -904,30 +1136,8 @@ export default function SOSCentral() {
     filtroControlabilidade,
   ]);
 
-  // Filtra a base Paginada (sosList) exclusivamente para uso na Tabela inferior
-  const filtrados = useMemo(() => {
-    const termo = busca.toLowerCase().trim();
-    if (!termo) return sosList;
-    return sosList.filter((s) => {
-      return (
-        s.numero_sos?.toString().toLowerCase().includes(termo) ||
-        s.veiculo?.toLowerCase().includes(termo) ||
-        s.motorista_nome?.toLowerCase().includes(termo) ||
-        s.ocorrencia?.toLowerCase().includes(termo)
-      );
-    });
-  }, [busca, sosList]);
-
   const baseRef = useMemo(() => baseFiltrada.filter((r) => r.mes_key === mesReferencia), [baseFiltrada, mesReferencia]);
   const baseComp = useMemo(() => baseFiltrada.filter((r) => r.mes_key === mesComparacao), [baseFiltrada, mesComparacao]);
-
-  const counts = useMemo(() => {
-    const obj = {};
-    OCORRENCIAS_CARDS.forEach((key) => {
-      obj[key] = baseRef.filter((item) => item.tipo_norm === key).length;
-    });
-    return obj;
-  }, [baseRef]);
 
   const kmMesMap = useMemo(() => {
     const map = new Map();
@@ -1284,7 +1494,7 @@ export default function SOSCentral() {
       [m, e, f, b].forEach(nome => {
           if (nome) {
               if (!map.has(nome)) {
-                  map.set(nome, { nome, totalPrevFeitas: 0, sosTotais: 0, sosPrecoce: 0, diasPrevSoma: 0, defeitos: {} });
+                  map.set(nome, { nome, totalPrevFeitas: 0, sosTotais: 0, sosPrecoce: 0, diasPrevSoma: 0, kmPrevSoma: 0, kmPrevQtd: 0, defeitos: {} });
               }
               map.get(nome).totalPrevFeitas += 1;
           }
@@ -1304,6 +1514,8 @@ export default function SOSCentral() {
           sosTotais: 0,
           sosPrecoce: 0,
           diasPrevSoma: 0,
+          kmPrevSoma: 0,
+          kmPrevQtd: 0,
           defeitos: {},
         });
       }
@@ -1318,6 +1530,11 @@ export default function SOSCentral() {
       const kmRodado = (n(r.km_veiculo_sos) > 0 && n(r.km_preventiva_vinculada) > 0) 
         ? Math.max(0, n(r.km_veiculo_sos) - n(r.km_preventiva_vinculada)) 
         : null;
+
+      if (kmRodado !== null) {
+        item.kmPrevSoma += kmRodado;
+        item.kmPrevQtd += 1;
+      }
 
       // Nova Regra de Retrabalho: <= 15 Dias OU <= 5.000 KM
       if (n(r.dias_ultima_preventiva_calc) <= 15 || (kmRodado !== null && kmRodado <= 5000)) {
@@ -1335,9 +1552,9 @@ export default function SOSCentral() {
         totalPrevFeitas: r.totalPrevFeitas,
         sosTotais: r.sosTotais,
         sosPrecoce: r.sosPrecoce,
-        // Se ele fez preventivas no mês, a taxa é sobre elas. Se só gerou retrabalho de meses anteriores, é sobre o SOS.
         taxaRetrabalho: r.totalPrevFeitas > 0 ? (r.sosPrecoce / r.totalPrevFeitas) * 100 : (r.sosTotais > 0 ? (r.sosPrecoce / r.sosTotais) * 100 : 0),
         mediaDiasQuebra: r.sosTotais > 0 ? (r.diasPrevSoma / r.sosTotais) : 0,
+        mediaKmQuebra: r.kmPrevQtd > 0 ? (r.kmPrevSoma / r.kmPrevQtd) : 0,
         defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
       }))
       .sort((a, b) => b.sosPrecoce - a.sosPrecoce || b.totalPrevFeitas - a.totalPrevFeitas);
@@ -1404,7 +1621,7 @@ export default function SOSCentral() {
         tabelaLinhas[0]?.totalAtual || 0
       )} SOS analisados e ${fmtInt(tabelaLinhas[0]?.veiculosReincidentes || 0)} veículos reincidentes.`,
       `O defeito mais recorrente é "${defeitoTop}", puxado principalmente pelo setor ${setorTop}.`,
-      `O colaborador com maior volume de retrabalho (≤ 15 dias ou ≤ 5.000 km) foi ${funcTop} (Taxa de Retrabalho: ${fmtPct(tabelaFuncionarios[0]?.taxaRetrabalho || 0)}).`,
+      `O colaborador com maior volume de retrabalho (≤ 15 dias ou ≤ 5k km) foi ${funcTop} (Taxa de Retrabalho: ${fmtPct(tabelaFuncionarios[0]?.taxaRetrabalho || 0)}). Em média, a preventiva dura ${fmtNum(tabelaFuncionarios[0]?.mediaDiasQuebra || 0, 1)} dias e ${fmtInt(tabelaFuncionarios[0]?.mediaKmQuebra || 0)} km.`,
       `O intervalo médio entre SOS do mesmo veículo está em ${fmtNum(
         resumoAtual.intervaloMedioGeral || 0,
         1
@@ -1479,6 +1696,7 @@ export default function SOSCentral() {
           "SOS (Retrabalho)": r.sosPrecoce,
           "Taxa Retrabalho %": fmtNum(r.taxaRetrabalho, 1),
           "Média Dias Pós-Prev": fmtNum(r.mediaDiasQuebra, 1),
+          "Média KM Pós-Prev": fmtInt(r.mediaKmQuebra),
           "Principal Defeito": r.defeitoTop,
         })),
         "SOS_Resumo_Funcionarios"
@@ -1737,12 +1955,6 @@ export default function SOSCentral() {
           </button>
         </div>
       </div>
-
-      {erro && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 text-rose-800 px-4 py-3 font-semibold">
-          Erro ao carregar dados: {erro}
-        </div>
-      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <CardKPI
@@ -2049,7 +2261,7 @@ export default function SOSCentral() {
 
           <div className="bg-white rounded-2xl border shadow-sm p-4 overflow-x-auto">
             <h3 className="text-lg font-black text-slate-800 mb-3">Avaliação Pós-Preventiva por Colaborador</h3>
-            <table className="w-full min-w-[1100px] text-sm">
+            <table className="w-full min-w-[1200px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
                 <tr>
                   <th className="px-3 py-3 text-left">Funcionário</th>
@@ -2058,6 +2270,7 @@ export default function SOSCentral() {
                   <th className="px-3 py-3 text-left">SOS Retrabalho (≤ 15d ou ≤ 5k km)</th>
                   <th className="px-3 py-3 text-left">Taxa de Retrabalho</th>
                   <th className="px-3 py-3 text-left">Média Dias até Quebrar</th>
+                  <th className="px-3 py-3 text-left">Média KM até Quebrar</th>
                   <th className="px-3 py-3 text-left">Principal Defeito Associado</th>
                 </tr>
               </thead>
@@ -2070,6 +2283,7 @@ export default function SOSCentral() {
                     <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.sosPrecoce)}</td>
                     <td className="px-3 py-3">{fmtPct(r.taxaRetrabalho)}</td>
                     <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaDiasQuebra, 1)} dias</td>
+                    <td className="px-3 py-3 font-semibold text-blue-600">{fmtInt(r.mediaKmQuebra)} km</td>
                     <td className="px-3 py-3 text-slate-600">{r.defeitoTop}</td>
                   </tr>
                 ))}

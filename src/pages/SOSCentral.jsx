@@ -488,11 +488,17 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <div className="col-span-1 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">Data</span>
-                    <span className="font-black text-slate-800">{formData.data_ultima_preventiva ? formatDateBR(formData.data_ultima_preventiva) : "—"}</span>
+                    <span className="font-black text-slate-800">
+                      {(historicoPrev?.data_realizacao || formData.data_ultima_preventiva) 
+                        ? formatDateBR(historicoPrev?.data_realizacao || formData.data_ultima_preventiva) 
+                        : "—"}
+                    </span>
                   </div>
                   <div className="col-span-1 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">KM Época</span>
-                    <span className="font-black text-slate-800">{formData.km_rodado_preventiva || "—"}</span>
+                    <span className="font-black text-slate-800">
+                      {historicoPrev?.km_veiculo || formData.km_rodado_preventiva || "—"}
+                    </span>
                   </div>
                   
                   {/* Dados buscados dinamicamente da tabela Preventivas */}
@@ -526,11 +532,17 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <div className="col-span-1 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">Data</span>
-                    <span className="font-black text-slate-800">{formData.data_ultima_inspecao ? formatDateBR(formData.data_ultima_inspecao) : "—"}</span>
+                    <span className="font-black text-slate-800">
+                      {(historicoInsp?.data_realizacao || formData.data_ultima_inspecao) 
+                        ? formatDateBR(historicoInsp?.data_realizacao || formData.data_ultima_inspecao) 
+                        : "—"}
+                    </span>
                   </div>
                   <div className="col-span-1 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">KM Época</span>
-                    <span className="font-black text-slate-800">{formData.km_rodado_inspecao || "—"}</span>
+                    <span className="font-black text-slate-800">
+                      {historicoInsp?.km_veiculo || formData.km_rodado_inspecao || "—"}
+                    </span>
                   </div>
 
                   {/* Dados buscados dinamicamente da tabela Preventivas */}

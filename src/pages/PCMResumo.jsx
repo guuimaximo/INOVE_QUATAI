@@ -101,16 +101,15 @@ function monthKeyFromISODate(isoDate) {
   return String(isoDate || "").slice(0, 7);
 }
 
-// ✅ Tipo de dia (filtro ajustado conforme regra: Dom-Qui=Util, Sex=Sab, Sab=Dom)
+// ✅ Tipo de dia (Dom-Qui=Util, Sex=Sab, Sab=Dom)
 function dayTypeFromISO(iso) {
   if (!iso) return "DESCONHECIDO";
   const d = new Date(iso.includes("T") ? iso : `${iso}T00:00:00`);
-  const dow = d.getDay(); // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
+  const dow = d.getDay(); 
   
-  if (dow === 5) return "SABADO";  // Sexta equivale a Sabado
-  if (dow === 6) return "DOMINGO"; // Sabado equivale a Domingo
-  
-  return "UTIL"; // Domingo (0) a Quinta (4)
+  if (dow === 5) return "SABADO";
+  if (dow === 6) return "DOMINGO";
+  return "UTIL";
 }
 
 function bestBaseDateISO(v) {
@@ -221,6 +220,9 @@ function AgingBar({ buckets }) {
           </div>
         ))}
       </div>
+      <p className="mt-4 text-[10px] text-slate-400 font-bold text-center uppercase tracking-wider">
+        * O Aging considera o total real de veículos em aberto hoje (Backlog Geral), ignorando os filtros de período.
+      </p>
     </div>
   );
 }
@@ -285,17 +287,20 @@ function ExplicacaoModal({ onClose }) {
             <ul className="list-disc pl-5 space-y-1 text-xs font-semibold text-slate-600">
               <li><span className="text-emerald-600 font-black">0-1 e 2-3 dias:</span> Fluxo normal. Carros entrando e saindo rapidamente.</li>
               <li><span className="text-amber-600 font-black">4-7 dias:</span> Alerta. Reparos mais complexos ou início de gargalo.</li>
-              <li><span className="text-rose-600 font-black">16+ dias:</span> Crítico. Veículos "mofando" na oficina, geralmente aguardando peças complexas, garantia, ou retífica de motor/câmbio.</li>
+              <li><span className="text-rose-600 font-black">16+ dias:</span> Crítico. Veículos "mofando" na oficina, geralmente aguardando peças complexas ou retífica.</li>
             </ul>
+            <p className="mt-3 text-xs italic bg-white p-2 rounded border border-slate-200">
+              <strong>Nota importante:</strong> O Aging e o card "Em Aberto" ignoram o filtro de datas do topo e puxam 100% da base real da oficina (backlog), para que carros muito antigos não desapareçam do seu radar.
+            </p>
           </div>
 
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-            <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2"><FaRedo className="text-blue-600"/> Regra de Reincidência (Top Ofensores)</h3>
+            <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2"><FaRedo className="text-blue-600"/> Regra de Reincidência (Frotas Reincidentes)</h3>
             <p className="mb-1">Como o painel define que um carro é reincidente?</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>O sistema rastreia o ciclo completo do carro: <strong>Entrou → Foi Liberado (Saiu) → Entrou novamente</strong>.</li>
               <li>Se um carro tem 3 registros no mês, mas a oficina nunca deu "saída" nele, ele conta como 1 única parada longa.</li>
-              <li>A reincidência conta as vezes que o carro "enganou" a operação: foi dado como pronto, rodou, e quebrou de novo no mesmo período.</li>
+              <li>A reincidência acusa os veículos que foram dados como "prontos", rodaram na rua e quebraram de novo no mesmo período selecionado.</li>
             </ul>
           </div>
 
@@ -489,7 +494,7 @@ export default function PCMResumo() {
   const [dayFilter, setDayFilter] = useState("ALL");
 
   // UI (reduzir informação)
-  const [compact, setCompact] = useState(false); // Default para falso para mostrar paineis de baixo (padrão bonito)
+  const [compact, setCompact] = useState(false); 
   const [secParetoOpen, setSecParetoOpen] = useState(true);
   const [secSerieOpen, setSecSerieOpen] = useState(true);
   const [secTopsOpen, setSecTopsOpen] = useState(true);
@@ -501,12 +506,13 @@ export default function PCMResumo() {
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
 
-  // série mensal (média GNS/dia por mês)
+  // série mensal
   const [serieMensal, setSerieMensal] = useState([]);
 
-  // base do período
+  // base do período e backlog real (para aging)
   const [diasPCM, setDiasPCM] = useState([]);
   const [veiculosPeriodo, setVeiculosPeriodo] = useState([]);
+  const [backlogAberto, setBacklogAberto] = useState([]); // ✅ NOVO: Base pura de abertos
 
   // reincidência
   const [reincidencias, setReincidencias] = useState([]);
@@ -540,7 +546,6 @@ export default function PCMResumo() {
   // =========================
 
   const carregarSerieMensal = useCallback(async () => {
-    // série mensal é histórica (não aplica filtro de tipo de dia)
     const { data: pcms, error: e1 } = await supabase
       .from("pcm_diario")
       .select("data_referencia")
@@ -611,7 +616,7 @@ export default function PCMResumo() {
   }, []);
 
   const carregarPeriodo = useCallback(async () => {
-    // 1) Dias com PCM no período (e aplica filtro de tipo de dia)
+    // 1) Dias com PCM no período
     const { data: pcmsRaw, error: e1 } = await supabase
       .from("pcm_diario")
       .select("id, data_referencia, criado_por")
@@ -621,42 +626,47 @@ export default function PCMResumo() {
 
     if (e1) throw e1;
 
-    const pcms =
-      dayFilter === "ALL"
+    const pcms = dayFilter === "ALL"
         ? pcmsRaw || []
-        : (pcmsRaw || []).filter(
-            (p) => dayTypeFromISO(p.data_referencia) === dayFilter
-          );
+        : (pcmsRaw || []).filter((p) => dayTypeFromISO(p.data_referencia) === dayFilter);
 
     setDiasPCM(pcms);
 
-    // 2) Veículos do período
+    // 2) Veículos que ENTRARAM no período (Para cálculos de volume do mês/período)
     const pcmIds = (pcms || []).map((p) => p.id);
-
-    const [qA, qB] = await Promise.all([
+    const [qA, qB, qBacklog] = await Promise.all([
       supabase
         .from("veiculos_pcm")
-        .select(
-          "id, pcm_id, frota, setor, categoria, ordem_servico, descricao, observacao, data_entrada, data_saida, lancado_por, lancado_no_turno"
-        )
+        .select("id, pcm_id, frota, setor, categoria, ordem_servico, descricao, observacao, data_entrada, data_saida, lancado_por, lancado_no_turno")
         .gte("data_entrada", `${inicio}T00:00:00`)
         .lte("data_entrada", `${fim}T23:59:59`),
       pcmIds.length
         ? supabase
             .from("veiculos_pcm")
-            .select(
-              "id, pcm_id, frota, setor, categoria, ordem_servico, descricao, observacao, data_entrada, data_saida, lancado_por, lancado_no_turno"
-            )
+            .select("id, pcm_id, frota, setor, categoria, ordem_servico, descricao, observacao, data_entrada, data_saida, lancado_por, lancado_no_turno")
             .is("data_entrada", null)
             .in("pcm_id", pcmIds)
         : Promise.resolve({ data: [], error: null }),
+      // ✅ 3) NEW: BACKLOG REAL (Para Aging e Card "Em Aberto" - ignora filtro de data)
+      supabase
+        .from("veiculos_pcm")
+        .select("id, frota, categoria, data_entrada, pcm_diario(data_referencia)")
+        .is("data_saida", null)
     ]);
 
     if (qA.error) throw qA.error;
     if (qB.error) throw qB.error;
+    if (qBacklog.error) throw qBacklog.error;
+
+    // Seta o backlog real, pegando data_entrada ou a data_referencia do pcm linkado caso data_entrada não exista
+    setBacklogAberto(
+      (qBacklog.data || []).map(v => ({
+        ...v,
+        data_efetiva: v.data_entrada || (v.pcm_diario?.data_referencia ? `${v.pcm_diario.data_referencia}T00:00:00` : null)
+      }))
+    );
 
     const all = [...(qA.data || []), ...(qB.data || [])];
-
     const pcmIdToRef = new Map((pcms || []).map((p) => [p.id, p.data_referencia]));
 
     const normalized = all.map((v) => ({
@@ -664,14 +674,13 @@ export default function PCMResumo() {
       data_referencia: pcmIdToRef.get(v.pcm_id) || null,
     }));
 
-    const normalizedFiltered =
-      dayFilter === "ALL"
+    const normalizedFiltered = dayFilter === "ALL"
         ? normalized
         : normalized.filter((v) => dayTypeFromISO(bestBaseDateISO(v)) === dayFilter);
 
     setVeiculosPeriodo(normalizedFiltered);
 
-    // 3) Reincidências (✅ regra: entrou -> saiu -> entrou novamente)
+    // 4) Reincidências (entrou -> saiu -> entrou novamente)
     const byFrota = new Map();
     normalizedFiltered.forEach((v) => {
       const f = String(v.frota || "").trim();
@@ -682,9 +691,7 @@ export default function PCMResumo() {
     });
 
     const parseIn = (v) => {
-      const base =
-        v.data_entrada ||
-        (v.data_referencia ? `${v.data_referencia}T00:00:00` : null);
+      const base = v.data_entrada || (v.data_referencia ? `${v.data_referencia}T00:00:00` : null);
       return base ? new Date(base).getTime() : 0;
     };
     const parseOut = (v) => (v.data_saida ? new Date(v.data_saida).getTime() : null);
@@ -703,18 +710,14 @@ export default function PCMResumo() {
       if (reentradas < 1) return;
 
       const ultimaEntrada = sorted[sorted.length - 1]?.data_entrada || null;
-
       const diasParadoTotal = sorted.reduce((acc, r) => {
-        const dtIn =
-          r.data_entrada || (r.data_referencia ? `${r.data_referencia}T00:00:00` : null);
+        const dtIn = r.data_entrada || (r.data_referencia ? `${r.data_referencia}T00:00:00` : null);
         const dtOut = r.data_saida || new Date().toISOString();
         if (!dtIn) return acc;
         return acc + daysDiff(dtIn, dtOut);
       }, 0);
 
-      const descricoes = sorted
-        .map((x) => (x.descricao ? String(x.descricao).trim().toUpperCase() : ""))
-        .filter(Boolean);
+      const descricoes = sorted.map((x) => (x.descricao ? String(x.descricao).trim().toUpperCase() : "")).filter(Boolean);
 
       reinc.push({
         frota,
@@ -732,16 +735,9 @@ export default function PCMResumo() {
     });
 
     setReincidencias(reinc);
+    setTopParado([...reinc].sort((a, b) => b.diasParadoTotal - a.diasParadoTotal).slice(0, 5));
+    setTopReinc([...reinc].sort((a, b) => b.reentradas - a.reentradas).slice(0, 5));
 
-    // 4) Top 5 por dias parado
-    const topPar = [...reinc]
-      .sort((a, b) => b.diasParadoTotal - a.diasParadoTotal)
-      .slice(0, 5);
-    setTopParado(topPar);
-
-    // 5) Top 5 por reentradas
-    const topRe = [...reinc].sort((a, b) => b.reentradas - a.reentradas).slice(0, 5);
-    setTopReinc(topRe);
   }, [inicio, fim, dayFilter]);
 
   const recarregarTudo = useCallback(async () => {
@@ -767,32 +763,30 @@ export default function PCMResumo() {
 
   const kpis = useMemo(() => {
     const diasComPCM = (diasPCM || []).length;
-
     const totalPeriodo = (veiculosPeriodo || []).length;
-    const totalAbertos = (veiculosPeriodo || []).filter((v) => !v.data_saida).length;
+    
+    // ✅ Em Aberto AGORA USA O BACKLOG REAL (Imune a filtros de data)
+    const totalAbertos = backlogAberto.length;
 
+    // O GNS continua refletindo o volume de GNS do período para gerar a média
     const totalGNS = (veiculosPeriodo || []).filter((v) => v.categoria === "GNS").length;
     const pctGNS = totalPeriodo ? safeNum((totalGNS / totalPeriodo) * 100, 1) : 0;
-
     const mediaGNSDia = diasComPCM ? safeNum(totalGNS / diasComPCM, 2) : 0;
-
     const frotasReincidentes = (reincidencias || []).length;
 
+    // ✅ AGING AGORA USA O BACKLOG REAL (Imune a filtros de data)
     const buckets = { "0-1": 0, "2-3": 0, "4-7": 0, "8-15": 0, "16+": 0 };
     const now = new Date().toISOString();
 
-    (veiculosPeriodo || [])
-      .filter((v) => !v.data_saida)
-      .forEach((v) => {
-        const dtIn =
-          v.data_entrada || (v.data_referencia ? `${v.data_referencia}T00:00:00` : null);
-        const dias = dtIn ? daysDiff(dtIn, now) : 0;
-        if (dias <= 1) buckets["0-1"] += 1;
-        else if (dias <= 3) buckets["2-3"] += 1;
-        else if (dias <= 7) buckets["4-7"] += 1;
-        else if (dias <= 15) buckets["8-15"] += 1;
-        else buckets["16+"] += 1;
-      });
+    backlogAberto.forEach((v) => {
+      const dtIn = v.data_efetiva;
+      const dias = dtIn ? daysDiff(dtIn, now) : 0;
+      if (dias <= 1) buckets["0-1"] += 1;
+      else if (dias <= 3) buckets["2-3"] += 1;
+      else if (dias <= 7) buckets["4-7"] += 1;
+      else if (dias <= 15) buckets["8-15"] += 1;
+      else buckets["16+"] += 1;
+    });
 
     const bySetor = {};
     const byCategoria = {};
@@ -804,58 +798,31 @@ export default function PCMResumo() {
     });
 
     const setores = Object.entries(bySetor)
-      .map(([k, v]) => ({
-        setor: k,
-        total: v,
-        pct: totalPeriodo ? safeNum((v / totalPeriodo) * 100, 1) : 0,
-      }))
+      .map(([k, v]) => ({ setor: k, total: v, pct: totalPeriodo ? safeNum((v / totalPeriodo) * 100, 1) : 0 }))
       .sort((a, b) => b.total - a.total);
 
     const categorias = Object.entries(byCategoria)
-      .map(([k, v]) => ({
-        categoria: k,
-        total: v,
-        pct: totalPeriodo ? safeNum((v / totalPeriodo) * 100, 1) : 0,
-      }))
+      .map(([k, v]) => ({ categoria: k, total: v, pct: totalPeriodo ? safeNum((v / totalPeriodo) * 100, 1) : 0 }))
       .sort((a, b) => b.total - a.total);
 
     return {
-      diasComPCM,
-      totalPeriodo,
-      totalAbertos,
-      totalGNS,
-      pctGNS,
-      mediaGNSDia,
-      frotasReincidentes,
-      aging: buckets,
-      setores,
-      categorias,
+      diasComPCM, totalPeriodo, totalAbertos, totalGNS, pctGNS, mediaGNSDia,
+      frotasReincidentes, aging: buckets, setores, categorias,
     };
-  }, [diasPCM, veiculosPeriodo, reincidencias]);
+  }, [diasPCM, veiculosPeriodo, reincidencias, backlogAberto]);
 
   const reincFiltradas = useMemo(() => {
     const q = reincQuery.trim().toLowerCase();
     if (!q) return reincidencias || [];
-    return (reincidencias || []).filter((r) =>
-      String(r.frota).toLowerCase().includes(q)
-    );
+    return (reincidencias || []).filter((r) => String(r.frota).toLowerCase().includes(q));
   }, [reincidencias, reincQuery]);
 
-  // =========================
-  // AÇÕES
-  // =========================
-
-  const abrirDetalheFrota = useCallback(
-    (frota) => {
-      const rows = (veiculosPeriodo || []).filter(
-        (v) => String(v.frota || "").trim() === String(frota || "").trim()
-      );
-      setModalFrota(frota);
-      setModalRows(rows);
-      setModalOpen(true);
-    },
-    [veiculosPeriodo]
-  );
+  const abrirDetalheFrota = useCallback((frota) => {
+    const rows = (veiculosPeriodo || []).filter((v) => String(v.frota || "").trim() === String(frota || "").trim());
+    setModalFrota(frota);
+    setModalRows(rows);
+    setModalOpen(true);
+  }, [veiculosPeriodo]);
 
   const fecharModal = useCallback(() => {
     setModalOpen(false);
@@ -865,7 +832,7 @@ export default function PCMResumo() {
 
   return (
     <div className="space-y-6">
-      {/* HEADER TIPO SOS CENTRAL */}
+      {/* HEADER PREMIUM */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
         <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
           <div>
@@ -876,21 +843,13 @@ export default function PCMResumo() {
               PAINEL PCM
             </h1>
             <p className="text-sm text-slate-500 mt-1 flex items-center gap-2 font-semibold">
-              <FaCalendarAlt />
-              Período: {fmtBRDate(inicio)} → {fmtBRDate(fim)}
+              <FaCalendarAlt /> Período: {fmtBRDate(inicio)} → {fmtBRDate(fim)}
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
             {QUICK_PERIODS.map((p) => (
-              <Chip
-                key={p.key}
-                active={periodMode === p.key}
-                onClick={() => setPeriodMode(p.key)}
-                title="Trocar período"
-              >
-                {p.label}
-              </Chip>
+              <Chip key={p.key} active={periodMode === p.key} onClick={() => setPeriodMode(p.key)} title="Trocar período">{p.label}</Chip>
             ))}
 
             <button
@@ -925,19 +884,9 @@ export default function PCMResumo() {
         <div className="mt-4 pt-4 border-t flex flex-col md:flex-row gap-4 items-start md:items-center">
           {periodMode === "INTERVALO" && (
             <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-              <input
-                type="date"
-                className="bg-transparent text-sm font-black text-slate-700 outline-none"
-                value={inicio}
-                onChange={(e) => setInicio(e.target.value)}
-              />
+              <input type="date" className="bg-transparent text-sm font-black text-slate-700 outline-none" value={inicio} onChange={(e) => setInicio(e.target.value)} />
               <span className="text-slate-400 font-bold">até</span>
-              <input
-                type="date"
-                className="bg-transparent text-sm font-black text-slate-700 outline-none"
-                value={fim}
-                onChange={(e) => setFim(e.target.value)}
-              />
+              <input type="date" className="bg-transparent text-sm font-black text-slate-700 outline-none" value={fim} onChange={(e) => setFim(e.target.value)} />
             </div>
           )}
 
@@ -947,9 +896,7 @@ export default function PCMResumo() {
                 key={p.key}
                 onClick={() => setDayFilter(p.key)}
                 className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition ${
-                  dayFilter === p.key
-                    ? "bg-blue-600 text-white shadow"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  dayFilter === p.key ? "bg-blue-600 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
                 {p.label}
@@ -968,8 +915,8 @@ export default function PCMResumo() {
       {/* KPIs PRINCIPAIS */}
       <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <CardKPI title="Dias com PCM" value={fmtInt(kpis.diasComPCM)} sub="No período" icon={<FaCalendarAlt />} tone="slate" />
-        <CardKPI title="Total Registros" value={fmtInt(kpis.totalPeriodo)} sub="Veículos lançados" icon={<FaBus />} tone="blue" />
-        <CardKPI title="Em Aberto" value={fmtInt(kpis.totalAbertos)} sub="Aguardando saída" icon={<FaTools />} tone="rose" />
+        <CardKPI title="Total Registros" value={fmtInt(kpis.totalPeriodo)} sub="Veículos lançados no período" icon={<FaBus />} tone="blue" />
+        <CardKPI title="Em Aberto" value={fmtInt(kpis.totalAbertos)} sub="Realidade Total (Hoje)" icon={<FaTools />} tone="rose" />
         <CardKPI title="Total GNS" value={fmtInt(kpis.totalGNS)} sub={`${kpis.pctGNS}% do período`} icon={<FaChartPie />} tone="emerald" />
         <CardKPI title="Média GNS/Dia" value={kpis.mediaGNSDia} sub="Base mensal/período" icon={<FaChartLine />} tone="violet" />
         <CardKPI title="Frotas Reincidentes" value={fmtInt(kpis.frotasReincidentes)} sub="Entrou → Saiu → Entrou" icon={<FaRedo />} tone="amber" />
@@ -998,9 +945,7 @@ export default function PCMResumo() {
                 placeholder="Buscar frota..."
               />
               {reincQuery && (
-                <button onClick={() => setReincQuery("")} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
-                  <FaTimes />
-                </button>
+                <button onClick={() => setReincQuery("")} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"><FaTimes /></button>
               )}
             </div>
           </div>
@@ -1019,21 +964,13 @@ export default function PCMResumo() {
               </thead>
               <tbody>
                 {reincFiltradas.slice(0, 50).map((r) => (
-                  <tr
-                    key={r.frota}
-                    className="border-b last:border-b-0 hover:bg-blue-50 cursor-pointer transition-colors"
-                    onClick={() => abrirDetalheFrota(r.frota)}
-                  >
+                  <tr key={r.frota} className="border-b last:border-b-0 hover:bg-blue-50 cursor-pointer transition-colors" onClick={() => abrirDetalheFrota(r.frota)}>
                     <td className="p-3 font-black text-slate-800">{r.frota}</td>
-                    <td className="p-3 text-center">
-                      <span className="px-2 py-1 rounded bg-rose-100 text-rose-700 text-xs font-black">{r.reentradas}</span>
-                    </td>
+                    <td className="p-3 text-center"><span className="px-2 py-1 rounded bg-rose-100 text-rose-700 text-xs font-black">{r.reentradas}</span></td>
                     <td className="p-3 text-center font-bold text-slate-700">{r.entradas}</td>
                     <td className="p-3 text-center font-black text-amber-600">{r.diasParadoTotal}</td>
                     <td className="p-3 text-[11px] font-bold text-slate-600">{fmtBRDateTime(r.ultimaEntrada)}</td>
-                    <td className="p-3 text-[10px] font-semibold text-slate-500 uppercase truncate max-w-[200px]">
-                      {(r.descricoesPreview || []).join(" • ") || "—"}
-                    </td>
+                    <td className="p-3 text-[10px] font-semibold text-slate-500 uppercase truncate max-w-[200px]">{(r.descricoesPreview || []).join(" • ") || "—"}</td>
                   </tr>
                 ))}
                 {(!reincFiltradas.length && !loading) && (
@@ -1048,12 +985,7 @@ export default function PCMResumo() {
       {/* EXTRAS (Sections com Collapse) */}
       {!compact && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Section
-            title="Pareto de Setor e Categoria"
-            subtitle="Top 6 ofensores do período selecionado"
-            open={secParetoOpen}
-            onToggle={() => setSecParetoOpen((v) => !v)}
-          >
+          <Section title="Pareto de Setor e Categoria" subtitle="Top 6 ofensores do período selecionado" open={secParetoOpen} onToggle={() => setSecParetoOpen((v) => !v)}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                 <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-3">Ranking por Setor</div>
@@ -1082,12 +1014,7 @@ export default function PCMResumo() {
             </div>
           </Section>
 
-          <Section
-            title="TOP 5 Ofensores"
-            subtitle="Veículos com mais dias parados e reentradas"
-            open={secTopsOpen}
-            onToggle={() => setSecTopsOpen((v) => !v)}
-          >
+          <Section title="TOP 5 Ofensores" subtitle="Veículos com mais dias parados e reentradas" open={secTopsOpen} onToggle={() => setSecTopsOpen((v) => !v)}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                 <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider p-4 border-b bg-slate-50">Por Dias Parados</div>
@@ -1127,22 +1054,11 @@ export default function PCMResumo() {
             </div>
           </Section>
 
-          <Section
-            title="Histórico de GNS"
-            subtitle="Média por Dia (Últimos 18 meses)"
-            open={secSerieOpen}
-            onToggle={() => setSecSerieOpen((v) => !v)}
-            right={<span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-1 rounded">Geral (Sem filtro de dias)</span>}
-          >
+          <Section title="Histórico de GNS" subtitle="Média por Dia (Últimos 18 meses)" open={secSerieOpen} onToggle={() => setSecSerieOpen((v) => !v)} right={<span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-1 rounded">Geral (Sem filtro)</span>}>
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse min-w-[500px]">
                 <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 border-b tracking-wider">
-                  <tr>
-                    <th className="px-4 py-3 font-black">Mês</th>
-                    <th className="px-4 py-3 text-center font-black">Dias PCM</th>
-                    <th className="px-4 py-3 text-center font-black">Total GNS</th>
-                    <th className="px-4 py-3 text-center font-black">Média GNS/Dia</th>
-                  </tr>
+                  <tr><th className="px-4 py-3 font-black">Mês</th><th className="px-4 py-3 text-center font-black">Dias PCM</th><th className="px-4 py-3 text-center font-black">Total GNS</th><th className="px-4 py-3 text-center font-black">Média GNS/Dia</th></tr>
                 </thead>
                 <tbody>
                   {(serieMensal || []).map((r) => (
@@ -1150,9 +1066,7 @@ export default function PCMResumo() {
                       <td className="px-4 py-3 font-black text-slate-700">{r.mes}</td>
                       <td className="px-4 py-3 text-center font-semibold text-slate-600">{r.dias_com_pcm}</td>
                       <td className="px-4 py-3 text-center font-semibold text-slate-600">{r.total_gns}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="bg-slate-800 text-white px-3 py-1 rounded-full text-xs font-black shadow-sm">{r.media_gns_dia}</span>
-                      </td>
+                      <td className="px-4 py-3 text-center"><span className="bg-slate-800 text-white px-3 py-1 rounded-full text-xs font-black shadow-sm">{r.media_gns_dia}</span></td>
                     </tr>
                   ))}
                   {(serieMensal || []).length === 0 && !loading && (

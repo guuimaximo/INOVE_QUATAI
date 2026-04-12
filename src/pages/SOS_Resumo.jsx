@@ -1392,6 +1392,13 @@ export default function SOSCentral() {
     return [...map.values()]
       .filter(r => r.revisoesFeitasMes > 0 || r.sosAtribuidos > 0)
       .map(r => {
+        // Eficácia da Preventiva (Carros que saíram e NÃO deram SOS no ciclo)
+        let eficacia = 0;
+        if (r.revisoesFeitasMes > 0) {
+            const sucessos = Math.max(0, r.revisoesFeitasMes - r.sosAtribuidos);
+            eficacia = (sucessos / r.revisoesFeitasMes) * 100;
+        }
+
         const taxaRetrabalho = r.sosAtribuidos > 0 ? (r.sosPrecoce / r.sosAtribuidos) * 100 : 0;
 
         return {
@@ -1400,6 +1407,7 @@ export default function SOSCentral() {
           revisoesFeitasMes: r.revisoesFeitasMes,
           sosAtribuidos: r.sosAtribuidos,
           sosPrecoce: r.sosPrecoce,
+          taxaEficacia: eficacia,
           taxaRetrabalho: taxaRetrabalho,
           mediaDiasQuebra: r.diasRevQtd > 0 ? (r.diasRevSoma / r.diasRevQtd) : 0,
           mediaKmQuebra: r.kmRevQtd > 0 ? (r.kmRevSoma / r.kmRevQtd) : 0,
@@ -1543,6 +1551,7 @@ export default function SOSCentral() {
           Função: r.funcao,
           "Volume Revisões no Mês": r.revisoesFeitasMes,
           "SOS Atribuídos no Mês": r.sosAtribuidos,
+          "Eficácia da Preventiva %": fmtNum(r.taxaEficacia, 1),
           "SOS Retrabalho Precoce": r.sosPrecoce,
           "Taxa de Retrabalho %": fmtNum(r.taxaRetrabalho, 1),
           "Média Dias Pós-Revisão": fmtNum(r.mediaDiasQuebra, 1),
@@ -1886,6 +1895,7 @@ export default function SOSCentral() {
                   <th className="px-3 py-3 text-left">Função</th>
                   <th className="px-3 py-3 text-left">Volume de Revisões no Mês</th>
                   <th className="px-3 py-3 text-left">SOS Atribuídos no Mês</th>
+                  <th className="px-3 py-3 text-left">Eficácia da Revisão %</th>
                   <th className="px-3 py-3 text-left">SOS Retrabalho Precoce</th>
                   <th className="px-3 py-3 text-left">Taxa de Retrabalho Técnico</th>
                   <th className="px-3 py-3 text-left">Média Dias até Quebrar</th>
@@ -1900,6 +1910,7 @@ export default function SOSCentral() {
                     <td className="px-3 py-3"><span className="bg-slate-100 px-2 py-1 rounded font-bold text-slate-600 text-xs">{r.funcao}</span></td>
                     <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.revisoesFeitasMes)}</td>
                     <td className="px-3 py-3 font-black text-blue-600">{fmtInt(r.sosAtribuidos)}</td>
+                    <td className="px-3 py-3 font-bold text-emerald-600">{fmtPct(r.taxaEficacia)}</td>
                     <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.sosPrecoce)}</td>
                     <td className="px-3 py-3 font-bold">{fmtPct(r.taxaRetrabalho)}</td>
                     <td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaDiasQuebra, 1)} dias</td>
@@ -2200,14 +2211,7 @@ export default function SOSCentral() {
         </div>
       )}
 
-      {loginModalOpen && (
-        <LoginModal
-          onConfirm={onLoginConfirm}
-          onCancel={() => setLoginModalOpen(false)}
-        />
-      )}
-
-      {/* MODAL DE EXPLICAÇÃO */}
+      {/* MODAIS GLOBAIS DA PÁGINA */}
       {mostrarExplicacao && (
         <ExplicacaoModal onClose={() => setMostrarExplicacao(false)} />
       )}

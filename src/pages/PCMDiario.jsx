@@ -17,7 +17,9 @@ import {
   FaBus,
   FaTools,
   FaWrench,
-  FaBolt
+  FaBolt,
+  FaExclamationTriangle, // ✅ Adicionado
+  FaClock                // ✅ Adicionado
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -362,7 +364,9 @@ export default function PCMDiario() {
     const { data: jaExiste } = await supabase.from("veiculos_pcm").select("id").eq("pcm_id", id).eq("frota", form.frota).is("data_saida", null).limit(1);
     if (jaExiste && jaExiste.length > 0) return alert(`A frota ${form.frota} já está lançada neste PCM.`);
 
-    const payload = { pcm_id: id, ...form, ordem_servico: os, lancado_por: user?.nome || "Sistema", lancado_no_turno: turnoAtivo, data_entrada: new Date().toISOString() };
+    // Setando a data de entrada E a data de mudança de categoria juntas no lançamento inicial.
+    const now = new Date().toISOString();
+    const payload = { pcm_id: id, ...form, ordem_servico: os, lancado_por: user?.nome || "Sistema", lancado_no_turno: turnoAtivo, data_entrada: now, data_mudanca_categoria: now };
     const { data: inserted, error } = await supabase.from("veiculos_pcm").insert([payload]).select("*").single();
 
     if (error) return alert("Erro ao lançar veículo.");

@@ -25,7 +25,10 @@ import {
   FaInfoCircle,
   FaBan,
   FaCheckCircle,
-  FaTools
+  FaTools,
+  FaClock,  // ✅ Adicionado
+  FaBus,    // ✅ Adicionado
+  FaRoad    // ✅ Adicionado
 } from "react-icons/fa";
 
 /* =========================
@@ -186,7 +189,6 @@ export default function AvariasResumo() {
     setLoading(true);
     setErrMsg("");
 
-    // Adicionado veiculo e motorista para o ranking
     let query = supabase
       .from("avarias")
       .select(
@@ -602,6 +604,3 @@ export default function AvariasResumo() {
     </div>
   );
 }
-
-// Para usar ícone de rua no KPI de externos (Como o react-icons/fa não tem FaRoad importado no topo, podemos adicionar)
-import { FaRoad } from "react-icons/fa";

@@ -18,8 +18,8 @@ import {
   FaTools,
   FaWrench,
   FaBolt,
-  FaExclamationTriangle, // ✅ Adicionado
-  FaClock                // ✅ Adicionado
+  FaExclamationTriangle,
+  FaClock
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -396,7 +396,7 @@ export default function PCMDiario() {
       if (dup && dup.length > 0) return alert(`A frota ${payloadUpdate.frota} já existe.`);
     }
 
-    // ✅ LOGICA DE TIMER POR CATEGORIA
+    // LOGICA DE TIMER POR CATEGORIA
     if (acao === "MOVER_CATEGORIA") {
       payloadUpdate.data_mudanca_categoria = new Date().toISOString();
     }
@@ -435,36 +435,82 @@ export default function PCMDiario() {
     return { total: (base || []).length, ...byCat };
   }, [veiculos, veiculosFiltrados]);
 
+  // ✅ PDF PROFISSIONAL COM MOTOR DE PAGE-BREAK E CORES DE FUNDO
   async function baixarPdfPCM() {
     try {
       if (!reportRef.current) return;
-      const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      
+      const scale = 2;
+      const canvas = await html2canvas(reportRef.current, { 
+        scale, 
+        backgroundColor: "#ffffff", 
+        useCORS: true,
+        logging: false
+      });
+
+      // Cálculo Inteligente de Cortes (Evita cortar linhas no meio)
+      const trElements = Array.from(reportRef.current.querySelectorAll("tr"));
+      const containerRect = reportRef.current.getBoundingClientRect();
+      
+      // Mapeia onde acaba cada linha TR dentro do canvas (multiplicado pela escala)
+      const cutPoints = trElements.map(tr => {
+        const rect = tr.getBoundingClientRect();
+        return Math.floor((rect.bottom - containerRect.top) * scale);
+      });
+      cutPoints.push(canvas.height); // Garante que o final do canvas é um ponto de corte
+
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageW = doc.internal.pageSize.getWidth();
       const pageH = doc.internal.pageSize.getHeight();
       const margin = 6;
+      
       const printableW = pageW - margin * 2;
       const printableH = pageH - margin * 2;
+      
       const mmPerPx = printableW / canvas.width;
-      const pageSlicePx = Math.floor(printableH / mmPerPx);
-      let y = 0, pageIndex = 0;
+      const maxPageHeightPx = Math.floor(printableH / mmPerPx);
+
+      let y = 0;
+      let pageIndex = 0;
 
       while (y < canvas.height) {
-        const sliceH = Math.min(pageSlicePx, canvas.height - y);
+        const targetY = y + maxPageHeightPx;
+        let cutY = canvas.height;
+
+        if (targetY < canvas.height) {
+          // Acha a última linha (corte seguro) que cabe na página atual
+          const validCuts = cutPoints.filter(cp => cp <= targetY && cp > y);
+          if (validCuts.length > 0) {
+            cutY = validCuts[validCuts.length - 1];
+          } else {
+            cutY = targetY; // Fallback extremo se uma única linha for maior que a página toda
+          }
+        }
+
+        const sliceH = cutY - y;
+        if (sliceH <= 0) break; // Trava de segurança para loop infinito
+
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
         pageCanvas.height = sliceH;
         const ctx = pageCanvas.getContext("2d");
+        
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
         ctx.drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
         if (pageIndex > 0) doc.addPage();
+        
         doc.addImage(pageCanvas.toDataURL("image/png", 1.0), "PNG", margin, margin, printableW, sliceH * mmPerPx, undefined, "FAST");
-        y += sliceH;
+
+        y = cutY;
         pageIndex += 1;
       }
       doc.save(`PCM_${pcmInfo?.data_referencia || "diario"}.pdf`);
-    } catch (err) { alert("Erro ao gerar PDF."); }
+    } catch (err) { 
+      alert("Erro ao gerar PDF."); 
+      console.error(err);
+    }
   }
 
   return (
@@ -673,7 +719,7 @@ export default function PCMDiario() {
         </div>
       </div>
 
-      {/* BLOCO INVISÍVEL PARA IMPRESSÃO DO PDF (Mantendo estrutura para não quebrar lógica) */}
+      {/* BLOCO INVISÍVEL PARA IMPRESSÃO DO PDF */}
       <div className="fixed -left-[99999px] top-0 pointer-events-none opacity-0">
         <div ref={reportRef} className="bg-white w-[1400px] p-6 text-black font-sans">
           {/* TOPO PDF */}
@@ -690,15 +736,15 @@ export default function PCMDiario() {
 
           {/* RESUMO NO COMEÇO DO PDF */}
           <div className="flex gap-4 mb-6">
-            <div className="flex-1 rounded-xl border-2 border-slate-200 bg-slate-50 p-4">
+            <div className="flex-1 rounded-xl border-2 border-slate-300 bg-slate-50 p-4">
               <p className="text-[10px] font-black text-slate-500 uppercase">Total</p>
               <p className="text-2xl font-black mt-1 text-slate-800">{resumo.total}</p>
             </div>
-            <div className="flex-1 rounded-xl border-2 border-rose-200 bg-rose-50 p-4">
-              <p className="text-[10px] font-black text-rose-500 uppercase">GNS</p>
+            <div className="flex-1 rounded-xl border-2 border-rose-300 bg-rose-50 p-4">
+              <p className="text-[10px] font-black text-rose-600 uppercase">GNS</p>
               <p className="text-2xl font-black mt-1 text-rose-700">{resumo.GNS}</p>
             </div>
-            <div className="flex-1 rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+            <div className="flex-1 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
               <p className="text-[10px] font-black text-amber-600 uppercase">F. Amarela</p>
               <p className="text-2xl font-black mt-1 text-amber-700">{resumo.FAIXA_AMARELA}</p>
             </div>
@@ -710,25 +756,25 @@ export default function PCMDiario() {
               <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
               <p className="text-2xl font-black mt-1 text-gray-700">{resumo.PENDENTES}</p>
             </div>
-            <div className="flex-1 rounded-xl border-2 border-blue-200 bg-blue-50 p-4">
-              <p className="text-[10px] font-black text-blue-500 uppercase">Venda</p>
+            <div className="flex-1 rounded-xl border-2 border-blue-300 bg-blue-50 p-4">
+              <p className="text-[10px] font-black text-blue-600 uppercase">Venda</p>
               <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
             </div>
           </div>
 
           {/* TABELA PDF */}
-          <table className="w-full text-left text-sm border-collapse border-2 border-slate-200">
+          <table className="w-full text-left text-sm border-collapse border-2 border-slate-300">
             <thead>
-              <tr className="bg-slate-100 text-[10px] uppercase text-slate-600 border-b-2 border-slate-200 font-black">
-                <th className="p-3 border-r border-slate-200">Cluster</th>
-                <th className="p-3 border-r border-slate-200">Frota</th>
-                <th className="p-3 border-r border-slate-200">Entrada</th>
-                <th className="p-3 border-r border-slate-200 text-center">Dias (Cat)</th>
-                <th className="p-3 border-r border-slate-200">Categoria</th>
-                <th className="p-3 border-r border-slate-200 w-[400px]">Descrição</th>
-                <th className="p-3 border-r border-slate-200">O.S</th>
-                <th className="p-3 border-r border-slate-200">Setor</th>
-                <th className="p-3 border-r border-slate-200">Resp. Lançamento</th>
+              <tr className="bg-slate-100 text-[10px] uppercase text-slate-700 border-b-2 border-slate-300 font-black">
+                <th className="p-3 border-r border-slate-300">Cluster</th>
+                <th className="p-3 border-r border-slate-300">Frota</th>
+                <th className="p-3 border-r border-slate-300">Entrada</th>
+                <th className="p-3 border-r border-slate-300 text-center">Dias (Cat)</th>
+                <th className="p-3 border-r border-slate-300">Categoria</th>
+                <th className="p-3 border-r border-slate-300 w-[400px]">Descrição</th>
+                <th className="p-3 border-r border-slate-300">O.S</th>
+                <th className="p-3 border-r border-slate-300">Setor</th>
+                <th className="p-3 border-r border-slate-300">Resp. Lançamento</th>
                 <th className="p-3 w-[250px]">Observação</th>
               </tr>
             </thead>
@@ -736,20 +782,21 @@ export default function PCMDiario() {
               {veiculosFiltrados.map((v) => {
                 const catStyle = getCategoriaStyle(v.categoria);
                 const diasCat = daysBetween(v.data_mudanca_categoria || v.data_entrada);
+                
                 return (
-                  <tr key={v.id} className="border-b border-slate-200 font-medium">
-                    <td className="p-3 border-r border-slate-200 text-[10px] font-black uppercase text-slate-500">{v.cluster || "-"}</td>
-                    <td className="p-3 text-lg font-black border-r border-slate-200 text-slate-800">{v.frota}</td>
-                    <td className="p-3 border-r border-slate-200 text-slate-700">{formatBRDate(v.data_entrada)}</td>
-                    <td className="p-3 text-center font-black border-r border-slate-200 text-lg text-slate-800">{diasCat}</td>
-                    <td className="p-3 border-r border-slate-200">
+                  <tr key={v.id} className={`border-b border-slate-300 font-medium ${catStyle.color}`}>
+                    <td className="p-3 border-r border-slate-300 text-[10px] font-black uppercase text-slate-600">{v.cluster || "-"}</td>
+                    <td className="p-3 text-lg font-black border-r border-slate-300 text-slate-900">{v.frota}</td>
+                    <td className="p-3 border-r border-slate-300 text-slate-800">{formatBRDate(v.data_entrada)}</td>
+                    <td className="p-3 text-center font-black border-r border-slate-300 text-lg text-slate-900">{diasCat}</td>
+                    <td className="p-3 border-r border-slate-300">
                       <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${catStyle.badge}`}>{catStyle.label}</span>
                     </td>
-                    <td className="p-3 text-[11px] uppercase leading-tight border-r border-slate-200 text-slate-700">{v.descricao}</td>
-                    <td className="p-3 font-bold border-r border-slate-200 text-slate-800">{v.ordem_servico || "-"}</td>
-                    <td className="p-3 text-[10px] font-black border-r border-slate-200 text-slate-600 uppercase">{v.setor}</td>
-                    <td className="p-3 text-[10px] italic border-r border-slate-200 text-slate-600">{v.lancado_por || "-"}</td>
-                    <td className="p-3 text-[10px] font-bold uppercase text-slate-700">{v.observacao || "-"}</td>
+                    <td className="p-3 text-[11px] uppercase leading-tight border-r border-slate-300 text-slate-800">{v.descricao}</td>
+                    <td className="p-3 font-bold border-r border-slate-300 text-slate-900">{v.ordem_servico || "-"}</td>
+                    <td className="p-3 text-[10px] font-black border-r border-slate-300 text-slate-700 uppercase">{v.setor}</td>
+                    <td className="p-3 text-[10px] italic border-r border-slate-300 text-slate-700">{v.lancado_por || "-"}</td>
+                    <td className="p-3 text-[10px] font-bold uppercase text-slate-800">{v.observacao || "-"}</td>
                   </tr>
                 );
               })}

@@ -26,9 +26,9 @@ import {
   FaBan,
   FaCheckCircle,
   FaTools,
-  FaClock,  // ✅ Adicionado
-  FaBus,    // ✅ Adicionado
-  FaRoad    // ✅ Adicionado
+  FaClock,
+  FaBus,
+  FaRoad
 } from "react-icons/fa";
 
 /* =========================
@@ -189,10 +189,11 @@ export default function AvariasResumo() {
     setLoading(true);
     setErrMsg("");
 
+    // Utilizando as colunas reais da tabela: prefixo e motoristaId
     let query = supabase
       .from("avarias")
       .select(
-        "id, status, status_cobranca, valor_total_orcamento, valor_cobrado, origem, origem_cobranca, dataAvaria, created_at, veiculo, motorista"
+        "id, status, status_cobranca, valor_total_orcamento, valor_cobrado, origem, origem_cobranca, dataAvaria, created_at, prefixo, motoristaId"
       )
       .eq("status", "Aprovado")
       .order("created_at", { ascending: false });
@@ -258,7 +259,7 @@ export default function AvariasResumo() {
 
       cancQtde: canceladas.length,
       cancOrcado: sumOrcado(canceladas),
-      cancCobrado: sumCobrado(canceladas), // Geralmente 0, mas bom ter
+      cancCobrado: sumCobrado(canceladas),
     };
   }, [rows]);
 
@@ -293,8 +294,8 @@ export default function AvariasResumo() {
     const mapMot = new Map();
 
     rows.forEach(r => {
-      // Veículos
-      const v = String(r.veiculo || "").trim();
+      // Veículos (agora puxando de prefixo)
+      const v = String(r.prefixo || "").trim();
       if (v && v !== "-") {
         if (!mapVeic.has(v)) mapVeic.set(v, { nome: v, qtd: 0, orcado: 0, cobrado: 0 });
         const itemV = mapVeic.get(v);
@@ -303,11 +304,13 @@ export default function AvariasResumo() {
         itemV.cobrado += Number(r.valor_cobrado || 0);
       }
 
-      // Motoristas
-      const m = String(r.motorista || "").trim();
-      if (m && m !== "-") {
-        if (!mapMot.has(m)) mapMot.set(m, { nome: m, qtd: 0, orcado: 0, cobrado: 0 });
-        const itemM = mapMot.get(m);
+      // Motoristas (Limpando o dado ex: "3202677 - JOAO" para apenas "JOAO")
+      const mRaw = String(r.motoristaId || "").trim();
+      if (mRaw && mRaw !== "-") {
+        const name = mRaw.includes(' - ') ? mRaw.split(' - ')[1].trim() : mRaw;
+        
+        if (!mapMot.has(name)) mapMot.set(name, { nome: name, qtd: 0, orcado: 0, cobrado: 0 });
+        const itemM = mapMot.get(name);
         itemM.qtd += 1;
         itemM.orcado += Number(r.valor_total_orcamento || 0);
         itemM.cobrado += Number(r.valor_cobrado || 0);

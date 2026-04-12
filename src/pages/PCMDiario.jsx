@@ -31,12 +31,13 @@ import { jsPDF } from "jspdf";
 const SETORES = ["GARANTIA", "MANUTENÇÃO", "SUPRIMENTOS"];
 const OBS_OPCOES = ["AG. CHEGADA DE PEÇAS", "AG. EXECUÇÃO DO SERVIÇO", "AG. GARANTIA"];
 
+// CORES INTENSIFICADAS PARA MELHOR CONTRASTE VISUAL (Tela e PDF)
 const CATEGORIAS = [
-  { value: "GNS", label: "GNS", color: "border-rose-200 bg-rose-50", badge: "bg-rose-600 text-white" },
-  { value: "FAIXA_AMARELA", label: "Faixa Amarela", color: "border-amber-200 bg-amber-50", badge: "bg-amber-500 text-white" },
-  { value: "NOITE", label: "Noturno", color: "border-slate-200 bg-white", badge: "bg-slate-800 text-white" },
-  { value: "PENDENTES", label: "Pendentes", color: "border-gray-200 bg-gray-50", badge: "bg-gray-500 text-white" },
-  { value: "VENDA", label: "Venda", color: "border-blue-200 bg-blue-50", badge: "bg-blue-600 text-white" },
+  { value: "GNS", label: "GNS", color: "border-red-300 bg-red-100", badge: "bg-red-600 text-white" },
+  { value: "FAIXA_AMARELA", label: "Faixa Amarela", color: "border-amber-300 bg-amber-100", badge: "bg-amber-500 text-white" },
+  { value: "NOITE", label: "Noturno", color: "border-slate-300 bg-white", badge: "bg-slate-800 text-white" },
+  { value: "PENDENTES", label: "Pendentes", color: "border-slate-400 bg-slate-200", badge: "bg-slate-600 text-white" },
+  { value: "VENDA", label: "Venda", color: "border-blue-300 bg-blue-100", badge: "bg-blue-600 text-white" },
 ];
 
 /* ============================
@@ -45,7 +46,19 @@ const CATEGORIAS = [
 
 function getCategoriaStyle(cat) {
   const found = CATEGORIAS.find((c) => c.value === cat);
-  return found || { value: cat, label: cat, color: "border-slate-200 bg-slate-50", badge: "bg-slate-500 text-white" };
+  return found || { value: cat, label: cat, color: "border-slate-300 bg-slate-100", badge: "bg-slate-500 text-white" };
+}
+
+// Estilo estrito inline para forçar a renderização perfeita do selo no PDF
+function getBadgeInlineStyle(catValue) {
+  switch (catValue) {
+    case 'GNS': return { backgroundColor: '#dc2626', color: '#ffffff' }; // red-600
+    case 'FAIXA_AMARELA': return { backgroundColor: '#f59e0b', color: '#ffffff' }; // amber-500
+    case 'NOITE': return { backgroundColor: '#1e293b', color: '#ffffff' }; // slate-800
+    case 'PENDENTES': return { backgroundColor: '#475569', color: '#ffffff' }; // slate-600
+    case 'VENDA': return { backgroundColor: '#2563eb', color: '#ffffff' }; // blue-600
+    default: return { backgroundColor: '#64748b', color: '#ffffff' }; // default slate
+  }
 }
 
 function formatBRDate(dt) {
@@ -364,7 +377,7 @@ export default function PCMDiario() {
     const { data: jaExiste } = await supabase.from("veiculos_pcm").select("id").eq("pcm_id", id).eq("frota", form.frota).is("data_saida", null).limit(1);
     if (jaExiste && jaExiste.length > 0) return alert(`A frota ${form.frota} já está lançada neste PCM.`);
 
-    // Setando a data de entrada E a data de mudança de categoria juntas no lançamento inicial.
+    // Data de entrada E data de mudança de categoria juntas no lançamento inicial.
     const now = new Date().toISOString();
     const payload = { pcm_id: id, ...form, ordem_servico: os, lancado_por: user?.nome || "Sistema", lancado_no_turno: turnoAtivo, data_entrada: now, data_mudanca_categoria: now };
     const { data: inserted, error } = await supabase.from("veiculos_pcm").insert([payload]).select("*").single();
@@ -396,7 +409,7 @@ export default function PCMDiario() {
       if (dup && dup.length > 0) return alert(`A frota ${payloadUpdate.frota} já existe.`);
     }
 
-    // LOGICA DE TIMER POR CATEGORIA
+    // Timer por Categoria atualizado
     if (acao === "MOVER_CATEGORIA") {
       payloadUpdate.data_mudanca_categoria = new Date().toISOString();
     }
@@ -435,12 +448,12 @@ export default function PCMDiario() {
     return { total: (base || []).length, ...byCat };
   }, [veiculos, veiculosFiltrados]);
 
-  // ✅ PDF PROFISSIONAL COM MOTOR DE PAGE-BREAK E CORES DE FUNDO
+  // ✅ GERADOR PDF PROFISSIONAL (Impede o corte de textos ao meio da página e mantém o selo visual estrito)
   async function baixarPdfPCM() {
     try {
       if (!reportRef.current) return;
       
-      const scale = 2;
+      const scale = 2; // Escala 2 resolve definição e previne excesso de memória
       const canvas = await html2canvas(reportRef.current, { 
         scale, 
         backgroundColor: "#ffffff", 
@@ -448,16 +461,15 @@ export default function PCMDiario() {
         logging: false
       });
 
-      // Cálculo Inteligente de Cortes (Evita cortar linhas no meio)
+      // Cálculo Inteligente de Cortes (Evita cortar linhas tr no meio)
       const trElements = Array.from(reportRef.current.querySelectorAll("tr"));
       const containerRect = reportRef.current.getBoundingClientRect();
       
-      // Mapeia onde acaba cada linha TR dentro do canvas (multiplicado pela escala)
       const cutPoints = trElements.map(tr => {
         const rect = tr.getBoundingClientRect();
         return Math.floor((rect.bottom - containerRect.top) * scale);
       });
-      cutPoints.push(canvas.height); // Garante que o final do canvas é um ponto de corte
+      cutPoints.push(canvas.height);
 
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageW = doc.internal.pageSize.getWidth();
@@ -478,17 +490,16 @@ export default function PCMDiario() {
         let cutY = canvas.height;
 
         if (targetY < canvas.height) {
-          // Acha a última linha (corte seguro) que cabe na página atual
           const validCuts = cutPoints.filter(cp => cp <= targetY && cp > y);
           if (validCuts.length > 0) {
             cutY = validCuts[validCuts.length - 1];
           } else {
-            cutY = targetY; // Fallback extremo se uma única linha for maior que a página toda
+            cutY = targetY; // Fallback se a linha for gigante
           }
         }
 
         const sliceH = cutY - y;
-        if (sliceH <= 0) break; // Trava de segurança para loop infinito
+        if (sliceH <= 0) break;
 
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
@@ -668,7 +679,7 @@ export default function PCMDiario() {
                   const diasCat = daysBetween(v.data_mudanca_categoria || v.data_entrada);
 
                   return (
-                    <tr key={v.id} className={`border-b border-slate-200 hover:bg-slate-100 transition-colors ${catStyle.color}`}>
+                    <tr key={v.id} className={`border-b border-slate-200 transition-colors ${catStyle.color} hover:brightness-95`}>
                       <td className="p-4">
                         <div className="text-lg font-black text-slate-800">{v.frota}</div>
                         <div className="text-[10px] font-bold text-slate-500 uppercase">{v.cluster || "Sem Cluster"}</div>
@@ -676,7 +687,7 @@ export default function PCMDiario() {
                       <td className="p-4 text-center">
                         <div className="text-xl font-black text-slate-800">{diasCat}d</div>
                         {diasTotal !== diasCat && (
-                          <div className="text-[10px] font-black text-slate-400 uppercase mt-0.5" title={`Dias desde a entrada original: ${diasTotal}`}>Total PCM: {diasTotal}d</div>
+                          <div className="text-[10px] font-black text-slate-500 uppercase mt-0.5" title={`Dias desde a entrada original: ${diasTotal}`}>Total PCM: {diasTotal}d</div>
                         )}
                       </td>
                       <td className="p-4">
@@ -684,12 +695,12 @@ export default function PCMDiario() {
                           {catStyle.label}
                         </span>
                       </td>
-                      <td className="p-4 text-[11px] font-semibold text-slate-600 uppercase">{v.descricao}</td>
-                      <td className="p-4 font-bold text-slate-700">{v.ordem_servico || "-"}</td>
-                      <td className="p-4 text-[10px] font-black text-slate-600 uppercase">{v.setor}</td>
-                      <td className="p-4 text-[10px] font-black text-slate-600"><span className="bg-slate-200/50 px-2 py-1 rounded">{v.lancado_no_turno || "-"}</span></td>
-                      <td className="p-4 text-[10px] font-bold text-slate-500 italic">{v.lancado_por || "-"}</td>
-                      <td className="p-4 text-[10px] font-bold text-slate-600 uppercase">{v.observacao || "-"}</td>
+                      <td className="p-4 text-[11px] font-semibold text-slate-700 uppercase">{v.descricao}</td>
+                      <td className="p-4 font-bold text-slate-800">{v.ordem_servico || "-"}</td>
+                      <td className="p-4 text-[10px] font-black text-slate-700 uppercase">{v.setor}</td>
+                      <td className="p-4 text-[10px] font-black text-slate-700"><span className="bg-slate-200/50 px-2 py-1 rounded">{v.lancado_no_turno || "-"}</span></td>
+                      <td className="p-4 text-[10px] font-bold text-slate-600 italic">{v.lancado_por || "-"}</td>
+                      <td className="p-4 text-[10px] font-bold text-slate-700 uppercase">{v.observacao || "-"}</td>
                       <td className="p-4">
                         <div className="flex justify-center gap-2">
                           <button
@@ -740,9 +751,9 @@ export default function PCMDiario() {
               <p className="text-[10px] font-black text-slate-500 uppercase">Total</p>
               <p className="text-2xl font-black mt-1 text-slate-800">{resumo.total}</p>
             </div>
-            <div className="flex-1 rounded-xl border-2 border-rose-300 bg-rose-50 p-4">
-              <p className="text-[10px] font-black text-rose-600 uppercase">GNS</p>
-              <p className="text-2xl font-black mt-1 text-rose-700">{resumo.GNS}</p>
+            <div className="flex-1 rounded-xl border-2 border-red-300 bg-red-50 p-4">
+              <p className="text-[10px] font-black text-red-600 uppercase">GNS</p>
+              <p className="text-2xl font-black mt-1 text-red-700">{resumo.GNS}</p>
             </div>
             <div className="flex-1 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
               <p className="text-[10px] font-black text-amber-600 uppercase">F. Amarela</p>
@@ -752,9 +763,9 @@ export default function PCMDiario() {
               <p className="text-[10px] font-black text-slate-500 uppercase">Noturno</p>
               <p className="text-2xl font-black mt-1 text-slate-800">{resumo.NOITE}</p>
             </div>
-            <div className="flex-1 rounded-xl border-2 border-gray-300 bg-gray-50 p-4">
-              <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
-              <p className="text-2xl font-black mt-1 text-gray-700">{resumo.PENDENTES}</p>
+            <div className="flex-1 rounded-xl border-2 border-slate-400 bg-slate-200 p-4">
+              <p className="text-[10px] font-black text-slate-600 uppercase">Pendentes</p>
+              <p className="text-2xl font-black mt-1 text-slate-800">{resumo.PENDENTES}</p>
             </div>
             <div className="flex-1 rounded-xl border-2 border-blue-300 bg-blue-50 p-4">
               <p className="text-[10px] font-black text-blue-600 uppercase">Venda</p>
@@ -762,7 +773,7 @@ export default function PCMDiario() {
             </div>
           </div>
 
-          {/* TABELA PDF */}
+          {/* TABELA PDF COM CORES CORRIGIDAS */}
           <table className="w-full text-left text-sm border-collapse border-2 border-slate-300">
             <thead>
               <tr className="bg-slate-100 text-[10px] uppercase text-slate-700 border-b-2 border-slate-300 font-black">
@@ -789,9 +800,24 @@ export default function PCMDiario() {
                     <td className="p-3 text-lg font-black border-r border-slate-300 text-slate-900">{v.frota}</td>
                     <td className="p-3 border-r border-slate-300 text-slate-800">{formatBRDate(v.data_entrada)}</td>
                     <td className="p-3 text-center font-black border-r border-slate-300 text-lg text-slate-900">{diasCat}</td>
+                    
+                    {/* ✅ FIX DO PDF: ESTILO INLINE ESTRITO PARA O SELO FUNCIONAR EM QUALQUER MOTOR DE HTML2CANVAS */}
                     <td className="p-3 border-r border-slate-300">
-                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${catStyle.badge}`}>{catStyle.label}</span>
+                      <div 
+                        style={{
+                          display: 'inline-block',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          fontSize: '10px',
+                          fontWeight: '900',
+                          textTransform: 'uppercase',
+                          ...getBadgeInlineStyle(v.categoria)
+                        }}
+                      >
+                        {catStyle.label}
+                      </div>
                     </td>
+                    
                     <td className="p-3 text-[11px] uppercase leading-tight border-r border-slate-300 text-slate-800">{v.descricao}</td>
                     <td className="p-3 font-bold border-r border-slate-300 text-slate-900">{v.ordem_servico || "-"}</td>
                     <td className="p-3 text-[10px] font-black border-r border-slate-300 text-slate-700 uppercase">{v.setor}</td>

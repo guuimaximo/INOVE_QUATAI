@@ -17,6 +17,7 @@ import {
   FaInbox,
   FaWrench,
   FaRoad,
+  FaFilter
 } from "react-icons/fa";
 
 /* =======================
@@ -106,17 +107,17 @@ const cores = {
 
 function StatusTag({ status }) {
   const s = String(status || "").toUpperCase().trim();
-  if (s === "ABERTO") return <span className="bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">AG. OPERAÇÃO</span>;
-  if (s === "EM ANDAMENTO") return <span className="bg-amber-100 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">AG. MANUTENÇÃO</span>;
-  if (s === "FECHADO") return <span className="bg-emerald-100 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">FECHADO</span>;
-  return null;
+  if (s === "ABERTO") return <span className="bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">AG. OPERAÇÃO</span>;
+  if (s === "EM ANDAMENTO") return <span className="bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">AG. MANUTENÇÃO</span>;
+  if (s === "FECHADO") return <span className="bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">FECHADO</span>;
+  return <span className="bg-slate-100 text-slate-500 border border-slate-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">{s || "—"}</span>;
 }
 
 function OcorrenciaTag({ ocorrencia }) {
-  const o = (ocorrencia || "").toUpperCase();
-  const estilo = cores[o] || "bg-slate-200 text-slate-700";
+  const o = String(ocorrencia || "").toUpperCase().trim();
+  const estilo = cores[o] || "bg-slate-200 text-slate-700 border border-slate-300";
   return (
-    <span className={`${estilo} px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm`}>
+    <span className={`${estilo} px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm`}>
       {o || "—"}
     </span>
   );
@@ -193,7 +194,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   const [formData, setFormData] = useState({});
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   
-  // Histórico puxado dinamicamente da tabela 'preventivas'
   const [historicoPrev, setHistoricoPrev] = useState(null);
   const [historicoInsp, setHistoricoInsp] = useState(null);
   const [buscandoHistorico, setBuscandoHistorico] = useState(false);
@@ -202,7 +202,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
     if (sos) setFormData(sos);
   }, [sos]);
 
-  // Busca os colaboradores e dados complementares na tabela de preventivas
   useEffect(() => {
     async function fetchLinkedPreventivas() {
       if (formData.os_ultima_preventiva) {
@@ -264,14 +263,12 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
         os_ultima_preventiva: prevData?.numero_os || prev.os_ultima_preventiva,
         os_ultima_inspecao: inspData?.numero_os || prev.os_ultima_inspecao,
       }));
-      // Como os useEffect escutam o numero_os (os_ultima_preventiva), eles já vão disparar e alimentar historicoPrev/Insp automaticamente
       alert("OS atreladas com sucesso! Salve para confirmar.");
     }
     setBuscandoHistorico(false);
   }
 
   async function salvarAlteracoes() {
-    // Agora usando EXCLUSIVAMENTE a data que vier da tabela preventivas (sem fallback para o formData antigo)
     const dataPrev = historicoPrev?.data_realizacao || null;
     const dataInsp = historicoInsp?.data_realizacao || null;
     const dataSosFormatada = formData.data_sos ? formData.data_sos.split('T')[0] : null;
@@ -475,7 +472,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             </div>
 
             <div className="mb-5 flex flex-col md:w-1/3">
-              {/* Mantém a edição do KM Atual do form */}
               {renderField("KM Atual do Veículo (Hora do SOS)", "km_veiculo_sos", false, "number")}
             </div>
 
@@ -500,7 +496,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
                     </span>
                   </div>
                   
-                  {/* Dados buscados dinamicamente da tabela Preventivas */}
                   <div className="col-span-2 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">Mecânico</span>
                     <span className="font-black text-slate-800">{historicoPrev?.mecanico || "—"}</span>
@@ -542,7 +537,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
                     </span>
                   </div>
 
-                  {/* Dados buscados dinamicamente da tabela Preventivas */}
                   <div className="col-span-2 text-xs">
                     <span className="block font-bold text-slate-500 uppercase">Mecânico</span>
                     <span className="font-black text-slate-800">{historicoInsp?.mecanico || "—"}</span>
@@ -666,7 +660,8 @@ export default function SOSCentral() {
         s.numero_sos?.toString().toLowerCase().includes(termo) ||
         s.veiculo?.toLowerCase().includes(termo) ||
         s.motorista_nome?.toLowerCase().includes(termo) ||
-        s.ocorrencia?.toLowerCase().includes(termo)
+        s.ocorrencia?.toLowerCase().includes(termo) ||
+        s.status?.toLowerCase().includes(termo)
       );
     });
   }, [busca, sosList]);
@@ -704,10 +699,10 @@ export default function SOSCentral() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6 space-y-6">
       
       {/* Cabeçalho */}
-      <div className="bg-white rounded-2xl border shadow-sm p-5 md:p-6">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 md:p-6">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200 mb-2">
           <FaTools /> Histórico Operacional
         </div>
@@ -730,9 +725,9 @@ export default function SOSCentral() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white shadow-sm border rounded-2xl p-5 flex flex-wrap gap-4 items-center">
-        <div className="flex-1 min-w-[200px] relative">
-          <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+      <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-5 flex flex-wrap gap-4 items-center">
+        <div className="flex-1 min-w-[250px] relative">
+          <FaSearch className="absolute left-3 top-3 text-slate-400" />
           <input
             type="text"
             placeholder="Buscar SOS, veículo, motorista..."
@@ -742,54 +737,63 @@ export default function SOSCentral() {
           />
         </div>
 
-        <input
-          type="month"
-          value={mesRef}
-          onChange={(e) => setMesRef(e.target.value)}
-          className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-200 text-sm font-semibold text-slate-700"
-          title="Filtrar por mês"
-        />
-
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col">
+          <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Mês de Referência</label>
           <input
-            type="date"
-            value={dataInicio}
-            onChange={(e) => setDataInicio(e.target.value)}
-            className="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-200 text-sm font-semibold text-slate-700"
-          />
-          <span className="text-slate-400 font-bold">até</span>
-          <input
-            type="date"
-            value={dataFim}
-            onChange={(e) => setDataFim(e.target.value)}
-            className="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-200 text-sm font-semibold text-slate-700"
+            type="month"
+            value={mesRef}
+            onChange={(e) => setMesRef(e.target.value)}
+            className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-200 text-sm font-semibold text-slate-700"
+            title="Filtrar por mês"
           />
         </div>
 
-        <select
-          value={ocorrenciaFiltro}
-          onChange={(e) => setOcorrenciaFiltro(e.target.value)}
-          className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-200 text-sm font-semibold text-slate-700"
-        >
-          <option value="">Todas as ocorrências</option>
-          {OCORRENCIAS_CARDS.map((oc) => (
-            <option key={oc} value={oc}>{oc}</option>
-          ))}
-        </select>
+        <div className="flex flex-col">
+          <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Período Específico</label>
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1.5">
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+              className="bg-transparent px-2 outline-none text-sm font-semibold text-slate-700"
+            />
+            <span className="text-slate-400 font-bold">até</span>
+            <input
+              type="date"
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
+              className="bg-transparent px-2 outline-none text-sm font-semibold text-slate-700"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col">
+          <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Tipo de Ocorrência</label>
+          <select
+            value={ocorrenciaFiltro}
+            onChange={(e) => setOcorrenciaFiltro(e.target.value)}
+            className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-200 text-sm font-semibold text-slate-700"
+          >
+            <option value="">Todas</option>
+            {OCORRENCIAS_CARDS.map((oc) => (
+              <option key={oc} value={oc}>{oc}</option>
+            ))}
+          </select>
+        </div>
 
         <button
           onClick={() => carregarSOS(true)}
-          className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition shadow-sm active:scale-95"
+          className="mt-4 bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition shadow-sm active:scale-95"
         >
-          Aplicar
+          Aplicar Filtros
         </button>
       </div>
 
-      {/* Tabela */}
-      <div className="bg-white shadow-sm border rounded-2xl overflow-hidden">
+      {/* Tabela de Resultados */}
+      <div className="bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-[11px] tracking-wider border-b">
+            <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200">
               <tr>
                 <ThSortable label="OS/SOS" onClick={() => toggleSort("numero_sos")}>
                   <SortIcon field="numero_sos" />
@@ -803,9 +807,15 @@ export default function SOSCentral() {
                 <ThSortable label="Motorista" onClick={() => toggleSort("motorista_nome")}>
                   <SortIcon field="motorista_nome" />
                 </ThSortable>
+                
+                {/* COLUNAS SEPARADAS PARA MELHOR VISUALIZAÇÃO */}
                 <ThSortable label="Ocorrência" onClick={() => toggleSort("ocorrencia")}>
                   <SortIcon field="ocorrencia" />
                 </ThSortable>
+                <ThSortable label="Status" onClick={() => toggleSort("status")}>
+                  <SortIcon field="status" />
+                </ThSortable>
+
                 <th className="px-6 py-4 text-center">Ações</th>
               </tr>
             </thead>
@@ -813,7 +823,7 @@ export default function SOSCentral() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center">
+                  <td colSpan="7" className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center text-blue-600">
                       <svg className="animate-spin h-8 w-8 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -825,7 +835,7 @@ export default function SOSCentral() {
                 </tr>
               ) : filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-16 text-center">
+                  <td colSpan="7" className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400">
                       <FaInbox size={48} className="mb-4 text-slate-300" />
                       <p className="text-lg font-bold text-slate-600">Nenhum SOS encontrado</p>
@@ -834,35 +844,39 @@ export default function SOSCentral() {
                   </td>
                 </tr>
               ) : (
-                filtrados.map((s) => {
+                filtrados.map((s, idx) => {
                   const st = String(s.status || "").toUpperCase().trim();
                   const isPendente = st === "ABERTO" || st === "EM ANDAMENTO";
 
                   return (
                     <tr
                       key={s.id}
-                      className={`transition-colors ${isPendente ? "bg-rose-50/30 hover:bg-rose-50" : "hover:bg-slate-50"}`}
+                      className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} ${isPendente ? "hover:bg-rose-50/50" : "hover:bg-blue-50/50"}`}
                     >
                       <td className="px-6 py-4 font-black text-slate-700">#{s.numero_sos}</td>
-                      <td className="px-6 py-4 font-medium text-slate-600">{formatDateBR(pickBestDate(s))}</td>
+                      <td className="px-6 py-4 font-bold text-slate-600">{formatDateBR(pickBestDate(s))}</td>
                       <td className="px-6 py-4">
-                        <span className="inline-flex items-center gap-1.5 font-black text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg border shadow-sm">
+                        <span className="inline-flex items-center gap-1.5 font-black text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
                           <FaBus className="text-slate-400 text-xs" /> {s.veiculo}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-slate-600 font-medium">{s.motorista_nome}</td>
+                      <td className="px-6 py-4 text-slate-600 font-semibold">{s.motorista_nome}</td>
+                      
+                      {/* OCORRÊNCIA E STATUS SEPARADOS */}
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <OcorrenciaTag ocorrencia={s.ocorrencia} />
-                          <StatusTag status={s.status} />
-                        </div>
+                        <OcorrenciaTag ocorrencia={s.ocorrencia} />
                       </td>
+                      <td className="px-6 py-4">
+                        <StatusTag status={s.status} />
+                      </td>
+
                       <td className="px-6 py-4 text-center">
                         <button
-                          className="bg-white border border-slate-300 hover:border-blue-400 hover:text-blue-600 text-slate-600 px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 mx-auto transition-all shadow-sm active:scale-95"
+                          className="bg-white border border-slate-300 hover:border-blue-400 hover:bg-blue-50 text-blue-600 p-2 rounded-xl transition-all shadow-sm active:scale-95 inline-flex items-center justify-center"
                           onClick={() => setSelected(s)}
+                          title="Ver Detalhes do SOS"
                         >
-                          <FaEye /> Abrir
+                          <FaEye size={18} />
                         </button>
                       </td>
                     </tr>

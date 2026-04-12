@@ -16,7 +16,8 @@ import {
   FaTools,
   FaWrench,
   FaBus,
-  FaBolt
+  FaBolt,
+  FaChartPie
 } from "react-icons/fa";
 
 /* =========================
@@ -195,11 +196,10 @@ function AgingBar({ buckets }) {
         {parts.map((p) => {
           const v = buckets[p.k] || 0;
           const w = total ? (v / total) * 100 : 0;
-          if (w === 0) return null;
           return (
             <div
               key={p.k}
-              style={{ width: `${w}%` }}
+              style={{ width: `${w}%`, display: w === 0 ? "none" : "block" }}
               className={`h-full ${p.color} transition-all duration-500`}
               title={`${p.label}: ${v}`}
             />

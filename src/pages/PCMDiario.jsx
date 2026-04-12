@@ -19,7 +19,10 @@ import {
   FaWrench,
   FaBolt,
   FaExclamationTriangle,
-  FaClock
+  FaClock,
+  FaChartPie,
+  FaSkullCrossbones,
+  FaClipboardList
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -31,7 +34,6 @@ import { jsPDF } from "jspdf";
 const SETORES = ["GARANTIA", "MANUTENÇÃO", "SUPRIMENTOS"];
 const OBS_OPCOES = ["AG. CHEGADA DE PEÇAS", "AG. EXECUÇÃO DO SERVIÇO", "AG. GARANTIA"];
 
-// CORES INTENSIFICADAS PARA MELHOR CONTRASTE VISUAL (Tela e PDF)
 const CATEGORIAS = [
   { value: "GNS", label: "GNS", color: "border-red-300 bg-red-100", badge: "bg-red-600 text-white" },
   { value: "FAIXA_AMARELA", label: "Faixa Amarela", color: "border-amber-300 bg-amber-100", badge: "bg-amber-500 text-white" },
@@ -49,15 +51,14 @@ function getCategoriaStyle(cat) {
   return found || { value: cat, label: cat, color: "border-slate-300 bg-slate-100", badge: "bg-slate-500 text-white" };
 }
 
-// Estilo estrito inline para forçar a renderização perfeita do selo no PDF
 function getBadgeInlineStyle(catValue) {
   switch (catValue) {
-    case 'GNS': return { backgroundColor: '#dc2626', color: '#ffffff' }; // red-600
-    case 'FAIXA_AMARELA': return { backgroundColor: '#f59e0b', color: '#ffffff' }; // amber-500
-    case 'NOITE': return { backgroundColor: '#1e293b', color: '#ffffff' }; // slate-800
-    case 'PENDENTES': return { backgroundColor: '#475569', color: '#ffffff' }; // slate-600
-    case 'VENDA': return { backgroundColor: '#2563eb', color: '#ffffff' }; // blue-600
-    default: return { backgroundColor: '#64748b', color: '#ffffff' }; // default slate
+    case 'GNS': return { backgroundColor: '#dc2626', color: '#ffffff' }; 
+    case 'FAIXA_AMARELA': return { backgroundColor: '#f59e0b', color: '#ffffff' }; 
+    case 'NOITE': return { backgroundColor: '#1e293b', color: '#ffffff' }; 
+    case 'PENDENTES': return { backgroundColor: '#475569', color: '#ffffff' }; 
+    case 'VENDA': return { backgroundColor: '#2563eb', color: '#ffffff' }; 
+    default: return { backgroundColor: '#64748b', color: '#ffffff' }; 
   }
 }
 
@@ -99,7 +100,7 @@ function canEditPCM(dataRefISO) {
     const ref = new Date(`${dataRefISO}T00:00:00`);
     const deadline = new Date(ref);
     deadline.setDate(deadline.getDate() + 1);
-    deadline.setHours(10, 0, 0, 0);
+    deadline.setHours(10, 0, 0, 0); // Fechamento cravado às 10:00 da manhã do dia seguinte
     return Date.now() <= deadline.getTime();
   } catch {
     return false;
@@ -235,7 +236,6 @@ function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-        
         <div className="flex justify-between items-center p-5 border-b bg-white relative overflow-hidden shrink-0">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-transparent opacity-50"></div>
           <div className="relative flex items-center gap-3">
@@ -302,7 +302,7 @@ function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
 }
 
 /* ============================
-   PAGE
+   PAGE: PCMDiario
 ============================ */
 
 export default function PCMDiario() {
@@ -314,7 +314,14 @@ export default function PCMDiario() {
   const [prefixos, setPrefixos] = useState([]);
   const [pcmInfo, setPcmInfo] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [turnoAtivo, setTurnoAtivo] = useState("DIA");
+
+  // ✅ NOVO: Automação Inteligente de Turno baseado no Relógio
+  const [turnoAtivo, setTurnoAtivo] = useState(() => {
+    const hora = new Date().getHours();
+    // Das 10h até as 19h59 (O turno é DIA)
+    // Das 20h até as 09h59 da manhã do dia seguinte (O turno é NOITE)
+    return (hora >= 10 && hora < 20) ? "DIA" : "NOITE";
+  });
 
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroCategorias, setFiltroCategorias] = useState([]);
@@ -377,7 +384,7 @@ export default function PCMDiario() {
     const { data: jaExiste } = await supabase.from("veiculos_pcm").select("id").eq("pcm_id", id).eq("frota", form.frota).is("data_saida", null).limit(1);
     if (jaExiste && jaExiste.length > 0) return alert(`A frota ${form.frota} já está lançada neste PCM.`);
 
-    // Data de entrada E data de mudança de categoria juntas no lançamento inicial.
+    // Setando a data de entrada E a data de mudança de categoria juntas no lançamento inicial.
     const now = new Date().toISOString();
     const payload = { pcm_id: id, ...form, ordem_servico: os, lancado_por: user?.nome || "Sistema", lancado_no_turno: turnoAtivo, data_entrada: now, data_mudanca_categoria: now };
     const { data: inserted, error } = await supabase.from("veiculos_pcm").insert([payload]).select("*").single();
@@ -409,7 +416,6 @@ export default function PCMDiario() {
       if (dup && dup.length > 0) return alert(`A frota ${payloadUpdate.frota} já existe.`);
     }
 
-    // Timer por Categoria atualizado
     if (acao === "MOVER_CATEGORIA") {
       payloadUpdate.data_mudanca_categoria = new Date().toISOString();
     }
@@ -441,34 +447,69 @@ export default function PCMDiario() {
     });
   }, [veiculos, filtroTexto, filtroCategorias, filtroSetores, filtroTurnos, filtroCluster, abaAtiva]);
 
-  const resumo = useMemo(() => {
+  // ============================================
+  // LÓGICA DE DADOS TÁTICOS (Comando Diário)
+  // ============================================
+  const { resumoStatus, taticalData } = useMemo(() => {
     const base = veiculosFiltrados.length ? veiculosFiltrados : veiculos;
+    const total = (base || []).length;
+    
+    // Resumo Top Cards
     const byCat = { GNS: 0, FAIXA_AMARELA: 0, NOITE: 0, VENDA: 0, PENDENTES: 0 };
-    (base || []).forEach((v) => { if (byCat[v.categoria] !== undefined) byCat[v.categoria]++; });
-    return { total: (base || []).length, ...byCat };
+    let alertas24h = 0;
+    let alertas48h = 0;
+
+    // Táticos
+    const motivos = {};
+    const slaCriticoList = [];
+    const defeitosFreq = {};
+
+    (base || []).forEach((v) => {
+      // 1. Contagem Simples
+      if (byCat[v.categoria] !== undefined) byCat[v.categoria]++;
+      
+      // 2. Análise de SLA (Baseado no dia que entrou na CATEGORIA)
+      const diasCat = daysBetween(v.data_mudanca_categoria || v.data_entrada);
+      if (diasCat >= 1) alertas24h++;
+      if (diasCat >= 2) {
+        alertas48h++;
+        slaCriticoList.push({ ...v, diasCat });
+      }
+
+      // 3. Raio-X do Pátio (Motivos de Parada)
+      const obs = v.observacao || "NÃO CLASSIFICADO";
+      motivos[obs] = (motivos[obs] || 0) + 1;
+
+      // 4. Termômetro de Defeitos
+      let def = String(v.descricao || "").toUpperCase().trim();
+      if (def.length > 20) def = def.substring(0, 30) + "..."; 
+      if (def) {
+        defeitosFreq[def] = (defeitosFreq[def] || 0) + 1;
+      }
+    });
+
+    const arrMotivos = Object.entries(motivos).map(([k,v]) => ({ name: k, val: v })).sort((a,b) => b.val - a.val);
+    const arrSla = slaCriticoList.sort((a,b) => b.diasCat - a.diasCat).slice(0, 4); 
+    const arrDefeitos = Object.entries(defeitosFreq).map(([k,v]) => ({ name: k, val: v })).sort((a,b) => b.val - a.val).slice(0, 4);
+
+    return { 
+      resumoStatus: { total, alertas24h, alertas48h, ...byCat },
+      taticalData: { motivos: arrMotivos, sla: arrSla, defeitos: arrDefeitos }
+    };
   }, [veiculos, veiculosFiltrados]);
 
-  // ✅ GERADOR PDF PROFISSIONAL (Impede o corte de textos ao meio da página e mantém o selo visual estrito)
+  // ============================================
+  // GERADOR PDF
+  // ============================================
   async function baixarPdfPCM() {
     try {
       if (!reportRef.current) return;
-      
-      const scale = 2; // Escala 2 resolve definição e previne excesso de memória
-      const canvas = await html2canvas(reportRef.current, { 
-        scale, 
-        backgroundColor: "#ffffff", 
-        useCORS: true,
-        logging: false
-      });
+      const scale = 2; 
+      const canvas = await html2canvas(reportRef.current, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false });
 
-      // Cálculo Inteligente de Cortes (Evita cortar linhas tr no meio)
       const trElements = Array.from(reportRef.current.querySelectorAll("tr"));
       const containerRect = reportRef.current.getBoundingClientRect();
-      
-      const cutPoints = trElements.map(tr => {
-        const rect = tr.getBoundingClientRect();
-        return Math.floor((rect.bottom - containerRect.top) * scale);
-      });
+      const cutPoints = trElements.map(tr => Math.floor((tr.getBoundingClientRect().bottom - containerRect.top) * scale));
       cutPoints.push(canvas.height);
 
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -478,24 +519,17 @@ export default function PCMDiario() {
       
       const printableW = pageW - margin * 2;
       const printableH = pageH - margin * 2;
-      
       const mmPerPx = printableW / canvas.width;
       const maxPageHeightPx = Math.floor(printableH / mmPerPx);
 
-      let y = 0;
-      let pageIndex = 0;
+      let y = 0, pageIndex = 0;
 
       while (y < canvas.height) {
         const targetY = y + maxPageHeightPx;
         let cutY = canvas.height;
-
         if (targetY < canvas.height) {
           const validCuts = cutPoints.filter(cp => cp <= targetY && cp > y);
-          if (validCuts.length > 0) {
-            cutY = validCuts[validCuts.length - 1];
-          } else {
-            cutY = targetY; // Fallback se a linha for gigante
-          }
+          cutY = validCuts.length > 0 ? validCuts[validCuts.length - 1] : targetY; 
         }
 
         const sliceH = cutY - y;
@@ -511,7 +545,6 @@ export default function PCMDiario() {
         ctx.drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
 
         if (pageIndex > 0) doc.addPage();
-        
         doc.addImage(pageCanvas.toDataURL("image/png", 1.0), "PNG", margin, margin, printableW, sliceH * mmPerPx, undefined, "FAST");
 
         y = cutY;
@@ -520,7 +553,6 @@ export default function PCMDiario() {
       doc.save(`PCM_${pcmInfo?.data_referencia || "diario"}.pdf`);
     } catch (err) { 
       alert("Erro ao gerar PDF."); 
-      console.error(err);
     }
   }
 
@@ -558,14 +590,14 @@ export default function PCMDiario() {
         </div>
       </div>
 
-      {/* KPIs RESUMO */}
+      {/* KPIs TÁTICOS DIÁRIOS (Refinados para ação imediata) */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <CardKPI title="Total Em Aberto" value={resumo.total} icon={<FaBus />} tone="slate" />
-        <CardKPI title="GNS" value={resumo.GNS} icon={<FaExclamationTriangle />} tone="rose" />
-        <CardKPI title="Faixa Amarela" value={resumo.FAIXA_AMARELA} icon={<FaTools />} tone="amber" />
-        <CardKPI title="Noturno" value={resumo.NOITE} icon={<FaClock />} tone="slate" />
-        <CardKPI title="Pendentes" value={resumo.PENDENTES} icon={<FaWrench />} tone="slate" />
-        <CardKPI title="Venda" value={resumo.VENDA} icon={<FaBolt />} tone="blue" />
+        <CardKPI title="Total Em Aberto" value={resumoStatus.total} icon={<FaBus />} tone="blue" />
+        <CardKPI title="GNS" value={resumoStatus.GNS} icon={<FaExclamationTriangle />} tone="rose" />
+        <CardKPI title="Faixa Amarela" value={resumoStatus.FAIXA_AMARELA} icon={<FaTools />} tone="amber" />
+        <CardKPI title="Pendentes" value={resumoStatus.PENDENTES} icon={<FaWrench />} tone="slate" />
+        <CardKPI title="Alerta > 24H" value={resumoStatus.alertas24h} sub="Dias na Categoria" icon={<FaClock />} tone="amber" />
+        <CardKPI title="SLA Estourado > 48h" value={resumoStatus.alertas48h} sub="Dias na Categoria" icon={<FaSkullCrossbones />} tone="rose" />
       </div>
 
       {/* FORMULÁRIO DE LANÇAMENTO */}
@@ -644,6 +676,163 @@ export default function PCMDiario() {
         </div>
       </div>
 
+      {/* BLOCO INVISÍVEL PARA IMPRESSÃO DO PDF - AQUI EU COLOQUEI A TABELA DENTRO DO PDF JUNTO COM A ANÁLISE TÁTICA */}
+      <div className="fixed -left-[99999px] top-0 pointer-events-none opacity-0">
+        <div ref={reportRef} className="bg-white w-[1400px] p-6 text-black font-sans">
+          
+          {/* TOPO PDF */}
+          <div className="mb-5 border-2 border-slate-800 rounded-xl overflow-hidden">
+            <div className="bg-slate-800 text-white px-5 py-4 flex justify-between items-center">
+              <div>
+                <div className="text-2xl font-black uppercase tracking-tight">PCM - Planejamento Diário e Controle</div>
+                <div className="text-sm font-semibold mt-1">Data de Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span></div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs uppercase font-bold opacity-80">Veículos em Aberto</div>
+                <div className="text-4xl font-black">{veiculosFiltrados.length}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* PAINEL TÁTICO PDF (RAIO-X) */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            
+            {/* Raio-X Gargalo */}
+            <div className="border-2 border-slate-200 rounded-xl p-4">
+              <h3 className="text-[11px] font-black text-slate-500 uppercase mb-3 flex items-center gap-2"><FaChartPie /> Raio-X do Pátio (Motivos)</h3>
+              <div className="space-y-2">
+                {taticalData.motivos.map((m, i) => (
+                  <div key={i} className="flex justify-between items-center bg-slate-50 px-3 py-1.5 rounded border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-700 truncate w-3/4">{m.name}</span>
+                    <span className="text-xs font-black text-blue-600">{m.val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* SLA Crítico */}
+            <div className="border-2 border-rose-200 rounded-xl p-4 bg-rose-50">
+              <h3 className="text-[11px] font-black text-rose-800 uppercase mb-3 flex items-center gap-2"><FaSkullCrossbones /> SLA Crítico {'>'} 48H</h3>
+              <div className="space-y-2">
+                {taticalData.sla.length === 0 ? <div className="text-xs font-bold text-rose-400">Nenhum veículo em SLA Crítico</div> : 
+                  taticalData.sla.map((v, i) => (
+                    <div key={i} className="flex justify-between items-center bg-white px-3 py-1.5 rounded border border-rose-100">
+                      <span className="text-xs font-black text-slate-800">{v.frota}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-500">{v.categoria}</span>
+                        <span className="text-xs font-black text-rose-600 bg-rose-100 px-2 rounded">{v.diasCat}d</span>
+                      </div>
+                    </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Termômetro Defeitos */}
+            <div className="border-2 border-slate-200 rounded-xl p-4">
+              <h3 className="text-[11px] font-black text-slate-500 uppercase mb-3 flex items-center gap-2"><FaClipboardList /> Termômetro (Sintomas Top 4)</h3>
+              <div className="space-y-2">
+                {taticalData.defeitos.map((d, i) => (
+                  <div key={i} className="flex justify-between items-center bg-slate-50 px-3 py-1.5 rounded border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-700 truncate w-4/5">{d.name}</span>
+                    <span className="text-xs font-black text-slate-600">{d.val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* TABELA PDF COM CORES CORRIGIDAS */}
+          <table className="w-full text-left text-sm border-collapse border-2 border-slate-300">
+            <thead>
+              <tr className="bg-slate-100 text-[10px] uppercase text-slate-700 border-b-2 border-slate-300 font-black">
+                <th className="p-3 border-r border-slate-300">Cluster</th>
+                <th className="p-3 border-r border-slate-300">Frota</th>
+                <th className="p-3 border-r border-slate-300">Entrada</th>
+                <th className="p-3 border-r border-slate-300 text-center">Dias (Cat)</th>
+                <th className="p-3 border-r border-slate-300">Categoria</th>
+                <th className="p-3 border-r border-slate-300 w-[400px]">Descrição</th>
+                <th className="p-3 border-r border-slate-300">O.S</th>
+                <th className="p-3 border-r border-slate-300">Setor</th>
+                <th className="p-3 border-r border-slate-300">Resp. Lançamento</th>
+                <th className="p-3 w-[250px]">Observação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {veiculosFiltrados.map((v) => {
+                const catStyle = getCategoriaStyle(v.categoria);
+                const diasCat = daysBetween(v.data_mudanca_categoria || v.data_entrada);
+                
+                return (
+                  <tr key={v.id} className={`border-b border-slate-300 font-medium ${catStyle.color}`}>
+                    <td className="p-3 border-r border-slate-300 text-[10px] font-black uppercase text-slate-600">{v.cluster || "-"}</td>
+                    <td className="p-3 text-lg font-black border-r border-slate-300 text-slate-900">{v.frota}</td>
+                    <td className="p-3 border-r border-slate-300 text-slate-800">{formatBRDate(v.data_entrada)}</td>
+                    <td className="p-3 text-center font-black border-r border-slate-300 text-lg text-slate-900">{diasCat}</td>
+                    <td className="p-3 border-r border-slate-300">
+                      <div style={{ display: 'inline-block', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', ...getBadgeInlineStyle(v.categoria) }}>
+                        {catStyle.label}
+                      </div>
+                    </td>
+                    <td className="p-3 text-[11px] uppercase leading-tight border-r border-slate-300 text-slate-800">{v.descricao}</td>
+                    <td className="p-3 font-bold border-r border-slate-300 text-slate-900">{v.ordem_servico || "-"}</td>
+                    <td className="p-3 text-[10px] font-black border-r border-slate-300 text-slate-700 uppercase">{v.setor}</td>
+                    <td className="p-3 text-[10px] italic border-r border-slate-300 text-slate-700">{v.lancado_por || "-"}</td>
+                    <td className="p-3 text-[10px] font-bold uppercase text-slate-800">{v.observacao || "-"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="mt-4 text-right text-[10px] text-slate-500 font-bold">Relatório Oficial - Gestão da Frota</div>
+        </div>
+      </div>
+
+      {/* PAINEL TÁTICO NA TELA */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <h3 className="text-xs font-black text-slate-500 uppercase mb-4 flex items-center gap-2"><FaChartPie /> Raio-X do Pátio (Status de Operação)</h3>
+          <div className="space-y-3">
+            {taticalData.motivos.map((m, i) => (
+              <div key={i} className="flex justify-between items-center bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
+                <span className="text-xs font-bold text-slate-700">{m.name}</span>
+                <span className="text-sm font-black text-blue-600 bg-blue-100 px-3 py-1 rounded-lg">{m.val}</span>
+              </div>
+            ))}
+            {taticalData.motivos.length === 0 && <div className="text-xs font-bold text-slate-400">Pátio limpo!</div>}
+          </div>
+        </div>
+
+        <div className="bg-rose-50 rounded-2xl border border-rose-200 p-5 shadow-sm">
+          <h3 className="text-xs font-black text-rose-800 uppercase mb-4 flex items-center gap-2"><FaSkullCrossbones /> Alerta de SLA {'>'} 48H</h3>
+          <div className="space-y-3">
+            {taticalData.sla.length === 0 ? <div className="text-xs font-bold text-rose-400">Nenhum veículo em SLA Crítico</div> : 
+              taticalData.sla.map((v, i) => (
+                <div key={i} className="flex justify-between items-center bg-white px-4 py-2.5 rounded-xl border border-rose-100 shadow-sm">
+                  <span className="text-sm font-black text-slate-800">{v.frota}</span>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${getCategoriaStyle(v.categoria).badge}`}>{v.categoria}</span>
+                    <span className="text-xs font-black text-rose-700 bg-rose-100 px-2 py-1 rounded">{v.diasCat} dias</span>
+                  </div>
+                </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <h3 className="text-xs font-black text-slate-500 uppercase mb-4 flex items-center gap-2"><FaClipboardList /> Termômetro (Top Defeitos Abertos Hoje)</h3>
+          <div className="space-y-3">
+            {taticalData.defeitos.map((d, i) => (
+              <div key={i} className="flex justify-between items-center bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
+                <span className="text-xs font-bold text-slate-700 truncate w-3/4">{d.name}</span>
+                <span className="text-sm font-black text-slate-600 bg-slate-200 px-3 py-1 rounded-lg">{d.val}</span>
+              </div>
+            ))}
+            {taticalData.defeitos.length === 0 && <div className="text-xs font-bold text-slate-400">Nenhum relato hoje</div>}
+          </div>
+        </div>
+      </div>
+
       {/* RELATÓRIO VISUAL (TABELA NA TELA) */}
       <div className="bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
         <div className="p-4 border-b bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-2">
@@ -679,7 +868,7 @@ export default function PCMDiario() {
                   const diasCat = daysBetween(v.data_mudanca_categoria || v.data_entrada);
 
                   return (
-                    <tr key={v.id} className={`border-b border-slate-200 transition-colors ${catStyle.color} hover:brightness-95`}>
+                    <tr key={v.id} className={`border-b border-slate-200 hover:bg-slate-100 transition-colors ${catStyle.color}`}>
                       <td className="p-4">
                         <div className="text-lg font-black text-slate-800">{v.frota}</div>
                         <div className="text-[10px] font-bold text-slate-500 uppercase">{v.cluster || "Sem Cluster"}</div>
@@ -687,7 +876,7 @@ export default function PCMDiario() {
                       <td className="p-4 text-center">
                         <div className="text-xl font-black text-slate-800">{diasCat}d</div>
                         {diasTotal !== diasCat && (
-                          <div className="text-[10px] font-black text-slate-500 uppercase mt-0.5" title={`Dias desde a entrada original: ${diasTotal}`}>Total PCM: {diasTotal}d</div>
+                          <div className="text-[10px] font-black text-slate-400 uppercase mt-0.5" title={`Dias desde a entrada original: ${diasTotal}`}>Total PCM: {diasTotal}d</div>
                         )}
                       </td>
                       <td className="p-4">
@@ -695,12 +884,12 @@ export default function PCMDiario() {
                           {catStyle.label}
                         </span>
                       </td>
-                      <td className="p-4 text-[11px] font-semibold text-slate-700 uppercase">{v.descricao}</td>
-                      <td className="p-4 font-bold text-slate-800">{v.ordem_servico || "-"}</td>
-                      <td className="p-4 text-[10px] font-black text-slate-700 uppercase">{v.setor}</td>
-                      <td className="p-4 text-[10px] font-black text-slate-700"><span className="bg-slate-200/50 px-2 py-1 rounded">{v.lancado_no_turno || "-"}</span></td>
-                      <td className="p-4 text-[10px] font-bold text-slate-600 italic">{v.lancado_por || "-"}</td>
-                      <td className="p-4 text-[10px] font-bold text-slate-700 uppercase">{v.observacao || "-"}</td>
+                      <td className="p-4 text-[11px] font-semibold text-slate-600 uppercase">{v.descricao}</td>
+                      <td className="p-4 font-bold text-slate-700">{v.ordem_servico || "-"}</td>
+                      <td className="p-4 text-[10px] font-black text-slate-600 uppercase">{v.setor}</td>
+                      <td className="p-4 text-[10px] font-black text-slate-600"><span className="bg-slate-200/50 px-2 py-1 rounded">{v.lancado_no_turno || "-"}</span></td>
+                      <td className="p-4 text-[10px] font-bold text-slate-500 italic">{v.lancado_por || "-"}</td>
+                      <td className="p-4 text-[10px] font-bold text-slate-600 uppercase">{v.observacao || "-"}</td>
                       <td className="p-4">
                         <div className="flex justify-center gap-2">
                           <button
@@ -725,107 +914,6 @@ export default function PCMDiario() {
                   );
                 })
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* BLOCO INVISÍVEL PARA IMPRESSÃO DO PDF */}
-      <div className="fixed -left-[99999px] top-0 pointer-events-none opacity-0">
-        <div ref={reportRef} className="bg-white w-[1400px] p-6 text-black font-sans">
-          {/* TOPO PDF */}
-          <div className="mb-5 border-2 border-slate-800 rounded-xl overflow-hidden">
-            <div className="bg-slate-800 text-white px-5 py-4">
-              <div className="text-2xl font-black uppercase tracking-tight">PCM - Planejamento e Controle de Manutenção</div>
-              <div className="text-sm font-semibold mt-1">Data de Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span></div>
-            </div>
-            <div className="px-5 py-3 bg-white flex flex-wrap gap-8 text-sm font-semibold text-slate-700">
-              <div>Veículos em Aberto: <span className="font-black text-slate-900">{veiculosFiltrados.length}</span></div>
-              <div>Gerado em: <span className="font-black text-slate-900">{new Date().toLocaleString("pt-BR")}</span></div>
-            </div>
-          </div>
-
-          {/* RESUMO NO COMEÇO DO PDF */}
-          <div className="flex gap-4 mb-6">
-            <div className="flex-1 rounded-xl border-2 border-slate-300 bg-slate-50 p-4">
-              <p className="text-[10px] font-black text-slate-500 uppercase">Total</p>
-              <p className="text-2xl font-black mt-1 text-slate-800">{resumo.total}</p>
-            </div>
-            <div className="flex-1 rounded-xl border-2 border-red-300 bg-red-50 p-4">
-              <p className="text-[10px] font-black text-red-600 uppercase">GNS</p>
-              <p className="text-2xl font-black mt-1 text-red-700">{resumo.GNS}</p>
-            </div>
-            <div className="flex-1 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
-              <p className="text-[10px] font-black text-amber-600 uppercase">F. Amarela</p>
-              <p className="text-2xl font-black mt-1 text-amber-700">{resumo.FAIXA_AMARELA}</p>
-            </div>
-            <div className="flex-1 rounded-xl border-2 border-slate-300 bg-white p-4">
-              <p className="text-[10px] font-black text-slate-500 uppercase">Noturno</p>
-              <p className="text-2xl font-black mt-1 text-slate-800">{resumo.NOITE}</p>
-            </div>
-            <div className="flex-1 rounded-xl border-2 border-slate-400 bg-slate-200 p-4">
-              <p className="text-[10px] font-black text-slate-600 uppercase">Pendentes</p>
-              <p className="text-2xl font-black mt-1 text-slate-800">{resumo.PENDENTES}</p>
-            </div>
-            <div className="flex-1 rounded-xl border-2 border-blue-300 bg-blue-50 p-4">
-              <p className="text-[10px] font-black text-blue-600 uppercase">Venda</p>
-              <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
-            </div>
-          </div>
-
-          {/* TABELA PDF COM CORES CORRIGIDAS */}
-          <table className="w-full text-left text-sm border-collapse border-2 border-slate-300">
-            <thead>
-              <tr className="bg-slate-100 text-[10px] uppercase text-slate-700 border-b-2 border-slate-300 font-black">
-                <th className="p-3 border-r border-slate-300">Cluster</th>
-                <th className="p-3 border-r border-slate-300">Frota</th>
-                <th className="p-3 border-r border-slate-300">Entrada</th>
-                <th className="p-3 border-r border-slate-300 text-center">Dias (Cat)</th>
-                <th className="p-3 border-r border-slate-300">Categoria</th>
-                <th className="p-3 border-r border-slate-300 w-[400px]">Descrição</th>
-                <th className="p-3 border-r border-slate-300">O.S</th>
-                <th className="p-3 border-r border-slate-300">Setor</th>
-                <th className="p-3 border-r border-slate-300">Resp. Lançamento</th>
-                <th className="p-3 w-[250px]">Observação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {veiculosFiltrados.map((v) => {
-                const catStyle = getCategoriaStyle(v.categoria);
-                const diasCat = daysBetween(v.data_mudanca_categoria || v.data_entrada);
-                
-                return (
-                  <tr key={v.id} className={`border-b border-slate-300 font-medium ${catStyle.color}`}>
-                    <td className="p-3 border-r border-slate-300 text-[10px] font-black uppercase text-slate-600">{v.cluster || "-"}</td>
-                    <td className="p-3 text-lg font-black border-r border-slate-300 text-slate-900">{v.frota}</td>
-                    <td className="p-3 border-r border-slate-300 text-slate-800">{formatBRDate(v.data_entrada)}</td>
-                    <td className="p-3 text-center font-black border-r border-slate-300 text-lg text-slate-900">{diasCat}</td>
-                    
-                    {/* ✅ FIX DO PDF: ESTILO INLINE ESTRITO PARA O SELO FUNCIONAR EM QUALQUER MOTOR DE HTML2CANVAS */}
-                    <td className="p-3 border-r border-slate-300">
-                      <div 
-                        style={{
-                          display: 'inline-block',
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          fontSize: '10px',
-                          fontWeight: '900',
-                          textTransform: 'uppercase',
-                          ...getBadgeInlineStyle(v.categoria)
-                        }}
-                      >
-                        {catStyle.label}
-                      </div>
-                    </td>
-                    
-                    <td className="p-3 text-[11px] uppercase leading-tight border-r border-slate-300 text-slate-800">{v.descricao}</td>
-                    <td className="p-3 font-bold border-r border-slate-300 text-slate-900">{v.ordem_servico || "-"}</td>
-                    <td className="p-3 text-[10px] font-black border-r border-slate-300 text-slate-700 uppercase">{v.setor}</td>
-                    <td className="p-3 text-[10px] italic border-r border-slate-300 text-slate-700">{v.lancado_por || "-"}</td>
-                    <td className="p-3 text-[10px] font-bold uppercase text-slate-800">{v.observacao || "-"}</td>
-                  </tr>
-                );
-              })}
             </tbody>
           </table>
         </div>

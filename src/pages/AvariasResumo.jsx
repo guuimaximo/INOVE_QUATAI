@@ -29,7 +29,8 @@ import {
   FaTools,
   FaClock,
   FaBus,
-  FaRoad
+  FaRoad,
+  FaDownload
 } from "react-icons/fa";
 
 /* =========================
@@ -110,6 +111,41 @@ function monthLabel(ym) {
     "09": "SET", "10": "OUT", "11": "NOV", "12": "DEZ",
   };
   return `${map[m] || m}/${String(y).slice(2)}`;
+}
+
+function exportarCSV(dados, nomeArquivo) {
+  if (!dados?.length) {
+    alert("Não há dados para exportar.");
+    return;
+  }
+  
+  const cabecalho = ["ID", "Data Avaria", "Veículo (Prefixo)", "Motorista/Responsável", "Origem", "Status Cobrança", "Valor Orçado", "Valor Cobrado"];
+  
+  const linhas = dados.map((row) => {
+    const dataFmt = row.dataAvaria ? new Date(row.dataAvaria.includes("T") ? row.dataAvaria : `${row.dataAvaria}T00:00:00`).toLocaleDateString("pt-BR") : "";
+    const motoristaLimpo = String(row.motoristaId || "").includes(' - ') ? String(row.motoristaId).split(' - ')[1].trim() : String(row.motoristaId || "");
+    
+    return [
+      row.id,
+      dataFmt,
+      row.prefixo || "",
+      motoristaLimpo,
+      normalizeOrigem(row),
+      normalizeStatusCobranca(row),
+      Number(row.valor_total_orcamento || 0).toFixed(2).replace(".", ","),
+      Number(row.valor_cobrado || 0).toFixed(2).replace(".", ",")
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(";");
+  });
+
+  const csv = [cabecalho.join(";"), ...linhas].join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${nomeArquivo}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 /* =========================
@@ -201,7 +237,6 @@ function ExplicacaoModal({ onClose }) {
 ========================= */
 
 export default function AvariasResumo() {
-  // Helpers de Data Padrão (Mês Atual)
   const hojeISO = useMemo(() => toISODate(new Date()), []);
   const mesAtualIni = useMemo(() => startOfMonthISO(hojeISO), [hojeISO]);
   const mesAtualFim = useMemo(() => endOfMonthISO(hojeISO), [hojeISO]);
@@ -211,7 +246,6 @@ export default function AvariasResumo() {
   const [errMsg, setErrMsg] = useState("");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
-  // Filtros (Iniciando no mês atual para não trazer a base histórica inteira de cara)
   const [dataInicio, setDataInicio] = useState(mesAtualIni);
   const [dataFim, setDataFim] = useState(mesAtualFim);
   const [origemFiltro, setOrigemFiltro] = useState("");
@@ -220,7 +254,6 @@ export default function AvariasResumo() {
     setLoading(true);
     setErrMsg("");
 
-    // Utilizando as colunas reais da tabela (prefixo e motoristaId)
     let query = supabase
       .from("avarias")
       .select(
@@ -253,9 +286,6 @@ export default function AvariasResumo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataInicio, dataFim, origemFiltro]);
 
-  // =========================
-  // KPIs
-  // =========================
   const kpis = useMemo(() => {
     const base = rows;
 
@@ -294,9 +324,6 @@ export default function AvariasResumo() {
     };
   }, [rows]);
 
-  // =========================
-  // GRÁFICO (Evolução Mensal)
-  // =========================
   const chartData = useMemo(() => {
     const map = new Map();
 
@@ -317,15 +344,11 @@ export default function AvariasResumo() {
       .map((x) => ({ ...x, mesLabel: monthLabel(x.mes) }));
   }, [rows]);
 
-  // =========================
-  // RANKING (Veículos e Motoristas)
-  // =========================
   const { topVeiculos, topMotoristas } = useMemo(() => {
     const mapVeic = new Map();
     const mapMot = new Map();
 
     rows.forEach(r => {
-      // Veículos
       const v = String(r.prefixo || "").trim();
       if (v && v !== "-") {
         if (!mapVeic.has(v)) mapVeic.set(v, { nome: v, qtd: 0, orcado: 0, cobrado: 0 });
@@ -335,7 +358,6 @@ export default function AvariasResumo() {
         itemV.cobrado += Number(r.valor_cobrado || 0);
       }
 
-      // Motoristas (Limpando "3202677 - JOAO" para "JOAO")
       const mRaw = String(r.motoristaId || "").trim();
       if (mRaw && mRaw !== "-") {
         const name = mRaw.includes(' - ') ? mRaw.split(' - ')[1].trim() : mRaw;
@@ -359,7 +381,6 @@ export default function AvariasResumo() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 space-y-6">
       
-      {/* HEADER PREMIUM */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
         <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
           <div>
@@ -375,6 +396,14 @@ export default function AvariasResumo() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => exportarCSV(rows, `Avarias_${dataInicio}_a_${dataFim}`)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition shadow-sm"
+              title="Baixar para Excel"
+            >
+              <FaDownload /> Exportar Dados
+            </button>
+
             <button
               onClick={() => setMostrarExplicacao(true)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
@@ -393,7 +422,6 @@ export default function AvariasResumo() {
           </div>
         </div>
 
-        {/* BARRA DE FILTROS */}
         <div className="mt-5 pt-5 border-t flex flex-col md:flex-row gap-4 items-start md:items-end">
           <div className="flex flex-col">
             <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Origem do Dano</label>
@@ -459,7 +487,6 @@ export default function AvariasResumo() {
         )}
       </div>
 
-      {/* KPIs PRINCIPAIS */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <CardKPI 
           title="Total de Avarias" 
@@ -491,7 +518,6 @@ export default function AvariasResumo() {
         />
       </div>
 
-      {/* COMPARAÇÃO INTERNO x EXTERNO */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex items-center justify-between">
           <div>
@@ -516,10 +542,7 @@ export default function AvariasResumo() {
         </div>
       </div>
 
-      {/* GRÁFICO MENSAL (DUAL AXIS) E RANKINGS */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        
-        {/* Gráfico */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm xl:col-span-3">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -535,15 +558,11 @@ export default function AvariasResumo() {
           ) : (
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                {/* Adicionado margin top para não cortar as labels */}
                 <BarChart data={chartData} margin={{ top: 25, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} dy={10} />
                   
-                  {/* Eixo Esquerdo (Quantidade) */}
                   <YAxis yAxisId="left" orientation="left" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} />
-                  
-                  {/* Eixo Direito (Financeiro) */}
                   <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} tickFormatter={(val) => `R$ ${fmtInt(val)}`} />
                   
                   <Tooltip
@@ -558,7 +577,6 @@ export default function AvariasResumo() {
                   />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 'bold' }} />
                   
-                  {/* Barras com LabelList para mostrar os valores formatados no topo */}
                   <Bar yAxisId="left" dataKey="qtde" name="Quantidade" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30}>
                     <LabelList dataKey="qtde" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
                   </Bar>
@@ -576,7 +594,6 @@ export default function AvariasResumo() {
           )}
         </div>
 
-        {/* Tabela Top Veículos */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm xl:col-span-1">
           <h3 className="text-base font-black text-slate-800 flex items-center gap-2 mb-4">
             <FaBus className="text-slate-400" /> Top 10 Veículos
@@ -608,10 +625,9 @@ export default function AvariasResumo() {
           </div>
         </div>
 
-        {/* Tabela Top Motoristas */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm xl:col-span-2">
           <h3 className="text-base font-black text-slate-800 flex items-center gap-2 mb-4">
-            <FaUserTie className="text-slate-400" /> Top 10 Motoristas (Culpabilidade / Envolvimentos)
+            <FaUserTie className="text-slate-400" /> Top 10 Motoristas (Culpabilidade)
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse min-w-[500px]">
@@ -644,7 +660,6 @@ export default function AvariasResumo() {
 
       </div>
 
-      {/* LOADING OVERLAY */}
       {loading && (
         <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-[1px] flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl px-6 py-4 shadow-xl border border-slate-200 font-black text-slate-800">
@@ -653,7 +668,6 @@ export default function AvariasResumo() {
         </div>
       )}
 
-      {/* MODAL DE EXPLICAÇÃO */}
       {mostrarExplicacao && (
         <ExplicacaoModal onClose={() => setMostrarExplicacao(false)} />
       )}

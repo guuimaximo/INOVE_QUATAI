@@ -19,7 +19,10 @@ import {
   FaWrench,
   FaBolt,
   FaExclamationTriangle,
-  FaClock
+  FaClock,
+  FaChartPie,
+  FaChartLine,
+  FaRedo
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -312,11 +315,9 @@ export default function PCMDiario() {
   const [pcmInfo, setPcmInfo] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ NOVO: Automação Inteligente de Turno baseado no Relógio
+  // ✅ Automação Inteligente de Turno baseado no Relógio
   const [turnoAtivo, setTurnoAtivo] = useState(() => {
     const hora = new Date().getHours();
-    // Das 10h até as 19h59 (O turno é DIA)
-    // Das 20h até as 09h59 da manhã do dia seguinte (O turno é NOITE)
     return (hora >= 10 && hora < 20) ? "DIA" : "NOITE";
   });
 
@@ -335,30 +336,36 @@ export default function PCMDiario() {
 
   const pcmEditavel = useMemo(() => canEditPCM(pcmInfo?.data_referencia), [pcmInfo?.data_referencia]);
 
+  // ✅ BLINDAGEM DA TELA BRANCA COM TRY...CATCH E MAYBESINGLE()
   const buscarDados = useCallback(async () => {
     setLoading(true);
-    const [resPcm, resVeiculos, resPrefixos] = await Promise.all([
-      supabase.from("pcm_diario").select("*").eq("id", id).single(),
-      supabase.from("veiculos_pcm").select("*").eq("pcm_id", id).is("data_saida", null).order("data_entrada", { ascending: true }),
-      supabase.from("prefixos").select("codigo, cluster").order("codigo"),
-    ]);
+    try {
+      const [resPcm, resVeiculos, resPrefixos] = await Promise.all([
+        supabase.from("pcm_diario").select("*").eq("id", id).maybeSingle(),
+        supabase.from("veiculos_pcm").select("*").eq("pcm_id", id).is("data_saida", null).order("data_entrada", { ascending: true }),
+        supabase.from("prefixos").select("codigo, cluster").order("codigo"),
+      ]);
 
-    if (resPcm?.data) setPcmInfo(resPcm.data);
-    if (resPrefixos?.data) setPrefixos(resPrefixos.data);
+      if (resPcm?.data) setPcmInfo(resPcm.data);
+      if (resPrefixos?.data) setPrefixos(resPrefixos.data);
 
-    const mapClusterByCodigo = new Map();
-    (resPrefixos?.data || []).forEach((p) => {
-      const cod = String(p?.codigo || "").trim();
-      if (cod) mapClusterByCodigo.set(cod, String(p?.cluster || "").trim());
-    });
+      const mapClusterByCodigo = new Map();
+      (resPrefixos?.data || []).forEach((p) => {
+        const cod = String(p?.codigo || "").trim();
+        if (cod) mapClusterByCodigo.set(cod, String(p?.cluster || "").trim());
+      });
 
-    const veicsComCluster = (resVeiculos?.data || []).map((v) => ({
-      ...v,
-      cluster: mapClusterByCodigo.get(String(v?.frota || "").trim()) || "",
-    }));
+      const veicsComCluster = (resVeiculos?.data || []).map((v) => ({
+        ...v,
+        cluster: mapClusterByCodigo.get(String(v?.frota || "").trim()) || "",
+      }));
 
-    setVeiculos(veicsComCluster);
-    setLoading(false);
+      setVeiculos(veicsComCluster);
+    } catch (error) {
+      console.error("Erro ao carregar dados do PCM:", error);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { buscarDados(); }, [buscarDados]);
@@ -451,27 +458,16 @@ export default function PCMDiario() {
     return { total: (base || []).length, ...byCat };
   }, [veiculos, veiculosFiltrados]);
 
-  // ✅ GERADOR PDF PROFISSIONAL (Impede o corte de textos ao meio da página e mantém o selo visual estrito)
+  // ✅ GERADOR PDF PROFISSIONAL
   async function baixarPdfPCM() {
     try {
       if (!reportRef.current) return;
-      
       const scale = 2; 
-      const canvas = await html2canvas(reportRef.current, { 
-        scale, 
-        backgroundColor: "#ffffff", 
-        useCORS: true,
-        logging: false
-      });
+      const canvas = await html2canvas(reportRef.current, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false });
 
-      // Cálculo Inteligente de Cortes (Evita cortar linhas tr no meio)
       const trElements = Array.from(reportRef.current.querySelectorAll("tr"));
       const containerRect = reportRef.current.getBoundingClientRect();
-      
-      const cutPoints = trElements.map(tr => {
-        const rect = tr.getBoundingClientRect();
-        return Math.floor((rect.bottom - containerRect.top) * scale);
-      });
+      const cutPoints = trElements.map(tr => Math.floor((tr.getBoundingClientRect().bottom - containerRect.top) * scale));
       cutPoints.push(canvas.height);
 
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -481,28 +477,21 @@ export default function PCMDiario() {
       
       const printableW = pageW - margin * 2;
       const printableH = pageH - margin * 2;
-      
       const mmPerPx = printableW / canvas.width;
       const maxPageHeightPx = Math.floor(printableH / mmPerPx);
 
-      let y = 0;
-      let pageIndex = 0;
+      let y = 0, pageIndex = 0;
 
       while (y < canvas.height) {
         const targetY = y + maxPageHeightPx;
         let cutY = canvas.height;
-
         if (targetY < canvas.height) {
           const validCuts = cutPoints.filter(cp => cp <= targetY && cp > y);
-          if (validCuts.length > 0) {
-            cutY = validCuts[validCuts.length - 1];
-          } else {
-            cutY = targetY; // Fallback se a linha for gigante
-          }
+          cutY = validCuts.length > 0 ? validCuts[validCuts.length - 1] : targetY; 
         }
 
         const sliceH = cutY - y;
-        if (sliceH <= 0) break; 
+        if (sliceH <= 0) break;
 
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
@@ -514,7 +503,6 @@ export default function PCMDiario() {
         ctx.drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
 
         if (pageIndex > 0) doc.addPage();
-        
         doc.addImage(pageCanvas.toDataURL("image/png", 1.0), "PNG", margin, margin, printableW, sliceH * mmPerPx, undefined, "FAST");
 
         y = cutY;
@@ -523,7 +511,6 @@ export default function PCMDiario() {
       doc.save(`PCM_${pcmInfo?.data_referencia || "diario"}.pdf`);
     } catch (err) { 
       alert("Erro ao gerar PDF."); 
-      console.error(err);
     }
   }
 

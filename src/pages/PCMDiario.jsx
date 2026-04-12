@@ -13,39 +13,28 @@ import {
   FaTimes,
   FaSave,
   FaCheckCircle,
+  FaCalendarAlt,
+  FaBus,
+  FaTools,
+  FaWrench,
+  FaBolt
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf"; // ✅ PDF real (sem print)
+import { jsPDF } from "jspdf";
 
 /* ============================
-   CONSTANTES (PADRÃO)
+   CONSTANTES E CONFIG
 ============================ */
 
 const SETORES = ["GARANTIA", "MANUTENÇÃO", "SUPRIMENTOS"];
-
 const OBS_OPCOES = ["AG. CHEGADA DE PEÇAS", "AG. EXECUÇÃO DO SERVIÇO", "AG. GARANTIA"];
 
-// ✅ ORDEM DEFINIDA:
-// GNS → FAIXA AMARELA → NOITE → PENDENTES → VENDA
 const CATEGORIAS = [
-  { value: "GNS", label: "GNS", color: "bg-red-600 text-white", badge: "bg-red-600 text-white" },
-
-  // ✅ NOVA CATEGORIA (linha amarela)
-  {
-    value: "FAIXA_AMARELA",
-    label: "Faixa Amarela",
-    color: "bg-yellow-300 text-black",
-    badge: "bg-yellow-500 text-black",
-  },
-
-  {
-    value: "NOITE",
-    label: "Liberação Noturno",
-    color: "bg-white text-gray-900",
-    badge: "bg-gray-900 text-white",
-  },
-  { value: "PENDENTES", label: "Pendentes", color: "bg-gray-500 text-white", badge: "bg-gray-500 text-white" },
-  { value: "VENDA", label: "Venda", color: "bg-blue-600 text-white", badge: "bg-blue-600 text-white" },
+  { value: "GNS", label: "GNS", color: "border-rose-200 bg-rose-50", badge: "bg-rose-600 text-white" },
+  { value: "FAIXA_AMARELA", label: "Faixa Amarela", color: "border-amber-200 bg-amber-50", badge: "bg-amber-500 text-white" },
+  { value: "NOITE", label: "Noturno", color: "border-slate-200 bg-white", badge: "bg-slate-800 text-white" },
+  { value: "PENDENTES", label: "Pendentes", color: "border-gray-200 bg-gray-50", badge: "bg-gray-500 text-white" },
+  { value: "VENDA", label: "Venda", color: "border-blue-200 bg-blue-50", badge: "bg-blue-600 text-white" },
 ];
 
 /* ============================
@@ -54,14 +43,7 @@ const CATEGORIAS = [
 
 function getCategoriaStyle(cat) {
   const found = CATEGORIAS.find((c) => c.value === cat);
-  return (
-    found || {
-      value: cat,
-      label: cat,
-      color: "bg-gray-200 text-gray-800",
-      badge: "bg-gray-200 text-gray-800",
-    }
-  );
+  return found || { value: cat, label: cat, color: "border-slate-200 bg-slate-50", badge: "bg-slate-500 text-white" };
 }
 
 function formatBRDate(dt) {
@@ -96,21 +78,13 @@ function buildDiff(before, after, keys) {
   return diff;
 }
 
-/**
- * PCM editável até 10:00 do dia seguinte (horário local do navegador)
- * Ex:
- * dataRef = 2026-01-20
- * deadline = 2026-01-21 10:00:00
- */
 function canEditPCM(dataRefISO) {
   try {
     if (!dataRefISO) return false;
-
     const ref = new Date(`${dataRefISO}T00:00:00`);
     const deadline = new Date(ref);
     deadline.setDate(deadline.getDate() + 1);
     deadline.setHours(10, 0, 0, 0);
-
     return Date.now() <= deadline.getTime();
   } catch {
     return false;
@@ -118,11 +92,36 @@ function canEditPCM(dataRefISO) {
 }
 
 /* ============================
-   UI: MULTISELECT (CHIPS)
+   COMPONENTES UI GERAIS
 ============================ */
 
+function CardKPI({ title, value, sub, icon, tone = "blue", className = "" }) {
+  const tones = {
+    blue: "from-blue-50 to-cyan-50 border-blue-200 text-blue-700",
+    emerald: "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700",
+    amber: "from-amber-50 to-orange-50 border-amber-200 text-amber-700",
+    rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
+    violet: "from-violet-50 to-fuchsia-50 border-violet-200 text-violet-700",
+    slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
+  };
+  return (
+    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-4 shadow-sm ${className}`}>
+      <div className="flex items-start justify-between gap-3 h-full">
+        <div className="flex flex-col justify-between h-full">
+          <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
+          <div>
+            <p className="text-2xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
+            {sub && <p className="text-[11px] mt-1 font-bold opacity-80">{sub}</p>}
+          </div>
+        </div>
+        <div className="text-xl mt-1 opacity-80">{icon}</div>
+      </div>
+    </div>
+  );
+}
+
 function MultiSelectChips({ label, options, values, onChange }) {
-  const set = useMemo(() => new Set(values || []), [values]);
+  const set = new Set(values || []);
 
   function toggle(v) {
     const next = new Set(set);
@@ -131,37 +130,23 @@ function MultiSelectChips({ label, options, values, onChange }) {
     onChange(Array.from(next));
   }
 
-  function clear() {
-    onChange([]);
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {label ? <div className="text-[10px] font-black text-gray-500 uppercase mr-1">{label}:</div> : null}
-
-      {options.map((opt) => {
-        const active = set.has(opt.value);
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => toggle(opt.value)}
-            className={`px-3 py-2 rounded-lg text-xs font-black border transition-all ${
-              active ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-800 hover:bg-gray-100"
-            }`}
-            title={active ? "Remover filtro" : "Adicionar filtro"}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-
-      {(values || []).length > 0 && (
+      {label && <div className="text-[10px] font-black text-slate-500 uppercase mr-1">{label}:</div>}
+      {options.map((opt) => (
         <button
+          key={opt.value}
           type="button"
-          onClick={clear}
-          className="px-3 py-2 rounded-lg text-xs font-black bg-gray-100 hover:bg-gray-200"
+          onClick={() => toggle(opt.value)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-black border transition-all ${
+            set.has(opt.value) ? "bg-slate-800 text-white border-slate-800 shadow" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+          }`}
         >
+          {opt.label}
+        </button>
+      ))}
+      {(values || []).length > 0 && (
+        <button onClick={() => onChange([])} className="px-3 py-1.5 rounded-lg text-[11px] font-black text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all">
           Limpar
         </button>
       )}
@@ -170,20 +155,12 @@ function MultiSelectChips({ label, options, values, onChange }) {
 }
 
 /* ============================
-   MODAL EDITAR (1 BOTÃO)
+   MODAL EDITAR VEÍCULO
 ============================ */
 
 function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
   const [saving, setSaving] = useState(false);
-
-  const [draft, setDraft] = useState({
-    frota: "",
-    setor: "",
-    ordem_servico: "",
-    descricao: "",
-    observacao: "",
-    categoria: "",
-  });
+  const [draft, setDraft] = useState({ frota: "", setor: "", ordem_servico: "", descricao: "", observacao: "", categoria: "" });
 
   useEffect(() => {
     if (!open || !veiculo) return;
@@ -197,32 +174,22 @@ function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
     });
   }, [open, veiculo]);
 
-  // ✅ REGRAS DE MOVIMENTAÇÃO
-  // Pedido: FAIXA_AMARELA pode ir para GNS, PENDENTES, NOITE (e ficar nela)
-  // Mantive NOITE com regra original (NOITE -> GNS). Se quiser permitir NOITE -> FAIXA_AMARELA,
-  // altere a linha do NOITE abaixo para incluir "FAIXA_AMARELA".
   const opcoesCategoriaPermitidas = useMemo(() => {
     const atual = veiculo?.categoria;
-
     if (atual === "PENDENTES") return ["PENDENTES", "GNS", "FAIXA_AMARELA", "NOITE"];
-    if (atual === "NOITE") return ["NOITE", "GNS"]; // <- se quiser, troque por ["NOITE","GNS","FAIXA_AMARELA"]
+    if (atual === "NOITE") return ["NOITE", "GNS"];
     if (atual === "GNS") return ["GNS", "FAIXA_AMARELA", "PENDENTES", "NOITE"];
     if (atual === "FAIXA_AMARELA") return ["FAIXA_AMARELA", "GNS", "PENDENTES", "NOITE"];
     if (atual === "VENDA") return ["VENDA", "GNS", "FAIXA_AMARELA", "PENDENTES", "NOITE"];
-
     return ["GNS", "FAIXA_AMARELA", "PENDENTES", "NOITE", "VENDA"];
   }, [veiculo]);
 
   if (!open || !veiculo) return null;
 
-  const catAtual = veiculo.categoria || "-";
-
   async function handleSalvar() {
     const os = String(draft.ordem_servico || "").trim();
-
     if (!draft.frota) return alert("Frota é obrigatória.");
     if (!os) return alert("Ordem de Serviço é obrigatória.");
-    if (!/^\d+$/.test(os)) return alert("Ordem de Serviço deve conter somente números.");
     if (!draft.setor) return alert("Setor é obrigatório.");
     if (!draft.observacao) return alert("Selecione uma Observação.");
 
@@ -236,17 +203,13 @@ function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
     };
 
     const diff = buildDiff(veiculo, payloadUpdate, ["frota", "setor", "ordem_servico", "descricao", "observacao", "categoria"]);
-
-    if (!Object.keys(diff).length) {
-      return alert("Nenhuma alteração para salvar.");
-    }
+    if (!Object.keys(diff).length) return alert("Nenhuma alteração para salvar.");
 
     setSaving(true);
     try {
       const deCat = veiculo.categoria || null;
       const paraCat = payloadUpdate.categoria || null;
       const acao = deCat !== paraCat ? "MOVER_CATEGORIA" : "EDITAR";
-
       await onSalvar(payloadUpdate, acao, deCat, paraCat, diff);
       onClose();
     } finally {
@@ -255,129 +218,67 @@ function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b flex items-center justify-between">
-          <div>
-            <div className="text-xs font-black text-gray-500 uppercase">Editar veículo</div>
-            <div className="text-lg font-black text-gray-900">
-              Frota: {veiculo.frota}{" "}
-              <span className="ml-2 text-xs font-black px-2 py-1 rounded-full bg-gray-100">
-                Atual: {catAtual}
-              </span>
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        
+        <div className="flex justify-between items-center p-5 border-b bg-white relative overflow-hidden shrink-0">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-transparent opacity-50"></div>
+          <div className="relative flex items-center gap-3">
+            <div className="bg-blue-600 text-white p-2.5 rounded-lg shadow-sm"><FaEdit size={20} /></div>
+            <div>
+              <h2 className="text-xl font-black text-slate-800">Editar Veículo <span className="text-blue-600">{veiculo.frota}</span></h2>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
+                  Atual: {veiculo.categoria || "-"}
+                </span>
+              </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" title="Fechar">
-            <FaTimes />
-          </button>
+          <button onClick={onClose} className="relative text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition"><FaTimes size={20} /></button>
         </div>
 
-        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/50">
           <div className="flex flex-col">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Frota</label>
-            <select
-              className="border rounded-lg px-3 py-2 text-sm font-bold"
-              value={draft.frota}
-              onChange={(e) => setDraft({ ...draft, frota: e.target.value })}
-            >
+            <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Frota</label>
+            <select className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-200" value={draft.frota} onChange={(e) => setDraft({ ...draft, frota: e.target.value })}>
               <option value="">Selecione...</option>
-              {(prefixos || []).map((p) => (
-                <option key={p.codigo} value={p.codigo}>
-                  {p.codigo}
-                </option>
-              ))}
+              {prefixos.map((p) => (<option key={p.codigo} value={p.codigo}>{p.codigo}</option>))}
             </select>
           </div>
-
           <div className="flex flex-col">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Setor</label>
-            <select
-              className="border rounded-lg px-3 py-2 text-sm font-bold"
-              value={draft.setor}
-              onChange={(e) => setDraft({ ...draft, setor: e.target.value })}
-            >
-              {SETORES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
+            <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Setor</label>
+            <select className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-200" value={draft.setor} onChange={(e) => setDraft({ ...draft, setor: e.target.value })}>
+              {SETORES.map((s) => (<option key={s} value={s}>{s}</option>))}
             </select>
           </div>
-
           <div className="flex flex-col">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Ordem de Serviço (somente números)</label>
-            <input
-              className="border rounded-lg px-3 py-2 text-sm font-bold"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={draft.ordem_servico}
-              onChange={(e) => setDraft({ ...draft, ordem_servico: e.target.value.replace(/\D/g, "") })}
-              placeholder="Ex: 123456"
-              required
-            />
+            <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Ordem de Serviço</label>
+            <input className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-200" type="text" inputMode="numeric" value={draft.ordem_servico} onChange={(e) => setDraft({ ...draft, ordem_servico: e.target.value.replace(/\D/g, "") })} placeholder="Somente números" required />
           </div>
-
           <div className="flex flex-col">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Observação</label>
-            <select
-              className="border rounded-lg px-3 py-2 text-sm font-bold"
-              value={draft.observacao}
-              onChange={(e) => setDraft({ ...draft, observacao: e.target.value })}
-            >
+            <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Observação</label>
+            <select className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-200" value={draft.observacao} onChange={(e) => setDraft({ ...draft, observacao: e.target.value })}>
               <option value="">Selecione...</option>
-              {OBS_OPCOES.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
+              {OBS_OPCOES.map((o) => (<option key={o} value={o}>{o}</option>))}
             </select>
           </div>
-
           <div className="flex flex-col md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Descrição</label>
-            <input
-              className="border rounded-lg px-3 py-2 text-sm font-bold"
-              type="text"
-              value={draft.descricao}
-              onChange={(e) => setDraft({ ...draft, descricao: e.target.value })}
-              placeholder="Defeito relatado..."
-            />
+            <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Descrição</label>
+            <input className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-200" type="text" value={draft.descricao} onChange={(e) => setDraft({ ...draft, descricao: e.target.value })} placeholder="Defeito relatado..." />
           </div>
-
-          <div className="flex flex-col md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Categoria</label>
-            <select
-              className="border rounded-lg px-3 py-2 text-sm font-bold"
-              value={draft.categoria}
-              onChange={(e) => setDraft({ ...draft, categoria: e.target.value })}
-            >
-              {opcoesCategoriaPermitidas.map((c) => (
-                <option key={c} value={c}>
-                  {getCategoriaStyle(c).label}
-                </option>
-              ))}
+          <div className="flex flex-col md:col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100">
+            <label className="text-[11px] font-bold text-blue-800 uppercase mb-1">Nova Categoria</label>
+            <select className="border border-blue-200 rounded-xl px-3 py-2.5 text-sm font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-300" value={draft.categoria} onChange={(e) => setDraft({ ...draft, categoria: e.target.value })}>
+              {opcoesCategoriaPermitidas.map((c) => (<option key={c} value={c}>{getCategoriaStyle(c).label}</option>))}
             </select>
-
-            <div className="text-[10px] text-gray-500 font-semibold mt-1">Regras aplicadas conforme categoria atual.</div>
+            <p className="text-[10px] text-blue-600 font-semibold mt-2">* O timer de dias na categoria será reiniciado caso o veículo mude de status.</p>
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t bg-gray-50 flex flex-col md:flex-row gap-2 md:items-center md:justify-between">
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className="px-4 py-2 rounded-lg font-black text-sm bg-white border hover:bg-gray-100 disabled:opacity-60"
-          >
-            Cancelar
-          </button>
-
-          <button
-            onClick={handleSalvar}
-            disabled={saving}
-            className="px-4 py-2 rounded-lg font-black text-sm bg-gray-900 text-white hover:bg-black disabled:opacity-60 flex items-center gap-2"
-          >
-            <FaSave /> Salvar alterações
+        <div className="px-6 py-4 border-t bg-white flex justify-end gap-3">
+          <button onClick={onClose} disabled={saving} className="px-4 py-2.5 rounded-xl font-black text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Cancelar</button>
+          <button onClick={handleSalvar} disabled={saving} className="px-5 py-2.5 rounded-xl font-black text-sm bg-blue-600 text-white hover:bg-blue-700 shadow-md transition flex items-center gap-2">
+            <FaSave /> {saving ? "Salvando..." : "Salvar alterações"}
           </button>
         </div>
       </div>
@@ -398,49 +299,28 @@ export default function PCMDiario() {
   const [prefixos, setPrefixos] = useState([]);
   const [pcmInfo, setPcmInfo] = useState(null);
   const [loading, setLoading] = useState(true);
-
   const [turnoAtivo, setTurnoAtivo] = useState("DIA");
 
-  // filtros
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroCategorias, setFiltroCategorias] = useState([]);
   const [filtroSetores, setFiltroSetores] = useState([]);
   const [filtroTurnos, setFiltroTurnos] = useState([]);
   const [filtroCluster, setFiltroCluster] = useState([]);
-
-  // abas
   const [abaAtiva, setAbaAtiva] = useState("TODOS");
 
   const reportRef = useRef(null);
-
-  // modal editar
   const [editOpen, setEditOpen] = useState(false);
   const [editVeiculo, setEditVeiculo] = useState(null);
 
-  const [form, setForm] = useState({
-    frota: "",
-    setor: "MANUTENÇÃO",
-    descricao: "",
-    categoria: "GNS",
-    ordem_servico: "",
-    previsao: "",
-    observacao: "",
-  });
+  const [form, setForm] = useState({ frota: "", setor: "MANUTENÇÃO", descricao: "", categoria: "GNS", ordem_servico: "", observacao: "" });
 
-  // ✅ regra de bloqueio (até 10:00 do dia seguinte)
   const pcmEditavel = useMemo(() => canEditPCM(pcmInfo?.data_referencia), [pcmInfo?.data_referencia]);
 
   const buscarDados = useCallback(async () => {
     setLoading(true);
-
     const [resPcm, resVeiculos, resPrefixos] = await Promise.all([
       supabase.from("pcm_diario").select("*").eq("id", id).single(),
-      supabase
-        .from("veiculos_pcm")
-        .select("*")
-        .eq("pcm_id", id)
-        .is("data_saida", null)
-        .order("data_entrada", { ascending: true }),
+      supabase.from("veiculos_pcm").select("*").eq("pcm_id", id).is("data_saida", null).order("data_entrada", { ascending: true }),
       supabase.from("prefixos").select("codigo, cluster").order("codigo"),
     ]);
 
@@ -462,853 +342,319 @@ export default function PCMDiario() {
     setLoading(false);
   }, [id]);
 
-  useEffect(() => {
-    buscarDados();
-  }, [buscarDados]);
+  useEffect(() => { buscarDados(); }, [buscarDados]);
 
   async function gravarHistorico({ veiculo_pcm_id, pcm_id, frota, acao, de_categoria, para_categoria, alteracoes }) {
-    const { error } = await supabase.from("veiculos_pcm_historico").insert([
-      {
-        veiculo_pcm_id,
-        pcm_id,
-        frota,
-        acao,
-        de_categoria,
-        para_categoria,
-        alteracoes: alteracoes || {},
-        executado_por: user?.nome || "Sistema",
-      },
-    ]);
-
-    if (error) {
-      console.warn("Falha ao gravar histórico (ver RLS/tabela):", error);
-    }
+    await supabase.from("veiculos_pcm_historico").insert([{
+      veiculo_pcm_id, pcm_id, frota, acao, de_categoria, para_categoria,
+      alteracoes: alteracoes || {}, executado_por: user?.nome || "Sistema",
+    }]);
   }
 
   async function lancarVeiculo() {
-    if (!pcmEditavel) {
-      return alert("PCM fechado: permitido editar somente até 10:00 do dia seguinte.");
-    }
+    if (!pcmEditavel) return alert("PCM fechado: permitido editar somente até 10:00 do dia seguinte.");
 
     const os = String(form.ordem_servico || "").trim();
-
     if (!form.frota || !form.descricao) return alert("Preencha Frota e Descrição.");
-    if (!os) return alert("Ordem de Serviço é obrigatória.");
-    if (!/^\d+$/.test(os)) return alert("Ordem de Serviço deve conter somente números.");
-    if (!form.setor) return alert("Setor é obrigatório.");
-    if (!form.observacao) return alert("Selecione uma Observação.");
+    if (!os || !/^\d+$/.test(os)) return alert("Ordem de Serviço deve conter somente números.");
+    if (!form.setor || !form.observacao) return alert("Setor e Observação são obrigatórios.");
 
-    const { data: jaExiste, error: errCheck } = await supabase
-      .from("veiculos_pcm")
-      .select("id")
-      .eq("pcm_id", id)
-      .eq("frota", form.frota)
-      .is("data_saida", null)
-      .limit(1);
+    const { data: jaExiste } = await supabase.from("veiculos_pcm").select("id").eq("pcm_id", id).eq("frota", form.frota).is("data_saida", null).limit(1);
+    if (jaExiste && jaExiste.length > 0) return alert(`A frota ${form.frota} já está lançada neste PCM.`);
 
-    if (errCheck) {
-      console.error(errCheck);
-      return alert("Erro ao validar duplicidade.");
-    }
-
-    if (jaExiste && jaExiste.length > 0) {
-      return alert(`A frota ${form.frota} já está lançada neste PCM (em aberto).`);
-    }
-
-    const payload = {
-      pcm_id: id,
-      ...form,
-      ordem_servico: os,
-      lancado_por: user?.nome || "Sistema",
-      lancado_no_turno: turnoAtivo,
-      data_entrada: new Date().toISOString(),
-    };
-
+    const payload = { pcm_id: id, ...form, ordem_servico: os, lancado_por: user?.nome || "Sistema", lancado_no_turno: turnoAtivo, data_entrada: new Date().toISOString() };
     const { data: inserted, error } = await supabase.from("veiculos_pcm").insert([payload]).select("*").single();
 
-    if (error) {
-      console.error(error);
-      return alert("Erro ao lançar veículo.");
-    }
+    if (error) return alert("Erro ao lançar veículo.");
 
-    await gravarHistorico({
-      veiculo_pcm_id: inserted?.id,
-      pcm_id: id,
-      frota: inserted?.frota,
-      acao: "LANCAR",
-      de_categoria: null,
-      para_categoria: inserted?.categoria || null,
-      alteracoes: { lancamento: true },
-    });
-
-    setForm({
-      ...form,
-      frota: "",
-      descricao: "",
-      ordem_servico: "",
-      observacao: "",
-    });
-
+    await gravarHistorico({ veiculo_pcm_id: inserted?.id, pcm_id: id, frota: inserted?.frota, acao: "LANCAR", para_categoria: inserted?.categoria, alteracoes: { lancamento: true }});
+    setForm({ ...form, frota: "", descricao: "", ordem_servico: "", observacao: "" });
     buscarDados();
   }
 
   async function liberarVeiculo(v) {
-    if (!pcmEditavel) {
-      return alert("PCM fechado: não é permitido liberar veículos após 10:00 do dia seguinte.");
-    }
-
+    if (!pcmEditavel) return alert("PCM fechado: não é permitido liberar veículos.");
     if (!confirm(`Confirmar liberação da frota ${v.frota}?`)) return;
 
-    const { error } = await supabase
-      .from("veiculos_pcm")
-      .update({
-        data_saida: new Date().toISOString(),
-        liberado_por: user?.nome || "Sistema",
-      })
-      .eq("id", v.id);
-
-    if (error) {
-      console.error(error);
-      return alert("Erro ao liberar veículo.");
-    }
-
-    await gravarHistorico({
-      veiculo_pcm_id: v.id,
-      pcm_id: id,
-      frota: v.frota,
-      acao: "LIBERAR",
-      de_categoria: v.categoria || null,
-      para_categoria: v.categoria || null,
-      alteracoes: { liberado_por: user?.nome || "Sistema" },
-    });
-
+    await supabase.from("veiculos_pcm").update({ data_saida: new Date().toISOString(), liberado_por: user?.nome || "Sistema" }).eq("id", v.id);
+    await gravarHistorico({ veiculo_pcm_id: v.id, pcm_id: id, frota: v.frota, acao: "LIBERAR", de_categoria: v.categoria, para_categoria: v.categoria, alteracoes: { liberado_por: user?.nome || "Sistema" }});
     buscarDados();
   }
 
   async function salvarEdicaoVeiculo(payloadUpdate, acao, deCat, paraCat, diff) {
-    if (!pcmEditavel) {
-      return alert("PCM fechado: não é permitido editar/mover veículos após 10:00 do dia seguinte.");
-    }
+    if (!pcmEditavel) return alert("PCM fechado.");
 
     const v = editVeiculo;
     if (!v?.id) return;
 
     if (payloadUpdate.frota && payloadUpdate.frota !== v.frota) {
-      const { data: dup, error: errDup } = await supabase
-        .from("veiculos_pcm")
-        .select("id")
-        .eq("pcm_id", id)
-        .eq("frota", payloadUpdate.frota)
-        .is("data_saida", null)
-        .limit(1);
+      const { data: dup } = await supabase.from("veiculos_pcm").select("id").eq("pcm_id", id).eq("frota", payloadUpdate.frota).is("data_saida", null).limit(1);
+      if (dup && dup.length > 0) return alert(`A frota ${payloadUpdate.frota} já existe.`);
+    }
 
-      if (errDup) {
-        console.error(errDup);
-        return alert("Erro ao validar duplicidade de frota.");
-      }
-
-      if (dup && dup.length > 0) {
-        return alert(`A frota ${payloadUpdate.frota} já existe neste PCM (em aberto).`);
-      }
+    // ✅ LOGICA DE TIMER POR CATEGORIA
+    if (acao === "MOVER_CATEGORIA") {
+      payloadUpdate.data_mudanca_categoria = new Date().toISOString();
     }
 
     const { error } = await supabase.from("veiculos_pcm").update(payloadUpdate).eq("id", v.id);
+    if (error) return alert("Erro ao salvar alterações.");
 
-    if (error) {
-      console.error(error);
-      alert("Erro ao salvar alterações.");
-      return;
-    }
-
-    await gravarHistorico({
-      veiculo_pcm_id: v.id,
-      pcm_id: id,
-      frota: payloadUpdate.frota || v.frota,
-      acao,
-      de_categoria: deCat,
-      para_categoria: paraCat,
-      alteracoes: diff,
-    });
-
+    await gravarHistorico({ veiculo_pcm_id: v.id, pcm_id: id, frota: payloadUpdate.frota || v.frota, acao, de_categoria: deCat, para_categoria: paraCat, alteracoes: diff });
     buscarDados();
   }
 
-  // ✅ clusters disponíveis (para chips)
-  const clustersDisponiveis = useMemo(() => {
-    const s = new Set();
-    (prefixos || []).forEach((p) => {
-      const cl = String(p?.cluster || "").trim();
-      if (cl) s.add(cl);
-    });
-    return Array.from(s).sort((a, b) => a.localeCompare(b));
-  }, [prefixos]);
+  const clustersDisponiveis = useMemo(() => Array.from(new Set((prefixos || []).map(p => String(p?.cluster || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [prefixos]);
 
-  // ============================
-  // FILTRO + ORDENAÇÃO
-  // ============================
   const veiculosFiltrados = useMemo(() => {
     const txt = filtroTexto.trim().toLowerCase();
-
-    // ✅ ORDEM: GNS → FAIXA_AMARELA → NOITE → PENDENTES → VENDA
     const orderCat = { GNS: 0, FAIXA_AMARELA: 1, NOITE: 2, PENDENTES: 3, VENDA: 4 };
 
-    const setCats = new Set(filtroCategorias || []);
-    const setSetores = new Set(filtroSetores || []);
-    const setTurnos = new Set(filtroTurnos || []);
-    const setClusters = new Set(filtroCluster || []);
-
-    return (veiculos || [])
-      .filter((v) => {
-        if (abaAtiva !== "TODOS" && v.categoria !== abaAtiva) return false;
-
-        if (setCats.size && !setCats.has(v.categoria)) return false;
-        if (setSetores.size && !setSetores.has(v.setor)) return false;
-        if (setTurnos.size && !setTurnos.has(v.lancado_no_turno)) return false;
-        if (setClusters.size && !setClusters.has(String(v.cluster || ""))) return false;
-
-        if (!txt) return true;
-
-        const s = [v.frota, v.descricao, v.ordem_servico, v.setor, v.lancado_por, v.observacao, v.cluster]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-        return s.includes(txt);
-      })
-      .sort((a, b) => {
-        const ca = orderCat[a.categoria] ?? 99;
-        const cb = orderCat[b.categoria] ?? 99;
-        if (ca !== cb) return ca - cb;
-
-        const da = daysBetween(a.data_entrada);
-        const db = daysBetween(b.data_entrada);
-        if (da !== db) return db - da;
-
-        const ta = new Date(a.data_entrada || 0).getTime();
-        const tb = new Date(b.data_entrada || 0).getTime();
-        return ta - tb;
-      });
+    return (veiculos || []).filter((v) => {
+      if (abaAtiva !== "TODOS" && v.categoria !== abaAtiva) return false;
+      if (filtroCategorias.length && !filtroCategorias.includes(v.categoria)) return false;
+      if (filtroSetores.length && !filtroSetores.includes(v.setor)) return false;
+      if (filtroTurnos.length && !filtroTurnos.includes(v.lancado_no_turno)) return false;
+      if (filtroCluster.length && !filtroCluster.includes(String(v.cluster || ""))) return false;
+      if (!txt) return true;
+      return [v.frota, v.descricao, v.ordem_servico, v.setor, v.lancado_por, v.observacao, v.cluster].filter(Boolean).join(" ").toLowerCase().includes(txt);
+    }).sort((a, b) => {
+      if (orderCat[a.categoria] !== orderCat[b.categoria]) return (orderCat[a.categoria] ?? 99) - (orderCat[b.categoria] ?? 99);
+      return daysBetween(b.data_mudanca_categoria || b.data_entrada) - daysBetween(a.data_mudanca_categoria || a.data_entrada);
+    });
   }, [veiculos, filtroTexto, filtroCategorias, filtroSetores, filtroTurnos, filtroCluster, abaAtiva]);
 
   const resumo = useMemo(() => {
     const base = veiculosFiltrados.length ? veiculosFiltrados : veiculos;
-    const total = (base || []).length;
-
     const byCat = { GNS: 0, FAIXA_AMARELA: 0, NOITE: 0, VENDA: 0, PENDENTES: 0 };
-    (base || []).forEach((v) => {
-      if (byCat[v.categoria] !== undefined) byCat[v.categoria]++;
-    });
-
-    return { total, ...byCat };
+    (base || []).forEach((v) => { if (byCat[v.categoria] !== undefined) byCat[v.categoria]++; });
+    return { total: (base || []).length, ...byCat };
   }, [veiculos, veiculosFiltrados]);
 
-  // ✅ PDF PROFISSIONAL (sem print, mantendo cores, com paginação)
   async function baixarPdfPCM() {
     try {
       if (!reportRef.current) return;
-
-      await new Promise((r) => requestAnimationFrame(r));
-
-      const scale = 3;
-      const canvas = await html2canvas(reportRef.current, {
-        scale,
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        windowWidth: reportRef.current.scrollWidth,
-        windowHeight: reportRef.current.scrollHeight,
-      });
-
-      const fileName = `PCM_${pcmInfo?.data_referencia || "diario"}.pdf`;
-
-      // A4 landscape (mm)
+      const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageW = doc.internal.pageSize.getWidth();
       const pageH = doc.internal.pageSize.getHeight();
       const margin = 6;
-
       const printableW = pageW - margin * 2;
       const printableH = pageH - margin * 2;
-
       const mmPerPx = printableW / canvas.width;
       const pageSlicePx = Math.floor(printableH / mmPerPx);
-
-      let y = 0;
-      let pageIndex = 0;
+      let y = 0, pageIndex = 0;
 
       while (y < canvas.height) {
         const sliceH = Math.min(pageSlicePx, canvas.height - y);
-
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
         pageCanvas.height = sliceH;
-
         const ctx = pageCanvas.getContext("2d");
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
         ctx.drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-
-        const imgData = pageCanvas.toDataURL("image/png", 1.0);
-
         if (pageIndex > 0) doc.addPage();
-
-        const renderW = printableW;
-        const renderH = sliceH * mmPerPx;
-
-        doc.addImage(imgData, "PNG", margin, margin, renderW, renderH, undefined, "FAST");
-
+        doc.addImage(pageCanvas.toDataURL("image/png", 1.0), "PNG", margin, margin, printableW, sliceH * mmPerPx, undefined, "FAST");
         y += sliceH;
         pageIndex += 1;
       }
-
-      doc.save(fileName);
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao gerar PDF do PCM.");
-    }
+      doc.save(`PCM_${pcmInfo?.data_referencia || "diario"}.pdf`);
+    } catch (err) { alert("Erro ao gerar PDF."); }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      {/* CABEÇALHO */}
-      <div className="bg-white p-5 rounded-xl shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-4 border-b-4 border-blue-600">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/pcm-inicio")} className="p-2 hover:bg-gray-100 rounded-full" title="Voltar">
-            <FaArrowLeft />
+    <div className="min-h-screen bg-slate-50 p-4 space-y-6">
+      
+      {/* HEADER PREMIUM */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col md:flex-row justify-between md:items-end gap-4">
+        <div>
+          <button onClick={() => navigate("/pcm-inicio")} className="mb-2 flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition">
+            <FaArrowLeft /> Voltar para Painel
           </button>
-
-          <div>
-            <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight">PCM - Planejamento e Controle de Manutenção</h1>
-            <p className="text-xs text-gray-500 font-semibold">
-              Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span>
-              {!pcmEditavel ? (
-                <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full bg-gray-200 text-gray-700 text-[10px] font-black">
-                  SOMENTE CONSULTA (fechado)
-                </span>
-              ) : (
-                <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 text-[10px] font-black">
-                  EDITÁVEL (até 10:00 do dia seguinte)
-                </span>
-              )}
-            </p>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black border border-blue-200 tracking-wider">
+            <FaTools /> Lançamento Diário
           </div>
+          <h1 className="text-2xl md:text-3xl font-black text-slate-800 mt-2 uppercase tracking-tight">Painel PCM</h1>
+          <p className="text-sm text-slate-500 mt-1 flex items-center gap-2 font-semibold">
+            Data de Referência: <span className="font-black text-slate-700">{pcmInfo?.data_referencia || "-"}</span>
+            {pcmEditavel ? (
+              <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ml-2">Editável</span>
+            ) : (
+              <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ml-2">Fechado</span>
+            )}
+          </p>
         </div>
 
         <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-          <div className="flex bg-gray-100 rounded-lg overflow-hidden border">
-            <button
-              className={`px-4 py-2 text-xs font-black ${turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"}`}
-              onClick={() => setTurnoAtivo("DIA")}
-            >
-              TURNO DIA
-            </button>
-            <button
-              className={`px-4 py-2 text-xs font-black ${turnoAtivo === "NOITE" ? "bg-blue-700 text-white" : "text-gray-700"}`}
-              onClick={() => setTurnoAtivo("NOITE")}
-            >
-              TURNO NOITE
-            </button>
+          <div className="flex bg-slate-100 rounded-xl overflow-hidden border border-slate-200 p-1 shadow-inner">
+            <button className={`px-4 py-2 rounded-lg text-xs font-black transition ${turnoAtivo === "DIA" ? "bg-white text-slate-800 shadow" : "text-slate-500 hover:text-slate-700"}`} onClick={() => setTurnoAtivo("DIA")}>TURNO DIA</button>
+            <button className={`px-4 py-2 rounded-lg text-xs font-black transition ${turnoAtivo === "NOITE" ? "bg-white text-slate-800 shadow" : "text-slate-500 hover:text-slate-700"}`} onClick={() => setTurnoAtivo("NOITE")}>TURNO NOITE</button>
           </div>
-
-          <button
-            onClick={baixarPdfPCM}
-            className="bg-blue-700 text-white px-5 py-2 rounded-lg font-black flex items-center justify-center gap-2 hover:bg-blue-800 transition-all"
-          >
-            <FaDownload /> BAIXAR PCM (PDF)
+          <button onClick={baixarPdfPCM} className="bg-slate-800 text-white px-5 py-2.5 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-slate-700 shadow-md transition-all active:scale-95">
+            <FaDownload /> Baixar PDF
           </button>
         </div>
       </div>
 
-      {/* RESUMO */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
-        <div className="bg-white rounded-xl shadow p-4 border">
-          <p className="text-[10px] font-black text-gray-500 uppercase">Total</p>
-          <p className="text-2xl font-black mt-1">{resumo.total}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow p-4 border">
-          <p className="text-[10px] font-black text-gray-500 uppercase">GNS</p>
-          <p className="text-2xl font-black mt-1 text-red-600">{resumo.GNS}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow p-4 border">
-          <p className="text-[10px] font-black text-gray-500 uppercase">Faixa Amarela</p>
-          <p className="text-2xl font-black mt-1 text-yellow-600">{resumo.FAIXA_AMARELA}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow p-4 border">
-          <p className="text-[10px] font-black text-gray-500 uppercase">Noturno</p>
-          <p className="text-2xl font-black mt-1">{resumo.NOITE}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow p-4 border">
-          <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
-          <p className="text-2xl font-black mt-1 text-gray-600">{resumo.PENDENTES}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow p-4 border">
-          <p className="text-[10px] font-black text-gray-500 uppercase">Venda</p>
-          <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
-        </div>
+      {/* KPIs RESUMO */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <CardKPI title="Total Em Aberto" value={resumo.total} icon={<FaBus />} tone="slate" />
+        <CardKPI title="GNS" value={resumo.GNS} icon={<FaExclamationTriangle />} tone="rose" />
+        <CardKPI title="Faixa Amarela" value={resumo.FAIXA_AMARELA} icon={<FaTools />} tone="amber" />
+        <CardKPI title="Noturno" value={resumo.NOITE} icon={<FaClock />} tone="slate" />
+        <CardKPI title="Pendentes" value={resumo.PENDENTES} icon={<FaWrench />} tone="slate" />
+        <CardKPI title="Venda" value={resumo.VENDA} icon={<FaBolt />} tone="blue" />
       </div>
 
-      {/* FORMULÁRIO */}
-      <div className="bg-gray-900 p-5 mt-4 rounded-xl shadow-inner text-white">
-        <div className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold mb-1">FROTA</label>
-            <select
-              className="p-2 rounded text-black text-sm font-bold"
-              value={form.frota}
-              onChange={(e) => setForm({ ...form, frota: e.target.value })}
-              disabled={!pcmEditavel}
-            >
-              <option value="">Selecione...</option>
-              {prefixos.map((p) => (
-                <option key={p.codigo} value={p.codigo}>
-                  {p.codigo}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold mb-1">CATEGORIA</label>
-            <select
-              className="p-2 rounded text-black text-sm font-bold"
-              value={form.categoria}
-              onChange={(e) => setForm({ ...form, categoria: e.target.value })}
-              disabled={!pcmEditavel}
-            >
-              <option value="GNS">GNS (Vermelho)</option>
-              <option value="FAIXA_AMARELA">Faixa Amarela (Amarelo)</option>
-              <option value="NOITE">Liberação Noturno (Branco)</option>
-              <option value="PENDENTES">Pendentes (Cinza)</option>
-              <option value="VENDA">Venda (Azul)</option>
-            </select>
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold mb-1">SETOR</label>
-            <select
-              className="p-2 rounded text-black text-sm font-bold"
-              value={form.setor}
-              onChange={(e) => setForm({ ...form, setor: e.target.value })}
-              disabled={!pcmEditavel}
-            >
-              {SETORES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold mb-1">ORDEM SERVIÇO (OBRIGATÓRIO)</label>
-            <input
-              className="p-2 rounded text-black text-sm"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={form.ordem_servico}
-              onChange={(e) => setForm({ ...form, ordem_servico: e.target.value.replace(/\D/g, "") })}
-              placeholder="Somente números"
-              required
-              disabled={!pcmEditavel}
-            />
-          </div>
-
-          <div className="flex flex-col md:col-span-2">
-            <label className="text-[10px] font-bold mb-1">DESCRIÇÃO DO DEFEITO</label>
-            <input
-              className="p-2 rounded text-black text-sm"
-              type="text"
-              value={form.descricao}
-              onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-              placeholder="Defeito relatado..."
-              disabled={!pcmEditavel}
-            />
-          </div>
-
-          <button
-            onClick={lancarVeiculo}
-            disabled={!pcmEditavel}
-            className={`p-2 rounded font-black flex items-center justify-center gap-2 h-[40px] ${
-              !pcmEditavel ? "bg-gray-600 text-white opacity-60 cursor-not-allowed" : "bg-green-600 hover:bg-green-500 text-white"
-            }`}
-            title={!pcmEditavel ? "PCM fechado" : "Lançar"}
-          >
-            <FaTruckLoading size={18} /> LANÇAR
-          </button>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold mb-1">OBSERVAÇÃO (OBRIGATÓRIA)</label>
-            <select
-              className="p-2 rounded text-black text-sm font-bold"
-              value={form.observacao}
-              onChange={(e) => setForm({ ...form, observacao: e.target.value })}
-              disabled={!pcmEditavel}
-            >
-              <option value="">Selecione...</option>
-              {OBS_OPCOES.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-end gap-2">
-            <span className="text-[10px] font-black text-gray-300 uppercase">Lançado no turno:</span>
-            <span className="px-3 py-1 rounded-full bg-blue-700 text-white text-xs font-black">{turnoAtivo}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* FILTROS */}
-      <div className="bg-white rounded-xl shadow p-4 mt-4 border">
-        <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-          <div className="flex items-center gap-2">
-            <FaSearch className="text-gray-500" />
-            <input
-              className="w-full md:w-[380px] border rounded-lg px-3 py-2 text-sm font-semibold"
-              value={filtroTexto}
-              onChange={(e) => setFiltroTexto(e.target.value)}
-              placeholder="Buscar frota, OS, descrição, setor, responsável..."
-            />
-          </div>
-
-          <div className="flex flex-col gap-2 items-start md:items-end">
-            <div className="flex items-center gap-2 text-xs font-black text-gray-500">
-              <FaFilter /> Filtros (multi):
+      {/* FORMULÁRIO DE LANÇAMENTO */}
+      {pcmEditavel && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2 mb-4 border-b pb-2">
+            <FaTruckLoading className="text-blue-600" /> Novo Lançamento
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-4 items-end">
+            <div className="flex flex-col">
+              <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Frota</label>
+              <select className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none" value={form.frota} onChange={(e) => setForm({ ...form, frota: e.target.value })}>
+                <option value="">Selecione...</option>
+                {prefixos.map((p) => (<option key={p.codigo} value={p.codigo}>{p.codigo}</option>))}
+              </select>
             </div>
-
-            <div className="flex flex-wrap gap-2 items-center">
-              <MultiSelectChips
-                label="Cluster"
-                options={clustersDisponiveis.map((cl) => ({ value: cl, label: cl }))}
-                values={filtroCluster}
-                onChange={setFiltroCluster}
-              />
-
-              <MultiSelectChips
-                label="Categoria"
-                options={CATEGORIAS.map((c) => ({ value: c.value, label: c.label }))}
-                values={filtroCategorias}
-                onChange={setFiltroCategorias}
-              />
-
-              <MultiSelectChips
-                label="Setor"
-                options={SETORES.map((s) => ({ value: s, label: s }))}
-                values={filtroSetores}
-                onChange={setFiltroSetores}
-              />
-
-              <MultiSelectChips
-                label="Turno"
-                options={[
-                  { value: "DIA", label: "DIA" },
-                  { value: "NOITE", label: "NOITE" },
-                ]}
-                values={filtroTurnos}
-                onChange={setFiltroTurnos}
-              />
-
-              <button
-                className="px-3 py-2 text-xs font-black rounded-lg bg-gray-100 hover:bg-gray-200"
-                onClick={() => {
-                  setFiltroTexto("");
-                  setFiltroCluster([]);
-                  setFiltroCategorias([]);
-                  setFiltroSetores([]);
-                  setFiltroTurnos([]);
-                  setAbaAtiva("TODOS");
-                }}
-              >
-                Limpar tudo
-              </button>
+            <div className="flex flex-col">
+              <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Categoria</label>
+              <select className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
+                {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col">
+              <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Setor</label>
+              <select className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none" value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })}>
+                {SETORES.map((s) => (<option key={s} value={s}>{s}</option>))}
+              </select>
+            </div>
+            <div className="flex flex-col">
+              <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Ordem Serviço (Nº)</label>
+              <input className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none" type="text" inputMode="numeric" value={form.ordem_servico} onChange={(e) => setForm({ ...form, ordem_servico: e.target.value.replace(/\D/g, "") })} placeholder="123456" />
+            </div>
+            <div className="flex flex-col md:col-span-2">
+              <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Descrição do Defeito</label>
+              <input className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none" type="text" value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Problema relatado..." />
+            </div>
+            <button onClick={lancarVeiculo} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2.5 font-black flex items-center justify-center gap-2 shadow-md transition active:scale-95 h-[42px]">
+              <FaTruckLoading /> Lançar
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="flex flex-col">
+              <label className="text-[11px] font-bold text-slate-500 uppercase mb-1">Observação Base</label>
+              <select className="border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none" value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })}>
+                <option value="">Selecione a observação...</option>
+                {OBS_OPCOES.map((o) => (<option key={o} value={o}>{o}</option>))}
+              </select>
+            </div>
+            <div className="flex items-end justify-end">
+              <p className="text-xs text-slate-400 font-semibold">Os veículos lançados herdam o turno ativo <strong className="text-slate-600">({turnoAtivo})</strong>.</p>
             </div>
           </div>
         </div>
+      )}
 
-        {/* ABAS */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            className={`px-4 py-2 rounded-lg text-xs font-black border ${
-              abaAtiva === "TODOS" ? "bg-gray-900 text-white" : "bg-white text-gray-800"
-            }`}
-            onClick={() => setAbaAtiva("TODOS")}
-          >
-            TODOS
-          </button>
+      {/* FILTROS E ABAS */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-4">
+          <div className="relative w-full md:w-96">
+            <FaSearch className="absolute left-3 top-3 text-slate-400" />
+            <input className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-blue-200 outline-none" value={filtroTexto} onChange={(e) => setFiltroTexto(e.target.value)} placeholder="Pesquisar OS, frota, defeito..." />
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <FaFilter className="text-slate-400 mr-1" />
+            <MultiSelectChips options={clustersDisponiveis.map(c => ({ value: c, label: `Cluster ${c}` }))} values={filtroCluster} onChange={setFiltroCluster} />
+            <MultiSelectChips options={CATEGORIAS} values={filtroCategorias} onChange={setFiltroCategorias} />
+            <MultiSelectChips options={SETORES.map(s => ({ value: s, label: s }))} values={filtroSetores} onChange={setFiltroSetores} />
+          </div>
+        </div>
 
-          {CATEGORIAS.map((c) => (
-            <button
-              key={c.value}
-              className={`px-4 py-2 rounded-lg text-xs font-black border ${
-                abaAtiva === c.value ? "bg-gray-900 text-white" : "bg-white text-gray-800"
-              }`}
-              onClick={() => setAbaAtiva(c.value)}
-            >
-              {c.label}
-            </button>
+        <div className="flex flex-wrap gap-2 border-t pt-4">
+          <button className={`px-5 py-2 rounded-xl text-xs font-black transition ${abaAtiva === "TODOS" ? "bg-slate-800 text-white shadow-md" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`} onClick={() => setAbaAtiva("TODOS")}>TODOS</button>
+          {CATEGORIAS.map(c => (
+            <button key={c.value} className={`px-5 py-2 rounded-xl text-xs font-black transition ${abaAtiva === c.value ? "bg-slate-800 text-white shadow-md" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`} onClick={() => setAbaAtiva(c.value)}>{c.label}</button>
           ))}
         </div>
       </div>
 
-      {/* BLOCO EXCLUSIVO DO PDF */}
-      <div className="fixed -left-[99999px] top-0 pointer-events-none opacity-0">
-        <div ref={reportRef} className="bg-white w-[1400px] p-6 text-black">
-          {/* TOPO PDF */}
-          <div className="mb-5">
-            <div className="bg-blue-700 text-white rounded-t-xl px-5 py-4">
-              <div className="text-2xl font-black uppercase tracking-tight">PCM - Planejamento e Controle de Manutenção</div>
-              <div className="text-sm font-semibold mt-1">
-                Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span>
-              </div>
-            </div>
-
-            <div className="border border-t-0 rounded-b-xl px-5 py-4 bg-white">
-              <div className="flex flex-wrap gap-6 text-sm font-semibold text-gray-700">
-                <div>
-                  Itens em aberto: <span className="font-black text-gray-900">{veiculosFiltrados.length}</span>
-                </div>
-                <div>
-                  Status:{" "}
-                  <span className={`font-black ${pcmEditavel ? "text-green-700" : "text-gray-700"}`}>
-                    {pcmEditavel ? "EDITÁVEL (até 10:00 do dia seguinte)" : "SOMENTE CONSULTA (fechado)"}
-                  </span>
-                </div>
-                <div>
-                  Gerado em: <span className="font-black text-gray-900">{new Date().toLocaleString("pt-BR")}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* RESUMO NO COMEÇO DO PDF */}
-          <div className="grid grid-cols-6 gap-3 mb-6">
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-[10px] font-black text-gray-500 uppercase">Total</p>
-              <p className="text-2xl font-black mt-1">{resumo.total}</p>
-            </div>
-
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-[10px] font-black text-gray-500 uppercase">GNS</p>
-              <p className="text-2xl font-black mt-1 text-red-600">{resumo.GNS}</p>
-            </div>
-
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-[10px] font-black text-gray-500 uppercase">Faixa Amarela</p>
-              <p className="text-2xl font-black mt-1 text-yellow-600">{resumo.FAIXA_AMARELA}</p>
-            </div>
-
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-[10px] font-black text-gray-500 uppercase">Noturno</p>
-              <p className="text-2xl font-black mt-1">{resumo.NOITE}</p>
-            </div>
-
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
-              <p className="text-2xl font-black mt-1 text-gray-600">{resumo.PENDENTES}</p>
-            </div>
-
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-[10px] font-black text-gray-500 uppercase">Venda</p>
-              <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
-            </div>
-          </div>
-
-          {/* CABEÇALHO DA TABELA PDF */}
-          <div className="mb-3">
-            <h2 className="text-base font-black uppercase text-gray-800">Relatório diário - PCM</h2>
-            <p className="text-xs text-gray-500 font-semibold">
-              Ordenação: Categoria (GNS → Amarela → Branco → Cinza → Venda) e Tempo parado (desc)
-            </p>
-          </div>
-
-          {/* TABELA PDF */}
-          <table className="w-full text-left text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border font-black">
-                <th className="p-3 border whitespace-nowrap">Cluster</th>
-                <th className="p-3 border whitespace-nowrap">Frota</th>
-                <th className="p-3 border whitespace-nowrap">Entrada</th>
-                <th className="p-3 border text-center whitespace-nowrap">Dias</th>
-                <th className="p-3 border whitespace-nowrap">Categoria</th>
-                <th className="p-3 border w-[420px]">Descrição</th>
-                <th className="p-3 border whitespace-nowrap">O.S</th>
-                <th className="p-3 border whitespace-nowrap">Setor</th>
-                <th className="p-3 border whitespace-nowrap">Turno</th>
-                <th className="p-3 border whitespace-nowrap">Responsável</th>
-                <th className="p-3 border w-[260px]">Observação</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={11} className="p-6 text-center text-gray-500 font-bold border">
-                    Carregando PCM...
-                  </td>
-                </tr>
-              ) : veiculosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="p-6 text-center text-gray-500 font-bold border">
-                    Nenhum registro encontrado.
-                  </td>
-                </tr>
-              ) : (
-                veiculosFiltrados.map((v) => {
-                  const catStyle = getCategoriaStyle(v.categoria);
-                  const dias = daysBetween(v.data_entrada);
-
-                  return (
-                    <tr key={v.id} className={`border-b border-gray-200 font-medium ${catStyle.color}`}>
-                      <td className="p-3 border border-black/10 text-[10px] font-black uppercase">{v.cluster || "-"}</td>
-                      <td className="p-3 text-lg font-black border border-black/10">{v.frota}</td>
-                      <td className="p-3 border border-black/10">{formatBRDate(v.data_entrada)}</td>
-                      <td className="p-3 text-center font-black border border-black/10 text-lg">{dias}</td>
-                      <td className="p-3 border border-black/10">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}>
-                          {catStyle.label}
-                        </span>
-                      </td>
-                      <td className="p-3 text-[11px] uppercase leading-tight border border-black/10">{v.descricao}</td>
-                      <td className="p-3 font-bold border border-black/10">{v.ordem_servico || "-"}</td>
-                      <td className="p-3 text-[10px] font-black border border-black/10">{v.setor}</td>
-                      <td className="p-3 border border-black/10">
-                        <span className="px-2 py-1 rounded-full bg-black/20 text-[10px] font-black uppercase">
-                          {v.lancado_no_turno || "-"}
-                        </span>
-                      </td>
-                      <td className="p-3 text-[10px] italic border border-black/10">{v.lancado_por || "-"}</td>
-                      <td className="p-3 text-[10px] font-bold border border-black/10 uppercase">{v.observacao || "-"}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-
-          <div className="mt-4 pt-3 border-t text-[10px] text-gray-500 font-bold flex justify-between">
-            <span>PCM Diário — Quatai</span>
-            <span>Gerado em: {new Date().toLocaleString("pt-BR")}</span>
-          </div>
+      {/* RELATÓRIO VISUAL (TABELA NA TELA) */}
+      <div className="bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="p-4 border-b bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-2">
+          <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">Lista de Veículos Abertos</h2>
+          <p className="text-[10px] font-bold text-slate-500 uppercase">Ordenação: Categorias Ofensoras e Maior Tempo na Categoria</p>
         </div>
-      </div>
-
-      {/* RELATORIO VISUAL DA TELA */}
-      <div className="bg-white shadow-2xl overflow-hidden rounded-xl border mt-4">
-        <div className="p-4 border-b bg-gray-50">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
-            <div>
-              <h2 className="text-sm md:text-base font-black uppercase text-gray-800">Relatório diário - PCM</h2>
-              <p className="text-xs text-gray-500 font-semibold">
-                Data: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span> | Itens em aberto:{" "}
-                <span className="font-black">{veiculosFiltrados.length}</span>
-              </p>
-            </div>
-
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Ordenação: Categoria (GNS → Amarela → Branco → Cinza → Venda) e Tempo parado (desc)
-            </div>
-          </div>
-        </div>
-
+        
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
-                <th className="p-3 border-r whitespace-nowrap">Cluster</th>
-                <th className="p-3 border-r whitespace-nowrap">Frota</th>
-                <th className="p-3 border-r whitespace-nowrap">Entrada</th>
-                <th className="p-3 border-r text-center whitespace-nowrap">Dias</th>
-                <th className="p-3 border-r whitespace-nowrap">Categoria</th>
-                <th className="p-3 border-r w-[420px]">Descrição</th>
-                <th className="p-3 border-r whitespace-nowrap">O.S</th>
-                <th className="p-3 border-r whitespace-nowrap">Setor</th>
-                <th className="p-3 border-r whitespace-nowrap">Turno</th>
-                <th className="p-3 border-r whitespace-nowrap">Responsável</th>
-                <th className="p-3 border-r w-[260px]">Observação</th>
-                <th className="p-3 text-center whitespace-nowrap">Ações</th>
+          <table className="w-full text-left text-sm border-collapse min-w-[1200px]">
+            <thead className="bg-white border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
+              <tr>
+                <th className="p-4 font-black">Frota</th>
+                <th className="p-4 text-center font-black">Dias (Timer)</th>
+                <th className="p-4 font-black">Categoria</th>
+                <th className="p-4 font-black w-[300px]">Defeito Reportado</th>
+                <th className="p-4 font-black">OS</th>
+                <th className="p-4 font-black">Setor</th>
+                <th className="p-4 font-black">Turno</th>
+                <th className="p-4 font-black">Responsável</th>
+                <th className="p-4 font-black w-[200px]">Observação</th>
+                <th className="p-4 text-center font-black">Ações</th>
               </tr>
             </thead>
-
-            <tbody>
+            <tbody className="bg-slate-50/30">
               {loading ? (
-                <tr>
-                  <td colSpan={12} className="p-6 text-center text-gray-500 font-bold">
-                    Carregando PCM...
-                  </td>
-                </tr>
+                <tr><td colSpan={10} className="p-8 text-center text-slate-400 font-bold">Carregando lista...</td></tr>
               ) : veiculosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={12} className="p-6 text-center text-gray-500 font-bold">
-                    Nenhum registro encontrado.
-                  </td>
-                </tr>
+                <tr><td colSpan={10} className="p-8 text-center text-slate-400 font-bold">Nenhum veículo atende aos filtros atuais.</td></tr>
               ) : (
                 veiculosFiltrados.map((v) => {
                   const catStyle = getCategoriaStyle(v.categoria);
-                  const dias = daysBetween(v.data_entrada);
+                  const diasTotal = daysBetween(v.data_entrada);
+                  const diasCat = daysBetween(v.data_mudanca_categoria || v.data_entrada);
 
                   return (
-                    <tr key={v.id} className={`border-b border-gray-200 font-medium ${catStyle.color}`}>
-                      <td className="p-3 border-r border-black/10 text-[10px] font-black uppercase">{v.cluster || "-"}</td>
-                      <td className="p-3 text-lg font-black border-r border-black/10">{v.frota}</td>
-                      <td className="p-3 border-r border-black/10">{formatBRDate(v.data_entrada)}</td>
-                      <td className="p-3 text-center font-black border-r border-black/10 text-lg">{dias}</td>
-                      <td className="p-3 border-r border-black/10">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}>
+                    <tr key={v.id} className={`border-b border-slate-200 hover:bg-slate-100 transition-colors ${catStyle.color}`}>
+                      <td className="p-4">
+                        <div className="text-lg font-black text-slate-800">{v.frota}</div>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase">{v.cluster || "Sem Cluster"}</div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="text-xl font-black text-slate-800">{diasCat}d</div>
+                        {diasTotal !== diasCat && (
+                          <div className="text-[10px] font-black text-slate-400 uppercase mt-0.5" title={`Dias desde a entrada original: ${diasTotal}`}>Total PCM: {diasTotal}d</div>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm ${catStyle.badge}`}>
                           {catStyle.label}
                         </span>
                       </td>
-                      <td className="p-3 text-[11px] uppercase leading-tight border-r border-black/10">{v.descricao}</td>
-                      <td className="p-3 font-bold border-r border-black/10">{v.ordem_servico || "-"}</td>
-                      <td className="p-3 text-[10px] font-black border-r border-black/10">{v.setor}</td>
-                      <td className="p-3 border-r border-black/10">
-                        <span className="px-2 py-1 rounded-full bg-black/20 text-[10px] font-black uppercase">
-                          {v.lancado_no_turno || "-"}
-                        </span>
-                      </td>
-                      <td className="p-3 text-[10px] italic border-r border-black/10">{v.lancado_por || "-"}</td>
-                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">{v.observacao || "-"}</td>
-
-                      <td className="p-3 text-center">
+                      <td className="p-4 text-[11px] font-semibold text-slate-600 uppercase">{v.descricao}</td>
+                      <td className="p-4 font-bold text-slate-700">{v.ordem_servico || "-"}</td>
+                      <td className="p-4 text-[10px] font-black text-slate-600 uppercase">{v.setor}</td>
+                      <td className="p-4 text-[10px] font-black text-slate-600"><span className="bg-slate-200/50 px-2 py-1 rounded">{v.lancado_no_turno || "-"}</span></td>
+                      <td className="p-4 text-[10px] font-bold text-slate-500 italic">{v.lancado_por || "-"}</td>
+                      <td className="p-4 text-[10px] font-bold text-slate-600 uppercase">{v.observacao || "-"}</td>
+                      <td className="p-4">
                         <div className="flex justify-center gap-2">
                           <button
                             onClick={() => liberarVeiculo(v)}
                             disabled={!pcmEditavel}
-                            className={`p-2 rounded-full shadow-lg transition-transform ${
-                              !pcmEditavel
-                                ? "bg-gray-400 text-white opacity-60 cursor-not-allowed"
-                                : "bg-green-500 hover:bg-green-400 text-white hover:scale-110"
-                            }`}
-                            title={!pcmEditavel ? "PCM fechado" : "Liberar veículo"}
+                            className={`p-2.5 rounded-xl shadow-sm transition-transform ${!pcmEditavel ? "bg-slate-300 text-white cursor-not-allowed" : "bg-emerald-500 hover:bg-emerald-400 text-white hover:scale-105 active:scale-95"}`}
+                            title={!pcmEditavel ? "Fechado" : "Liberar Veículo (Dar Saída)"}
                           >
                             <FaCheckCircle size={16} />
                           </button>
-
                           <button
-                            onClick={() => {
-                              if (!pcmEditavel)
-                                return alert("PCM fechado: não é permitido editar/mover após 10:00 do dia seguinte.");
-                              setEditVeiculo(v);
-                              setEditOpen(true);
-                            }}
+                            onClick={() => { if (pcmEditavel) { setEditVeiculo(v); setEditOpen(true); } }}
                             disabled={!pcmEditavel}
-                            className={`p-2 rounded-full shadow-lg transition-transform ${
-                              !pcmEditavel
-                                ? "bg-gray-400 text-white opacity-60 cursor-not-allowed"
-                                : "bg-black/20 hover:bg-black/30 text-white hover:scale-110"
-                            }`}
-                            title={!pcmEditavel ? "PCM fechado" : "Editar / Mover"}
+                            className={`p-2.5 rounded-xl shadow-sm transition-transform ${!pcmEditavel ? "bg-slate-300 text-white cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500 text-white hover:scale-105 active:scale-95"}`}
+                            title={!pcmEditavel ? "Fechado" : "Editar ou Mover"}
                           >
                             <FaEdit size={16} />
                           </button>
@@ -1321,10 +667,90 @@ export default function PCMDiario() {
             </tbody>
           </table>
         </div>
+      </div>
 
-        <div className="p-3 border-t bg-gray-50 text-[10px] text-gray-500 font-bold flex justify-between">
-          <span>PCM Diário — Quatai</span>
-          <span>Gerado em: {new Date().toLocaleString("pt-BR")}</span>
+      {/* BLOCO INVISÍVEL PARA IMPRESSÃO DO PDF (Mantendo estrutura para não quebrar lógica) */}
+      <div className="fixed -left-[99999px] top-0 pointer-events-none opacity-0">
+        <div ref={reportRef} className="bg-white w-[1400px] p-6 text-black font-sans">
+          {/* TOPO PDF */}
+          <div className="mb-5 border-2 border-slate-800 rounded-xl overflow-hidden">
+            <div className="bg-slate-800 text-white px-5 py-4">
+              <div className="text-2xl font-black uppercase tracking-tight">PCM - Planejamento e Controle de Manutenção</div>
+              <div className="text-sm font-semibold mt-1">Data de Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span></div>
+            </div>
+            <div className="px-5 py-3 bg-white flex flex-wrap gap-8 text-sm font-semibold text-slate-700">
+              <div>Veículos em Aberto: <span className="font-black text-slate-900">{veiculosFiltrados.length}</span></div>
+              <div>Gerado em: <span className="font-black text-slate-900">{new Date().toLocaleString("pt-BR")}</span></div>
+            </div>
+          </div>
+
+          {/* RESUMO NO COMEÇO DO PDF */}
+          <div className="flex gap-4 mb-6">
+            <div className="flex-1 rounded-xl border-2 border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] font-black text-slate-500 uppercase">Total</p>
+              <p className="text-2xl font-black mt-1 text-slate-800">{resumo.total}</p>
+            </div>
+            <div className="flex-1 rounded-xl border-2 border-rose-200 bg-rose-50 p-4">
+              <p className="text-[10px] font-black text-rose-500 uppercase">GNS</p>
+              <p className="text-2xl font-black mt-1 text-rose-700">{resumo.GNS}</p>
+            </div>
+            <div className="flex-1 rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+              <p className="text-[10px] font-black text-amber-600 uppercase">F. Amarela</p>
+              <p className="text-2xl font-black mt-1 text-amber-700">{resumo.FAIXA_AMARELA}</p>
+            </div>
+            <div className="flex-1 rounded-xl border-2 border-slate-300 bg-white p-4">
+              <p className="text-[10px] font-black text-slate-500 uppercase">Noturno</p>
+              <p className="text-2xl font-black mt-1 text-slate-800">{resumo.NOITE}</p>
+            </div>
+            <div className="flex-1 rounded-xl border-2 border-gray-300 bg-gray-50 p-4">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
+              <p className="text-2xl font-black mt-1 text-gray-700">{resumo.PENDENTES}</p>
+            </div>
+            <div className="flex-1 rounded-xl border-2 border-blue-200 bg-blue-50 p-4">
+              <p className="text-[10px] font-black text-blue-500 uppercase">Venda</p>
+              <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
+            </div>
+          </div>
+
+          {/* TABELA PDF */}
+          <table className="w-full text-left text-sm border-collapse border-2 border-slate-200">
+            <thead>
+              <tr className="bg-slate-100 text-[10px] uppercase text-slate-600 border-b-2 border-slate-200 font-black">
+                <th className="p-3 border-r border-slate-200">Cluster</th>
+                <th className="p-3 border-r border-slate-200">Frota</th>
+                <th className="p-3 border-r border-slate-200">Entrada</th>
+                <th className="p-3 border-r border-slate-200 text-center">Dias (Cat)</th>
+                <th className="p-3 border-r border-slate-200">Categoria</th>
+                <th className="p-3 border-r border-slate-200 w-[400px]">Descrição</th>
+                <th className="p-3 border-r border-slate-200">O.S</th>
+                <th className="p-3 border-r border-slate-200">Setor</th>
+                <th className="p-3 border-r border-slate-200">Resp. Lançamento</th>
+                <th className="p-3 w-[250px]">Observação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {veiculosFiltrados.map((v) => {
+                const catStyle = getCategoriaStyle(v.categoria);
+                const diasCat = daysBetween(v.data_mudanca_categoria || v.data_entrada);
+                return (
+                  <tr key={v.id} className="border-b border-slate-200 font-medium">
+                    <td className="p-3 border-r border-slate-200 text-[10px] font-black uppercase text-slate-500">{v.cluster || "-"}</td>
+                    <td className="p-3 text-lg font-black border-r border-slate-200 text-slate-800">{v.frota}</td>
+                    <td className="p-3 border-r border-slate-200 text-slate-700">{formatBRDate(v.data_entrada)}</td>
+                    <td className="p-3 text-center font-black border-r border-slate-200 text-lg text-slate-800">{diasCat}</td>
+                    <td className="p-3 border-r border-slate-200">
+                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${catStyle.badge}`}>{catStyle.label}</span>
+                    </td>
+                    <td className="p-3 text-[11px] uppercase leading-tight border-r border-slate-200 text-slate-700">{v.descricao}</td>
+                    <td className="p-3 font-bold border-r border-slate-200 text-slate-800">{v.ordem_servico || "-"}</td>
+                    <td className="p-3 text-[10px] font-black border-r border-slate-200 text-slate-600 uppercase">{v.setor}</td>
+                    <td className="p-3 text-[10px] italic border-r border-slate-200 text-slate-600">{v.lancado_por || "-"}</td>
+                    <td className="p-3 text-[10px] font-bold uppercase text-slate-700">{v.observacao || "-"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -1333,10 +759,7 @@ export default function PCMDiario() {
         open={editOpen}
         veiculo={editVeiculo}
         prefixos={prefixos}
-        onClose={() => {
-          setEditOpen(false);
-          setEditVeiculo(null);
-        }}
+        onClose={() => { setEditOpen(false); setEditVeiculo(null); }}
         onSalvar={salvarEdicaoVeiculo}
       />
     </div>

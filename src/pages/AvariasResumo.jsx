@@ -10,6 +10,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList
 } from "recharts";
 import {
   FaSearch,
@@ -32,12 +33,38 @@ import {
 } from "react-icons/fa";
 
 /* =========================
-   HELPERS
+   HELPERS (Datas e Numéricos)
 ========================= */
+
+function toISODate(d) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function startOfMonthISO(iso) {
+  const [y, m] = iso.split("-").map(Number);
+  const d = new Date(y, m - 1, 1);
+  return toISODate(d);
+}
+
+function endOfMonthISO(iso) {
+  const [y, m] = iso.split("-").map(Number);
+  const d = new Date(y, m, 0);
+  return toISODate(d);
+}
 
 function moneyBRL(v) {
   const n = Number(v || 0);
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function compactBRL(v) {
+  const n = Number(v || 0);
+  if (n === 0) return "";
+  if (n >= 1000000) return `R$ ${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `R$ ${(n / 1000).toFixed(1)}k`;
+  return `R$ ${n.toFixed(0)}`;
 }
 
 function fmtInt(v) {
@@ -134,29 +161,28 @@ function ExplicacaoModal({ onClose }) {
         <div className="overflow-y-auto pr-2 space-y-5 text-sm text-slate-700">
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
             <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2"><FaFilter className="text-slate-500"/> Base de Dados</h3>
-            <p>O painel contabiliza <strong>apenas as avarias com status "Aprovado"</strong>. Avarias rejeitadas ou em análise não entram na soma financeira nem nas contagens de frota e motorista.</p>
+            <p>O painel contabiliza <strong>apenas as avarias com status "Aprovado"</strong>. Avarias rejeitadas ou em análise não entram na soma financeira nem nas contagens do ranking.</p>
+          </div>
+
+          <div className="bg-rose-50 p-4 rounded-xl border border-rose-200">
+            <h3 className="font-black text-rose-900 mb-2 flex items-center gap-2"><FaCar className="text-rose-600"/> Avarias Internas vs Externas</h3>
+            <ul className="list-disc pl-5 space-y-2">
+              <li><strong>Internas (Cobrança Motoristas):</strong> São danos causados na garagem ou em situações de culpabilidade direta do colaborador interno da empresa. O alvo da cobrança é o funcionário.</li>
+              <li><strong>Externas (Terceiros):</strong> São danos causados por terceiros no trânsito (acidentes de operação externa). A cobrança é direcionada ao seguro ou ao terceiro envolvido.</li>
+            </ul>
           </div>
 
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
             <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2"><FaMoneyBillWave className="text-blue-600"/> Orçado vs. Cobrado</h3>
             <ul className="list-disc pl-5 space-y-1">
-              <li><strong>Orçado:</strong> É o valor total do orçamento da avaria (peças + mão de obra).</li>
-              <li><strong>Cobrado:</strong> É o valor que de fato foi lançado para desconto ou cobrança do responsável.</li>
+              <li><strong>Orçado:</strong> É o valor total orçado da manutenção da avaria (peças + mão de obra).</li>
+              <li><strong>Cobrado:</strong> É o valor que de fato foi lançado para desconto ou cobrança do culpado.</li>
             </ul>
           </div>
 
           <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
             <h3 className="font-black text-amber-900 mb-2 flex items-center gap-2"><FaChartLine className="text-amber-600"/> Gráfico de Eixo Duplo</h3>
-            <p>No gráfico de evolução mensal, as barras de "Orçado" e "Cobrado" (Reais) usam a escala numérica da <strong>direita</strong>. Já a barra de "Quantidade" (Unidades) usa a escala numérica da <strong>esquerda</strong>. Isso impede que os valores financeiros (ex: R$ 10.000) esmaguem as barras de quantidade (ex: 5 avarias).</p>
-          </div>
-
-          <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-            <h3 className="font-black text-emerald-900 mb-2 flex items-center gap-2"><FaCheckCircle className="text-emerald-600"/> Status de Cobrança</h3>
-            <ul className="list-disc pl-5 space-y-1">
-              <li><span className="font-bold text-amber-600">Pendente:</span> A avaria ocorreu, foi orçada, mas ainda não foi cobrada do culpado.</li>
-              <li><span className="font-bold text-emerald-600">Cobrada:</span> O valor já foi descontado/pago pelo responsável.</li>
-              <li><span className="font-bold text-rose-600">Cancelada:</span> A cobrança foi isentada por decisão da gestão. Custo assumido pela empresa.</li>
-            </ul>
+            <p>No gráfico de evolução mensal, as barras de "Orçado" e "Cobrado" (Reais) usam a escala numérica da <strong>direita</strong>. Já a barra de "Quantidade" (Unidades) usa a escala numérica da <strong>esquerda</strong>. Isso impede que os valores financeiros esmaguem as barras de quantidade visualmente.</p>
           </div>
         </div>
 
@@ -175,21 +201,26 @@ function ExplicacaoModal({ onClose }) {
 ========================= */
 
 export default function AvariasResumo() {
+  // Helpers de Data Padrão (Mês Atual)
+  const hojeISO = useMemo(() => toISODate(new Date()), []);
+  const mesAtualIni = useMemo(() => startOfMonthISO(hojeISO), [hojeISO]);
+  const mesAtualFim = useMemo(() => endOfMonthISO(hojeISO), [hojeISO]);
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [errMsg, setErrMsg] = useState("");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
-  // filtros
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
+  // Filtros (Iniciando no mês atual para não trazer a base histórica inteira de cara)
+  const [dataInicio, setDataInicio] = useState(mesAtualIni);
+  const [dataFim, setDataFim] = useState(mesAtualFim);
   const [origemFiltro, setOrigemFiltro] = useState("");
 
   const carregar = async () => {
     setLoading(true);
     setErrMsg("");
 
-    // Utilizando as colunas reais da tabela: prefixo e motoristaId
+    // Utilizando as colunas reais da tabela (prefixo e motoristaId)
     let query = supabase
       .from("avarias")
       .select(
@@ -294,7 +325,7 @@ export default function AvariasResumo() {
     const mapMot = new Map();
 
     rows.forEach(r => {
-      // Veículos (agora puxando de prefixo)
+      // Veículos
       const v = String(r.prefixo || "").trim();
       if (v && v !== "-") {
         if (!mapVeic.has(v)) mapVeic.set(v, { nome: v, qtd: 0, orcado: 0, cobrado: 0 });
@@ -304,7 +335,7 @@ export default function AvariasResumo() {
         itemV.cobrado += Number(r.valor_cobrado || 0);
       }
 
-      // Motoristas (Limpando o dado ex: "3202677 - JOAO" para apenas "JOAO")
+      // Motoristas (Limpando "3202677 - JOAO" para "JOAO")
       const mRaw = String(r.motoristaId || "").trim();
       if (mRaw && mRaw !== "-") {
         const name = mRaw.includes(' - ') ? mRaw.split(' - ')[1].trim() : mRaw;
@@ -396,16 +427,29 @@ export default function AvariasResumo() {
             </div>
           </div>
 
-          <button
-            onClick={() => {
-              setOrigemFiltro("");
-              setDataInicio("");
-              setDataFim("");
-            }}
-            className="px-4 py-2.5 rounded-xl font-black text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
-          >
-            Limpar filtros
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setDataInicio(mesAtualIni);
+                setDataFim(mesAtualFim);
+                setOrigemFiltro("");
+              }}
+              className="px-4 py-2.5 rounded-xl font-black text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 transition shadow-sm border border-blue-200"
+            >
+              Mês Atual
+            </button>
+
+            <button
+              onClick={() => {
+                setOrigemFiltro("");
+                setDataInicio("");
+                setDataFim("");
+              }}
+              className="px-4 py-2.5 rounded-xl font-black text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+            >
+              Limpar filtros
+            </button>
+          </div>
         </div>
 
         {errMsg && (
@@ -451,8 +495,8 @@ export default function AvariasResumo() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Avarias Internas (Garagem)</p>
-            <p className="text-3xl font-black text-slate-800">{fmtInt(kpis.internoQtde)}</p>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Avarias Internas <span className="text-rose-500">(Cobrança Motoristas)</span></p>
+            <p className="text-3xl font-black text-slate-800">{fmtInt(kpis.internoQtde)} <span className="text-sm font-bold text-slate-400">veículos</span></p>
             <p className="text-sm text-slate-600 font-bold mt-1">Custo: <span className="text-rose-600">{moneyBRL(kpis.internoOrcado)}</span></p>
           </div>
           <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
@@ -462,8 +506,8 @@ export default function AvariasResumo() {
 
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Avarias Externas (Rua/Operação)</p>
-            <p className="text-3xl font-black text-slate-800">{fmtInt(kpis.externoQtde)}</p>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Avarias Externas <span className="text-blue-500">(Terceiros)</span></p>
+            <p className="text-3xl font-black text-slate-800">{fmtInt(kpis.externoQtde)} <span className="text-sm font-bold text-slate-400">veículos</span></p>
             <p className="text-sm text-slate-600 font-bold mt-1">Custo: <span className="text-rose-600">{moneyBRL(kpis.externoOrcado)}</span></p>
           </div>
           <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
@@ -491,7 +535,8 @@ export default function AvariasResumo() {
           ) : (
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                {/* Adicionado margin top para não cortar as labels */}
+                <BarChart data={chartData} margin={{ top: 25, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} dy={10} />
                   
@@ -513,9 +558,18 @@ export default function AvariasResumo() {
                   />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 'bold' }} />
                   
-                  <Bar yAxisId="left" dataKey="qtde" name="Quantidade" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={25} />
-                  <Bar yAxisId="right" dataKey="orcado" name="Valor Orçado" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={25} />
-                  <Bar yAxisId="right" dataKey="cobrado" name="Valor Cobrado" fill="#10b981" radius={[4, 4, 0, 0]} barSize={25} />
+                  {/* Barras com LabelList para mostrar os valores formatados no topo */}
+                  <Bar yAxisId="left" dataKey="qtde" name="Quantidade" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30}>
+                    <LabelList dataKey="qtde" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
+                  </Bar>
+                  
+                  <Bar yAxisId="right" dataKey="orcado" name="Valor Orçado" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={30}>
+                    <LabelList dataKey="orcado" position="top" formatter={compactBRL} style={{ fill: "#f59e0b", fontSize: 10, fontWeight: "bold" }} />
+                  </Bar>
+                  
+                  <Bar yAxisId="right" dataKey="cobrado" name="Valor Cobrado" fill="#10b981" radius={[4, 4, 0, 0]} barSize={30}>
+                    <LabelList dataKey="cobrado" position="top" formatter={compactBRL} style={{ fill: "#10b981", fontSize: 10, fontWeight: "bold" }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -572,7 +626,7 @@ export default function AvariasResumo() {
               <tbody>
                 {topMotoristas.map((m, i) => (
                   <tr key={m.nome} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-                    <td className="p-3 font-black text-slate-800 truncate max-w-[200px]" title={m.nome}>
+                    <td className="p-3 font-black text-slate-800 truncate max-w-[300px]" title={m.nome}>
                       <span className="text-slate-400 mr-2">#{i+1}</span>{m.nome}
                     </td>
                     <td className="p-3 text-center font-bold text-rose-600">{m.qtd}</td>

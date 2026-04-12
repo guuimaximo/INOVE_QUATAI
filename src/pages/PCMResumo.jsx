@@ -17,7 +17,8 @@ import {
   FaWrench,
   FaBus,
   FaBolt,
-  FaChartPie
+  FaChartPie,
+  FaInfoCircle
 } from "react-icons/fa";
 
 /* =========================
@@ -120,7 +121,7 @@ function bestBaseDateISO(v) {
 }
 
 /* =========================
-   COMPONENTES DE UI (Estilo SOS)
+   COMPONENTES DE UI (Estilo Premium)
 ========================= */
 
 function Chip({ active, onClick, children, title }) {
@@ -188,7 +189,7 @@ function AgingBar({ buckets }) {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between text-xs font-black text-slate-500 uppercase mb-3">
-        <span className="flex items-center gap-2"><FaClock /> Aging (dias parado) — Carros Abertos</span>
+        <span className="flex items-center gap-2"><FaClock /> Aging (Idade da fila) — Carros Abertos</span>
         <span>Total: {total}</span>
       </div>
 
@@ -201,7 +202,7 @@ function AgingBar({ buckets }) {
               key={p.k}
               style={{ width: `${w}%`, display: w === 0 ? "none" : "block" }}
               className={`h-full ${p.color} transition-all duration-500`}
-              title={`${p.label}: ${v}`}
+              title={`${p.label} dias: ${v} veículos`}
             />
           );
         })}
@@ -252,6 +253,77 @@ function Section({ title, subtitle, open, onToggle, children, right }) {
         </div>
       </button>
       {open ? <div className="px-5 pb-5 pt-2 border-t border-slate-100 bg-slate-50/50">{children}</div> : null}
+    </div>
+  );
+}
+
+/* =========================
+   MODAL: EXPLICAÇÃO (POPUP)
+========================= */
+
+function ExplicacaoModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-[70] animate-in fade-in duration-200 p-4">
+      <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+        
+        {/* Cabeçalho */}
+        <div className="flex justify-between items-center mb-4 border-b pb-4 shrink-0">
+          <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <FaInfoCircle className="text-blue-600" /> Dicionário de Indicadores PCM
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition">
+            <FaTimes size={20} />
+          </button>
+        </div>
+
+        {/* Conteúdo */}
+        <div className="overflow-y-auto pr-2 space-y-5 text-sm text-slate-700">
+          
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2"><FaClock className="text-slate-500"/> O que é o "Aging"? (Idade da Fila)</h3>
+            <p className="mb-2">O Aging (Envelhecimento) mede <strong>há quantos dias os veículos estão parados na oficina</strong>. Ele agrupa os carros que estão com a OS "Em Aberto" em diferentes faixas de tempo.</p>
+            <ul className="list-disc pl-5 space-y-1 text-xs font-semibold text-slate-600">
+              <li><span className="text-emerald-600 font-black">0-1 e 2-3 dias:</span> Fluxo normal. Carros entrando e saindo rapidamente.</li>
+              <li><span className="text-amber-600 font-black">4-7 dias:</span> Alerta. Reparos mais complexos ou início de gargalo.</li>
+              <li><span className="text-rose-600 font-black">16+ dias:</span> Crítico. Veículos "mofando" na oficina, geralmente aguardando peças complexas, garantia, ou retífica de motor/câmbio.</li>
+            </ul>
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+            <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2"><FaRedo className="text-blue-600"/> Regra de Reincidência (Top Ofensores)</h3>
+            <p className="mb-1">Como o painel define que um carro é reincidente?</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>O sistema rastreia o ciclo completo do carro: <strong>Entrou → Foi Liberado (Saiu) → Entrou novamente</strong>.</li>
+              <li>Se um carro tem 3 registros no mês, mas a oficina nunca deu "saída" nele, ele conta como 1 única parada longa.</li>
+              <li>A reincidência conta as vezes que o carro "enganou" a operação: foi dado como pronto, rodou, e quebrou de novo no mesmo período.</li>
+            </ul>
+          </div>
+
+          <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+            <h3 className="font-black text-amber-900 mb-2 flex items-center gap-2"><FaCalendarAlt className="text-amber-600"/> Filtro de Dias (O Calendário Operacional)</h3>
+            <p className="mb-2">A operação de manutenção trata os dias de forma diferente do calendário civil:</p>
+            <ul className="list-disc pl-5 space-y-1 font-semibold text-xs text-amber-800">
+              <li><strong>Domingo a Quinta-feira:</strong> Contam como "Dias Úteis" normais.</li>
+              <li><strong>Sexta-feira:</strong> Conta como "Sábado" para fins de análise de planejamento.</li>
+              <li><strong>Sábado:</strong> Conta como "Domingo".</li>
+            </ul>
+          </div>
+
+          <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+            <h3 className="font-black text-emerald-900 mb-2 flex items-center gap-2"><FaChartLine className="text-emerald-600"/> Média GNS/Dia</h3>
+            <p>Calcula a gravidade diária das quebras severas (GNS - Guarda Não Sai). O cálculo é a divisão do <strong>Total de registros GNS do período</strong> pela quantidade de <strong>Dias que tiveram PCM lançado</strong> no mesmo período. É o principal termômetro de saúde da frota a curto prazo.</p>
+          </div>
+
+        </div>
+
+        {/* Rodapé */}
+        <div className="mt-5 pt-4 border-t flex justify-end shrink-0">
+          <button onClick={onClose} className="px-6 py-2.5 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition shadow-md active:scale-95">
+            Entendi
+          </button>
+        </div>
+
+      </div>
     </div>
   );
 }
@@ -421,6 +493,9 @@ export default function PCMResumo() {
   const [secParetoOpen, setSecParetoOpen] = useState(true);
   const [secSerieOpen, setSecSerieOpen] = useState(true);
   const [secTopsOpen, setSecTopsOpen] = useState(true);
+  
+  // Modal de Explicação
+  const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
   // dados
   const [loading, setLoading] = useState(true);
@@ -819,9 +894,17 @@ export default function PCMResumo() {
             ))}
 
             <button
+              onClick={() => setMostrarExplicacao(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
+              title="Entender Cálculos"
+            >
+              <FaInfoCircle /> Entender Cálculos
+            </button>
+
+            <button
               onClick={() => setCompact((v) => !v)}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-black transition ${
-                !compact ? "bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                !compact ? "bg-slate-100 text-slate-800 hover:bg-slate-200 border-slate-300" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
               }`}
               title="Alternar modo de visualização"
             >
@@ -1091,7 +1174,11 @@ export default function PCMResumo() {
         </div>
       )}
 
-      {/* MODAL */}
+      {/* MODAIS */}
+      {mostrarExplicacao && (
+        <ExplicacaoModal onClose={() => setMostrarExplicacao(false)} />
+      )}
+
       <FrotaDetalheModal
         open={modalOpen}
         onClose={fecharModal}

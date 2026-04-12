@@ -365,9 +365,80 @@ function TabButton({ active, onClick, icon, children }) {
   );
 }
 
+/* --- Modal de Explicação das Regras (Popup) --- */
+function ExplicacaoModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-[70] animate-in fade-in duration-200 p-4">
+      <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+        
+        {/* Cabeçalho do Modal */}
+        <div className="flex justify-between items-center mb-4 border-b pb-4 shrink-0">
+          <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <FaInfoCircle className="text-blue-600" /> Dicionário de Indicadores e Regras
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition">
+            <FaTimes size={20} />
+          </button>
+        </div>
+
+        {/* Conteúdo com Rolagem */}
+        <div className="overflow-y-auto pr-2 space-y-5 text-sm text-slate-700">
+          
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2"><FaBolt className="text-amber-500"/> Visão Geral e MKBF</h3>
+            <p className="mb-2"><strong>Base da tela:</strong> Traz a base consolidada de todos os SOS válidos, que reagem aos filtros do topo (Setor, Linha, Controlabilidade, etc).</p>
+            <p><strong>MKBF (Quilometragem Média Entre Falhas):</strong> Calculado dividindo a Quilometragem Total Rodada pela frota no mês pela quantidade de SOS válidos analisados.</p>
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+            <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2"><FaChartLine className="text-blue-600"/> Regras de Reincidência (Até 30 dias)</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong>Reincidência Veículo:</strong> O mesmo carro apresentou um novo SOS (de qualquer tipo) em um intervalo menor ou igual a 30 dias.</li>
+              <li><strong>Reincidência Técnica:</strong> O mesmo carro apresentou um novo SOS com o <em>exatamente o mesmo defeito</em> em até 30 dias.</li>
+              <li><strong>Reincidência Setorial:</strong> O mesmo carro apresentou um novo SOS atendido pelo <em>mesmo setor de manutenção</em> em até 30 dias.</li>
+            </ul>
+          </div>
+
+          <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+            <h3 className="font-black text-emerald-900 mb-2 flex items-center gap-2"><FaWrench className="text-emerald-600"/> Avaliação de Pós-Revisão (Mecânicos/Eletricistas)</h3>
+            <p className="mb-2">A avaliação técnica não busca apenas "quem assinou por último", mas aplica regras matemáticas para garantir que o profissional não seja penalizado injustamente (Outliers).</p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li><strong>Atribuição Dinâmica:</strong> Quando o carro quebra, o sistema busca a última revisão feita (Preventiva de 10k OU Inspeção de 5k) e atribui o SOS ao executor daquela revisão específica.</li>
+              <li><strong>Limites de Ciclo (Filtro de Injustiça):</strong> O SOS só entra na conta do mecânico se a quebra ocorreu dentro da "janela de proteção" da revisão:
+                <ul className="list-disc pl-5 mt-1 text-xs text-slate-600 font-semibold">
+                  <li>Se a última foi <strong>Inspeção (5k)</strong>: O carro tem que ter quebrado com <strong>≤ 6.000 km</strong> ou <strong>≤ 25 dias</strong> rodados após a OS.</li>
+                  <li>Se a última foi <strong>Preventiva (10k)</strong>: O carro tem que ter quebrado com <strong>≤ 12.000 km</strong> ou <strong>≤ 45 dias</strong> rodados após a OS.</li>
+                </ul>
+              </li>
+              <li>Se o carro quebrar após esses limites, é considerado desgaste natural de operação, e o SOS <strong>NÃO</strong> afeta os indicadores do funcionário.</li>
+            </ul>
+          </div>
+
+          <div className="bg-rose-50 p-4 rounded-xl border border-rose-200">
+            <h3 className="font-black text-rose-900 mb-2 flex items-center gap-2"><FaUserCog className="text-rose-600"/> Indicadores do Funcionário (Aba Avaliação)</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong>Eficácia da Preventiva/Inspeção:</strong> Mostra o percentual de sucesso. Fórmula: <code>(Total Revisões Feitas - SOS Atribuídos) / Total Revisões Feitas</code>. Se ele fez 10 revisões e apenas 2 voltaram com SOS no ciclo, a eficácia é de 80%.</li>
+              <li><strong>Retrabalho Precoce (Garantia Interna):</strong> É a pior ofensa. Dos SOS que foram atribuídos a ele, quantos quebraram muito rápido? Consideramos precoce se quebrar com <strong>≤ 15 dias</strong> ou <strong>≤ 3.000 km</strong> rodados.</li>
+              <li><strong>Taxa de Retrabalho:</strong> Mostra o percentual de SOS precoces dentro do universo de SOS atribuídos ao funcionário.</li>
+            </ul>
+          </div>
+
+        </div>
+
+        {/* Rodapé do Modal */}
+        <div className="mt-5 pt-4 border-t flex justify-end shrink-0">
+          <button onClick={onClose} className="px-6 py-2.5 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition shadow-md active:scale-95">
+            Entendi
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 /* --- Modal de Login --- */
 function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
-  // ... (Mesmo componente LoginModal)
   const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
@@ -417,7 +488,6 @@ function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
 
 /* --- Modal de Detalhes do SOS --- */
 function DetalheSOSModal({ sos, onClose, onAtualizar }) {
-  // ... (Mesmo componente DetalheSOSModal que você já tinha)
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({});
   const [loginModalOpen, setLoginModalOpen] = useState(false);
@@ -783,7 +853,7 @@ export default function SOSCentral() {
         const diasPrev = n(r.dias_ultima_preventiva) > 0 ? n(r.dias_ultima_preventiva) : Math.max(0, n(diffDays(data_sos, basePrev)));
         const diasInsp = n(r.dias_ultima_inspecao) > 0 ? n(r.dias_ultima_inspecao) : Math.max(0, n(diffDays(data_sos, baseInsp)));
 
-        // ======= NOVA LÓGICA: QUEM FOI O ÚLTIMO A REVISAR? (PREV ou INSP) =======
+        // ======= LÓGICA: QUEM FOI O ÚLTIMO A REVISAR? (PREV ou INSP) =======
         let isInspMaisRecente = false;
         if (baseInsp && basePrev) {
           isInspMaisRecente = diasInsp < diasPrev;
@@ -823,7 +893,6 @@ export default function SOSCentral() {
           faixa_preventiva: faixaDias(diasPrev),
           faixa_inspecao: faixaDias(diasInsp),
           
-          // Dados da Revisão que "quebrou"
           responsavel_revisao,
           tipo_revisao_atribuida,
           dias_revisao_atribuida,
@@ -1227,7 +1296,7 @@ export default function SOSCentral() {
     })).sort((a, b) => b.total - a.total);
   }, [baseRef]);
 
-  // =============== LÓGICA DE AVALIAÇÃO DE FUNCIONÁRIOS REAJUSTADA (PREV E INSP) ===============
+  // =============== LÓGICA DE AVALIAÇÃO DE FUNCIONÁRIOS ===============
   const tabelaFuncionarios = useMemo(() => {
     const map = new Map();
 
@@ -1260,8 +1329,6 @@ export default function SOSCentral() {
     });
 
     // 2. Avaliação da Quebra (Filtrada)
-    // baseRef JÁ ESTÁ FILTRADA pelos botões da tela (Controlável, Setor, etc).
-    // O SOS que entrar aqui, entra na conta do cara que fez a última revisão.
     baseRef.forEach((r) => {
       if (!r.responsavel_revisao || r.responsavel_revisao === "Não Identificado") return;
 
@@ -1294,7 +1361,6 @@ export default function SOSCentral() {
       const isInsp = r.tipo_revisao_atribuida === "Inspeção";
 
       // 3. Constantes de Ciclo (Outliers limit)
-      // Se quebrou muito longe do que a revisão protege, não foi culpa da revisão.
       const MAX_KM = isInsp ? 6000 : 12000;
       const MAX_DIAS = isInsp ? 25 : 45;
 
@@ -1302,7 +1368,7 @@ export default function SOSCentral() {
       const diasValido = (diasPosRev <= MAX_DIAS);
 
       if (kmValido || diasValido) {
-          item.sosAtribuidos += 1; // Esse SOS entra como culpa desse funcionário
+          item.sosAtribuidos += 1; 
 
           if (diasValido) {
               item.diasRevSoma += diasPosRev;
@@ -1315,7 +1381,6 @@ export default function SOSCentral() {
           }
 
           // 4. Regra Mestra de Retrabalho Técnico
-          // Menos de 15 dias ou menos de 3.000 KM rodados após o cara mexer.
           if (diasPosRev <= 15 || (kmValido && kmRodado <= 3000)) {
               item.sosPrecoce += 1;
           }
@@ -1327,7 +1392,6 @@ export default function SOSCentral() {
     return [...map.values()]
       .filter(r => r.revisoesFeitasMes > 0 || r.sosAtribuidos > 0)
       .map(r => {
-        // Taxa de Retrabalho Técnico -> Dos SOS que caíram pra ele, qual % é precoce?
         const taxaRetrabalho = r.sosAtribuidos > 0 ? (r.sosPrecoce / r.sosAtribuidos) * 100 : 0;
 
         return {
@@ -1422,7 +1486,6 @@ export default function SOSCentral() {
   ]);
 
   const exportAtual = () => {
-    // ... Exports iguais, só ajustei a aba FUNCIONARIOS ...
     if (abaAtiva === "EXECUTIVO") {
       exportarCSV(
         historico12m.map((r) => ({
@@ -1585,8 +1648,8 @@ export default function SOSCentral() {
               <FaDownload /> Baixar Excel
             </button>
 
-            <button onClick={() => setMostrarExplicacao((v) => !v)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition">
-              <FaInfoCircle /> {mostrarExplicacao ? "Ocultar Cálculos" : "Entender Cálculos"}
+            <button onClick={() => setMostrarExplicacao(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition">
+              <FaInfoCircle /> Entender Cálculos
             </button>
 
             <button onClick={carregarTudo} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-700 transition">
@@ -1594,15 +1657,6 @@ export default function SOSCentral() {
             </button>
           </div>
         </div>
-
-        {mostrarExplicacao && (
-          <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm space-y-2">
-            <p><strong>Base da tela:</strong> Traz a base consolidada de todos os SOS válidos, filtrada de acordo com as seleções abaixo.</p>
-            <p><strong>Reincidência operacional:</strong> mesmo veículo com novo SOS em até 30 dias.</p>
-            <p><strong>Reincidência técnica:</strong> mesmo veículo + mesmo defeito em até 30 dias.</p>
-            <p><strong>Avaliação de Funcionário:</strong> O SOS agora é atribuído ao mecânico que executou a <strong>ÚLTIMA</strong> revisão (Preventiva ou Inspeção). "Revisões no Mês" indica apenas volume de produção. A <strong>Taxa de Retrabalho</strong> pega apenas os SOS Atribuídos (após passar nos seus filtros de tela) e calcula quantos quebraram em <strong>≤ 15 dias ou ≤ 3.000 KM</strong>.</p>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">
           <div className="xl:col-span-2 relative">
@@ -1703,7 +1757,6 @@ export default function SOSCentral() {
         <TabButton active={abaAtiva === "MOTORISTAS"} onClick={() => setAbaAtiva("MOTORISTAS")} icon={<FaUserTie />}>Motoristas</TabButton>
       </div>
 
-      {/* RENDERIZAÇÃO DAS ABAS */}
       {abaAtiva === "EXECUTIVO" && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -1801,7 +1854,6 @@ export default function SOSCentral() {
         </div>
       )}
 
-      {/* NOVA VISÃO DE FUNCIONÁRIOS (TAXA DE RETRABALHO SOBRE SOS FILTRADOS) */}
       {abaAtiva === "FUNCIONARIOS" && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border shadow-sm p-4">
@@ -1861,7 +1913,6 @@ export default function SOSCentral() {
         </div>
       )}
 
-      {/* DEMAIS ABAS IGUAIS (Reincidência, Prev/Insp, Linhas, Veículos, Setores, Defeitos, Motoristas) */}
       {abaAtiva === "REINCIDENCIA" && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="bg-white rounded-2xl border shadow-sm p-4">
@@ -2147,6 +2198,18 @@ export default function SOSCentral() {
             </table>
           </div>
         </div>
+      )}
+
+      {loginModalOpen && (
+        <LoginModal
+          onConfirm={onLoginConfirm}
+          onCancel={() => setLoginModalOpen(false)}
+        />
+      )}
+
+      {/* MODAL DE EXPLICAÇÃO */}
+      {mostrarExplicacao && (
+        <ExplicacaoModal onClose={() => setMostrarExplicacao(false)} />
       )}
 
       {loading && (

@@ -123,13 +123,13 @@ function bestBaseDateISO(v) {
 }
 
 /* =========================
-   CORES DAS CATEGORIAS (Corrigidas para alto contraste)
+   CORES DAS CATEGORIAS
 ========================= */
 const CATEGORIAS = [
   { value: "GNS", label: "GNS", color: "border-red-300 bg-red-50 text-red-900", badge: "bg-red-600 text-white" },
   { value: "FAIXA_AMARELA", label: "Faixa Amarela", color: "border-amber-300 bg-amber-50 text-amber-900", badge: "bg-amber-500 text-white" },
-  { value: "NOITE", label: "Noturno", color: "border-indigo-300 bg-indigo-50 text-indigo-900", badge: "bg-indigo-600 text-white" }, // Azul índigo forte para destacar do cinza
-  { value: "PENDENTES", label: "Pendentes", color: "border-slate-400 bg-slate-100 text-slate-800", badge: "bg-slate-600 text-white" }, // Cinza chumbo claro
+  { value: "NOITE", label: "Noturno", color: "border-indigo-300 bg-indigo-50 text-indigo-900", badge: "bg-indigo-600 text-white" },
+  { value: "PENDENTES", label: "Pendentes", color: "border-slate-400 bg-slate-100 text-slate-800", badge: "bg-slate-600 text-white" },
   { value: "VENDA", label: "Venda", color: "border-blue-300 bg-blue-50 text-blue-900", badge: "bg-blue-600 text-white" },
 ];
 
@@ -203,8 +203,8 @@ function AgingBar({ buckets }) {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between text-xs font-black text-slate-500 uppercase mb-3">
-        <span className="flex items-center gap-2"><FaClock /> Aging (Idade da fila de abertos)</span>
-        <span>Total de Carros: {total}</span>
+        <span className="flex items-center gap-2"><FaClock /> Aging (Idade da fila - Apenas GNS)</span>
+        <span>Total de GNS: {total}</span>
       </div>
 
       <div className="w-full h-4 rounded-full overflow-hidden border border-slate-200 bg-slate-100 flex shadow-inner">
@@ -272,12 +272,20 @@ function ExplicacaoModal({ onClose }) {
         </div>
 
         <div className="overflow-y-auto pr-2 space-y-5 text-sm text-slate-700">
+          
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2"><FaClock className="text-slate-500"/> O que é o "Aging"? E o Backlog?</h3>
-            <p className="mb-2">O Aging (Envelhecimento) mede <strong>há quantos dias os veículos estão parados na oficina</strong>. Ele agrupa os carros que estão com a OS "Em Aberto" em diferentes faixas de tempo.</p>
-            <p className="text-xs italic bg-white p-2 rounded border border-slate-200 text-rose-700 font-bold mb-2">
-              ⚠️ Nota importante: O Aging e o "Raio-X do Pátio" ignoram o filtro de datas do topo e puxam a realidade de HOJE (100% dos carros que estão sem saída lançada), para garantir que nenhum carro esquecido há meses desapareça do radar da gestão.
-            </p>
+            <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2"><FaTools className="text-slate-500"/> O que significa "Em Aberto"?</h3>
+            <p>Um veículo <strong>Em Aberto</strong> é todo aquele que deu entrada na oficina (foi lançado no PCM) e ainda não recebeu a liberação de saída. Representa a fila real de trabalho (o <em>Backlog</em>) da manutenção no momento atual.</p>
+          </div>
+
+          <div className="bg-rose-50 p-4 rounded-xl border border-rose-200">
+            <h3 className="font-black text-rose-900 mb-2 flex items-center gap-2"><FaClock className="text-rose-600"/> Aging exclusivo de GNS</h3>
+            <p className="mb-2">O Aging mede <strong>há quantos dias os veículos estão parados na oficina</strong>. Para evitar distorções com carros que aguardam peças simples e ainda podem rodar, o Aging agora contabiliza <strong className="text-rose-700">APENAS os veículos da categoria GNS (Guarda Não Sai)</strong> que estão Em Aberto hoje.</p>
+            <ul className="list-disc pl-5 space-y-1 text-xs font-semibold text-rose-800">
+              <li><span className="font-black">0-1 e 2-3 dias:</span> Fluxo normal de reparo grave.</li>
+              <li><span className="font-black">4-7 dias:</span> Alerta de gargalo de peças ou mão de obra.</li>
+              <li><span className="font-black">16+ dias:</span> Crítico. Veículos "mofando" imobilizados.</li>
+            </ul>
           </div>
 
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
@@ -285,18 +293,12 @@ function ExplicacaoModal({ onClose }) {
             <p>De todos os carros que deram entrada na oficina no período selecionado, quantos já foram consertados e liberados? Isso mede o fôlego da sua equipe de manutenção contra a demanda que chega.</p>
           </div>
 
-          <div className="bg-rose-50 p-4 rounded-xl border border-rose-200">
-            <h3 className="font-black text-rose-900 mb-2 flex items-center gap-2"><FaRedo className="text-rose-600"/> Regra de Reincidência (Top Ofensores)</h3>
-            <p className="mb-1">Como o painel define que um carro é reincidente?</p>
+          <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+            <h3 className="font-black text-amber-900 mb-2 flex items-center gap-2"><FaRedo className="text-amber-600"/> Frotas Reincidentes</h3>
             <ul className="list-disc pl-5 space-y-1">
-              <li>O sistema rastreia o ciclo completo do carro: <strong>Entrou → Foi Liberado (Saiu) → Entrou novamente no mesmo período.</strong></li>
-              <li>Se um carro tem 3 registros no mês, mas a oficina nunca deu "saída" nele, ele conta como 1 única parada longa.</li>
+              <li>O sistema rastreia o ciclo completo: <strong>Entrou → Foi Liberado (Saiu) → Entrou novamente no mesmo período.</strong></li>
+              <li>Conta as vezes que o carro foi dado como pronto, rodou e quebrou de novo.</li>
             </ul>
-          </div>
-
-          <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-            <h3 className="font-black text-emerald-900 mb-2 flex items-center gap-2"><FaChartLine className="text-emerald-600"/> Média GNS/Dia</h3>
-            <p>Calcula a gravidade diária das quebras severas. É a divisão do <strong>Total de registros GNS do período</strong> pelos <strong>Dias trabalhados</strong>. É o termômetro de saúde da frota a curto prazo.</p>
           </div>
         </div>
 
@@ -442,20 +444,15 @@ export default function PCMResumo() {
   const [errMsg, setErrMsg] = useState("");
   const [serieMensal, setSerieMensal] = useState([]);
 
-  // Base do período
   const [diasPCM, setDiasPCM] = useState([]);
   const [veiculosPeriodo, setVeiculosPeriodo] = useState([]);
-  
-  // Base do Backlog (Carros abertos independentes de data - Para o Raio X e Aging)
   const [backlogAberto, setBacklogAberto] = useState([]);
 
-  // Reincidências e Tops
   const [reincidencias, setReincidencias] = useState([]);
   const [reincQuery, setReincQuery] = useState("");
   const [topParado, setTopParado] = useState([]);
   const [topReinc, setTopReinc] = useState([]);
 
-  // Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [modalFrota, setModalFrota] = useState(null);
   const [modalRows, setModalRows] = useState([]);
@@ -520,22 +517,13 @@ export default function PCMResumo() {
   }, []);
 
   const carregarPeriodo = useCallback(async () => {
-    // 1) Dias com PCM no período
-    const { data: pcmsRaw, error: e1 } = await supabase
-      .from("pcm_diario")
-      .select("id, data_referencia, criado_por")
-      .gte("data_referencia", inicio)
-      .lte("data_referencia", fim)
-      .order("data_referencia", { ascending: true });
-
+    const { data: pcmsRaw, error: e1 } = await supabase.from("pcm_diario").select("id, data_referencia, criado_por").gte("data_referencia", inicio).lte("data_referencia", fim).order("data_referencia", { ascending: true });
     if (e1) throw e1;
 
     const pcms = dayFilter === "ALL" ? pcmsRaw || [] : (pcmsRaw || []).filter((p) => dayTypeFromISO(p.data_referencia) === dayFilter);
     setDiasPCM(pcms);
 
-    // 2) Veículos do período E Backlog Puro
     const pcmIds = (pcms || []).map((p) => p.id);
-
     const [qA, qB, qBacklog] = await Promise.all([
       supabase.from("veiculos_pcm").select("id, pcm_id, frota, setor, categoria, ordem_servico, descricao, observacao, data_entrada, data_saida, lancado_por, lancado_no_turno").gte("data_entrada", `${inicio}T00:00:00`).lte("data_entrada", `${fim}T23:59:59`),
       pcmIds.length ? supabase.from("veiculos_pcm").select("id, pcm_id, frota, setor, categoria, ordem_servico, descricao, observacao, data_entrada, data_saida, lancado_por, lancado_no_turno").is("data_entrada", null).in("pcm_id", pcmIds) : Promise.resolve({ data: [], error: null }),
@@ -546,7 +534,6 @@ export default function PCMResumo() {
     if (qB.error) throw qB.error;
     if (qBacklog.error) throw qBacklog.error;
 
-    // Seta Backlog Real
     setBacklogAberto((qBacklog.data || []).map(v => ({ ...v, data_efetiva: v.data_entrada || (v.pcm_diario?.data_referencia ? `${v.pcm_diario.data_referencia}T00:00:00` : null) })));
 
     const all = [...(qA.data || []), ...(qB.data || [])];
@@ -556,7 +543,6 @@ export default function PCMResumo() {
 
     setVeiculosPeriodo(normalizedFiltered);
 
-    // 3) Reincidências
     const byFrota = new Map();
     normalizedFiltered.forEach((v) => {
       const f = String(v.frota || "").trim();
@@ -625,9 +611,8 @@ export default function PCMResumo() {
   const { kpis, analiseTatica } = useMemo(() => {
     const diasComPCM = (diasPCM || []).length;
     const totalPeriodo = (veiculosPeriodo || []).length;
-    const totalAbertos = backlogAberto.length; // Raio-X puro do pátio
+    const totalAbertos = backlogAberto.length;
     
-    // Resolução do período
     const resolvidosNoPeriodo = veiculosPeriodo.filter(v => v.data_saida).length;
     const taxaResolucao = totalPeriodo ? (resolvidosNoPeriodo / totalPeriodo) * 100 : 0;
 
@@ -636,20 +621,21 @@ export default function PCMResumo() {
     const mediaGNSDia = diasComPCM ? safeNum(totalGNS / diasComPCM, 2) : 0;
     const frotasReincidentes = (reincidencias || []).length;
 
-    // Aging do BACKLOG (Ignora filtro de data)
+    // ✅ FILTRO APLICADO: Aging conta APENAS veículos GNS em aberto
     const buckets = { "0-1": 0, "2-3": 0, "4-7": 0, "8-15": 0, "16+": 0 };
     const now = new Date().toISOString();
-    backlogAberto.forEach((v) => {
-      const dtIn = v.data_efetiva;
-      const dias = dtIn ? daysDiff(dtIn, now) : 0;
-      if (dias <= 1) buckets["0-1"] += 1;
-      else if (dias <= 3) buckets["2-3"] += 1;
-      else if (dias <= 7) buckets["4-7"] += 1;
-      else if (dias <= 15) buckets["8-15"] += 1;
-      else buckets["16+"] += 1;
-    });
+    backlogAberto
+      .filter(v => v.categoria === "GNS") 
+      .forEach((v) => {
+        const dtIn = v.data_efetiva;
+        const dias = dtIn ? daysDiff(dtIn, now) : 0;
+        if (dias <= 1) buckets["0-1"] += 1;
+        else if (dias <= 3) buckets["2-3"] += 1;
+        else if (dias <= 7) buckets["4-7"] += 1;
+        else if (dias <= 15) buckets["8-15"] += 1;
+        else buckets["16+"] += 1;
+      });
 
-    // Motivos do Backlog (Por que o pátio está cheio HOJE)
     const obsMap = {};
     backlogAberto.forEach(v => {
       const obs = String(v.observacao || "Sem Classificação").toUpperCase().trim();
@@ -657,7 +643,6 @@ export default function PCMResumo() {
     });
     const motivosBacklog = Object.entries(obsMap).sort((a,b) => b[1]-a[1]).map(([nome, val]) => ({nome, val}));
 
-    // Top Defeitos do Período
     const defMap = {};
     let turnoDia = 0, turnoNoite = 0;
     veiculosPeriodo.forEach(v => {
@@ -795,7 +780,7 @@ export default function PCMResumo() {
         {/* RAIO-X DO GARGALO (Por que estão parados) */}
         <div className="bg-slate-800 text-white border border-slate-700 rounded-2xl p-5 shadow-md flex flex-col">
           <h3 className="text-sm font-black uppercase tracking-wider mb-4 flex items-center gap-2">
-            <FaChartPie className="text-slate-400" /> Raio-X do Backlog (Status Real)
+            <FaChartPie className="text-slate-400" /> Raio-X do Backlog (Total Oficina)
           </h3>
           <div className="space-y-3 flex-1">
             {analiseTatica.motivosBacklog.map((m, i) => (
@@ -807,7 +792,7 @@ export default function PCMResumo() {
             {analiseTatica.motivosBacklog.length === 0 && <div className="text-xs font-bold text-slate-400">Pátio limpo! Nenhum carro em aberto.</div>}
           </div>
           <p className="mt-4 text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">
-            * Distribuição dos {kpis.totalAbertos} carros parados na oficina hoje.
+            * Baseia-se nos {kpis.totalAbertos} carros "Em Aberto" no pátio hoje.
           </p>
         </div>
       </div>

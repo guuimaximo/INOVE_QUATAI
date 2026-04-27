@@ -55,6 +55,18 @@ function getSafeFarolRedirect(rawUrl) {
   }
 }
 
+function normalizeAccessValue(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function isPendingAccessLevel(nivel) {
+  return normalizeAccessValue(nivel) === "pendente";
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -183,9 +195,8 @@ export default function Login() {
       }
 
       const nivel = String(data.nivel || "").trim();
-      const statusCadastro = String(data.status_cadastro || "").trim();
 
-      if (nivel === "Pendente" || statusCadastro === "Pendente") {
+      if (isPendingAccessLevel(nivel)) {
         pushFeedback("error", "Seu cadastro ainda esta em analise pelo administrador.");
         return;
       }

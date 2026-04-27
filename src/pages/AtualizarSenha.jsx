@@ -17,10 +17,10 @@ export default function AtualizarSenha() {
   const rules = useMemo(
     () => [
       { label: "8 caracteres ou mais", ok: password.length >= 8 },
-      { label: "Uma letra maiÃºscula", ok: /[A-Z]/.test(password) },
-      { label: "Um nÃºmero", ok: /\d/.test(password) },
+      { label: "Uma letra maiuscula", ok: /[A-Z]/.test(password) },
+      { label: "Um numero", ok: /\d/.test(password) },
       {
-        label: "Um sÃ­mbolo",
+        label: "Um simbolo",
         ok: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/.test(password),
       },
     ],
@@ -64,20 +64,20 @@ export default function AtualizarSenha() {
     setFeedback(null);
 
     if (!hasRecoverySession) {
-      setFeedback({ type: "error", text: "Abra novamente o link de redefiniÃ§Ã£o enviado pelo e-mail." });
+      setFeedback({ type: "error", text: "Abra novamente o link de redefinicao enviado pelo e-mail." });
       return;
     }
 
     if (!PASSWORD_REGEX.test(password)) {
       setFeedback({
         type: "error",
-        text: "A nova senha precisa ter no mÃ­nimo 8 caracteres, com maiÃºscula, nÃºmero e sÃ­mbolo.",
+        text: "A nova senha precisa ter no minimo 8 caracteres, com maiuscula, numero e simbolo.",
       });
       return;
     }
 
     if (password !== confirmPassword) {
-      setFeedback({ type: "error", text: "A confirmaÃ§Ã£o da senha nÃ£o confere." });
+      setFeedback({ type: "error", text: "A confirmacao da senha nao confere." });
       return;
     }
 
@@ -87,7 +87,7 @@ export default function AtualizarSenha() {
 
     if (error) {
       setLoading(false);
-      setFeedback({ type: "error", text: error.message || "NÃ£o foi possÃ­vel atualizar a senha." });
+      setFeedback({ type: "error", text: error.message || "Nao foi possivel atualizar a senha." });
       return;
     }
 
@@ -95,7 +95,7 @@ export default function AtualizarSenha() {
     setLoading(false);
     setFeedback({
       type: "success",
-      text: "Senha atualizada com sucesso. FaÃ§a login novamente com a nova senha.",
+      text: "Senha atualizada com sucesso. Faca login novamente com a nova senha.",
     });
 
     window.setTimeout(() => navigate("/login", { replace: true }), 1500);
@@ -104,7 +104,7 @@ export default function AtualizarSenha() {
   if (!ready) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">
-        Preparando recuperaÃ§Ã£o de senha...
+        Preparando recuperacao de senha...
       </div>
     );
   }
@@ -118,14 +118,14 @@ export default function AtualizarSenha() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900">Definir nova senha</h1>
           <p className="text-sm text-slate-500 mt-2">
-            Use uma senha forte para concluir sua recuperaÃ§Ã£o de acesso.
+            Use uma senha forte para concluir sua recuperacao de acesso.
           </p>
         </div>
 
         {!hasRecoverySession ? (
           <div className="space-y-4">
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              O link de recuperaÃ§Ã£o nÃ£o estÃ¡ ativo nesta sessÃ£o. Solicite um novo e-mail de redefiniÃ§Ã£o.
+              O link de recuperacao nao esta ativo nesta sessao. Solicite um novo e-mail de redefinicao.
             </div>
             <Link
               to="/login"

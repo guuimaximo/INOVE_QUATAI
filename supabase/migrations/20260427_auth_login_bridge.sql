@@ -139,6 +139,8 @@ as $$
 declare
   v_auth_user_id uuid := auth.uid();
   v_usuario_id integer;
+  v_nivel text;
+  v_ativo boolean;
 begin
   if v_auth_user_id is null then
     raise exception 'Sessao invalida para atualizar perfil.';
@@ -157,11 +159,35 @@ begin
     limit 1;
   end if;
 
-  update public.profiles
-     set nome = nullif(trim(p_nome), ''),
-         login = nullif(trim(p_login), ''),
-         setor = nullif(trim(p_setor), '')
-   where id = v_auth_user_id;
+  select p.nivel, p.ativo
+    into v_nivel, v_ativo
+  from public.profiles p
+  where p.id = v_auth_user_id;
+
+  if v_nivel is null and v_usuario_id is not null then
+    select u.nivel, coalesce(u.ativo, true)
+      into v_nivel, v_ativo
+    from public.usuarios_aprovadores u
+    where u.id = v_usuario_id;
+  end if;
+
+  insert into public.profiles (id, usuario_id, nome, nivel, setor, ativo, login)
+  values (
+    v_auth_user_id,
+    v_usuario_id,
+    nullif(trim(p_nome), ''),
+    coalesce(v_nivel, 'Pendente'),
+    nullif(trim(p_setor), ''),
+    coalesce(v_ativo, true),
+    nullif(trim(p_login), '')
+  )
+  on conflict (id) do update
+    set usuario_id = excluded.usuario_id,
+        nome = excluded.nome,
+        setor = excluded.setor,
+        login = excluded.login,
+        nivel = coalesce(public.profiles.nivel, excluded.nivel),
+        ativo = coalesce(public.profiles.ativo, excluded.ativo);
 
   if v_usuario_id is not null then
     update public.usuarios_aprovadores

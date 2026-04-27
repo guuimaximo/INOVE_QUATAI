@@ -5,14 +5,9 @@ returns table (
   auth_user_id uuid,
   auth_email text,
   usuario_id integer,
-  nome text,
-  login text,
   legacy_email text,
-  nivel text,
-  setor text,
   ativo boolean,
   status_cadastro text,
-  migrado_auth boolean,
   email_precisa_correcao boolean
 )
 language sql
@@ -24,14 +19,9 @@ as $$
       coalesce(u.auth_user_id, au.id) as auth_user_id,
       au.email as auth_email,
       u.id as usuario_id,
-      u.nome,
-      u.login,
       u.email as legacy_email,
-      u.nivel,
-      u.setor,
       coalesce(u.ativo, false) as ativo,
-      u.status_cadastro,
-      coalesce(u.migrado_auth, false) as migrado_auth
+      u.status_cadastro
     from public.usuarios_aprovadores u
     left join lateral (
       select a.id, a.email
@@ -67,45 +57,60 @@ as $$
     auth_user_id,
     auth_email,
     usuario_id,
-    nome,
-    login,
     legacy_email,
-    nivel,
-    setor,
     ativo,
     status_cadastro,
-    migrado_auth,
     coalesce(auth_email ilike '%@inove.local', true) as email_precisa_correcao
   from matched;
 $$;
 
 grant execute on function public.resolve_auth_account(text) to anon, authenticated;
 
-create or replace function public.link_auth_account(
-  p_usuario_id integer,
-  p_auth_user_id uuid,
-  p_email text
-)
+create or replace function public.link_auth_account(p_email text)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, auth
 as $$
+declare
+  v_auth_user_id uuid := auth.uid();
+  v_auth_email text;
+  v_usuario_id integer;
 begin
-  if auth.uid() is null or auth.uid() <> p_auth_user_id then
-    raise exception 'Usuario nao autorizado a vincular esta conta.';
+  if v_auth_user_id is null then
+    raise exception 'Usuario nao autenticado.';
+  end if;
+
+  select a.email
+    into v_auth_email
+  from auth.users a
+  where a.id = v_auth_user_id;
+
+  select u.id
+    into v_usuario_id
+  from public.usuarios_aprovadores u
+  where
+    u.auth_user_id = v_auth_user_id
+    or lower(coalesce(u.email, '')) = lower(coalesce(v_auth_email, ''))
+  order by
+    case when u.auth_user_id = v_auth_user_id then 0 else 1 end,
+    u.id asc
+  limit 1;
+
+  if v_usuario_id is null then
+    raise exception 'Nao foi possivel identificar o cadastro legado para esse usuario.';
   end if;
 
   update public.usuarios_aprovadores
-     set auth_user_id = p_auth_user_id,
+     set auth_user_id = v_auth_user_id,
          migrado_auth = true,
          email = coalesce(nullif(trim(p_email), ''), email),
          atualizado_em = now()
-   where id = p_usuario_id;
+   where id = v_usuario_id;
 
   insert into public.profiles (id, usuario_id, nome, nivel, setor, ativo, login)
   select
-    p_auth_user_id,
+    v_auth_user_id,
     u.id,
     u.nome,
     u.nivel,
@@ -113,7 +118,7 @@ begin
     coalesce(u.ativo, true),
     u.login
   from public.usuarios_aprovadores u
-  where u.id = p_usuario_id
+  where u.id = v_usuario_id
   on conflict (id) do update
     set usuario_id = excluded.usuario_id,
         nome = excluded.nome,
@@ -124,7 +129,7 @@ begin
 end;
 $$;
 
-grant execute on function public.link_auth_account(integer, uuid, text) to authenticated;
+grant execute on function public.link_auth_account(text) to authenticated;
 
 create or replace function public.sync_profile_after_review(
   p_nome text,

@@ -1,13 +1,30 @@
-// src/pages/Login.jsx (PROJETO INOVE)
-import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { useAuth } from "../context/AuthContext";
 import {
-  User, Lock, LogIn, Mail, Check, X,
-  Loader2, Eye, EyeOff, KeyRound, RefreshCcw,
+  User,
+  Lock,
+  LogIn,
+  Mail,
+  Check,
+  X,
+  Loader2,
+  ChevronDown,
+  Briefcase,
+  Eye,
+  EyeOff,
+  KeyRound,
+  RefreshCcw,
 } from "lucide-react";
+import {
+  getAbsoluteUrl,
+  getRpcSetupMessage,
+  isPlaceholderEmail,
+  isValidEmail,
+  resolveAuthAccount,
+} from "../utils/authBridge";
 
 const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 const SETORES = [
@@ -19,468 +36,752 @@ const SETORES = [
   "Ouvidoria",
   "Financeiro",
 ];
+const PASSWORD_STRENGTH_REGEX = {
+  hasUpper: /[A-Z]/,
+  hasNumber: /\d/,
+  hasSpecial: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/,
+};
+const FAROL_ORIGIN = "https://faroldemetas.onrender.com";
 
-function PasswordCheck({ senha }) {
-  const checks = [
-    { label: "Mínimo 8 caracteres", ok: senha.length >= 8 },
-    { label: "Letra maiúscula", ok: /[A-Z]/.test(senha) },
-    { label: "Número", ok: /\d/.test(senha) },
-    { label: "Caractere especial", ok: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/.test(senha) },
-  ];
-  return (
-    <ul className="mt-1 space-y-1">
-      {checks.map((c) => (
-        <li key={c.label} className={`flex items-center gap-1 text-xs ${c.ok ? "text-green-400" : "text-slate-400"}`}>
-          {c.ok ? <Check size={12} /> : <X size={12} />} {c.label}
-        </li>
-      ))}
-    </ul>
-  );
+function getFriendlyError(error) {
+  const message = String(error?.message || "");
+
+  if (
+    message.includes("resolve_auth_account") ||
+    message.includes("Could not find the function public.resolve_auth_account")
+  ) {
+    return getRpcSetupMessage();
+  }
+
+  return message || "Nao foi possivel concluir a operacao.";
+}
+
+function getSafeFarolRedirect(rawUrl) {
+  if (!rawUrl) return null;
+
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.origin === FAROL_ORIGIN ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function Login() {
-  const navigate    = useNavigate();
-  const location    = useLocation();
-  const { login: ctxLogin } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { refreshUser } = useAuth();
 
-  const [isCadastro, setIsCadastro]       = useState(false);
-  const [showReset, setShowReset]         = useState(false);
-  const [loading, setLoading]             = useState(false);
-  const [mostrarSenha, setMostrarSenha]   = useState(false);
-  const [feedback, setFeedback]           = useState(null); // { type: "error"|"success", text }
+  const [isCadastro, setIsCadastro] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [showEmailFix, setShowEmailFix] = useState(false);
+  const [feedback, setFeedback] = useState(null);
 
-  // Campos login
   const [loginInput, setLoginInput] = useState("");
-  const [senha, setSenha]           = useState("");
-  const [resetEmail, setResetEmail] = useState("");
-
-  // Campos cadastro
-  const [nome, setNome]   = useState("");
+  const [senha, setSenha] = useState("");
+  const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [setor, setSetor] = useState("");
+  const [resetIdentifier, setResetIdentifier] = useState("");
+  const [correcaoEmail, setCorrecaoEmail] = useState("");
+  const [correcaoSenha, setCorrecaoSenha] = useState("");
 
-  const nextPath = location.state?.from?.pathname || "/inove";
+  const [passwordMetrics, setPasswordMetrics] = useState({
+    score: 0,
+    hasUpper: false,
+    hasNumber: false,
+    hasSpecial: false,
+    minChar: false,
+  });
 
-  function resetForm() {
-    setNome(""); setLoginInput(""); setSenha("");
-    setEmail(""); setSetor(""); setResetEmail("");
-    setFeedback(null);
+  const redirectParam = useMemo(() => {
+    const sp = new URLSearchParams(location.search);
+    const raw = sp.get("redirect");
+    if (!raw) return null;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }, [location.search]);
+
+  const nextPathState = location.state?.from?.pathname || null;
+
+  function decideDefaultNext() {
+    return "/inove";
   }
 
-  // ── ENTRAR ────────────────────────────────────────────────
-  async function handleEntrar(e) {
-    e.preventDefault();
-    setFeedback(null);
-    if (!loginInput.trim() || !senha) {
-      return setFeedback({ type: "error", text: "Preencha o login e a senha." });
-    }
-    setLoading(true);
+  function resetForm(clearFeedback = true) {
+    setNome("");
+    setLoginInput("");
+    setSenha("");
+    setEmail("");
+    setSetor("");
+    setResetIdentifier("");
+    setCorrecaoEmail("");
+    setCorrecaoSenha("");
+    setPasswordMetrics({
+      score: 0,
+      hasUpper: false,
+      hasNumber: false,
+      hasSpecial: false,
+      minChar: false,
+    });
+    if (clearFeedback) setFeedback(null);
+  }
+
+  function pushFeedback(type, text) {
+    setFeedback({ type, text });
+  }
+
+  useEffect(() => {
+    const storedLogin = localStorage.getItem("inove_login");
+    if (storedLogin && !loginInput) setLoginInput(storedLogin);
+  }, [loginInput]);
+
+  useEffect(() => {
+    if (!isCadastro) return;
+
+    const value = senha;
+    const metrics = {
+      hasUpper: PASSWORD_STRENGTH_REGEX.hasUpper.test(value),
+      hasNumber: PASSWORD_STRENGTH_REGEX.hasNumber.test(value),
+      hasSpecial: PASSWORD_STRENGTH_REGEX.hasSpecial.test(value),
+      minChar: value.length >= 8,
+    };
+
+    setPasswordMetrics({
+      ...metrics,
+      score: Object.values(metrics).filter(Boolean).length,
+    });
+  }, [senha, isCadastro]);
+
+  async function lookupAccount(identifier) {
+    const account = await resolveAuthAccount(identifier);
+    return account;
+  }
+
+  function rememberUserHints(identifier, userData) {
     try {
-      // 1. Buscar perfil pelo login
-      const { data: profile, error: pErr } = await supabase
-        .from("profiles")
-        .select("id, nome, nivel, setor, ativo, login")
-        .ilike("login", loginInput.trim())
-        .single();
-
-      if (pErr || !profile) {
-        setFeedback({ type: "error", text: "Login não encontrado." });
-        setLoading(false);
-        return;
-      }
-      if (!profile.ativo) {
-        setFeedback({ type: "error", text: "Conta inativa. Fale com o administrador." });
-        setLoading(false);
-        return;
-      }
-
-      // 2. Buscar email vinculado
-      const { data: authRow } = await supabase
-        .from("auth_emails_view")
-        .select("email")
-        .eq("id", profile.id)
-        .single();
-
-      const emailAuth = authRow?.email;
-      if (!emailAuth || emailAuth.endsWith("@inove.local")) {
-        // Sem email real — redirecionar para cadastrar email
-        setFeedback({
-          type: "error",
-          text: "Seu acesso ainda não foi migrado. Clique em 'Primeiro acesso' para configurar seu email.",
-        });
-        setLoading(false);
-        return;
-      }
-
-      // 3. Login Supabase Auth
-      const { data, error: signErr } = await supabase.auth.signInWithPassword({
-        email: emailAuth,
-        password: senha,
-      });
-      if (signErr) {
-        setFeedback({ type: "error", text: "Senha incorreta. Tente novamente ou redefina sua senha." });
-        setLoading(false);
-        return;
-      }
-
-      // 4. Montar user no contexto
-      ctxLogin({
-        id:         profile.id,
-        usuario_id: profile.usuario_id,
-        nome:       profile.nome,
-        nivel:      profile.nivel,
-        setor:      profile.setor,
-        ativo:      profile.ativo,
-        login:      profile.login,
-        email:      data.user.email,
-      });
-
-      // 5. Redirecionar
-      const nivel = String(profile.nivel || "").trim();
-      const dest  = NIVEIS_PORTAL.has(nivel) ? "/inove" : "/inove";
-      navigate(dest, { replace: true });
+      localStorage.setItem("inove_login", userData?.login || identifier || loginInput.trim());
+      localStorage.setItem("inove_nivel", String(userData?.nivel || ""));
+      localStorage.setItem("inove_nome", userData?.nome || "");
     } catch {
-      setFeedback({ type: "error", text: "Erro inesperado. Tente novamente." });
+      // noop
+    }
+  }
+
+  async function handleEntrar(event) {
+    event.preventDefault();
+    setFeedback(null);
+
+    const identifier = loginInput.trim();
+    const currentPassword = senha;
+
+    if (!identifier || !currentPassword) {
+      pushFeedback("error", "Informe seu usuario/e-mail e senha.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const account = await lookupAccount(identifier);
+
+      if (!account) {
+        pushFeedback("error", "Nenhum cadastro ativo foi encontrado para esse login/e-mail.");
+        return;
+      }
+
+      if (!account.auth_email) {
+        setShowEmailFix(true);
+        setCorrecaoEmail(account.legacy_email || "");
+        pushFeedback(
+          "error",
+          "Seu cadastro foi localizado, mas o usuario Auth ainda nao esta vinculado corretamente. Regularize o e-mail de acesso ou finalize a migracao no Supabase."
+        );
+        return;
+      }
+
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: account.auth_email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        pushFeedback("error", signInError.message || "Credenciais incorretas.");
+        return;
+      }
+
+      const hydratedUser = await refreshUser(signInData.session || null);
+      rememberUserHints(identifier, hydratedUser);
+
+      if (!hydratedUser?.ativo) {
+        await supabase.auth.signOut();
+        pushFeedback("error", "Sua conta esta inativa. Fale com o administrador.");
+        return;
+      }
+
+      const hydratedNivel = String(hydratedUser?.nivel || "").trim();
+      const statusCadastro = String(hydratedUser?.status_cadastro || "").trim();
+      if (hydratedNivel === "Pendente" || statusCadastro === "Pendente") {
+        await supabase.auth.signOut();
+        pushFeedback("error", "Seu cadastro ainda esta em analise pelo administrador.");
+        return;
+      }
+
+      if (account.email_precisa_correcao) {
+        alert(
+          "Seu acesso entrou usando um e-mail provisorio no Supabase. Use a opcao 'Corrigir e-mail de acesso' para trocar pelo e-mail correto antes de depender de recuperacao de senha."
+        );
+      }
+
+      const safeFarolRedirect = getSafeFarolRedirect(redirectParam);
+      if (safeFarolRedirect && NIVEIS_PORTAL.has(hydratedNivel)) {
+        window.location.href = safeFarolRedirect;
+        return;
+      }
+
+      if (hydratedUser?.requires_profile_review) {
+        navigate("/atualizar-perfil", { replace: true });
+        return;
+      }
+
+      navigate(nextPathState || decideDefaultNext(hydratedNivel), { replace: true });
+    } catch (error) {
+      pushFeedback("error", getFriendlyError(error));
     } finally {
       setLoading(false);
     }
   }
 
-  // ── CADASTRO (Primeiro acesso / novo usuário) ─────────────
-  async function handleCadastro(e) {
-    e.preventDefault();
+  async function handleSolicitarReset(event) {
+    event.preventDefault();
     setFeedback(null);
 
-    if (!nome.trim() || !loginInput.trim() || !email.trim() || !senha || !setor) {
-      return setFeedback({ type: "error", text: "Preencha todos os campos." });
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return setFeedback({ type: "error", text: "Email inválido." });
-    }
-    if (senha.length < 8 || !/[A-Z]/.test(senha) || !/\d/.test(senha) || !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/.test(senha)) {
-      return setFeedback({ type: "error", text: "A senha não atende aos requisitos de segurança." });
+    const identifier = (resetIdentifier || loginInput).trim();
+    if (!identifier) {
+      pushFeedback("error", "Informe o login ou e-mail para localizar a conta.");
+      return;
     }
 
     setLoading(true);
+
     try {
-      // Verificar se o login existe no profiles
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, nome, ativo, login")
-        .ilike("login", loginInput.trim())
-        .single();
+      const account = await lookupAccount(identifier);
 
-      if (!profile) {
-        setFeedback({ type: "error", text: "Login não encontrado. Verifique com o administrador." });
-        setLoading(false);
-        return;
-      }
-      if (!profile.ativo) {
-        setFeedback({ type: "error", text: "Conta inativa. Fale com o administrador." });
-        setLoading(false);
+      if (!account || !account.ativo) {
+        pushFeedback("error", "Conta nao encontrada ou inativa.");
         return;
       }
 
-      // Verificar se email já existe no Auth
-      const { data: existing } = await supabase
-        .from("auth_emails_view")
-        .select("email")
-        .eq("id", profile.id)
-        .single();
-
-      if (existing?.email && !existing.email.endsWith("@inove.local")) {
-        setFeedback({ type: "error", text: "Esse login já possui acesso configurado. Use 'Entrar' ou redefina sua senha." });
-        setLoading(false);
+      if (!account.auth_email) {
+        setShowEmailFix(true);
+        pushFeedback(
+          "error",
+          "Seu usuario ainda nao tem um e-mail de acesso valido no Supabase. Corrija o e-mail antes de usar recuperacao de senha."
+        );
         return;
       }
 
-      // Criar conta no Supabase Auth
-      const { error: signUpErr } = await supabase.auth.signUp({
-        email,
-        password: senha,
+      if (!isValidEmail(account.auth_email) || isPlaceholderEmail(account.auth_email)) {
+        setShowEmailFix(true);
+        setCorrecaoEmail(account.legacy_email || "");
+        pushFeedback(
+          "error",
+          "Sua conta ainda usa um e-mail provisorio. Corrija o e-mail de acesso primeiro e depois refaca a recuperacao de senha."
+        );
+        return;
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(account.auth_email, {
+        redirectTo: getAbsoluteUrl("/atualizar-senha"),
+      });
+
+      if (error) {
+        pushFeedback("error", error.message || "Nao foi possivel enviar o reset de senha.");
+        return;
+      }
+
+      pushFeedback(
+        "success",
+        `Enviamos a redefinicao de senha para ${account.auth_email}. Abra o link do e-mail para cadastrar a nova senha.`
+      );
+    } catch (error) {
+      pushFeedback("error", getFriendlyError(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCorrigirEmail(event) {
+    event.preventDefault();
+    setFeedback(null);
+
+    const identifier = loginInput.trim();
+    const currentPassword = correcaoSenha;
+    const newEmail = correcaoEmail.trim().toLowerCase();
+
+    if (!identifier || !currentPassword || !newEmail) {
+      pushFeedback("error", "Informe login/e-mail, senha atual e novo e-mail de acesso.");
+      return;
+    }
+
+    if (!isValidEmail(newEmail) || isPlaceholderEmail(newEmail)) {
+      pushFeedback("error", "Informe um e-mail corporativo valido para o novo acesso.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const account = await lookupAccount(identifier);
+
+      if (!account) {
+        pushFeedback("error", "Conta nao encontrada para esse login/e-mail.");
+        return;
+      }
+
+      if (!account.auth_email) {
+        pushFeedback(
+          "error",
+          "Este cadastro ainda nao possui um usuario Auth vinculado. O administrador precisa concluir a migracao desse usuario no Supabase."
+        );
+        return;
+      }
+
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: account.auth_email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        pushFeedback("error", "Nao foi possivel validar sua senha atual para corrigir o e-mail de acesso.");
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser(
+        { email: newEmail },
+        { emailRedirectTo: getAbsoluteUrl("/login") }
+      );
+
+      if (updateError) {
+        pushFeedback("error", updateError.message || "Falha ao atualizar o e-mail de acesso.");
+        return;
+      }
+
+      try {
+        await supabase.rpc("link_auth_account", {
+          p_email: newEmail,
+        });
+      } catch (rpcError) {
+        console.warn("Falha ao sincronizar usuarios_aprovadores:", rpcError);
+      }
+
+      await supabase.auth.signOut();
+      pushFeedback(
+        "success",
+        "Solicitacao de troca de e-mail enviada. Se o projeto estiver com 'Secure email change' ativo no Supabase, desative essa opcao ou conclua a confirmacao tambem no e-mail antigo."
+      );
+    } catch (error) {
+      pushFeedback("error", getFriendlyError(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCadastro(event) {
+    event.preventDefault();
+    setFeedback(null);
+
+    const nomeTrim = nome.trim();
+    const loginTrim = loginInput.trim();
+    const senhaTrim = senha;
+    const emailTrim = email.trim().toLowerCase();
+
+    if (!nomeTrim || !loginTrim || !senhaTrim || !setor || !emailTrim) {
+      pushFeedback("error", "Preencha todos os campos obrigatorios.");
+      return;
+    }
+
+    if (!isValidEmail(emailTrim)) {
+      pushFeedback("error", "Insira um e-mail valido.");
+      return;
+    }
+
+    if (passwordMetrics.score < 3) {
+      pushFeedback("error", "Senha muito fraca.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data: existingUser, error: checkError } = await supabase
+        .from("usuarios_aprovadores")
+        .select("id")
+        .or(`login.eq.${loginTrim},email.eq.${emailTrim}`)
+        .maybeSingle();
+
+      if (checkError) {
+        pushFeedback("error", "Erro ao verificar dados de cadastro.");
+        return;
+      }
+
+      if (existingUser) {
+        pushFeedback("error", "Este usuario ou e-mail ja estao cadastrados.");
+        return;
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: emailTrim,
+        password: senhaTrim,
         options: {
-          data: { nome: profile.nome, login: profile.login },
-          emailRedirectTo: window.location.origin + "/login",
+          emailRedirectTo: getAbsoluteUrl("/login"),
+          data: {
+            nome: nomeTrim,
+            nivel: "Pendente",
+            login: loginTrim,
+          },
         },
       });
 
-      if (signUpErr) {
-        setFeedback({ type: "error", text: "Erro ao criar acesso: " + signUpErr.message });
-        setLoading(false);
+      if (authError) {
+        pushFeedback("error", authError.message || "Nao foi possivel criar o acesso no Supabase Auth.");
         return;
       }
 
-      setFeedback({
-        type: "success",
-        text: "Acesso criado! Verifique seu email " + email + " para confirmar e depois faça login.",
-      });
-      resetForm();
+      const authUserId = authData.user?.id || null;
+
+      const { error: insertError } = await supabase.from("usuarios_aprovadores").insert([
+        {
+          nome: nomeTrim,
+          login: loginTrim,
+          email: emailTrim,
+          senha: null,
+          setor,
+          ativo: false,
+          nivel: "Pendente",
+          status_cadastro: "Pendente",
+          criado_em: new Date().toISOString(),
+          auth_user_id: authUserId,
+          migrado_auth: !!authUserId,
+        },
+      ]);
+
+      if (insertError) {
+        pushFeedback("error", insertError.message || "Erro ao registrar sua solicitacao de acesso.");
+        return;
+      }
+
+      await supabase.auth.signOut();
+      pushFeedback(
+        "success",
+        "Cadastro solicitado com sucesso. Se o Supabase exigir confirmacao de e-mail, valide a mensagem recebida antes do primeiro login."
+      );
       setIsCadastro(false);
-    } catch {
-      setFeedback({ type: "error", text: "Erro inesperado. Tente novamente." });
+      resetForm(false);
+    } catch (error) {
+      pushFeedback("error", getFriendlyError(error));
     } finally {
       setLoading(false);
     }
   }
 
-  // ── REDEFINIR SENHA ───────────────────────────────────────
-  async function enviarParaFarol(e) {
-    e.preventDefault();
-    setFeedback(null);
-    if (!resetEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(resetEmail)) {
-      return setFeedback({ type: "error", text: "Digite um email válido." });
-    }
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-        redirectTo: window.location.origin + "/redefinir-senha",
-      });
-      if (error) throw error;
-      setFeedback({
-        type: "success",
-        text: "Email de redefinição enviado para " + resetEmail + ". Verifique sua caixa de entrada.",
-      });
-      setResetEmail("");
-    } catch {
-      setFeedback({ type: "error", text: "Não foi possível enviar o email. Verifique o endereço informado." });
-    } finally {
-      setLoading(false);
-    }
-  }
+  const PasswordCheck = ({ label, met }) => (
+    <div className={`flex items-center gap-1.5 text-xs ${met ? "text-green-600 font-medium" : "text-slate-400"}`}>
+      {met ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
+      <span>{label}</span>
+    </div>
+  );
 
-  // ─────────────────────────────────────────────────────────
-  // UI
-  // ─────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-[#0f172a] to-slate-800 px-4 py-10">
-
-      {/* Logo */}
-      <img src={logoInova} alt="Inove Quatai" className="h-16 mb-8 object-contain drop-shadow-lg" />
-
-      <div className="w-full max-w-md bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl p-8">
-
-        {/* ── Tabs Entrar / Primeiro acesso ── */}
-        {!showReset && (
-          <div className="flex mb-6 rounded-lg overflow-hidden border border-white/10">
-            <button
-              type="button"
-              onClick={() => { setIsCadastro(false); resetForm(); }}
-              className={`flex-1 py-2 text-sm font-semibold transition ${!isCadastro ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
-            >
-              Entrar
-            </button>
-            <button
-              type="button"
-              onClick={() => { setIsCadastro(true); resetForm(); }}
-              className={`flex-1 py-2 text-sm font-semibold transition ${isCadastro ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
-            >
-              Primeiro acesso
-            </button>
-          </div>
-        )}
-
-        {/* ── Feedback ── */}
-        {feedback && (
-          <div className={`mb-4 px-4 py-3 rounded-lg text-sm flex items-start gap-2 ${feedback.type === "error" ? "bg-red-500/20 text-red-300 border border-red-500/30" : "bg-green-500/20 text-green-300 border border-green-500/30"}`}>
-            {feedback.type === "error" ? <X size={16} className="mt-0.5 shrink-0" /> : <Check size={16} className="mt-0.5 shrink-0" />}
-            {feedback.text}
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════
-            FORMULÁRIO — ENTRAR
-        ══════════════════════════════════════ */}
-        {!isCadastro && !showReset && (
-          <form onSubmit={handleEntrar} className="space-y-4">
-            <h2 className="text-white font-semibold text-lg mb-2">Bem-vindo ao Inove</h2>
-            <p className="text-slate-400 text-sm mb-4">
-              Use seu <strong className="text-slate-200">login</strong> e <strong className="text-slate-200">senha</strong> para acessar o sistema.
-            </p>
-
-            <div className="relative">
-              <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Seu login"
-                value={loginInput}
-                onChange={e => setLoginInput(e.target.value)}
-                autoFocus
-                className="w-full bg-white/10 border border-white/20 rounded-lg pl-9 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition text-sm"
-              />
-            </div>
-
-            <div className="relative">
-              <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type={mostrarSenha ? "text" : "password"}
-                placeholder="Senha"
-                value={senha}
-                onChange={e => setSenha(e.target.value)}
-                className="w-full bg-white/10 border border-white/20 rounded-lg pl-9 pr-10 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => setMostrarSenha(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
-              >
-                {mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => { setShowReset(true); setFeedback(null); }}
-                className="text-xs text-blue-400 hover:text-blue-300 transition"
-              >
-                Esqueci minha senha
-              </button>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2 text-sm"
-            >
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-              {loading ? "Verificando..." : "Entrar"}
-            </button>
-          </form>
-        )}
-
-        {/* ══════════════════════════════════════
-            FORMULÁRIO — PRIMEIRO ACESSO / CADASTRO
-        ══════════════════════════════════════ */}
-        {isCadastro && !showReset && (
-          <form onSubmit={handleCadastro} className="space-y-4">
-            <h2 className="text-white font-semibold text-lg mb-2">Configure seu acesso</h2>
-            <p className="text-slate-400 text-sm mb-4">
-              Informe seus dados para ativar o acesso seguro ao sistema Inove.
-            </p>
-
-            <div className="relative">
-              <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Seu nome completo"
-                value={nome}
-                onChange={e => setNome(e.target.value)}
-                autoFocus
-                className="w-full bg-white/10 border border-white/20 rounded-lg pl-9 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition text-sm"
-              />
-            </div>
-
-            <div className="relative">
-              <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Seu login (cadastrado pelo admin)"
-                value={loginInput}
-                onChange={e => setLoginInput(e.target.value)}
-                className="w-full bg-white/10 border border-white/20 rounded-lg pl-9 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition text-sm"
-              />
-            </div>
-
-            <div className="relative">
-              <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="email"
-                placeholder="Seu email corporativo"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full bg-white/10 border border-white/20 rounded-lg pl-9 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition text-sm"
-              />
-            </div>
-
-            <select
-              value={setor}
-              onChange={e => setSetor(e.target.value)}
-              className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition text-sm appearance-none"
-            >
-              <option value="" className="bg-slate-800">Selecione seu setor</option>
-              {SETORES.map(s => (
-                <option key={s} value={s} className="bg-slate-800">{s}</option>
-              ))}
-            </select>
-
-            <div>
-              <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type={mostrarSenha ? "text" : "password"}
-                  placeholder="Criar senha segura"
-                  value={senha}
-                  onChange={e => setSenha(e.target.value)}
-                  className="w-full bg-white/10 border border-white/20 rounded-lg pl-9 pr-10 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setMostrarSenha(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
-                >
-                  {mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {senha && <PasswordCheck senha={senha} />}
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2 text-sm"
-            >
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-              {loading ? "Configurando..." : "Ativar acesso"}
-            </button>
-          </form>
-        )}
-
-        {/* ══════════════════════════════════════
-            REDEFINIR SENHA
-        ══════════════════════════════════════ */}
-        {showReset && (
-          <form onSubmit={enviarParaFarol} className="space-y-4">
-            <h2 className="text-white font-semibold text-lg mb-2">Redefinir senha</h2>
-            <p className="text-slate-400 text-sm mb-4">
-              Informe o email cadastrado. Vamos enviar um link para você criar uma nova senha.
-            </p>
-
-            <div className="relative">
-              <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="email"
-                placeholder="Seu email cadastrado"
-                value={resetEmail}
-                onChange={e => setResetEmail(e.target.value)}
-                autoFocus
-                className="w-full bg-white/10 border border-white/20 rounded-lg pl-9 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition text-sm"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2 text-sm"
-            >
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
-              {loading ? "Enviando..." : "Enviar link de redefinição"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { setShowReset(false); setFeedback(null); setResetEmail(""); }}
-              className="w-full text-slate-400 hover:text-white text-sm py-2 transition"
-            >
-              ← Voltar para o login
-            </button>
-          </form>
-        )}
-
+    <div className="min-h-screen flex bg-slate-50 font-sans">
+      <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
+        <div className="relative z-10 flex flex-col items-center">
+          <img src={logoInova} alt="Logo Portal Inove" className="w-48 mb-8 drop-shadow-xl" />
+          <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
+          <p className="text-blue-100 max-w-sm text-lg leading-relaxed text-justify">
+            O papel da lideranca no Grupo CSC e motivar e capacitar pessoas, entendendo a individualidade de cada um,
+            com disciplina e comprometimento, gerando resiliencia e coragem para influenciar, quebrar barreiras,
+            melhorar processos e entregar resultados com foco na seguranca, na satisfacao do cliente e na otimizacao de
+            custos.
+          </p>
+        </div>
       </div>
 
-      <p className="text-slate-600 text-xs mt-6">
-        Inove Quatai © {new Date().getFullYear()} — Acesso restrito a colaboradores autorizados
-      </p>
+      <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
+        <div className="w-full max-w-md space-y-6">
+          <div className="lg:hidden text-center">
+            <img src={logoInova} alt="Logo InovaQuatai" className="mx-auto mb-4 w-32 h-auto" />
+          </div>
+
+          <div className="text-center lg:text-left">
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              {isCadastro ? "Criar nova conta" : "Acesse sua conta"}
+            </h1>
+            {redirectParam && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 font-medium">
+                Conectando ao Farol Tatico... (faca login para continuar)
+              </div>
+            )}
+            <p className="mt-2 text-slate-500">
+              {isCadastro
+                ? "Preencha todos os dados abaixo para solicitar acesso."
+                : "Entre com suas credenciais para continuar."}
+            </p>
+          </div>
+
+          {feedback && (
+            <div
+              className={`rounded-xl px-4 py-3 text-sm ${
+                feedback.type === "success"
+                  ? "bg-green-50 border border-green-200 text-green-700"
+                  : "bg-red-50 border border-red-200 text-red-700"
+              }`}
+            >
+              {feedback.text}
+            </div>
+          )}
+
+          <form onSubmit={isCadastro ? handleCadastro : handleEntrar} className="space-y-5">
+            {!isCadastro && (
+              <>
+                <div className="relative group">
+                  <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Usuario ou e-mail"
+                    value={loginInput}
+                    onChange={(event) => setLoginInput(event.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
+                  />
+                </div>
+
+                <div className="relative group">
+                  <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input
+                    type={mostrarSenha ? "text" : "password"}
+                    placeholder="Senha"
+                    value={senha}
+                    onChange={(event) => setSenha(event.target.value)}
+                    className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarSenha(!mostrarSenha)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-blue-600 transition p-1"
+                  >
+                    {mostrarSenha ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {isCadastro && (
+              <div className="space-y-4">
+                <div className="relative group">
+                  <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Nome completo *"
+                    value={nome}
+                    onChange={(event) => setNome(event.target.value)}
+                    className="w-full pl-10 py-3 bg-white border rounded-xl"
+                  />
+                </div>
+                <div className="relative group">
+                  <Mail className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input
+                    type="email"
+                    placeholder="E-mail corporativo *"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="w-full pl-10 py-3 bg-white border rounded-xl"
+                  />
+                </div>
+                <div className="relative group">
+                  <Briefcase className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <select
+                    value={setor}
+                    onChange={(event) => setSetor(event.target.value)}
+                    className="w-full pl-10 py-3 bg-white border rounded-xl appearance-none"
+                  >
+                    <option value="">Selecione seu setor *</option>
+                    {SETORES.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-3.5 pointer-events-none text-slate-400" size={20} />
+                </div>
+                <div className="relative group">
+                  <LogIn className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Usuario (login) *"
+                    value={loginInput}
+                    onChange={(event) => setLoginInput(event.target.value)}
+                    className="w-full pl-10 py-3 bg-white border rounded-xl"
+                  />
+                </div>
+                <div className="relative group">
+                  <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input
+                    type="password"
+                    placeholder="Senha *"
+                    value={senha}
+                    onChange={(event) => setSenha(event.target.value)}
+                    className="w-full pl-10 py-3 bg-white border rounded-xl"
+                  />
+                </div>
+
+                {senha.length > 0 && (
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <div className="flex gap-1 h-1.5 mb-2">
+                      {[1, 2, 3, 4].map((step) => (
+                        <div
+                          key={step}
+                          className={`flex-1 rounded-full ${passwordMetrics.score >= step ? "bg-green-500" : "bg-slate-200"}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <PasswordCheck label="8+ caracteres" met={passwordMetrics.minChar} />
+                      <PasswordCheck label="Maiuscula" met={passwordMetrics.hasUpper} />
+                      <PasswordCheck label="Numero" met={passwordMetrics.hasNumber} />
+                      <PasswordCheck label="Simbolo" met={passwordMetrics.hasSpecial} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <Loader2 className="animate-spin" size={22} />
+              ) : isCadastro ? (
+                "Solicitar cadastro"
+              ) : (
+                "Entrar no sistema"
+              )}
+            </button>
+          </form>
+
+          {!isCadastro && (
+            <div className="grid gap-3">
+              <button
+                type="button"
+                onClick={() => setShowReset((prev) => !prev)}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700"
+              >
+                <KeyRound size={16} /> Esqueci minha senha
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowEmailFix((prev) => !prev)}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700"
+              >
+                <RefreshCcw size={16} /> Corrigir e-mail de acesso
+              </button>
+            </div>
+          )}
+
+          {showReset && !isCadastro && (
+            <form onSubmit={handleSolicitarReset} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+              <h2 className="font-semibold text-slate-900">Recuperar senha</h2>
+              <p className="text-sm text-slate-500">
+                O reset segue o fluxo correto do Supabase e envia um link para redefinir a senha.
+              </p>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Usuario ou e-mail"
+                  value={resetIdentifier}
+                  onChange={(event) => setResetIdentifier(event.target.value)}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-white font-semibold hover:bg-slate-800 disabled:opacity-70"
+              >
+                Enviar redefinicao
+              </button>
+            </form>
+          )}
+
+          {showEmailFix && !isCadastro && (
+            <form onSubmit={handleCorrigirEmail} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+              <h2 className="font-semibold text-slate-900">Corrigir e-mail de acesso</h2>
+              <p className="text-sm text-slate-500">
+                Use sua senha atual para trocar o e-mail provisorio do Supabase pelo e-mail correto de trabalho.
+              </p>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
+                <input
+                  type="email"
+                  placeholder="Novo e-mail de acesso"
+                  value={correcaoEmail}
+                  onChange={(event) => setCorrecaoEmail(event.target.value)}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                />
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3.5 text-slate-400" size={18} />
+                <input
+                  type="password"
+                  placeholder="Senha atual"
+                  value={correcaoSenha}
+                  onChange={(event) => setCorrecaoSenha(event.target.value)}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-white font-semibold hover:bg-emerald-700 disabled:opacity-70"
+              >
+                Atualizar e-mail de acesso
+              </button>
+            </form>
+          )}
+
+          <div className="mt-4 text-center">
+            <p className="text-slate-600">
+              {isCadastro ? "Ja possui cadastro?" : "Nao tem uma conta?"}{" "}
+              <button
+                onClick={() => {
+                  setIsCadastro(!isCadastro);
+                  setShowReset(false);
+                  setShowEmailFix(false);
+                  resetForm();
+                }}
+                className="text-blue-600 font-bold hover:underline"
+              >
+                {isCadastro ? "Fazer login" : "Cadastre-se aqui"}
+              </button>
+            </p>
+          </div>
+
+          <div className="text-center mt-6">
+            <p className="text-xs text-slate-400">(c) {new Date().getFullYear()} PORTAL INOVE</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
+

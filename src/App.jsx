@@ -3,6 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import AtualizarSenha from "./pages/AtualizarSenha";
+import AtualizarPerfil from "./pages/AtualizarPerfil";
 
 import Dashboard from "./pages/Dashboard";
 import InicioRapido from "./pages/InicioRapido";
@@ -89,6 +90,7 @@ export default function App() {
             </RequireAuth>
           }
         >
+          <Route path="/atualizar-perfil" element={<AtualizarPerfil />} />
           <Route path="/" element={<HomeDecider />} />
           <Route path="/inove" element={<HomeDecider />} />
           <Route path="/portal" element={<Navigate to="/inove" replace />} />

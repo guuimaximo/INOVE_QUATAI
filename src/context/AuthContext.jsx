@@ -10,6 +10,38 @@ import {
 
 export const AuthContext = createContext();
 
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+
+function sameText(a, b) {
+  return normalizeText(a).toLowerCase() === normalizeText(b).toLowerCase();
+}
+
+function getProfileReviewStatus(profile, legacyUser) {
+  if (!legacyUser) {
+    return {
+      requiresProfileReview: !profile?.nome || !profile?.login || !profile?.setor,
+      profileReviewReasons: [],
+    };
+  }
+
+  const reasons = [];
+
+  if (!normalizeText(profile?.nome)) reasons.push("nome");
+  if (!normalizeText(profile?.login)) reasons.push("login");
+  if (!normalizeText(profile?.setor)) reasons.push("setor");
+
+  if (normalizeText(legacyUser.nome) && !sameText(profile?.nome, legacyUser.nome)) reasons.push("nome_desatualizado");
+  if (normalizeText(legacyUser.login) && !sameText(profile?.login, legacyUser.login)) reasons.push("login_desatualizado");
+  if (normalizeText(legacyUser.setor) && !sameText(profile?.setor, legacyUser.setor)) reasons.push("setor_desatualizado");
+
+  return {
+    requiresProfileReview: reasons.length > 0,
+    profileReviewReasons: reasons,
+  };
+}
+
 async function loadProfile(userId) {
   if (!userId) return null;
 
@@ -69,6 +101,7 @@ function buildNormalizedUser(session, profile, legacyUser) {
     legacyUser?.login ??
     authUser?.email ??
     null;
+  const profileReview = getProfileReviewStatus(profile, legacyUser);
 
   return {
     id: usuarioId ?? authUser?.id ?? null,
@@ -84,6 +117,8 @@ function buildNormalizedUser(session, profile, legacyUser) {
       legacyUser?.status_cadastro ?? (nivel === "Pendente" ? "Pendente" : "Aprovado"),
     migrado_auth: legacyUser?.migrado_auth ?? true,
     created_at: authUser?.created_at ?? null,
+    requires_profile_review: profileReview.requiresProfileReview,
+    profile_review_reasons: profileReview.profileReviewReasons,
   };
 }
 

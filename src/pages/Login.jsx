@@ -233,6 +233,11 @@ export default function Login() {
         return;
       }
 
+      if (hydratedUser?.requires_profile_review) {
+        navigate("/atualizar-perfil", { replace: true });
+        return;
+      }
+
       navigate(nextPathState || decideDefaultNext(hydratedUser?.nivel || nivel), { replace: true });
     } catch (error) {
       pushFeedback("error", getFriendlyError(error));

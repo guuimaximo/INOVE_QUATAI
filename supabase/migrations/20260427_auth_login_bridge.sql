@@ -125,3 +125,53 @@ end;
 $$;
 
 grant execute on function public.link_auth_account(integer, uuid, text) to authenticated;
+
+create or replace function public.sync_profile_after_review(
+  p_nome text,
+  p_login text,
+  p_setor text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_auth_user_id uuid := auth.uid();
+  v_usuario_id integer;
+begin
+  if v_auth_user_id is null then
+    raise exception 'Sessao invalida para atualizar perfil.';
+  end if;
+
+  select p.usuario_id
+    into v_usuario_id
+  from public.profiles p
+  where p.id = v_auth_user_id;
+
+  if v_usuario_id is null then
+    select u.id
+      into v_usuario_id
+    from public.usuarios_aprovadores u
+    where u.auth_user_id = v_auth_user_id
+    limit 1;
+  end if;
+
+  update public.profiles
+     set nome = nullif(trim(p_nome), ''),
+         login = nullif(trim(p_login), ''),
+         setor = nullif(trim(p_setor), '')
+   where id = v_auth_user_id;
+
+  if v_usuario_id is not null then
+    update public.usuarios_aprovadores
+       set nome = nullif(trim(p_nome), ''),
+           login = nullif(trim(p_login), ''),
+           setor = nullif(trim(p_setor), ''),
+           atualizado_em = now()
+     where id = v_usuario_id;
+  end if;
+end;
+$$;
+
+grant execute on function public.sync_profile_after_review(text, text, text) to authenticated;

@@ -1,67 +1,67 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout";
-import Login from "./pages/Login";
-import AtualizarSenha from "./pages/AtualizarSenha";
-import AtualizarPerfil from "./pages/AtualizarPerfil";
+import Login from "./pages/auth/Login";
+import AtualizarSenha from "./pages/auth/AtualizarSenha";
+import AtualizarPerfil from "./pages/auth/AtualizarPerfil";
 
-import Dashboard from "./pages/Dashboard";
-import InicioRapido from "./pages/InicioRapido";
+import Dashboard from "./pages/home/Dashboard";
+import InicioRapido from "./pages/home/InicioRapido";
 
-import CentralTratativas from "./pages/CentralTratativas";
-import TratativasResumo from "./pages/TratativasResumo";
-import TratarTratativa from "./pages/TratarTratativa";
-import ConsultarTratativa from "./pages/ConsultarTratativa";
-import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
-import TratativasRH from "./pages/TratativasRH";
+import CentralTratativas from "./pages/tratativas/CentralTratativas";
+import TratativasResumo from "./pages/tratativas/TratativasResumo";
+import TratarTratativa from "./pages/tratativas/TratarTratativa";
+import ConsultarTratativa from "./pages/tratativas/ConsultarTratativa";
+import SolicitacaoTratativa from "./pages/tratativas/SolicitacaoTratativa";
+import TratativasRH from "./pages/tratativas/TratativasRH";
 
-import LancarAvaria from "./pages/LancarAvaria";
-import CobrancasAvarias from "./pages/CobrancasAvarias";
-import AprovacaoAvarias from "./pages/AprovacaoAvarias";
-import AvariasEmRevisao from "./pages/AvariasEmRevisao";
-import AvariasResumo from "./pages/AvariasResumo";
+import LancarAvaria from "./pages/avarias/LancarAvaria";
+import CobrancasAvarias from "./pages/avarias/CobrancasAvarias";
+import AprovacaoAvarias from "./pages/avarias/AprovacaoAvarias";
+import AvariasEmRevisao from "./pages/avarias/AvariasEmRevisao";
+import AvariasResumo from "./pages/avarias/AvariasResumo";
 
-import SolicitacaoSOS from "./pages/SolicitacaoSOS";
-import SOSFechamento from "./pages/SOSFechamento";
-import SOSTratamento from "./pages/SOSTratamento";
-import SOSCentral from "./pages/SOSCentral";
-import SOSDashboard from "./pages/SOSDashboard";
-import SOS_Resumo from "./pages/SOS_Resumo";
+import SolicitacaoSOS from "./pages/intervencoes/SolicitacaoSOS";
+import SOSFechamento from "./pages/intervencoes/SOSFechamento";
+import SOSTratamento from "./pages/intervencoes/SOSTratamento";
+import SOSCentral from "./pages/intervencoes/SOSCentral";
+import SOSDashboard from "./pages/intervencoes/SOSDashboard";
+import SOS_Resumo from "./pages/intervencoes/SOS_Resumo";
 
-import KMRodado from "./pages/KMRodado";
+import KMRodado from "./pages/intervencoes/KMRodado";
 
-import PCMInicio from "./pages/PCMInicio";
-import PCMDiario from "./pages/PCMDiario";
-import PCMResumo from "./pages/PCMResumo";
-import PCM_Preventivas from "./pages/PCM_Preventivas";
+import PCMInicio from "./pages/pcm/PCMInicio";
+import PCMDiario from "./pages/pcm/PCMDiario";
+import PCMResumo from "./pages/pcm/PCMResumo";
+import PCM_Preventivas from "./pages/pcm/PCM_Preventivas";
 
-import Usuarios from "./pages/Usuarios";
+import Usuarios from "./pages/configuracoes/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
 
-import DesempenhoLancamento from "./pages/DesempenhoLancamento";
-import DesempenhoDieselResumo from "./pages/DesempenhoDieselResumo";
-import DesempenhoDieselAcompanhamento from "./pages/DesempenhoDieselAcompanhamento";
-import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
-import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
-import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
+import DesempenhoLancamento from "./pages/desempenho-diesel/DesempenhoLancamento";
+import DesempenhoDieselResumo from "./pages/desempenho-diesel/DesempenhoDieselResumo";
+import DesempenhoDieselAcompanhamento from "./pages/desempenho-diesel/DesempenhoDieselAcompanhamento";
+import DesempenhoDieselTratativas from "./pages/desempenho-diesel/DesempenhoDieselTratativas";
+import DesempenhoDieselAgente from "./pages/desempenho-diesel/DesempenhoDieselAgente";
+import DesempenhoDieselCheckpoint from "./pages/desempenho-diesel/DesempenhoDieselCheckpoint";
 
-import ChecklistCentral from "./pages/ChecklistCentral";
+import ChecklistCentral from "./pages/checklists/ChecklistCentral";
 
-import EmbarcadosCentral from "./pages/EmbarcadosCentral";
-import EmbarcadosMovimentacoes from "./pages/EmbarcadosMovimentacoes";
-import EmbarcadosReparos from "./pages/EmbarcadosReparos";
-import EmbarcadosEnvioManutencao from "./pages/EmbarcadosEnvioManutencao";
+import EmbarcadosCentral from "./pages/embarcados/EmbarcadosCentral";
+import EmbarcadosMovimentacoes from "./pages/embarcados/EmbarcadosMovimentacoes";
+import EmbarcadosReparos from "./pages/embarcados/EmbarcadosReparos";
+import EmbarcadosEnvioManutencao from "./pages/embarcados/EmbarcadosEnvioManutencao";
 import ReparoSolicitacaoDetalhes from "./components/embarcados/ReparoSolicitacaoDetalhes";
 import ReparoSolicitacaoExecucao from "./components/embarcados/ReparoSolicitacaoExecucao";
 
-import Desempenho_Diesel_Tratativas_Central from "./pages/Desempenho_Diesel_Tratativas_Central";
-import DieselTratarTratativa from "./pages/DieselTratarTratativa";
-import DieselConsultarTratativa from "./pages/DieselConsultarTratativa";
+import Desempenho_Diesel_Tratativas_Central from "./pages/desempenho-diesel/Desempenho_Diesel_Tratativas_Central";
+import DieselTratarTratativa from "./pages/desempenho-diesel/DieselTratarTratativa";
+import DieselConsultarTratativa from "./pages/desempenho-diesel/DieselConsultarTratativa";
 
-import EstruturaFisicaSolicitacao from "./pages/EstruturaFisicaSolicitacao";
-import EstruturaFisicaCentral from "./pages/EstruturaFisicaCentral";
-import EstruturaFisicaConsultar from "./pages/EstruturaFisicaConsultar";
-import EstruturaFisicaTratar from "./pages/EstruturaFisicaTratar";
+import EstruturaFisicaSolicitacao from "./pages/estrutura-fisica/EstruturaFisicaSolicitacao";
+import EstruturaFisicaCentral from "./pages/estrutura-fisica/EstruturaFisicaCentral";
+import EstruturaFisicaConsultar from "./pages/estrutura-fisica/EstruturaFisicaConsultar";
+import EstruturaFisicaTratar from "./pages/estrutura-fisica/EstruturaFisicaTratar";
 
 import { useContext } from "react";
 import { AuthContext } from "./context/AuthContext";

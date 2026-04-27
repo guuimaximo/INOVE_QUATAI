@@ -491,7 +491,7 @@ export default function Login() {
           <img src={logoInova} alt="Logo Portal Inove" className="w-48 mb-8 drop-shadow-xl" />
           <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed text-justify">
-            O login agora usa o Supabase Auth como fonte principal de acesso, com suporte para correÃ§Ã£o de e-mail e redefiniÃ§Ã£o de senha.
+            O papel da lideranca no Grupo CSC e motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento, gerando resiliencia e coragem para influenciar, quebrar barreiras, melhorar processos e entregar resultados com foco na seguranca, na satisfacao do cliente e na otimizacao de custos.
           </p>
         </div>
       </div>
@@ -504,12 +504,17 @@ export default function Login() {
 
           <div className="text-center lg:text-left">
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-              {isCadastro ? "Solicitar novo acesso" : "Acesse sua conta"}
+              {isCadastro ? "Criar nova conta" : "Acesse sua conta"}
             </h1>
+            {redirectParam && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 font-medium">
+                Conectando ao Farol Tatico... (faca login para continuar)
+              </div>
+            )}
             <p className="mt-2 text-slate-500">
               {isCadastro
-                ? "Crie seu acesso com e-mail e senha vÃ¡lidos."
-                : "Entre com login ou e-mail. O app localiza a conta correta no Supabase Auth."}
+                ? "Preencha todos os dados abaixo para solicitar acesso."
+                : "Entre com suas credenciais para continuar."}
             </p>
           </div>
 
@@ -755,7 +760,7 @@ export default function Login() {
           </div>
 
           <div className="text-center mt-6">
-            <p className="text-xs text-slate-400">Â© {new Date().getFullYear()} PORTAL INOVE</p>
+            <p className="text-xs text-slate-400">© {new Date().getFullYear()} PORTAL INOVE</p>
           </div>
         </div>
       </div>

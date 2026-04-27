@@ -21,7 +21,7 @@ set search_path = public, auth
 as $$
   with matched as (
     select
-      u.auth_user_id,
+      coalesce(u.auth_user_id, au.id) as auth_user_id,
       au.email as auth_email,
       u.id as usuario_id,
       u.nome,
@@ -33,7 +33,23 @@ as $$
       u.status_cadastro,
       coalesce(u.migrado_auth, false) as migrado_auth
     from public.usuarios_aprovadores u
-    left join auth.users au on au.id = u.auth_user_id
+    left join lateral (
+      select a.id, a.email
+      from auth.users a
+      where
+        a.id = u.auth_user_id
+        or lower(coalesce(a.email, '')) = lower(coalesce(u.email, ''))
+        or lower(coalesce(a.raw_user_meta_data->>'login', '')) = lower(coalesce(u.login, ''))
+        or (
+          coalesce(a.raw_user_meta_data->>'usuario_id', '') ~ '^\d+$'
+          and (a.raw_user_meta_data->>'usuario_id')::integer = u.id
+        )
+      order by
+        case when a.id = u.auth_user_id then 0 else 1 end,
+        case when lower(coalesce(a.email, '')) = lower(coalesce(u.email, '')) then 0 else 1 end,
+        case when lower(coalesce(a.raw_user_meta_data->>'login', '')) = lower(coalesce(u.login, '')) then 0 else 1 end
+      limit 1
+    ) au on true
     where
       lower(coalesce(u.login, '')) = lower(coalesce(p_identifier, ''))
       or lower(coalesce(u.email, '')) = lower(coalesce(p_identifier, ''))

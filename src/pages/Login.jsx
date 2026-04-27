@@ -1,15 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-// src/pages/Login.jsx (PROJETO INOVE)
-import { useState, useMemo, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabase";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { useAuth } from "../context/AuthContext";
 import {
-  User, Lock, LogIn, UserPlus, Eye, EyeOff,
-  Briefcase, Mail, Check, X, Loader2, ChevronDown
+  User,
+  Lock,
+  LogIn,
+  Mail,
+  Check,
+  X,
+  Loader2,
+  ChevronDown,
+  Briefcase,
+  Eye,
+  EyeOff,
+  KeyRound,
+  RefreshCcw,
 } from "lucide-react";
+import {
+  getAbsoluteUrl,
+  getRpcSetupMessage,
+  isPlaceholderEmail,
+  isValidEmail,
+  resolveAuthAccount,
+} from "../utils/authBridge";
 
 const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 const SETORES = [
@@ -18,50 +33,83 @@ const SETORES = [
   "Departamento Pessoal",
   "SESMT",
   "Operacao",
-  "Manutenção",
-  "Recursos humanos",
-  "Departamento Pessoal",
-  "SESMT",
-  "Operação",
   "Ouvidoria",
   "Financeiro",
 ];
+const PASSWORD_STRENGTH_REGEX = {
+  hasUpper: /[A-Z]/,
+  hasNumber: /\d/,
+  hasSpecial: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/,
+};
+const FAROL_ORIGIN = "https://faroldemetas.onrender.com";
+
+function getFriendlyError(error) {
+  const message = String(error?.message || "");
+
+  if (
+    message.includes("resolve_auth_account") ||
+    message.includes("Could not find the function public.resolve_auth_account")
+  ) {
+    return getRpcSetupMessage();
+  }
 
   return message || "Nao foi possivel concluir a operacao.";
 }
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function getSafeFarolRedirect(rawUrl) {
+  if (!rawUrl) return null;
+
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.origin === FAROL_ORIGIN ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login: doLogin } = useAuth();
+  const { refreshUser } = useAuth();
 
   const [isCadastro, setIsCadastro] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [showEmailFix, setShowEmailFix] = useState(false);
+  const [feedback, setFeedback] = useState(null);
 
-  // Estados do Formulário
   const [loginInput, setLoginInput] = useState("");
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [setor, setSetor] = useState("");
+  const [resetIdentifier, setResetIdentifier] = useState("");
+  const [correcaoEmail, setCorrecaoEmail] = useState("");
+  const [correcaoSenha, setCorrecaoSenha] = useState("");
 
   const [passwordMetrics, setPasswordMetrics] = useState({
-    score: 0, hasUpper: false, hasNumber: false, hasSpecial: false, minChar: false
+    score: 0,
+    hasUpper: false,
+    hasNumber: false,
+    hasSpecial: false,
+    minChar: false,
   });
 
   const redirectParam = useMemo(() => {
     const sp = new URLSearchParams(location.search);
     const raw = sp.get("redirect");
-    return raw ? decodeURIComponent(raw) : null;
+    if (!raw) return null;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
   }, [location.search]);
 
   const nextPathState = location.state?.from?.pathname || null;
 
-  function decideDefaultNext(nivel) {
-    if (NIVEIS_PORTAL.has(nivel)) return "/portal";
+  function decideDefaultNext() {
     return "/inove";
   }
 
@@ -83,86 +131,67 @@ export default function Login() {
     });
     if (clearFeedback) setFeedback(null);
   }
-  // =================================================================
-  // FUNÇÃO ATUALIZADA: REDIRECIONAMENTO LIMPO
-  // =================================================================
-  // Não envia mais 'userData' para evitar confusão de cache.
-  // Apenas manda o usuário para a tela de login do Farol.
-  const enviarParaFarol = (urlDestino) => {
-    console.log("🚀 Redirecionando para Login Manual no Farol...");
 
-    // 1. Define a origem base (Domínio do Farol)
-    let origin;
-    try {
-        origin = new URL(urlDestino).origin;
-    } catch {
-        // Fallback de segurança se o link estiver quebrado
-        origin = "https://faroldemetas.onrender.com";
-    }
+  function pushFeedback(type, text) {
+    setFeedback({ type, text });
+  }
 
-    // 2. Redireciona para a raiz do Farol.
-    // Lá, o LandingFarol vai limpar o cache e pedir login novamente.
-    window.location.href = origin;
-  };
-
-  // Preenche o login se já houver um salvo no navegador
   useEffect(() => {
-    if (!redirectParam) return;
-
     const storedLogin = localStorage.getItem("inove_login");
-    if (storedLogin && !loginInput) {
-      setLoginInput(storedLogin); 
-    }
-  }, [redirectParam]);
+    if (storedLogin && !loginInput) setLoginInput(storedLogin);
+  }, [loginInput]);
 
-  // Monitor de Senha
   useEffect(() => {
     if (!isCadastro) return;
-    const s = senha;
+
+    const value = senha;
     const metrics = {
-      hasUpper: /[A-Z]/.test(s),
-      hasNumber: /[0-9]/.test(s),
-      hasSpecial: /[!@#$%^&*]/.test(s),
-      minChar: s.length >= 8
+      hasUpper: PASSWORD_STRENGTH_REGEX.hasUpper.test(value),
+      hasNumber: PASSWORD_STRENGTH_REGEX.hasNumber.test(value),
+      hasSpecial: PASSWORD_STRENGTH_REGEX.hasSpecial.test(value),
+      minChar: value.length >= 8,
     };
-    setPasswordMetrics({ ...metrics, score: Object.values(metrics).filter(Boolean).length });
+
+    setPasswordMetrics({
+      ...metrics,
+      score: Object.values(metrics).filter(Boolean).length,
+    });
   }, [senha, isCadastro]);
 
-  // --- LOGIN MANUAL ---
-  async function handleEntrar(e) {
-    e.preventDefault();
-    const inputTrim = loginInput.trim();
-    const senhaTrim = senha.trim();
+  async function lookupAccount(identifier) {
+    const account = await resolveAuthAccount(identifier);
+    return account;
+  }
+
+  function rememberUserHints(identifier, userData) {
+    try {
+      localStorage.setItem("inove_login", userData?.login || identifier || loginInput.trim());
+      localStorage.setItem("inove_nivel", String(userData?.nivel || ""));
+      localStorage.setItem("inove_nome", userData?.nome || "");
+    } catch {
+      // noop
+    }
+  }
+
+  async function handleEntrar(event) {
+    event.preventDefault();
+    setFeedback(null);
+
+    const identifier = loginInput.trim();
+    const currentPassword = senha;
 
     if (!identifier || !currentPassword) {
       pushFeedback("error", "Informe seu usuario/e-mail e senha.");
-    if (!inputTrim || !senhaTrim) {
-      alert("Informe seu usuário/e-mail e senha.");
       return;
     }
 
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from("usuarios_aprovadores")
-      .select("*")
-      .or(`login.eq.${inputTrim},email.eq.${inputTrim}`)
-      .eq("senha", senhaTrim)
-      .eq("ativo", true)
-      .maybeSingle();
+    try {
+      const account = await lookupAccount(identifier);
 
-    setLoading(false);
-
-      if (!account.ativo) {
-        pushFeedback("error", "Sua conta esta inativa. Fale com o administrador.");
-        return;
-      }
-
-      const nivel = String(account.nivel || "").trim();
-      const statusCadastro = String(account.status_cadastro || "").trim();
-
-      if (nivel === "Pendente" || statusCadastro === "Pendente") {
-        pushFeedback("error", "Seu cadastro ainda esta em analise pelo administrador.");
+      if (!account) {
+        pushFeedback("error", "Nenhum cadastro ativo foi encontrado para esse login/e-mail.");
         return;
       }
 
@@ -176,7 +205,7 @@ export default function Login() {
         return;
       }
 
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: account.auth_email,
         password: currentPassword,
       });
@@ -187,7 +216,21 @@ export default function Login() {
       }
 
       const hydratedUser = await refreshUser(signInData.session || null);
-      rememberUserHints(account);
+      rememberUserHints(identifier, hydratedUser);
+
+      if (!hydratedUser?.ativo) {
+        await supabase.auth.signOut();
+        pushFeedback("error", "Sua conta esta inativa. Fale com o administrador.");
+        return;
+      }
+
+      const hydratedNivel = String(hydratedUser?.nivel || "").trim();
+      const statusCadastro = String(hydratedUser?.status_cadastro || "").trim();
+      if (hydratedNivel === "Pendente" || statusCadastro === "Pendente") {
+        await supabase.auth.signOut();
+        pushFeedback("error", "Seu cadastro ainda esta em analise pelo administrador.");
+        return;
+      }
 
       if (account.email_precisa_correcao) {
         alert(
@@ -196,7 +239,7 @@ export default function Login() {
       }
 
       const safeFarolRedirect = getSafeFarolRedirect(redirectParam);
-      if (safeFarolRedirect && NIVEIS_PORTAL.has(nivel)) {
+      if (safeFarolRedirect && NIVEIS_PORTAL.has(hydratedNivel)) {
         window.location.href = safeFarolRedirect;
         return;
       }
@@ -206,7 +249,7 @@ export default function Login() {
         return;
       }
 
-      navigate(nextPathState || decideDefaultNext(hydratedUser?.nivel || nivel), { replace: true });
+      navigate(nextPathState || decideDefaultNext(hydratedNivel), { replace: true });
     } catch (error) {
       pushFeedback("error", getFriendlyError(error));
     } finally {
@@ -278,7 +321,7 @@ export default function Login() {
     setFeedback(null);
 
     const identifier = loginInput.trim();
-    const currentPassword = correcaoSenha.trim();
+    const currentPassword = correcaoSenha;
     const newEmail = correcaoEmail.trim().toLowerCase();
 
     if (!identifier || !currentPassword || !newEmail) {
@@ -288,24 +331,10 @@ export default function Login() {
 
     if (!isValidEmail(newEmail) || isPlaceholderEmail(newEmail)) {
       pushFeedback("error", "Informe um e-mail corporativo valido para o novo acesso.");
-    if (error) {
-      alert("Erro de conexão. Tente novamente.");
       return;
     }
 
-    if (!data) {
-      alert("Credenciais incorretas ou conta inativa.");
-      return;
-    }
-
-    const nivel = String(data.nivel || "").trim();
-
-    if (nivel === "Pendente") {
-      alert("Seu cadastro ainda está em análise pelo administrador.");
-      return;
-    }
-
-    doLogin(data);
+    setLoading(true);
 
     try {
       const account = await lookupAccount(identifier);
@@ -345,8 +374,6 @@ export default function Login() {
 
       try {
         await supabase.rpc("link_auth_account", {
-          p_usuario_id: account.usuario_id,
-          p_auth_user_id: signInData.user?.id || signInData.session?.user?.id,
           p_email: newEmail,
         });
       } catch (rpcError) {
@@ -362,32 +389,17 @@ export default function Login() {
       pushFeedback("error", getFriendlyError(error));
     } finally {
       setLoading(false);
-      localStorage.setItem("inove_login", data.login);
-      localStorage.setItem("inove_nivel", nivel);
-      localStorage.setItem("inove_nome", data.nome || "");
-    } catch {}
-
-    const isGestorAdm = NIVEIS_PORTAL.has(nivel);
-
-    // ✅ LÓGICA DE REDIRECT ATUALIZADA
-    // Se veio do Farol, autenticamos aqui só para validar, mas
-    // mandamos ele de volta para logar lá e criar a sessão correta.
-    if (redirectParam && isGestorAdm) {
-      enviarParaFarol(redirectParam);
-      return;
     }
-
-    // Fluxo normal (Navegação dentro do Inove)
-    navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
   }
 
-  // --- CADASTRO ---
-  async function handleCadastro(e) {
-    e.preventDefault();
+  async function handleCadastro(event) {
+    event.preventDefault();
+    setFeedback(null);
+
     const nomeTrim = nome.trim();
     const loginTrim = loginInput.trim();
-    const senhaTrim = senha.trim();
-    const emailTrim = email.trim();
+    const senhaTrim = senha;
+    const emailTrim = email.trim().toLowerCase();
 
     if (!nomeTrim || !loginTrim || !senhaTrim || !setor || !emailTrim) {
       pushFeedback("error", "Preencha todos os campos obrigatorios.");
@@ -396,49 +408,34 @@ export default function Login() {
 
     if (!isValidEmail(emailTrim)) {
       pushFeedback("error", "Insira um e-mail valido.");
-      alert("Preencha todos os campos obrigatórios.");
-      return;
-    }
-
-    if (!EMAIL_REGEX.test(emailTrim)) {
-      alert("Insira um e-mail válido.");
       return;
     }
 
     if (passwordMetrics.score < 3) {
-      alert("Senha muito fraca.");
+      pushFeedback("error", "Senha muito fraca.");
       return;
     }
 
     setLoading(true);
 
-    const { data: existingUser, error: checkError } = await supabase
-      .from("usuarios_aprovadores")
-      .select("id")
-      .or(`login.eq.${loginTrim},email.eq.${emailTrim}`)
-      .maybeSingle();
+    try {
+      const { data: existingUser, error: checkError } = await supabase
+        .from("usuarios_aprovadores")
+        .select("id")
+        .or(`login.eq.${loginTrim},email.eq.${emailTrim}`)
+        .maybeSingle();
+
+      if (checkError) {
+        pushFeedback("error", "Erro ao verificar dados de cadastro.");
+        return;
+      }
 
       if (existingUser) {
         pushFeedback("error", "Este usuario ou e-mail ja estao cadastrados.");
         return;
       }
-    if (checkError) {
-      setLoading(false);
-      alert("Erro ao verificar dados.");
-      return;
-    }
 
-    if (existingUser) {
-      setLoading(false);
-      alert("Este Usuário ou E-mail já estão cadastrados.");
-      return;
-    }
-
-    const { error } = await supabase.from("usuarios_aprovadores").insert([
-      {
-        nome: nomeTrim,
-        login: loginTrim,
-        senha: senhaTrim,
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: emailTrim,
         password: senhaTrim,
         options: {
@@ -454,23 +451,7 @@ export default function Login() {
       if (authError) {
         pushFeedback("error", authError.message || "Nao foi possivel criar o acesso no Supabase Auth.");
         return;
-        setor: setor,
-        ativo: false,
-        nivel: "Pendente",
-        criado_em: new Date().toISOString()
-      },
-    ]);
-
-    setLoading(false);
-
-    if (error) {
-      if (error.message.includes('column "setor"')) {
-        alert("Erro técnico: Coluna 'setor' ausente no banco.");
-      } else {
-        alert("Erro ao cadastrar: " + error.message);
       }
-      return;
-    }
 
       const authUserId = authData.user?.id || null;
 
@@ -507,18 +488,6 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-    alert("Cadastro solicitado! Aguarde a aprovação.");
-    setIsCadastro(false);
-    resetForm();
-  }
-
-  function resetForm() {
-    setNome("");
-    setLoginInput("");
-    setSenha("");
-    setEmail("");
-    setSetor("");
-    setPasswordMetrics({ score: 0 });
   }
 
   const PasswordCheck = ({ label, met }) => (
@@ -530,33 +499,22 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans">
-      {/* --- LADO ESQUERDO: Branding (Desktop) --- */}
       <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
         <div className="relative z-10 flex flex-col items-center">
-          <img
-            src={logoInova}
-            alt="Logo Portal Inove"
-            className="w-48 mb-8 drop-shadow-xl"
-          />
+          <img src={logoInova} alt="Logo Portal Inove" className="w-48 mb-8 drop-shadow-xl" />
           <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
-
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed text-justify">
             O papel da lideranca no Grupo CSC e motivar e capacitar pessoas, entendendo a individualidade de cada um,
             com disciplina e comprometimento, gerando resiliencia e coragem para influenciar, quebrar barreiras,
             melhorar processos e entregar resultados com foco na seguranca, na satisfacao do cliente e na otimizacao de
             custos.
-            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento, gerando resiliência e coragem para influenciar, quebrar barreiras, melhorar processos e entregar resultados com foco na segurança, na satisfação do cliente e na otimização de custos”
           </p>
         </div>
-
-        <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-        <div className="absolute -top-32 -right-32 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
       </div>
 
-      {/* --- LADO DIREITO: Formulário --- */}
       <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
-        <div className="w-full max-w-md space-y-8">
+        <div className="w-full max-w-md space-y-6">
           <div className="lg:hidden text-center">
             <img src={logoInova} alt="Logo InovaQuatai" className="mx-auto mb-4 w-32 h-auto" />
           </div>
@@ -570,13 +528,6 @@ export default function Login() {
                 Conectando ao Farol Tatico... (faca login para continuar)
               </div>
             )}
-
-            {redirectParam && (
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 font-medium">
-                Conectando ao Farol Tático... (faça login para continuar)
-              </div>
-            )}
-
             <p className="mt-2 text-slate-500">
               {isCadastro
                 ? "Preencha todos os dados abaixo para solicitar acesso."
@@ -584,8 +535,19 @@ export default function Login() {
             </p>
           </div>
 
+          {feedback && (
+            <div
+              className={`rounded-xl px-4 py-3 text-sm ${
+                feedback.type === "success"
+                  ? "bg-green-50 border border-green-200 text-green-700"
+                  : "bg-red-50 border border-red-200 text-red-700"
+              }`}
+            >
+              {feedback.text}
+            </div>
+          )}
+
           <form onSubmit={isCadastro ? handleCadastro : handleEntrar} className="space-y-5">
-            {/* Campos de Login */}
             {!isCadastro && (
               <>
                 <div className="relative group">
@@ -593,9 +555,8 @@ export default function Login() {
                   <input
                     type="text"
                     placeholder="Usuario ou e-mail"
-                    placeholder="Usuário ou E-mail"
                     value={loginInput}
-                    onChange={(e) => setLoginInput(e.target.value)}
+                    onChange={(event) => setLoginInput(event.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
                   />
                 </div>
@@ -606,7 +567,7 @@ export default function Login() {
                     type={mostrarSenha ? "text" : "password"}
                     placeholder="Senha"
                     value={senha}
-                    onChange={(e) => setSenha(e.target.value)}
+                    onChange={(event) => setSenha(event.target.value)}
                     className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
                     autoComplete="current-password"
                   />
@@ -621,22 +582,41 @@ export default function Login() {
               </>
             )}
 
-            {/* Campos de Cadastro */}
             {isCadastro && (
               <div className="space-y-4">
                 <div className="relative group">
                   <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
-                  <input type="text" placeholder="Nome Completo *" value={nome} onChange={e => setNome(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
+                  <input
+                    type="text"
+                    placeholder="Nome completo *"
+                    value={nome}
+                    onChange={(event) => setNome(event.target.value)}
+                    className="w-full pl-10 py-3 bg-white border rounded-xl"
+                  />
                 </div>
                 <div className="relative group">
                   <Mail className="absolute left-3 top-3.5 text-slate-400" size={20} />
-                  <input type="email" placeholder="Email Corporativo *" value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
+                  <input
+                    type="email"
+                    placeholder="E-mail corporativo *"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="w-full pl-10 py-3 bg-white border rounded-xl"
+                  />
                 </div>
                 <div className="relative group">
                   <Briefcase className="absolute left-3 top-3.5 text-slate-400" size={20} />
-                  <select value={setor} onChange={e => setSetor(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl appearance-none">
-                    <option value="">Selecione seu Setor *</option>
-                    {SETORES.map(s => <option key={s} value={s}>{s}</option>)}
+                  <select
+                    value={setor}
+                    onChange={(event) => setSetor(event.target.value)}
+                    className="w-full pl-10 py-3 bg-white border rounded-xl appearance-none"
+                  >
+                    <option value="">Selecione seu setor *</option>
+                    {SETORES.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
                   </select>
                   <ChevronDown className="absolute right-3 top-3.5 pointer-events-none text-slate-400" size={20} />
                 </div>
@@ -649,18 +629,26 @@ export default function Login() {
                     onChange={(event) => setLoginInput(event.target.value)}
                     className="w-full pl-10 py-3 bg-white border rounded-xl"
                   />
-                  <input type="text" placeholder="Usuário (Login) *" value={loginInput} onChange={e => setLoginInput(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
                 </div>
                 <div className="relative group">
                   <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
-                  <input type="password" placeholder="Senha *" value={senha} onChange={e => setSenha(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
+                  <input
+                    type="password"
+                    placeholder="Senha *"
+                    value={senha}
+                    onChange={(event) => setSenha(event.target.value)}
+                    className="w-full pl-10 py-3 bg-white border rounded-xl"
+                  />
                 </div>
 
                 {senha.length > 0 && (
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex gap-1 h-1.5 mb-2">
-                      {[1, 2, 3, 4].map(s => (
-                        <div key={s} className={`flex-1 rounded-full ${passwordMetrics.score >= s ? "bg-green-500" : "bg-slate-200"}`} />
+                      {[1, 2, 3, 4].map((step) => (
+                        <div
+                          key={step}
+                          className={`flex-1 rounded-full ${passwordMetrics.score >= step ? "bg-green-500" : "bg-slate-200"}`}
+                        />
                       ))}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -668,10 +656,6 @@ export default function Login() {
                       <PasswordCheck label="Maiuscula" met={passwordMetrics.hasUpper} />
                       <PasswordCheck label="Numero" met={passwordMetrics.hasNumber} />
                       <PasswordCheck label="Simbolo" met={passwordMetrics.hasSpecial} />
-                      <PasswordCheck label="8+ Car" met={passwordMetrics.minChar} />
-                      <PasswordCheck label="Maiúscula" met={passwordMetrics.hasUpper} />
-                      <PasswordCheck label="Número" met={passwordMetrics.hasNumber} />
-                      <PasswordCheck label="Símbolo" met={passwordMetrics.hasSpecial} />
                     </div>
                   </div>
                 )}
@@ -683,7 +667,13 @@ export default function Login() {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
             >
-              {loading ? <Loader2 className="animate-spin" size={22} /> : (isCadastro ? "Solicitar Cadastro" : "Entrar no Sistema")}
+              {loading ? (
+                <Loader2 className="animate-spin" size={22} />
+              ) : isCadastro ? (
+                "Solicitar cadastro"
+              ) : (
+                "Entrar no sistema"
+              )}
             </button>
           </form>
 
@@ -782,21 +772,16 @@ export default function Login() {
                 className="text-blue-600 font-bold hover:underline"
               >
                 {isCadastro ? "Fazer login" : "Cadastre-se aqui"}
-          <div className="mt-8 text-center">
-            <p className="text-slate-600">
-              {isCadastro ? "Já possui cadastro?" : "Não tem uma conta?"}{" "}
-              <button onClick={() => { setIsCadastro(!isCadastro); resetForm(); }} className="text-blue-600 font-bold hover:underline">
-                {isCadastro ? "Fazer Login" : "Cadastre-se aqui"}
               </button>
             </p>
           </div>
 
           <div className="text-center mt-6">
-          <div className="text-center mt-8">
-            <p className="text-xs text-slate-400">© {new Date().getFullYear()} PORTAL INOVE</p>
+            <p className="text-xs text-slate-400">(c) {new Date().getFullYear()} PORTAL INOVE</p>
           </div>
         </div>
       </div>
     </div>
   );
 }
+

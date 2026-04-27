@@ -16,15 +16,7 @@ import {
   Eye,
   EyeOff,
   KeyRound,
-  RefreshCcw,
 } from "lucide-react";
-import {
-  getAbsoluteUrl,
-  getRpcSetupMessage,
-  isPlaceholderEmail,
-  isValidEmail,
-  resolveAuthAccount,
-} from "../utils/authBridge";
 
 const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 const SETORES = [
@@ -43,16 +35,12 @@ const PASSWORD_STRENGTH_REGEX = {
 };
 const FAROL_ORIGIN = "https://faroldemetas.onrender.com";
 
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
 function getFriendlyError(error) {
   const message = String(error?.message || "");
-
-  if (
-    message.includes("resolve_auth_account") ||
-    message.includes("Could not find the function public.resolve_auth_account")
-  ) {
-    return getRpcSetupMessage();
-  }
-
   return message || "Nao foi possivel concluir a operacao.";
 }
 
@@ -70,13 +58,12 @@ function getSafeFarolRedirect(rawUrl) {
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { refreshUser } = useAuth();
+  const { login: doLogin } = useAuth();
 
   const [isCadastro, setIsCadastro] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [showReset, setShowReset] = useState(false);
-  const [showEmailFix, setShowEmailFix] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
   const [loginInput, setLoginInput] = useState("");
@@ -84,9 +71,6 @@ export default function Login() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [setor, setSetor] = useState("");
-  const [resetIdentifier, setResetIdentifier] = useState("");
-  const [correcaoEmail, setCorrecaoEmail] = useState("");
-  const [correcaoSenha, setCorrecaoSenha] = useState("");
 
   const [passwordMetrics, setPasswordMetrics] = useState({
     score: 0,
@@ -119,9 +103,6 @@ export default function Login() {
     setSenha("");
     setEmail("");
     setSetor("");
-    setResetIdentifier("");
-    setCorrecaoEmail("");
-    setCorrecaoSenha("");
     setPasswordMetrics({
       score: 0,
       hasUpper: false,
@@ -158,18 +139,13 @@ export default function Login() {
     });
   }, [senha, isCadastro]);
 
-  async function lookupAccount(identifier) {
-    const account = await resolveAuthAccount(identifier);
-    return account;
-  }
-
   function rememberUserHints(identifier, userData) {
     try {
       localStorage.setItem("inove_login", userData?.login || identifier || loginInput.trim());
       localStorage.setItem("inove_nivel", String(userData?.nivel || ""));
       localStorage.setItem("inove_nome", userData?.nome || "");
     } catch {
-      // noop
+      // Mantem o login funcional mesmo se o navegador bloquear storage.
     }
   }
 
@@ -188,68 +164,42 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const account = await lookupAccount(identifier);
+      const { data, error } = await supabase
+        .from("usuarios_aprovadores")
+        .select("*")
+        .or(`login.eq.${identifier},email.eq.${identifier}`)
+        .eq("senha", currentPassword)
+        .eq("ativo", true)
+        .maybeSingle();
 
-      if (!account) {
-        pushFeedback("error", "Nenhum cadastro ativo foi encontrado para esse login/e-mail.");
+      if (error) {
+        pushFeedback("error", error.message || "Erro ao consultar usuarios_aprovadores.");
         return;
       }
 
-      if (!account.auth_email) {
-        setShowEmailFix(true);
-        setCorrecaoEmail(account.legacy_email || "");
-        pushFeedback(
-          "error",
-          "Seu cadastro foi localizado, mas o usuario Auth ainda nao esta vinculado corretamente. Regularize o e-mail de acesso ou finalize a migracao no Supabase."
-        );
+      if (!data) {
+        pushFeedback("error", "Credenciais incorretas ou conta inativa.");
         return;
       }
 
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: account.auth_email,
-        password: currentPassword,
-      });
+      const nivel = String(data.nivel || "").trim();
+      const statusCadastro = String(data.status_cadastro || "").trim();
 
-      if (signInError) {
-        pushFeedback("error", signInError.message || "Credenciais incorretas.");
-        return;
-      }
-
-      const hydratedUser = await refreshUser(signInData.session || null);
-      rememberUserHints(identifier, hydratedUser);
-
-      if (!hydratedUser?.ativo) {
-        await supabase.auth.signOut();
-        pushFeedback("error", "Sua conta esta inativa. Fale com o administrador.");
-        return;
-      }
-
-      const hydratedNivel = String(hydratedUser?.nivel || "").trim();
-      const statusCadastro = String(hydratedUser?.status_cadastro || "").trim();
-      if (hydratedNivel === "Pendente" || statusCadastro === "Pendente") {
-        await supabase.auth.signOut();
+      if (nivel === "Pendente" || statusCadastro === "Pendente") {
         pushFeedback("error", "Seu cadastro ainda esta em analise pelo administrador.");
         return;
       }
 
-      if (account.email_precisa_correcao) {
-        alert(
-          "Seu acesso entrou usando um e-mail provisorio no Supabase. Use a opcao 'Corrigir e-mail de acesso' para trocar pelo e-mail correto antes de depender de recuperacao de senha."
-        );
-      }
+      const loggedUser = doLogin(data);
+      rememberUserHints(identifier, loggedUser);
 
       const safeFarolRedirect = getSafeFarolRedirect(redirectParam);
-      if (safeFarolRedirect && NIVEIS_PORTAL.has(hydratedNivel)) {
+      if (safeFarolRedirect && NIVEIS_PORTAL.has(nivel)) {
         window.location.href = safeFarolRedirect;
         return;
       }
 
-      if (hydratedUser?.requires_profile_review) {
-        navigate("/atualizar-perfil", { replace: true });
-        return;
-      }
-
-      navigate(nextPathState || decideDefaultNext(hydratedNivel), { replace: true });
+      navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
     } catch (error) {
       pushFeedback("error", getFriendlyError(error));
     } finally {
@@ -257,139 +207,12 @@ export default function Login() {
     }
   }
 
-  async function handleSolicitarReset(event) {
+  function handleSolicitarReset(event) {
     event.preventDefault();
-    setFeedback(null);
-
-    const identifier = (resetIdentifier || loginInput).trim();
-    if (!identifier) {
-      pushFeedback("error", "Informe o login ou e-mail para localizar a conta.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const account = await lookupAccount(identifier);
-
-      if (!account || !account.ativo) {
-        pushFeedback("error", "Conta nao encontrada ou inativa.");
-        return;
-      }
-
-      if (!account.auth_email) {
-        setShowEmailFix(true);
-        pushFeedback(
-          "error",
-          "Seu usuario ainda nao tem um e-mail de acesso valido no Supabase. Corrija o e-mail antes de usar recuperacao de senha."
-        );
-        return;
-      }
-
-      if (!isValidEmail(account.auth_email) || isPlaceholderEmail(account.auth_email)) {
-        setShowEmailFix(true);
-        setCorrecaoEmail(account.legacy_email || "");
-        pushFeedback(
-          "error",
-          "Sua conta ainda usa um e-mail provisorio. Corrija o e-mail de acesso primeiro e depois refaca a recuperacao de senha."
-        );
-        return;
-      }
-
-      const { error } = await supabase.auth.resetPasswordForEmail(account.auth_email, {
-        redirectTo: getAbsoluteUrl("/atualizar-senha"),
-      });
-
-      if (error) {
-        pushFeedback("error", error.message || "Nao foi possivel enviar o reset de senha.");
-        return;
-      }
-
-      pushFeedback(
-        "success",
-        `Enviamos a redefinicao de senha para ${account.auth_email}. Abra o link do e-mail para cadastrar a nova senha.`
-      );
-    } catch (error) {
-      pushFeedback("error", getFriendlyError(error));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleCorrigirEmail(event) {
-    event.preventDefault();
-    setFeedback(null);
-
-    const identifier = loginInput.trim();
-    const currentPassword = correcaoSenha;
-    const newEmail = correcaoEmail.trim().toLowerCase();
-
-    if (!identifier || !currentPassword || !newEmail) {
-      pushFeedback("error", "Informe login/e-mail, senha atual e novo e-mail de acesso.");
-      return;
-    }
-
-    if (!isValidEmail(newEmail) || isPlaceholderEmail(newEmail)) {
-      pushFeedback("error", "Informe um e-mail corporativo valido para o novo acesso.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const account = await lookupAccount(identifier);
-
-      if (!account) {
-        pushFeedback("error", "Conta nao encontrada para esse login/e-mail.");
-        return;
-      }
-
-      if (!account.auth_email) {
-        pushFeedback(
-          "error",
-          "Este cadastro ainda nao possui um usuario Auth vinculado. O administrador precisa concluir a migracao desse usuario no Supabase."
-        );
-        return;
-      }
-
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: account.auth_email,
-        password: currentPassword,
-      });
-
-      if (signInError) {
-        pushFeedback("error", "Nao foi possivel validar sua senha atual para corrigir o e-mail de acesso.");
-        return;
-      }
-
-      const { error: updateError } = await supabase.auth.updateUser(
-        { email: newEmail },
-        { emailRedirectTo: getAbsoluteUrl("/login") }
-      );
-
-      if (updateError) {
-        pushFeedback("error", updateError.message || "Falha ao atualizar o e-mail de acesso.");
-        return;
-      }
-
-      try {
-        await supabase.rpc("link_auth_account", {
-          p_email: newEmail,
-        });
-      } catch (rpcError) {
-        console.warn("Falha ao sincronizar usuarios_aprovadores:", rpcError);
-      }
-
-      await supabase.auth.signOut();
-      pushFeedback(
-        "success",
-        "Solicitacao de troca de e-mail enviada. Se o projeto estiver com 'Secure email change' ativo no Supabase, desative essa opcao ou conclua a confirmacao tambem no e-mail antigo."
-      );
-    } catch (error) {
-      pushFeedback("error", getFriendlyError(error));
-    } finally {
-      setLoading(false);
-    }
+    pushFeedback(
+      "error",
+      "A recuperacao automatica pelo Supabase Auth esta temporariamente indisponivel. Para trocar a senha agora, fale com o administrador do sistema."
+    );
   }
 
   async function handleCadastro(event) {
@@ -398,10 +221,10 @@ export default function Login() {
 
     const nomeTrim = nome.trim();
     const loginTrim = loginInput.trim();
-    const senhaTrim = senha;
+    const senhaCadastro = senha;
     const emailTrim = email.trim().toLowerCase();
 
-    if (!nomeTrim || !loginTrim || !senhaTrim || !setor || !emailTrim) {
+    if (!nomeTrim || !loginTrim || !senhaCadastro || !setor || !emailTrim) {
       pushFeedback("error", "Preencha todos os campos obrigatorios.");
       return;
     }
@@ -435,39 +258,17 @@ export default function Login() {
         return;
       }
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: emailTrim,
-        password: senhaTrim,
-        options: {
-          emailRedirectTo: getAbsoluteUrl("/login"),
-          data: {
-            nome: nomeTrim,
-            nivel: "Pendente",
-            login: loginTrim,
-          },
-        },
-      });
-
-      if (authError) {
-        pushFeedback("error", authError.message || "Nao foi possivel criar o acesso no Supabase Auth.");
-        return;
-      }
-
-      const authUserId = authData.user?.id || null;
-
       const { error: insertError } = await supabase.from("usuarios_aprovadores").insert([
         {
           nome: nomeTrim,
           login: loginTrim,
           email: emailTrim,
-          senha: null,
+          senha: senhaCadastro,
           setor,
           ativo: false,
           nivel: "Pendente",
           status_cadastro: "Pendente",
           criado_em: new Date().toISOString(),
-          auth_user_id: authUserId,
-          migrado_auth: !!authUserId,
         },
       ]);
 
@@ -476,11 +277,7 @@ export default function Login() {
         return;
       }
 
-      await supabase.auth.signOut();
-      pushFeedback(
-        "success",
-        "Cadastro solicitado com sucesso. Se o Supabase exigir confirmacao de e-mail, valide a mensagem recebida antes do primeiro login."
-      );
+      pushFeedback("success", "Cadastro solicitado com sucesso. Aguarde a aprovacao do administrador.");
       setIsCadastro(false);
       resetForm(false);
     } catch (error) {
@@ -647,7 +444,9 @@ export default function Login() {
                       {[1, 2, 3, 4].map((step) => (
                         <div
                           key={step}
-                          className={`flex-1 rounded-full ${passwordMetrics.score >= step ? "bg-green-500" : "bg-slate-200"}`}
+                          className={`flex-1 rounded-full ${
+                            passwordMetrics.score >= step ? "bg-green-500" : "bg-slate-200"
+                          }`}
                         />
                       ))}
                     </div>
@@ -686,14 +485,6 @@ export default function Login() {
               >
                 <KeyRound size={16} /> Esqueci minha senha
               </button>
-
-              <button
-                type="button"
-                onClick={() => setShowEmailFix((prev) => !prev)}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700"
-              >
-                <RefreshCcw size={16} /> Corrigir e-mail de acesso
-              </button>
             </div>
           )}
 
@@ -701,60 +492,13 @@ export default function Login() {
             <form onSubmit={handleSolicitarReset} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
               <h2 className="font-semibold text-slate-900">Recuperar senha</h2>
               <p className="text-sm text-slate-500">
-                O reset segue o fluxo correto do Supabase e envia um link para redefinir a senha.
+                No modo legado, a troca de senha precisa ser feita pelo administrador em usuarios_aprovadores.
               </p>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
-                <input
-                  type="text"
-                  placeholder="Usuario ou e-mail"
-                  value={resetIdentifier}
-                  onChange={(event) => setResetIdentifier(event.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
-                />
-              </div>
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-white font-semibold hover:bg-slate-800 disabled:opacity-70"
+                className="w-full inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-white font-semibold hover:bg-slate-800"
               >
-                Enviar redefinicao
-              </button>
-            </form>
-          )}
-
-          {showEmailFix && !isCadastro && (
-            <form onSubmit={handleCorrigirEmail} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-              <h2 className="font-semibold text-slate-900">Corrigir e-mail de acesso</h2>
-              <p className="text-sm text-slate-500">
-                Use sua senha atual para trocar o e-mail provisorio do Supabase pelo e-mail correto de trabalho.
-              </p>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
-                <input
-                  type="email"
-                  placeholder="Novo e-mail de acesso"
-                  value={correcaoEmail}
-                  onChange={(event) => setCorrecaoEmail(event.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
-                />
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3.5 text-slate-400" size={18} />
-                <input
-                  type="password"
-                  placeholder="Senha atual"
-                  value={correcaoSenha}
-                  onChange={(event) => setCorrecaoSenha(event.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-white font-semibold hover:bg-emerald-700 disabled:opacity-70"
-              >
-                Atualizar e-mail de acesso
+                Entendi, solicitar ao administrador
               </button>
             </form>
           )}
@@ -766,7 +510,6 @@ export default function Login() {
                 onClick={() => {
                   setIsCadastro(!isCadastro);
                   setShowReset(false);
-                  setShowEmailFix(false);
                   resetForm();
                 }}
                 className="text-blue-600 font-bold hover:underline"
@@ -784,4 +527,3 @@ export default function Login() {
     </div>
   );
 }
-

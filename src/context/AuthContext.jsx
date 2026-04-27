@@ -1,84 +1,220 @@
-// src/context/AuthContext.jsx
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabase";
 import {
-  getStoredUser,
-  setStoredUser,
   clearStoredUser,
+  getStoredUser,
   isSessionValid,
+  setStoredUser,
   touchActivity,
 } from "../utils/auth";
 
 export const AuthContext = createContext();
 
+async function loadProfile(userId) {
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, usuario_id, nome, nivel, setor, ativo, login, criado_em")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Falha ao carregar profiles:", error.message);
+    return null;
+  }
+
+  return data || null;
+}
+
+async function loadLegacyUser(authUserId, email) {
+  if (authUserId) {
+    const { data, error } = await supabase
+      .from("usuarios_aprovadores")
+      .select("id, nome, login, email, nivel, setor, ativo, status_cadastro, auth_user_id, migrado_auth")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+
+    if (!error && data) return data;
+  }
+
+  if (email) {
+    const { data, error } = await supabase
+      .from("usuarios_aprovadores")
+      .select("id, nome, login, email, nivel, setor, ativo, status_cadastro, auth_user_id, migrado_auth")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (!error && data) return data;
+  }
+
+  return null;
+}
+
+function buildNormalizedUser(session, profile, legacyUser) {
+  const authUser = session?.user;
+  const meta = authUser?.user_metadata || {};
+
+  const usuarioId = profile?.usuario_id ?? legacyUser?.id ?? meta.usuario_id ?? null;
+  const nivel = profile?.nivel ?? meta.nivel ?? legacyUser?.nivel ?? "Pendente";
+  const nome =
+    profile?.nome ??
+    meta.nome ??
+    legacyUser?.nome ??
+    authUser?.email ??
+    "UsuÃ¡rio";
+  const login =
+    profile?.login ??
+    meta.login ??
+    legacyUser?.login ??
+    authUser?.email ??
+    null;
+
+  return {
+    id: usuarioId ?? authUser?.id ?? null,
+    usuario_id: usuarioId,
+    auth_user_id: authUser?.id ?? legacyUser?.auth_user_id ?? null,
+    nome,
+    login,
+    email: authUser?.email ?? legacyUser?.email ?? null,
+    nivel,
+    setor: profile?.setor ?? legacyUser?.setor ?? "",
+    ativo: profile?.ativo ?? legacyUser?.ativo ?? true,
+    status_cadastro:
+      legacyUser?.status_cadastro ?? (nivel === "Pendente" ? "Pendente" : "Aprovado"),
+    migrado_auth: legacyUser?.migrado_auth ?? true,
+    created_at: authUser?.created_at ?? null,
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getStoredUser());
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Sincroniza user se o storage mudar em outra aba
-  useEffect(() => {
-    function onStorage(e) {
-      if (e.key === "user") setUser(getStoredUser());
+  const login = useCallback((userData) => {
+    const stored = setStoredUser(userData);
+    setUser(stored);
+    return stored;
+  }, []);
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
+    clearStoredUser();
+    setSession(null);
+    setUser(null);
+  }, []);
+
+  const refreshUser = useCallback(async (nextSession = null) => {
+    const activeSession =
+      nextSession ??
+      (await supabase.auth.getSession()).data.session ??
+      null;
+
+    setSession(activeSession);
+
+    if (!activeSession?.user) {
+      clearStoredUser();
+      setUser(null);
+      return null;
     }
+
+    const [profile, legacyUser] = await Promise.all([
+      loadProfile(activeSession.user.id),
+      loadLegacyUser(activeSession.user.id, activeSession.user.email),
+    ]);
+
+    const normalized = buildNormalizedUser(activeSession, profile, legacyUser);
+    const stored = setStoredUser(normalized);
+    setUser(stored);
+    return stored;
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function bootstrap() {
+      setLoading(true);
+      try {
+        const {
+          data: { session: initialSession },
+        } = await supabase.auth.getSession();
+
+        if (!mounted) return;
+        await refreshUser(initialSession || null);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    bootstrap();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      window.setTimeout(async () => {
+        if (!mounted) return;
+        await refreshUser(nextSession || null);
+        setLoading(false);
+      }, 0);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [refreshUser]);
+
+  useEffect(() => {
+    function onStorage(event) {
+      if (event.key === "user") setUser(getStoredUser());
+    }
+
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Idle timeout por inatividade (1h)
   useEffect(() => {
     const activityEvents = ["mousemove", "keydown", "click", "scroll", "visibilitychange"];
-    
+
     const onActivity = () => {
-      // Só renova se a aba estiver visível (evita renovar abas em 2º plano desnecessariamente)
       if (document.visibilityState === "visible") {
         touchActivity();
-        // Opcional: só atualiza o estado se houver mudança real, mas ok manter assim
         setUser(getStoredUser());
       }
     };
 
-    activityEvents.forEach((ev) => window.addEventListener(ev, onActivity));
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, onActivity));
 
-    const timer = setInterval(() => {
-      // ✅ NOVA LÓGICA DE EXCEÇÃO PARA O DASHBOARD
-      // Verifica se a rota atual é o dashboard
+    const timer = window.setInterval(() => {
       if (window.location.pathname === "/sos-dashboard") {
-        // Se estiver no dashboard, simulamos atividade para renovar o token/tempo
-        // Isso impede que ele deslogue e garante que, ao sair do dashboard,
-        // o usuário ainda tenha 1h de sessão.
-        touchActivity(); 
-        return; 
+        touchActivity();
+        return;
       }
 
-      // Lógica padrão: se o tempo expirou, desloga
       if (!isSessionValid()) {
-        logout();
+        void logout();
       }
-    }, 30 * 1000); // checa a cada 30s
+    }, 30 * 1000);
 
     return () => {
-      activityEvents.forEach((ev) => window.removeEventListener(ev, onActivity));
-      clearInterval(timer);
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, onActivity));
+      window.clearInterval(timer);
     };
-  }, []);
+  }, [logout]);
 
-  const login = (userData) => {
-    const norm = {
-      id: userData.id,
-      nome: userData.nome,
-      login: userData.login,
-      email: userData.email || null,
-      nivel: userData.nivel, 
-      ativo: userData.ativo,
-    };
-    const stored = setStoredUser(norm);
-    setUser(stored);
-  };
-
-  const logout = () => {
-    clearStoredUser();
-    setUser(null);
-  };
-
-  const value = useMemo(() => ({ user, login, logout }), [user]);
+  const value = useMemo(
+    () => ({
+      user,
+      session,
+      loading,
+      login,
+      logout,
+      refreshUser,
+      isAuthenticated: !!session?.user,
+    }),
+    [user, session, loading, login, logout, refreshUser]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

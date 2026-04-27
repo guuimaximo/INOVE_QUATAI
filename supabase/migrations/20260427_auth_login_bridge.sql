@@ -1,0 +1,111 @@
+create schema if not exists supabase;
+
+create or replace function public.resolve_auth_account(p_identifier text)
+returns table (
+  auth_user_id uuid,
+  auth_email text,
+  usuario_id integer,
+  nome text,
+  login text,
+  legacy_email text,
+  nivel text,
+  setor text,
+  ativo boolean,
+  status_cadastro text,
+  migrado_auth boolean,
+  email_precisa_correcao boolean
+)
+language sql
+security definer
+set search_path = public, auth
+as $$
+  with matched as (
+    select
+      u.auth_user_id,
+      au.email as auth_email,
+      u.id as usuario_id,
+      u.nome,
+      u.login,
+      u.email as legacy_email,
+      u.nivel,
+      u.setor,
+      coalesce(u.ativo, false) as ativo,
+      u.status_cadastro,
+      coalesce(u.migrado_auth, false) as migrado_auth
+    from public.usuarios_aprovadores u
+    left join auth.users au on au.id = u.auth_user_id
+    where
+      lower(coalesce(u.login, '')) = lower(coalesce(p_identifier, ''))
+      or lower(coalesce(u.email, '')) = lower(coalesce(p_identifier, ''))
+      or lower(coalesce(au.email, '')) = lower(coalesce(p_identifier, ''))
+    order by
+      case
+        when lower(coalesce(au.email, '')) = lower(coalesce(p_identifier, '')) then 0
+        when lower(coalesce(u.email, '')) = lower(coalesce(p_identifier, '')) then 1
+        else 2
+      end,
+      u.id asc
+    limit 1
+  )
+  select
+    auth_user_id,
+    auth_email,
+    usuario_id,
+    nome,
+    login,
+    legacy_email,
+    nivel,
+    setor,
+    ativo,
+    status_cadastro,
+    migrado_auth,
+    coalesce(auth_email ilike '%@inove.local', true) as email_precisa_correcao
+  from matched;
+$$;
+
+grant execute on function public.resolve_auth_account(text) to anon, authenticated;
+
+create or replace function public.link_auth_account(
+  p_usuario_id integer,
+  p_auth_user_id uuid,
+  p_email text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null or auth.uid() <> p_auth_user_id then
+    raise exception 'UsuÃ¡rio nÃ£o autorizado a vincular esta conta.';
+  end if;
+
+  update public.usuarios_aprovadores
+     set auth_user_id = p_auth_user_id,
+         migrado_auth = true,
+         email = coalesce(nullif(trim(p_email), ''), email),
+         atualizado_em = now()
+   where id = p_usuario_id;
+
+  insert into public.profiles (id, usuario_id, nome, nivel, setor, ativo, login)
+  select
+    p_auth_user_id,
+    u.id,
+    u.nome,
+    u.nivel,
+    u.setor,
+    coalesce(u.ativo, true),
+    u.login
+  from public.usuarios_aprovadores u
+  where u.id = p_usuario_id
+  on conflict (id) do update
+    set usuario_id = excluded.usuario_id,
+        nome = excluded.nome,
+        nivel = excluded.nivel,
+        setor = excluded.setor,
+        ativo = excluded.ativo,
+        login = excluded.login;
+end;
+$$;
+
+grant execute on function public.link_auth_account(integer, uuid, text) to authenticated;

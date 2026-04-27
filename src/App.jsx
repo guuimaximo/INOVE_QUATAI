@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
+import AtualizarSenha from "./pages/AtualizarSenha";
 
 import Dashboard from "./pages/Dashboard";
 import InicioRapido from "./pages/InicioRapido";
@@ -31,7 +32,7 @@ import KMRodado from "./pages/KMRodado";
 import PCMInicio from "./pages/PCMInicio";
 import PCMDiario from "./pages/PCMDiario";
 import PCMResumo from "./pages/PCMResumo";
-import PCM_Preventivas from "./pages/PCM_Preventivas"; // ADICIONADO
+import PCM_Preventivas from "./pages/PCM_Preventivas";
 
 import Usuarios from "./pages/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
@@ -45,7 +46,6 @@ import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
 import ChecklistCentral from "./pages/ChecklistCentral";
 
-// ✅ Embarcados
 import EmbarcadosCentral from "./pages/EmbarcadosCentral";
 import EmbarcadosMovimentacoes from "./pages/EmbarcadosMovimentacoes";
 import EmbarcadosReparos from "./pages/EmbarcadosReparos";
@@ -53,12 +53,10 @@ import EmbarcadosEnvioManutencao from "./pages/EmbarcadosEnvioManutencao";
 import ReparoSolicitacaoDetalhes from "./components/embarcados/ReparoSolicitacaoDetalhes";
 import ReparoSolicitacaoExecucao from "./components/embarcados/ReparoSolicitacaoExecucao";
 
-// ✅ Módulo separado Diesel
 import Desempenho_Diesel_Tratativas_Central from "./pages/Desempenho_Diesel_Tratativas_Central";
 import DieselTratarTratativa from "./pages/DieselTratarTratativa";
 import DieselConsultarTratativa from "./pages/DieselConsultarTratativa";
 
-// ✅ Estrutura Física
 import EstruturaFisicaSolicitacao from "./pages/EstruturaFisicaSolicitacao";
 import EstruturaFisicaCentral from "./pages/EstruturaFisicaCentral";
 import EstruturaFisicaConsultar from "./pages/EstruturaFisicaConsultar";
@@ -82,6 +80,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/atualizar-senha" element={<AtualizarSenha />} />
 
         <Route
           element={
@@ -92,56 +91,36 @@ export default function App() {
         >
           <Route path="/" element={<HomeDecider />} />
           <Route path="/inove" element={<HomeDecider />} />
+          <Route path="/portal" element={<Navigate to="/inove" replace />} />
           <Route path="/inicio-rapido" element={<InicioRapido />} />
 
-          {/* Desempenho Diesel (módulo atual) */}
           <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
           <Route path="/desempenho-diesel-resumo" element={<DesempenhoDieselResumo />} />
-          <Route
-            path="/desempenho-diesel-acompanhamento"
-            element={<DesempenhoDieselAcompanhamento />}
-          />
+          <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
           <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
           <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
           <Route path="/desempenho-diesel-checkpoint/:id" element={<DesempenhoDieselCheckpoint />} />
-          <Route
-            path="/desempenho-diesel"
-            element={<Navigate to="/desempenho-diesel-resumo" replace />}
-          />
+          <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
 
-          {/* ✅ Tratativas Diesel (módulo separado - novo trio) */}
-          <Route
-            path="/diesel-tratativas"
-            element={<Desempenho_Diesel_Tratativas_Central />}
-          />
+          <Route path="/diesel-tratativas" element={<Desempenho_Diesel_Tratativas_Central />} />
           <Route path="/diesel-tratar/:id" element={<DieselTratarTratativa />} />
           <Route path="/diesel-consultar/:id" element={<DieselConsultarTratativa />} />
 
-          {/* PCM */}
           <Route path="/pcm-inicio" element={<PCMInicio />} />
           <Route path="/pcm-resumo" element={<PCMResumo />} />
           <Route path="/pcm-diario/:id" element={<PCMDiario />} />
-          <Route path="/pcm-preventivas" element={<PCM_Preventivas />} /> {/* ADICIONADO */}
+          <Route path="/pcm-preventivas" element={<PCM_Preventivas />} />
 
-          {/* Checklists */}
           <Route path="/checklists" element={<ChecklistCentral />} />
 
-          {/* ✅ Embarcados */}
           <Route path="/embarcados-central" element={<EmbarcadosCentral />} />
           <Route path="/embarcados-movimentacoes" element={<EmbarcadosMovimentacoes />} />
           <Route path="/embarcados-reparos" element={<EmbarcadosReparos />} />
-          <Route
-            path="/embarcados-reparos/:id"
-            element={<ReparoSolicitacaoDetalhes />}
-          />
-          <Route
-            path="/embarcados-reparos/:id/executar"
-            element={<ReparoSolicitacaoExecucao />}
-          />
+          <Route path="/embarcados-reparos/:id" element={<ReparoSolicitacaoDetalhes />} />
+          <Route path="/embarcados-reparos/:id/executar" element={<ReparoSolicitacaoExecucao />} />
           <Route path="/embarcados-envio-manutencao" element={<EmbarcadosEnvioManutencao />} />
           <Route path="/embarcados" element={<Navigate to="/embarcados-central" replace />} />
 
-          {/* Tratativas Gerais */}
           <Route path="/central" element={<CentralTratativas />} />
           <Route path="/tratativas-resumo" element={<TratativasResumo />} />
           <Route path="/tratar/:id" element={<TratarTratativa />} />
@@ -149,36 +128,18 @@ export default function App() {
           <Route path="/solicitar" element={<SolicitacaoTratativa />} />
           <Route path="/tratativas-rh" element={<TratativasRH />} />
 
-          {/* ✅ Estrutura Física */}
-          <Route
-            path="/estrutura-fisica/solicitacao"
-            element={<EstruturaFisicaSolicitacao />}
-          />
-          <Route
-            path="/estrutura-fisica/central"
-            element={<EstruturaFisicaCentral />}
-          />
-          <Route
-            path="/estrutura-fisica/consultar/:id"
-            element={<EstruturaFisicaConsultar />}
-          />
-          <Route
-            path="/estrutura-fisica/tratar/:id"
-            element={<EstruturaFisicaTratar />}
-          />
-          <Route
-            path="/estrutura-fisica"
-            element={<Navigate to="/estrutura-fisica/central" replace />}
-          />
+          <Route path="/estrutura-fisica/solicitacao" element={<EstruturaFisicaSolicitacao />} />
+          <Route path="/estrutura-fisica/central" element={<EstruturaFisicaCentral />} />
+          <Route path="/estrutura-fisica/consultar/:id" element={<EstruturaFisicaConsultar />} />
+          <Route path="/estrutura-fisica/tratar/:id" element={<EstruturaFisicaTratar />} />
+          <Route path="/estrutura-fisica" element={<Navigate to="/estrutura-fisica/central" replace />} />
 
-          {/* Avarias */}
           <Route path="/lancar-avaria" element={<LancarAvaria />} />
           <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
           <Route path="/cobrancas" element={<CobrancasAvarias />} />
           <Route path="/avarias-resumo" element={<AvariasResumo />} />
           <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
 
-          {/* SOS */}
           <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
           <Route path="/sos-fechamento" element={<SOSFechamento />} />
           <Route path="/sos-tratamento" element={<SOSTratamento />} />
@@ -186,10 +147,8 @@ export default function App() {
           <Route path="/sos-dashboard" element={<SOSDashboard />} />
           <Route path="/sos-resumo" element={<SOS_Resumo />} />
 
-          {/* KM Rodado */}
           <Route path="/km-rodado" element={<KMRodado />} />
 
-          {/* Configurações */}
           <Route path="/usuarios" element={<Usuarios />} />
         </Route>
 

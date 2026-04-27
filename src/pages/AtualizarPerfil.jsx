@@ -5,11 +5,11 @@ import { supabase } from "../supabase";
 import { useAuth } from "../context/AuthContext";
 
 const SETORES = [
-  "Manutenção",
+  "Manutencao",
   "Recursos humanos",
   "Departamento Pessoal",
   "SESMT",
-  "Operação",
+  "Operacao",
   "Ouvidoria",
   "Financeiro",
 ];

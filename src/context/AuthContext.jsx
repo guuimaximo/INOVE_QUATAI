@@ -89,18 +89,8 @@ function buildNormalizedUser(session, profile, legacyUser) {
 
   const usuarioId = profile?.usuario_id ?? legacyUser?.id ?? meta.usuario_id ?? null;
   const nivel = profile?.nivel ?? meta.nivel ?? legacyUser?.nivel ?? "Pendente";
-  const nome =
-    profile?.nome ??
-    meta.nome ??
-    legacyUser?.nome ??
-    authUser?.email ??
-    "UsuÃ¡rio";
-  const login =
-    profile?.login ??
-    meta.login ??
-    legacyUser?.login ??
-    authUser?.email ??
-    null;
+  const nome = profile?.nome ?? meta.nome ?? legacyUser?.nome ?? authUser?.email ?? "Usuario";
+  const login = profile?.login ?? meta.login ?? legacyUser?.login ?? authUser?.email ?? null;
   const profileReview = getProfileReviewStatus(profile, legacyUser);
 
   return {

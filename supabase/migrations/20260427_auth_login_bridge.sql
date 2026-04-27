@@ -93,7 +93,7 @@ set search_path = public
 as $$
 begin
   if auth.uid() is null or auth.uid() <> p_auth_user_id then
-    raise exception 'UsuÃ¡rio nÃ£o autorizado a vincular esta conta.';
+    raise exception 'Usuario nao autorizado a vincular esta conta.';
   end if;
 
   update public.usuarios_aprovadores

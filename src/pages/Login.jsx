@@ -1,4 +1,3 @@
-// src/pages/Login.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
@@ -29,11 +28,11 @@ import {
 
 const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 const SETORES = [
-  "ManutenÃ§Ã£o",
+  "Manutencao",
   "Recursos humanos",
   "Departamento Pessoal",
   "SESMT",
-  "OperaÃ§Ã£o",
+  "Operacao",
   "Ouvidoria",
   "Financeiro",
 ];
@@ -54,7 +53,7 @@ function getFriendlyError(error) {
     return getRpcSetupMessage();
   }
 
-  return message || "NÃ£o foi possÃ­vel concluir a operaÃ§Ã£o.";
+  return message || "Nao foi possivel concluir a operacao.";
 }
 
 function getSafeFarolRedirect(rawUrl) {
@@ -118,7 +117,13 @@ export default function Login() {
     setResetIdentifier("");
     setCorrecaoEmail("");
     setCorrecaoSenha("");
-    setPasswordMetrics({ score: 0, hasUpper: false, hasNumber: false, hasSpecial: false, minChar: false });
+    setPasswordMetrics({
+      score: 0,
+      hasUpper: false,
+      hasNumber: false,
+      hasSpecial: false,
+      minChar: false,
+    });
     if (clearFeedback) setFeedback(null);
   }
 
@@ -171,7 +176,7 @@ export default function Login() {
     const currentPassword = senha.trim();
 
     if (!identifier || !currentPassword) {
-      pushFeedback("error", "Informe seu usuÃ¡rio/e-mail e senha.");
+      pushFeedback("error", "Informe seu usuario/e-mail e senha.");
       return;
     }
 
@@ -186,7 +191,7 @@ export default function Login() {
       }
 
       if (!account.ativo) {
-        pushFeedback("error", "Sua conta estÃ¡ inativa. Fale com o administrador.");
+        pushFeedback("error", "Sua conta esta inativa. Fale com o administrador.");
         return;
       }
 
@@ -194,7 +199,7 @@ export default function Login() {
       const statusCadastro = String(account.status_cadastro || "").trim();
 
       if (nivel === "Pendente" || statusCadastro === "Pendente") {
-        pushFeedback("error", "Seu cadastro ainda estÃ¡ em anÃ¡lise pelo administrador.");
+        pushFeedback("error", "Seu cadastro ainda esta em analise pelo administrador.");
         return;
       }
 
@@ -203,7 +208,7 @@ export default function Login() {
         setCorrecaoEmail(account.legacy_email || "");
         pushFeedback(
           "error",
-          "Seu cadastro foi localizado, mas o usuÃ¡rio Auth ainda nÃ£o estÃ¡ vinculado corretamente. Regularize o e-mail de acesso ou finalize a migraÃ§Ã£o no Supabase."
+          "Seu cadastro foi localizado, mas o usuario Auth ainda nao esta vinculado corretamente. Regularize o e-mail de acesso ou finalize a migracao no Supabase."
         );
         return;
       }
@@ -223,7 +228,7 @@ export default function Login() {
 
       if (account.email_precisa_correcao) {
         alert(
-          "Seu acesso entrou usando um e-mail provisÃ³rio no Supabase. Use a opÃ§Ã£o 'Corrigir e-mail de acesso' para trocar pelo e-mail correto antes de depender de recuperaÃ§Ã£o de senha."
+          "Seu acesso entrou usando um e-mail provisorio no Supabase. Use a opcao 'Corrigir e-mail de acesso' para trocar pelo e-mail correto antes de depender de recuperacao de senha."
         );
       }
 
@@ -262,7 +267,7 @@ export default function Login() {
       const account = await lookupAccount(identifier);
 
       if (!account || !account.ativo) {
-        pushFeedback("error", "Conta nÃ£o encontrada ou inativa.");
+        pushFeedback("error", "Conta nao encontrada ou inativa.");
         return;
       }
 
@@ -270,7 +275,7 @@ export default function Login() {
         setShowEmailFix(true);
         pushFeedback(
           "error",
-          "Seu usuÃ¡rio ainda nÃ£o tem um e-mail de acesso vÃ¡lido no Supabase. Corrija o e-mail antes de usar recuperaÃ§Ã£o de senha."
+          "Seu usuario ainda nao tem um e-mail de acesso valido no Supabase. Corrija o e-mail antes de usar recuperacao de senha."
         );
         return;
       }
@@ -280,7 +285,7 @@ export default function Login() {
         setCorrecaoEmail(account.legacy_email || "");
         pushFeedback(
           "error",
-          "Sua conta ainda usa um e-mail provisÃ³rio. Corrija o e-mail de acesso primeiro e depois refaÃ§a a recuperaÃ§Ã£o de senha."
+          "Sua conta ainda usa um e-mail provisorio. Corrija o e-mail de acesso primeiro e depois refaca a recuperacao de senha."
         );
         return;
       }
@@ -290,13 +295,13 @@ export default function Login() {
       });
 
       if (error) {
-        pushFeedback("error", error.message || "NÃ£o foi possÃ­vel enviar o reset de senha.");
+        pushFeedback("error", error.message || "Nao foi possivel enviar o reset de senha.");
         return;
       }
 
       pushFeedback(
         "success",
-        `Enviamos a redefiniÃ§Ã£o de senha para ${account.auth_email}. Abra o link do e-mail para cadastrar a nova senha.`
+        `Enviamos a redefinicao de senha para ${account.auth_email}. Abra o link do e-mail para cadastrar a nova senha.`
       );
     } catch (error) {
       pushFeedback("error", getFriendlyError(error));
@@ -319,7 +324,7 @@ export default function Login() {
     }
 
     if (!isValidEmail(newEmail) || isPlaceholderEmail(newEmail)) {
-      pushFeedback("error", "Informe um e-mail corporativo vÃ¡lido para o novo acesso.");
+      pushFeedback("error", "Informe um e-mail corporativo valido para o novo acesso.");
       return;
     }
 
@@ -329,14 +334,14 @@ export default function Login() {
       const account = await lookupAccount(identifier);
 
       if (!account) {
-        pushFeedback("error", "Conta nÃ£o encontrada para esse login/e-mail.");
+        pushFeedback("error", "Conta nao encontrada para esse login/e-mail.");
         return;
       }
 
       if (!account.auth_email) {
         pushFeedback(
           "error",
-          "Este cadastro ainda nÃ£o possui um usuÃ¡rio Auth vinculado. O administrador precisa concluir a migraÃ§Ã£o desse usuÃ¡rio no Supabase."
+          "Este cadastro ainda nao possui um usuario Auth vinculado. O administrador precisa concluir a migracao desse usuario no Supabase."
         );
         return;
       }
@@ -347,7 +352,7 @@ export default function Login() {
       });
 
       if (signInError) {
-        pushFeedback("error", "NÃ£o foi possÃ­vel validar sua senha atual para corrigir o e-mail de acesso.");
+        pushFeedback("error", "Nao foi possivel validar sua senha atual para corrigir o e-mail de acesso.");
         return;
       }
 
@@ -374,7 +379,7 @@ export default function Login() {
       await supabase.auth.signOut();
       pushFeedback(
         "success",
-        "SolicitaÃ§Ã£o de troca de e-mail enviada. Se o projeto estiver com 'Secure email change' ativo no Supabase, desative essa opÃ§Ã£o ou conclua a confirmaÃ§Ã£o tambÃ©m no e-mail antigo."
+        "Solicitacao de troca de e-mail enviada. Se o projeto estiver com 'Secure email change' ativo no Supabase, desative essa opcao ou conclua a confirmacao tambem no e-mail antigo."
       );
     } catch (error) {
       pushFeedback("error", getFriendlyError(error));
@@ -393,12 +398,12 @@ export default function Login() {
     const emailTrim = email.trim().toLowerCase();
 
     if (!nomeTrim || !loginTrim || !senhaTrim || !setor || !emailTrim) {
-      pushFeedback("error", "Preencha todos os campos obrigatÃ³rios.");
+      pushFeedback("error", "Preencha todos os campos obrigatorios.");
       return;
     }
 
     if (!isValidEmail(emailTrim)) {
-      pushFeedback("error", "Insira um e-mail vÃ¡lido.");
+      pushFeedback("error", "Insira um e-mail valido.");
       return;
     }
 
@@ -422,7 +427,7 @@ export default function Login() {
       }
 
       if (existingUser) {
-        pushFeedback("error", "Este usuÃ¡rio ou e-mail jÃ¡ estÃ£o cadastrados.");
+        pushFeedback("error", "Este usuario ou e-mail ja estao cadastrados.");
         return;
       }
 
@@ -440,7 +445,7 @@ export default function Login() {
       });
 
       if (authError) {
-        pushFeedback("error", authError.message || "NÃ£o foi possÃ­vel criar o acesso no Supabase Auth.");
+        pushFeedback("error", authError.message || "Nao foi possivel criar o acesso no Supabase Auth.");
         return;
       }
 
@@ -463,14 +468,14 @@ export default function Login() {
       ]);
 
       if (insertError) {
-        pushFeedback("error", insertError.message || "Erro ao registrar sua solicitaÃ§Ã£o de acesso.");
+        pushFeedback("error", insertError.message || "Erro ao registrar sua solicitacao de acesso.");
         return;
       }
 
       await supabase.auth.signOut();
       pushFeedback(
         "success",
-        "Cadastro solicitado com sucesso. Se o Supabase exigir confirmaÃ§Ã£o de e-mail, valide a mensagem recebida antes do primeiro login."
+        "Cadastro solicitado com sucesso. Se o Supabase exigir confirmacao de e-mail, valide a mensagem recebida antes do primeiro login."
       );
       setIsCadastro(false);
       resetForm(false);
@@ -496,7 +501,10 @@ export default function Login() {
           <img src={logoInova} alt="Logo Portal Inove" className="w-48 mb-8 drop-shadow-xl" />
           <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed text-justify">
-            O papel da lideranca no Grupo CSC e motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento, gerando resiliencia e coragem para influenciar, quebrar barreiras, melhorar processos e entregar resultados com foco na seguranca, na satisfacao do cliente e na otimizacao de custos.
+            O papel da lideranca no Grupo CSC e motivar e capacitar pessoas, entendendo a individualidade de cada um,
+            com disciplina e comprometimento, gerando resiliencia e coragem para influenciar, quebrar barreiras,
+            melhorar processos e entregar resultados com foco na seguranca, na satisfacao do cliente e na otimizacao de
+            custos.
           </p>
         </div>
       </div>
@@ -542,7 +550,7 @@ export default function Login() {
                   <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
                   <input
                     type="text"
-                    placeholder="UsuÃ¡rio ou e-mail"
+                    placeholder="Usuario ou e-mail"
                     value={loginInput}
                     onChange={(event) => setLoginInput(event.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
@@ -612,7 +620,7 @@ export default function Login() {
                   <LogIn className="absolute left-3 top-3.5 text-slate-400" size={20} />
                   <input
                     type="text"
-                    placeholder="UsuÃ¡rio (login) *"
+                    placeholder="Usuario (login) *"
                     value={loginInput}
                     onChange={(event) => setLoginInput(event.target.value)}
                     className="w-full pl-10 py-3 bg-white border rounded-xl"
@@ -641,9 +649,9 @@ export default function Login() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <PasswordCheck label="8+ caracteres" met={passwordMetrics.minChar} />
-                      <PasswordCheck label="MaiÃºscula" met={passwordMetrics.hasUpper} />
-                      <PasswordCheck label="NÃºmero" met={passwordMetrics.hasNumber} />
-                      <PasswordCheck label="SÃ­mbolo" met={passwordMetrics.hasSpecial} />
+                      <PasswordCheck label="Maiuscula" met={passwordMetrics.hasUpper} />
+                      <PasswordCheck label="Numero" met={passwordMetrics.hasNumber} />
+                      <PasswordCheck label="Simbolo" met={passwordMetrics.hasSpecial} />
                     </div>
                   </div>
                 )}
@@ -695,7 +703,7 @@ export default function Login() {
                 <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
                 <input
                   type="text"
-                  placeholder="UsuÃ¡rio ou e-mail"
+                  placeholder="Usuario ou e-mail"
                   value={resetIdentifier}
                   onChange={(event) => setResetIdentifier(event.target.value)}
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
@@ -706,7 +714,7 @@ export default function Login() {
                 disabled={loading}
                 className="w-full inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-white font-semibold hover:bg-slate-800 disabled:opacity-70"
               >
-                Enviar redefiniÃ§Ã£o
+                Enviar redefinicao
               </button>
             </form>
           )}
@@ -715,7 +723,7 @@ export default function Login() {
             <form onSubmit={handleCorrigirEmail} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
               <h2 className="font-semibold text-slate-900">Corrigir e-mail de acesso</h2>
               <p className="text-sm text-slate-500">
-                Use sua senha atual para trocar o e-mail provisÃ³rio do Supabase pelo e-mail correto de trabalho.
+                Use sua senha atual para trocar o e-mail provisorio do Supabase pelo e-mail correto de trabalho.
               </p>
               <div className="relative">
                 <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
@@ -749,7 +757,7 @@ export default function Login() {
 
           <div className="mt-4 text-center">
             <p className="text-slate-600">
-              {isCadastro ? "JÃ¡ possui cadastro?" : "NÃ£o tem uma conta?"}{" "}
+              {isCadastro ? "Ja possui cadastro?" : "Nao tem uma conta?"}{" "}
               <button
                 onClick={() => {
                   setIsCadastro(!isCadastro);

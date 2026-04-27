@@ -8,7 +8,7 @@ export default function RequireAuth({ children }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">
-        Carregando sessÃ£o...
+        Carregando sessao...
       </div>
     );
   }
@@ -17,10 +17,7 @@ export default function RequireAuth({ children }) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (
-    user?.requires_profile_review &&
-    location.pathname !== "/atualizar-perfil"
-  ) {
+  if (user?.requires_profile_review && location.pathname !== "/atualizar-perfil") {
     return <Navigate to="/atualizar-perfil" replace state={{ from: location }} />;
   }
 

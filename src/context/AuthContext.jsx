@@ -16,6 +16,7 @@ function normalizeStoredAppUser(userData) {
 
   return {
     ...userData,
+    auth_source: userData.auth_source || (userData.auth_user_id ? "supabase" : "legacy"),
     id: userData.id ?? userData.usuario_id ?? userData.auth_user_id ?? null,
     usuario_id: userData.usuario_id ?? userData.id ?? null,
     auth_user_id: userData.auth_user_id ?? null,
@@ -29,6 +30,10 @@ function normalizeStoredAppUser(userData) {
     requires_profile_review: !!userData.requires_profile_review,
     profile_review_reasons: Array.isArray(userData.profile_review_reasons) ? userData.profile_review_reasons : [],
   };
+}
+
+function shouldKeepLegacySession(userData) {
+  return !!userData && userData.auth_source === "legacy" && isSessionValid();
 }
 
 export function AuthProvider({ children }) {
@@ -59,6 +64,12 @@ export function AuthProvider({ children }) {
   const syncFromSession = useCallback(
     async (sessionUser) => {
       if (!sessionUser) {
+        const storedUser = getStoredUser();
+        if (shouldKeepLegacySession(storedUser)) {
+          setUser(storedUser);
+          return storedUser;
+        }
+
         clearStoredUser();
         setUser(null);
         return null;
@@ -92,6 +103,12 @@ export function AuthProvider({ children }) {
     } = await supabase.auth.getSession();
 
     if (!session?.user) {
+      const storedUser = getStoredUser();
+      if (shouldKeepLegacySession(storedUser)) {
+        setUser(storedUser);
+        return storedUser;
+      }
+
       clearStoredUser();
       setUser(null);
       return null;
@@ -110,6 +127,14 @@ export function AuthProvider({ children }) {
         } = await supabase.auth.getSession();
 
         if (!mounted) return;
+        if (!session?.user) {
+          const storedUser = getStoredUser();
+          if (shouldKeepLegacySession(storedUser)) {
+            setUser(storedUser);
+            return;
+          }
+        }
+
         await syncFromSession(session?.user || null);
       } catch (error) {
         console.error("Falha ao preparar sessao do Auth:", error);
@@ -133,6 +158,12 @@ export function AuthProvider({ children }) {
       syncFromSession(session?.user || null)
         .catch((error) => {
           console.error("Falha ao sincronizar sessao do Auth:", error);
+          const storedUser = getStoredUser();
+          if (shouldKeepLegacySession(storedUser)) {
+            setUser(storedUser);
+            return;
+          }
+
           clearStoredUser();
           setUser(null);
         })

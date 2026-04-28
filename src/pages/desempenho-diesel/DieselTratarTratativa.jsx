@@ -32,17 +32,16 @@ const acoes = [
   "Elogiado",
 ];
 
-function isValidUUID(v) {
-  if (!v) return false;
-  const s = String(v).trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    s
-  );
-}
+function pickNumericUserId(user) {
+  const candidates = [user?.usuario_id, user?.id];
 
-function pickUserUuid(user) {
-  if (isValidUUID(user?.auth_user_id)) return user.auth_user_id;
-  if (isValidUUID(user?.id)) return user.id;
+  for (const value of candidates) {
+    const parsed = Number(value);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
   return null;
 }
 
@@ -315,7 +314,7 @@ export default function DieselTratarTratativa() {
           .getPublicUrl(safe).data.publicUrl;
       }
 
-      const tratadoPorId = pickUserUuid(user);
+      const tratadoPorId = pickNumericUserId(user);
       const tratadoPorLogin = user?.login || user?.email || null;
       const tratadoPorNome = user?.nome_completo || user?.nome || user?.login || user?.email || null;
 

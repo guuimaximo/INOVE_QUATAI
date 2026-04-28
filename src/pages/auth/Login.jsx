@@ -104,7 +104,7 @@ function getSignInEmail(identifier, bridge) {
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { refreshUser, logout } = useAuth();
+  const { refreshUser, logout, login: persistLocalLogin } = useAuth();
 
   const [isCadastro, setIsCadastro] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -193,6 +193,44 @@ export default function Login() {
     } catch {
       // Mantem o login funcional mesmo se o navegador bloquear storage.
     }
+  }
+
+  function isAuthSchemaFailure(error) {
+    const message = String(error?.message || error?.msg || "").toLowerCase();
+    const code = String(error?.code || error?.error_code || "").toLowerCase();
+    return code === "unexpected_failure" || message.includes("database error querying schema");
+  }
+
+  function buildLegacyFallbackUser(legacyUser) {
+    return {
+      id: legacyUser?.id ?? null,
+      usuario_id: legacyUser?.id ?? null,
+      auth_user_id: legacyUser?.auth_user_id ?? null,
+      auth_source: "legacy",
+      nome: legacyUser?.nome || "Usuario",
+      login: legacyUser?.login || "",
+      email: legacyUser?.email || "",
+      nivel: legacyUser?.nivel || "Pendente",
+      setor: legacyUser?.setor || "",
+      ativo: legacyUser?.ativo !== false,
+      status_cadastro: legacyUser?.status_cadastro || "Aprovado",
+      migrado_auth: !!legacyUser?.migrado_auth,
+      legacy_user: legacyUser,
+      profile: null,
+      requires_profile_review: false,
+      profile_review_reasons: [],
+    };
+  }
+
+  async function finalizeLegacyFallbackLogin(identifier, legacyUser) {
+    const localUser = persistLocalLogin(buildLegacyFallbackUser(legacyUser));
+    rememberUserHints(identifier, localUser);
+    navigate(nextPathState || decideDefaultNext(), { replace: true });
+    pushFeedback(
+      "success",
+      "Seu acesso foi liberado em modo de contingencia enquanto finalizamos a estabilizacao do Supabase Auth."
+    );
+    return true;
   }
 
   async function fetchLegacyCredentialMatch(identifier, currentPassword) {
@@ -372,6 +410,11 @@ export default function Login() {
 
       if (hasApprovalBlock(legacyUser)) {
         pushFeedback("error", getApprovalMessage(legacyUser));
+        return;
+      }
+
+      if (isAuthSchemaFailure(authSignInError)) {
+        await finalizeLegacyFallbackLogin(identifier, legacyUser);
         return;
       }
 

@@ -464,6 +464,29 @@ export default function Login() {
       });
 
       if (error) {
+        if (isAuthSchemaFailure(error) || /unable to process request|database error finding user/i.test(String(error.message || ""))) {
+          const { data: requestId, error: requestError } = await supabase.rpc("create_password_reset_request", {
+            p_identifier: identifier,
+          });
+
+          if (requestError) {
+            pushFeedback(
+              "error",
+              requestError.message || "Nao foi possivel registrar sua solicitacao de recuperacao."
+            );
+            return;
+          }
+
+          pushFeedback(
+            "success",
+            `A redefinicao automatica esta em manutencao. Registramos sua solicitacao${
+              requestId ? ` (${String(requestId).slice(0, 8)})` : ""
+            } para atendimento interno.`
+          );
+          setShowReset(false);
+          return;
+        }
+
         pushFeedback("error", error.message || "Nao foi possivel enviar o e-mail de redefinicao.");
         return;
       }

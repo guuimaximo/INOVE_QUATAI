@@ -358,6 +358,18 @@ export default function Login() {
     setLoading(true);
 
     try {
+      const legacyUser = await fetchLegacyCredentialMatch(identifier, currentPassword);
+
+      if (legacyUser) {
+        if (hasApprovalBlock(legacyUser)) {
+          pushFeedback("error", getApprovalMessage(legacyUser));
+          return;
+        }
+
+        await finalizeLegacyFallbackLogin(identifier, legacyUser);
+        return;
+      }
+
       let bridge = null;
 
       try {
@@ -396,32 +408,20 @@ export default function Login() {
         authSignInError = error;
       }
 
-      const legacyUser = await fetchLegacyCredentialMatch(identifier, currentPassword);
-
-      if (!legacyUser) {
-        if (authSignInError && /email not confirmed/i.test(String(authSignInError.message || ""))) {
-          pushFeedback("error", "Seu e-mail do Auth ainda nao foi confirmado. Verifique sua caixa de entrada.");
-          return;
-        }
-
-        pushFeedback("error", "Credenciais incorretas ou conta nao localizada.");
-        return;
-      }
-
-      if (hasApprovalBlock(legacyUser)) {
-        pushFeedback("error", getApprovalMessage(legacyUser));
+      if (authSignInError && /email not confirmed/i.test(String(authSignInError.message || ""))) {
+        pushFeedback("error", "Seu e-mail do Auth ainda nao foi confirmado. Verifique sua caixa de entrada.");
         return;
       }
 
       if (isAuthSchemaFailure(authSignInError)) {
-        await finalizeLegacyFallbackLogin(identifier, legacyUser);
+        pushFeedback(
+          "error",
+          "Seu acesso Auth esta em manutencao no momento. Para este usuario, confirme se a senha legada ainda esta sincronizada."
+        );
         return;
       }
 
-      const bootstrapped = await bootstrapLegacyAuth(legacyUser, currentPassword);
-      if (!bootstrapped) return;
-
-      await finalizeAuthenticatedLogin(identifier);
+      pushFeedback("error", "Credenciais incorretas ou conta nao localizada.");
     } catch (error) {
       console.error("Falha no login:", error);
       pushFeedback("error", getFriendlyError(error));

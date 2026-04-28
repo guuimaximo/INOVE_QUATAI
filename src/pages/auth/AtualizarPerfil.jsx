@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Save, User, Briefcase, LogIn } from "lucide-react";
+import { Loader2, Save, User, Briefcase, LogIn, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../context/AuthContext";
+import { isPlaceholderEmail, isValidEmail } from "../../utils/authBridge";
 
 const SETORES = [
   "Manutencao",
@@ -19,6 +20,7 @@ export default function AtualizarPerfil() {
   const { user, refreshUser, logout } = useAuth();
   const [nome, setNome] = useState("");
   const [login, setLogin] = useState("");
+  const [email, setEmail] = useState("");
   const [setor, setSetor] = useState("");
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -26,12 +28,18 @@ export default function AtualizarPerfil() {
   useEffect(() => {
     setNome(user?.nome || "");
     setLogin(user?.login || "");
+    setEmail(user?.email || "");
     setSetor(user?.setor || "");
   }, [user]);
 
   const reasonsText = useMemo(() => {
     const reasons = user?.profile_review_reasons || [];
     if (!reasons.length) return "Seu perfil precisa ser conferido antes de entrar no sistema.";
+
+    if (reasons.includes("email")) {
+      return "Precisamos corrigir seu e-mail para concluir a migracao do login e liberar o acesso normal.";
+    }
+
     return "Encontramos dados incompletos ou desatualizados no seu perfil. Revise e confirme abaixo para continuar.";
   }, [user?.profile_review_reasons]);
 
@@ -43,22 +51,52 @@ export default function AtualizarPerfil() {
       p_nome: String(nome || "").trim(),
       p_login: String(login || "").trim(),
       p_setor: String(setor || "").trim(),
+      p_email: String(email || "").trim().toLowerCase(),
     };
 
-    if (!payload.p_nome || !payload.p_login || !payload.p_setor) {
-      setFeedback({ type: "error", text: "Preencha nome, login e setor para continuar." });
+    if (!payload.p_nome || !payload.p_login || !payload.p_setor || !payload.p_email) {
+      setFeedback({ type: "error", text: "Preencha nome, apelido, e-mail e setor para continuar." });
+      return;
+    }
+
+    if (!isValidEmail(payload.p_email)) {
+      setFeedback({ type: "error", text: "Informe um e-mail valido para concluir a atualizacao." });
       return;
     }
 
     setLoading(true);
 
-    const { error } = await supabase.rpc("sync_profile_after_review", payload);
+    const { error: syncError } = await supabase.rpc("sync_profile_after_review", payload);
 
-    if (error) {
+    if (syncError) {
       setLoading(false);
       setFeedback({
         type: "error",
-        text: error.message || "Nao foi possivel atualizar o perfil. Verifique a migration do Supabase.",
+        text: syncError.message || "Nao foi possivel atualizar o perfil. Verifique a migration do Supabase.",
+      });
+      return;
+    }
+
+    const authPayload = {
+      data: {
+        nome: payload.p_nome,
+        login: payload.p_login,
+        setor: payload.p_setor,
+      },
+    };
+
+    const currentEmail = String(user?.email || "").trim().toLowerCase();
+    if (payload.p_email !== currentEmail) {
+      authPayload.email = payload.p_email;
+    }
+
+    const { error: authError } = await supabase.auth.updateUser(authPayload);
+
+    if (authError) {
+      setLoading(false);
+      setFeedback({
+        type: "error",
+        text: authError.message || "Os dados base foram salvos, mas falhou a atualizacao do Auth.",
       });
       return;
     }
@@ -67,9 +105,14 @@ export default function AtualizarPerfil() {
     setLoading(false);
 
     if (updatedUser?.requires_profile_review) {
+      const emailStillPending =
+        updatedUser.profile_review_reasons?.includes("email") || isPlaceholderEmail(updatedUser?.email || "");
+
       setFeedback({
         type: "error",
-        text: "O perfil ainda ficou pendente de revisao. Verifique os dados salvos no banco.",
+        text: emailStillPending
+          ? "Os dados foram salvos, mas o novo e-mail ainda precisa ser confirmado no Auth para liberar seu acesso."
+          : "O perfil ainda ficou pendente de revisao. Verifique os dados salvos no banco.",
       });
       return;
     }
@@ -114,9 +157,20 @@ export default function AtualizarPerfil() {
             <LogIn className="absolute left-3 top-3.5 text-slate-400" size={18} />
             <input
               type="text"
-              placeholder="Login"
+              placeholder="Apelido"
               value={login}
               onChange={(event) => setLogin(event.target.value)}
+              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+            />
+          </div>
+
+          <div className="relative">
+            <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
+            <input
+              type="email"
+              placeholder="E-mail"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
             />
           </div>

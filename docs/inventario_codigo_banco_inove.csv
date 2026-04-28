@@ -1,0 +1,352 @@
+file,module,client,category,object,line,operations,flags
+src/AuthContext.jsx,auth_context,supabase,table_or_view,profiles,16,"select, eq, single",
+src/AuthContext.jsx,auth_context,supabase,auth_method,getSession,30,getSession,
+src/AuthContext.jsx,auth_context,supabase,auth_method,onAuthStateChange,53,onAuthStateChange,
+src/AuthContext.jsx,auth_context,supabase,auth_method,signOut,68,signOut,
+src/components/CampoMotorista.jsx,component,supabase,table_or_view,motoristas,22,select,
+src/components/CampoPrefixo.jsx,component,supabase,table_or_view,prefixos,22,select,
+src/components/ChamadosMotoristasModal.jsx,component,supabase,table_or_view,avarias_motoristas_chamados,38,"select, eq",
+src/components/ChamadosMotoristasModal.jsx,component,supabase,table_or_view,avarias_motoristas_chamados,100,"delete, eq",
+src/components/ChamadosMotoristasModal.jsx,component,supabase,table_or_view,avarias_motoristas_chamados,148,"update, eq",
+src/components/ChamadosMotoristasModal.jsx,component,supabase,table_or_view,avarias_motoristas_chamados,175,"update, eq",
+src/components/ChamadosMotoristasModal.jsx,component,supabase,table_or_view,avarias_motoristas_chamados,202,"select, insert, single",
+src/components/ChamadosMotoristasModal.jsx,component,supabase,table_or_view,avarias_motoristas_chamados,212,"update, eq",
+src/components/CobrancaDetalheModal.jsx,component,supabase,table_or_view,cobrancas_avarias,115,"select, eq",
+src/components/CobrancaDetalheModal.jsx,component,supabase,table_or_view,avarias_terceiros,126,"select, eq, maybeSingle",
+src/components/CobrancaDetalheModal.jsx,component,supabase,table_or_view,avarias_terceiros,169,"select, eq, maybeSingle",
+src/components/CobrancaDetalheModal.jsx,component,supabase,table_or_view,avarias_terceiros,313,upsert,
+src/components/CobrancaDetalheModal.jsx,component,supabase,table_or_view,avarias,346,"update, eq",
+src/components/desempenho/AnaliseResumoModal.jsx,component,supabase,table_or_view,diesel_acompanhamento_eventos,33,"select, eq",
+src/components/desempenho/HistoricoModal.jsx,component,supabase,table_or_view,diesel_acompanhamento_eventos,31,"select, eq",
+src/components/desempenho/ModalCheckpointAnalise.jsx,component,supabase,table_or_view,diesel_acompanhamento_eventos,228,"select, eq, maybeSingle","github_env_usage, github_token_frontend"
+src/components/desempenho/ModalCheckpointAnalise.jsx,component,supabase,table_or_view,diesel_acompanhamento_eventos,300,insert,"github_env_usage, github_token_frontend"
+src/components/desempenho/ModalCheckpointAnalise.jsx,component,supabase,table_or_view,diesel_acompanhamentos,313,"update, eq","github_env_usage, github_token_frontend"
+src/components/desempenho/ModalCheckpointAnalise.jsx,component,supabase,table_or_view,diesel_tratativas,389,"select, eq, maybeSingle","github_env_usage, github_token_frontend"
+src/components/desempenho/ModalCheckpointAnalise.jsx,component,supabase,table_or_view,diesel_tratativas,414,"update, eq","github_env_usage, github_token_frontend"
+src/components/desempenho/ModalCheckpointAnalise.jsx,component,supabase,table_or_view,diesel_tratativas,434,insert,"github_env_usage, github_token_frontend"
+src/components/desempenho/ModalCheckpointAnalise.jsx,component,supabase,table_or_view,diesel_tratativas_detalhes,472,insert,"github_env_usage, github_token_frontend"
+src/components/desempenho/ModalCheckpointAnalise.jsx,component,supabase,table_or_view,acompanhamento_lotes,484,"select, insert, single","github_env_usage, github_token_frontend"
+src/components/desempenho/ModalCheckpointAnalise.jsx,component,supabase,table_or_view,acompanhamento_lote_itens,501,insert,"github_env_usage, github_token_frontend"
+src/components/desempenho/ModalLancamentoIntervencao.jsx,component,supabase,table_or_view,diesel_checklist_itens,146,select,
+src/components/desempenho/ModalLancamentoIntervencao.jsx,component,supabase,table_or_view,diesel_acompanhamentos,276,"update, eq",
+src/components/desempenho/ModalLancamentoIntervencao.jsx,component,supabase,table_or_view,diesel_checklist_respostas,283,"delete, eq",
+src/components/desempenho/ModalLancamentoIntervencao.jsx,component,supabase,table_or_view,diesel_checklist_respostas,330,insert,
+src/components/desempenho/ModalProntuarioUnificado.jsx,component,supabase,table_or_view,diesel_acompanhamentos,163,"select, eq",
+src/components/desempenho/ResumoAnalise.jsx,component,supabase,table_or_view,diesel_acompanhamento_eventos,71,"select, eq, in",
+src/components/desempenho/ResumoLancamentoInstrutor.jsx,component,supabase,table_or_view,diesel_checklist_itens,222,"select, eq, in",
+src/components/desempenho/ResumoLancamentoInstrutor.jsx,component,supabase,table_or_view,diesel_checklist_respostas,267,"select, eq",
+src/components/embarcados/ReparoSolicitacaoDetalhes.jsx,component,supabase,table_or_view,usuarios_aprovadores,238,"select, eq, maybeSingle",legacy_password_query
+src/components/embarcados/ReparoSolicitacaoDetalhes.jsx,component,supabase,table_or_view,embarcados_solicitacoes_reparo,266,"select, eq, maybeSingle",legacy_password_query
+src/components/embarcados/ReparoSolicitacaoDetalhes.jsx,component,supabase,table_or_view,usuarios_aprovadores,307,"select, eq, maybeSingle",legacy_password_query
+src/components/embarcados/ReparoSolicitacaoDetalhes.jsx,component,supabase,table_or_view,embarcados_solicitacoes_reparo_eventos,356,insert,legacy_password_query
+src/components/embarcados/ReparoSolicitacaoDetalhes.jsx,component,supabase,table_or_view,embarcados_solicitacoes_reparo,384,"update, eq",legacy_password_query
+src/components/embarcados/ReparoSolicitacaoDetalhes.jsx,component,supabase,table_or_view,embarcados_solicitacoes_reparo,428,"update, eq",legacy_password_query
+src/components/embarcados/ReparoSolicitacaoExecucao.jsx,component,supabase,table_or_view,usuarios_aprovadores,111,"select, eq, maybeSingle",
+src/components/embarcados/ReparoSolicitacaoExecucao.jsx,component,supabase,table_or_view,embarcados_solicitacoes_reparo,141,"select, eq, maybeSingle",
+src/components/embarcados/ReparoSolicitacaoExecucao.jsx,component,supabase,table_or_view,embarcados_solicitacoes_reparo_eventos,315,insert,
+src/components/embarcados/ReparoSolicitacaoExecucao.jsx,component,supabase,table_or_view,embarcados_solicitacoes_reparo,349,"update, eq",
+src/components/embarcados/ReparoSolicitacaoNovaModal.jsx,component,supabase,table_or_view,usuarios_aprovadores,123,"select, eq, maybeSingle",
+src/components/embarcados/ReparoSolicitacaoNovaModal.jsx,component,supabase,table_or_view,prefixos,174,select,
+src/components/embarcados/ReparoSolicitacaoNovaModal.jsx,component,supabase,table_or_view,embarcados_solicitacoes_reparo_eventos,249,insert,
+src/components/embarcados/ReparoSolicitacaoNovaModal.jsx,component,supabase,table_or_view,embarcados_solicitacoes_reparo,406,"select, insert, single",
+src/components/Sidebar.jsx,component,,flag_only,,,,localstorage_session
+src/pages/auth/AtualizarPerfil.jsx,page,supabase,rpc,sync_profile_after_review,55,unknown,
+src/pages/auth/AtualizarSenha.jsx,page,supabase,auth_method,getSession,36,getSession,
+src/pages/auth/AtualizarSenha.jsx,page,supabase,auth_method,onAuthStateChange,47,onAuthStateChange,
+src/pages/auth/AtualizarSenha.jsx,page,supabase,auth_method,updateUser,86,updateUser,
+src/pages/auth/AtualizarSenha.jsx,page,supabase,auth_method,signOut,94,signOut,
+src/pages/auth/Cadastro.jsx,page,supabase,table_or_view,profiles,55,"update, eq",
+src/pages/auth/Cadastro.jsx,page,supabase,auth_method,signUp,40,signUp,
+src/pages/auth/Login.jsx,page,supabase,table_or_view,usuarios_aprovadores,179,"select, eq, maybeSingle","legacy_password_query, localstorage_session"
+src/pages/auth/Login.jsx,page,supabase,table_or_view,usuarios_aprovadores,256,"select, maybeSingle","legacy_password_query, localstorage_session"
+src/pages/auth/Login.jsx,page,supabase,table_or_view,usuarios_aprovadores,272,insert,"legacy_password_query, localstorage_session"
+src/pages/auth/Register.jsx,page,supabase,table_or_view,usuarios_aprovadores,26,insert,
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,usuarios_aprovadores,18,"select, eq, single",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,cobrancas_avarias,111,"select, eq",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,avarias,145,"update, eq",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,avarias,152,"update, eq",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,cobrancas_avarias,227,"update, eq",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,avarias,255,"update, eq",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,avarias,267,"update, eq",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,cobrancas_avarias,298,"select, insert, single",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,cobrancas_avarias,328,"delete, eq",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,avarias,365,"update, eq",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,avarias,385,"update, eq",legacy_password_query
+src/pages/avarias/AprovacaoAvarias.jsx,page,supabase,table_or_view,avarias,673,"select, eq",legacy_password_query
+src/pages/avarias/Avarias.jsx,page,supabase,table_or_view,avarias,19,select,
+src/pages/avarias/Avarias.jsx,page,supabase,table_or_view,cobrancas_avarias,55,insert,
+src/pages/avarias/Avarias.jsx,page,supabase,table_or_view,avarias,67,"update, eq",
+src/pages/avarias/AvariasEmRevisao.jsx,page,supabase,table_or_view,usuarios_aprovadores,21,"select, eq, single",legacy_password_query
+src/pages/avarias/AvariasEmRevisao.jsx,page,supabase,table_or_view,cobrancas_avarias,119,"select, eq",legacy_password_query
+src/pages/avarias/AvariasEmRevisao.jsx,page,supabase,table_or_view,cobrancas_avarias,187,"delete, eq",legacy_password_query
+src/pages/avarias/AvariasEmRevisao.jsx,page,supabase,table_or_view,cobrancas_avarias,208,"delete, eq",legacy_password_query
+src/pages/avarias/AvariasEmRevisao.jsx,page,supabase,table_or_view,avarias,218,"delete, eq",legacy_password_query
+src/pages/avarias/AvariasEmRevisao.jsx,page,supabase,table_or_view,cobrancas_avarias,252,insert,legacy_password_query
+src/pages/avarias/AvariasEmRevisao.jsx,page,supabase,table_or_view,cobrancas_avarias,266,"update, eq",legacy_password_query
+src/pages/avarias/AvariasEmRevisao.jsx,page,supabase,table_or_view,avarias,297,"update, eq",legacy_password_query
+src/pages/avarias/AvariasEmRevisao.jsx,page,supabase,table_or_view,avarias,551,"select, eq",legacy_password_query
+src/pages/avarias/AvariasResumo.jsx,page,supabase,table_or_view,avarias,257,"select, eq",
+src/pages/avarias/CobrancasAvarias.jsx,page,supabase,table_or_view,usuarios_aprovadores,64,"select, maybeSingle",
+src/pages/avarias/CobrancasAvarias.jsx,page,supabase,table_or_view,avarias,114,"select, eq",
+src/pages/avarias/CobrancasAvarias.jsx,page,supabase,table_or_view,avarias,152,"select, eq",
+src/pages/avarias/CobrancasAvarias.jsx,page,supabase,table_or_view,avarias,215,"update, eq",
+src/pages/avarias/CobrancasAvarias.jsx,page,supabase,table_or_view,avarias,241,"delete, eq",
+src/pages/avarias/CobrancasAvarias.jsx,page,supabase,auth_method,getUser,56,getUser,
+src/pages/avarias/CobrancasAvarias.jsx,page,supabase,auth_method,onAuthStateChange,82,onAuthStateChange,
+src/pages/avarias/LancarAvaria.jsx,page,storage,table_or_view,avarias,131,unknown,
+src/pages/avarias/LancarAvaria.jsx,page,storage,table_or_view,avarias,137,unknown,
+src/pages/avarias/LancarAvaria.jsx,page,supabase,table_or_view,avarias,147,"select, insert, single",
+src/pages/avarias/LancarAvaria.jsx,page,supabase,table_or_view,cobrancas_avarias,183,insert,
+src/pages/avarias/LancarAvaria.jsx,page,supabase,bucket,avarias,131,upload,
+src/pages/avarias/LancarAvaria.jsx,page,supabase,bucket,avarias,137,getPublicUrl,
+src/pages/checklists/ChecklistCentral.jsx,page,supabaseBCNT,table_or_view,checklists,103,select,cross_base_client
+src/pages/checklists/ChecklistCentral.jsx,page,supabaseBCNT,table_or_view,checklists,136,select,cross_base_client
+src/pages/checklists/ChecklistCentral.jsx,page,supabaseBCNT,table_or_view,checklists,141,select,cross_base_client
+src/pages/checklists/ChecklistCentral.jsx,page,supabaseBCNT,table_or_view,checklists,150,select,cross_base_client
+src/pages/configuracoes/Usuarios.jsx,page,supabase,table_or_view,usuarios_aprovadores,14,select,
+src/pages/configuracoes/Usuarios.jsx,page,supabase,table_or_view,usuarios_aprovadores,34,"update, eq",
+src/pages/configuracoes/Usuarios.jsx,page,supabase,table_or_view,usuarios_aprovadores,51,"update, eq",
+src/pages/desempenho-diesel/Desempenho_Diesel_Tratativas_Central.jsx,page,supabase,table_or_view,diesel_tratativas,133,select,
+src/pages/desempenho-diesel/Desempenho_Diesel_Tratativas_Central.jsx,page,supabase,table_or_view,diesel_tratativas,142,select,
+src/pages/desempenho-diesel/Desempenho_Diesel_Tratativas_Central.jsx,page,supabase,table_or_view,diesel_tratativas,148,select,
+src/pages/desempenho-diesel/DesempenhoDieselAcompanhamento.jsx,page,supabase,table_or_view,usuarios_aprovadores,204,"select, eq, maybeSingle",
+src/pages/desempenho-diesel/DesempenhoDieselAcompanhamento.jsx,page,supabase,table_or_view,v_diesel_acompanhamentos_ciclo,230,select,
+src/pages/desempenho-diesel/DesempenhoDieselAcompanhamento.jsx,page,supabase,table_or_view,diesel_checklist_respostas,334,"delete, eq",
+src/pages/desempenho-diesel/DesempenhoDieselAcompanhamento.jsx,page,supabase,table_or_view,diesel_acompanhamentos,339,"delete, eq",
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,supabase,table_or_view,relatorios_gerados,834,"select, eq, maybeSingle","cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,supabase,table_or_view,diesel_analise_gerencial_snapshot,845,"select, maybeSingle","cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,supabase,table_or_view,v_sugestoes_acompanhamento_30d,855,select,"cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,supabase,table_or_view,diesel_acompanhamentos,857,select,"cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,supabase,table_or_view,diesel_sugestoes_acompanhamento,892,"select, eq, maybeSingle","cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,supabase,table_or_view,relatorios_gerados,964,"select, insert, single","cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,supabase,table_or_view,acompanhamento_lotes,1008,"select, insert, single","cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,supabase,table_or_view,acompanhamento_lote_itens,1032,insert,"cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,url_literal,bucket,${bucket},86,public_url,"cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,url_literal,bucket,${bucket},89,public_url,"cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,url_literal,bucket,parcial_meritocracia,131,public_url,"cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAgente.jsx,page,supabase,auth_method,getSession,830,getSession,"cross_base_client, github_env_usage, github_token_frontend, hardcoded_public_storage_url, hardcoded_supabase_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,supabase,table_or_view,relatorios_gerados,194,"select, eq, maybeSingle","github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,supabase,table_or_view,diesel_analise_gerencial_snapshot,205,"select, maybeSingle","github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,supabase,table_or_view,v_sugestoes_acompanhamento_30d,215,select,"github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,supabase,table_or_view,diesel_acompanhamentos,217,select,"github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,supabase,table_or_view,diesel_sugestoes_acompanhamento,256,"select, eq, maybeSingle","github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,supabase,table_or_view,relatorios_gerados,360,"select, insert, single","github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,supabase,table_or_view,acompanhamento_lotes,407,"select, insert, single","github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,supabase,table_or_view,acompanhamento_lote_itens,431,insert,"github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,url_literal,bucket,${BUCKET_NAME},53,public_url,"github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselAnalise.jsx,page,supabase,auth_method,getSession,190,getSession,"github_env_usage, github_token_frontend, hardcoded_public_storage_url"
+src/pages/desempenho-diesel/DesempenhoDieselCheckpoint.jsx,page,supabase,table_or_view,diesel_acompanhamentos,344,select,
+src/pages/desempenho-diesel/DesempenhoDieselCheckpoint.jsx,page,supabase,table_or_view,diesel_acompanhamento_eventos,399,"select, eq",
+src/pages/desempenho-diesel/DesempenhoDieselCheckpoint.jsx,page,supabase,table_or_view,diesel_checklist_itens,415,"select, eq",
+src/pages/desempenho-diesel/DesempenhoDieselCheckpoint.jsx,page,supabase,table_or_view,diesel_metricas_motorista_dia,459,"select, eq",
+src/pages/desempenho-diesel/DesempenhoDieselCheckpoint.jsx,page,supabase,table_or_view,diesel_acompanhamento_eventos,622,"select, insert, single",
+src/pages/desempenho-diesel/DesempenhoDieselCheckpoint.jsx,page,supabase,table_or_view,diesel_checklist_respostas,641,insert,
+src/pages/desempenho-diesel/DesempenhoDieselCheckpoint.jsx,page,supabase,table_or_view,diesel_acompanhamentos,668,"update, eq",
+src/pages/desempenho-diesel/DesempenhoDieselResumo.jsx,page,supabaseA,table_or_view,premiacao_diaria_atualizada,289,select,create_client_local
+src/pages/desempenho-diesel/DesempenhoDieselResumo.jsx,page,supabaseA,table_or_view,funcionarios,318,select,create_client_local
+src/pages/desempenho-diesel/DesempenhoDieselResumo.jsx,page,supabase,table_or_view,diesel_acompanhamentos,337,select,create_client_local
+src/pages/desempenho-diesel/DesempenhoDieselTratativas.jsx,page,supabase,table_or_view,atas_diesel,122,"select, eq, single",
+src/pages/desempenho-diesel/DesempenhoDieselTratativas.jsx,page,supabase,table_or_view,atas_diesel_detalhes,126,"select, eq",
+src/pages/desempenho-diesel/DesempenhoDieselTratativas.jsx,page,supabase,table_or_view,linhas,136,"select, eq, maybeSingle",
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,diesel_acompanhamentos,141,"select, eq, in","github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,diesel_tratativas,160,"select, eq","github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,diesel_acompanhamentos,238,"select, insert, single","github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,diesel_acompanhamento_eventos,248,insert,"github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,acompanhamento_lotes,256,"select, insert, single","github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,acompanhamento_lote_itens,260,insert,"github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,diesel_tratativas,267,"select, insert, single","github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,diesel_tratativas_detalhes,278,insert,"github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,acompanhamento_lotes,286,"select, insert, single","github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DesempenhoLancamento.jsx,page,supabase,table_or_view,acompanhamento_lote_itens,290,insert,"github_env_usage, github_token_frontend"
+src/pages/desempenho-diesel/DieselConsultarTratativa.jsx,page,supabase,table_or_view,diesel_tratativas,157,"select, eq, single",
+src/pages/desempenho-diesel/DieselConsultarTratativa.jsx,page,supabase,table_or_view,diesel_tratativas_detalhes,166,"select, eq",
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,table_or_view,diesel_tratativas,245,"select, eq, single",
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,table_or_view,linhas,254,"select, eq, maybeSingle",
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,table_or_view,motoristas,263,"select, eq, maybeSingle",
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,table_or_view,diesel_tratativas_detalhes,273,"select, eq",
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,storage,table_or_view,diesel_tratativas,308,unknown,
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,storage,table_or_view,diesel_tratativas,313,unknown,
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,table_or_view,diesel_tratativas_detalhes,322,insert,
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,table_or_view,diesel_tratativas,333,"update, eq",
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,table_or_view,diesel_tratativas_detalhes,369,"delete, eq",
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,table_or_view,diesel_tratativas,376,"delete, eq",
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,bucket,diesel_tratativas,308,upload,
+src/pages/desempenho-diesel/DieselTratarTratativa.jsx,page,supabase,bucket,diesel_tratativas,313,getPublicUrl,
+src/pages/embarcados/Embarcados.jsx,page,supabase,table_or_view,prefixos,507,select,
+src/pages/embarcados/Embarcados.jsx,page,supabase,table_or_view,embarcados_veiculos,530,"select, eq",
+src/pages/embarcados/Embarcados.jsx,page,supabase,table_or_view,embarcados_veiculos,586,"update, eq",
+src/pages/embarcados/Embarcados.jsx,page,supabase,table_or_view,embarcados_veiculos,597,insert,
+src/pages/embarcados/EmbarcadosCentral.jsx,page,supabase,table_or_view,v_embarcados_central,407,"select, in",
+src/pages/embarcados/EmbarcadosCentral.jsx,page,supabase,table_or_view,embarcados_movimentacoes,411,"select, in",
+src/pages/embarcados/EmbarcadosCentral.jsx,page,supabase,table_or_view,embarcados,496,"update, eq",
+src/pages/embarcados/EmbarcadosCentral.jsx,page,supabase,table_or_view,embarcados,513,insert,
+src/pages/embarcados/EmbarcadosEnvioManutencao.jsx,page,supabase,table_or_view,embarcados,89,"select, eq",
+src/pages/embarcados/EmbarcadosEnvioManutencao.jsx,page,supabase,table_or_view,embarcados_envios_manutencao,95,select,
+src/pages/embarcados/EmbarcadosEnvioManutencao.jsx,page,supabase,table_or_view,embarcados_envios_manutencao,99,select,
+src/pages/embarcados/EmbarcadosEnvioManutencao.jsx,page,supabase,table_or_view,embarcados_envios_manutencao,321,"select, insert, single",
+src/pages/embarcados/EmbarcadosEnvioManutencao.jsx,page,supabase,table_or_view,embarcados,334,"update, eq",
+src/pages/embarcados/EmbarcadosEnvioManutencao.jsx,page,supabase,table_or_view,embarcados_movimentacoes,345,insert,
+src/pages/embarcados/EmbarcadosEnvioManutencao.jsx,page,supabase,table_or_view,embarcados_envios_manutencao,380,"update, eq",
+src/pages/embarcados/EmbarcadosEnvioManutencao.jsx,page,supabase,table_or_view,embarcados,419,"update, eq",
+src/pages/embarcados/EmbarcadosEnvioManutencao.jsx,page,supabase,table_or_view,embarcados_movimentacoes,430,insert,
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,prefixos,79,"select, eq, in",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados,80,"select, eq, in",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados,86,"select, eq",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,prefixos,105,"select, eq",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados,106,"select, eq",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados,180,"select, eq, in",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados_solicitacoes_reparo,186,"select, eq, in",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados_movimentacoes,191,select,
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados_movimentacoes,222,insert,
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados_instalacoes,236,"update, eq",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados_instalacoes,246,insert,
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados,256,"update, eq",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados,296,"select, eq",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados_movimentacoes,323,insert,
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados_instalacoes,337,"update, eq",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados_instalacoes,348,insert,
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,table_or_view,embarcados,359,"update, eq",
+src/pages/embarcados/EmbarcadosMovimentacoes.jsx,page,supabase,auth_method,getSession,72,getSession,
+src/pages/embarcados/EmbarcadosReparos.jsx,page,supabase,table_or_view,embarcados_solicitacoes_reparo,111,select,
+src/pages/estrutura-fisica/EstruturaFisicaCentral.jsx,page,supabase,table_or_view,setores,94,select,
+src/pages/estrutura-fisica/EstruturaFisicaCentral.jsx,page,supabase,table_or_view,v_estrutura_fisica_central,108,select,
+src/pages/estrutura-fisica/EstruturaFisicaCentral.jsx,page,supabase,table_or_view,v_estrutura_fisica_central,123,select,
+src/pages/estrutura-fisica/EstruturaFisicaConsultar.jsx,page,supabase,table_or_view,estrutura_fisica_solicitacoes,107,"select, eq, single",
+src/pages/estrutura-fisica/EstruturaFisicaConsultar.jsx,page,supabase,table_or_view,estrutura_fisica_historico,116,"select, eq",
+src/pages/estrutura-fisica/EstruturaFisicaSolicitacao.jsx,page,supabase,table_or_view,setores,82,select,
+src/pages/estrutura-fisica/EstruturaFisicaSolicitacao.jsx,page,supabase,table_or_view,estrutura_fisica_solicitacoes,97,"select, maybeSingle",
+src/pages/estrutura-fisica/EstruturaFisicaSolicitacao.jsx,page,supabase,table_or_view,estrutura_fisica_solicitacoes,190,insert,
+src/pages/estrutura-fisica/EstruturaFisicaSolicitacao.jsx,page,storage,table_or_view,estrutura_fisica,225,unknown,
+src/pages/estrutura-fisica/EstruturaFisicaSolicitacao.jsx,page,storage,table_or_view,estrutura_fisica,232,unknown,
+src/pages/estrutura-fisica/EstruturaFisicaSolicitacao.jsx,page,supabase,table_or_view,estrutura_fisica_solicitacoes,239,"update, eq",
+src/pages/estrutura-fisica/EstruturaFisicaSolicitacao.jsx,page,supabase,bucket,estrutura_fisica,225,upload,
+src/pages/estrutura-fisica/EstruturaFisicaSolicitacao.jsx,page,supabase,bucket,estrutura_fisica,232,getPublicUrl,
+src/pages/estrutura-fisica/EstruturaFisicaTratar.jsx,page,supabase,table_or_view,estrutura_fisica_solicitacoes,56,"select, eq, single",
+src/pages/estrutura-fisica/EstruturaFisicaTratar.jsx,page,storage,table_or_view,estrutura_fisica,179,unknown,
+src/pages/estrutura-fisica/EstruturaFisicaTratar.jsx,page,storage,table_or_view,estrutura_fisica,186,unknown,
+src/pages/estrutura-fisica/EstruturaFisicaTratar.jsx,page,supabase,table_or_view,estrutura_fisica_historico,198,insert,
+src/pages/estrutura-fisica/EstruturaFisicaTratar.jsx,page,supabase,table_or_view,estrutura_fisica_solicitacoes,227,update,
+src/pages/estrutura-fisica/EstruturaFisicaTratar.jsx,page,supabase,table_or_view,estrutura_fisica_solicitacoes,277,update,
+src/pages/estrutura-fisica/EstruturaFisicaTratar.jsx,page,supabase,table_or_view,estrutura_fisica_solicitacoes,331,update,
+src/pages/estrutura-fisica/EstruturaFisicaTratar.jsx,page,supabase,bucket,estrutura_fisica,179,upload,
+src/pages/estrutura-fisica/EstruturaFisicaTratar.jsx,page,supabase,bucket,estrutura_fisica,186,getPublicUrl,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,tratativas,82,select,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,tratativas,87,select,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,tratativas,95,select,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,tratativas,106,select,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,avarias,116,select,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,tratativas,164,select,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,avarias,167,select,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,avarias,171,select,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,tratativas,203,select,
+src/pages/home/Dashboard.jsx,page,supabase,table_or_view,avarias,208,select,
+src/pages/home/InicioRapido.jsx,page,,flag_only,,,,localstorage_session
+src/pages/home/Landing.jsx,page,supabase,table_or_view,usuarios_aprovadores,26,"select, eq, maybeSingle",
+src/pages/home/Landing.jsx,page,supabase,table_or_view,usuarios_aprovadores,35,"select, eq, maybeSingle",
+src/pages/home/Landing.jsx,page,supabase,auth_method,getUser,14,getUser,
+src/pages/intervencoes/KMRodado.jsx,page,supabase,table_or_view,km_rodado_diario,38,select,
+src/pages/intervencoes/KMRodado.jsx,page,supabase,table_or_view,km_rodado_diario,91,upsert,
+src/pages/intervencoes/KMRodado.jsx,page,supabase,table_or_view,km_rodado_diario,113,"delete, eq",
+src/pages/intervencoes/SolicitacaoSOS.jsx,page,supabase,table_or_view,linhas,60,select,
+src/pages/intervencoes/SolicitacaoSOS.jsx,page,supabase,table_or_view,tabelas_operacionais,64,select,
+src/pages/intervencoes/SolicitacaoSOS.jsx,page,supabase,table_or_view,prefixos,67,select,
+src/pages/intervencoes/SolicitacaoSOS.jsx,page,supabase,table_or_view,sos_acionamentos,77,"select, single",
+src/pages/intervencoes/SolicitacaoSOS.jsx,page,supabase,table_or_view,sos_acionamentos,120,insert,
+src/pages/intervencoes/SOS_Resumo.jsx,page,supabase,table_or_view,usuarios_aprovadores,448,"select, eq, single",legacy_password_query
+src/pages/intervencoes/SOS_Resumo.jsx,page,supabase,table_or_view,preventivas,503,"select, eq, maybeSingle",legacy_password_query
+src/pages/intervencoes/SOS_Resumo.jsx,page,supabase,table_or_view,preventivas,507,"select, eq, maybeSingle",legacy_password_query
+src/pages/intervencoes/SOS_Resumo.jsx,page,supabase,table_or_view,preventivas,519,"select, eq, maybeSingle",legacy_password_query
+src/pages/intervencoes/SOS_Resumo.jsx,page,supabase,table_or_view,preventivas,520,"select, eq, maybeSingle",legacy_password_query
+src/pages/intervencoes/SOS_Resumo.jsx,page,supabase,table_or_view,sos_acionamentos,548,"update, eq",legacy_password_query
+src/pages/intervencoes/SOS_Resumo.jsx,page,supabase,table_or_view,sos_acionamentos,737,select,legacy_password_query
+src/pages/intervencoes/SOSCentral.jsx,page,supabase,table_or_view,usuarios_aprovadores,134,"select, eq, single",legacy_password_query
+src/pages/intervencoes/SOSCentral.jsx,page,supabase,table_or_view,preventivas,208,"select, eq, maybeSingle",legacy_password_query
+src/pages/intervencoes/SOSCentral.jsx,page,supabase,table_or_view,preventivas,217,"select, eq, maybeSingle",legacy_password_query
+src/pages/intervencoes/SOSCentral.jsx,page,supabase,table_or_view,preventivas,240,"select, eq, maybeSingle",legacy_password_query
+src/pages/intervencoes/SOSCentral.jsx,page,supabase,table_or_view,preventivas,249,"select, eq, maybeSingle",legacy_password_query
+src/pages/intervencoes/SOSCentral.jsx,page,supabase,table_or_view,sos_acionamentos,284,"update, eq",legacy_password_query
+src/pages/intervencoes/SOSCentral.jsx,page,supabase,table_or_view,sos_acionamentos,593,select,legacy_password_query
+src/pages/intervencoes/SOSDashboard.jsx,page,supabase,table_or_view,sos_acionamentos,105,select,
+src/pages/intervencoes/SOSDashboard.jsx,page,supabase,table_or_view,sos_acionamentos,211,select,
+src/pages/intervencoes/SOSDashboard.jsx,page,supabase,table_or_view,km_rodado_diario,219,select,
+src/pages/intervencoes/SOSDashboard.jsx,page,supabase,table_or_view,sos_acionamentos,240,"select, eq",
+src/pages/intervencoes/SOSDashboard.jsx,page,supabase,channel,realtime-sos_acionamentos-dashboard,320,channel,
+src/pages/intervencoes/SOSFechamento.jsx,page,supabase,table_or_view,sos_acionamentos,47,"select, eq",
+src/pages/intervencoes/SOSFechamento.jsx,page,supabase,table_or_view,prefixos,161,select,
+src/pages/intervencoes/SOSFechamento.jsx,page,supabase,table_or_view,sos_acionamentos,175,"update, eq",
+src/pages/intervencoes/SOSTratamento.jsx,page,supabase,table_or_view,sos_acionamentos,38,"select, eq",
+src/pages/intervencoes/SOSTratamento.jsx,page,supabase,table_or_view,motoristas,170,select,
+src/pages/intervencoes/SOSTratamento.jsx,page,supabase,table_or_view,sos_manutencao_catalogo,288,select,
+src/pages/intervencoes/SOSTratamento.jsx,page,supabase,table_or_view,preventivas,303,"select, eq, maybeSingle",
+src/pages/intervencoes/SOSTratamento.jsx,page,supabase,table_or_view,preventivas,312,"select, eq, maybeSingle",
+src/pages/intervencoes/SOSTratamento.jsx,page,supabase,table_or_view,sos_acionamentos,482,"update, eq",
+src/pages/pcm/PCM_Preventivas.jsx,page,supabase,table_or_view,prefixos,51,select,
+src/pages/pcm/PCM_Preventivas.jsx,page,supabase,table_or_view,preventivas,57,select,
+src/pages/pcm/PCM_Preventivas.jsx,page,supabase,table_or_view,preventivas,144,insert,
+src/pages/pcm/PCMDiario.jsx,page,supabase,table_or_view,pcm_diario,344,"select, eq, maybeSingle",
+src/pages/pcm/PCMDiario.jsx,page,supabase,table_or_view,veiculos_pcm,345,"select, eq",
+src/pages/pcm/PCMDiario.jsx,page,supabase,table_or_view,prefixos,346,select,
+src/pages/pcm/PCMDiario.jsx,page,supabase,table_or_view,veiculos_pcm_historico,374,insert,
+src/pages/pcm/PCMDiario.jsx,page,supabase,table_or_view,veiculos_pcm,388,"select, eq",
+src/pages/pcm/PCMDiario.jsx,page,supabase,table_or_view,veiculos_pcm,394,"select, insert, single",
+src/pages/pcm/PCMDiario.jsx,page,supabase,table_or_view,veiculos_pcm,407,"update, eq",
+src/pages/pcm/PCMDiario.jsx,page,supabase,table_or_view,veiculos_pcm,419,"select, eq",
+src/pages/pcm/PCMDiario.jsx,page,supabase,table_or_view,veiculos_pcm,427,"update, eq",
+src/pages/pcm/PCMInicio.jsx,page,supabase,table_or_view,pcm_diario,147,select,
+src/pages/pcm/PCMInicio.jsx,page,supabase,table_or_view,pcm_diario,160,"select, eq, single",
+src/pages/pcm/PCMInicio.jsx,page,supabase,table_or_view,veiculos_pcm,168,"select, eq",
+src/pages/pcm/PCMInicio.jsx,page,supabase,table_or_view,veiculos_pcm,199,"select, eq",
+src/pages/pcm/PCMInicio.jsx,page,supabase,table_or_view,veiculos_pcm,212,insert,
+src/pages/pcm/PCMInicio.jsx,page,supabase,table_or_view,pcm_diario,223,"select, eq, maybeSingle",
+src/pages/pcm/PCMInicio.jsx,page,supabase,table_or_view,pcm_diario,239,"select, insert, single",
+src/pages/pcm/PCMResumo.jsx,page,supabase,table_or_view,pcm_diario,474,select,
+src/pages/pcm/PCMResumo.jsx,page,supabase,table_or_view,veiculos_pcm,483,"select, eq",
+src/pages/pcm/PCMResumo.jsx,page,supabase,table_or_view,pcm_diario,494,"select, in",
+src/pages/pcm/PCMResumo.jsx,page,supabase,table_or_view,pcm_diario,520,select,
+src/pages/pcm/PCMResumo.jsx,page,supabase,table_or_view,veiculos_pcm,528,select,
+src/pages/pcm/PCMResumo.jsx,page,supabase,table_or_view,veiculos_pcm,529,"select, in",
+src/pages/pcm/PCMResumo.jsx,page,supabase,table_or_view,veiculos_pcm,530,select,
+src/pages/portal/PortalSistemas.jsx,page,supabase,table_or_view,usuarios_aprovadores,33,"select, eq, single",localstorage_session
+src/pages/tratativas/CentralTratativas.jsx,page,supabase,table_or_view,setores,137,select,
+src/pages/tratativas/CentralTratativas.jsx,page,supabase,table_or_view,tratativas,151,select,
+src/pages/tratativas/CentralTratativas.jsx,page,supabase,table_or_view,tratativas,171,select,
+src/pages/tratativas/CentralTratativas.jsx,page,supabase,table_or_view,tratativas,180,select,
+src/pages/tratativas/CentralTratativas.jsx,page,supabase,table_or_view,tratativas,186,select,
+src/pages/tratativas/ConsultarTratativa.jsx,page,supabase,table_or_view,tratativas,129,"select, eq, single",
+src/pages/tratativas/ConsultarTratativa.jsx,page,supabase,table_or_view,tratativas_detalhes,138,"select, eq",
+src/pages/tratativas/ConsultarTratativa.jsx,page,supabase,table_or_view,linhas,160,"select, eq, maybeSingle",
+src/pages/tratativas/SolicitacaoTratativa.jsx,page,supabase,table_or_view,tipos_ocorrencia,81,select,
+src/pages/tratativas/SolicitacaoTratativa.jsx,page,supabase,table_or_view,setores,82,select,
+src/pages/tratativas/SolicitacaoTratativa.jsx,page,supabase,table_or_view,linhas,83,select,
+src/pages/tratativas/SolicitacaoTratativa.jsx,page,supabase,table_or_view,usuarios_aprovadores,178,"select, eq, maybeSingle",
+src/pages/tratativas/SolicitacaoTratativa.jsx,page,storage,table_or_view,tratativas,214,unknown,
+src/pages/tratativas/SolicitacaoTratativa.jsx,page,storage,table_or_view,tratativas,220,unknown,
+src/pages/tratativas/SolicitacaoTratativa.jsx,page,supabase,table_or_view,tratativas,250,insert,
+src/pages/tratativas/SolicitacaoTratativa.jsx,page,supabase,bucket,tratativas,214,upload,
+src/pages/tratativas/SolicitacaoTratativa.jsx,page,supabase,bucket,tratativas,220,getPublicUrl,
+src/pages/tratativas/TratarTratativa.jsx,page,supabase,table_or_view,tratativas,370,"select, eq, single",
+src/pages/tratativas/TratarTratativa.jsx,page,supabase,table_or_view,linhas,392,"select, eq, maybeSingle",
+src/pages/tratativas/TratarTratativa.jsx,page,supabase,table_or_view,motoristas,403,"select, eq, maybeSingle",
+src/pages/tratativas/TratarTratativa.jsx,page,supabase,table_or_view,tratativas,419,"update, eq",
+src/pages/tratativas/TratarTratativa.jsx,page,supabase,table_or_view,linhas,435,"select, eq, maybeSingle",
+src/pages/tratativas/TratarTratativa.jsx,page,storage,table_or_view,tratativas,457,unknown,
+src/pages/tratativas/TratarTratativa.jsx,page,storage,table_or_view,tratativas,462,unknown,
+src/pages/tratativas/TratarTratativa.jsx,page,supabase,table_or_view,tratativas_detalhes,488,insert,
+src/pages/tratativas/TratarTratativa.jsx,page,supabase,table_or_view,tratativas,501,"update, eq",
+src/pages/tratativas/TratarTratativa.jsx,page,supabase,bucket,tratativas,457,upload,
+src/pages/tratativas/TratarTratativa.jsx,page,supabase,bucket,tratativas,462,getPublicUrl,
+src/pages/tratativas/TratativasLancarRH.jsx,page,storage,table_or_view,tratativas,57,unknown,
+src/pages/tratativas/TratativasLancarRH.jsx,page,storage,table_or_view,tratativas,63,unknown,
+src/pages/tratativas/TratativasLancarRH.jsx,page,supabase,table_or_view,tratativas_rh,267,upsert,
+src/pages/tratativas/TratativasLancarRH.jsx,page,supabase,bucket,tratativas,57,upload,
+src/pages/tratativas/TratativasLancarRH.jsx,page,supabase,bucket,tratativas,63,getPublicUrl,
+src/pages/tratativas/TratativasResumo.jsx,page,supabase,table_or_view,tratativas,156,select,
+src/pages/tratativas/TratativasResumo.jsx,page,supabase,table_or_view,tratativas,205,select,
+src/pages/tratativas/TratativasResumo.jsx,page,supabase,table_or_view,tratativas_detalhes,252,"select, in",
+src/pages/tratativas/TratativasRH.jsx,page,supabase,table_or_view,tratativas_detalhes,120,select,
+src/pages/tratativas/TratativasRH.jsx,page,supabase,table_or_view,tratativas_rh,143,"select, in",
+src/routes/premiacaoRoutes.js,route,sb,table_or_view,premiacao_diaria,32,"select, eq","create_client_local, service_role_in_frontend"
+src/supabase.js,supabase_client,,flag_only,,,,create_client_local
+src/supabaseBCNT.js,supabase_client,,flag_only,,,,"create_client_local, cross_base_client"
+src/utils/auth.js,util,,flag_only,,,,localstorage_session
+src/utils/authBridge.js,util,supabase,rpc,resolve_auth_account,23,unknown,

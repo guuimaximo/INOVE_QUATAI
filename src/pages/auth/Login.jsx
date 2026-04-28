@@ -4,6 +4,16 @@ import { supabase } from "../../supabase";
 import logoInova from "../../assets/logoInovaQuatai.png";
 import { useAuth } from "../../context/AuthContext";
 import {
+  buildPlaceholderEmail,
+  ensureLegacyAuthLink,
+  getAbsoluteUrl,
+  getRpcSetupMessage,
+  isPendingAccessLevel,
+  isPlaceholderEmail,
+  isValidEmail,
+  resolveAuthAccount,
+} from "../../utils/authBridge";
+import {
   User,
   Lock,
   LogIn,
@@ -34,10 +44,7 @@ const PASSWORD_STRENGTH_REGEX = {
   hasSpecial: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/,
 };
 const FAROL_ORIGIN = "https://faroldemetas.onrender.com";
-
-function isValidEmail(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
-}
+const AUTH_PLACEHOLDER_PASSWORD = "__AUTH_MANAGED__";
 
 function getFriendlyError(error) {
   const message = String(error?.message || "");
@@ -55,10 +62,49 @@ function getSafeFarolRedirect(rawUrl) {
   }
 }
 
+function normalizeAccessValue(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function isPendingStatus(status) {
+  return normalizeAccessValue(status) === "pendente";
+}
+
+function hasApprovalBlock(record) {
+  return !record?.ativo || isPendingAccessLevel(record?.nivel) || isPendingStatus(record?.status_cadastro);
+}
+
+function getApprovalMessage(record) {
+  if (!record?.ativo) return "Sua conta esta inativa no momento.";
+  if (isPendingAccessLevel(record?.nivel) || isPendingStatus(record?.status_cadastro)) {
+    return "Seu cadastro ainda esta em analise pelo administrador.";
+  }
+  return "Nao foi possivel liberar seu acesso.";
+}
+
+function getBootstrapEmail(legacyUser) {
+  if (isValidEmail(legacyUser?.email)) {
+    return String(legacyUser.email).trim().toLowerCase();
+  }
+
+  return buildPlaceholderEmail(legacyUser?.login || legacyUser?.nome || "usuario", legacyUser?.id || "");
+}
+
+function getSignInEmail(identifier, bridge) {
+  if (bridge?.auth_email) return String(bridge.auth_email).trim().toLowerCase();
+  if (isValidEmail(identifier)) return String(identifier).trim().toLowerCase();
+  if (isValidEmail(bridge?.legacy_email)) return String(bridge.legacy_email).trim().toLowerCase();
+  return null;
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login: doLogin } = useAuth();
+  const { refreshUser, logout } = useAuth();
 
   const [isCadastro, setIsCadastro] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -149,6 +195,116 @@ export default function Login() {
     }
   }
 
+  async function fetchLegacyCredentialMatch(identifier, currentPassword) {
+    const { data, error } = await supabase
+      .from("usuarios_aprovadores")
+      .select("*")
+      .or(`login.eq.${identifier},email.eq.${identifier}`)
+      .eq("senha", currentPassword)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data || null;
+  }
+
+  async function finalizeAuthenticatedLogin(identifier) {
+    const loggedUser = await refreshUser();
+
+    if (!loggedUser) {
+      pushFeedback("error", "Nao foi possivel carregar seu perfil apos a autenticacao.");
+      return false;
+    }
+
+    if (hasApprovalBlock(loggedUser)) {
+      await logout();
+      pushFeedback("error", getApprovalMessage(loggedUser));
+      return false;
+    }
+
+    rememberUserHints(identifier, loggedUser);
+
+    const safeFarolRedirect = getSafeFarolRedirect(redirectParam);
+    if (safeFarolRedirect && NIVEIS_PORTAL.has(String(loggedUser?.nivel || "").trim())) {
+      window.location.href = safeFarolRedirect;
+      return true;
+    }
+
+    navigate(loggedUser.requires_profile_review ? "/atualizar-perfil" : nextPathState || decideDefaultNext(), {
+      replace: true,
+    });
+    return true;
+  }
+
+  async function bootstrapLegacyAuth(legacyUser, currentPassword) {
+    const bootstrapEmail = getBootstrapEmail(legacyUser);
+    const redirectTo = getAbsoluteUrl("/login");
+    let authSessionOpened = false;
+
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email: bootstrapEmail,
+      password: currentPassword,
+      options: {
+        emailRedirectTo: redirectTo,
+        data: {
+          login: legacyUser.login || "",
+          nome: legacyUser.nome || "",
+          setor: legacyUser.setor || "",
+          usuario_id: String(legacyUser.id || ""),
+          origem: "legacy-bridge",
+        },
+      },
+    });
+
+    if (
+      signUpError &&
+      !/already registered|already been registered|user already registered/i.test(String(signUpError.message || ""))
+    ) {
+      throw signUpError;
+    }
+
+    if (signUpData?.session?.user) {
+      authSessionOpened = true;
+    } else {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: bootstrapEmail,
+        password: currentPassword,
+      });
+
+      if (!signInError) {
+        authSessionOpened = true;
+      } else if (/email not confirmed/i.test(String(signInError.message || ""))) {
+        pushFeedback(
+          "error",
+          "Sua conta Auth foi criada, mas o e-mail ainda nao foi confirmado. Confirme o e-mail antes de continuar."
+        );
+        return false;
+      }
+    }
+
+    if (!authSessionOpened) {
+      if (!isValidEmail(legacyUser?.email) || isPlaceholderEmail(bootstrapEmail)) {
+        pushFeedback(
+          "error",
+          "Seu primeiro acesso precisa de um e-mail valido para concluir a migracao. Vamos tratar isso na etapa de atualizacao cadastral."
+        );
+      } else {
+        pushFeedback(
+          "error",
+          "A conta foi preparada no Auth, mas a sessao nao abriu automaticamente. Tente novamente em instantes."
+        );
+      }
+      return false;
+    }
+
+    try {
+      await ensureLegacyAuthLink(isValidEmail(legacyUser?.email) ? legacyUser.email : null);
+    } catch (error) {
+      console.warn("Falha ao vincular conta legada ao Auth:", error);
+    }
+
+    return true;
+  }
+
   async function handleEntrar(event) {
     event.preventDefault();
     setFeedback(null);
@@ -157,62 +313,126 @@ export default function Login() {
     const currentPassword = senha;
 
     if (!identifier || !currentPassword) {
-      pushFeedback("error", "Informe seu usuario/e-mail e senha.");
+      pushFeedback("error", "Informe seu apelido/e-mail e senha.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from("usuarios_aprovadores")
-        .select("*")
-        .or(`login.eq.${identifier},email.eq.${identifier}`)
-        .eq("senha", currentPassword)
-        .eq("ativo", true)
-        .maybeSingle();
+      let bridge = null;
 
-      if (error) {
-        pushFeedback("error", error.message || "Erro ao consultar usuarios_aprovadores.");
+      try {
+        bridge = await resolveAuthAccount(identifier);
+      } catch (error) {
+        console.error("Falha ao resolver conta no bridge:", error);
+        pushFeedback("error", getRpcSetupMessage());
         return;
       }
 
-      if (!data) {
-        pushFeedback("error", "Credenciais incorretas ou conta inativa.");
+      if (bridge && hasApprovalBlock(bridge)) {
+        pushFeedback("error", getApprovalMessage(bridge));
         return;
       }
 
-      const nivel = String(data.nivel || "").trim();
-      const statusCadastro = String(data.status_cadastro || "").trim();
+      let authSignInError = null;
+      const signInEmail = getSignInEmail(identifier, bridge);
 
-      if (nivel === "Pendente" || statusCadastro === "Pendente") {
-        pushFeedback("error", "Seu cadastro ainda esta em analise pelo administrador.");
+      if (signInEmail) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: signInEmail,
+          password: currentPassword,
+        });
+
+        if (!error) {
+          try {
+            await ensureLegacyAuthLink(bridge?.legacy_email || signInEmail);
+          } catch (linkError) {
+            console.warn("Falha ao sincronizar vinculo auth/legado:", linkError);
+          }
+
+          await finalizeAuthenticatedLogin(identifier);
+          return;
+        }
+
+        authSignInError = error;
+      }
+
+      const legacyUser = await fetchLegacyCredentialMatch(identifier, currentPassword);
+
+      if (!legacyUser) {
+        if (authSignInError && /email not confirmed/i.test(String(authSignInError.message || ""))) {
+          pushFeedback("error", "Seu e-mail do Auth ainda nao foi confirmado. Verifique sua caixa de entrada.");
+          return;
+        }
+
+        pushFeedback("error", "Credenciais incorretas ou conta nao localizada.");
         return;
       }
 
-      const loggedUser = doLogin(data);
-      rememberUserHints(identifier, loggedUser);
-
-      const safeFarolRedirect = getSafeFarolRedirect(redirectParam);
-      if (safeFarolRedirect && NIVEIS_PORTAL.has(nivel)) {
-        window.location.href = safeFarolRedirect;
+      if (hasApprovalBlock(legacyUser)) {
+        pushFeedback("error", getApprovalMessage(legacyUser));
         return;
       }
 
-      navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
+      const bootstrapped = await bootstrapLegacyAuth(legacyUser, currentPassword);
+      if (!bootstrapped) return;
+
+      await finalizeAuthenticatedLogin(identifier);
     } catch (error) {
+      console.error("Falha no login:", error);
       pushFeedback("error", getFriendlyError(error));
     } finally {
       setLoading(false);
     }
   }
 
-  function handleSolicitarReset(event) {
+  async function handleSolicitarReset(event) {
     event.preventDefault();
-    pushFeedback(
-      "error",
-      "A recuperacao automatica pelo Supabase Auth esta temporariamente indisponivel. Para trocar a senha agora, fale com o administrador do sistema."
-    );
+    setFeedback(null);
+
+    const identifier = loginInput.trim();
+
+    if (!identifier) {
+      pushFeedback("error", "Informe primeiro seu apelido ou e-mail para recuperar a senha.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      let targetEmail = isValidEmail(identifier) ? identifier.trim().toLowerCase() : "";
+
+      if (!targetEmail) {
+        const bridge = await resolveAuthAccount(identifier);
+        targetEmail = bridge?.auth_email || bridge?.legacy_email || "";
+      }
+
+      if (!isValidEmail(targetEmail) || isPlaceholderEmail(targetEmail)) {
+        pushFeedback(
+          "error",
+          "Ainda nao existe um e-mail valido vinculado a esse usuario. Primeiro vamos corrigir o cadastro."
+        );
+        return;
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo: getAbsoluteUrl("/atualizar-senha"),
+      });
+
+      if (error) {
+        pushFeedback("error", error.message || "Nao foi possivel enviar o e-mail de redefinicao.");
+        return;
+      }
+
+      pushFeedback("success", "Enviamos o link de redefinicao para o seu e-mail.");
+      setShowReset(false);
+    } catch (error) {
+      console.error("Falha ao solicitar reset:", error);
+      pushFeedback("error", getFriendlyError(error));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleCadastro(event) {
@@ -258,29 +478,69 @@ export default function Login() {
         return;
       }
 
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: emailTrim,
+        password: senhaCadastro,
+        options: {
+          emailRedirectTo: getAbsoluteUrl("/login"),
+          data: {
+            login: loginTrim,
+            nome: nomeTrim,
+            setor,
+            origem: "self-signup",
+          },
+        },
+      });
+
+      if (authError) {
+        pushFeedback("error", authError.message || "Nao foi possivel criar sua conta no Auth.");
+        return;
+      }
+
+      const authUserId = authData?.user?.id || null;
+
       const { error: insertError } = await supabase.from("usuarios_aprovadores").insert([
         {
           nome: nomeTrim,
           login: loginTrim,
           email: emailTrim,
-          senha: senhaCadastro,
+          senha: AUTH_PLACEHOLDER_PASSWORD,
           setor,
           ativo: false,
           nivel: "Pendente",
           status_cadastro: "Pendente",
           criado_em: new Date().toISOString(),
+          auth_user_id: authUserId,
+          migrado_auth: !!authUserId,
         },
       ]);
 
       if (insertError) {
-        pushFeedback("error", insertError.message || "Erro ao registrar sua solicitacao de acesso.");
+        pushFeedback(
+          "error",
+          insertError.message || "A conta Auth foi criada, mas falhou o espelho na base legada. Verifique o banco."
+        );
         return;
       }
 
-      pushFeedback("success", "Cadastro solicitado com sucesso. Aguarde a aprovacao do administrador.");
+      if (authData?.session?.user) {
+        try {
+          await ensureLegacyAuthLink(emailTrim);
+        } catch (error) {
+          console.warn("Falha ao vincular novo cadastro ao legado:", error);
+        }
+
+        await supabase.auth.signOut();
+      }
+
+      pushFeedback(
+        "success",
+        "Cadastro recebido com sucesso. Sua conta foi criada no Auth e agora aguarda aprovacao do administrador."
+      );
       setIsCadastro(false);
       resetForm(false);
     } catch (error) {
+      console.error("Falha no cadastro:", error);
       pushFeedback("error", getFriendlyError(error));
     } finally {
       setLoading(false);
@@ -327,8 +587,8 @@ export default function Login() {
             )}
             <p className="mt-2 text-slate-500">
               {isCadastro
-                ? "Preencha todos os dados abaixo para solicitar acesso."
-                : "Entre com suas credenciais para continuar."}
+                ? "Novos usuarios ja entram pelo Supabase Auth. O acesso continua sujeito a aprovacao."
+                : "Entre com seu apelido ou e-mail para continuar."}
             </p>
           </div>
 
@@ -351,7 +611,7 @@ export default function Login() {
                   <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
                   <input
                     type="text"
-                    placeholder="Usuario ou e-mail"
+                    placeholder="Apelido ou e-mail"
                     value={loginInput}
                     onChange={(event) => setLoginInput(event.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
@@ -421,7 +681,7 @@ export default function Login() {
                   <LogIn className="absolute left-3 top-3.5 text-slate-400" size={20} />
                   <input
                     type="text"
-                    placeholder="Usuario (login) *"
+                    placeholder="Apelido (login) *"
                     value={loginInput}
                     onChange={(event) => setLoginInput(event.target.value)}
                     className="w-full pl-10 py-3 bg-white border rounded-xl"
@@ -464,7 +724,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70"
             >
               {loading ? (
                 <Loader2 className="animate-spin" size={22} />
@@ -492,13 +752,14 @@ export default function Login() {
             <form onSubmit={handleSolicitarReset} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
               <h2 className="font-semibold text-slate-900">Recuperar senha</h2>
               <p className="text-sm text-slate-500">
-                No modo legado, a troca de senha precisa ser feita pelo administrador em usuarios_aprovadores.
+                Informe seu apelido ou e-mail no campo acima para enviarmos o link de redefinicao pelo Supabase Auth.
               </p>
               <button
                 type="submit"
-                className="w-full inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-white font-semibold hover:bg-slate-800"
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-white font-semibold hover:bg-slate-800 disabled:opacity-70"
               >
-                Entendi, solicitar ao administrador
+                {loading ? <Loader2 className="animate-spin" size={18} /> : "Enviar link de redefinicao"}
               </button>
             </form>
           )}

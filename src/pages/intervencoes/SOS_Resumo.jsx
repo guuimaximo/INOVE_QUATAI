@@ -336,12 +336,12 @@ function CardKPI({ title, value, sub, icon, tone = "blue", className = "" }) {
     slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
   };
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-4 shadow-sm ${className}`}>
+    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-3.5 shadow-sm ${className}`}>
       <div className="flex items-start justify-between gap-3 h-full">
         <div className="flex flex-col justify-between h-full">
           <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
           <div>
-            <p className="text-2xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
+            <p className="text-xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
             <p className="text-xs mt-1 text-slate-600 font-semibold">{sub}</p>
           </div>
         </div>
@@ -355,7 +355,7 @@ function TabButton({ active, onClick, icon, children }) {
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-black transition ${
+      className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-black transition ${
         active ? "bg-slate-800 text-white border-slate-800 shadow" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
       }`}
     >
@@ -1636,14 +1636,14 @@ export default function SOSCentral() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="bg-white rounded-2xl border shadow-sm p-4 md:p-5">
         <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-black border border-amber-200">
               <FaBolt /> Resumo SOS / Reincidência / Controláveis
             </div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-800 mt-3">
+            <h1 className="mt-3 text-2xl font-black text-slate-800">
               PAINEL DE INTERVENÇÕES
             </h1>
             <p className="text-sm text-slate-500 mt-1">
@@ -1652,62 +1652,62 @@ export default function SOSCentral() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button onClick={exportAtual} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+            <button onClick={exportAtual} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition">
               <FaDownload /> Baixar Excel
             </button>
 
-            <button onClick={() => setMostrarExplicacao(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition">
+            <button onClick={() => setMostrarExplicacao(true)} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition">
               <FaInfoCircle /> Entender Cálculos
             </button>
 
-            <button onClick={carregarTudo} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-700 transition">
+            <button onClick={carregarTudo} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-700 transition">
               <FaSync /> Atualizar
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
           <div className="xl:col-span-2 relative">
             <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar SOS, veículo, linha, defeito, motorista, avaliador..." className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200" />
           </div>
 
-          <select value={mesReferencia} onChange={(e) => setMesReferencia(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
+          <select value={mesReferencia} onChange={(e) => setMesReferencia(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-semibold">
             <option value="">Mês referência</option>
             {mesesDisponiveis.map((m) => (<option key={m} value={m}>{monthLabelFromKey(m)}</option>))}
           </select>
 
-          <select value={filtroLinha} onChange={(e) => setFiltroLinha(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
+          <select value={filtroLinha} onChange={(e) => setFiltroLinha(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-semibold">
             <option value="">Todas as linhas</option>
             {linhaOptions.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
 
-          <select value={filtroSetor} onChange={(e) => setFiltroSetor(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
+          <select value={filtroSetor} onChange={(e) => setFiltroSetor(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-semibold">
             <option value="">Todos os setores</option>
             {setorOptions.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
 
-          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
+          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-semibold">
             <option value="">Todos os tipos</option>
             {tipoOptions.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
-          <select value={filtroCluster} onChange={(e) => setFiltroCluster(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+          <select value={filtroCluster} onChange={(e) => setFiltroCluster(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-semibold">
             <option value="">Todos os clusters</option>
             {clusterOptions.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
 
-          <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
+          <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-semibold">
             <option value="">Todos os status</option>
             <option value="ABERTO">ABERTO</option>
             <option value="EM ANDAMENTO">EM ANDAMENTO</option>
             <option value="FECHADO">FECHADO</option>
           </select>
 
-          <select value={filtroControlabilidade} onChange={(e) => setFiltroControlabilidade(e.target.value)} className="px-3 py-3 rounded-xl border border-slate-200 bg-white font-semibold">
+          <select value={filtroControlabilidade} onChange={(e) => setFiltroControlabilidade(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-semibold">
             <option value="">Todas classificações</option>
             <option value="CONTROLÁVEL">Controlável</option>
             <option value="NÃO CONTROLÁVEL">Não Controlável</option>

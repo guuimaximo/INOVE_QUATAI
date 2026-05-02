@@ -1,6 +1,8 @@
 import React, { useContext, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
 import {
+  FaChevronRight,
   FaInfoCircle,
   FaShieldAlt,
   FaCheckCircle,
@@ -8,19 +10,20 @@ import {
   FaUserTag,
   FaBell,
 } from "react-icons/fa";
+import { getMobileQuickLinks } from "../../utils/mobileNavigation";
 
-function StatCard({ title, value, icon, hint }) {
+function StatCard({ title, value, icon, hint, className = "" }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+    <div className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 ${className}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {title}
           </div>
-          <div className="mt-2 text-2xl font-bold text-gray-800">{value}</div>
-          {hint ? <div className="mt-1 text-xs text-gray-500">{hint}</div> : null}
+          <div className="mt-2 text-xl font-bold text-slate-800 break-words sm:text-2xl">{value}</div>
+          {hint ? <div className="mt-1 text-xs text-slate-500">{hint}</div> : null}
         </div>
-        <div className="h-10 w-10 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-700">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700">
           {icon}
         </div>
       </div>
@@ -30,15 +33,30 @@ function StatCard({ title, value, icon, hint }) {
 
 function Box({ title, icon, children }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="h-9 w-9 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-700">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700">
           {icon}
         </div>
-        <h2 className="text-base font-semibold text-gray-800">{title}</h2>
+        <h2 className="text-base font-semibold text-slate-800">{title}</h2>
       </div>
-      <div className="text-sm text-gray-700 leading-relaxed">{children}</div>
+      <div className="text-sm leading-relaxed text-slate-700">{children}</div>
     </div>
+  );
+}
+
+function QuickLinkRow({ title, description, to }) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 transition last:border-b-0 hover:bg-slate-50"
+    >
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-slate-900">{title}</div>
+        <div className="mt-1 text-xs leading-5 text-slate-500">{description}</div>
+      </div>
+      <FaChevronRight className="shrink-0 text-slate-400" />
+    </Link>
   );
 }
 
@@ -54,101 +72,103 @@ export default function InicioRapido() {
   const { user } = useContext(AuthContext);
 
   const firstName = useMemo(() => {
-    const n = String(user?.nome || "").trim();
-    return n ? n.split(" ")[0] : "usuário";
+    const name = String(user?.nome || "").trim();
+    return name ? name.split(" ")[0] : "usuario";
   }, [user?.nome]);
 
   const nivel = user?.nivel || "-";
 
   const lastSeen = useMemo(() => {
-    // Guarda um "último acesso" local (não depende do Supabase).
-    // Isso dá sensação de sistema “vivo”, sem criar link nem nova tabela.
     const key = "inove_last_seen";
-    const prev = localStorage.getItem(key);
+    const previous = localStorage.getItem(key);
     localStorage.setItem(key, new Date().toISOString());
-    if (!prev) return "Primeiro acesso registrado";
+    if (!previous) return "Primeiro acesso registrado";
     try {
-      return new Date(prev).toLocaleString("pt-BR");
+      return new Date(previous).toLocaleString("pt-BR");
     } catch {
-      return "—";
+      return "-";
     }
   }, []);
 
   const statusSistema = "ONLINE";
+  const quickLinks = useMemo(() => getMobileQuickLinks(user?.nivel), [user?.nivel]);
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-1 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Visão Inicial</h1>
-        <div className="text-sm text-gray-600">
-          Olá, <b>{firstName}</b>. Você está logado como <b>{nivel}</b>.
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600">Inove</p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Visao inicial</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Ola, <strong>{firstName}</strong>. Perfil atual: <strong>{nivel}</strong>.
+            </p>
+          </div>
+          <div className="text-xs text-slate-500">Atualizado em {formatNowBR()}</div>
         </div>
-        <div className="text-xs text-gray-500 mt-1">
-          Atualizado em {formatNowBR()} • Utilize o menu lateral para navegar.
-        </div>
-      </div>
+      </section>
 
-      {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           title="Status do Sistema"
           value={statusSistema}
           icon={<FaCheckCircle />}
-          hint="Serviços operacionais disponíveis"
+          hint="Servicos operacionais disponiveis"
         />
         <StatCard
           title="Seu Perfil"
           value={nivel}
           icon={<FaUserTag />}
-          hint="Acessos conforme regra do módulo"
+          hint="Acessos conforme regra do modulo"
         />
         <StatCard
-          title="Último acesso"
+          title="Ultimo acesso"
           value={lastSeen}
           icon={<FaClock />}
           hint="Registro local do navegador"
+          className="sm:col-span-2 xl:col-span-1"
         />
       </div>
 
-      {/* Conteúdo */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Box title="Como usar o INOVE" icon={<FaInfoCircle />}>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Escolha o módulo no menu lateral (Tratativas, Intervenções, etc.).</li>
-            <li>Mantenha filtros e datas consistentes para evitar leitura incorreta.</li>
-            <li>Ao finalizar ações, registre observações completas e evidências quando aplicável.</li>
-          </ul>
-        </Box>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-4 py-3">
+          <div className="text-sm font-semibold text-slate-900">Acesso rapido</div>
+          <div className="mt-1 text-xs text-slate-500">
+            Entradas principais para usar o app no celular com menos toques.
+          </div>
+        </div>
+        <div>
+          {quickLinks.map((link) => (
+            <QuickLinkRow
+              key={link.path}
+              title={link.title}
+              description={link.description}
+              to={link.path}
+            />
+          ))}
+        </div>
+      </section>
 
-        <Box title="Regras e Boas Práticas" icon={<FaShieldAlt />}>
-          <ul className="list-disc pl-5 space-y-1">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Box title="Regras e boas praticas" icon={<FaShieldAlt />}>
+          <ul className="list-disc space-y-1 pl-5">
             <li>Use o sistema apenas para rotinas operacionais e registros oficiais.</li>
-            <li>Evite duplicidade de lançamentos: pesquise antes de criar.</li>
-            <li>Se identificar inconsistência, registre no campo de observação do módulo.</li>
+            <li>Evite duplicidade de lancamentos: pesquise antes de criar um item novo.</li>
+            <li>Se houver inconsistencias, deixe observacoes claras no proprio modulo.</li>
+            <li>Use observacoes objetivas com acao executada, responsavel e horario.</li>
+            <li>Quando houver anexo, prefira evidencia clara e completa.</li>
           </ul>
         </Box>
 
-        <Box title="Avisos" icon={<FaBell />}>
-          <div className="text-sm text-gray-700">
-            <div className="font-semibold text-gray-800 mb-2">Orientações rápidas</div>
-            <div className="space-y-2">
-              <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                Se você não encontrar um botão/aba, provavelmente seu nível não tem permissão para aquela ação.
-              </div>
-              <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                Para solicitações urgentes, priorize o fluxo de Intervenções (SOS) conforme procedimento.
-              </div>
+        <Box title="Avisos rapidos" icon={<FaBell />}>
+          <div className="space-y-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              Se voce nao encontrar um botao ou aba, seu nivel provavelmente nao tem permissao para aquela acao.
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              Para solicitacoes urgentes, priorize o fluxo de intervencoes conforme o procedimento operacional.
             </div>
           </div>
-        </Box>
-
-        <Box title="Padrão de Qualidade do Registro" icon={<FaCheckCircle />}>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Escreva observações objetivas: o que foi feito, por quem e quando.</li>
-            <li>Evite termos genéricos (ex.: “resolvido”) sem descrever a ação.</li>
-            <li>Anexos: prefira evidência clara (foto nítida / PDF completo).</li>
-          </ul>
         </Box>
       </div>
     </div>

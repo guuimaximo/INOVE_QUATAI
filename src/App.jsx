@@ -34,6 +34,7 @@ import PCMInicio from "./pages/pcm/PCMInicio";
 import PCMDiario from "./pages/pcm/PCMDiario";
 import PCMResumo from "./pages/pcm/PCMResumo";
 import PCM_Preventivas from "./pages/pcm/PCM_Preventivas";
+import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
 
 import Usuarios from "./pages/configuracoes/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
@@ -63,99 +64,114 @@ import EstruturaFisicaCentral from "./pages/estrutura-fisica/EstruturaFisicaCent
 import EstruturaFisicaConsultar from "./pages/estrutura-fisica/EstruturaFisicaConsultar";
 import EstruturaFisicaTratar from "./pages/estrutura-fisica/EstruturaFisicaTratar";
 
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
+import { Capacitor } from "@capacitor/core";
 import { AuthContext } from "./context/AuthContext";
+import InstallAppPrompt from "./components/InstallAppPrompt";
 
 function HomeDecider() {
   const { user } = useContext(AuthContext);
+  const isNativeShell = Capacitor.isNativePlatform();
 
   const isAdmin = user?.nivel === "Administrador";
   const isGestor = user?.nivel === "Gestor";
 
+  if (isNativeShell) return <InicioRapido />;
   if (isAdmin || isGestor) return <Dashboard />;
   return <InicioRapido />;
 }
 
 export default function App() {
+  useEffect(() => {
+    window.__INOVE_SET_BOOT_STAGE?.("Sessao iniciada", "Preparando suas rotas e o shell do aplicativo.");
+    window.__INOVE_HIDE_BOOT?.();
+  }, []);
+
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/atualizar-senha" element={<AtualizarSenha />} />
+      <>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/atualizar-senha" element={<AtualizarSenha />} />
 
-        <Route
-          element={
-            <RequireAuth>
-              <Layout />
-            </RequireAuth>
-          }
-        >
-          <Route path="/atualizar-perfil" element={<AtualizarPerfil />} />
-          <Route path="/" element={<HomeDecider />} />
-          <Route path="/inove" element={<HomeDecider />} />
-          <Route path="/portal" element={<Navigate to="/inove" replace />} />
-          <Route path="/inicio-rapido" element={<InicioRapido />} />
+          <Route
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          >
+            <Route path="/atualizar-perfil" element={<AtualizarPerfil />} />
+            <Route path="/" element={<HomeDecider />} />
+            <Route path="/inove" element={<HomeDecider />} />
+            <Route path="/painel" element={<Dashboard />} />
+            <Route path="/portal" element={<Navigate to="/inove" replace />} />
+            <Route path="/inicio-rapido" element={<InicioRapido />} />
 
-          <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
-          <Route path="/desempenho-diesel-resumo" element={<DesempenhoDieselResumo />} />
-          <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
-          <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
-          <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
-          <Route path="/desempenho-diesel-checkpoint/:id" element={<DesempenhoDieselCheckpoint />} />
-          <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
+            <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
+            <Route path="/desempenho-diesel-resumo" element={<DesempenhoDieselResumo />} />
+            <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
+            <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
+            <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
+            <Route path="/desempenho-diesel-checkpoint/:id" element={<DesempenhoDieselCheckpoint />} />
+            <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
 
-          <Route path="/diesel-tratativas" element={<Desempenho_Diesel_Tratativas_Central />} />
-          <Route path="/diesel-tratar/:id" element={<DieselTratarTratativa />} />
-          <Route path="/diesel-consultar/:id" element={<DieselConsultarTratativa />} />
+            <Route path="/diesel-tratativas" element={<Desempenho_Diesel_Tratativas_Central />} />
+            <Route path="/diesel-tratar/:id" element={<DieselTratarTratativa />} />
+            <Route path="/diesel-consultar/:id" element={<DieselConsultarTratativa />} />
 
-          <Route path="/pcm-inicio" element={<PCMInicio />} />
-          <Route path="/pcm-resumo" element={<PCMResumo />} />
-          <Route path="/pcm-diario/:id" element={<PCMDiario />} />
-          <Route path="/pcm-preventivas" element={<PCM_Preventivas />} />
+            <Route path="/pcm-inicio" element={<PCMInicio />} />
+            <Route path="/pcm-resumo" element={<PCMResumo />} />
+            <Route path="/pcm-diario/:id" element={<PCMDiario />} />
+            <Route path="/pcm-preventivas" element={<PCM_Preventivas />} />
+            <Route path="/pcm-troca-pneus" element={<PCMTrocaPneus />} />
 
-          <Route path="/checklists" element={<ChecklistCentral />} />
+            <Route path="/checklists" element={<ChecklistCentral />} />
 
-          <Route path="/embarcados-central" element={<EmbarcadosCentral />} />
-          <Route path="/embarcados-movimentacoes" element={<EmbarcadosMovimentacoes />} />
-          <Route path="/embarcados-reparos" element={<EmbarcadosReparos />} />
-          <Route path="/embarcados-reparos/:id" element={<ReparoSolicitacaoDetalhes />} />
-          <Route path="/embarcados-reparos/:id/executar" element={<ReparoSolicitacaoExecucao />} />
-          <Route path="/embarcados-envio-manutencao" element={<EmbarcadosEnvioManutencao />} />
-          <Route path="/embarcados" element={<Navigate to="/embarcados-central" replace />} />
+            <Route path="/embarcados-central" element={<EmbarcadosCentral />} />
+            <Route path="/embarcados-movimentacoes" element={<EmbarcadosMovimentacoes />} />
+            <Route path="/embarcados-reparos" element={<EmbarcadosReparos />} />
+            <Route path="/embarcados-reparos/:id" element={<ReparoSolicitacaoDetalhes />} />
+            <Route path="/embarcados-reparos/:id/executar" element={<ReparoSolicitacaoExecucao />} />
+            <Route path="/embarcados-envio-manutencao" element={<EmbarcadosEnvioManutencao />} />
+            <Route path="/embarcados" element={<Navigate to="/embarcados-central" replace />} />
 
-          <Route path="/central" element={<CentralTratativas />} />
-          <Route path="/tratativas-resumo" element={<TratativasResumo />} />
-          <Route path="/tratar/:id" element={<TratarTratativa />} />
-          <Route path="/consultar/:id" element={<ConsultarTratativa />} />
-          <Route path="/solicitar" element={<SolicitacaoTratativa />} />
-          <Route path="/tratativas-rh" element={<TratativasRH />} />
+            <Route path="/central" element={<CentralTratativas />} />
+            <Route path="/tratativas-resumo" element={<TratativasResumo />} />
+            <Route path="/tratar/:id" element={<TratarTratativa />} />
+            <Route path="/consultar/:id" element={<ConsultarTratativa />} />
+            <Route path="/solicitar" element={<SolicitacaoTratativa />} />
+            <Route path="/tratativas-rh" element={<TratativasRH />} />
 
-          <Route path="/estrutura-fisica/solicitacao" element={<EstruturaFisicaSolicitacao />} />
-          <Route path="/estrutura-fisica/central" element={<EstruturaFisicaCentral />} />
-          <Route path="/estrutura-fisica/consultar/:id" element={<EstruturaFisicaConsultar />} />
-          <Route path="/estrutura-fisica/tratar/:id" element={<EstruturaFisicaTratar />} />
-          <Route path="/estrutura-fisica" element={<Navigate to="/estrutura-fisica/central" replace />} />
+            <Route path="/estrutura-fisica/solicitacao" element={<EstruturaFisicaSolicitacao />} />
+            <Route path="/estrutura-fisica/central" element={<EstruturaFisicaCentral />} />
+            <Route path="/estrutura-fisica/consultar/:id" element={<EstruturaFisicaConsultar />} />
+            <Route path="/estrutura-fisica/tratar/:id" element={<EstruturaFisicaTratar />} />
+            <Route path="/estrutura-fisica" element={<Navigate to="/estrutura-fisica/central" replace />} />
 
-          <Route path="/lancar-avaria" element={<LancarAvaria />} />
-          <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
-          <Route path="/cobrancas" element={<CobrancasAvarias />} />
-          <Route path="/avarias-resumo" element={<AvariasResumo />} />
-          <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
+            <Route path="/lancar-avaria" element={<LancarAvaria />} />
+            <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
+            <Route path="/cobrancas" element={<CobrancasAvarias />} />
+            <Route path="/avarias-resumo" element={<AvariasResumo />} />
+            <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
 
-          <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
-          <Route path="/sos-fechamento" element={<SOSFechamento />} />
-          <Route path="/sos-tratamento" element={<SOSTratamento />} />
-          <Route path="/sos-central" element={<SOSCentral />} />
-          <Route path="/sos-dashboard" element={<SOSDashboard />} />
-          <Route path="/sos-resumo" element={<SOS_Resumo />} />
+            <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
+            <Route path="/sos-fechamento" element={<SOSFechamento />} />
+            <Route path="/sos-tratamento" element={<SOSTratamento />} />
+            <Route path="/sos-central" element={<SOSCentral />} />
+            <Route path="/sos-dashboard" element={<SOSDashboard />} />
+            <Route path="/sos-resumo" element={<SOS_Resumo />} />
 
-          <Route path="/km-rodado" element={<KMRodado />} />
+            <Route path="/km-rodado" element={<KMRodado />} />
 
-          <Route path="/usuarios" element={<Usuarios />} />
-        </Route>
+            <Route path="/usuarios" element={<Usuarios />} />
+          </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+
+        <InstallAppPrompt />
+      </>
     </AuthProvider>
   );
 }

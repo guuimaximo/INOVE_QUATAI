@@ -2,12 +2,171 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    
-    <link rel="icon" type="image/png" href="/favicon.png" /> 
-    
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <meta name="theme-color" content="#0b5ed7" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Inove" />
+    <meta
+      name="description"
+      content="Portal operacional do Inove para uso em desktop, Android e iPhone com a mesma base de codigo."
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>INOVEQUATAI</title> </head>
+    <title>INOVEQUATAI</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #e2e8f0;
+        font-family: Inter, sans-serif;
+      }
+
+      body[data-inove-app-ready="true"] #inove-boot {
+        display: none;
+      }
+
+      #inove-boot {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 22%, #e2e8f0 100%);
+        color: #0f172a;
+      }
+
+      #inove-boot[data-state="error"] {
+        background: #020617;
+        color: #f8fafc;
+      }
+
+      #inove-boot-card {
+        width: min(100%, 440px);
+        border-radius: 28px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 22px 60px rgba(15, 23, 42, 0.14);
+        padding: 24px;
+      }
+
+      #inove-boot[data-state="error"] #inove-boot-card {
+        border-color: rgba(248, 113, 113, 0.35);
+        background: rgba(15, 23, 42, 0.94);
+        box-shadow: 0 22px 60px rgba(2, 6, 23, 0.45);
+      }
+
+      #inove-boot-kicker {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: #2563eb;
+      }
+
+      #inove-boot[data-state="error"] #inove-boot-kicker {
+        color: #fda4af;
+      }
+
+      #inove-boot-title {
+        margin: 10px 0 0;
+        font-size: 26px;
+        line-height: 1.15;
+      }
+
+      #inove-boot-detail {
+        margin: 12px 0 0;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #475569;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      #inove-boot[data-state="error"] #inove-boot-detail {
+        color: #cbd5e1;
+      }
+    </style>
+    <script>
+      (function () {
+        var bootState = { finished: false };
+        window.__INOVE_BOOT_STATE = bootState;
+
+        function setReady() {
+          bootState.finished = true;
+          document.body.dataset.inoveAppReady = "true";
+        }
+
+        function setMessage(title, detail, state) {
+          var boot = document.getElementById("inove-boot");
+          var titleNode = document.getElementById("inove-boot-title");
+          var detailNode = document.getElementById("inove-boot-detail");
+
+          if (!boot || !titleNode || !detailNode) return;
+
+          if (state) boot.dataset.state = state;
+          if (title) titleNode.textContent = title;
+          if (detail) detailNode.textContent = detail;
+        }
+
+        function formatError(payload) {
+          if (!payload) return "Erro desconhecido.";
+          if (typeof payload === "string") return payload;
+          if (payload && payload.message) return payload.message;
+          try {
+            return JSON.stringify(payload);
+          } catch {
+            return String(payload);
+          }
+        }
+
+        window.__INOVE_SET_BOOT_STAGE = function (title, detail) {
+          setMessage(title, detail, "loading");
+        };
+
+        window.__INOVE_SET_BOOT_ERROR = function (error) {
+          setMessage(
+            "O aplicativo nao conseguiu abrir",
+            formatError(error),
+            "error"
+          );
+        };
+
+        window.__INOVE_HIDE_BOOT = function () {
+          setReady();
+        };
+
+        window.addEventListener("error", function (event) {
+          var message = event && (event.error || event.message);
+          window.__INOVE_SET_BOOT_ERROR(message);
+        });
+
+        window.addEventListener("unhandledrejection", function (event) {
+          window.__INOVE_SET_BOOT_ERROR(event && event.reason);
+        });
+
+        window.setTimeout(function () {
+          if (bootState.finished) return;
+          window.__INOVE_SET_BOOT_ERROR(
+            "A interface nao terminou de carregar a tempo. Se esta mensagem apareceu no celular, instale o APK mais recente e me envie o texto exato."
+          );
+        }, 9000);
+      })();
+    </script>
+  </head>
   <body>
+    <div id="inove-boot" data-state="loading">
+      <div id="inove-boot-card">
+        <p id="inove-boot-kicker">Inove mobile</p>
+        <h1 id="inove-boot-title">Abrindo o aplicativo</h1>
+        <p id="inove-boot-detail">Carregando a interface inicial do Inove no seu aparelho.</p>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

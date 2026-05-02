@@ -1,5 +1,5 @@
-import { useState, useContext, useMemo } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useState, useContext, useMemo, useEffect } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   FaHome,
   FaClipboardList,
@@ -54,6 +54,7 @@ const PCM_ROUTES = {
   inicio: "/pcm-inicio",
   diario: "/pcm-diario",
   preventivas: "/pcm-preventivas",
+  trocaPneus: "/pcm-troca-pneus",
 };
 
 const EMBARCADOS_ROUTES = {
@@ -113,6 +114,7 @@ const ACCESS = {
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
     PCM_ROUTES.preventivas,
+    PCM_ROUTES.trocaPneus,
 
     // Embarcados
     ...Object.values(EMBARCADOS_ROUTES),
@@ -174,6 +176,7 @@ const ACCESS = {
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
     PCM_ROUTES.preventivas,
+    PCM_ROUTES.trocaPneus,
 
     ...Object.values(EMBARCADOS_ROUTES),
   ],
@@ -211,6 +214,7 @@ function canSee(user, path) {
 }
 
 export default function Sidebar() {
+  const location = useLocation();
   const [pcmOpen, setPcmOpen] = useState(false);
   const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
@@ -273,6 +277,7 @@ export default function Sidebar() {
           { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
           { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
           { path: PCM_ROUTES.preventivas, label: "Preventivas", icon: <FaWrench /> },
+          { path: PCM_ROUTES.trocaPneus, label: "Troca de pneus", icon: <FaTools /> },
         ],
       },
 
@@ -355,14 +360,27 @@ export default function Sidebar() {
     }
   };
 
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.startsWith("/pcm")) setPcmOpen(true);
+    if (path.startsWith("/desempenho") || path.startsWith("/diesel")) setDesempenhoDieselOpen(true);
+    if (path.startsWith("/tratativas") || path.startsWith("/central") || path.startsWith("/solicitar")) setTratativasOpen(true);
+    if (path.startsWith("/avarias") || path.startsWith("/lancar-avaria") || path.startsWith("/aprovar-avarias") || path.startsWith("/cobrancas")) setAvariasOpen(true);
+    if (path.startsWith("/checklists")) setChecklistsOpen(true);
+    if (path.startsWith("/sos") || path.startsWith("/km-rodado")) setIntervencoesOpen(true);
+    if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
+    if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
+    if (path.startsWith("/usuarios")) setConfigOpen(true);
+  }, [location.pathname]);
+
   const navLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 px-3 py-2 rounded-lg mb-2 transition-all duration-200 ${
-      isActive ? "bg-blue-500" : "hover:bg-blue-600"
+    `mb-2 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
+      isActive ? "bg-blue-500 shadow-sm" : "hover:bg-blue-600"
     }`;
 
   const subNavLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 px-3 py-2 rounded-lg mb-1 ml-4 transition-all duration-200 text-sm ${
-      isActive ? "bg-blue-500" : "hover:bg-blue-600"
+    `mb-1 ml-4 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
+      isActive ? "bg-blue-500 shadow-sm" : "hover:bg-blue-600"
     }`;
 
   const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
@@ -397,18 +415,18 @@ export default function Sidebar() {
   const showConfig = isAdmin;
 
   return (
-    <aside className="w-72 bg-blue-700 text-white flex flex-col">
-      <div className="p-4 border-b border-blue-600 flex flex-col items-center">
+    <aside className="flex h-full w-72 flex-col bg-blue-700 text-white shadow-2xl lg:shadow-none">
+      <div className="flex flex-col items-center border-b border-blue-600 px-4 py-5">
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
           <div className="text-center w-full">
             <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
-            <p className="text-xs text-blue-200">Seja bem-vindo!</p>
+            <p className="mt-1 text-xs text-blue-200">Seu painel de operacao</p>
 
             {podeVerFarol && (
               <button
                 onClick={abrirFarol}
-                className="mt-3 w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 text-sm font-semibold shadow-sm transition"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                 type="button"
                 title="Abrir Farol Tático"
               >
@@ -420,7 +438,7 @@ export default function Sidebar() {
         )}
       </div>
 
-      <nav className="flex-1 p-3 overflow-y-auto">
+      <nav className="flex-1 overflow-y-auto px-3 py-3 pb-24">
         {showInicioExecutivo && canSee(user, links.inicioExecutivo.path) && (
           <NavLink to={links.inicioExecutivo.path} className={navLinkClass}>
             {links.inicioExecutivo.icon}
@@ -692,18 +710,18 @@ export default function Sidebar() {
         )}
       </nav>
 
-      <div className="p-3 border-t border-blue-600">
+      <div className="border-t border-blue-600 p-4">
         <button
           onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-md text-sm"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold shadow-sm transition hover:bg-blue-500"
           type="button"
         >
           <FaSignOutAlt /> <span>Sair</span>
         </button>
       </div>
 
-      <div className="p-3 text-xs text-center border-t border-blue-600 text-blue-200">
-        © {new Date().getFullYear()} InovaQuatai
+      <div className="border-t border-blue-600 px-3 py-3 text-center text-xs text-blue-200">
+        INOVE {new Date().getFullYear()}
       </div>
     </aside>
   );

@@ -162,12 +162,12 @@ function CardKPI({ title, value, sub, icon, tone = "blue", className = "" }) {
     slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
   };
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-4 shadow-sm ${className}`}>
+    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-3.5 shadow-sm ${className}`}>
       <div className="flex items-start justify-between gap-3 h-full">
         <div className="flex flex-col justify-between h-full">
           <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
           <div>
-            <p className="text-2xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
+            <p className="text-xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
             {sub && <p className="text-[11px] mt-1 font-bold opacity-80">{sub}</p>}
           </div>
         </div>
@@ -379,7 +379,7 @@ export default function AvariasResumo() {
   }, [rows]);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 space-y-6">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5">
       
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
         <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
@@ -387,8 +387,8 @@ export default function AvariasResumo() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-black border border-rose-200">
               <FaCar /> Gestão de Danos e Custos
             </div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-800 mt-3 flex items-center gap-3">
-              PAINEL DE AVARIAS
+            <h1 className="mt-3 text-2xl font-black text-slate-800">
+              Painel de avarias
             </h1>
             <p className="text-sm text-slate-500 mt-1 flex items-center gap-2 font-semibold">
               <FaCalendarAlt /> Visão analítica de avarias aprovadas, cobranças e reincidências.
@@ -598,7 +598,31 @@ export default function AvariasResumo() {
           <h3 className="text-base font-black text-slate-800 flex items-center gap-2 mb-4">
             <FaBus className="text-slate-400" /> Top 10 Veículos
           </h3>
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {topVeiculos.map((v, i) => (
+              <div key={v.nome} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-black text-slate-800">
+                    <span className="mr-2 text-slate-400">#{i + 1}</span>
+                    {v.nome}
+                  </div>
+                  <div className="rounded-lg bg-rose-100 px-2 py-1 text-xs font-black text-rose-700">
+                    {v.qtd}
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
+                  <span>Valor orçado</span>
+                  <span className="font-bold text-slate-700">{moneyBRL(v.orcado)}</span>
+                </div>
+              </div>
+            ))}
+            {topVeiculos.length === 0 && !loading && (
+              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm font-bold text-slate-400">
+                Sem dados
+              </div>
+            )}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left text-sm border-collapse">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
                 <tr>
@@ -629,7 +653,36 @@ export default function AvariasResumo() {
           <h3 className="text-base font-black text-slate-800 flex items-center gap-2 mb-4">
             <FaUserTie className="text-slate-400" /> Top 10 Motoristas (Culpabilidade)
           </h3>
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {topMotoristas.map((m, i) => (
+              <div key={m.nome} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-black text-slate-800">
+                  <span className="mr-2 text-slate-400">#{i + 1}</span>
+                  {m.nome}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Eventos</div>
+                    <div className="mt-1 font-bold text-rose-600">{m.qtd}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cobrado</div>
+                    <div className="mt-1 font-bold text-emerald-600">{moneyBRL(m.cobrado)}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Custo orçado</div>
+                    <div className="mt-1 font-bold text-slate-700">{moneyBRL(m.orcado)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {topMotoristas.length === 0 && !loading && (
+              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm font-bold text-slate-400">
+                Sem dados
+              </div>
+            )}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left text-sm border-collapse min-w-[500px]">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
                 <tr>

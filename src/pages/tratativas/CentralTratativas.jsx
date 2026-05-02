@@ -573,7 +573,86 @@ export default function CentralTratativas() {
         />
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+      <div className="space-y-3 lg:hidden">
+        {loading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
+            Carregando...
+          </div>
+        ) : tratativasOrdenadas.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
+            Nenhuma tratativa encontrada.
+          </div>
+        ) : (
+          tratativasOrdenadas.map((t) => {
+            const concluida = isConcluidaOuResolvida(t?.status);
+
+            return (
+              <div key={t.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-slate-900">
+                      {t.motorista_nome || "-"}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {t.created_at
+                        ? new Date(t.created_at).toLocaleDateString("pt-BR")
+                        : "-"}
+                    </div>
+                  </div>
+                  <div>{badgeStatus(t)}</div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Chapa
+                    </div>
+                    <div className="mt-1 text-slate-700">{t.motorista_chapa || "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Prioridade
+                    </div>
+                    <div className="mt-1">{badgePrioridade(t.prioridade)}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Ocorrencia
+                    </div>
+                    <div className="mt-1 text-slate-700">{t.tipo_ocorrencia || "-"}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Setor
+                    </div>
+                    <div className="mt-1 text-slate-700">{t.setor_origem || "-"}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  {concluida ? (
+                    <button
+                      onClick={() => navigate(`/consultar/${t.id}`)}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-900"
+                    >
+                      <FaEye size={13} /> Consultar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => navigate(`/tratar/${t.id}`)}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+                    >
+                      <FaGavel size={13} /> Tratar
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border bg-white shadow-sm lg:block">
         <table className="w-full text-left min-w-[1200px]">
           <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
             <tr>

@@ -1,27 +1,225 @@
-/* src/index.css */
-
-/* ===== Tailwind base ===== */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ===== Estilos padrão da aplicação ===== */
+html {
+  background-color: #e2e8f0;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
   background-color: #f9fafb;
   color: #1f2937;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none;
 }
 
-/* ===== Estilos para impressão ===== */
+body.standalone-app {
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 22%, #e2e8f0 100%);
+}
+
+body.native-mobile-app {
+  background:
+    radial-gradient(circle at top, rgba(219, 234, 254, 0.5) 0%, rgba(248, 250, 252, 0) 24%),
+    #f8fafc;
+  color: #0f172a;
+}
+
+body.native-mobile-app #root {
+  min-height: 100vh;
+}
+
+@supports (padding: max(0px)) {
+  .safe-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 1023px) {
+  body.native-mobile-app {
+    font-family: "Inter", "Segoe UI", "Roboto", sans-serif;
+    font-size: 15px;
+  }
+
+  body.native-mobile-app h1 {
+    letter-spacing: -0.02em;
+  }
+
+  body.native-mobile-app h2 {
+    letter-spacing: -0.01em;
+  }
+
+  body.native-mobile-app input,
+  body.native-mobile-app select,
+  body.native-mobile-app textarea {
+    min-height: 44px;
+    border-radius: 1rem !important;
+    font-size: 16px !important;
+    border-color: #cbd5e1;
+    background-color: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  body.native-mobile-app textarea {
+    min-height: 108px;
+  }
+
+  body.native-mobile-app button,
+  body.native-mobile-app a[role="button"] {
+    min-height: 42px;
+  }
+
+  body.native-mobile-app .text-3xl {
+    font-size: 1.55rem !important;
+    line-height: 1.15 !important;
+  }
+
+  body.native-mobile-app .text-2xl {
+    font-size: 1.28rem !important;
+    line-height: 1.2 !important;
+  }
+
+  body.native-mobile-app .text-xl {
+    font-size: 1.08rem !important;
+    line-height: 1.25 !important;
+  }
+
+  body.native-mobile-app .text-lg {
+    font-size: 0.98rem !important;
+    line-height: 1.3 !important;
+  }
+
+  body.native-mobile-app .text-base {
+    font-size: 0.94rem !important;
+    line-height: 1.4 !important;
+  }
+
+  body.native-mobile-app .text-sm {
+    font-size: 0.82rem !important;
+    line-height: 1.4 !important;
+  }
+
+  body.native-mobile-app .p-6 {
+    padding: 1rem !important;
+  }
+
+  body.native-mobile-app .p-5 {
+    padding: 0.9rem !important;
+  }
+
+  body.native-mobile-app .p-4 {
+    padding: 0.85rem !important;
+  }
+
+  body.native-mobile-app .px-6 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  body.native-mobile-app .py-6 {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+
+  body.native-mobile-app .gap-6 {
+    gap: 1rem !important;
+  }
+
+  body.native-mobile-app .gap-5 {
+    gap: 0.9rem !important;
+  }
+
+  body.native-mobile-app .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1rem !important;
+  }
+
+  body.native-mobile-app .space-y-5 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.9rem !important;
+  }
+
+  body.native-mobile-app table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.native-mobile-app thead th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    z-index: 1;
+  }
+
+  body.native-mobile-app th,
+  body.native-mobile-app td {
+    font-size: 0.78rem;
+  }
+
+  body.native-mobile-app .shadow,
+  body.native-mobile-app .shadow-sm,
+  body.native-mobile-app .shadow-lg,
+  body.native-mobile-app .shadow-xl,
+  body.native-mobile-app .shadow-2xl {
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06) !important;
+  }
+
+  body.native-mobile-app .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.native-mobile-app .rounded-lg {
+    border-radius: 1rem !important;
+  }
+
+  body.native-mobile-app .rounded-xl {
+    border-radius: 1.15rem !important;
+  }
+
+  body.native-mobile-app .rounded-2xl {
+    border-radius: 1.4rem !important;
+  }
+
+  body.native-mobile-app .rounded-3xl {
+    border-radius: 1.7rem !important;
+  }
+
+  body.native-mobile-app .max-w-7xl,
+  body.native-mobile-app .max-w-6xl,
+  body.native-mobile-app .max-w-5xl,
+  body.native-mobile-app .max-w-4xl,
+  body.native-mobile-app .max-w-3xl {
+    max-width: 100% !important;
+  }
+
+  body.native-mobile-app .h-80 {
+    height: 16rem !important;
+  }
+
+  body.native-mobile-app .h-72 {
+    height: 14.5rem !important;
+  }
+
+  body.native-mobile-app .min-h-screen {
+    min-height: auto;
+  }
+}
+
 @media print {
   @page {
     size: A4 portrait;
     margin: 15mm;
   }
 
-  /* Oculta elementos desnecessários */
   .no-print,
   nav,
   aside,
@@ -31,7 +229,6 @@ body {
     display: none !important;
   }
 
-  /* Reseta estilo do body */
   body {
     background: white !important;
     color: black !important;
@@ -40,7 +237,6 @@ body {
     -webkit-print-color-adjust: exact;
   }
 
-  /* Área de impressão */
   .printable-area {
     position: absolute;
     left: 0;
@@ -52,10 +248,9 @@ body {
     overflow: visible !important;
     max-height: none !important;
     color: #000;
-    font-family: 'Arial', sans-serif;
+    font-family: "Arial", sans-serif;
   }
 
-  /* Cabeçalhos e textos */
   .printable-area h1,
   .printable-area h2,
   .printable-area h3 {
@@ -69,13 +264,11 @@ body {
     color: black !important;
   }
 
-  /* Links e elementos interativos */
   .printable-area a {
     text-decoration: none;
     color: black;
   }
 
-  /* Tabelas */
   table {
     width: 100%;
     border-collapse: collapse !important;
@@ -94,19 +287,48 @@ body {
     background-color: #f3f4f6 !important;
   }
 
-  /* Assinatura e blocos forçados */
-  .print\:block { display: block !important; }
-  .print\:pt-16 { padding-top: 4rem; }
-  .print\:mt-10 { margin-top: 2.5rem; }
-  .print\:mx-auto { margin-left: auto; margin-right: auto; }
-  .print\:border-t { border-top-width: 1px; }
-  .print\:border-black { border-color: black; }
-  .print\:w-64 { width: 16rem; }
-  .print\:text-center { text-align: center; }
-  .print\:text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-  .print\:pt-1 { padding-top: 0.25rem; }
+  .print\:block {
+    display: block !important;
+  }
 
-  /* Remove sombra e cantos arredondados de modais */
+  .print\:pt-16 {
+    padding-top: 4rem;
+  }
+
+  .print\:mt-10 {
+    margin-top: 2.5rem;
+  }
+
+  .print\:mx-auto {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .print\:border-t {
+    border-top-width: 1px;
+  }
+
+  .print\:border-black {
+    border-color: black;
+  }
+
+  .print\:w-64 {
+    width: 16rem;
+  }
+
+  .print\:text-center {
+    text-align: center;
+  }
+
+  .print\:text-sm {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  .print\:pt-1 {
+    padding-top: 0.25rem;
+  }
+
   .shadow,
   .shadow-lg,
   .shadow-2xl {
@@ -117,7 +339,6 @@ body {
     border-radius: 0 !important;
   }
 
-  /* Garantia de impressão do timbrado */
   img {
     -webkit-print-color-adjust: exact;
     filter: none !important;

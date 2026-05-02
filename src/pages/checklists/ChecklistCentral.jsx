@@ -1,6 +1,6 @@
 // src/pages/ChecklistCentral.jsx
 import { useEffect, useMemo, useState } from "react";
-import { supabaseBCNT } from "../../supabaseBCNT";
+import { isSupabaseBCNTConfigured, supabaseBCNT } from "../../supabaseBCNT";
 import ChecklistDetalheModal from "../../components/ChecklistDetalheModal";
 
 function norm(s) {
@@ -54,6 +54,7 @@ function CardResumo({ titulo, valor, cor }) {
 export default function ChecklistCentral() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [erroConfig, setErroConfig] = useState("");
 
   const [filtros, setFiltros] = useState({
     prefixo: "",
@@ -100,6 +101,12 @@ export default function ChecklistCentral() {
   }
 
   async function carregarLista() {
+    if (!isSupabaseBCNTConfigured) {
+      setErroConfig("A base BCNT não está configurada neste APK.");
+      setRows([]);
+      return;
+    }
+
     let q = supabaseBCNT
       .from("checklists")
       .select(
@@ -132,6 +139,13 @@ export default function ChecklistCentral() {
   }
 
   async function carregarContadoresHead() {
+    if (!isSupabaseBCNTConfigured) {
+      setTotalCount(0);
+      setComVideoCount(0);
+      setComFotosCount(0);
+      return;
+    }
+
     // Total
     let qTotal = supabaseBCNT.from("checklists").select("id", { count: "exact", head: true });
     qTotal = applyCommonFilters(qTotal);
@@ -162,6 +176,7 @@ export default function ChecklistCentral() {
 
   async function aplicar() {
     setLoading(true);
+    setErroConfig("");
     try {
       await Promise.all([carregarLista(), carregarContadoresHead()]);
     } catch (e) {
@@ -230,6 +245,12 @@ export default function ChecklistCentral() {
 
       <div className="bg-white shadow rounded-lg p-4 mb-6">
         <h2 className="text-lg font-semibold mb-3">Filtros</h2>
+
+        {erroConfig ? (
+          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {erroConfig}
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <input

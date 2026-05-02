@@ -6,9 +6,20 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "mobile:sync": "npm run build && npx cap sync",
+    "mobile:apk": "npm run build && npx cap sync android && cd android && gradlew.bat assembleDebug",
+    "mobile:android": "npm run build && npx cap sync android && npx cap open android",
+    "mobile:ios": "npm run build && npx cap sync ios && npx cap open ios",
+    "cap:sync": "cap sync",
+    "cap:copy": "cap copy",
+    "cap:android": "cap open android",
+    "cap:ios": "cap open ios"
   },
   "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
     "@supabase/supabase-js": "^2.45.0",
     "chart.js": "^4.4.1",
     "clsx": "^2.1.0",
@@ -27,6 +38,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.15",
     "postcss": "^8.4.31",

@@ -1,6 +1,3 @@
-// src/pages/Dashboard.jsx
-// (Versão final consolidada — sem botão do Farol)
-
 import { useEffect, useState } from "react";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../context/AuthContext";
@@ -14,25 +11,19 @@ import {
   Legend,
 } from "recharts";
 
-// ==========================
-// COMPONENTE CARD RESUMO
-// ==========================
 function CardResumo({ titulo, valor, cor, subValor = null, subValor2 = null }) {
   return (
-    <div className={`${cor} rounded-lg shadow p-5 text-center`}>
+    <div className={`${cor} rounded-2xl border border-white/60 p-4 text-left shadow-sm sm:p-5`}>
       <h3 className="text-sm font-medium text-gray-600">{titulo}</h3>
-      <p className="text-3xl font-bold mt-2 text-gray-800">{valor}</p>
-      {subValor && <p className="text-sm font-medium mt-1 text-gray-700">{subValor}</p>}
+      <p className="mt-2 text-2xl font-bold text-gray-800 sm:text-3xl">{valor}</p>
+      {subValor && <p className="mt-1 text-sm font-medium text-gray-700">{subValor}</p>}
       {subValor2 && <p className="text-xs font-medium text-gray-600">{subValor2}</p>}
     </div>
   );
 }
 
-// ==========================
-// COMPONENTE PRINCIPAL
-// ==========================
 export default function Dashboard() {
-  const { user } = useAuth(); 
+  const { user } = useAuth();
 
   const [resumo, setResumo] = useState({
     tratativasTotal: 0,
@@ -72,18 +63,14 @@ export default function Dashboard() {
     return query;
   };
 
-  // ==========================
-  // RESUMO GERAL
-  // ==========================
   const carregarResumo = async () => {
     try {
-      // Tratativas
-      let totalTratQuery = applyDateFilters(
+      const totalTratQuery = applyDateFilters(
         supabase.from("tratativas").select("id", { count: "exact", head: true })
       );
       const { count: tratativasTotalCount } = await totalTratQuery;
 
-      let pendentesQuery = applyDateFilters(
+      const pendentesQuery = applyDateFilters(
         supabase
           .from("tratativas")
           .select("id", { count: "exact", head: true })
@@ -91,7 +78,7 @@ export default function Dashboard() {
       );
       const { count: tratativasPendentesCount } = await pendentesQuery;
 
-      let concluidasQuery = applyDateFilters(
+      const concluidasQuery = applyDateFilters(
         supabase
           .from("tratativas")
           .select("id", { count: "exact", head: true })
@@ -102,7 +89,7 @@ export default function Dashboard() {
       const date10DaysAgo = new Date();
       date10DaysAgo.setDate(date10DaysAgo.getDate() - 10);
 
-      let atrasadasQuery = applyDateFilters(
+      const atrasadasQuery = applyDateFilters(
         supabase
           .from("tratativas")
           .select("id", { count: "exact", head: true })
@@ -111,8 +98,7 @@ export default function Dashboard() {
       );
       const { count: tratativasAtrasadasCount } = await atrasadasQuery;
 
-      // Avarias
-      let avsQuery = applyDateFilters(
+      const avsQuery = applyDateFilters(
         supabase
           .from("avarias")
           .select("status, status_cobranca, valor_total_orcamento, valor_cobrado, created_at")
@@ -133,32 +119,33 @@ export default function Dashboard() {
         tratativasAtrasadas: tratativasAtrasadasCount || 0,
         avariasAprovadas: avariasAprovadas.length,
         avariasAprovadasValor: avariasAprovadas.reduce(
-          (s, a) => s + (a.valor_total_orcamento || 0),
+          (sum, avaria) => sum + (avaria.valor_total_orcamento || 0),
           0
         ),
         avariasPendentesCobranca: avariasPendentesCobranca.length,
         avariasPendentesCobrancaValor: avariasPendentesCobranca.reduce(
-          (s, a) => s + (a.valor_total_orcamento || 0),
+          (sum, avaria) => sum + (avaria.valor_total_orcamento || 0),
           0
         ),
         cobrancasRealizadas: cobrancasRealizadas.length,
         cobrancasRealizadasValor: cobrancasRealizadas.reduce(
-          (s, a) => s + (Number(a.valor_cobrado) || a.valor_total_orcamento || 0),
+          (sum, avaria) => sum + (Number(avaria.valor_cobrado) || avaria.valor_total_orcamento || 0),
           0
         ),
         canceladasCount: canceladas.length,
-        canceladasValor: canceladas.reduce((s, a) => s + (a.valor_total_orcamento || 0), 0),
+        canceladasValor: canceladas.reduce(
+          (sum, avaria) => sum + (avaria.valor_total_orcamento || 0),
+          0
+        ),
       });
-    } catch (e) {
-      console.error("Erro fatal ao carregar resumo:", e);
+    } catch (error) {
+      console.error("Erro fatal ao carregar resumo:", error);
     }
   };
 
-  // ==========================
-  // EVOLUÇÃO (Gráfico)
-  // ==========================
   const carregarEvolucao = async () => {
-    let dateFilterStart = dataFiltro.dataInicio || new Date(Date.now() - 30 * 864e5).toISOString();
+    const dateFilterStart =
+      dataFiltro.dataInicio || new Date(Date.now() - 30 * 864e5).toISOString();
 
     const consultas = [
       { nome: "tratativas", query: supabase.from("tratativas").select("created_at") },
@@ -173,16 +160,17 @@ export default function Dashboard() {
     ];
 
     const contagem = {};
-    for (const { nome, query } of consultas) {
-      let q = query.gte("created_at", dateFilterStart);
-      if (dataFiltro.dataFim) q = q.lte("created_at", dataFiltro.dataFim);
 
-      const { data } = await q.limit(100000);
+    for (const { nome, query } of consultas) {
+      let consulta = query.gte("created_at", dateFilterStart);
+      if (dataFiltro.dataFim) consulta = consulta.lte("created_at", dataFiltro.dataFim);
+
+      const { data } = await consulta.limit(100000);
       data?.forEach((item) => {
         const dia = new Date(item.created_at).toLocaleDateString("pt-BR");
         contagem[dia] =
           contagem[dia] || { dia, tratativas: 0, avariasAprovadas: 0, cobrancasRealizadas: 0 };
-        contagem[dia][nome]++;
+        contagem[dia][nome] += 1;
       });
     }
 
@@ -195,16 +183,17 @@ export default function Dashboard() {
     );
   };
 
-  // ==========================
-  // TOP MOTORISTAS
-  // ==========================
   const carregarTopMotoristas = async () => {
-    let tratQuery = applyDateFilters(
-      supabase.from("tratativas").select("motorista_nome").not("motorista_nome", "is", null).limit(100000)
+    const tratQuery = applyDateFilters(
+      supabase
+        .from("tratativas")
+        .select("motorista_nome")
+        .not("motorista_nome", "is", null)
+        .limit(100000)
     );
     const { data: tratData } = await tratQuery;
 
-    let avQuery = applyDateFilters(
+    const avQuery = applyDateFilters(
       supabase
         .from("avarias")
         .select("motoristaId, valor_cobrado, valor_total_orcamento")
@@ -216,13 +205,19 @@ export default function Dashboard() {
     if (!tratData || !avData) return;
 
     const contador = {};
-    tratData.forEach((t) => (contador[t.motorista_nome] = (contador[t.motorista_nome] || 0) + 1));
+    tratData.forEach((tratativa) => {
+      contador[tratativa.motorista_nome] = (contador[tratativa.motorista_nome] || 0) + 1;
+    });
 
     const top = Object.entries(contador)
       .map(([nome, qtd]) => {
         const valorAvs = avData
-          .filter((av) => av.motoristaId?.includes(nome))
-          .reduce((sum, av) => sum + (Number(av.valor_cobrado) || av.valor_total_orcamento || 0), 0);
+          .filter((avaria) => avaria.motoristaId?.includes(nome))
+          .reduce(
+            (sum, avaria) => sum + (Number(avaria.valor_cobrado) || avaria.valor_total_orcamento || 0),
+            0
+          );
+
         return { nome, qtd, valorAvs };
       })
       .sort((a, b) => b.qtd - a.qtd)
@@ -237,97 +232,142 @@ export default function Dashboard() {
     carregarTopMotoristas();
   };
 
-  // ==========================
-  // INTERFACE
-  // ==========================
   return (
-    <div className="p-6">
-      {/* Cabeçalho */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-700">Painel de Gestão Integrada</h1>
-          <p className="text-xs text-gray-500 mt-1">
-            Usuário: <span className="font-semibold">{user?.nome || user?.login || "-"}</span>{" "}
-            · Nível: <span className="font-semibold">{user?.nivel || "-"}</span>
-          </p>
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600">
+          Painel executivo
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">
+              Gestao integrada de tratativas e avarias
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Usuario: <span className="font-semibold">{user?.nome || user?.login || "-"}</span> ·
+              Nivel: <span className="font-semibold">{user?.nivel || "-"}</span>
+            </p>
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* FILTROS DE DATA */}
-      <div className="bg-white shadow rounded-lg p-4 mb-6 flex flex-wrap gap-4 items-center text-gray-700">
-        <h2 className="text-lg font-semibold">Filtro de Período</h2>
-        <div className="flex flex-col">
-          <label className="text-sm font-medium">Data Início</label>
-          <input
-            type="date"
-            value={dataFiltro.dataInicio}
-            onChange={(e) => setDataFiltro({ ...dataFiltro, dataInicio: e.target.value })}
-            className="border rounded-md px-3 py-2 text-gray-700"
-          />
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
+        <div className="flex flex-col gap-4 text-gray-700 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Filtro de periodo</h2>
+            <p className="mt-1 text-sm text-slate-500">Ajuste o recorte quando precisar analisar um periodo especifico.</p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end">
+            <div className="flex flex-col">
+              <label className="text-sm font-medium">Data inicio</label>
+              <input
+                type="date"
+                value={dataFiltro.dataInicio}
+                onChange={(event) =>
+                  setDataFiltro({ ...dataFiltro, dataInicio: event.target.value })
+                }
+                className="mt-1 rounded-xl border border-slate-300 px-3 py-2.5 text-gray-700 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <div className="flex flex-col">
+              <label className="text-sm font-medium">Data fim</label>
+              <input
+                type="date"
+                value={dataFiltro.dataFim}
+                onChange={(event) =>
+                  setDataFiltro({ ...dataFiltro, dataFim: event.target.value })
+                }
+                className="mt-1 rounded-xl border border-slate-300 px-3 py-2.5 text-gray-700 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <button
+              onClick={() => setDataFiltro({ dataInicio: "", dataFim: "" })}
+              className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+              type="button"
+            >
+              Limpar filtro
+            </button>
+          </div>
         </div>
-        <div className="flex flex-col">
-          <label className="text-sm font-medium">Data Fim</label>
-          <input
-            type="date"
-            value={dataFiltro.dataFim}
-            onChange={(e) => setDataFiltro({ ...dataFiltro, dataFim: e.target.value })}
-            className="border rounded-md px-3 py-2 text-gray-700"
-          />
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Tratativas</h2>
         </div>
-        <button
-          onClick={() => setDataFiltro({ dataInicio: "", dataFim: "" })}
-          className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-4 py-2 mt-4"
-          type="button"
-        >
-          Limpar Filtro
-        </button>
-      </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <CardResumo
+          titulo="Total Tratativas"
+          valor={resumo.tratativasTotal}
+          cor="bg-blue-100 text-blue-700"
+        />
+        <CardResumo
+          titulo="Tratativas Pendentes"
+          valor={resumo.tratativasPendentes}
+          cor="bg-yellow-100 text-yellow-700"
+        />
+        <CardResumo
+          titulo="Tratativas Concluidas"
+          valor={resumo.tratativasConcluidas}
+          cor="bg-green-100 text-green-700"
+        />
+        <CardResumo
+          titulo="Tratativas Atrasadas"
+          valor={resumo.tratativasAtrasadas}
+          cor="bg-red-200 text-red-700"
+        />
+        </div>
+      </section>
 
-      {/* LINHA 1 — TRATATIVAS */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <CardResumo titulo="Total Tratativas" valor={resumo.tratativasTotal} cor="bg-blue-100 text-blue-700" />
-        <CardResumo titulo="Tratativas Pendentes" valor={resumo.tratativasPendentes} cor="bg-yellow-100 text-yellow-700" />
-        <CardResumo titulo="Tratativas Concluídas" valor={resumo.tratativasConcluidas} cor="bg-green-100 text-green-700" />
-        <CardResumo titulo="Tratativas Atrasadas" valor={resumo.tratativasAtrasadas} cor="bg-red-200 text-red-700" />
-      </div>
-
-      {/* LINHA 2 — AVARIAS */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Avarias e cobrancas</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <CardResumo
           titulo="Avarias Aprovadas"
           valor={resumo.avariasAprovadas}
           subValor={formatCurrency(resumo.avariasAprovadasValor)}
-          subValor2="Valor Orçado"
+          subValor2="Valor orcado"
           cor="bg-orange-100 text-orange-700"
         />
         <CardResumo
-          titulo="Pendentes Cobrança"
+          titulo="Pendentes Cobranca"
           valor={resumo.avariasPendentesCobranca}
           subValor={formatCurrency(resumo.avariasPendentesCobrancaValor)}
-          subValor2="Valor Orçado"
-          cor="bg-purple-100 text-purple-700"
+          subValor2="Valor orcado"
+          cor="bg-fuchsia-100 text-fuchsia-700"
         />
         <CardResumo
-          titulo="Cobranças Realizadas"
+          titulo="Cobrancas Realizadas"
           valor={resumo.cobrancasRealizadas}
           subValor={formatCurrency(resumo.cobrancasRealizadasValor)}
-          subValor2="Valor Cobrado"
+          subValor2="Valor cobrado"
           cor="bg-lime-100 text-lime-700"
         />
         <CardResumo
-          titulo="Cobranças Canceladas"
+          titulo="Cobrancas Canceladas"
           valor={resumo.canceladasCount}
           subValor={formatCurrency(resumo.canceladasValor)}
-          subValor2="Valor Cancelado"
+          subValor2="Valor cancelado"
           cor="bg-red-100 text-red-700"
         />
-      </div>
+        </div>
+      </section>
 
-      {/* GRÁFICO + TOP MOTORISTAS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-medium mb-4 text-gray-700">Evolução dos últimos 30 dias</h2>
-          <div style={{ width: "100%", height: "300px" }}>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)]">
+        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-medium text-gray-700">Evolucao dos ultimos 30 dias</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Leitura consolidada de tratativas, aprovacoes e cobrancas.
+            </p>
+          </div>
+
+          <div className="h-72 w-full sm:h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={evolucao}>
                 <XAxis dataKey="dia" />
@@ -335,42 +375,91 @@ export default function Dashboard() {
                 <Tooltip />
                 <Legend />
                 <Line type="monotone" dataKey="tratativas" stroke="#2563eb" name="Tratativas" />
-                <Line type="monotone" dataKey="avariasAprovadas" stroke="#f97316" name="Avarias Aprovadas" />
-                <Line type="monotone" dataKey="cobrancasRealizadas" stroke="#16a34a" name="Cobranças Realizadas" />
+                <Line
+                  type="monotone"
+                  dataKey="avariasAprovadas"
+                  stroke="#f97316"
+                  name="Avarias Aprovadas"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="cobrancasRealizadas"
+                  stroke="#16a34a"
+                  name="Cobrancas Realizadas"
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </section>
 
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-medium mb-4 text-gray-700">Motoristas com mais tratativas</h2>
-          <table className="min-w-full">
-            <thead>
-              <tr className="bg-gray-100 text-gray-700 text-left">
-                <th className="p-3">Motorista</th>
-                <th className="p-3 text-center">Qtd Tratativas</th>
-                <th className="p-3 text-right">Valor Avarias</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topMotoristas.length > 0 ? (
-                topMotoristas.map((m, i) => (
-                  <tr key={i} className="border-b hover:bg-gray-50">
-                    <td className="p-3">{m.nome}</td>
-                    <td className="p-3 text-center font-semibold">{m.qtd}</td>
-                    <td className="p-3 text-right font-semibold text-red-600">{formatCurrency(m.valorAvs)}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="3" className="p-3 text-center text-gray-500">
-                    Nenhum dado disponível.
-                  </td>
+        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-medium text-gray-700">
+              Motoristas com mais tratativas
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              No celular a leitura vira cards; na web a tabela continua disponivel.
+            </p>
+          </div>
+
+          <div className="space-y-3 md:hidden">
+            {topMotoristas.length > 0 ? (
+              topMotoristas.map((motorista, index) => (
+                <div
+                  key={index}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div className="text-sm font-semibold text-slate-900">{motorista.nome}</div>
+                  <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
+                    <span>Qtd. tratativas</span>
+                    <span className="font-semibold text-slate-900">{motorista.qtd}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-sm text-slate-600">
+                    <span>Valor avarias</span>
+                    <span className="font-semibold text-red-600">
+                      {formatCurrency(motorista.valorAvs)}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+                Nenhum dado disponivel.
+              </div>
+            )}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-gray-100 text-left text-gray-700">
+                  <th className="p-3">Motorista</th>
+                  <th className="p-3 text-center">Qtd Tratativas</th>
+                  <th className="p-3 text-right">Valor Avarias</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {topMotoristas.length > 0 ? (
+                  topMotoristas.map((motorista, index) => (
+                    <tr key={index} className="border-b hover:bg-gray-50">
+                      <td className="p-3">{motorista.nome}</td>
+                      <td className="p-3 text-center font-semibold">{motorista.qtd}</td>
+                      <td className="p-3 text-right font-semibold text-red-600">
+                        {formatCurrency(motorista.valorAvs)}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="3" className="p-3 text-center text-gray-500">
+                      Nenhum dado disponivel.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
   );

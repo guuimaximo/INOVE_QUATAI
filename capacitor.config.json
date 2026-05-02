@@ -1,0 +1,15 @@
+{
+  "appId": "com.inove.mobile",
+  "appName": "Inove",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1000,
+      "backgroundColor": "#0F2D5C",
+      "showSpinner": false
+    }
+  }
+}

@@ -262,6 +262,8 @@ function FichaModal({
                     value={form.prefixoInstalacao}
                     onChange={(value) => onFieldChange("prefixoInstalacao", value)}
                     label="Prefixo"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
                 </div>
 
@@ -277,12 +279,16 @@ function FichaModal({
                   label="Pneu retirado (numero de fogo)"
                   value={form.numeroFogoRetirado}
                   onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                 />
 
                 <InputField
                   label="Pneu colocado (numero de fogo)"
                   value={form.numeroFogoColocado}
                   onChange={(value) => onFieldChange("numeroFogoColocado", value)}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                 />
               </div>
 
@@ -310,6 +316,8 @@ function FichaModal({
                       value={form.prefixoRetirada}
                       onChange={(value) => onFieldChange("prefixoRetirada", value)}
                       label="Prefixo"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                     />
                   </div>
 
@@ -323,6 +331,8 @@ function FichaModal({
                     label="Pneu retirado (numero de fogo)"
                     value={form.numeroFogoRetirado}
                     onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
 
                   <PhotoField
@@ -341,6 +351,8 @@ function FichaModal({
                       value={form.prefixoInstalacao}
                       onChange={(value) => onFieldChange("prefixoInstalacao", value)}
                       label="Prefixo"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                     />
                   </div>
 
@@ -354,6 +366,8 @@ function FichaModal({
                     label="Pneu colocado (numero de fogo)"
                     value={form.numeroFogoColocado}
                     onChange={(value) => onFieldChange("numeroFogoColocado", value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
 
                   <PhotoField
@@ -405,13 +419,15 @@ function ReadOnlyField({ label, value }) {
   );
 }
 
-function InputField({ label, value, onChange }) {
+function InputField({ label, value, onChange, inputMode = "text", pattern }) {
   return (
     <label className="flex flex-col gap-2">
       <span className="text-sm text-gray-600">{label}</span>
       <input
         type="text"
         value={value}
+        inputMode={inputMode}
+        pattern={pattern}
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
       />

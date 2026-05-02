@@ -6,13 +6,18 @@ import {
   FaCamera,
   FaCheckCircle,
   FaClipboardList,
-  FaIdCard,
   FaPlus,
   FaSave,
+  FaSearch,
   FaTimes,
 } from "react-icons/fa";
 
 const BUCKET_FOTOS = "pcm_troca_pneus";
+
+const TIPOS_TROCA = {
+  ESTOQUE_CARRO: "ESTOQUE -> CARRO",
+  CARRO_CARRO: "CARRO -> CARRO",
+};
 
 const POSICOES = [
   "DIANTEIRO DIREITO",
@@ -24,10 +29,16 @@ const POSICOES = [
 ];
 
 const EMPTY_FORM = {
-  prefixo: "",
   ficha: "",
-  posicao: POSICOES[0],
-  numeroFogo: "",
+  dataLancamento: "",
+  quemLancou: "",
+  tipoTroca: TIPOS_TROCA.ESTOQUE_CARRO,
+  prefixoRetirada: "",
+  posicaoRetirada: POSICOES[0],
+  numeroFogoRetirado: "",
+  prefixoInstalacao: "",
+  posicaoInstalacao: POSICOES[0],
+  numeroFogoColocado: "",
   observacoes: "",
 };
 
@@ -69,6 +80,10 @@ function formatDate(value) {
   }
 }
 
+function nowDisplay() {
+  return formatDate(new Date().toISOString());
+}
+
 function extractFichaSequence(value) {
   const digits = String(value || "").match(/(\d+)$/);
   return digits ? Number.parseInt(digits[1], 10) : 0;
@@ -83,9 +98,13 @@ function buildNextFicha(rows) {
   return `TP-${String(maxValue + 1).padStart(6, "0")}`;
 }
 
-async function uploadFotoNumeroFogo(trocaId, file) {
+function norm(value) {
+  return String(value || "").trim();
+}
+
+async function uploadFoto(trocaId, tag, file) {
   const safeName = sanitizeFileName(file?.name);
-  const path = `trocas/${trocaId}/numero_fogo_${Date.now()}_${safeName}`;
+  const path = `trocas/${trocaId}/${tag}_${Date.now()}_${safeName}`;
 
   const { error: uploadError } = await supabase.storage.from(BUCKET_FOTOS).upload(path, file, {
     upsert: false,
@@ -102,35 +121,35 @@ async function uploadFotoNumeroFogo(trocaId, file) {
   };
 }
 
-function PhotoCaptureCard({ file, inputRef, onChange }) {
+function Card({ label, value, color }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center">
+      <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">{label}</span>
+      <span className={`mt-1 text-3xl font-black ${color}`}>{value}</span>
+    </div>
+  );
+}
+
+function PhotoField({ title, file, inputRef, onChange }) {
   const previewUrl = useMemo(() => {
     if (!file) return "";
     return URL.createObjectURL(file);
   }, [file]);
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold text-slate-900">Foto do numero de fogo</div>
-          <div className="mt-1 text-xs leading-5 text-slate-500">
-            Ao tocar em inserir foto, a camera abre no celular.
-          </div>
-        </div>
-        {file ? (
-          <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-            Capturada
-          </span>
-        ) : null}
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-semibold text-slate-900">{title}</div>
+      <div className="mt-1 text-xs text-slate-500">
+        Ao tocar em inserir foto, a camera abre no celular.
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-3xl border border-dashed border-slate-300 bg-white">
+      <div className="mt-3 overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white">
         {previewUrl ? (
-          <img src={previewUrl} alt="Numero de fogo" className="h-52 w-full object-cover" />
+          <img src={previewUrl} alt={title} className="h-40 w-full object-cover" />
         ) : (
-          <div className="flex h-52 flex-col items-center justify-center gap-3 px-6 text-center text-slate-400">
-            <FaCamera className="text-2xl" />
-            <div className="text-sm font-medium">Nenhuma foto adicionada</div>
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-slate-400">
+            <FaCamera className="text-xl" />
+            <span className="text-sm font-medium">Nenhuma foto adicionada</span>
           </div>
         )}
       </div>
@@ -147,7 +166,7 @@ function PhotoCaptureCard({ file, inputRef, onChange }) {
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm"
+        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
       >
         <FaCamera />
         Inserir foto
@@ -156,76 +175,40 @@ function PhotoCaptureCard({ file, inputRef, onChange }) {
   );
 }
 
-function FichaCard({ ficha }) {
+function SectionBlock({ title, children }) {
   return (
-    <article className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-            <FaClipboardList />
-            {ficha.ficha_troca}
-          </div>
-          <h3 className="mt-3 text-lg font-semibold text-slate-950">Prefixo {ficha.prefixo}</h3>
-          <p className="mt-1 text-sm text-slate-500">{ficha.posicao}</p>
-        </div>
-
-        <div className="text-sm text-slate-500 md:text-right">
-          <div className="font-semibold text-slate-900">{formatDate(ficha.created_at)}</div>
-          <div className="mt-1">{ficha.criado_por_nome || ficha.criado_por_login || "Equipe PCM"}</div>
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-            Numero de fogo
-          </div>
-          <div className="mt-2 text-sm font-medium text-slate-800">
-            {ficha.numero_fogo_pneu || ficha.pneu_colocado_descricao || "-"}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-            Status
-          </div>
-          <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700">
-            <FaCheckCircle />
-            Registrada
-          </div>
-        </div>
-      </div>
-
-      {ficha.observacoes ? (
-        <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-          {ficha.observacoes}
-        </div>
-      ) : null}
-    </article>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="mb-4 text-sm font-black uppercase tracking-wide text-slate-700">{title}</div>
+      <div className="space-y-4">{children}</div>
+    </div>
   );
 }
 
-function NovaFichaModal({
+function FichaModal({
   open,
   form,
-  foto,
+  fotoRetirado,
+  fotoColocado,
   saving,
-  inputRef,
+  retiradaRef,
+  colocadoRef,
   onClose,
-  onPrefixoChange,
   onFieldChange,
-  onPhotoChange,
-  onSubmit,
+  onPhotoRetirado,
+  onPhotoColocado,
+  onSalvar,
 }) {
   if (!open) return null;
 
+  const isEstoqueCarro = form.tipoTroca === TIPOS_TROCA.ESTOQUE_CARRO;
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-5xl rounded-2xl border border-slate-200 bg-white shadow-2xl max-h-[92vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <div>
             <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">
-              PCM · Solicitação
+              PCM · Solicitacao
             </div>
             <h2 className="mt-1 text-xl font-semibold text-slate-950">Lancar troca de pneus</h2>
           </div>
@@ -233,92 +216,171 @@ function NovaFichaModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-2xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
           >
             <FaTimes />
           </button>
         </div>
 
-        <div className="space-y-5 px-5 py-5">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <CampoPrefixo
-                value={form.prefixo}
-                onChange={onPrefixoChange}
-                label="Prefixo"
-              />
-            </div>
-
-            <label className="flex flex-col gap-2">
-              <span className="text-sm text-gray-600">Numero da ficha</span>
-              <input
-                type="text"
-                value={form.ficha}
-                disabled
-                className="w-full rounded-md border border-gray-300 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700"
-              />
-            </label>
+        <div className="overflow-y-auto px-5 py-5 space-y-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <ReadOnlyField label="Numero da ficha" value={form.ficha} />
+            <ReadOnlyField label="Data" value={form.dataLancamento} />
+            <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2">
-              <span className="text-sm text-gray-600">Posicao do pneu</span>
+              <span className="text-sm text-gray-600">Tipo de troca</span>
               <select
-                value={form.posicao}
-                onChange={(event) => onFieldChange("posicao", event.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-slate-800"
+                value={form.tipoTroca}
+                onChange={(event) => onFieldChange("tipoTroca", event.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
-                {POSICOES.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
+                <option value={TIPOS_TROCA.ESTOQUE_CARRO}>{TIPOS_TROCA.ESTOQUE_CARRO}</option>
+                <option value={TIPOS_TROCA.CARRO_CARRO}>{TIPOS_TROCA.CARRO_CARRO}</option>
               </select>
             </label>
 
             <label className="flex flex-col gap-2">
-              <span className="text-sm text-gray-600">Numero de fogo do pneu</span>
+              <span className="text-sm text-gray-600">Observacoes</span>
               <input
                 type="text"
-                value={form.numeroFogo}
-                onChange={(event) => onFieldChange("numeroFogo", event.target.value)}
-                placeholder="Digite o numero de fogo"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-slate-800"
+                value={form.observacoes}
+                onChange={(event) => onFieldChange("observacoes", event.target.value)}
+                placeholder="Opcional"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
           </div>
 
-          <PhotoCaptureCard
-            file={foto}
-            inputRef={inputRef}
-            onChange={onPhotoChange}
-          />
+          {isEstoqueCarro ? (
+            <SectionBlock title="Estoque para carro">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <CampoPrefixo
+                    value={form.prefixoInstalacao}
+                    onChange={(value) => onFieldChange("prefixoInstalacao", value)}
+                    label="Prefixo"
+                  />
+                </div>
 
-          <label className="flex flex-col gap-2">
-            <span className="text-sm text-gray-600">Observacoes</span>
-            <textarea
-              value={form.observacoes}
-              onChange={(event) => onFieldChange("observacoes", event.target.value)}
-              rows={3}
-              placeholder="Se precisar, escreva uma observacao curta."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-slate-800"
-            />
-          </label>
+                <SelectPosicao
+                  label="Posicao do pneu"
+                  value={form.posicaoInstalacao}
+                  onChange={(value) => onFieldChange("posicaoInstalacao", value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <InputField
+                  label="Pneu retirado (numero de fogo)"
+                  value={form.numeroFogoRetirado}
+                  onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
+                />
+
+                <InputField
+                  label="Pneu colocado (numero de fogo)"
+                  value={form.numeroFogoColocado}
+                  onChange={(value) => onFieldChange("numeroFogoColocado", value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <PhotoField
+                  title="Foto do numero de fogo do pneu retirado"
+                  file={fotoRetirado}
+                  inputRef={retiradaRef}
+                  onChange={onPhotoRetirado}
+                />
+                <PhotoField
+                  title="Foto do numero de fogo do pneu colocado"
+                  file={fotoColocado}
+                  inputRef={colocadoRef}
+                  onChange={onPhotoColocado}
+                />
+              </div>
+            </SectionBlock>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+              <SectionBlock title="Carro de origem">
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <CampoPrefixo
+                      value={form.prefixoRetirada}
+                      onChange={(value) => onFieldChange("prefixoRetirada", value)}
+                      label="Prefixo"
+                    />
+                  </div>
+
+                  <SelectPosicao
+                    label="Posicao do pneu"
+                    value={form.posicaoRetirada}
+                    onChange={(value) => onFieldChange("posicaoRetirada", value)}
+                  />
+
+                  <InputField
+                    label="Pneu retirado (numero de fogo)"
+                    value={form.numeroFogoRetirado}
+                    onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
+                  />
+
+                  <PhotoField
+                    title="Foto do numero de fogo do pneu retirado"
+                    file={fotoRetirado}
+                    inputRef={retiradaRef}
+                    onChange={onPhotoRetirado}
+                  />
+                </div>
+              </SectionBlock>
+
+              <SectionBlock title="Carro de destino">
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <CampoPrefixo
+                      value={form.prefixoInstalacao}
+                      onChange={(value) => onFieldChange("prefixoInstalacao", value)}
+                      label="Prefixo"
+                    />
+                  </div>
+
+                  <SelectPosicao
+                    label="Posicao do pneu"
+                    value={form.posicaoInstalacao}
+                    onChange={(value) => onFieldChange("posicaoInstalacao", value)}
+                  />
+
+                  <InputField
+                    label="Pneu colocado (numero de fogo)"
+                    value={form.numeroFogoColocado}
+                    onChange={(value) => onFieldChange("numeroFogoColocado", value)}
+                  />
+
+                  <PhotoField
+                    title="Foto do numero de fogo do pneu colocado"
+                    file={fotoColocado}
+                    inputRef={colocadoRef}
+                    onChange={onPhotoColocado}
+                  />
+                </div>
+              </SectionBlock>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+            className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
           >
             Cancelar
           </button>
           <button
             type="button"
-            onClick={onSubmit}
+            onClick={onSalvar}
             disabled={saving}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
           >
             <FaSave />
             {saving ? "Salvando..." : "Salvar ficha"}
@@ -329,105 +391,215 @@ function NovaFichaModal({
   );
 }
 
+function ReadOnlyField({ label, value }) {
+  return (
+    <label className="flex flex-col gap-2">
+      <span className="text-sm text-gray-600">{label}</span>
+      <input
+        type="text"
+        value={value}
+        disabled
+        className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700"
+      />
+    </label>
+  );
+}
+
+function InputField({ label, value, onChange }) {
+  return (
+    <label className="flex flex-col gap-2">
+      <span className="text-sm text-gray-600">{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+      />
+    </label>
+  );
+}
+
+function SelectPosicao({ label, value, onChange }) {
+  return (
+    <label className="flex flex-col gap-2">
+      <span className="text-sm text-gray-600">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+      >
+        {POSICOES.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function formatResumo(row) {
+  const tipo = norm(row.tipo_troca);
+  const retirada = `${row.prefixo_retirada || row.prefixo || "-"} · ${row.posicao_retirada || row.posicao || "-"}`;
+  const instalacao = `${row.prefixo_instalacao || row.prefixo || "-"} · ${row.posicao_instalacao || row.posicao || "-"}`;
+
+  if (tipo === TIPOS_TROCA.ESTOQUE_CARRO) {
+    return `Estoque -> ${instalacao}`;
+  }
+
+  return `${retirada} -> ${instalacao}`;
+}
+
 export default function PCMTrocaPneus() {
   const { user } = useContext(AuthContext);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [fotoNumeroFogo, setFotoNumeroFogo] = useState(null);
+  const [fotoRetirado, setFotoRetirado] = useState(null);
+  const [fotoColocado, setFotoColocado] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [loadingList, setLoadingList] = useState(true);
-  const [lastSavedId, setLastSavedId] = useState("");
+  const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [fichas, setFichas] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [cards, setCards] = useState({
+    total: 0,
+    estoqueCarro: 0,
+    carroCarro: 0,
+    hoje: 0,
+  });
+  const [filtros, setFiltros] = useState({
+    busca: "",
+    tipoTroca: "",
+  });
 
-  const fotoNumeroFogoRef = useRef(null);
+  const retiradaRef = useRef(null);
+  const colocadoRef = useRef(null);
 
   function resetFormState(nextFicha) {
     setForm({
       ...EMPTY_FORM,
       ficha: nextFicha || "",
+      dataLancamento: nowDisplay(),
+      quemLancou: safeText(user?.nome || user?.login || user?.email) || "Equipe PCM",
     });
-    setFotoNumeroFogo(null);
-    if (fotoNumeroFogoRef.current) fotoNumeroFogoRef.current.value = "";
+    setFotoRetirado(null);
+    setFotoColocado(null);
+    if (retiradaRef.current) retiradaRef.current.value = "";
+    if (colocadoRef.current) colocadoRef.current.value = "";
   }
 
-  async function loadFichas() {
-    try {
-      setLoadingList(true);
-      const { data, error } = await supabase
-        .from("pcm_troca_pneus")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(30);
+  async function carregarLista() {
+    const { data, error } = await supabase
+      .from("pcm_troca_pneus")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
 
-      if (error) throw error;
-      setFichas(data || []);
-      return data || [];
+    if (error) throw error;
+    setRows(data || []);
+    return data || [];
+  }
+
+  function atualizarCards(arr) {
+    const hoje = new Date().toDateString();
+    setCards({
+      total: arr.length,
+      estoqueCarro: arr.filter((item) => norm(item.tipo_troca) === TIPOS_TROCA.ESTOQUE_CARRO).length,
+      carroCarro: arr.filter((item) => norm(item.tipo_troca) === TIPOS_TROCA.CARRO_CARRO).length,
+      hoje: arr.filter((item) => new Date(item.created_at).toDateString() === hoje).length,
+    });
+  }
+
+  async function aplicar() {
+    setLoading(true);
+    try {
+      const data = await carregarLista();
+      atualizarCards(data);
     } catch (error) {
-      console.error("Erro ao carregar fichas de troca de pneus:", error);
-      alert(error?.message || "Nao foi possivel carregar a central de fichas.");
-      return [];
+      console.error("Erro ao carregar trocas de pneus:", error);
+      alert(error?.message || "Nao foi possivel carregar a central de trocas.");
     } finally {
-      setLoadingList(false);
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadFichas();
+    aplicar();
   }, []);
 
   async function abrirNovaFicha() {
-    const rows = fichas.length ? fichas : await loadFichas();
-    const nextFicha = buildNextFicha(rows);
-    resetFormState(nextFicha);
-    setLastSavedId("");
+    const rowsRef = rows.length ? rows : await carregarLista();
+    resetFormState(buildNextFicha(rowsRef));
     setModalOpen(true);
   }
 
   function updateField(field, value) {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => {
+      if (field === "tipoTroca" && value === TIPOS_TROCA.ESTOQUE_CARRO) {
+        return {
+          ...current,
+          tipoTroca: value,
+          prefixoRetirada: "",
+          posicaoRetirada: POSICOES[0],
+        };
+      }
+
+      return { ...current, [field]: value };
+    });
   }
 
   async function handleSalvarFicha() {
-    const prefixo = safeText(form.prefixo);
     const ficha = safeText(form.ficha);
-    const numeroFogo = safeText(form.numeroFogo);
+    const tipoTroca = safeText(form.tipoTroca);
+    const prefixoInstalacao = safeText(form.prefixoInstalacao);
+    const posicaoInstalacao = safeText(form.posicaoInstalacao);
+    const numeroFogoRetirado = safeText(form.numeroFogoRetirado);
+    const numeroFogoColocado = safeText(form.numeroFogoColocado);
     const observacoes = safeText(form.observacoes);
 
-    if (!prefixo || !ficha || !numeroFogo) {
-      alert("Preencha prefixo, numero da ficha e numero de fogo.");
+    const isEstoqueCarro = tipoTroca === TIPOS_TROCA.ESTOQUE_CARRO;
+    const prefixoRetirada = isEstoqueCarro ? prefixoInstalacao : safeText(form.prefixoRetirada);
+    const posicaoRetirada = isEstoqueCarro ? posicaoInstalacao : safeText(form.posicaoRetirada);
+
+    if (!ficha || !tipoTroca || !prefixoInstalacao || !posicaoInstalacao || !numeroFogoRetirado || !numeroFogoColocado) {
+      alert("Preencha os campos obrigatorios da troca.");
       return;
     }
 
-    if (!fotoNumeroFogo) {
-      alert("Adicione a foto do numero de fogo.");
+    if (!prefixoRetirada || !posicaoRetirada) {
+      alert("Preencha os dados do pneu retirado.");
+      return;
+    }
+
+    if (!fotoRetirado || !fotoColocado) {
+      alert("As duas fotos do numero de fogo sao obrigatorias.");
       return;
     }
 
     try {
       setSaving(true);
-
       const trocaId = createClientUuid();
-      const foto = await uploadFotoNumeroFogo(trocaId, fotoNumeroFogo);
+      const uploadedRetirado = await uploadFoto(trocaId, "numero_fogo_retirado", fotoRetirado);
+      const uploadedColocado = await uploadFoto(trocaId, "numero_fogo_colocado", fotoColocado);
 
       const payload = {
         id: trocaId,
-        prefixo,
         ficha_troca: ficha,
-        posicao: form.posicao,
-        numero_fogo_pneu: numeroFogo,
+        prefixo: prefixoInstalacao,
+        posicao: posicaoInstalacao,
+        tipo_troca: tipoTroca,
+        prefixo_retirada: prefixoRetirada,
+        posicao_retirada: posicaoRetirada,
+        numero_fogo_retirado: numeroFogoRetirado,
+        foto_numero_fogo_retirado_path: uploadedRetirado.path,
+        foto_numero_fogo_retirado_url: uploadedRetirado.url,
+        prefixo_instalacao: prefixoInstalacao,
+        posicao_instalacao: posicaoInstalacao,
+        numero_fogo_colocado: numeroFogoColocado,
+        foto_numero_fogo_colocado_path: uploadedColocado.path,
+        foto_numero_fogo_colocado_url: uploadedColocado.url,
+        numero_fogo_pneu: numeroFogoColocado,
+        foto_numero_fogo_path: uploadedColocado.path,
+        foto_numero_fogo_url: uploadedColocado.url,
         observacoes,
-        foto_numero_fogo_path: foto.path,
-        foto_numero_fogo_url: foto.url,
-        pneu_retirado_descricao: null,
-        pneu_colocado_descricao: null,
-        foto_fogo_retirado_path: null,
-        foto_fogo_retirado_url: null,
-        foto_pneu_retirado_path: null,
-        foto_pneu_retirado_url: null,
-        foto_fogo_colocado_path: null,
-        foto_fogo_colocado_url: null,
-        foto_pneu_colocado_path: null,
-        foto_pneu_colocado_url: null,
         criado_por_login: safeText(user?.login || user?.email),
         criado_por_nome: safeText(user?.nome),
         criado_por_id: safeText(user?.auth_user_id),
@@ -437,11 +609,10 @@ export default function PCMTrocaPneus() {
       const { error } = await supabase.from("pcm_troca_pneus").insert([payload]);
       if (error) throw error;
 
-      setLastSavedId(trocaId);
       setModalOpen(false);
-      const latestRows = await loadFichas();
-      resetFormState(buildNextFicha(latestRows));
-
+      const data = await carregarLista();
+      atualizarCards(data);
+      resetFormState(buildNextFicha(data));
       alert("Ficha de troca de pneus salva com sucesso.");
     } catch (error) {
       console.error("Erro ao salvar ficha de troca de pneus:", error);
@@ -451,109 +622,165 @@ export default function PCMTrocaPneus() {
     }
   }
 
-  const fichasHoje = useMemo(() => {
-    const today = new Date().toDateString();
-    return fichas.filter((item) => new Date(item.created_at).toDateString() === today).length;
-  }, [fichas]);
+  function limparFiltros() {
+    setFiltros({
+      busca: "",
+      tipoTroca: "",
+    });
+  }
+
+  const rowsFiltradas = useMemo(() => {
+    const busca = norm(filtros.busca).toLowerCase();
+    return rows.filter((row) => {
+      const tipoOk = !filtros.tipoTroca || row.tipo_troca === filtros.tipoTroca;
+      if (!tipoOk) return false;
+
+      if (!busca) return true;
+
+      const alvo = [
+        row.ficha_troca,
+        row.prefixo_retirada,
+        row.prefixo_instalacao,
+        row.numero_fogo_retirado,
+        row.numero_fogo_colocado,
+        row.criado_por_nome,
+        row.criado_por_login,
+      ]
+        .map((item) => norm(item).toLowerCase())
+        .join(" ");
+
+      return alvo.includes(busca);
+    });
+  }, [rows, filtros]);
+
+  const inputClass =
+    "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all";
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-600">
-              <FaClipboardList /> PCM · Central de fichas
-            </div>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
-              Troca de pneus
-            </h1>
-            <p className="mt-2 text-sm text-slate-500">
-              Tela simples para a equipe de base lancar e consultar as fichas.
-            </p>
+    <div className="max-w-7xl mx-auto p-6 space-y-6 bg-slate-50 min-h-screen">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+            Controle de Troca de Pneus
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">Central operacional do PCM</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={abrirNovaFicha}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+        >
+          <FaPlus />
+          Lancar troca de pneus
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card label="Total" value={cards.total} color="text-slate-900" />
+        <Card label="Estoque -> Carro" value={cards.estoqueCarro} color="text-blue-600" />
+        <Card label="Carro -> Carro" value={cards.carroCarro} color="text-orange-600" />
+        <Card label="Lancadas Hoje" value={cards.hoje} color="text-emerald-600" />
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">Filtros</h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="relative">
+            <FaSearch className="absolute left-3 top-3 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar ficha, prefixo ou numero de fogo..."
+              value={filtros.busca}
+              onChange={(event) => setFiltros({ ...filtros, busca: event.target.value })}
+              className={`${inputClass} pl-10`}
+            />
           </div>
 
-          <button
-            type="button"
-            onClick={abrirNovaFicha}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+          <select
+            value={filtros.tipoTroca}
+            onChange={(event) => setFiltros({ ...filtros, tipoTroca: event.target.value })}
+            className={inputClass}
           >
-            <FaPlus />
-            Lancar troca de pneus
-          </button>
-        </div>
+            <option value="">Todos os tipos</option>
+            <option value={TIPOS_TROCA.ESTOQUE_CARRO}>{TIPOS_TROCA.ESTOQUE_CARRO}</option>
+            <option value={TIPOS_TROCA.CARRO_CARRO}>{TIPOS_TROCA.CARRO_CARRO}</option>
+          </select>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-              Fichas registradas
-            </div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{fichas.length}</div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-              Lancadas hoje
-            </div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{fichasHoje}</div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-              Fluxo
-            </div>
-            <div className="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700">
-              <FaCheckCircle />
-              Basico e rapido
-            </div>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={limparFiltros}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+            >
+              Limpar
+            </button>
+            <button
+              onClick={aplicar}
+              disabled={loading}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 shadow-sm disabled:opacity-50 transition-colors"
+            >
+              {loading ? "Atualizando..." : "Atualizar"}
+            </button>
           </div>
         </div>
+      </div>
 
-        {lastSavedId ? (
-          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-            Ficha salva com sucesso. Protocolo: {lastSavedId}
-          </div>
-        ) : null}
-      </section>
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-xs font-semibold tracking-wider">
+              <tr>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">Ficha</th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">Data</th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">Quem lancou</th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">Tipo</th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">Resumo</th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">Numero de fogo</th>
+              </tr>
+            </thead>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-950">Central das fichas</h2>
-            <p className="mt-1 text-sm text-slate-500">Ultimas trocas lancadas no PCM.</p>
-          </div>
+            <tbody className="divide-y divide-slate-100">
+              {!loading && rowsFiltradas.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                    Nenhuma ficha encontrada com os filtros atuais.
+                  </td>
+                </tr>
+              ) : (
+                rowsFiltradas.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3 font-bold text-slate-700">{row.ficha_troca}</td>
+                    <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
+                    <td className="px-4 py-3 text-slate-700 font-medium">
+                      {row.criado_por_nome || row.criado_por_login || "-"}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{row.tipo_troca || "-"}</td>
+                    <td className="px-4 py-3 text-slate-600">{formatResumo(row)}</td>
+                    <td className="px-4 py-3 text-slate-700 font-medium">
+                      {row.numero_fogo_colocado || row.numero_fogo_pneu || "-"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+      </div>
 
-        <div className="mt-5 space-y-4">
-          {loadingList ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-medium text-slate-500">
-              Carregando fichas de troca de pneus...
-            </div>
-          ) : null}
-
-          {!loadingList && fichas.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
-              <div className="text-lg font-semibold text-slate-800">Nenhuma ficha lancada ainda</div>
-              <p className="mt-2 text-sm text-slate-500">
-                Clique em <strong>Lancar troca de pneus</strong> para registrar a primeira.
-              </p>
-            </div>
-          ) : null}
-
-          {!loadingList && fichas.map((ficha) => <FichaCard key={ficha.id} ficha={ficha} />)}
-        </div>
-      </section>
-
-      <NovaFichaModal
+      <FichaModal
         open={modalOpen}
         form={form}
-        foto={fotoNumeroFogo}
+        fotoRetirado={fotoRetirado}
+        fotoColocado={fotoColocado}
         saving={saving}
-        inputRef={fotoNumeroFogoRef}
+        retiradaRef={retiradaRef}
+        colocadoRef={colocadoRef}
         onClose={() => setModalOpen(false)}
-        onPrefixoChange={(value) => updateField("prefixo", value)}
         onFieldChange={updateField}
-        onPhotoChange={(event) => setFotoNumeroFogo(event.target.files?.[0] || null)}
-        onSubmit={handleSalvarFicha}
+        onPhotoRetirado={(event) => setFotoRetirado(event.target.files?.[0] || null)}
+        onPhotoColocado={(event) => setFotoColocado(event.target.files?.[0] || null)}
+        onSalvar={handleSalvarFicha}
       />
     </div>
   );

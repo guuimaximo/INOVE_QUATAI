@@ -76,7 +76,7 @@ function HomeDecider() {
   const isAdmin = user?.nivel === "Administrador";
   const isGestor = user?.nivel === "Gestor";
 
-  if (isNativeShell) return <InicioRapido />;
+  if (isNativeShell) return <Navigate to="/pcm-troca-pneus" replace />;
   if (isAdmin || isGestor) return <Dashboard />;
   return <InicioRapido />;
 }

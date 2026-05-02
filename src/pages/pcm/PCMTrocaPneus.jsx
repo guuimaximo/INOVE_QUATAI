@@ -2,10 +2,12 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AuthContext } from "../../context/AuthContext";
 import CampoPrefixo from "../../components/CampoPrefixo";
 import { supabase } from "../../supabase";
+import { Capacitor } from "@capacitor/core";
 import {
   FaCamera,
   FaCheckCircle,
   FaClipboardList,
+  FaEye,
   FaPlus,
   FaSave,
   FaSearch,
@@ -184,6 +186,86 @@ function SectionBlock({ title, children }) {
   );
 }
 
+function DetailRow({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
+        {label}
+      </div>
+      <div className="mt-2 text-sm font-medium text-slate-800">{value || "-"}</div>
+    </div>
+  );
+}
+
+function ConsultaFichaModal({ row, onClose }) {
+  if (!row) return null;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl max-h-[92vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">
+              PCM · Consulta
+            </div>
+            <h2 className="mt-1 text-xl font-semibold text-slate-950">{row.ficha_troca}</h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-5 space-y-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <DetailRow label="Data" value={formatDate(row.created_at)} />
+            <DetailRow label="Quem lancou" value={row.criado_por_nome || row.criado_por_login} />
+            <DetailRow label="Tipo de troca" value={row.tipo_troca} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <SectionBlock title="Pneu retirado">
+              <div className="grid grid-cols-1 gap-4">
+                <DetailRow label="Prefixo" value={row.prefixo_retirada || row.prefixo} />
+                <DetailRow label="Posicao" value={row.posicao_retirada || row.posicao} />
+                <DetailRow label="Numero de fogo" value={row.numero_fogo_retirado} />
+                {row.foto_numero_fogo_retirado_url ? (
+                  <img
+                    src={row.foto_numero_fogo_retirado_url}
+                    alt="Numero de fogo retirado"
+                    className="h-56 w-full rounded-2xl border border-slate-200 object-cover"
+                  />
+                ) : null}
+              </div>
+            </SectionBlock>
+
+            <SectionBlock title="Pneu colocado">
+              <div className="grid grid-cols-1 gap-4">
+                <DetailRow label="Prefixo" value={row.prefixo_instalacao || row.prefixo} />
+                <DetailRow label="Posicao" value={row.posicao_instalacao || row.posicao} />
+                <DetailRow label="Numero de fogo" value={row.numero_fogo_colocado || row.numero_fogo_pneu} />
+                {row.foto_numero_fogo_colocado_url || row.foto_numero_fogo_url ? (
+                  <img
+                    src={row.foto_numero_fogo_colocado_url || row.foto_numero_fogo_url}
+                    alt="Numero de fogo colocado"
+                    className="h-56 w-full rounded-2xl border border-slate-200 object-cover"
+                  />
+                ) : null}
+              </div>
+            </SectionBlock>
+          </div>
+
+          {row.observacoes ? <DetailRow label="Observacoes" value={row.observacoes} /> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FichaModal({
   open,
   form,
@@ -262,6 +344,8 @@ function FichaModal({
                     value={form.prefixoInstalacao}
                     onChange={(value) => onFieldChange("prefixoInstalacao", value)}
                     label="Prefixo"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
                 </div>
 
@@ -273,32 +357,37 @@ function FichaModal({
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <InputField
-                  label="Pneu retirado (numero de fogo)"
-                  value={form.numeroFogoRetirado}
-                  onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
-                />
+                <div className="space-y-4">
+                  <InputField
+                    label="Pneu retirado (numero de fogo)"
+                    value={form.numeroFogoRetirado}
+                    onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                  />
+                  <PhotoField
+                    title="Foto do numero de fogo do pneu retirado"
+                    file={fotoRetirado}
+                    inputRef={retiradaRef}
+                    onChange={onPhotoRetirado}
+                  />
+                </div>
 
-                <InputField
-                  label="Pneu colocado (numero de fogo)"
-                  value={form.numeroFogoColocado}
-                  onChange={(value) => onFieldChange("numeroFogoColocado", value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <PhotoField
-                  title="Foto do numero de fogo do pneu retirado"
-                  file={fotoRetirado}
-                  inputRef={retiradaRef}
-                  onChange={onPhotoRetirado}
-                />
-                <PhotoField
-                  title="Foto do numero de fogo do pneu colocado"
-                  file={fotoColocado}
-                  inputRef={colocadoRef}
-                  onChange={onPhotoColocado}
-                />
+                <div className="space-y-4">
+                  <InputField
+                    label="Pneu colocado (numero de fogo)"
+                    value={form.numeroFogoColocado}
+                    onChange={(value) => onFieldChange("numeroFogoColocado", value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                  />
+                  <PhotoField
+                    title="Foto do numero de fogo do pneu colocado"
+                    file={fotoColocado}
+                    inputRef={colocadoRef}
+                    onChange={onPhotoColocado}
+                  />
+                </div>
               </div>
             </SectionBlock>
           ) : (
@@ -310,6 +399,8 @@ function FichaModal({
                       value={form.prefixoRetirada}
                       onChange={(value) => onFieldChange("prefixoRetirada", value)}
                       label="Prefixo"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                     />
                   </div>
 
@@ -323,6 +414,8 @@ function FichaModal({
                     label="Pneu retirado (numero de fogo)"
                     value={form.numeroFogoRetirado}
                     onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
 
                   <PhotoField
@@ -341,6 +434,8 @@ function FichaModal({
                       value={form.prefixoInstalacao}
                       onChange={(value) => onFieldChange("prefixoInstalacao", value)}
                       label="Prefixo"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                     />
                   </div>
 
@@ -354,6 +449,8 @@ function FichaModal({
                     label="Pneu colocado (numero de fogo)"
                     value={form.numeroFogoColocado}
                     onChange={(value) => onFieldChange("numeroFogoColocado", value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
 
                   <PhotoField
@@ -405,13 +502,15 @@ function ReadOnlyField({ label, value }) {
   );
 }
 
-function InputField({ label, value, onChange }) {
+function InputField({ label, value, onChange, inputMode = "text", pattern }) {
   return (
     <label className="flex flex-col gap-2">
       <span className="text-sm text-gray-600">{label}</span>
       <input
         type="text"
         value={value}
+        inputMode={inputMode}
+        pattern={pattern}
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
       />
@@ -452,12 +551,14 @@ function formatResumo(row) {
 
 export default function PCMTrocaPneus() {
   const { user } = useContext(AuthContext);
+  const isNativeShell = Capacitor.isNativePlatform();
   const [form, setForm] = useState(EMPTY_FORM);
   const [fotoRetirado, setFotoRetirado] = useState(null);
   const [fotoColocado, setFotoColocado] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [consultaRow, setConsultaRow] = useState(null);
   const [rows, setRows] = useState([]);
   const [cards, setCards] = useState({
     total: 0,
@@ -726,47 +827,86 @@ export default function PCMTrocaPneus() {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-xs font-semibold tracking-wider">
-              <tr>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Ficha</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Data</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Quem lancou</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Tipo</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Resumo</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Numero de fogo</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {!loading && rowsFiltradas.length === 0 ? (
+      {isNativeShell ? (
+        <div className="space-y-3">
+          {!loading && rowsFiltradas.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-slate-500 shadow-sm">
+              Nenhuma ficha encontrada com os filtros atuais.
+            </div>
+          ) : (
+            rowsFiltradas.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => setConsultaRow(row)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/40"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">Prefixo {row.prefixo_instalacao || row.prefixo || "-"}</div>
+                  </div>
+                  <div className="text-right text-xs text-slate-500">
+                    {formatDate(row.created_at)}
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-xs font-semibold tracking-wider">
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                    Nenhuma ficha encontrada com os filtros atuais.
-                  </td>
+                  <th className="px-4 py-3 font-semibold whitespace-nowrap">Ficha</th>
+                  <th className="px-4 py-3 font-semibold whitespace-nowrap">Data</th>
+                  <th className="px-4 py-3 font-semibold whitespace-nowrap">Quem lancou</th>
+                  <th className="px-4 py-3 font-semibold whitespace-nowrap">Tipo</th>
+                  <th className="px-4 py-3 font-semibold whitespace-nowrap">Resumo</th>
+                  <th className="px-4 py-3 font-semibold whitespace-nowrap">Numero de fogo</th>
+                  <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">Acoes</th>
                 </tr>
-              ) : (
-                rowsFiltradas.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-4 py-3 font-bold text-slate-700">{row.ficha_troca}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
-                    <td className="px-4 py-3 text-slate-700 font-medium">
-                      {row.criado_por_nome || row.criado_por_login || "-"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{row.tipo_troca || "-"}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatResumo(row)}</td>
-                    <td className="px-4 py-3 text-slate-700 font-medium">
-                      {row.numero_fogo_colocado || row.numero_fogo_pneu || "-"}
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {!loading && rowsFiltradas.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
+                      Nenhuma ficha encontrada com os filtros atuais.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  rowsFiltradas.map((row) => (
+                    <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-3 font-bold text-slate-700">{row.ficha_troca}</td>
+                      <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
+                      <td className="px-4 py-3 text-slate-700 font-medium">
+                        {row.criado_por_nome || row.criado_por_login || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{row.tipo_troca || "-"}</td>
+                      <td className="px-4 py-3 text-slate-600">{formatResumo(row)}</td>
+                      <td className="px-4 py-3 text-slate-700 font-medium">
+                        {row.numero_fogo_colocado || row.numero_fogo_pneu || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setConsultaRow(row)}
+                          className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-200"
+                        >
+                          <FaEye />
+                          Consultar
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       <FichaModal
         open={modalOpen}
@@ -782,6 +922,7 @@ export default function PCMTrocaPneus() {
         onPhotoColocado={(event) => setFotoColocado(event.target.files?.[0] || null)}
         onSalvar={handleSalvarFicha}
       />
+      <ConsultaFichaModal row={consultaRow} onClose={() => setConsultaRow(null)} />
     </div>
   );
 }

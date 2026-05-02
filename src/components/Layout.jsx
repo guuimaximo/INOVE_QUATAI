@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
 import {
   FaCarCrash,
   FaClipboardList,
@@ -34,6 +35,8 @@ function getPageTitle(pathname) {
 
 function getIconForNav(key) {
   switch (key) {
+    case "pcm":
+      return FaClipboardList;
     case "tratativas":
       return FaClipboardList;
     case "avarias":
@@ -56,7 +59,7 @@ function getIconForNav(key) {
 function MobileBottomNav({ items, onOpenMenu }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-2 pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden">
-      <div className="grid grid-cols-4 gap-1 pb-[calc(env(safe-area-inset-bottom,0px)+0.35rem)]">
+      <div className={`grid gap-1 pb-[calc(env(safe-area-inset-bottom,0px)+0.35rem)] ${onOpenMenu ? "grid-cols-4" : "grid-cols-1"}`}>
         {items.map((item) => {
           const Icon = getIconForNav(item.key);
 
@@ -78,14 +81,16 @@ function MobileBottomNav({ items, onOpenMenu }) {
           );
         })}
 
-        <button
-          type="button"
-          onClick={onOpenMenu}
-          className="flex min-h-[56px] flex-col items-center justify-center rounded-2xl px-2 py-1.5 text-[10px] font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-        >
-          <FaCog className="mb-1 text-base" />
-          <span className="text-center leading-tight">Menu</span>
-        </button>
+        {onOpenMenu ? (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="flex min-h-[56px] flex-col items-center justify-center rounded-2xl px-2 py-1.5 text-[10px] font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+          >
+            <FaCog className="mb-1 text-base" />
+            <span className="text-center leading-tight">Menu</span>
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -95,11 +100,16 @@ export default function Layout() {
   const location = useLocation();
   const { user } = useContext(AuthContext);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const isNativeShell = Capacitor.isNativePlatform();
+  const isLockedMobileModule = isNativeShell;
 
   const pageTitle = getPageTitle(location.pathname);
   const mobileNavItems = useMemo(
-    () => getMobileNavItems(user?.nivel).slice(0, 3),
-    [user?.nivel]
+    () =>
+      isLockedMobileModule
+        ? [{ key: "pcm", label: "Pneus", path: "/pcm-troca-pneus" }]
+        : getMobileNavItems(user?.nivel).slice(0, 3),
+    [isLockedMobileModule, user?.nivel]
   );
 
   useEffect(() => {
@@ -117,15 +127,17 @@ export default function Layout() {
             <p className="truncate text-base font-semibold text-slate-900">{pageTitle}</p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setMobileSidebarOpen((current) => !current)}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
-            aria-label={mobileSidebarOpen ? "Fechar menu" : "Abrir menu"}
-            aria-expanded={mobileSidebarOpen}
-          >
-            {mobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+          {!isLockedMobileModule ? (
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen((current) => !current)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+              aria-label={mobileSidebarOpen ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={mobileSidebarOpen}
+            >
+              {mobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -155,7 +167,7 @@ export default function Layout() {
 
       <MobileBottomNav
         items={mobileNavItems}
-        onOpenMenu={() => setMobileSidebarOpen(true)}
+        onOpenMenu={isLockedMobileModule ? undefined : () => setMobileSidebarOpen(true)}
       />
     </div>
   );

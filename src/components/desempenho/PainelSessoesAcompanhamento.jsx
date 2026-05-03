@@ -80,6 +80,21 @@ function buildGoogleMapsLink(lat, lng) {
   return `https://www.google.com/maps?q=${latitude},${longitude}`;
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
+
+function combineDateAndTime(dateValue, timeValue) {
+  if (!dateValue || !timeValue) return null;
+
+  const normalizedTime = String(timeValue).length === 5 ? `${timeValue}:00` : String(timeValue);
+  const composed = new Date(`${dateValue}T${normalizedTime}`);
+  if (Number.isNaN(composed.getTime())) return null;
+  return composed.toISOString();
+}
+
 async function registrarEventoSessao(acompanhamentoId, payload) {
   const { error } = await supabase.from("diesel_acompanhamento_eventos").insert({
     acompanhamento_id: acompanhamentoId,
@@ -101,6 +116,11 @@ export default function PainelSessoesAcompanhamento({
   const [okMsg, setOkMsg] = useState("");
   const [sessoes, setSessoes] = useState([]);
   const [sessaoMapaAbertaId, setSessaoMapaAbertaId] = useState(null);
+  const [formSessao, setFormSessao] = useState({
+    dataSessao: toISODateInBrazil(new Date()),
+    horaInicio: toTimeInBrazil(new Date()),
+    horaFim: "",
+  });
 
   const windowInfo = useMemo(() => getAcompanhamentoWindowInfo(item), [item]);
   const instrutorLogin = user?.login || user?.email || null;
@@ -138,6 +158,15 @@ export default function PainelSessoesAcompanhamento({
     carregarSessoes();
   }, [item?.id]);
 
+  useEffect(() => {
+    const agora = new Date();
+    setFormSessao((prev) => ({
+      dataSessao: prev.dataSessao || toISODateInBrazil(agora),
+      horaInicio: prev.horaInicio || toTimeInBrazil(agora),
+      horaFim: prev.horaFim || "",
+    }));
+  }, [item?.id]);
+
   const sessaoAberta = useMemo(
     () => (sessoes || []).find((sessao) => !sessao.encerrado_em) || null,
     [sessoes]
@@ -157,7 +186,7 @@ export default function PainelSessoesAcompanhamento({
   }, [sessoes]);
 
   const canManageSessions = useMemo(() => {
-    return ["EM_MONITORAMENTO", "AGUARDANDO_INSTRUTOR"].includes(statusAtual);
+    return !["OK", "ENCERRADO", "ATAS"].includes(statusAtual);
   }, [statusAtual]);
 
   async function iniciarSessao() {
@@ -173,7 +202,7 @@ export default function PainelSessoesAcompanhamento({
 
     if (!canManageSessions) {
       setErro(
-        "Novas sessoes so podem ser abertas enquanto o caso estiver em monitoramento. Casos em analise ou finalizados nao aceitam novas sessoes."
+        "Casos encerrados ou enviados para tratativa nao aceitam novas sessoes."
       );
       return;
     }
@@ -183,25 +212,36 @@ export default function PainelSessoesAcompanhamento({
       return;
     }
 
+    if (!formSessao.dataSessao || !formSessao.horaInicio) {
+      setErro("Informe a data e a hora inicial antes de iniciar o acompanhamento.");
+      return;
+    }
+
     setActionLoading("iniciar");
     setErro("");
     setOkMsg("");
 
     try {
       const location = await captureCurrentInstructorPosition();
-      const agora = new Date();
-      const nowIso = agora.toISOString();
+      const nowIso = combineDateAndTime(
+        formSessao.dataSessao,
+        formSessao.horaInicio
+      );
+
+      if (!nowIso) {
+        throw new Error("Data ou hora inicial invalida.");
+      }
 
       const payload = {
         acompanhamento_id: item.id,
         sessao_numero: resumo.total + 1,
-        data_sessao: toISODateInBrazil(agora),
-        hora_inicio: toTimeInBrazil(agora),
+        data_sessao: formSessao.dataSessao,
+        hora_inicio: formSessao.horaInicio,
         iniciado_em: nowIso,
         status_sessao: "INICIADA",
         instrutor_login: instrutorLogin,
         instrutor_nome: instrutorNome,
-        instrutor_id: user?.id || null,
+        instrutor_id: isUuid(user?.id) ? user.id : null,
         linha_snapshot: getLinhaApenas(item),
         foco_snapshot: item?.motivo || item?.metadata?.foco || null,
         latitude_inicio: location.latitude,
@@ -225,7 +265,7 @@ export default function PainelSessoesAcompanhamento({
         observacoes: `Sessao ${payload.sessao_numero} iniciada por ${instrutorNome || instrutorLogin}.`,
         criado_por_login: instrutorLogin,
         criado_por_nome: instrutorNome,
-        criado_por_id: user?.id || null,
+        criado_por_id: isUuid(user?.id) ? user.id : null,
         extra: {
           sessao_numero: payload.sessao_numero,
           data_sessao: payload.data_sessao,
@@ -240,6 +280,10 @@ export default function PainelSessoesAcompanhamento({
       });
 
       setOkMsg("Acompanhamento iniciado com localizacao registrada.");
+      setFormSessao((prev) => ({
+        ...prev,
+        horaFim: "",
+      }));
       await carregarSessoes();
       onSessionSaved?.();
     } catch (e) {
@@ -258,7 +302,7 @@ export default function PainelSessoesAcompanhamento({
 
     if (!canManageSessions) {
       setErro(
-        "Este acompanhamento ja saiu da fase de monitoramento e nao permite encerrar sessoes por aqui."
+        "Este acompanhamento ja foi encerrado ou encaminhado para tratativa e nao permite encerrar sessoes por aqui."
       );
       return;
     }
@@ -270,15 +314,27 @@ export default function PainelSessoesAcompanhamento({
       return;
     }
 
+    if (!formSessao.horaFim) {
+      setErro("Informe a hora final antes de encerrar o acompanhamento.");
+      return;
+    }
+
     setActionLoading("encerrar");
     setErro("");
     setOkMsg("");
 
     try {
       const location = await captureCurrentInstructorPosition();
-      const agora = new Date();
-      const nowIso = agora.toISOString();
-      const horaFim = toTimeInBrazil(agora);
+      const nowIso = combineDateAndTime(
+        sessaoAberta.data_sessao,
+        formSessao.horaFim
+      );
+
+      if (!nowIso) {
+        throw new Error("Hora final invalida.");
+      }
+
+      const horaFim = formSessao.horaFim;
 
       const { error } = await supabase
         .from("diesel_acompanhamento_sessoes")
@@ -300,7 +356,7 @@ export default function PainelSessoesAcompanhamento({
         observacoes: `Sessao ${sessaoAberta.sessao_numero} encerrada por ${instrutorNome || instrutorLogin}.`,
         criado_por_login: instrutorLogin,
         criado_por_nome: instrutorNome,
-        criado_por_id: user?.id || null,
+        criado_por_id: isUuid(user?.id) ? user.id : null,
         extra: {
           sessao_numero: sessaoAberta.sessao_numero,
           data_sessao: sessaoAberta.data_sessao,
@@ -316,6 +372,11 @@ export default function PainelSessoesAcompanhamento({
       });
 
       setOkMsg("Acompanhamento encerrado com localizacao registrada.");
+      setFormSessao((prev) => ({
+        ...prev,
+        horaInicio: prev.horaInicio,
+        horaFim: "",
+      }));
       await carregarSessoes();
       onSessionSaved?.();
     } catch (e) {
@@ -390,9 +451,53 @@ export default function PainelSessoesAcompanhamento({
               Dentro de 30 dias, novas idas a campo entram neste mesmo acompanhamento. Passou de 30 dias, precisa abrir um novo acompanhamento.
             </div>
             <div className="mt-1">
-              Cada sessao precisa ser iniciada e encerrada com localizacao. Enquanto uma sessao estiver aberta, nao pode iniciar outra.
+              Cada sessao precisa ser iniciada e encerrada com localizacao. Os horarios ficam manuais por enquanto, e enquanto uma sessao estiver aberta nao pode iniciar outra.
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <div className="rounded-lg border bg-white px-3 py-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+            Data da sessao
+          </div>
+          <input
+            type="date"
+            value={formSessao.dataSessao}
+            onChange={(e) =>
+              setFormSessao((prev) => ({ ...prev, dataSessao: e.target.value }))
+            }
+            className="w-full rounded-md border px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="rounded-lg border bg-white px-3 py-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+            Hora inicial
+          </div>
+          <input
+            type="time"
+            value={formSessao.horaInicio}
+            onChange={(e) =>
+              setFormSessao((prev) => ({ ...prev, horaInicio: e.target.value }))
+            }
+            className="w-full rounded-md border px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="rounded-lg border bg-white px-3 py-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+            Hora final
+          </div>
+          <input
+            type="time"
+            value={formSessao.horaFim}
+            onChange={(e) =>
+              setFormSessao((prev) => ({ ...prev, horaFim: e.target.value }))
+            }
+            className="w-full rounded-md border px-3 py-2 text-sm"
+          />
         </div>
       </div>
 
@@ -492,7 +597,7 @@ export default function PainelSessoesAcompanhamento({
 
       {windowInfo.withinWindow && !canManageSessions && (
         <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
-          Este caso ja entrou em fase de analise ou foi finalizado. As sessoes continuam visiveis para auditoria, mas nao aceitam novos inicios ou encerramentos.
+          Este caso ja foi finalizado ou encaminhado para tratativa. As sessoes continuam visiveis para auditoria, mas nao aceitam novos inicios ou encerramentos.
         </div>
       )}
 

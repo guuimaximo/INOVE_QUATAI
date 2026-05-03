@@ -10,6 +10,7 @@ import {
   FaTimes as FaX,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
+import { captureCurrentInstructorPosition } from "../../utils/dieselAcompanhamento";
 
 function n(v) {
   const x = Number(v);
@@ -64,6 +65,17 @@ function isAtivo(v) {
   return s === "true" || s === "t" || s === "1" || s === "sim" || s === "yes";
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
+
+function formatCoordinate(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toFixed(6) : "-";
+}
+
 const TEC_OPCOES = [
   {
     value: "SIM",
@@ -113,6 +125,7 @@ export default function ModalLancamentoIntervencao({
   const [loadingItens, setLoadingItens] = useState(false);
   const [itensError, setItensError] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [localizacaoInfo, setLocalizacaoInfo] = useState(null);
 
   const [form, setForm] = useState({
     horaInicio: "",
@@ -214,6 +227,7 @@ export default function ModalLancamentoIntervencao({
     const instrutorLogin = user?.login || user?.email || null;
     const instrutorNome =
       buildNomeSobrenome(user) || userRoleData?.nome_completo || instrutorLogin;
+    const instrutorId = isUuid(user?.id) ? user.id : null;
 
     let notaTotal = 0;
     const mapByCodigo = new Map();
@@ -240,6 +254,9 @@ export default function ModalLancamentoIntervencao({
     const notaFinal = Math.round(Math.max(0, Math.min(100, notaTotal)));
 
     try {
+      const location = await captureCurrentInstructorPosition();
+      setLocalizacaoInfo(location);
+
       const intervencaoChecklist = {
         versao: "FORM_ACOMPANHAMENTO_TELEMETRIA_v3",
         itens: {
@@ -270,6 +287,15 @@ export default function ModalLancamentoIntervencao({
         prontuario_10_gerado_em: null,
         prontuario_20_gerado_em: null,
         prontuario_30_gerado_em: null,
+        metadata: {
+          ...(item?.metadata || {}),
+          intervencao_localizacao: {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            precisao: location.accuracy,
+            capturado_em: location.captured_at,
+          },
+        },
         updated_at: new Date().toISOString(),
       };
 
@@ -334,6 +360,40 @@ export default function ModalLancamentoIntervencao({
         if (errIns) throw errIns;
       }
 
+      const { error: errEvt } = await supabase
+        .from("diesel_acompanhamento_eventos")
+        .insert({
+          acompanhamento_id: item.id,
+          tipo: "INTERVENCAO_TECNICA",
+          observacoes:
+            `Intervenção técnica lançada por ${instrutorNome || instrutorLogin}.\n` +
+            `Hora início: ${form.horaInicio}\n` +
+            `Hora fim: ${form.horaFim || "-"}\n` +
+            `KM início: ${form.kmInicio}\n` +
+            `KM fim: ${form.kmFim || "-"}\n` +
+            `Média teste: ${form.mediaTeste}\n\n` +
+            `${form.obs || ""}`,
+          criado_por_login: instrutorLogin,
+          criado_por_nome: instrutorNome,
+          criado_por_id: instrutorId,
+          extra: {
+            hora_inicio: form.horaInicio,
+            hora_fim: form.horaFim || null,
+            km_inicio: n(form.kmInicio),
+            km_fim: form.kmFim ? n(form.kmFim) : null,
+            media_teste: n(form.mediaTeste),
+            nota_calculada: notaFinal,
+            localizacao: {
+              latitude: location.latitude,
+              longitude: location.longitude,
+              precisao: location.accuracy,
+              capturado_em: location.captured_at,
+            },
+          },
+        });
+
+      if (errEvt) throw errEvt;
+
       alert(
         `Monitoramento iniciado com sucesso!\nNota Final do Check-list: ${notaFinal}/100`
       );
@@ -387,6 +447,15 @@ export default function ModalLancamentoIntervencao({
             <h4 className="font-bold text-slate-700 text-sm mb-4 flex items-center gap-2">
               <FaClock /> Dados da Viagem de Teste
             </h4>
+
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              A localizacao desta intervencao sera capturada automaticamente no momento de salvar, junto com os horarios informados manualmente.
+              {localizacaoInfo ? (
+                <span className="block mt-1 font-bold">
+                  Ultima captura: Lat {formatCoordinate(localizacaoInfo.latitude)} • Lng {formatCoordinate(localizacaoInfo.longitude)}
+                </span>
+              ) : null}
+            </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>

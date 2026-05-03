@@ -143,6 +143,10 @@ function getDecisionCheckpoint(item) {
   return null;
 }
 
+function isCheckpointFinal30(tipo) {
+  return String(tipo || "").toUpperCase() === "PRONTUARIO_30";
+}
+
 function statusBadgeClass(status) {
   const st = normalizeStatus(status);
   if (st === "AGUARDANDO_INSTRUTOR") {
@@ -161,6 +165,11 @@ function statusBadgeClass(status) {
     return "bg-emerald-50 text-emerald-700 border-emerald-200";
   }
   return "bg-emerald-50 text-emerald-700 border-emerald-200";
+}
+
+function isEmAnalise(item) {
+  const st = getStatusView(item);
+  return st === "EM_ANALISE" || !!item?.prontuario_pendente || !!item?.prontuario_30_gerado_em;
 }
 
 // =============================================================================
@@ -342,9 +351,7 @@ export default function DesempenhoDieselAcompanhamento() {
     (i) => !!i?.prontuario_pendente
   ).length;
 
-  const countEmAnalise = lista.filter(
-    (i) => !!i?.prontuario_30_gerado_em
-  ).length;
+  const countEmAnalise = lista.filter((i) => isEmAnalise(i)).length;
 
   const countAguardandoFiltrado = listaComFiltrosSemAba.filter(
     (i) => getStatusView(i) === "AGUARDANDO_INSTRUTOR"
@@ -358,9 +365,7 @@ export default function DesempenhoDieselAcompanhamento() {
     (i) => !!i?.prontuario_pendente
   ).length;
 
-  const countEmAnaliseFiltrado = listaComFiltrosSemAba.filter(
-    (i) => !!i?.prontuario_30_gerado_em
-  ).length;
+  const countEmAnaliseFiltrado = listaComFiltrosSemAba.filter((i) => isEmAnalise(i)).length;
 
   const handleExcluir = async (id) => {
     if (!podeExcluir) {
@@ -463,7 +468,7 @@ export default function DesempenhoDieselAcompanhamento() {
       } else if (abaAtiva === "MONITORAMENTO") {
         matchAba = st === "EM_MONITORAMENTO";
       } else if (abaAtiva === "ANALISE") {
-        matchAba = !!item?.prontuario_30_gerado_em;
+        matchAba = isEmAnalise(item);
       }
       if (!matchAba) return false;
 
@@ -928,7 +933,9 @@ export default function DesempenhoDieselAcompanhamento() {
                         </button>
                       )}
 
-                      {abaAtiva === "ANALISE" && decisionTipo && status !== "OK" && (
+                      {abaAtiva === "ANALISE" &&
+                        isCheckpointFinal30(decisionTipo) &&
+                        status !== "OK" && (
                         <button
                           onClick={() => abrirCheckpoint(item, decisionTipo)}
                           className="flex items-center gap-1.5 px-3 py-2 bg-violet-700 text-white rounded font-bold text-xs shadow-sm hover:bg-violet-800 transition-all whitespace-nowrap"

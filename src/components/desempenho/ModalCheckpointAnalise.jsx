@@ -7,6 +7,7 @@ import {
   FaCheckCircle,
   FaExclamationTriangle,
   FaArrowRight,
+  FaInfoCircle,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
@@ -32,6 +33,27 @@ function titleFromTipo(tipo) {
 
 function eventTypeFromTipo(tipo) {
   return tipo;
+}
+
+function isCheckpointFinal30(tipo) {
+  return String(tipo || "").toUpperCase() === "PRONTUARIO_30";
+}
+
+function pickEventoAnalise(eventos = [], checkpointTipo) {
+  if (!Array.isArray(eventos) || eventos.length === 0) return null;
+
+  const tipoEsperado = String(checkpointTipo || "").toUpperCase();
+  const ordenados = [...eventos].sort((a, b) => {
+    const da = new Date(a?.created_at || 0).getTime();
+    const db = new Date(b?.created_at || 0).getTime();
+    return db - da;
+  });
+
+  return (
+    ordenados.find((evento) => String(evento?.tipo || "").toUpperCase() === tipoEsperado) ||
+    ordenados.find((evento) => String(evento?.tipo || "").toUpperCase() === "CHECKPOINT") ||
+    ordenados[0]
+  );
 }
 
 function formatarDataHoraBR(val, isApenasData = false) {
@@ -213,7 +235,7 @@ export default function ModalCheckpointAnalise({
   const [actionLoading, setActionLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
-  const isCheckpoint30 = checkpointTipo === "PRONTUARIO_30";
+  const isCheckpoint30 = isCheckpointFinal30(checkpointTipo);
 
   const notaInstrutor = getNotaInstrutorValue(item?.intervencao_nota);
   const notaColors = getNotaInstrutorColors(item?.intervencao_nota);
@@ -225,20 +247,20 @@ export default function ModalCheckpointAnalise({
       try {
         const tipo = eventTypeFromTipo(checkpointTipo);
 
-        const { data, error } = await supabase
-          .from("diesel_acompanhamento_eventos")
-          .select("*")
-          .eq("acompanhamento_id", item.id)
-          .eq("tipo", tipo)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          const { data, error } = await supabase
+            .from("diesel_acompanhamento_eventos")
+            .select("*")
+            .eq("acompanhamento_id", item.id)
+            .in("tipo", [tipo, "CHECKPOINT"])
+            .order("created_at", { ascending: false })
+            .limit(10);
 
-        if (error) throw error;
+          if (error) throw error;
 
-        setEvento(data || null);
+          const eventoSelecionado = pickEventoAnalise(data || [], checkpointTipo);
+          setEvento(eventoSelecionado || null);
 
-        const extra = data?.extra || {};
+          const extra = eventoSelecionado?.extra || {};
         const comparativo = extra?.comparativo || null;
 
         if (comparativo) {
@@ -309,11 +331,11 @@ export default function ModalCheckpointAnalise({
     if (error) throw error;
   }
 
-  async function atualizarStatusParaOk() {
+  async function atualizarStatusAcompanhamento(status) {
     const { error } = await supabase
       .from("diesel_acompanhamentos")
       .update({
-        status: "OK",
+        status,
         updated_at: new Date().toISOString(),
       })
       .eq("id", item.id);
@@ -331,7 +353,7 @@ export default function ModalCheckpointAnalise({
     setStatusMsg({ type: "info", text: "Finalizando acompanhamento..." });
 
     try {
-      await atualizarStatusParaOk();
+      await atualizarStatusAcompanhamento("OK");
 
       await registrarHistoricoAcao(
         "DECISAO_FINALIZAR",
@@ -504,11 +526,11 @@ export default function ModalCheckpointAnalise({
 
       if (itemLoteErr) throw itemLoteErr;
 
-      await atualizarStatusParaOk();
+      await atualizarStatusAcompanhamento("ATAS");
 
       await registrarHistoricoAcao(
         "DECISAO_TRATATIVA",
-        `Caso enviado para tratativa a partir da etapa ${checkpointTipo}. Status ajustado para OK.`,
+        `Caso enviado para tratativa a partir da etapa ${checkpointTipo}. Status ajustado para ATAS.`,
         {
           checkpoint_tipo: checkpointTipo,
           decisao: "TRATATIVA",
@@ -659,6 +681,19 @@ export default function ModalCheckpointAnalise({
             <>
               {isCheckpoint30 && (
                 <div className="border rounded-xl p-4 bg-violet-50 border-violet-200 shadow-sm">
+                  <div className="mb-4 rounded-lg border border-violet-200 bg-white/70 px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <FaInfoCircle className="text-violet-600 mt-0.5 shrink-0" />
+                      <div className="text-sm text-violet-900">
+                        <div className="font-black uppercase tracking-wider text-[11px] mb-1">
+                          Regras
+                        </div>
+                        <div>
+                          A decisao final so acontece no checkpoint de 30 dias. Esta tela usa o checkpoint mais recente como base da analise e separa os desfechos entre <strong>OK</strong> e <strong>ATAS</strong>.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <div className="font-black text-sm uppercase tracking-wider mb-2 text-violet-800">
                     Decisão da Etapa
                   </div>
@@ -682,6 +717,22 @@ export default function ModalCheckpointAnalise({
                     >
                       <FaArrowRight /> Enviar para Tratativa
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {!isCheckpoint30 && (
+                <div className="border rounded-xl p-4 bg-slate-50 border-slate-200 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <FaInfoCircle className="text-slate-500 mt-0.5 shrink-0" />
+                    <div className="text-sm text-slate-700">
+                      <div className="font-black uppercase tracking-wider text-[11px] mb-1">
+                        Regras
+                      </div>
+                      <div>
+                        Checkpoints de 10 e 20 dias servem para leitura da evolucao e apoio operacional. A decisao de finalizar ou enviar para tratativa fica reservada ao checkpoint de 30 dias.
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

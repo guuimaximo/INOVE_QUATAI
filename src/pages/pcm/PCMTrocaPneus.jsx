@@ -167,14 +167,20 @@ function createAuditoriaForm(nextFicha, userName) {
   };
 }
 
+function createEstoqueItem() {
+  return {
+    numeroPneu: "",
+    marca: "",
+    situacao: SITUACOES_ESTOQUE[0],
+  };
+}
+
 function createEstoqueForm(nextFicha, userName) {
   return {
     ficha: nextFicha,
     dataLancamento: nowDisplay(),
     quemLancou: userName,
-    numeroPneu: "",
-    marca: "",
-    situacao: SITUACOES_ESTOQUE[0],
+    itens: [createEstoqueItem()],
     observacoes: "",
   };
 }
@@ -212,6 +218,45 @@ function getAuditoriaPosicoes(row) {
 
 function buildAuditoriaResumo(row) {
   return `${getAuditoriaPosicoes(row).length} posicoes auditadas`;
+}
+
+function groupEstoqueRows(rows) {
+  const groups = new Map();
+
+  for (const row of rows || []) {
+    const key = norm(row.ficha_estoque) || row.id;
+    const current = groups.get(key);
+
+    if (!current) {
+      groups.set(key, {
+        id: key,
+        ficha_estoque: row.ficha_estoque,
+        created_at: row.created_at,
+        criado_por_login: row.criado_por_login,
+        criado_por_nome: row.criado_por_nome,
+        criado_por_id: row.criado_por_id,
+        observacoes: row.observacoes,
+        itens: [
+          {
+            id: row.id,
+            numero_pneu: row.numero_pneu,
+            marca: row.marca,
+            situacao: row.situacao,
+          },
+        ],
+      });
+      continue;
+    }
+
+    current.itens.push({
+      id: row.id,
+      numero_pneu: row.numero_pneu,
+      marca: row.marca,
+      situacao: row.situacao,
+    });
+  }
+
+  return [...groups.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
 function CardResumo({ label, value, color }) {
@@ -644,7 +689,17 @@ function AuditoriaModal({ open, form, saving, onClose, onFieldChange, onPosicaoC
   );
 }
 
-function EstoqueModal({ open, form, saving, onClose, onFieldChange, onSalvar }) {
+function EstoqueModal({
+  open,
+  form,
+  saving,
+  onClose,
+  onFieldChange,
+  onItemChange,
+  onAddItem,
+  onRemoveItem,
+  onSalvar,
+}) {
   if (!open) return null;
 
   return (
@@ -680,21 +735,56 @@ function EstoqueModal({ open, form, saving, onClose, onFieldChange, onSalvar }) 
           <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
         </div>
 
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-bold uppercase tracking-wide text-slate-700">Pneus do lancamento</div>
+          <button
+            type="button"
+            onClick={onAddItem}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+          >
+            <FaPlus />
+            Adicionar pneu
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {form.itens.map((item, index) => (
+            <SectionBlock key={`estoque-item-${index}`} title={`Pneu ${index + 1}`}>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <InputField
+                  label="Numero do pneu"
+                  value={item.numeroPneu}
+                  onChange={(value) => onItemChange(index, "numeroPneu", value)}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                />
+                <InputField
+                  label="Marca"
+                  value={item.marca}
+                  onChange={(value) => onItemChange(index, "marca", value)}
+                />
+                <SelectField
+                  label="Situacao"
+                  value={item.situacao}
+                  onChange={(value) => onItemChange(index, "situacao", value)}
+                  options={SITUACOES_ESTOQUE}
+                />
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => onRemoveItem(index)}
+                    disabled={form.itens.length === 1}
+                    className="w-full rounded-lg bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Remover pneu
+                  </button>
+                </div>
+              </div>
+            </SectionBlock>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <InputField
-            label="Numero do pneu"
-            value={form.numeroPneu}
-            onChange={(value) => onFieldChange("numeroPneu", value)}
-            inputMode="numeric"
-            pattern="[0-9]*"
-          />
-          <InputField label="Marca" value={form.marca} onChange={(value) => onFieldChange("marca", value)} />
-          <SelectField
-            label="Situacao"
-            value={form.situacao}
-            onChange={(value) => onFieldChange("situacao", value)}
-            options={SITUACOES_ESTOQUE}
-          />
           <InputField
             label="Observacoes"
             value={form.observacoes}
@@ -855,15 +945,25 @@ function ConsultaModal({
     title = row.ficha_estoque || "Estoque de pneus";
     content = (
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <DetailRow label="Data" value={formatDate(row.created_at)} />
           <DetailRow label="Quem lancou" value={row.criado_por_nome || row.criado_por_login} />
-          <DetailRow label="Situacao" value={row.situacao} />
+          <DetailRow label="Quantidade de pneus" value={String(row.itens?.length || 0)} />
+          <DetailRow label="Resumo" value={(row.itens || []).map((item) => item.situacao).join(", ")} />
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <DetailRow label="Numero do pneu" value={row.numero_pneu} />
-          <DetailRow label="Marca" value={row.marca} />
+
+        <div className="space-y-4">
+          {(row.itens || []).map((item, index) => (
+            <SectionBlock key={item.id || `${item.numero_pneu}-${index}`} title={`Pneu ${index + 1}`}>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <DetailRow label="Numero do pneu" value={item.numero_pneu} />
+                <DetailRow label="Marca" value={item.marca} />
+                <DetailRow label="Situacao" value={item.situacao} />
+              </div>
+            </SectionBlock>
+          ))}
         </div>
+
         {row.observacoes ? <DetailRow label="Observacoes" value={row.observacoes} /> : null}
       </div>
     );
@@ -1020,12 +1120,15 @@ export default function PCMTrocaPneus() {
   const cardsEstoque = useMemo(() => {
     return {
       total: estoqueRows.length,
+      fichas: groupEstoqueRows(estoqueRows).length,
       novo: estoqueRows.filter((item) => norm(item.situacao) === "NOVO").length,
       uso: estoqueRows.filter((item) => norm(item.situacao) === "USADO ( PARA USO )").length,
       recapagem: estoqueRows.filter((item) => norm(item.situacao) === "ENVIAR PARA RECAPAGEM").length,
       sucata: estoqueRows.filter((item) => norm(item.situacao) === "SUCATA").length,
     };
   }, [estoqueRows]);
+
+  const estoqueAgrupado = useMemo(() => groupEstoqueRows(estoqueRows), [estoqueRows]);
 
   const trocasFiltradas = useMemo(() => {
     const busca = norm(trocaFiltros.busca).toLowerCase();
@@ -1074,18 +1177,25 @@ export default function PCMTrocaPneus() {
 
   const estoqueFiltrado = useMemo(() => {
     const busca = norm(estoqueFiltros.busca).toLowerCase();
-    return estoqueRows.filter((row) => {
+    return estoqueAgrupado.filter((row) => {
       if (!inDateRange(row.created_at, estoqueFiltros.dataInicio, estoqueFiltros.dataFim)) return false;
-      if (estoqueFiltros.situacao && row.situacao !== estoqueFiltros.situacao) return false;
+      if (estoqueFiltros.situacao && !row.itens.some((item) => item.situacao === estoqueFiltros.situacao)) {
+        return false;
+      }
       if (!busca) return true;
 
-      const alvo = [row.ficha_estoque, row.numero_pneu, row.marca, row.situacao, row.criado_por_nome, row.criado_por_login]
+      const alvo = [
+        row.ficha_estoque,
+        row.criado_por_nome,
+        row.criado_por_login,
+        ...row.itens.flatMap((item) => [item.numero_pneu, item.marca, item.situacao]),
+      ]
         .map((item) => norm(item).toLowerCase())
         .join(" ");
 
       return alvo.includes(busca);
     });
-  }, [estoqueRows, estoqueFiltros]);
+  }, [estoqueAgrupado, estoqueFiltros]);
 
   function openConsulta(tab, row) {
     setConsulta({ open: true, tab, row });
@@ -1178,6 +1288,32 @@ export default function PCMTrocaPneus() {
 
   function updateEstoqueField(field, value) {
     setEstoqueForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateEstoqueItem(index, field, value) {
+    setEstoqueForm((current) => ({
+      ...current,
+      itens: current.itens.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item
+      ),
+    }));
+  }
+
+  function addEstoqueItem() {
+    setEstoqueForm((current) => ({
+      ...current,
+      itens: [...current.itens, createEstoqueItem()],
+    }));
+  }
+
+  function removeEstoqueItem(index) {
+    setEstoqueForm((current) => ({
+      ...current,
+      itens:
+        current.itens.length === 1
+          ? current.itens
+          : current.itens.filter((_, itemIndex) => itemIndex !== index),
+    }));
   }
 
   async function salvarTroca() {
@@ -1326,32 +1462,40 @@ export default function PCMTrocaPneus() {
 
   async function salvarEstoque() {
     const ficha = safeText(estoqueForm.ficha);
-    const numeroPneu = safeText(estoqueForm.numeroPneu);
-    const marca = safeText(estoqueForm.marca);
-    const situacao = safeText(estoqueForm.situacao);
     const observacoes = safeText(estoqueForm.observacoes);
 
-    if (!ficha || !numeroPneu || !marca || !situacao) {
-      alert("Preencha os campos obrigatorios do estoque.");
+    if (!ficha) {
+      alert("Numero da ficha e obrigatorio.");
+      return;
+    }
+
+    const itens = estoqueForm.itens.map((item) => ({
+      numero_pneu: safeText(item.numeroPneu),
+      marca: safeText(item.marca),
+      situacao: safeText(item.situacao),
+    }));
+
+    if (itens.some((item) => !item.numero_pneu || !item.marca || !item.situacao)) {
+      alert("Preencha numero, marca e situacao de todos os pneus do estoque.");
       return;
     }
 
     try {
       setSaving(true);
-      const payload = {
+      const payload = itens.map((item) => ({
         id: createClientUuid(),
         ficha_estoque: ficha,
-        numero_pneu: numeroPneu,
-        marca,
-        situacao,
+        numero_pneu: item.numero_pneu,
+        marca: item.marca,
+        situacao: item.situacao,
         observacoes,
         criado_por_login: safeText(user?.login || user?.email),
         criado_por_nome: safeText(user?.nome),
         criado_por_id: safeText(user?.auth_user_id || user?.id),
         origem: "INOVE_WEB_APP",
-      };
+      }));
 
-      const { error } = await supabase.from("pcm_estoque_pneus").insert([payload]);
+      const { error } = await supabase.from("pcm_estoque_pneus").insert(payload);
       if (error) throw error;
 
       setEstoqueOpen(false);
@@ -1444,13 +1588,14 @@ export default function PCMTrocaPneus() {
       return;
     }
 
-    const sheet = estoqueFiltrado.map((row) => ({
+      const sheet = estoqueFiltrado.map((row) => ({
       ficha: row.ficha_estoque,
       data: formatDate(row.created_at),
       quem_lancou: row.criado_por_nome || row.criado_por_login,
-      numero_pneu: row.numero_pneu,
-      marca: row.marca,
-      situacao: row.situacao,
+      quantidade_pneus: row.itens.length,
+      pneus: row.itens.map((item) => item.numero_pneu).join(", "),
+      marcas: row.itens.map((item) => item.marca).join(", "),
+      situacoes: row.itens.map((item) => item.situacao).join(", "),
       observacoes: row.observacoes || "",
     }));
 
@@ -1542,8 +1687,9 @@ export default function PCMTrocaPneus() {
       ) : null}
 
       {activeTab === TAB_ESTOQUE ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          <CardResumo label="Total" value={cardsEstoque.total} color="text-slate-900" />
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
+          <CardResumo label="Pneus" value={cardsEstoque.total} color="text-slate-900" />
+          <CardResumo label="Fichas" value={cardsEstoque.fichas} color="text-blue-600" />
           <CardResumo label="Novo" value={cardsEstoque.novo} color="text-blue-600" />
           <CardResumo label="Para uso" value={cardsEstoque.uso} color="text-emerald-600" />
           <CardResumo label="Recapagem" value={cardsEstoque.recapagem} color="text-amber-600" />
@@ -1843,8 +1989,8 @@ export default function PCMTrocaPneus() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-bold text-slate-900">Pneu {row.numero_pneu || "-"}</div>
-                      <div className="mt-1 text-xs text-slate-500">{row.situacao || "-"}</div>
+                      <div className="text-sm font-bold text-slate-900">{row.ficha_estoque || "-"}</div>
+                      <div className="mt-1 text-xs text-slate-500">{row.itens.length} pneus no lancamento</div>
                     </div>
                     <div className="text-right text-xs text-slate-500">{formatDate(row.created_at)}</div>
                   </div>
@@ -1860,9 +2006,9 @@ export default function PCMTrocaPneus() {
                   <tr>
                     <th className="px-4 py-3">Ficha</th>
                     <th className="px-4 py-3">Data</th>
-                    <th className="px-4 py-3">Numero do pneu</th>
-                    <th className="px-4 py-3">Marca</th>
-                    <th className="px-4 py-3">Situacao</th>
+                    <th className="px-4 py-3">Quantidade</th>
+                    <th className="px-4 py-3">Numeros</th>
+                    <th className="px-4 py-3">Situacoes</th>
                     <th className="px-4 py-3">Quem lancou</th>
                     <th className="px-4 py-3 text-right">Acoes</th>
                   </tr>
@@ -1879,9 +2025,9 @@ export default function PCMTrocaPneus() {
                       <tr key={row.id} className="transition-colors hover:bg-slate-50/80">
                         <td className="px-4 py-3 font-bold text-slate-700">{row.ficha_estoque}</td>
                         <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
-                        <td className="px-4 py-3 font-medium text-slate-700">{row.numero_pneu}</td>
-                        <td className="px-4 py-3 text-slate-600">{row.marca}</td>
-                        <td className="px-4 py-3 text-slate-600">{row.situacao}</td>
+                        <td className="px-4 py-3 font-medium text-slate-700">{row.itens.length}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.itens.map((item) => item.numero_pneu).join(", ")}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.itens.map((item) => item.situacao).join(", ")}</td>
                         <td className="px-4 py-3 text-slate-600">{row.criado_por_nome || row.criado_por_login || "-"}</td>
                         <td className="px-4 py-3 text-right">
                           <button
@@ -1929,6 +2075,9 @@ export default function PCMTrocaPneus() {
         saving={saving}
         onClose={() => setEstoqueOpen(false)}
         onFieldChange={updateEstoqueField}
+        onItemChange={updateEstoqueItem}
+        onAddItem={addEstoqueItem}
+        onRemoveItem={removeEstoqueItem}
         onSalvar={salvarEstoque}
       />
 

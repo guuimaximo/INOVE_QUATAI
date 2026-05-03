@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import {
@@ -10,6 +10,7 @@ import {
   FaHome,
   FaMapMarkedAlt,
   FaMicrochip,
+  FaSignOutAlt,
   FaTools,
 } from "react-icons/fa";
 
@@ -98,7 +99,8 @@ function MobileBottomNav({ items, onOpenMenu }) {
 
 export default function Layout() {
   const location = useLocation();
-  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const { user, logout } = useContext(AuthContext);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isNativeShell = Capacitor.isNativePlatform();
   const isLockedMobileModule = isNativeShell;
@@ -116,6 +118,11 @@ export default function Layout() {
     setMobileSidebarOpen(false);
   }, [location.pathname]);
 
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:hidden">
@@ -127,7 +134,26 @@ export default function Layout() {
             <p className="truncate text-base font-semibold text-slate-900">{pageTitle}</p>
           </div>
 
-          {!isLockedMobileModule ? (
+          {isLockedMobileModule ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigate("/atualizar-perfil")}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+                aria-label="Configuracoes"
+              >
+                <FaCog className="text-base" />
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+                aria-label="Sair"
+              >
+                <FaSignOutAlt className="text-base" />
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
               onClick={() => setMobileSidebarOpen((current) => !current)}
@@ -137,7 +163,7 @@ export default function Layout() {
             >
               {mobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-          ) : null}
+          )}
         </div>
       </div>
 

@@ -10,10 +10,12 @@ import {
   FaArrowRight,
   FaCheckCircle,
   FaExclamationTriangle,
+  FaInfoCircle,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import ResumoLancamentoInstrutor from "./ResumoLancamentoInstrutor";
 import ResumoAnalise from "./ResumoAnalise";
+import PainelSessoesAcompanhamento from "./PainelSessoesAcompanhamento";
 
 function normalizeStatus(s) {
   const st = String(s || "").toUpperCase().trim();
@@ -152,6 +154,7 @@ export default function ModalProntuarioUnificado({
   item,
   onClose,
   onOpenCheckpoint,
+  onSessionSaved,
 }) {
   const [historico, setHistorico] = useState([]);
   const [loadingHist, setLoadingHist] = useState(false);
@@ -438,6 +441,11 @@ export default function ModalProntuarioUnificado({
             </div>
           </div>
 
+          <PainelSessoesAcompanhamento
+            item={item}
+            onSessionSaved={onSessionSaved}
+          />
+
           <div className="border rounded-lg p-4 md:p-5 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
               <h4 className="font-bold text-slate-800 flex items-center gap-2">
@@ -454,6 +462,20 @@ export default function ModalProntuarioUnificado({
                   <FaFilePdf /> PDF Inicial
                 </a>
               )}
+            </div>
+
+            <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <FaInfoCircle className="text-violet-600 mt-0.5 shrink-0" />
+                <div className="text-sm text-violet-900">
+                  <div className="font-black uppercase tracking-wider text-[11px] mb-1">
+                    Regras
+                  </div>
+                  <div>
+                    O checkpoint continua ligado ao acompanhamento pai. As sessões do instrutor servem para provar a rotina de acompanhamento e apoiar a análise, sem alterar a régua de melhora do motorista.
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

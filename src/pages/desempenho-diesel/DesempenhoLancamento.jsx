@@ -4,6 +4,10 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import CampoMotorista from "../../components/CampoMotorista";
 import { AuthContext } from "../../context/AuthContext";
+import {
+  formatDateBR,
+  getAcompanhamentoWindowInfo,
+} from "../../utils/dieselAcompanhamento";
 import { 
   FaBolt, 
   FaClock, 
@@ -32,6 +36,15 @@ const TIPO_PRONTUARIO = "prontuarios_acompanhamento";
 const MOTIVOS = ["KM/L abaixo da meta", "Tendência de queda", "Comparativo com cluster", "Outro"];
 const DESTINOS = { ACOMP: "ACOMPANHAMENTO", TRAT: "TRATATIVA" };
 const PRIORIDADES = ["Gravíssima", "Alta", "Média", "Baixa"];
+const STATUS_ACOMPANHAMENTO_PAI = [
+  "AGUARDANDO_INSTRUTOR",
+  "EM_MONITORAMENTO",
+  "EM_ANALISE",
+  "OK",
+  "ENCERRADO",
+  "AGUARDANDO INSTRUTOR",
+  "AG_ACOMPANHAMENTO",
+];
 
 // =============================================================================
 // HELPERS
@@ -90,6 +103,27 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
   return true;
 }
 
+async function buscarAcompanhamentoPaiElegivel(chapa) {
+  if (!chapa) return null;
+
+  const { data, error } = await supabase
+    .from("diesel_acompanhamentos")
+    .select("id, status, created_at, dt_inicio_monitoramento, motorista_nome, motivo")
+    .eq("motorista_chapa", chapa)
+    .in("status", STATUS_ACOMPANHAMENTO_PAI)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (error) throw error;
+
+  const elegivel = (data || []).find((item) => {
+    const windowInfo = getAcompanhamentoWindowInfo(item);
+    return windowInfo.withinWindow;
+  });
+
+  return elegivel || null;
+}
+
 // =============================================================================
 // COMPONENTE PRINCIPAL
 // =============================================================================
@@ -137,20 +171,24 @@ export default function DesempenhoLancamento() {
 
       try {
         if (destino === DESTINOS.ACOMP) {
-          // Verifica se há acompanhamento pendente ou em monitoramento
-          const { data, error } = await supabase
-            .from("diesel_acompanhamentos")
-            .select("status, dt_inicio_monitoramento")
-            .eq("motorista_chapa", chapa)
-            .in("status", ["AGUARDANDO_INSTRUTOR", "EM_MONITORAMENTO", "AG_ACOMPANHAMENTO", "AGUARDANDO INSTRUTOR"])
-            .limit(1);
+          const acompanhamentoPai = await buscarAcompanhamentoPaiElegivel(chapa);
 
-          if (data && data.length > 0) {
-            const st = String(data[0].status).toUpperCase();
+          if (acompanhamentoPai) {
+            const windowInfo = getAcompanhamentoWindowInfo(acompanhamentoPai);
+            const st = String(acompanhamentoPai.status || "").toUpperCase();
+            const dataBase =
+              acompanhamentoPai.dt_inicio_monitoramento ||
+              acompanhamentoPai.created_at ||
+              null;
+
             if (st === "EM_MONITORAMENTO") {
-              setBloqueio(`Motorista já está EM MONITORAMENTO desde ${data[0].dt_inicio_monitoramento ? new Date(data[0].dt_inicio_monitoramento).toLocaleDateString('pt-BR') : 'data não informada'}.`);
+              setBloqueio(
+                `Motorista já está EM MONITORAMENTO desde ${formatDateBR(dataBase)}. Como este acompanhamento ainda está dentro da janela de 30 dias, a nova ida do instrutor deve ser registrada dentro dele.`
+              );
             } else {
-              setBloqueio("Motorista já possui um acompanhamento AGUARDANDO INSTRUTOR.");
+              setBloqueio(
+                `Motorista já possui um acompanhamento válido até ${formatDateBR(windowInfo.expiresAt)}. Enquanto ele estiver dentro da janela de 30 dias, use o acompanhamento já existente para registrar novas sessões do instrutor.`
+              );
             }
           }
         } 
@@ -234,6 +272,13 @@ export default function DesempenhoLancamento() {
 
       // Fluxo Específico: ACOMPANHAMENTO
       if (destino === DESTINOS.ACOMP) {
+        const acompanhamentoPai = await buscarAcompanhamentoPaiElegivel(chapa);
+        if (acompanhamentoPai) {
+          const windowInfo = getAcompanhamentoWindowInfo(acompanhamentoPai);
+          throw new Error(
+            `Já existe um acompanhamento deste motorista dentro da janela de 30 dias (até ${formatDateBR(windowInfo.expiresAt)}). Abra a Central de Acompanhamento e registre a nova sessão dentro dele.`
+          );
+        }
         
         const { data: acompData, error: errAcomp } = await supabase.from("diesel_acompanhamentos").insert({
           motorista_chapa: chapa || null,

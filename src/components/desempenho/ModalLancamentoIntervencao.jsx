@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   FaRoad,
   FaTimes,
@@ -8,6 +8,10 @@ import {
   FaCheck,
   FaSave,
   FaTimes as FaX,
+  FaPlay,
+  FaRoute,
+  FaStopCircle,
+  FaSync,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { captureCurrentInstructorPosition } from "../../utils/dieselAcompanhamento";
@@ -76,6 +80,55 @@ function formatCoordinate(value) {
   return Number.isFinite(num) ? num.toFixed(6) : "-";
 }
 
+function spTimeHM(d = new Date()) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d);
+}
+
+function formatDateTimeBR(value) {
+  if (!value) return "-";
+  try {
+    return new Date(value).toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+function formatDuration(startedAt, endedAt) {
+  if (!startedAt || !endedAt) return "-";
+  const start = new Date(startedAt);
+  const end = new Date(endedAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "-";
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs <= 0) return "-";
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+function buildDirectionsLink(originLat, originLng, destLat, destLng) {
+  const oLat = Number(originLat);
+  const oLng = Number(originLng);
+  const dLat = Number(destLat);
+  const dLng = Number(destLng);
+  if (![oLat, oLng, dLat, dLng].every(Number.isFinite)) return null;
+  return `https://www.google.com/maps/dir/?api=1&origin=${oLat},${oLng}&destination=${dLat},${dLng}&travelmode=driving`;
+}
+
+function buildWazeLink(destLat, destLng) {
+  const dLat = Number(destLat);
+  const dLng = Number(destLng);
+  if (![dLat, dLng].every(Number.isFinite)) return null;
+  return `https://www.waze.com/ul?ll=${dLat},${dLng}&navigate=yes`;
+}
+
 const TEC_OPCOES = [
   {
     value: "SIM",
@@ -85,13 +138,13 @@ const TEC_OPCOES = [
   },
   {
     value: "NAO",
-    label: "Não",
+    label: "NÃ£o",
     icon: FaX,
     cls: "bg-rose-50 border-rose-200 text-rose-700",
   },
   {
     value: "DUVIDAS",
-    label: "Dúvidas",
+    label: "DÃºvidas",
     icon: FaQuestionCircle,
     cls: "bg-amber-50 border-amber-200 text-amber-700",
   },
@@ -99,15 +152,15 @@ const TEC_OPCOES = [
 
 const NIVEIS = {
   1: {
-    label: "Nível 1",
+    label: "NÃ­vel 1",
     color: "bg-blue-50 border-blue-200 text-blue-700",
   },
   2: {
-    label: "Nível 2",
+    label: "NÃ­vel 2",
     color: "bg-amber-50 border-amber-200 text-amber-700",
   },
   3: {
-    label: "Nível 3",
+    label: "NÃ­vel 3",
     color: "bg-rose-50 border-rose-200 text-rose-700",
   },
 };
@@ -126,6 +179,10 @@ export default function ModalLancamentoIntervencao({
   const [itensError, setItensError] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [localizacaoInfo, setLocalizacaoInfo] = useState(null);
+  const [sessoes, setSessoes] = useState([]);
+  const [loadingSessao, setLoadingSessao] = useState(false);
+  const [acaoSessao, setAcaoSessao] = useState("");
+  const [sessaoErro, setSessaoErro] = useState("");
 
   const [form, setForm] = useState({
     horaInicio: "",
@@ -141,6 +198,7 @@ export default function ModalLancamentoIntervencao({
 
   useEffect(() => {
     carregarItensChecklist();
+    carregarSessoesAcompanhamento();
   }, []);
 
   function buildEmptyRespostas(conducaoList, tecnicaList) {
@@ -198,6 +256,82 @@ export default function ModalLancamentoIntervencao({
     }
   }
 
+  const sessaoAberta = useMemo(
+    () => (sessoes || []).find((sessao) => !sessao.encerrado_em) || null,
+    [sessoes]
+  );
+
+  const ultimaSessaoEncerrada = useMemo(
+    () => (sessoes || []).find((sessao) => !!sessao.encerrado_em) || null,
+    [sessoes]
+  );
+
+  async function carregarSessoesAcompanhamento() {
+    if (!item?.id) return;
+
+    setLoadingSessao(true);
+    setSessaoErro("");
+
+    try {
+      const { data, error } = await supabase
+        .from("diesel_acompanhamento_sessoes")
+        .select("*")
+        .eq("acompanhamento_id", item.id)
+        .order("sessao_numero", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const rows = data || [];
+      setSessoes(rows);
+
+      const aberta = rows.find((sessao) => !sessao.encerrado_em) || null;
+      const encerrada = rows.find((sessao) => !!sessao.encerrado_em) || null;
+      const referencia = aberta || encerrada;
+
+      if (referencia) {
+        setForm((prev) => ({
+          ...prev,
+          horaInicio: referencia.hora_inicio || prev.horaInicio,
+          horaFim: referencia.hora_fim || (aberta ? "" : prev.horaFim),
+        }));
+
+        setLocalizacaoInfo({
+          inicio: {
+            latitude: referencia.latitude_inicio,
+            longitude: referencia.longitude_inicio,
+            precisao: referencia.precisao_inicio,
+            capturado_em: referencia.capturado_em_inicio || referencia.iniciado_em,
+          },
+          fim: referencia.encerrado_em
+            ? {
+                latitude: referencia.latitude_fim,
+                longitude: referencia.longitude_fim,
+                precisao: referencia.precisao_fim,
+                capturado_em: referencia.capturado_em_fim || referencia.encerrado_em,
+              }
+            : null,
+          rota_google: referencia.encerrado_em
+            ? buildDirectionsLink(
+                referencia.latitude_inicio,
+                referencia.longitude_inicio,
+                referencia.latitude_fim,
+                referencia.longitude_fim
+              )
+            : null,
+          rota_waze: referencia.encerrado_em
+            ? buildWazeLink(referencia.latitude_fim, referencia.longitude_fim)
+            : null,
+        });
+      }
+    } catch (e) {
+      console.error("Erro ao carregar sessoes da intervencao:", e);
+      setSessaoErro(e?.message || "Nao foi possivel carregar as sessoes deste acompanhamento.");
+    } finally {
+      setLoadingSessao(false);
+    }
+  }
+
   const setConducao = (codigo, val) =>
     setForm((prev) => ({
       ...prev,
@@ -210,11 +344,214 @@ export default function ModalLancamentoIntervencao({
       avaliacaoTecnica: { ...prev.avaliacaoTecnica, [codigo]: val },
     }));
 
+  async function iniciarAcompanhamento() {
+    if (!item?.id) return;
+    if (sessaoAberta) {
+      setSessaoErro("Ja existe um acompanhamento em aberto para esta intervencao.");
+      return;
+    }
+
+    setAcaoSessao("iniciar");
+    setSessaoErro("");
+
+    try {
+      const now = new Date();
+      const dataSessao = spDateISO(now);
+      const horaInicio = spTimeHM(now);
+      const location = await captureCurrentInstructorPosition();
+
+      const instrutorLogin = user?.login || user?.email || null;
+      const instrutorNome =
+        buildNomeSobrenome(user) || userRoleData?.nome_completo || instrutorLogin;
+      const instrutorId = isUuid(user?.id) ? user.id : null;
+
+      const { data: sessaoRow, error } = await supabase
+        .from("diesel_acompanhamento_sessoes")
+        .insert({
+          acompanhamento_id: item.id,
+          sessao_numero: (sessoes || []).length + 1,
+          data_sessao: dataSessao,
+          hora_inicio: horaInicio,
+          iniciado_em: now.toISOString(),
+          status_sessao: "INICIADA",
+          instrutor_login: instrutorLogin,
+          instrutor_nome: instrutorNome,
+          instrutor_id: instrutorId,
+          linha_snapshot: item?.linha_foco || item?.metadata?.linha_foco || null,
+          foco_snapshot: item?.motivo || item?.metadata?.foco || null,
+          latitude_inicio: location.latitude,
+          longitude_inicio: location.longitude,
+          precisao_inicio: location.accuracy,
+          capturado_em_inicio: location.captured_at,
+          metadata: {
+            origem: "LANCAMENTO_INTERVENCAO_TECNICA",
+            device: navigator.userAgent,
+          },
+        })
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      const { error: eventError } = await supabase
+        .from("diesel_acompanhamento_eventos")
+        .insert({
+          acompanhamento_id: item.id,
+          tipo: "SESSAO_INICIADA",
+          observacoes: `Sessao ${sessaoRow.sessao_numero} iniciada pela tela de intervencao tecnica.`,
+          criado_por_login: instrutorLogin,
+          criado_por_nome: instrutorNome,
+          criado_por_id: instrutorId,
+          extra: {
+            sessao_numero: sessaoRow.sessao_numero,
+            data_sessao: dataSessao,
+            hora_inicio: horaInicio,
+            localizacao_inicio: {
+              latitude: location.latitude,
+              longitude: location.longitude,
+              precisao: location.accuracy,
+              capturado_em: location.captured_at,
+            },
+          },
+        });
+
+      if (eventError) throw eventError;
+
+      setForm((prev) => ({
+        ...prev,
+        horaInicio,
+        horaFim: "",
+      }));
+
+      setLocalizacaoInfo({
+        inicio: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          precisao: location.accuracy,
+          capturado_em: location.captured_at,
+        },
+        fim: null,
+        rota_google: null,
+        rota_waze: null,
+      });
+
+      await carregarSessoesAcompanhamento();
+    } catch (e) {
+      console.error("Erro ao iniciar acompanhamento:", e);
+      setSessaoErro(e?.message || "Nao foi possivel iniciar o acompanhamento.");
+    } finally {
+      setAcaoSessao("");
+    }
+  }
+
+  async function encerrarAcompanhamento() {
+    if (!sessaoAberta?.id) {
+      setSessaoErro("Nao existe acompanhamento em aberto para encerrar.");
+      return;
+    }
+
+    setAcaoSessao("encerrar");
+    setSessaoErro("");
+
+    try {
+      const now = new Date();
+      const horaFim = spTimeHM(now);
+      const location = await captureCurrentInstructorPosition();
+
+      const instrutorLogin = user?.login || user?.email || null;
+      const instrutorNome =
+        buildNomeSobrenome(user) || userRoleData?.nome_completo || instrutorLogin;
+      const instrutorId = isUuid(user?.id) ? user.id : null;
+
+      const { data: sessaoRow, error } = await supabase
+        .from("diesel_acompanhamento_sessoes")
+        .update({
+          hora_fim: horaFim,
+          encerrado_em: now.toISOString(),
+          status_sessao: "ENCERRADA",
+          latitude_fim: location.latitude,
+          longitude_fim: location.longitude,
+          precisao_fim: location.accuracy,
+          capturado_em_fim: location.captured_at,
+        })
+        .eq("id", sessaoAberta.id)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      const { error: eventError } = await supabase
+        .from("diesel_acompanhamento_eventos")
+        .insert({
+          acompanhamento_id: item.id,
+          tipo: "SESSAO_ENCERRADA",
+          observacoes: `Sessao ${sessaoAberta.sessao_numero} encerrada pela tela de intervencao tecnica.`,
+          criado_por_login: instrutorLogin,
+          criado_por_nome: instrutorNome,
+          criado_por_id: instrutorId,
+          extra: {
+            sessao_numero: sessaoAberta.sessao_numero,
+            data_sessao: sessaoAberta.data_sessao,
+            hora_inicio: sessaoAberta.hora_inicio,
+            hora_fim: horaFim,
+            localizacao_fim: {
+              latitude: location.latitude,
+              longitude: location.longitude,
+              precisao: location.accuracy,
+              capturado_em: location.captured_at,
+            },
+          },
+        });
+
+      if (eventError) throw eventError;
+
+      setForm((prev) => ({
+        ...prev,
+        horaInicio: sessaoRow.hora_inicio || prev.horaInicio,
+        horaFim,
+      }));
+
+      setLocalizacaoInfo({
+        inicio: {
+          latitude: sessaoRow.latitude_inicio,
+          longitude: sessaoRow.longitude_inicio,
+          precisao: sessaoRow.precisao_inicio,
+          capturado_em: sessaoRow.capturado_em_inicio || sessaoRow.iniciado_em,
+        },
+        fim: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          precisao: location.accuracy,
+          capturado_em: location.captured_at,
+        },
+        rota_google: buildDirectionsLink(
+          sessaoRow.latitude_inicio,
+          sessaoRow.longitude_inicio,
+          location.latitude,
+          location.longitude
+        ),
+        rota_waze: buildWazeLink(location.latitude, location.longitude),
+      });
+
+      await carregarSessoesAcompanhamento();
+    } catch (e) {
+      console.error("Erro ao encerrar acompanhamento:", e);
+      setSessaoErro(e?.message || "Nao foi possivel encerrar o acompanhamento.");
+    } finally {
+      setAcaoSessao("");
+    }
+  }
+
   async function salvarIntervencao() {
     if (!item?.id) return;
 
-    if (!form.horaInicio || !form.kmInicio || !form.mediaTeste) {
-      alert("Preencha: Hora Início, KM Início e Média do Teste.");
+    if (!form.horaInicio || !form.horaFim || !form.kmInicio || !form.mediaTeste) {
+      alert("Use Iniciar acompanhamento e Encerrar acompanhamento para gravar Hora Início e Hora Fim, e preencha KM Início e Média do Teste.");
+      return;
+    }
+
+    if (sessaoAberta) {
+      alert("Existe um acompanhamento em aberto. Encerre o acompanhamento antes de salvar.");
       return;
     }
 
@@ -228,6 +565,7 @@ export default function ModalLancamentoIntervencao({
     const instrutorNome =
       buildNomeSobrenome(user) || userRoleData?.nome_completo || instrutorLogin;
     const instrutorId = isUuid(user?.id) ? user.id : null;
+    const sessaoReferencia = ultimaSessaoEncerrada || null;
 
     let notaTotal = 0;
     const mapByCodigo = new Map();
@@ -254,8 +592,36 @@ export default function ModalLancamentoIntervencao({
     const notaFinal = Math.round(Math.max(0, Math.min(100, notaTotal)));
 
     try {
-      const location = await captureCurrentInstructorPosition();
-      setLocalizacaoInfo(location);
+      const locationStart = sessaoReferencia
+        ? {
+            latitude: sessaoReferencia.latitude_inicio,
+            longitude: sessaoReferencia.longitude_inicio,
+            precisao: sessaoReferencia.precisao_inicio,
+            capturado_em:
+              sessaoReferencia.capturado_em_inicio || sessaoReferencia.iniciado_em,
+          }
+        : localizacaoInfo?.inicio || null;
+      const locationEnd = sessaoReferencia
+        ? {
+            latitude: sessaoReferencia.latitude_fim,
+            longitude: sessaoReferencia.longitude_fim,
+            precisao: sessaoReferencia.precisao_fim,
+            capturado_em:
+              sessaoReferencia.capturado_em_fim || sessaoReferencia.encerrado_em,
+          }
+        : localizacaoInfo?.fim || null;
+      const rotaGoogle =
+        locationStart && locationEnd
+          ? buildDirectionsLink(
+              locationStart.latitude,
+              locationStart.longitude,
+              locationEnd.latitude,
+              locationEnd.longitude
+            )
+          : null;
+      const rotaWaze = locationEnd
+        ? buildWazeLink(locationEnd.latitude, locationEnd.longitude)
+        : null;
 
       const intervencaoChecklist = {
         versao: "FORM_ACOMPANHAMENTO_TELEMETRIA_v3",
@@ -290,10 +656,12 @@ export default function ModalLancamentoIntervencao({
         metadata: {
           ...(item?.metadata || {}),
           intervencao_localizacao: {
-            latitude: location.latitude,
-            longitude: location.longitude,
-            precisao: location.accuracy,
-            capturado_em: location.captured_at,
+            inicio: locationStart,
+            fim: locationEnd,
+            rota_google: rotaGoogle,
+            rota_waze: rotaWaze,
+            sessao_id: sessaoReferencia?.id || null,
+            sessao_numero: sessaoReferencia?.sessao_numero || null,
           },
         },
         updated_at: new Date().toISOString(),
@@ -366,12 +734,12 @@ export default function ModalLancamentoIntervencao({
           acompanhamento_id: item.id,
           tipo: "INTERVENCAO_TECNICA",
           observacoes:
-            `Intervenção técnica lançada por ${instrutorNome || instrutorLogin}.\n` +
-            `Hora início: ${form.horaInicio}\n` +
+            `IntervenÃ§Ã£o tÃ©cnica lanÃ§ada por ${instrutorNome || instrutorLogin}.\n` +
+            `Hora inÃ­cio: ${form.horaInicio}\n` +
             `Hora fim: ${form.horaFim || "-"}\n` +
-            `KM início: ${form.kmInicio}\n` +
+            `KM inÃ­cio: ${form.kmInicio}\n` +
             `KM fim: ${form.kmFim || "-"}\n` +
-            `Média teste: ${form.mediaTeste}\n\n` +
+            `MÃ©dia teste: ${form.mediaTeste}\n\n` +
             `${form.obs || ""}`,
           criado_por_login: instrutorLogin,
           criado_por_nome: instrutorNome,
@@ -384,11 +752,19 @@ export default function ModalLancamentoIntervencao({
             media_teste: n(form.mediaTeste),
             nota_calculada: notaFinal,
             localizacao: {
-              latitude: location.latitude,
-              longitude: location.longitude,
-              precisao: location.accuracy,
-              capturado_em: location.captured_at,
+              inicio: locationStart,
+              fim: locationEnd,
+              rota_google: rotaGoogle,
+              rota_waze: rotaWaze,
             },
+            sessao_referencia: sessaoReferencia
+              ? {
+                  id: sessaoReferencia.id,
+                  sessao_numero: sessaoReferencia.sessao_numero,
+                  iniciado_em: sessaoReferencia.iniciado_em,
+                  encerrado_em: sessaoReferencia.encerrado_em,
+                }
+              : null,
           },
         });
 
@@ -411,7 +787,7 @@ export default function ModalLancamentoIntervencao({
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-4 border-b bg-slate-50 sticky top-0 z-10">
           <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-            <FaRoad /> Lançar Intervenção Técnica
+            <FaRoad /> LanÃ§ar IntervenÃ§Ã£o TÃ©cnica
           </h3>
           <button onClick={onClose}>
             <FaTimes className="text-gray-400 hover:text-red-500 text-xl" />
@@ -438,8 +814,8 @@ export default function ModalLancamentoIntervencao({
               {item?.motivo || "-"}
             </div>
             <div className="text-xs mt-2 text-blue-700 font-bold">
-              O monitoramento agora será fixo em 30 dias, dividido em 3 checkpoints
-              automáticos: 10, 20 e 30 dias.
+              O monitoramento agora serÃ¡ fixo em 30 dias, dividido em 3 checkpoints
+              automÃ¡ticos: 10, 20 e 30 dias.
             </div>
           </div>
 
@@ -449,26 +825,124 @@ export default function ModalLancamentoIntervencao({
             </h4>
 
             <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-              A localizacao desta intervencao sera capturada automaticamente no momento de salvar, junto com os horarios informados manualmente.
-              {localizacaoInfo ? (
+              Os horarios e a localizacao desta intervencao ficam automaticos. Clique em iniciar para gravar o ponto de partida e em encerrar para gravar o ponto final.
+              {ultimaSessaoEncerrada ? (
                 <span className="block mt-1 font-bold">
-                  Ultima captura: Lat {formatCoordinate(localizacaoInfo.latitude)} • Lng {formatCoordinate(localizacaoInfo.longitude)}
+                  Ultimo acompanhamento encerrado: sessao {ultimaSessaoEncerrada.sessao_numero} em {formatDateTimeBR(ultimaSessaoEncerrada.encerrado_em)}
+                </span>
+              ) : sessaoAberta ? (
+                <span className="block mt-1 font-bold">
+                  Acompanhamento em andamento: sessao {sessaoAberta.sessao_numero} iniciada em {formatDateTimeBR(sessaoAberta.iniciado_em)}
                 </span>
               ) : null}
             </div>
 
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={carregarSessoesAcompanhamento}
+                disabled={loadingSessao || !!acaoSessao}
+                className="px-3 py-2 rounded-lg border bg-white text-slate-700 text-xs font-black inline-flex items-center gap-2 disabled:opacity-50"
+              >
+                <FaSync className={loadingSessao ? "animate-spin" : ""} /> Atualizar
+              </button>
+              <button
+                type="button"
+                onClick={iniciarAcompanhamento}
+                disabled={loadingSessao || !!acaoSessao || !!sessaoAberta}
+                className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-black inline-flex items-center gap-2 disabled:opacity-50"
+              >
+                <FaPlay /> {acaoSessao === "iniciar" ? "Iniciando..." : "Iniciar acompanhamento"}
+              </button>
+              <button
+                type="button"
+                onClick={encerrarAcompanhamento}
+                disabled={loadingSessao || !!acaoSessao || !sessaoAberta}
+                className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-black inline-flex items-center gap-2 disabled:opacity-50"
+              >
+                <FaStopCircle /> {acaoSessao === "encerrar" ? "Encerrando..." : "Encerrar acompanhamento"}
+              </button>
+              {localizacaoInfo?.rota_google && (
+                <a
+                  href={localizacaoInfo.rota_google}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-black inline-flex items-center gap-2"
+                >
+                  <FaRoute /> Abrir rota
+                </a>
+              )}
+              {localizacaoInfo?.rota_waze && (
+                <a
+                  href={localizacaoInfo.rota_waze}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 text-xs font-black inline-flex items-center gap-2"
+                >
+                  <FaRoad /> Waze destino
+                </a>
+              )}
+            </div>
+
+            {sessaoErro && (
+              <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                {sessaoErro}
+              </div>
+            )}
+
+            {(sessaoAberta || ultimaSessaoEncerrada || localizacaoInfo) && (
+              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="rounded-lg border bg-white px-3 py-3">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Inicio do acompanhamento
+                  </div>
+                  <div className="text-sm font-black text-slate-800">{form.horaInicio || "-"}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {localizacaoInfo?.inicio
+                      ? `Lat ${formatCoordinate(localizacaoInfo.inicio.latitude)} â€¢ Lng ${formatCoordinate(localizacaoInfo.inicio.longitude)}`
+                      : "Aguardando inicio"}
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-400">
+                    {localizacaoInfo?.inicio?.capturado_em
+                      ? formatDateTimeBR(localizacaoInfo.inicio.capturado_em)
+                      : "-"}
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-white px-3 py-3">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Fim do acompanhamento
+                  </div>
+                  <div className="text-sm font-black text-slate-800">{form.horaFim || "-"}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {localizacaoInfo?.fim
+                      ? `Lat ${formatCoordinate(localizacaoInfo.fim.latitude)} â€¢ Lng ${formatCoordinate(localizacaoInfo.fim.longitude)}`
+                      : "Aguardando encerramento"}
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-400">
+                    {localizacaoInfo?.fim?.capturado_em
+                      ? formatDateTimeBR(localizacaoInfo.fim.capturado_em)
+                      : "-"}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {ultimaSessaoEncerrada && (
+              <div className="mb-4 rounded-lg border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+                Sessao {ultimaSessaoEncerrada.sessao_numero} concluida em {formatDuration(ultimaSessaoEncerrada.iniciado_em, ultimaSessaoEncerrada.encerrado_em)}.
+              </div>
+            )}
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <label className="text-xs font-bold text-gray-500 mb-1 block">
-                  Hora Início *
+                  Hora InÃ­cio *
                 </label>
                 <input
                   type="time"
                   value={form.horaInicio}
-                  onChange={(e) =>
-                    setForm({ ...form, horaInicio: e.target.value })
-                  }
-                  className="w-full p-2.5 border rounded text-sm outline-none focus:border-blue-500"
+                  readOnly
+                  className="w-full p-2.5 border rounded text-sm bg-slate-100 text-slate-700"
                 />
               </div>
 
@@ -479,14 +953,14 @@ export default function ModalLancamentoIntervencao({
                 <input
                   type="time"
                   value={form.horaFim}
-                  onChange={(e) => setForm({ ...form, horaFim: e.target.value })}
-                  className="w-full p-2.5 border rounded text-sm outline-none focus:border-blue-500"
+                  readOnly
+                  className="w-full p-2.5 border rounded text-sm bg-slate-100 text-slate-700"
                 />
               </div>
 
               <div>
                 <label className="text-xs font-bold text-gray-500 mb-1 block">
-                  KM Início *
+                  KM InÃ­cio *
                 </label>
                 <input
                   type="number"
@@ -511,7 +985,7 @@ export default function ModalLancamentoIntervencao({
 
             <div className="mt-4">
               <label className="text-xs font-bold text-blue-600 block mb-1">
-                MÉDIA REALIZADA NO TESTE (KM/L) *
+                MÃ‰DIA REALIZADA NO TESTE (KM/L) *
               </label>
               <input
                 type="number"
@@ -526,7 +1000,7 @@ export default function ModalLancamentoIntervencao({
 
           <div>
             <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
-              <FaClipboardList /> Condução Inteligente
+              <FaClipboardList /> ConduÃ§Ã£o Inteligente
             </h4>
             <div className="space-y-2">
               {itensConducao.map((it) => {
@@ -540,7 +1014,7 @@ export default function ModalLancamentoIntervencao({
                   >
                     <div>
                       <div className="text-sm font-extrabold text-slate-700 leading-tight">
-                        {String(it.ordem).padStart(2, "0")} • {it.descricao}
+                        {String(it.ordem).padStart(2, "0")} â€¢ {it.descricao}
                       </div>
                       {it.ajuda && (
                         <div className="text-xs text-slate-500 mt-1">
@@ -579,7 +1053,7 @@ export default function ModalLancamentoIntervencao({
                             : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
                         }`}
                       >
-                        NÃO
+                        NÃƒO
                       </button>
                     </div>
                   </div>
@@ -590,7 +1064,7 @@ export default function ModalLancamentoIntervencao({
 
           <div>
             <h4 className="font-bold text-slate-700 text-sm mb-3">
-              Avaliação Técnica
+              AvaliaÃ§Ã£o TÃ©cnica
             </h4>
             <div className="space-y-3">
               {itensTecnica.map((q) => (
@@ -600,7 +1074,7 @@ export default function ModalLancamentoIntervencao({
                 >
                   <div>
                     <div className="text-sm text-slate-700 font-semibold leading-tight">
-                      {String(q.ordem).padStart(2, "0")} • {q.descricao}
+                      {String(q.ordem).padStart(2, "0")} â€¢ {q.descricao}
                     </div>
                     {q.ajuda && (
                       <div className="text-xs text-slate-500 mt-1">{q.ajuda}</div>
@@ -631,7 +1105,7 @@ export default function ModalLancamentoIntervencao({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <h4 className="font-bold text-slate-700 text-sm mb-2">
-                Severidade da Intervenção
+                Severidade da IntervenÃ§Ã£o
               </h4>
               <div className="grid grid-cols-3 gap-2">
                 {[1, 2, 3].map((lvl) => (
@@ -653,14 +1127,14 @@ export default function ModalLancamentoIntervencao({
 
             <div>
               <h4 className="font-bold text-slate-700 text-sm mb-2">
-                Observação (opcional)
+                ObservaÃ§Ã£o (opcional)
               </h4>
               <textarea
                 rows={3}
                 value={form.obs}
                 onChange={(e) => setForm({ ...form, obs: e.target.value })}
                 className="w-full p-2.5 border rounded-lg text-sm outline-none focus:border-blue-500"
-                placeholder="Ex.: ajustes aplicados e pontos de atenção..."
+                placeholder="Ex.: ajustes aplicados e pontos de atenÃ§Ã£o..."
               />
             </div>
           </div>
@@ -671,7 +1145,7 @@ export default function ModalLancamentoIntervencao({
               disabled={salvando || loadingItens}
               className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black text-lg rounded-xl shadow-md flex justify-center items-center gap-2"
             >
-              <FaSave /> {salvando ? "SALVANDO..." : "SALVAR LANÇAMENTO"}
+              <FaSave /> {salvando ? "SALVANDO..." : "SALVAR LANÃ‡AMENTO"}
             </button>
           </div>
         </div>
@@ -679,3 +1153,4 @@ export default function ModalLancamentoIntervencao({
     </div>
   );
 }
+

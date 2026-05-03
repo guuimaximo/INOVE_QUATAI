@@ -86,15 +86,6 @@ function isUuid(value) {
   );
 }
 
-function combineDateAndTime(dateValue, timeValue) {
-  if (!dateValue || !timeValue) return null;
-
-  const normalizedTime = String(timeValue).length === 5 ? `${timeValue}:00` : String(timeValue);
-  const composed = new Date(`${dateValue}T${normalizedTime}`);
-  if (Number.isNaN(composed.getTime())) return null;
-  return composed.toISOString();
-}
-
 async function registrarEventoSessao(acompanhamentoId, payload) {
   const { error } = await supabase.from("diesel_acompanhamento_eventos").insert({
     acompanhamento_id: acompanhamentoId,
@@ -116,11 +107,6 @@ export default function PainelSessoesAcompanhamento({
   const [okMsg, setOkMsg] = useState("");
   const [sessoes, setSessoes] = useState([]);
   const [sessaoMapaAbertaId, setSessaoMapaAbertaId] = useState(null);
-  const [formSessao, setFormSessao] = useState({
-    dataSessao: toISODateInBrazil(new Date()),
-    horaInicio: toTimeInBrazil(new Date()),
-    horaFim: "",
-  });
 
   const windowInfo = useMemo(() => getAcompanhamentoWindowInfo(item), [item]);
   const instrutorLogin = user?.login || user?.email || null;
@@ -156,15 +142,6 @@ export default function PainelSessoesAcompanhamento({
 
   useEffect(() => {
     carregarSessoes();
-  }, [item?.id]);
-
-  useEffect(() => {
-    const agora = new Date();
-    setFormSessao((prev) => ({
-      dataSessao: prev.dataSessao || toISODateInBrazil(agora),
-      horaInicio: prev.horaInicio || toTimeInBrazil(agora),
-      horaFim: prev.horaFim || "",
-    }));
   }, [item?.id]);
 
   const sessaoAberta = useMemo(
@@ -212,31 +189,22 @@ export default function PainelSessoesAcompanhamento({
       return;
     }
 
-    if (!formSessao.dataSessao || !formSessao.horaInicio) {
-      setErro("Informe a data e a hora inicial antes de iniciar o acompanhamento.");
-      return;
-    }
-
     setActionLoading("iniciar");
     setErro("");
     setOkMsg("");
 
     try {
+      const now = new Date();
+      const dataSessao = toISODateInBrazil(now);
+      const horaInicio = toTimeInBrazil(now);
       const location = await captureCurrentInstructorPosition();
-      const nowIso = combineDateAndTime(
-        formSessao.dataSessao,
-        formSessao.horaInicio
-      );
-
-      if (!nowIso) {
-        throw new Error("Data ou hora inicial invalida.");
-      }
+      const nowIso = now.toISOString();
 
       const payload = {
         acompanhamento_id: item.id,
         sessao_numero: resumo.total + 1,
-        data_sessao: formSessao.dataSessao,
-        hora_inicio: formSessao.horaInicio,
+        data_sessao: dataSessao,
+        hora_inicio: horaInicio,
         iniciado_em: nowIso,
         status_sessao: "INICIADA",
         instrutor_login: instrutorLogin,
@@ -280,10 +248,6 @@ export default function PainelSessoesAcompanhamento({
       });
 
       setOkMsg("Acompanhamento iniciado com localizacao registrada.");
-      setFormSessao((prev) => ({
-        ...prev,
-        horaFim: "",
-      }));
       await carregarSessoes();
       onSessionSaved?.();
     } catch (e) {
@@ -314,27 +278,15 @@ export default function PainelSessoesAcompanhamento({
       return;
     }
 
-    if (!formSessao.horaFim) {
-      setErro("Informe a hora final antes de encerrar o acompanhamento.");
-      return;
-    }
-
     setActionLoading("encerrar");
     setErro("");
     setOkMsg("");
 
     try {
+      const now = new Date();
+      const horaFim = toTimeInBrazil(now);
       const location = await captureCurrentInstructorPosition();
-      const nowIso = combineDateAndTime(
-        sessaoAberta.data_sessao,
-        formSessao.horaFim
-      );
-
-      if (!nowIso) {
-        throw new Error("Hora final invalida.");
-      }
-
-      const horaFim = formSessao.horaFim;
+      const nowIso = now.toISOString();
 
       const { error } = await supabase
         .from("diesel_acompanhamento_sessoes")
@@ -372,11 +324,6 @@ export default function PainelSessoesAcompanhamento({
       });
 
       setOkMsg("Acompanhamento encerrado com localizacao registrada.");
-      setFormSessao((prev) => ({
-        ...prev,
-        horaInicio: prev.horaInicio,
-        horaFim: "",
-      }));
       await carregarSessoes();
       onSessionSaved?.();
     } catch (e) {
@@ -451,7 +398,7 @@ export default function PainelSessoesAcompanhamento({
               Dentro de 30 dias, novas idas a campo entram neste mesmo acompanhamento. Passou de 30 dias, precisa abrir um novo acompanhamento.
             </div>
             <div className="mt-1">
-              Cada sessao precisa ser iniciada e encerrada com localizacao. Os horarios ficam manuais por enquanto, e enquanto uma sessao estiver aberta nao pode iniciar outra.
+              Cada sessao precisa ser iniciada e encerrada com localizacao. Ao clicar em iniciar o sistema grava hora e local automaticamente, e ao clicar em encerrar ele grava a hora e o ponto final.
             </div>
           </div>
         </div>
@@ -460,44 +407,38 @@ export default function PainelSessoesAcompanhamento({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <div className="rounded-lg border bg-white px-3 py-3">
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Data da sessao
+            Proximo inicio
           </div>
-          <input
-            type="date"
-            value={formSessao.dataSessao}
-            onChange={(e) =>
-              setFormSessao((prev) => ({ ...prev, dataSessao: e.target.value }))
-            }
-            className="w-full rounded-md border px-3 py-2 text-sm"
-          />
+          <div className="text-sm font-black text-slate-800">
+            Automatico no clique
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            Data, hora e localizacao sao gravadas ao iniciar.
+          </div>
         </div>
 
         <div className="rounded-lg border bg-white px-3 py-3">
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Hora inicial
+            Proximo encerramento
           </div>
-          <input
-            type="time"
-            value={formSessao.horaInicio}
-            onChange={(e) =>
-              setFormSessao((prev) => ({ ...prev, horaInicio: e.target.value }))
-            }
-            className="w-full rounded-md border px-3 py-2 text-sm"
-          />
+          <div className="text-sm font-black text-slate-800">
+            Automatico no clique
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            Hora final e localizacao sao gravadas ao encerrar.
+          </div>
         </div>
 
         <div className="rounded-lg border bg-white px-3 py-3">
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Hora final
+            Linha acompanhada
           </div>
-          <input
-            type="time"
-            value={formSessao.horaFim}
-            onChange={(e) =>
-              setFormSessao((prev) => ({ ...prev, horaFim: e.target.value }))
-            }
-            className="w-full rounded-md border px-3 py-2 text-sm"
-          />
+          <div className="text-sm font-black text-slate-800">
+            {getLinhaApenas(item) || "Sem linha"}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            Referencia usada para a sessao do instrutor.
+          </div>
         </div>
       </div>
 

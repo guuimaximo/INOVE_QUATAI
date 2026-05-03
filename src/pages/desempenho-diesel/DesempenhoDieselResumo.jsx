@@ -84,6 +84,34 @@ function parseHoraToMin(hora) {
   return hh * 60 + mm + ss / 60;
 }
 
+function getSessionDurationMinutes(sessao) {
+  const inicioHora = parseHoraToMin(sessao?.hora_inicio);
+  const fimHora = parseHoraToMin(sessao?.hora_fim);
+  if (
+    inicioHora != null &&
+    fimHora != null &&
+    Number.isFinite(inicioHora) &&
+    Number.isFinite(fimHora) &&
+    fimHora >= inicioHora
+  ) {
+    return fimHora - inicioHora;
+  }
+
+  const inicio = sessao?.iniciado_em ? new Date(sessao.iniciado_em) : null;
+  const fim = sessao?.encerrado_em ? new Date(sessao.encerrado_em) : null;
+  if (
+    inicio &&
+    fim &&
+    !Number.isNaN(inicio.getTime()) &&
+    !Number.isNaN(fim.getTime()) &&
+    fim.getTime() >= inicio.getTime()
+  ) {
+    return (fim.getTime() - inicio.getTime()) / 60000;
+  }
+
+  return 0;
+}
+
 function formatMinutes(mins) {
   const total = Math.max(0, Math.round(n(mins)));
   const h = Math.floor(total / 60);
@@ -252,6 +280,7 @@ export default function DesempenhoDieselAnalise() {
 
   const [rowsBase, setRowsBase] = useState([]);
   const [acompanhamentos, setAcompanhamentos] = useState([]);
+  const [sessoesAcompanhamento, setSessoesAcompanhamento] = useState([]);
   const [funcionarios, setFuncionarios] = useState([]);
 
   const [abaAtiva, setAbaAtiva] = useState("LINHAS");
@@ -346,18 +375,34 @@ export default function DesempenhoDieselAnalise() {
     return data || [];
   }
 
+  async function carregarSessoesAcompanhamento() {
+    const { data, error } = await supabase
+      .from("diesel_acompanhamento_sessoes")
+      .select(
+        "id, acompanhamento_id, sessao_numero, data_sessao, hora_inicio, hora_fim, iniciado_em, encerrado_em, instrutor_nome, instrutor_login"
+      )
+      .order("data_sessao", { ascending: false })
+      .order("sessao_numero", { ascending: false })
+      .limit(20000);
+
+    if (error) throw error;
+    return data || [];
+  }
+
   async function carregarTudo() {
     setLoading(true);
     setErro("");
     try {
-      const [premiacao, acomp, funcs] = await Promise.all([
+      const [premiacao, acomp, funcs, sessoes] = await Promise.all([
         carregarPremiacao(),
         carregarAcompanhamentos(),
         carregarFuncionarios(),
+        carregarSessoesAcompanhamento(),
       ]);
       setRowsBase(premiacao);
       setAcompanhamentos(acomp);
       setFuncionarios(funcs);
+      setSessoesAcompanhamento(sessoes);
     } catch (e) {
       console.error(e);
       setErro(e?.message || String(e));
@@ -755,17 +800,62 @@ export default function DesempenhoDieselAnalise() {
     };
   }
 
+  const sessoesPorAcompanhamento = useMemo(() => {
+    const map = new Map();
+
+    (sessoesAcompanhamento || []).forEach((sessao) => {
+      const acompanhamentoId = sessao?.acompanhamento_id;
+      if (!acompanhamentoId) return;
+
+      if (!map.has(acompanhamentoId)) {
+        map.set(acompanhamentoId, {
+          total: 0,
+          totalMinutos: 0,
+          sessoes: [],
+        });
+      }
+
+      const item = map.get(acompanhamentoId);
+      const duracaoMin = getSessionDurationMinutes(sessao);
+      const dataRef =
+        safeDateStr(sessao?.data_sessao) ||
+        safeDateStr(sessao?.iniciado_em) ||
+        safeDateStr(sessao?.encerrado_em);
+      const instrutorNome =
+        String(sessao?.instrutor_nome || "").trim() ||
+        String(sessao?.instrutor_login || "").trim() ||
+        "Sem instrutor";
+
+      item.total += 1;
+      item.totalMinutos += duracaoMin;
+      item.sessoes.push({
+        id: sessao.id,
+        acompanhamento_id: acompanhamentoId,
+        sessao_numero: sessao.sessao_numero,
+        data_ref: dataRef,
+        duracao_min: duracaoMin,
+        instrutor_nome: instrutorNome,
+      });
+    });
+
+    return map;
+  }, [sessoesAcompanhamento]);
+
   const acompanhamentosComEvolucao = useMemo(() => {
     return acompanhamentos
       .filter((a) => a.dt_inicio_monitoramento)
       .map((a) => {
         const iniMin = parseHoraToMin(a.intervencao_hora_inicio);
         const fimMin = parseHoraToMin(a.intervencao_hora_fim);
-        const duracaoMin =
+        const duracaoMinIntervencao =
           iniMin != null && fimMin != null && fimMin >= iniMin ? fimMin - iniMin : 0;
 
         const dtInicioStr = safeDateStr(a.dt_inicio_monitoramento);
         const chapa = String(a.motorista_chapa || "").trim();
+        const sessoesResumo = sessoesPorAcompanhamento.get(a.id);
+        const totalSessoes = sessoesResumo?.total || 0;
+        const duracaoMin =
+          totalSessoes > 0 ? n(sessoesResumo.totalMinutos) : duracaoMinIntervencao;
 
         const aBase = {
           ...a,
@@ -773,6 +863,9 @@ export default function DesempenhoDieselAnalise() {
           linha_resolvida: getLinhaFocoAcompanhamento(a),
           data_ref: dtInicioStr,
           duracao_min: duracaoMin,
+          duracao_intervencao_min: duracaoMinIntervencao,
+          total_sessoes: totalSessoes,
+          acompanhamentos_contabilizados: Math.max(totalSessoes, 1),
         };
 
         if (!chapa) {
@@ -924,6 +1017,7 @@ export default function DesempenhoDieselAnalise() {
   }, [
     acompanhamentos,
     dataset,
+    sessoesPorAcompanhamento,
     filtroLinha,
     filtroCluster,
     filtroInstrutor,
@@ -933,6 +1027,42 @@ export default function DesempenhoDieselAnalise() {
     filtroConclusao,
     busca,
   ]);
+
+  const registrosInstrutor = useMemo(() => {
+    const rows = [];
+
+    acompanhamentosComEvolucao.forEach((acompanhamento) => {
+      const resumoSessoes = sessoesPorAcompanhamento.get(acompanhamento.id);
+
+      if (resumoSessoes?.sessoes?.length) {
+        resumoSessoes.sessoes.forEach((sessao) => {
+          rows.push({
+            id: `${acompanhamento.id}__sessao__${sessao.id}`,
+            acompanhamento_id: acompanhamento.id,
+            data_ref: sessao.data_ref || acompanhamento.data_ref,
+            instrutor_nome: sessao.instrutor_nome,
+            duracao_min: sessao.duracao_min,
+            status_norm: acompanhamento.status_norm,
+            linha_resolvida: acompanhamento.linha_resolvida,
+          });
+        });
+        return;
+      }
+
+      rows.push({
+        id: `${acompanhamento.id}__base`,
+        acompanhamento_id: acompanhamento.id,
+        data_ref: acompanhamento.data_ref,
+        instrutor_nome:
+          String(acompanhamento.instrutor_nome || "").trim() || "Sem instrutor",
+        duracao_min: acompanhamento.duracao_intervencao_min || acompanhamento.duracao_min,
+        status_norm: acompanhamento.status_norm,
+        linha_resolvida: acompanhamento.linha_resolvida,
+      });
+    });
+
+    return rows;
+  }, [acompanhamentosComEvolucao, sessoesPorAcompanhamento]);
 
   const checkpointResumo = useMemo(() => {
     const rows = acompanhamentosComEvolucao.filter(
@@ -1027,7 +1157,7 @@ export default function DesempenhoDieselAnalise() {
 
   const resumoInstrutor = useMemo(() => {
     const map = new Map();
-    acompanhamentosComEvolucao.forEach((r) => {
+    registrosInstrutor.forEach((r) => {
       const key = String(r.instrutor_nome || "Sem instrutor").trim() || "Sem instrutor";
       if (!map.has(key)) {
         map.set(key, {
@@ -1040,28 +1170,28 @@ export default function DesempenhoDieselAnalise() {
           concluidos: 0,
           linhas: new Set(),
         });
-      }
-      const item = map.get(key);
+        }
+        const item = map.get(key);
       item.total_acompanhamentos += 1;
-      item.total_minutos += n(r.duracao_min);
-      if (r.status_norm === "EM_MONITORAMENTO") item.em_monitoramento += 1;
-      if (r.status_norm === "EM_ANALISE") item.em_analise += 1;
+        item.total_minutos += n(r.duracao_min);
+        if (r.status_norm === "EM_MONITORAMENTO") item.em_monitoramento += 1;
+        if (r.status_norm === "EM_ANALISE") item.em_analise += 1;
       if (["OK", "ENCERRADO", "ATAS"].includes(r.status_norm)) item.concluidos += 1;
       if (r.linha_resolvida) item.linhas.add(r.linha_resolvida);
     });
 
     return [...map.values()]
-      .map((r) => ({
-        ...r,
+        .map((r) => ({
+          ...r,
         media_minutos: r.total_acompanhamentos ? r.total_minutos / r.total_acompanhamentos : 0,
-        qtd_linhas: r.linhas.size,
-      }))
-      .sort((a, b) => b.total_minutos - a.total_minutos);
-  }, [acompanhamentosComEvolucao]);
+          qtd_linhas: r.linhas.size,
+        }))
+        .sort((a, b) => b.total_minutos - a.total_minutos);
+  }, [registrosInstrutor]);
 
   const tempoPorDia = useMemo(() => {
     const map = new Map();
-    acompanhamentosComEvolucao.forEach((r) => {
+    registrosInstrutor.forEach((r) => {
       const key = `${r.data_ref}__${r.instrutor_nome || "Sem instrutor"}`;
       if (!map.has(key)) {
         map.set(key, {
@@ -1086,9 +1216,9 @@ export default function DesempenhoDieselAnalise() {
         if (a.data_ref === b.data_ref) {
           return String(a.instrutor_nome).localeCompare(String(b.instrutor_nome), "pt-BR");
         }
-        return String(b.data_ref).localeCompare(String(a.data_ref));
-      });
-  }, [acompanhamentosComEvolucao]);
+          return String(b.data_ref).localeCompare(String(a.data_ref));
+        });
+  }, [registrosInstrutor]);
 
   const totalDesperdicioMeta = useMemo(
     () => rowsReferenciaComRef.reduce((acc, r) => acc + n(r.Litros_Desp_Meta), 0),

@@ -1,8 +1,14 @@
 // src/pages/DesempenhoDieselCheckpoint.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { FaInfoCircle } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../context/AuthContext";
+import {
+  formatDateBR,
+  formatDateTimeBR,
+  formatTimeBR,
+} from "../../utils/dieselAcompanhamento";
 
 function isUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -251,6 +257,20 @@ function isImageUrl(url) {
   return u.includes(".png") || u.includes(".jpg") || u.includes(".jpeg") || u.includes(".webp") || u.includes(".gif");
 }
 
+function buildMapSrc(lat, lng) {
+  const latitude = Number(lat);
+  const longitude = Number(lng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`;
+}
+
+function buildGoogleMapsLink(lat, lng) {
+  const latitude = Number(lat);
+  const longitude = Number(lng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return `https://www.google.com/maps?q=${latitude},${longitude}`;
+}
+
 function PublicUrlList({ title, urls }) {
   const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
   if (arr.length === 0) return null;
@@ -301,6 +321,7 @@ export default function DesempenhoDieselCheckpoint() {
   const [okMsg, setOkMsg] = useState("");
 
   const [acomp, setAcomp] = useState(null);
+  const [sessoesAcomp, setSessoesAcomp] = useState([]);
 
   const [itensChecklist, setItensChecklist] = useState([]);
   const [respostasChecklist, setRespostasChecklist] = useState({});
@@ -422,6 +443,20 @@ export default function DesempenhoDieselCheckpoint() {
         if (itens.error) throw itens.error;
         setItensChecklist(itens.data || []);
         setRespostasChecklist({});
+
+        const { data: sessoes, error: erroSessoes } = await supabase
+          .from("diesel_acompanhamento_sessoes")
+          .select("*")
+          .eq("acompanhamento_id", id)
+          .order("sessao_numero", { ascending: false })
+          .order("created_at", { ascending: false });
+
+        if (erroSessoes) {
+          console.error("Erro ao carregar sessoes do acompanhamento:", erroSessoes);
+          setSessoesAcomp([]);
+        } else {
+          setSessoesAcomp(sessoes || []);
+        }
       } catch (e) {
         console.error(e);
         setErrMsg(e?.message || "Erro ao carregar.");
@@ -530,8 +565,9 @@ export default function DesempenhoDieselCheckpoint() {
     if (!String(observacoes || "").trim()) return false;
     if ((evidencias || []).length === 0) return false;
     if ((itensChecklist || []).length > 0 && faltandoResponder > 0) return false;
+    if (sessaoAberta) return false;
     return true;
-  }, [acomp?.id, observacoes, evidencias, itensChecklist, faltandoResponder]);
+  }, [acomp?.id, observacoes, evidencias, itensChecklist, faltandoResponder, sessaoAberta]);
 
   const itensPorGrupo = useMemo(() => groupItems(itensChecklist), [itensChecklist]);
 
@@ -555,6 +591,16 @@ export default function DesempenhoDieselCheckpoint() {
     };
   }, [detalhes.hora_inicial, detalhes.hora_final, detalhes.km_inicial, detalhes.km_final]);
 
+  const sessaoAberta = useMemo(
+    () => (sessoesAcomp || []).find((sessao) => !sessao.encerrado_em) || null,
+    [sessoesAcomp]
+  );
+
+  const sessaoReferencia = useMemo(
+    () => (sessoesAcomp || []).find((sessao) => !!sessao.encerrado_em) || null,
+    [sessoesAcomp]
+  );
+
   async function salvarCheckpoint() {
     if (!pronto || saving) return;
 
@@ -564,6 +610,11 @@ export default function DesempenhoDieselCheckpoint() {
 
     try {
       if (!acomp?.id) throw new Error("Acompanhamento inválido.");
+      if (sessaoAberta) {
+        throw new Error(
+          "Existe uma sessao do instrutor em aberto. Encerre a sessao antes de salvar a analise."
+        );
+      }
 
       const instrutorLogin = user?.login || user?.email || null;
       const instrutorNome = user?.nome || null;
@@ -616,6 +667,23 @@ export default function DesempenhoDieselCheckpoint() {
             // mantém o período automático (útil para análise)
             kml_durante_teste_periodo: periodo.kml_periodo,
           },
+          sessao_referencia: sessaoReferencia
+            ? {
+                id: sessaoReferencia.id,
+                sessao_numero: sessaoReferencia.sessao_numero,
+                data_sessao: sessaoReferencia.data_sessao,
+                hora_inicio: sessaoReferencia.hora_inicio,
+                hora_fim: sessaoReferencia.hora_fim,
+                iniciado_em: sessaoReferencia.iniciado_em,
+                encerrado_em: sessaoReferencia.encerrado_em,
+                instrutor_login: sessaoReferencia.instrutor_login,
+                instrutor_nome: sessaoReferencia.instrutor_nome,
+                latitude_inicio: sessaoReferencia.latitude_inicio,
+                longitude_inicio: sessaoReferencia.longitude_inicio,
+                latitude_fim: sessaoReferencia.latitude_fim,
+                longitude_fim: sessaoReferencia.longitude_fim,
+              }
+            : null,
         },
       };
 
@@ -662,6 +730,14 @@ export default function DesempenhoDieselCheckpoint() {
           kml_acompanhamento_manual: kmlManual,
           ultimo_checklist_resumo: checklistResumo,
           ultimo_checkpoint_em: new Date().toISOString(),
+          ultima_sessao_referencia: sessaoReferencia
+            ? {
+                id: sessaoReferencia.id,
+                sessao_numero: sessaoReferencia.sessao_numero,
+                data_sessao: sessaoReferencia.data_sessao,
+                encerrado_em: sessaoReferencia.encerrado_em,
+              }
+            : null,
         },
       };
 
@@ -814,6 +890,165 @@ export default function DesempenhoDieselCheckpoint() {
 
         {/* Evidências do lançamento (miniatura pdf/imagem) */}
         <PublicUrlList title="Evidências do lançamento" urls={evidLancamento} />
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+        <div className="flex items-start gap-3">
+          <FaInfoCircle className="text-blue-600 mt-0.5 shrink-0" />
+          <div className="text-sm text-blue-900">
+            <div className="font-bold uppercase tracking-wider text-[11px] mb-1">
+              Regras da análise
+            </div>
+            <div>
+              O checkpoint continua pertencendo ao acompanhamento pai. As sessões do instrutor servem como prova operacional e não mudam a regra de melhora do motorista.
+            </div>
+            <div className="mt-1">
+              Para salvar a análise, não pode existir sessão em aberto. Se houver várias sessões dentro dos 30 dias, a análise usa a sessão encerrada mais recente como referência operacional.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-800">Sessão de referência da análise</h2>
+          <div className="text-xs font-semibold text-gray-500">
+            {sessoesAcomp.length} sessão(ões) registrada(s)
+          </div>
+        </div>
+
+        {sessaoAberta && (
+          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            Existe uma sessão em aberto do instrutor. Encerre essa sessão antes de salvar o checkpoint.
+          </div>
+        )}
+
+        {sessaoReferencia ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="border rounded-md p-3 bg-gray-50">
+                <div className="text-xs text-gray-500">Sessão</div>
+                <div className="text-lg font-bold text-gray-800">
+                  {sessaoReferencia.sessao_numero}
+                </div>
+              </div>
+
+              <div className="border rounded-md p-3 bg-gray-50">
+                <div className="text-xs text-gray-500">Data</div>
+                <div className="text-sm font-bold text-gray-800">
+                  {formatDateBR(sessaoReferencia.data_sessao)}
+                </div>
+              </div>
+
+              <div className="border rounded-md p-3 bg-gray-50">
+                <div className="text-xs text-gray-500">Início</div>
+                <div className="text-sm font-bold text-gray-800">
+                  {formatTimeBR(sessaoReferencia.hora_inicio || sessaoReferencia.iniciado_em)}
+                </div>
+              </div>
+
+              <div className="border rounded-md p-3 bg-gray-50">
+                <div className="text-xs text-gray-500">Fim</div>
+                <div className="text-sm font-bold text-gray-800">
+                  {formatTimeBR(sessaoReferencia.hora_fim || sessaoReferencia.encerrado_em)}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 text-sm text-gray-700">
+              Instrutor:{" "}
+              <span className="font-semibold">
+                {sessaoReferencia.instrutor_nome || sessaoReferencia.instrutor_login || "-"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-3">
+              <div className="rounded-lg border bg-white overflow-hidden">
+                <div className="px-3 py-2 border-b bg-gray-50 text-xs font-semibold text-gray-600">
+                  Mapa do início
+                </div>
+                {buildMapSrc(
+                  sessaoReferencia.latitude_inicio,
+                  sessaoReferencia.longitude_inicio
+                ) ? (
+                  <>
+                    <iframe
+                      title="sessao-referencia-inicio"
+                      src={buildMapSrc(
+                        sessaoReferencia.latitude_inicio,
+                        sessaoReferencia.longitude_inicio
+                      )}
+                      className="w-full h-48 border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    />
+                    <div className="px-3 py-2 border-t text-xs">
+                      <a
+                        href={buildGoogleMapsLink(
+                          sessaoReferencia.latitude_inicio,
+                          sessaoReferencia.longitude_inicio
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-blue-700 hover:underline"
+                      >
+                        Abrir no mapa
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <div className="px-3 py-5 text-sm text-gray-500">
+                    Localização inicial indisponível.
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border bg-white overflow-hidden">
+                <div className="px-3 py-2 border-b bg-gray-50 text-xs font-semibold text-gray-600">
+                  Mapa do fim
+                </div>
+                {buildMapSrc(
+                  sessaoReferencia.latitude_fim,
+                  sessaoReferencia.longitude_fim
+                ) ? (
+                  <>
+                    <iframe
+                      title="sessao-referencia-fim"
+                      src={buildMapSrc(
+                        sessaoReferencia.latitude_fim,
+                        sessaoReferencia.longitude_fim
+                      )}
+                      className="w-full h-48 border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    />
+                    <div className="px-3 py-2 border-t text-xs">
+                      <a
+                        href={buildGoogleMapsLink(
+                          sessaoReferencia.latitude_fim,
+                          sessaoReferencia.longitude_fim
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-blue-700 hover:underline"
+                      >
+                        Abrir no mapa
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <div className="px-3 py-5 text-sm text-gray-500">
+                    Localização final indisponível.
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-md border border-dashed p-4 text-sm text-gray-500">
+            Nenhuma sessão encerrada foi encontrada. O checkpoint ainda pode ser usado no fluxo antigo, mas o ideal é analisar depois de uma sessão fechada do instrutor.
+          </div>
+        )}
       </div>
 
       {/* Checklist (OK/NOK) */}

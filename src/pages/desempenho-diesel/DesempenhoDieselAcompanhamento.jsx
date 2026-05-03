@@ -20,6 +20,7 @@ import { AuthContext } from "../../context/AuthContext";
 import ModalLancamentoIntervencao from "../../components/desempenho/ModalLancamentoIntervencao";
 import ModalProntuarioUnificado from "../../components/desempenho/ModalProntuarioUnificado";
 import ModalCheckpointAnalise from "../../components/desempenho/ModalCheckpointAnalise";
+import { formatDateBR } from "../../utils/dieselAcompanhamento";
 
 // =============================================================================
 // HELPERS
@@ -170,6 +171,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
   const [loading, setLoading] = useState(false);
   const [lista, setLista] = useState([]);
+  const [sessaoResumoByAcomp, setSessaoResumoByAcomp] = useState({});
 
   const [userRoleData, setUserRoleData] = useState({
     nivel: null,
@@ -234,7 +236,50 @@ export default function DesempenhoDieselAcompanhamento() {
         .limit(800);
 
       if (error) throw error;
-      setLista(data || []);
+      const rows = data || [];
+      setLista(rows);
+
+      const acompanhamentoIds = rows.map((item) => item.id).filter(Boolean);
+      if (acompanhamentoIds.length === 0) {
+        setSessaoResumoByAcomp({});
+        return;
+      }
+
+      const { data: sessoes, error: erroSessoes } = await supabase
+        .from("diesel_acompanhamento_sessoes")
+        .select("acompanhamento_id, iniciado_em, encerrado_em, data_sessao")
+        .in("acompanhamento_id", acompanhamentoIds);
+
+      if (erroSessoes) {
+        console.error("Erro ao carregar resumo de sessoes:", erroSessoes);
+        setSessaoResumoByAcomp({});
+        return;
+      }
+
+      const resumo = {};
+      (sessoes || []).forEach((sessao) => {
+        const key = sessao.acompanhamento_id;
+        if (!key) return;
+
+        if (!resumo[key]) {
+          resumo[key] = { total: 0, abertas: 0, ultimaData: null };
+        }
+
+        resumo[key].total += 1;
+        if (!sessao.encerrado_em) resumo[key].abertas += 1;
+
+        const ref =
+          sessao.encerrado_em ||
+          sessao.iniciado_em ||
+          sessao.data_sessao ||
+          null;
+
+        if (ref && (!resumo[key].ultimaData || ref > resumo[key].ultimaData)) {
+          resumo[key].ultimaData = ref;
+        }
+      });
+
+      setSessaoResumoByAcomp(resumo);
     } catch (e) {
       alert("Erro ao carregar: " + (e?.message || String(e)));
     } finally {
@@ -730,6 +775,7 @@ export default function DesempenhoDieselAcompanhamento() {
                 </div>
               </th>
 
+              <th className="px-4 py-4 text-center">Sessões</th>
               <th className="px-4 py-4 text-center">Prontuário</th>
               <th className="px-4 py-4 text-center">Ações</th>
             </tr>
@@ -739,6 +785,7 @@ export default function DesempenhoDieselAcompanhamento() {
             {listaFiltrada.map((item) => {
               const status = getStatusView(item);
               const foco = getFoco(item);
+              const resumoSessoes = sessaoResumoByAcomp[item.id] || null;
 
               const dataRef =
                 abaAtiva === "AGUARDANDO"
@@ -791,6 +838,36 @@ export default function DesempenhoDieselAcompanhamento() {
                     >
                       {status}
                     </span>
+                  </td>
+
+                  <td className="px-4 py-4 text-center">
+                    {resumoSessoes ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="px-2 py-1 rounded-lg text-xs font-bold border bg-slate-50 text-slate-700 border-slate-200 whitespace-nowrap">
+                          {resumoSessoes.total} registro(s)
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded whitespace-nowrap border ${
+                            resumoSessoes.abertas > 0
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          }`}
+                        >
+                          {resumoSessoes.abertas > 0
+                            ? `${resumoSessoes.abertas} em aberto`
+                            : "todas encerradas"}
+                        </span>
+                        <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                          {resumoSessoes.ultimaData
+                            ? `ult. ${formatDateBR(resumoSessoes.ultimaData)}`
+                            : "-"}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400 font-bold">
+                        Sem sessões
+                      </span>
+                    )}
                   </td>
 
                   <td className="px-4 py-4 text-center">
@@ -867,7 +944,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
             {listaFiltrada.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
                   <div className="text-sm font-bold">
                     Nenhum registro encontrado nesta aba.
                   </div>
@@ -894,6 +971,7 @@ export default function DesempenhoDieselAcompanhamento() {
           item={itemSelecionado}
           onClose={() => setModalVisaoGeralOpen(false)}
           onOpenCheckpoint={abrirCheckpoint}
+          onSessionSaved={carregarOrdens}
         />
       )}
 

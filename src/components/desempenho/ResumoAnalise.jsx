@@ -3,6 +3,7 @@ import {
   FaChartLine,
   FaCheckCircle,
   FaExclamationTriangle,
+  FaInfoCircle,
   FaSync,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
@@ -31,6 +32,7 @@ function buildEmptyResumo() {
     periodoFim: null,
     observacoes: "",
     tipoEvento: null,
+    sessaoReferencia: null,
   };
 }
 
@@ -41,6 +43,7 @@ function pickMelhorEvento(eventos = []) {
     PRONTUARIO_30: 3,
     PRONTUARIO_20: 2,
     PRONTUARIO_10: 1,
+    CHECKPOINT: 1,
     ANALISE_FINAL: 0,
   };
 
@@ -72,7 +75,13 @@ export default function ResumoAnalise({ item }) {
           .from("diesel_acompanhamento_eventos")
           .select("tipo, created_at, observacoes, extra")
           .eq("acompanhamento_id", item.id)
-          .in("tipo", ["PRONTUARIO_10", "PRONTUARIO_20", "PRONTUARIO_30", "ANALISE_FINAL"])
+          .in("tipo", [
+            "PRONTUARIO_10",
+            "PRONTUARIO_20",
+            "PRONTUARIO_30",
+            "CHECKPOINT",
+            "ANALISE_FINAL",
+          ])
           .order("created_at", { ascending: false });
 
         if (error) throw error;
@@ -111,6 +120,10 @@ export default function ResumoAnalise({ item }) {
               null,
             observacoes: evento?.observacoes || item?.intervencao_obs || "",
             tipoEvento: evento?.tipo || null,
+            sessaoReferencia:
+              evento?.extra?.sessao_referencia ||
+              item?.metadata?.ultima_sessao_referencia ||
+              null,
           });
         } else {
           setResumo({
@@ -122,6 +135,10 @@ export default function ResumoAnalise({ item }) {
             periodoFim: item?.dt_fim_previsao || null,
             observacoes: item?.intervencao_obs || "",
             tipoEvento: evento?.tipo || null,
+            sessaoReferencia:
+              evento?.extra?.sessao_referencia ||
+              item?.metadata?.ultima_sessao_referencia ||
+              null,
           });
         }
       } catch (e) {
@@ -135,6 +152,7 @@ export default function ResumoAnalise({ item }) {
           periodoFim: item?.dt_fim_previsao || null,
           observacoes: item?.intervencao_obs || "",
           tipoEvento: null,
+          sessaoReferencia: item?.metadata?.ultima_sessao_referencia || null,
         });
       } finally {
         setLoading(false);
@@ -265,6 +283,56 @@ export default function ResumoAnalise({ item }) {
               {resumo.observacoes || "Nenhum log registrado."}
             </div>
           </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <FaInfoCircle className="text-slate-500 mt-0.5 shrink-0" />
+              <div className="text-sm text-slate-700">
+                <div className="font-black uppercase tracking-wider text-[11px] mb-1">
+                  Regras
+                </div>
+                <div>
+                  Este resumo usa o checkpoint mais recente do acompanhamento como base da anÃ¡lise. A decisÃ£o final de <strong>OK</strong> ou <strong>ATAS</strong> continua reservada ao checkpoint de 30 dias.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {resumo.sessaoReferencia && (
+            <div className="p-4 rounded-lg border bg-slate-50">
+              <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">
+                Sessão de referência da análise
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <div className="text-[10px] text-slate-500">Sessão</div>
+                  <div className="text-sm font-black text-slate-800">
+                    {resumo.sessaoReferencia?.sessao_numero || "-"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500">Data</div>
+                  <div className="text-sm font-black text-slate-800">
+                    {resumo.sessaoReferencia?.data_sessao || "-"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500">Instrutor</div>
+                  <div className="text-sm font-black text-slate-800">
+                    {resumo.sessaoReferencia?.instrutor_nome ||
+                      resumo.sessaoReferencia?.instrutor_login ||
+                      "-"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500">Encerramento</div>
+                  <div className="text-sm font-black text-slate-800">
+                    {resumo.sessaoReferencia?.encerrado_em || "-"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

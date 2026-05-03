@@ -271,6 +271,28 @@ function buildGoogleMapsLink(lat, lng) {
   return `https://www.google.com/maps?q=${latitude},${longitude}`;
 }
 
+function getSessaoReferenceTimestamp(sessao) {
+  if (!sessao) return 0;
+
+  if (sessao.encerrado_em) {
+    const stamp = new Date(sessao.encerrado_em).getTime();
+    if (Number.isFinite(stamp) && stamp > 0) return stamp;
+  }
+
+  if (sessao.data_sessao && sessao.hora_fim) {
+    const stamp = new Date(`${sessao.data_sessao}T${sessao.hora_fim}`).getTime();
+    if (Number.isFinite(stamp) && stamp > 0) return stamp;
+  }
+
+  if (sessao.data_sessao && sessao.hora_inicio) {
+    const stamp = new Date(`${sessao.data_sessao}T${sessao.hora_inicio}`).getTime();
+    if (Number.isFinite(stamp) && stamp > 0) return stamp;
+  }
+
+  const created = new Date(sessao.created_at || 0).getTime();
+  return Number.isFinite(created) ? created : 0;
+}
+
 function PublicUrlList({ title, urls }) {
   const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
   if (arr.length === 0) return null;
@@ -597,7 +619,13 @@ export default function DesempenhoDieselCheckpoint() {
   );
 
   const sessaoReferencia = useMemo(
-    () => (sessoesAcomp || []).find((sessao) => !!sessao.encerrado_em) || null,
+    () =>
+      [...(sessoesAcomp || [])]
+        .filter((sessao) => !!sessao.encerrado_em)
+        .sort(
+          (a, b) =>
+            getSessaoReferenceTimestamp(b) - getSessaoReferenceTimestamp(a)
+        )[0] || null,
     [sessoesAcomp]
   );
 

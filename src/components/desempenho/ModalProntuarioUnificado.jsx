@@ -97,6 +97,10 @@ function getCheckpointDecisao(item) {
   return null;
 }
 
+function isCheckpointFinal30(tipo) {
+  return String(tipo || "").toUpperCase() === "PRONTUARIO_30";
+}
+
 function getNotaInstrutorValue(nota) {
   if (nota == null || nota === "") return null;
   const valor = Number(nota);
@@ -206,7 +210,7 @@ export default function ModalProntuarioUnificado({
   const decisaoInfo = useMemo(() => {
     if (!isAnaliseFinal) return null;
 
-    if (item?.prontuario_pendente) {
+    if (item?.prontuario_pendente && isCheckpointFinal30(item?.prontuario_pendente)) {
       return {
         titulo: "Existe prontuário pendente para decisão",
         texto:
@@ -217,7 +221,7 @@ export default function ModalProntuarioUnificado({
       };
     }
 
-    if (checkpointDecisao) {
+    if (checkpointDecisao && isCheckpointFinal30(checkpointDecisao)) {
       return {
         titulo: "Abrir checkpoint para decisão final",
         texto:
@@ -225,6 +229,17 @@ export default function ModalProntuarioUnificado({
         classe: "bg-violet-50 border-violet-200 text-violet-800",
         icon: <FaCheckCircle className="text-violet-600" />,
         cta: "Abrir checkpoint mais recente",
+      };
+    }
+
+    if (checkpointDecisao) {
+      return {
+        titulo: "Checkpoint disponÃ­vel apenas para consulta",
+        texto:
+          "Checkpoints de 10 e 20 dias continuam servindo para leitura da evoluÃ§Ã£o do motorista, mas a decisÃ£o final de encerrar ou enviar para tratativa sÃ³ acontece no checkpoint de 30 dias.",
+        classe: "bg-slate-50 border-slate-200 text-slate-700",
+        icon: <FaInfoCircle className="text-slate-500" />,
+        cta: null,
       };
     }
 
@@ -241,6 +256,10 @@ export default function ModalProntuarioUnificado({
   const handleAbrirDecisao = () => {
     if (!checkpointDecisao) {
       alert("Nenhum checkpoint disponível para decisão.");
+      return;
+    }
+    if (!isCheckpointFinal30(checkpointDecisao)) {
+      alert("A decisÃ£o final sÃ³ fica disponÃ­vel quando o checkpoint de 30 dias existir.");
       return;
     }
     onOpenCheckpoint?.(item, checkpointDecisao);
@@ -396,6 +415,22 @@ export default function ModalProntuarioUnificado({
                           </button>
                         </div>
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isAnaliseFinal && (
+                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <FaInfoCircle className="text-slate-500 mt-0.5 shrink-0" />
+                    <div className="text-sm text-slate-700">
+                      <div className="font-black uppercase tracking-wider text-[11px] mb-1">
+                        Regras
+                      </div>
+                      <div>
+                        A intervenÃ§Ã£o tÃ©cnica e as sessÃµes do instrutor alimentam o acompanhamento pai. O checkpoint organiza a anÃ¡lise, mas a decisÃ£o de <strong>OK</strong> ou <strong>ATAS</strong> sÃ³ fica disponÃ­vel quando o checkpoint de 30 dias existir.
+                      </div>
                     </div>
                   </div>
                 </div>

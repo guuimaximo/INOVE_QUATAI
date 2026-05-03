@@ -56,6 +56,11 @@ function formatDateBR(value) {
   }
 }
 
+function formatCoordinate(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toFixed(6) : "—";
+}
+
 function extractChecklist(raw) {
   if (!raw || typeof raw !== "object") {
     return { versao: null, conducao: {}, tecnica: {}, itens: {} };
@@ -266,14 +271,20 @@ export default function ResumoLancamentoInstrutor({ item }) {
       try {
         const { data, error } = await supabase
           .from("diesel_checklist_respostas")
-          .select("checklist_item_id, valor_bool, valor_text, updated_at")
+          .select("checklist_item_id, valor_bool, valor_text, updated_at, origem")
           .eq("acompanhamento_id", item.id);
 
         if (error) throw error;
         if (!alive) return;
 
+        const rows = Array.isArray(data) ? data : [];
+        const preferidas = rows.filter(
+          (r) => String(r?.origem || "").trim().toUpperCase() === "LANCAMENTO_INSTRUTOR"
+        );
+        const fonte = preferidas.length > 0 ? preferidas : rows;
+
         const m = new Map();
-        (data || []).forEach((r) => {
+        fonte.forEach((r) => {
           if (!r?.checklist_item_id) return;
           m.set(r.checklist_item_id, {
             valor_bool: r.valor_bool,
@@ -307,6 +318,7 @@ export default function ResumoLancamentoInstrutor({ item }) {
 
   const inicioBR = formatDateBR(item?.dt_inicio_monitoramento);
   const fimBR = formatDateBR(item?.dt_fim_previsao);
+  const localizacaoIntervencao = item?.metadata?.intervencao_localizacao || null;
 
   function getValConducaoFromItem(it) {
     const r = respByItemId.get(it.id);
@@ -444,6 +456,25 @@ export default function ResumoLancamentoInstrutor({ item }) {
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
             Nível {item?.nivel ?? "—"} • {item?.dias_monitoramento ?? "—"} dias
+          </div>
+        </div>
+
+        <div className="p-3 rounded border bg-slate-50 col-span-2 md:col-span-4">
+          <div className="text-[10px] font-bold text-slate-500">Localização da Intervenção Técnica</div>
+          <div className="text-sm font-extrabold text-slate-800">
+            {localizacaoIntervencao ? (
+              <>
+                Lat {formatCoordinate(localizacaoIntervencao.latitude)} • Lng{" "}
+                {formatCoordinate(localizacaoIntervencao.longitude)}
+              </>
+            ) : (
+              "Não registrada"
+            )}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">
+            {localizacaoIntervencao?.capturado_em
+              ? `Capturada em ${String(localizacaoIntervencao.capturado_em)}`
+              : "A prova de localização aparece aqui quando a intervenção é lançada."}
           </div>
         </div>
       </div>

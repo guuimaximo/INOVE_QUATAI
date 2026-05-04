@@ -20,6 +20,7 @@ const NIVEIS = [
   "Tratativa",
   "Instrutor",
   "Embarcados",
+  "Borracheiro",
   "RH",
   "Gestor",
   "Administrador",

@@ -203,6 +203,8 @@ const ACCESS = {
     "/inicio-rapido",
     ...Object.values(EMBARCADOS_ROUTES),
   ],
+
+  Borracheiro: [PCM_ROUTES.trocaPneus],
 };
 
 function canSee(user, path) {
@@ -237,6 +239,7 @@ export default function Sidebar() {
   const isCCO = user?.nivel === "CCO";
   const isTratativa = user?.nivel === "Tratativa";
   const isEmbarcados = user?.nivel === "Embarcados";
+  const isBorracheiro = user?.nivel === "Borracheiro";
 
   const showInicioExecutivo = isAdmin || isGestor || isRH;
   const showInicioBasico = !showInicioExecutivo;
@@ -388,7 +391,7 @@ export default function Sidebar() {
     }`;
 
   const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
-  const showPCM = isAdmin || isGestor || isManutencao;
+  const showPCM = isAdmin || isGestor || isManutencao || isBorracheiro;
 
   const showEmbarcados =
     isAdmin ||
@@ -732,4 +735,3 @@ export default function Sidebar() {
     </aside>
   );
 }
-

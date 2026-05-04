@@ -73,13 +73,13 @@ const ESTRUTURA_FISICA_ROUTES = {
 };
 
 /* =========================
-   FAROL TÃTICO
+   FAROL TÁTICO
 ========================= */
 const NIVEIS_LIBERADOS_FAROL = new Set(["Gestor", "Administrador", "RH"]);
 const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
 
 /* =========================
-   ACESSO POR NÃVEL
+   ACESSO POR NÍVEL
 ========================= */
 
 const ACCESS = {
@@ -126,7 +126,7 @@ const ACCESS = {
     // Tratativas Diesel
     ...Object.values(DIESEL_TRATATIVAS_ROUTES),
 
-    // Estrutura FÃ­sica
+    // Estrutura Física
     ESTRUTURA_FISICA_ROUTES.solicitacao,
     ESTRUTURA_FISICA_ROUTES.central,
     ESTRUTURA_FISICA_ROUTES.consultar,
@@ -156,7 +156,7 @@ const ACCESS = {
     EMBARCADOS_ROUTES.reparos,
   ],
 
-  "ManutenÃ§Ã£o": [
+  Manutenção: [
     "/inicio-rapido",
     "/solicitar",
 
@@ -231,7 +231,7 @@ export default function Sidebar() {
 
   const isAdmin = user?.nivel === "Administrador";
   const isGestor = user?.nivel === "Gestor";
-  const isManutencao = user?.nivel === "ManutenÃ§Ã£o";
+  const isManutencao = user?.nivel === "Manutenção";
   const isRH = user?.nivel === "RH";
   const isInstrutor = user?.nivel === "Instrutor";
   const isCCO = user?.nivel === "CCO";
@@ -268,8 +268,8 @@ export default function Sidebar() {
 
   const links = useMemo(
     () => ({
-      inicioExecutivo: { path: "/", label: "InÃ­cio", icon: <FaHome /> },
-      inicioBasico: { path: "/inicio-rapido", label: "InÃ­cio", icon: <FaHome /> },
+      inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
+      inicioBasico: { path: "/inicio-rapido", label: "Início", icon: <FaHome /> },
 
       pcm: {
         label: "PCM",
@@ -287,9 +287,9 @@ export default function Sidebar() {
         icon: <FaMicrochip />,
         tabs: [
           { path: EMBARCADOS_ROUTES.central, label: "Central", icon: <FaListAlt /> },
-          { path: EMBARCADOS_ROUTES.movimentacoes, label: "MovimentaÃ§Ãµes", icon: <FaExchangeAlt /> },
+          { path: EMBARCADOS_ROUTES.movimentacoes, label: "Movimentações", icon: <FaExchangeAlt /> },
           { path: EMBARCADOS_ROUTES.reparos, label: "Reparos", icon: <FaTools /> },
-          { path: EMBARCADOS_ROUTES.envioManutencao, label: "Envio ManutenÃ§Ã£o", icon: <FaFileInvoice /> },
+          { path: EMBARCADOS_ROUTES.envioManutencao, label: "Envio Manutenção", icon: <FaFileInvoice /> },
         ],
       },
 
@@ -299,19 +299,19 @@ export default function Sidebar() {
         tabs: [
           { path: DIESEL_ROUTES.resumo, label: "Resumo", icon: <FaChartBar /> },
           { path: DIESEL_ROUTES.agente, label: "Agente Diesel", icon: <FaRobot /> },
-          { path: DIESEL_ROUTES.lancamento, label: "LanÃ§amento Manual", icon: <FaPenSquare /> },
+          { path: DIESEL_ROUTES.lancamento, label: "Lançamento Manual", icon: <FaPenSquare /> },
           { path: DIESEL_ROUTES.acompanhamento, label: "Acompanhamento", icon: <FaSearch /> },
           { path: DIESEL_TRATATIVAS_ROUTES.central, label: "Tratativas (Central)", icon: <FaListAlt /> },
         ],
       },
 
       estruturaFisica: {
-        label: "Estrutura FÃ­sica",
+        label: "Estrutura Física",
         icon: <FaBuilding />,
         tabs: [
           {
             path: ESTRUTURA_FISICA_ROUTES.solicitacao,
-            label: "SolicitaÃ§Ã£o",
+            label: "Solicitação",
             icon: <FaPenSquare />,
           },
           {
@@ -324,34 +324,34 @@ export default function Sidebar() {
 
       tratativas: [
         { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie />, onlyAdminGestor: true },
-        { path: "/solicitar", label: "SolicitaÃ§Ã£o", icon: <FaPenSquare /> },
+        { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
         { path: "/central", label: "Central", icon: <FaListAlt /> },
         { path: "/tratativas-rh", label: "Tratativas RH", icon: <FaUserCog />, onlyAdminGestorRH: true },
       ],
 
       avarias: [
         { path: "/avarias-resumo", label: "Resumo", icon: <FaChartPie /> },
-        { path: "/lancar-avaria", label: "LanÃ§amento", icon: <FaWrench /> },
-        { path: "/avarias-em-revisao", label: "PendÃªncias de RevisÃ£o", icon: <FaUndo /> },
-        { path: "/aprovar-avarias", label: "AprovaÃ§Ãµes", icon: <FaClipboardCheck /> },
-        { path: "/cobrancas", label: "CobranÃ§as", icon: <FaMoneyBill /> },
+        { path: "/lancar-avaria", label: "Lançamento", icon: <FaWrench /> },
+        { path: "/avarias-em-revisao", label: "Pendências de Revisão", icon: <FaUndo /> },
+        { path: "/aprovar-avarias", label: "Aprovações", icon: <FaClipboardCheck /> },
+        { path: "/cobrancas", label: "Cobranças", icon: <FaMoneyBill /> },
       ],
 
       checklists: [{ path: "/checklists", label: "Central", icon: <FaClipboardCheck /> }],
 
       sos: [
         { path: "/sos-resumo", label: "Resumo", icon: <FaChartPie /> },
-        { path: "/sos-solicitacao", label: "SolicitaÃ§Ã£o", icon: <FaPenSquare /> },
+        { path: "/sos-solicitacao", label: "Solicitação", icon: <FaPenSquare /> },
         { path: "/sos-fechamento", label: "Fechamento", icon: <FaCheckDouble /> },
-        { path: "/sos-tratamento", label: "ManutenÃ§Ã£o", icon: <FaScrewdriver /> },
+        { path: "/sos-tratamento", label: "Manutenção", icon: <FaScrewdriver /> },
         { path: "/sos-central", label: "Central", icon: <FaEye /> },
         { path: "/sos-dashboard", label: "Dashboard (Excel)", icon: <FaDownload /> },
         { path: "/km-rodado", label: "KM Rodado (Dia)", icon: <FaRoad /> },
       ],
 
       configuracoes: [
-        { path: "/usuarios", label: "UsuÃ¡rios", icon: <FaUserCog /> },
-        { path: "/funcionarios", label: "FuncionÃ¡rios", icon: <FaIdBadge /> },
+        { path: "/usuarios", label: "Usuários", icon: <FaUserCog /> },
+        { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
       ],
     }),
     []
@@ -424,7 +424,7 @@ export default function Sidebar() {
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
           <div className="text-center w-full">
-            <p className="text-sm font-semibold text-white">OlÃ¡, {user.nome?.split(" ")[0]} ðŸ‘‹</p>
+            <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
             <p className="mt-1 text-xs text-blue-200">Seu painel de operação</p>
 
             {podeVerFarol && (
@@ -432,9 +432,9 @@ export default function Sidebar() {
                 onClick={abrirFarol}
                 className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                 type="button"
-                title="Abrir Farol TÃ¡tico"
+                title="Abrir Farol Tático"
               >
-                Ir para Farol TÃ¡tico
+                Ir para Farol Tático
                 <ExternalLink className="w-4 h-4" />
               </button>
             )}
@@ -670,7 +670,7 @@ export default function Sidebar() {
               type="button"
             >
               <div className="flex items-center gap-3">
-                <FaCogs /> <span>IntervenÃ§Ãµes</span>
+                <FaCogs /> <span>Intervenções</span>
               </div>
               {intervencoesOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
             </button>
@@ -698,7 +698,7 @@ export default function Sidebar() {
               type="button"
             >
               <div className="flex items-center gap-3">
-                <FaUserCog /> <span>ConfiguraÃ§Ãµes</span>
+                <FaUserCog /> <span>Configurações</span>
               </div>
               {configOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
             </button>

@@ -1,14 +1,35 @@
-function notifyUpdateAvailable(registration) {
+let updateInFlight = false;
+
+function applyUpdateNow(registration) {
+  if (!registration?.waiting || updateInFlight) return;
+
+  updateInFlight = true;
+
+  navigator.serviceWorker?.addEventListener(
+    "controllerchange",
+    () => {
+      window.location.reload();
+    },
+    { once: true },
+  );
+
+  registration.waiting.postMessage({ type: "SKIP_WAITING" });
+}
+
+function notifyUpdateAvailable(registration, autoApply = false) {
   window.dispatchEvent(
     new CustomEvent("inove:update-available", {
-      detail: { registration },
+      detail: { registration, autoApply },
     }),
   );
 }
 
-function watchServiceWorkerRegistration(registration) {
+function watchServiceWorkerRegistration(registration, { forceReload = false } = {}) {
   if (registration.waiting) {
-    notifyUpdateAvailable(registration);
+    notifyUpdateAvailable(registration, forceReload);
+    if (forceReload) {
+      applyUpdateNow(registration);
+    }
   }
 
   registration.addEventListener("updatefound", () => {
@@ -17,14 +38,17 @@ function watchServiceWorkerRegistration(registration) {
 
     newWorker.addEventListener("statechange", () => {
       if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-        notifyUpdateAvailable(registration);
+        notifyUpdateAvailable(registration, forceReload);
+        if (forceReload) {
+          applyUpdateNow(registration);
+        }
       }
     });
   });
 
   const refreshForUpdates = () => {
     registration.update().catch((error) => {
-      console.error("Falha ao verificar atualizacoes do Inove:", error);
+      console.error("Falha ao verificar atualizações do Inove:", error);
     });
   };
 
@@ -36,7 +60,7 @@ function watchServiceWorkerRegistration(registration) {
   });
 }
 
-export function registerServiceWorker({ disable = false } = {}) {
+export function registerServiceWorker({ disable = false, forceReload = false } = {}) {
   if (disable || !("serviceWorker" in navigator) || import.meta.env.DEV) {
     return;
   }
@@ -45,7 +69,7 @@ export function registerServiceWorker({ disable = false } = {}) {
     navigator.serviceWorker
       .register("/sw.js")
       .then((registration) => {
-        watchServiceWorkerRegistration(registration);
+        watchServiceWorkerRegistration(registration, { forceReload });
       })
       .catch((error) => {
         console.error("Falha ao registrar service worker do Inove:", error);

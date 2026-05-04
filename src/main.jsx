@@ -11,7 +11,7 @@ import { registerServiceWorker } from "./pwa/registerServiceWorker";
 const isNativeShell = Capacitor.isNativePlatform();
 const Router = isNativeShell ? HashRouter : BrowserRouter;
 
-registerServiceWorker({ disable: isNativeShell });
+registerServiceWorker({ disable: isNativeShell, forceReload: true });
 
 if (isNativeShell) {
   document.documentElement.classList.add("native-mobile-app");

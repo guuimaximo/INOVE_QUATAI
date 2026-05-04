@@ -67,8 +67,8 @@ export default function InstallAppPrompt() {
           <p className="text-sm font-semibold text-slate-900">Instalar Inove no aparelho</p>
           <p className="text-xs leading-5 text-slate-600">
             {deferredPrompt
-              ? "Use a mesma base do site como app no Android ou iPhone, com acesso mais rápido e tela cheia."
-              : "No iPhone, abra o compartilhamento do Safari e toque em Adicionar à Tela de Início para usar como app."}
+              ? "Use a mesma base do site como app no Android ou iPhone, com acesso mais r\u00e1pido e tela cheia."
+              : "No iPhone, abra o compartilhamento do Safari e toque em Adicionar \u00e0 Tela de In\u00edcio para usar como app."}
           </p>
         </div>
 
@@ -86,7 +86,7 @@ export default function InstallAppPrompt() {
           type="button"
           onClick={() => setVisible(false)}
           className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-          aria-label="Fechar aviso de instalação"
+          aria-label={"Fechar aviso de instala\u00e7\u00e3o"}
         >
           <X size={18} />
         </button>

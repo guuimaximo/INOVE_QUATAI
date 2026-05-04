@@ -19,6 +19,10 @@ export default function UpdateAppPrompt() {
     function handleUpdateAvailable(event) {
       setRegistration(event.detail?.registration || null);
       setVisible(true);
+
+      if (event.detail?.autoApply) {
+        setRefreshing(true);
+      }
     }
 
     window.addEventListener("inove:update-available", handleUpdateAvailable);
@@ -62,30 +66,45 @@ export default function UpdateAppPrompt() {
               <RefreshCw size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900">Atualização disponível</h2>
-              <p className="mt-1 text-sm text-slate-500">Uma versão nova do Inove já está pronta para este computador.</p>
+              <h2 className="text-lg font-black text-slate-900">{"Atualiza\u00e7\u00e3o dispon\u00edvel"}</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {refreshing
+                  ? "Aplicando a vers\u00e3o mais recente do Inove neste navegador."
+                  : "Uma vers\u00e3o nova do Inove j\u00e1 est\u00e1 pronta para este computador."}
+              </p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={() => setVisible(false)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Fechar aviso de atualização"
+            disabled={refreshing}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={"Fechar aviso de atualiza\u00e7\u00e3o"}
           >
             <X size={18} />
           </button>
         </div>
 
         <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Clique em <span className="font-bold">Atualizar</span> para carregar o código mais recente sem precisar fechar o app.
+          {refreshing ? (
+            <>{"Aguarde alguns segundos enquanto o Inove recarrega sozinho com o c\u00f3digo mais recente."}</>
+          ) : (
+            <>
+              {"Clique em "}
+              <span className="font-bold">Atualizar</span>
+              {" para carregar o c\u00f3digo mais recente sem"}
+              precisar fechar o app.
+            </>
+          )}
         </div>
 
         <div className="mt-6 flex justify-end gap-3">
           <button
             type="button"
             onClick={() => setVisible(false)}
-            className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+            disabled={refreshing}
+            className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Depois
           </button>

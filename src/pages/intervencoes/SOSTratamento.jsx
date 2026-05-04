@@ -1,7 +1,7 @@
 // src/pages/SOSTratamento.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
-import { buscarFuncionariosAtivos } from "../../utils/funcionariosBCNT";
+import { listarFuncionariosAtivos } from "../../utils/funcionariosBCNT";
 import { FaTools, FaCheckCircle, FaTimes, FaBus, FaCalendarAlt, FaRoad, FaWrench, FaInfoCircle } from "react-icons/fa";
 
 function calcularDiasDecorridos(data) {
@@ -149,6 +149,7 @@ export default function SOSTratamento() {
 // ===============================
 function CampoMecanico({ value, onChange }) {
   const [busca, setBusca] = useState(value?.nome || value?.chapa || "");
+  const [todos, setTodos] = useState([]);
   const [opcoes, setOpcoes] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -158,45 +159,50 @@ function CampoMecanico({ value, onChange }) {
 
   useEffect(() => {
     let alive = true;
-
-    async function buscar() {
-      const termo = (busca || "").trim();
-      if (termo.length < 2) {
-        setOpcoes([]);
-        return;
-      }
-
+    async function carregarTodos() {
       setLoading(true);
-
       try {
-        const data = await buscarFuncionariosAtivos(termo, {
-          limit: 10,
-          excluirMotoristas: true,
+        const data = await listarFuncionariosAtivos({
+          columns: "id_funcionario, nr_cracha, nm_funcionario, nm_funcao, status",
+          from: 0,
+          to: 9999,
         });
-
         if (!alive) return;
-
-        setLoading(false);
-        setOpcoes(
-          (data || []).map((funcionario) => ({
-            chapa: funcionario.chapa,
-            nome: funcionario.nome,
-            cargo: funcionario.cargo,
-          }))
-        );
+        const semMotorista = (data || []).filter((f) => !String(f.cargo || "").toUpperCase().includes("MOTORISTA"));
+        setTodos(semMotorista);
       } catch (error) {
         if (!alive) return;
-        setLoading(false);
-        console.error("Erro ao buscar colaboradores:", error);
-        setOpcoes([]);
+        console.error("Erro ao carregar colaboradores:", error);
+        setTodos([]);
+      } finally {
+        if (alive) setLoading(false);
       }
     }
-
-    buscar();
+    carregarTodos();
     return () => {
       alive = false;
     };
-  }, [busca]);
+  }, []);
+
+  useEffect(() => {
+    const termo = (busca || "").trim().toLowerCase();
+    if (!termo) {
+      setOpcoes([]);
+      return;
+    }
+
+    const filtrados = (todos || [])
+      .filter((f) => {
+        return String(f.nome || "").toLowerCase().includes(termo) || String(f.chapa || "").toLowerCase().includes(termo);
+      })
+      .slice(0, 12)
+      .map((funcionario) => ({
+        chapa: funcionario.chapa,
+        nome: funcionario.nome,
+        cargo: funcionario.cargo,
+      }));
+    setOpcoes(filtrados);
+  }, [busca, todos]);
 
   function selecionar(m) {
     onChange({ chapa: m.chapa, nome: m.nome });

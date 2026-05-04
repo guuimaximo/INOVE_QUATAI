@@ -37,15 +37,21 @@ export default function Cadastro() {
     }
     // --- Fim Validações ---
 
-    const { data, error } = await supabase.auth.signUp({
+    const signupPayload = {
       email: email,
       password: password,
-      options: {
-        // Podemos enviar dados extras que o Gatilho SQL pode usar,
-        // mas o nome é mais fácil atualizar depois no perfil.
-        // data: { display_name: name } 
-      }
-    });
+      options: {},
+    };
+    let { data, error } = await supabase.auth.signUp(signupPayload);
+
+    if (error && /Error sending confirmation email/i.test(String(error.message || ""))) {
+      const retry = await supabase.auth.signUp({
+        ...signupPayload,
+        options: undefined,
+      });
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       setErr(error.message);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
+import { escapePostgrestValue } from "../../utils/supabaseQuery";
 import {
   FaCar,
   FaCheckCircle,
@@ -191,7 +192,7 @@ export default function EmbarcadosMovimentacoes() {
       supabase
         .from("embarcados_movimentacoes")
         .select("*, embarcados(numero_equipamento, tipo)")
-        .or(`origem_valor.eq.${veiculo},destino_valor.eq.${veiculo}`)
+        .or(`origem_valor.eq.${escapePostgrestValue(veiculo)},destino_valor.eq.${escapePostgrestValue(veiculo)}`)
         .order("data_movimentacao", { ascending: false })
         .limit(50),
     ]);

@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
 import { FaTools, FaCheckCircle, FaTimes, FaBus, FaCalendarAlt, FaRoad, FaWrench, FaInfoCircle } from "react-icons/fa";
+import { escapeIlikePattern } from "../../utils/supabaseQuery";
 
 function calcularDiasDecorridos(data) {
   if (!data) return null;
@@ -171,7 +172,7 @@ function CampoMecanico({ value, onChange }) {
         .from("motoristas")
         .select("chapa, nome, cargo")
         .not("cargo", "ilike", "MOTORISTA%")
-        .or(`nome.ilike.%${termo}%,chapa.ilike.%${termo}%`)
+        .or(`nome.ilike.${escapeIlikePattern(`%${termo}%`)},chapa.ilike.${escapeIlikePattern(`%${termo}%`)}`)
         .order("nome", { ascending: true })
         .limit(10);
 

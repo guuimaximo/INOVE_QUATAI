@@ -835,6 +835,8 @@ function DieselAgenteView({ onAlert }) {
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
     };
@@ -880,6 +882,10 @@ function DieselAgenteView({ onAlert }) {
   }, []);
 
   async function carregarTela() {
+    // Em ambiente dev/React StrictMode, o cleanup do useEffect pode marcar mountedRef como false
+    // antes da segunda execução do efeito. Reativamos aqui para não abortar as consultas.
+    mountedRef.current = true;
+
     setDebugCarregamento([]);
     addDebug("carregarTela iniciou");
 

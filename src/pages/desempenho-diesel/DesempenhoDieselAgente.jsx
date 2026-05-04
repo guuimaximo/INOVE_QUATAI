@@ -868,11 +868,22 @@ function DieselAgenteView({ onAlert }) {
   }, [periodoInicio, periodoFim]);
 
   async function carregarTela() {
+    console.log("🚀 [Agente Diesel] carregarTela iniciou");
+
     setLoading(true);
+
     try {
-      const { data: sess } = await supabase.auth.getSession();
+      console.log("🔌 [Agente Diesel] Supabase normal:", supabase);
+
+      const { data: sess, error: sessError } = await supabase.auth.getSession();
+      console.log("👤 [Agente Diesel] Sessão:", { sess, sessError });
+
+      if (sessError) throw sessError;
+
       if (!mountedRef.current) return;
       setUserSession(sess?.session || null);
+
+      console.log("🔎 [Agente Diesel] Buscando último relatório gerencial...");
 
       const { data: rel, error: relError } = await supabase
         .from("relatorios_gerados")
@@ -882,12 +893,14 @@ function DieselAgenteView({ onAlert }) {
         .limit(1)
         .maybeSingle();
 
-      if (relError) {
-        console.error("Erro ao buscar relatorios_gerados:", relError);
-      }
+      console.log("📄 [Agente Diesel] Resultado relatorios_gerados:", { rel, relError });
+
+      if (relError) throw relError;
 
       if (!mountedRef.current) return;
       setUltimoGerencial(rel || null);
+
+      console.log("🔎 [Agente Diesel] Buscando última análise gerencial...");
 
       const { data: ultAnalise, error: ultAnaliseError } = await supabase
         .from("diesel_analise_gerencial_snapshot")
@@ -896,8 +909,13 @@ function DieselAgenteView({ onAlert }) {
         .limit(1)
         .maybeSingle();
 
+      console.log("📊 [Agente Diesel] Resultado diesel_analise_gerencial_snapshot:", {
+        ultAnalise,
+        ultAnaliseError,
+      });
+
       if (ultAnaliseError) {
-        console.error("Erro ao buscar diesel_analise_gerencial_snapshot:", ultAnaliseError);
+        console.warn("⚠️ [Agente Diesel] Snapshot não carregou. A tela continuará sem bloquear.", ultAnaliseError);
       }
 
       if (!mountedRef.current) return;
@@ -905,13 +923,17 @@ function DieselAgenteView({ onAlert }) {
 
       let sugestoesFonte = [];
 
+      console.log("🔎 [Agente Diesel] Buscando sugestões pela view v_sugestoes_acompanhamento_30d...");
+
       const viewResp = await supabase
         .from("v_sugestoes_acompanhamento_30d")
         .select("*")
         .limit(500);
 
+      console.log("📌 [Agente Diesel] Resultado view sugestões:", viewResp);
+
       if (viewResp.error) {
-        console.error("Erro ao buscar v_sugestoes_acompanhamento_30d:", viewResp.error);
+        console.warn("⚠️ [Agente Diesel] View de sugestões falhou. Tentando tabela base.", viewResp.error);
       }
 
       if (Array.isArray(viewResp.data) && viewResp.data.length > 0) {
@@ -919,17 +941,19 @@ function DieselAgenteView({ onAlert }) {
       }
 
       if (!sugestoesFonte.length) {
+        console.log("🔎 [Agente Diesel] Buscando sugestões pela tabela diesel_sugestoes_acompanhamento...");
+
         const tabelaResp = await supabase
           .from("diesel_sugestoes_acompanhamento")
-          .select(
-            "chapa, motorista_chapa, motorista_nome, linha_mais_rodada, km_percorrido, consumo_realizado, combustivel_consumido, kml_realizado, kml_meta, combustivel_desperdicado, detalhes_json, mes_ref, created_at"
-          )
+          .select("*")
           .order("mes_ref", { ascending: false })
           .order("created_at", { ascending: false })
           .limit(500);
 
+        console.log("📌 [Agente Diesel] Resultado tabela sugestões:", tabelaResp);
+
         if (tabelaResp.error) {
-          console.error("Erro ao buscar diesel_sugestoes_acompanhamento:", tabelaResp.error);
+          console.warn("⚠️ [Agente Diesel] Tabela de sugestões falhou.", tabelaResp.error);
         }
 
         if (Array.isArray(tabelaResp.data) && tabelaResp.data.length > 0) {
@@ -937,13 +961,22 @@ function DieselAgenteView({ onAlert }) {
         }
       }
 
+      console.log("✅ [Agente Diesel] Sugestões normalizadas:", sugestoesFonte);
+
+      console.log("🔎 [Agente Diesel] Buscando acompanhamentos ativos...");
+
       const { data: acompanhamentos, error: acompanhamentosError } = await supabase
         .from("diesel_acompanhamentos")
         .select("motorista_chapa, status")
         .not("status", "in", '("OK","ENCERRADO","ATAS")');
 
+      console.log("📋 [Agente Diesel] Resultado acompanhamentos ativos:", {
+        acompanhamentos,
+        acompanhamentosError,
+      });
+
       if (acompanhamentosError) {
-        console.error("Erro ao buscar diesel_acompanhamentos:", acompanhamentosError);
+        console.warn("⚠️ [Agente Diesel] Acompanhamentos ativos não carregaram. A tela continuará sem bloquear.", acompanhamentosError);
       }
 
       const mapStatusAtivo = {};
@@ -958,8 +991,19 @@ function DieselAgenteView({ onAlert }) {
 
       if (!mountedRef.current) return;
       setSugestoes(sugestoesComStatus);
+
+      console.log("🏁 [Agente Diesel] carregarTela finalizou com sucesso:", {
+        ultimoRelatorio: rel,
+        ultimaAnalise: ultAnalise,
+        totalSugestoes: sugestoesComStatus.length,
+      });
     } catch (e) {
-      onAlert?.({ type: "error", message: "Erro ao carregar: " + (e?.message || String(e)) });
+      console.error("❌ [Agente Diesel] Erro no carregarTela:", e);
+
+      onAlert?.({
+        type: "error",
+        message: "Erro ao carregar Agente Diesel: " + (e?.message || String(e)),
+      });
     } finally {
       if (!mountedRef.current) return;
       setLoading(false);
@@ -967,8 +1011,17 @@ function DieselAgenteView({ onAlert }) {
   }
 
   useEffect(() => {
-    carregarTela();
+    console.log("✅ [Agente Diesel] useEffect executou");
+
+    carregarTela().catch((err) => {
+      console.error("❌ [Agente Diesel] Erro fora do carregarTela:", err);
+      onAlert?.({
+        type: "error",
+        message: "Erro ao iniciar carregamento: " + (err?.message || String(err)),
+      });
+    });
   }, []);
+
 
   const openModal = async (motorista) => {
     let detalhes = motorista.detalhes_json || null;

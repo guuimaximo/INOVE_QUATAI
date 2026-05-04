@@ -544,7 +544,7 @@ export default function Login() {
         return;
       }
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const signupPayload = {
         email: emailTrim,
         password: senhaCadastro,
         options: {
@@ -556,7 +556,21 @@ export default function Login() {
             origem: "self-signup",
           },
         },
-      });
+      };
+
+      let { data: authData, error: authError } = await supabase.auth.signUp(signupPayload);
+
+      if (authError && /Error sending confirmation email/i.test(String(authError.message || ""))) {
+        const fallbackPayload = {
+          ...signupPayload,
+          options: {
+            data: signupPayload.options.data,
+          },
+        };
+        const retry = await supabase.auth.signUp(fallbackPayload);
+        authData = retry.data;
+        authError = retry.error;
+      }
 
       if (authError) {
         pushFeedback("error", authError.message || "Nao foi possivel criar sua conta no Auth.");

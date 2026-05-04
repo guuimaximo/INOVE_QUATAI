@@ -1,6 +1,7 @@
 // src/pages/SOSTratamento.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
+import { buscarFuncionariosAtivos } from "../../utils/funcionariosBCNT";
 import { FaTools, FaCheckCircle, FaTimes, FaBus, FaCalendarAlt, FaRoad, FaWrench, FaInfoCircle } from "react-icons/fa";
 
 function calcularDiasDecorridos(data) {
@@ -167,25 +168,28 @@ function CampoMecanico({ value, onChange }) {
 
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from("motoristas")
-        .select("chapa, nome, cargo")
-        .not("cargo", "ilike", "MOTORISTA%")
-        .or(`nome.ilike.%${termo}%,chapa.ilike.%${termo}%`)
-        .order("nome", { ascending: true })
-        .limit(10);
+      try {
+        const data = await buscarFuncionariosAtivos(termo, {
+          limit: 10,
+          excluirMotoristas: true,
+        });
 
-      if (!alive) return;
+        if (!alive) return;
 
-      setLoading(false);
-
-      if (error) {
+        setLoading(false);
+        setOpcoes(
+          (data || []).map((funcionario) => ({
+            chapa: funcionario.chapa,
+            nome: funcionario.nome,
+            cargo: funcionario.cargo,
+          }))
+        );
+      } catch (error) {
+        if (!alive) return;
+        setLoading(false);
         console.error("Erro ao buscar colaboradores:", error);
         setOpcoes([]);
-        return;
       }
-
-      setOpcoes(data || []);
     }
 
     buscar();

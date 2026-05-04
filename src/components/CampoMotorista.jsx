@@ -2,7 +2,7 @@
 // (Correção no useMemo + suporte a disabled)
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabase";
+import { listarFuncionariosAtivos } from "../utils/funcionariosBCNT";
 
 export default function CampoMotorista({
   value,
@@ -19,17 +19,17 @@ export default function CampoMotorista({
   useEffect(() => {
     setErrorLoading(null);
     (async () => {
-      const { data, error } = await supabase
-        .from("motoristas")
-        .select("chapa, nome")
-        .order("nome", { ascending: true });
-
-      if (error) {
+      try {
+        const data = await listarFuncionariosAtivos({
+          columns: "id_funcionario, nr_cracha, nm_funcionario, status",
+          from: 0,
+          to: 9999,
+        });
+        setTodos(data || []);
+      } catch (error) {
         console.error("Erro ao buscar motoristas:", error);
         setErrorLoading("Falha ao carregar motoristas.");
         setTodos([]);
-      } else {
-        setTodos(data || []);
       }
     })();
   }, []);

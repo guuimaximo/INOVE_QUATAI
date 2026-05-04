@@ -1,6 +1,9 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { Capacitor } from "@capacitor/core";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { App as CapacitorApp } from "@capacitor/app";
+import { useSearchParams } from "react-router-dom";
 import {
   FaCamera,
   FaCheckCircle,
@@ -18,6 +21,13 @@ import {
 import { AuthContext } from "../../context/AuthContext";
 import CampoPrefixo from "../../components/CampoPrefixo";
 import { supabase } from "../../supabase";
+import {
+  base64ToFile,
+  enqueueSubmission,
+  listSubmissions,
+  removeSubmission,
+  serializeFile,
+} from "../../utils/pcmOfflineQueue";
 
 const TAB_TROCA = "troca";
 const TAB_AUDITORIA = "auditoria";
@@ -45,6 +55,8 @@ const SITUACOES_ESTOQUE = [
   "ENVIAR PARA RECAPAGEM",
   "RECAPADO",
 ];
+
+const MARCAS_PNEU = ["Michelin", "Goodyear", "Pirelli", "Outra"];
 
 function norm(value) {
   return String(value || "").trim();
@@ -76,6 +88,21 @@ function formatDateOnly(value) {
   } catch {
     return value;
   }
+}
+
+function isTabValue(value) {
+  return value === TAB_TROCA || value === TAB_AUDITORIA || value === TAB_ESTOQUE;
+}
+
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
 }
 
 function nowDisplay() {
@@ -170,7 +197,8 @@ function createAuditoriaForm(nextFicha, userName) {
 function createEstoqueItem() {
   return {
     numeroPneu: "",
-    marca: "",
+    marca: MARCAS_PNEU[0],
+    marcaOutra: "",
     situacao: SITUACOES_ESTOQUE[0],
   };
 }
@@ -204,6 +232,36 @@ async function uploadFoto(bucket, folder, recordId, tag, file) {
   };
 }
 
+async function captureNativePhoto(fileNamePrefix) {
+  const permissions = await Camera.checkPermissions();
+  const hasCameraPermission =
+    permissions.camera === "granted" || permissions.camera === "limited";
+
+  if (!hasCameraPermission) {
+    const requested = await Camera.requestPermissions({ permissions: ["camera"] });
+    const granted = requested.camera === "granted" || requested.camera === "limited";
+    if (!granted) {
+      throw new Error("Permissao da camera negada.");
+    }
+  }
+
+  const photo = await Camera.getPhoto({
+    source: CameraSource.Camera,
+    resultType: CameraResultType.Base64,
+    quality: 80,
+    promptLabelHeader: "Foto do pneu",
+    promptLabelPhoto: "Galeria",
+    promptLabelPicture: "Camera",
+  });
+
+  if (!photo?.base64String) return null;
+
+  const extension = photo.format || "jpg";
+  const mimeType = photo.format ? `image/${photo.format}` : "image/jpeg";
+  const bytes = base64ToUint8Array(photo.base64String);
+  return new File([bytes], `${fileNamePrefix}.${extension}`, { type: mimeType });
+}
+
 function buildTrocaResumo(row) {
   if (norm(row.tipo_troca) === TIPO_TROCA_ESTOQUE) {
     return `Estoque -> ${row.prefixo_instalacao || row.prefixo || "-"} · ${row.posicao_instalacao || row.posicao || "-"}`;
@@ -218,6 +276,16 @@ function getAuditoriaPosicoes(row) {
 
 function buildAuditoriaResumo(row) {
   return `${getAuditoriaPosicoes(row).length} posicoes auditadas`;
+}
+
+function isNetworkError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    !window.navigator.onLine ||
+    message.includes("network") ||
+    message.includes("fetch") ||
+    message.includes("failed to fetch")
+  );
 }
 
 function groupEstoqueRows(rows) {
@@ -242,6 +310,10 @@ function groupEstoqueRows(rows) {
             numero_pneu: row.numero_pneu,
             marca: row.marca,
             situacao: row.situacao,
+            transnet_status: row.transnet_status,
+            transnet_conferido_em: row.transnet_conferido_em,
+            transnet_conferido_por_nome: row.transnet_conferido_por_nome,
+            transnet_conferido_por_login: row.transnet_conferido_por_login,
           },
         ],
       });
@@ -253,6 +325,10 @@ function groupEstoqueRows(rows) {
       numero_pneu: row.numero_pneu,
       marca: row.marca,
       situacao: row.situacao,
+      transnet_status: row.transnet_status,
+      transnet_conferido_em: row.transnet_conferido_em,
+      transnet_conferido_por_nome: row.transnet_conferido_por_nome,
+      transnet_conferido_por_login: row.transnet_conferido_por_login,
     });
   }
 
@@ -362,7 +438,7 @@ function SelectField({ label, value, onChange, options }) {
   );
 }
 
-function PhotoField({ title, file, imageUrl = "", inputId, onChange }) {
+function PhotoField({ title, file, imageUrl = "", inputId, onChange, onNativeCapture, isNativeShell }) {
   const [previewUrl, setPreviewUrl] = useState(imageUrl || "");
 
   useEffect(() => {
@@ -403,7 +479,13 @@ function PhotoField({ title, file, imageUrl = "", inputId, onChange }) {
 
       <button
         type="button"
-        onClick={() => document.getElementById(inputId)?.click()}
+        onClick={() => {
+          if (isNativeShell && onNativeCapture) {
+            void onNativeCapture();
+            return;
+          }
+          document.getElementById(inputId)?.click();
+        }}
         className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
       >
         <FaCamera />
@@ -433,7 +515,18 @@ function TabButton({ active, onClick, icon, title, count }) {
   );
 }
 
-function TrocaModal({ open, form, saving, onClose, onFieldChange, onFotoChange, onSalvar }) {
+function TrocaModal({
+  open,
+  form,
+  saving,
+  onClose,
+  onFieldChange,
+  onFotoChange,
+  onCapturePhoto,
+  onSalvarOffline,
+  onSalvar,
+  isNativeShell,
+}) {
   if (!open) return null;
 
   const isEstoqueCarro = form.tipoTroca === TIPO_TROCA_ESTOQUE;
@@ -451,6 +544,15 @@ function TrocaModal({ open, form, saving, onClose, onFieldChange, onFotoChange, 
             className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
           >
             Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onSalvarOffline}
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60"
+          >
+            <FaSave />
+            Salvar offline
           </button>
           <button
             type="button"
@@ -520,6 +622,8 @@ function TrocaModal({ open, form, saving, onClose, onFieldChange, onFotoChange, 
                   file={form.fotoRetirado}
                   inputId="troca-retirado"
                   onChange={(event) => onFotoChange("fotoRetirado", event.target.files?.[0] || null)}
+                  onNativeCapture={() => onCapturePhoto("fotoRetirado", "numero_retirado")}
+                  isNativeShell={isNativeShell}
                 />
               </div>
 
@@ -536,6 +640,8 @@ function TrocaModal({ open, form, saving, onClose, onFieldChange, onFotoChange, 
                   file={form.fotoColocado}
                   inputId="troca-colocado"
                   onChange={(event) => onFotoChange("fotoColocado", event.target.files?.[0] || null)}
+                  onNativeCapture={() => onCapturePhoto("fotoColocado", "numero_colocado")}
+                  isNativeShell={isNativeShell}
                 />
               </div>
             </div>
@@ -569,6 +675,8 @@ function TrocaModal({ open, form, saving, onClose, onFieldChange, onFotoChange, 
                   file={form.fotoRetirado}
                   inputId="troca-retirado"
                   onChange={(event) => onFotoChange("fotoRetirado", event.target.files?.[0] || null)}
+                  onNativeCapture={() => onCapturePhoto("fotoRetirado", "numero_retirado")}
+                  isNativeShell={isNativeShell}
                 />
               </div>
             </SectionBlock>
@@ -600,6 +708,8 @@ function TrocaModal({ open, form, saving, onClose, onFieldChange, onFotoChange, 
                   file={form.fotoColocado}
                   inputId="troca-colocado"
                   onChange={(event) => onFotoChange("fotoColocado", event.target.files?.[0] || null)}
+                  onNativeCapture={() => onCapturePhoto("fotoColocado", "numero_colocado")}
+                  isNativeShell={isNativeShell}
                 />
               </div>
             </SectionBlock>
@@ -610,7 +720,18 @@ function TrocaModal({ open, form, saving, onClose, onFieldChange, onFotoChange, 
   );
 }
 
-function AuditoriaModal({ open, form, saving, onClose, onFieldChange, onPosicaoChange, onSalvar }) {
+function AuditoriaModal({
+  open,
+  form,
+  saving,
+  onClose,
+  onFieldChange,
+  onPosicaoChange,
+  onCapturePhoto,
+  onSalvarOffline,
+  onSalvar,
+  isNativeShell,
+}) {
   if (!open) return null;
 
   return (
@@ -627,6 +748,15 @@ function AuditoriaModal({ open, form, saving, onClose, onFieldChange, onPosicaoC
             className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
           >
             Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onSalvarOffline}
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60"
+          >
+            <FaSave />
+            Salvar offline
           </button>
           <button
             type="button"
@@ -680,6 +810,8 @@ function AuditoriaModal({ open, form, saving, onClose, onFieldChange, onPosicaoC
                 file={posicao.foto}
                 inputId={`auditoria-${index}`}
                 onChange={(event) => onPosicaoChange(index, "foto", event.target.files?.[0] || null)}
+                onNativeCapture={() => onCapturePhoto(index)}
+                isNativeShell={isNativeShell}
               />
             </SectionBlock>
           ))}
@@ -698,6 +830,7 @@ function EstoqueModal({
   onItemChange,
   onAddItem,
   onRemoveItem,
+  onSalvarOffline,
   onSalvar,
 }) {
   if (!open) return null;
@@ -718,6 +851,15 @@ function EstoqueModal({
           </button>
           <button
             type="button"
+            onClick={onSalvarOffline}
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60"
+          >
+            <FaSave />
+            Salvar offline
+          </button>
+          <button
+            type="button"
             onClick={onSalvar}
             disabled={saving}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
@@ -735,12 +877,12 @@ function EstoqueModal({
           <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="sticky top-0 z-10 -mx-1 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
           <div className="text-sm font-bold uppercase tracking-wide text-slate-700">Pneus do lancamento</div>
           <button
             type="button"
             onClick={onAddItem}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
           >
             <FaPlus />
             Adicionar pneu
@@ -758,11 +900,21 @@ function EstoqueModal({
                   inputMode="numeric"
                   pattern="[0-9]*"
                 />
-                <InputField
+                <SelectField
                   label="Marca"
                   value={item.marca}
                   onChange={(value) => onItemChange(index, "marca", value)}
+                  options={MARCAS_PNEU}
                 />
+                {item.marca === "Outra" ? (
+                  <InputField
+                    label="Qual marca?"
+                    value={item.marcaOutra}
+                    onChange={(value) => onItemChange(index, "marcaOutra", value)}
+                  />
+                ) : (
+                  <div />
+                )}
                 <SelectField
                   label="Situacao"
                   value={item.situacao}
@@ -802,8 +954,11 @@ function ConsultaModal({
   tab,
   row,
   transnetSaving,
+  checkingStatusKey,
   onClose,
   onMarcarTransnet,
+  onMarcarAuditoriaStatus,
+  onMarcarEstoqueStatus,
 }) {
   if (!open || !row) return null;
 
@@ -920,6 +1075,31 @@ function ConsultaModal({
                   className="h-56 w-full rounded-2xl border border-slate-200 object-cover"
                 />
               ) : null}
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <DetailRow label="Conferencia" value={item.conferencia_status || "Pendente"} />
+                <button
+                  type="button"
+                  onClick={() => onMarcarAuditoriaStatus(item.posicao, "OK")}
+                  disabled={checkingStatusKey === `auditoria:${item.posicao}`}
+                  className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  OK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMarcarAuditoriaStatus(item.posicao, "INCORRETO")}
+                  disabled={checkingStatusKey === `auditoria:${item.posicao}`}
+                  className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                >
+                  Incorreto
+                </button>
+              </div>
+              {item.conferencia_por_nome || item.conferencia_por_login ? (
+                <DetailRow
+                  label="Conferido por"
+                  value={`${item.conferencia_por_nome || item.conferencia_por_login} em ${formatDate(item.conferencia_em)}`}
+                />
+              ) : null}
             </SectionBlock>
           ))}
         </div>
@@ -960,6 +1140,31 @@ function ConsultaModal({
                 <DetailRow label="Marca" value={item.marca} />
                 <DetailRow label="Situacao" value={item.situacao} />
               </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <DetailRow label="Conferencia" value={item.transnet_status || "Pendente"} />
+                <button
+                  type="button"
+                  onClick={() => onMarcarEstoqueStatus(item.id, "OK")}
+                  disabled={checkingStatusKey === `estoque:${item.id}`}
+                  className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  OK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMarcarEstoqueStatus(item.id, "INCORRETO")}
+                  disabled={checkingStatusKey === `estoque:${item.id}`}
+                  className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                >
+                  Incorreto
+                </button>
+              </div>
+              {item.transnet_conferido_por_nome || item.transnet_conferido_por_login ? (
+                <DetailRow
+                  label="Conferido por"
+                  value={`${item.transnet_conferido_por_nome || item.transnet_conferido_por_login} em ${formatDate(item.transnet_conferido_em)}`}
+                />
+              ) : null}
             </SectionBlock>
           ))}
         </div>
@@ -997,12 +1202,18 @@ function ConsultaModal({
 export default function PCMTrocaPneus() {
   const { user } = useContext(AuthContext);
   const isNativeShell = Capacitor.isNativePlatform();
+  const [searchParams, setSearchParams] = useSearchParams();
   const userName = safeText(user?.nome || user?.login || user?.email) || "Equipe PCM";
+  const initialTab = isTabValue(searchParams.get("aba")) ? searchParams.get("aba") : TAB_TROCA;
 
-  const [activeTab, setActiveTab] = useState(TAB_TROCA);
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [transnetSaving, setTransnetSaving] = useState(false);
+  const [checkingStatusKey, setCheckingStatusKey] = useState("");
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [syncingOffline, setSyncingOffline] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => window.navigator.onLine);
 
   const [trocas, setTrocas] = useState([]);
   const [auditorias, setAuditorias] = useState([]);
@@ -1036,6 +1247,17 @@ export default function PCMTrocaPneus() {
     dataInicio: "",
     dataFim: "",
   });
+
+  async function refreshOfflineCount() {
+    try {
+      const rows = await listSubmissions();
+      setOfflineCount(rows.length);
+      return rows;
+    } catch (error) {
+      console.error("Erro ao ler fila offline:", error);
+      return [];
+    }
+  }
 
   async function carregarTrocas() {
     const { data, error } = await supabase
@@ -1087,7 +1309,83 @@ export default function PCMTrocaPneus() {
 
   useEffect(() => {
     aplicar();
+    refreshOfflineCount().then(() => {
+      void syncOfflineQueue();
+    });
   }, []);
+
+  useEffect(() => {
+    function handleOnline() {
+      setIsOnline(true);
+      void syncOfflineQueue();
+    }
+
+    function handleOffline() {
+      setIsOnline(false);
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextTab = searchParams.get("aba");
+    if (isTabValue(nextTab) && nextTab !== activeTab) {
+      setActiveTab(nextTab);
+      return;
+    }
+
+    if (!isTabValue(nextTab)) {
+      setSearchParams({ aba: activeTab }, { replace: true });
+    }
+  }, [activeTab, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!isNativeShell) return undefined;
+
+    const handlePopState = () => {
+      if (consulta.open) {
+        closeConsulta();
+      } else if (trocaOpen) {
+        setTrocaOpen(false);
+      } else if (auditoriaOpen) {
+        setAuditoriaOpen(false);
+      } else if (estoqueOpen) {
+        setEstoqueOpen(false);
+      } else if (activeTab !== TAB_TROCA) {
+        handleTabChange(TAB_TROCA);
+      }
+
+      window.history.pushState({ inoveMobile: true }, "", `${window.location.pathname}${window.location.search}`);
+    };
+
+    window.history.pushState({ inoveMobile: true }, "", `${window.location.pathname}${window.location.search}`);
+    window.addEventListener("popstate", handlePopState);
+
+    const backListener = CapacitorApp.addListener("backButton", ({ canGoBack }) => {
+      if (consulta.open || trocaOpen || auditoriaOpen || estoqueOpen || activeTab !== TAB_TROCA) {
+        handlePopState();
+        return;
+      }
+
+      if (canGoBack) {
+        window.history.back();
+        return;
+      }
+
+      window.history.pushState({ inoveMobile: true }, "", `${window.location.pathname}${window.location.search}`);
+    });
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      backListener.then((listener) => listener.remove());
+    };
+  }, [activeTab, auditoriaOpen, consulta.open, estoqueOpen, isNativeShell, trocaOpen]);
 
   useEffect(() => {
     setTrocaForm((current) => ({ ...current, dataLancamento: nowDisplay(), quemLancou: userName }));
@@ -1205,6 +1503,11 @@ export default function PCMTrocaPneus() {
     setConsulta({ open: false, tab: activeTab, row: null });
   }
 
+  function handleTabChange(tab) {
+    setActiveTab(tab);
+    setSearchParams({ aba: tab });
+  }
+
   function limparFiltrosAtivos() {
     if (activeTab === TAB_TROCA) {
       setTrocaFiltros({
@@ -1273,6 +1576,16 @@ export default function PCMTrocaPneus() {
     setTrocaForm((current) => ({ ...current, [field]: file }));
   }
 
+  async function captureTrocaPhoto(field, fileNamePrefix) {
+    try {
+      const file = await captureNativePhoto(fileNamePrefix);
+      if (file) updateTrocaFoto(field, file);
+    } catch (error) {
+      console.error("Erro ao capturar foto da troca:", error);
+      alert("Nao foi possivel abrir a camera agora.");
+    }
+  }
+
   function updateAuditoriaField(field, value) {
     setAuditoriaForm((current) => ({ ...current, [field]: value }));
   }
@@ -1286,6 +1599,16 @@ export default function PCMTrocaPneus() {
     }));
   }
 
+  async function captureAuditoriaPhoto(index) {
+    try {
+      const file = await captureNativePhoto(`auditoria_${index + 1}`);
+      if (file) updateAuditoriaPosicao(index, "foto", file);
+    } catch (error) {
+      console.error("Erro ao capturar foto da auditoria:", error);
+      alert("Nao foi possivel abrir a camera agora.");
+    }
+  }
+
   function updateEstoqueField(field, value) {
     setEstoqueForm((current) => ({ ...current, [field]: value }));
   }
@@ -1294,7 +1617,13 @@ export default function PCMTrocaPneus() {
     setEstoqueForm((current) => ({
       ...current,
       itens: current.itens.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, [field]: value } : item
+        itemIndex === index
+          ? {
+              ...item,
+              [field]: value,
+              ...(field === "marca" && value !== "Outra" ? { marcaOutra: "" } : {}),
+            }
+          : item
       ),
     }));
   }
@@ -1316,7 +1645,200 @@ export default function PCMTrocaPneus() {
     }));
   }
 
-  async function salvarTroca() {
+  async function submitTrocaPayload(payload) {
+    const trocaId = payload.id || createClientUuid();
+    const fotoRetirada = await uploadFoto(
+      BUCKET_TROCA,
+      "trocas",
+      trocaId,
+      "numero_retirado",
+      payload.fotoRetiradoFile
+    );
+    const fotoColocada = await uploadFoto(
+      BUCKET_TROCA,
+      "trocas",
+      trocaId,
+      "numero_colocado",
+      payload.fotoColocadoFile
+    );
+
+    const insertPayload = {
+      id: trocaId,
+      ficha_troca: payload.ficha,
+      prefixo: payload.prefixoInstalacao,
+      posicao: payload.posicaoInstalacao,
+      tipo_troca: payload.tipoTroca,
+      prefixo_retirada: payload.prefixoRetirada,
+      posicao_retirada: payload.posicaoRetirada,
+      numero_fogo_retirado: payload.numeroFogoRetirado,
+      foto_numero_fogo_retirado_path: fotoRetirada.path,
+      foto_numero_fogo_retirado_url: fotoRetirada.url,
+      prefixo_instalacao: payload.prefixoInstalacao,
+      posicao_instalacao: payload.posicaoInstalacao,
+      numero_fogo_colocado: payload.numeroFogoColocado,
+      foto_numero_fogo_colocado_path: fotoColocada.path,
+      foto_numero_fogo_colocado_url: fotoColocada.url,
+      numero_fogo_pneu: payload.numeroFogoColocado,
+      foto_numero_fogo_path: fotoColocada.path,
+      foto_numero_fogo_url: fotoColocada.url,
+      observacoes: payload.observacoes,
+      criado_por_login: payload.criadoPorLogin,
+      criado_por_nome: payload.criadoPorNome,
+      criado_por_id: payload.criadoPorId,
+      origem: "INOVE_WEB_APP",
+    };
+
+    const { error } = await supabase.from("pcm_troca_pneus").insert([insertPayload]);
+    if (error) throw error;
+  }
+
+  async function submitAuditoriaPayload(payload) {
+    const auditoriaId = payload.id || createClientUuid();
+    const posicoes = [];
+
+    for (let index = 0; index < payload.posicoes.length; index += 1) {
+      const item = payload.posicoes[index];
+      const uploaded = await uploadFoto(
+        BUCKET_AUDITORIA,
+        "auditorias",
+        auditoriaId,
+        `posicao_${index + 1}`,
+        item.fotoFile
+      );
+
+      posicoes.push({
+        posicao: item.posicao,
+        numero_fogo: item.numeroFogo,
+        foto_path: uploaded.path,
+        foto_url: uploaded.url,
+      });
+    }
+
+    const { error } = await supabase.from("pcm_auditoria_pneus").insert([
+      {
+        id: auditoriaId,
+        ficha_auditoria: payload.ficha,
+        prefixo: payload.prefixo,
+        posicoes,
+        observacoes: payload.observacoes,
+        criado_por_login: payload.criadoPorLogin,
+        criado_por_nome: payload.criadoPorNome,
+        criado_por_id: payload.criadoPorId,
+        origem: "INOVE_WEB_APP",
+      },
+    ]);
+
+    if (error) throw error;
+  }
+
+  async function submitEstoquePayload(payload) {
+    const rows = payload.itens.map((item) => ({
+      id: createClientUuid(),
+      ficha_estoque: payload.ficha,
+      numero_pneu: item.numero_pneu,
+      marca: item.marca,
+      situacao: item.situacao,
+      observacoes: payload.observacoes,
+      criado_por_login: payload.criadoPorLogin,
+      criado_por_nome: payload.criadoPorNome,
+      criado_por_id: payload.criadoPorId,
+      origem: "INOVE_WEB_APP",
+    }));
+
+    const { error } = await supabase.from("pcm_estoque_pneus").insert(rows);
+    if (error) throw error;
+  }
+
+  async function queueTrocaSubmission(payload) {
+    await enqueueSubmission({
+      id: createClientUuid(),
+      type: TAB_TROCA,
+      createdAt: new Date().toISOString(),
+      payload: {
+        ...payload,
+        fotoRetiradoFile: await serializeFile(payload.fotoRetiradoFile),
+        fotoColocadoFile: await serializeFile(payload.fotoColocadoFile),
+      },
+    });
+    await refreshOfflineCount();
+  }
+
+  async function queueAuditoriaSubmission(payload) {
+    await enqueueSubmission({
+      id: createClientUuid(),
+      type: TAB_AUDITORIA,
+      createdAt: new Date().toISOString(),
+      payload: {
+        ...payload,
+        posicoes: await Promise.all(
+          payload.posicoes.map(async (item) => ({
+            ...item,
+            fotoFile: await serializeFile(item.fotoFile),
+          }))
+        ),
+      },
+    });
+    await refreshOfflineCount();
+  }
+
+  async function queueEstoqueSubmission(payload) {
+    await enqueueSubmission({
+      id: createClientUuid(),
+      type: TAB_ESTOQUE,
+      createdAt: new Date().toISOString(),
+      payload,
+    });
+    await refreshOfflineCount();
+  }
+
+  async function syncOfflineQueue() {
+    if (!window.navigator.onLine) return;
+
+    const pendentes = await listSubmissions();
+    if (!pendentes.length) {
+      setOfflineCount(0);
+      return;
+    }
+
+    setSyncingOffline(true);
+
+    try {
+      for (const item of pendentes) {
+        if (item.type === TAB_TROCA) {
+          await submitTrocaPayload({
+            ...item.payload,
+            fotoRetiradoFile: base64ToFile(item.payload.fotoRetiradoFile),
+            fotoColocadoFile: base64ToFile(item.payload.fotoColocadoFile),
+          });
+        }
+
+        if (item.type === TAB_AUDITORIA) {
+          await submitAuditoriaPayload({
+            ...item.payload,
+            posicoes: item.payload.posicoes.map((posicao) => ({
+              ...posicao,
+              fotoFile: base64ToFile(posicao.fotoFile),
+            })),
+          });
+        }
+
+        if (item.type === TAB_ESTOQUE) {
+          await submitEstoquePayload(item.payload);
+        }
+
+        await removeSubmission(item.id);
+      }
+
+      await Promise.all([carregarTrocas(), carregarAuditorias(), carregarEstoque()]);
+      await refreshOfflineCount();
+    } catch (error) {
+      console.error("Erro ao sincronizar fila offline:", error);
+    } finally {
+      setSyncingOffline(false);
+    }
+  }
+
+  async function salvarTroca(mode = "online") {
     const ficha = safeText(trocaForm.ficha);
     const tipoTroca = safeText(trocaForm.tipoTroca);
     const prefixoInstalacao = safeText(trocaForm.prefixoInstalacao);
@@ -1344,54 +1866,58 @@ export default function PCMTrocaPneus() {
       return;
     }
 
+    const payload = {
+      id: createClientUuid(),
+      ficha,
+      tipoTroca,
+      prefixoRetirada,
+      posicaoRetirada,
+      numeroFogoRetirado,
+      fotoRetiradoFile: trocaForm.fotoRetirado,
+      prefixoInstalacao,
+      posicaoInstalacao,
+      numeroFogoColocado,
+      fotoColocadoFile: trocaForm.fotoColocado,
+      observacoes,
+      criadoPorLogin: safeText(user?.login || user?.email),
+      criadoPorNome: safeText(user?.nome),
+      criadoPorId: safeText(user?.auth_user_id || user?.id),
+    };
+
     try {
       setSaving(true);
-      const trocaId = createClientUuid();
-      const fotoRetirada = await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_retirado", trocaForm.fotoRetirado);
-      const fotoColocada = await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_colocado", trocaForm.fotoColocado);
 
-      const payload = {
-        id: trocaId,
-        ficha_troca: ficha,
-        prefixo: prefixoInstalacao,
-        posicao: posicaoInstalacao,
-        tipo_troca: tipoTroca,
-        prefixo_retirada: prefixoRetirada,
-        posicao_retirada: posicaoRetirada,
-        numero_fogo_retirado: numeroFogoRetirado,
-        foto_numero_fogo_retirado_path: fotoRetirada.path,
-        foto_numero_fogo_retirado_url: fotoRetirada.url,
-        prefixo_instalacao: prefixoInstalacao,
-        posicao_instalacao: posicaoInstalacao,
-        numero_fogo_colocado: numeroFogoColocado,
-        foto_numero_fogo_colocado_path: fotoColocada.path,
-        foto_numero_fogo_colocado_url: fotoColocada.url,
-        numero_fogo_pneu: numeroFogoColocado,
-        foto_numero_fogo_path: fotoColocada.path,
-        foto_numero_fogo_url: fotoColocada.url,
-        observacoes,
-        criado_por_login: safeText(user?.login || user?.email),
-        criado_por_nome: safeText(user?.nome),
-        criado_por_id: safeText(user?.auth_user_id || user?.id),
-        origem: "INOVE_WEB_APP",
-      };
-
-      const { error } = await supabase.from("pcm_troca_pneus").insert([payload]);
-      if (error) throw error;
+      if (mode === "offline" || !window.navigator.onLine) {
+        await queueTrocaSubmission(payload);
+      } else {
+        await submitTrocaPayload(payload);
+      }
 
       setTrocaOpen(false);
-      const data = await carregarTrocas();
-      setTrocaForm(createTrocaForm(buildNextFicha(data, "ficha_troca", "TP"), userName));
-      alert("Ficha de troca salva com sucesso.");
+      if (mode === "offline" || !window.navigator.onLine) {
+        setTrocaForm(createTrocaForm(trocaForm.ficha, userName));
+        alert("Ficha salva offline. Ela sera enviada quando a internet voltar.");
+      } else {
+        const data = await carregarTrocas();
+        setTrocaForm(createTrocaForm(buildNextFicha(data, "ficha_troca", "TP"), userName));
+        alert("Ficha de troca salva com sucesso.");
+      }
     } catch (error) {
       console.error("Erro ao salvar troca de pneus:", error);
+      if (mode !== "offline" && isNetworkError(error)) {
+        await queueTrocaSubmission(payload);
+        setTrocaOpen(false);
+        setTrocaForm(createTrocaForm(trocaForm.ficha, userName));
+        alert("Sem internet no envio. A ficha foi guardada offline e sera enviada depois.");
+        return;
+      }
       alert(error?.message || "Nao foi possivel salvar a troca.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function salvarAuditoria() {
+  async function salvarAuditoria(mode = "online") {
     const ficha = safeText(auditoriaForm.ficha);
     const prefixo = safeText(auditoriaForm.prefixo);
     const observacoes = safeText(auditoriaForm.observacoes);
@@ -1410,57 +1936,55 @@ export default function PCMTrocaPneus() {
       return;
     }
 
+    const payload = {
+      id: createClientUuid(),
+      ficha,
+      prefixo,
+      observacoes,
+      criadoPorLogin: safeText(user?.login || user?.email),
+      criadoPorNome: safeText(user?.nome),
+      criadoPorId: safeText(user?.auth_user_id || user?.id),
+      posicoes: auditoriaForm.posicoes.map((item) => ({
+        posicao: item.posicao,
+        numeroFogo: safeText(item.numeroFogo),
+        fotoFile: item.foto,
+      })),
+    };
+
     try {
       setSaving(true);
-      const auditoriaId = createClientUuid();
-      const posicoes = [];
 
-      for (let index = 0; index < auditoriaForm.posicoes.length; index += 1) {
-        const item = auditoriaForm.posicoes[index];
-        const uploaded = await uploadFoto(
-          BUCKET_AUDITORIA,
-          "auditorias",
-          auditoriaId,
-          `posicao_${index + 1}`,
-          item.foto
-        );
-
-        posicoes.push({
-          posicao: item.posicao,
-          numero_fogo: safeText(item.numeroFogo),
-          foto_path: uploaded.path,
-          foto_url: uploaded.url,
-        });
+      if (mode === "offline" || !window.navigator.onLine) {
+        await queueAuditoriaSubmission(payload);
+      } else {
+        await submitAuditoriaPayload(payload);
       }
 
-      const payload = {
-        id: auditoriaId,
-        ficha_auditoria: ficha,
-        prefixo,
-        posicoes,
-        observacoes,
-        criado_por_login: safeText(user?.login || user?.email),
-        criado_por_nome: safeText(user?.nome),
-        criado_por_id: safeText(user?.auth_user_id || user?.id),
-        origem: "INOVE_WEB_APP",
-      };
-
-      const { error } = await supabase.from("pcm_auditoria_pneus").insert([payload]);
-      if (error) throw error;
-
       setAuditoriaOpen(false);
-      const data = await carregarAuditorias();
-      setAuditoriaForm(createAuditoriaForm(buildNextFicha(data, "ficha_auditoria", "AP"), userName));
-      alert("Auditoria salva com sucesso.");
+      if (mode === "offline" || !window.navigator.onLine) {
+        setAuditoriaForm(createAuditoriaForm(auditoriaForm.ficha, userName));
+        alert("Auditoria salva offline. Ela sera enviada quando a internet voltar.");
+      } else {
+        const data = await carregarAuditorias();
+        setAuditoriaForm(createAuditoriaForm(buildNextFicha(data, "ficha_auditoria", "AP"), userName));
+        alert("Auditoria salva com sucesso.");
+      }
     } catch (error) {
       console.error("Erro ao salvar auditoria:", error);
+      if (mode !== "offline" && isNetworkError(error)) {
+        await queueAuditoriaSubmission(payload);
+        setAuditoriaOpen(false);
+        setAuditoriaForm(createAuditoriaForm(auditoriaForm.ficha, userName));
+        alert("Sem internet no envio. A auditoria foi guardada offline e sera enviada depois.");
+        return;
+      }
       alert(error?.message || "Nao foi possivel salvar a auditoria.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function salvarEstoque() {
+  async function salvarEstoque(mode = "online") {
     const ficha = safeText(estoqueForm.ficha);
     const observacoes = safeText(estoqueForm.observacoes);
 
@@ -1471,7 +1995,7 @@ export default function PCMTrocaPneus() {
 
     const itens = estoqueForm.itens.map((item) => ({
       numero_pneu: safeText(item.numeroPneu),
-      marca: safeText(item.marca),
+      marca: item.marca === "Outra" ? safeText(item.marcaOutra) : safeText(item.marca),
       situacao: safeText(item.situacao),
     }));
 
@@ -1480,30 +2004,42 @@ export default function PCMTrocaPneus() {
       return;
     }
 
+    const payload = {
+      ficha,
+      observacoes,
+      criadoPorLogin: safeText(user?.login || user?.email),
+      criadoPorNome: safeText(user?.nome),
+      criadoPorId: safeText(user?.auth_user_id || user?.id),
+      itens,
+    };
+
     try {
       setSaving(true);
-      const payload = itens.map((item) => ({
-        id: createClientUuid(),
-        ficha_estoque: ficha,
-        numero_pneu: item.numero_pneu,
-        marca: item.marca,
-        situacao: item.situacao,
-        observacoes,
-        criado_por_login: safeText(user?.login || user?.email),
-        criado_por_nome: safeText(user?.nome),
-        criado_por_id: safeText(user?.auth_user_id || user?.id),
-        origem: "INOVE_WEB_APP",
-      }));
 
-      const { error } = await supabase.from("pcm_estoque_pneus").insert(payload);
-      if (error) throw error;
+      if (mode === "offline" || !window.navigator.onLine) {
+        await queueEstoqueSubmission(payload);
+      } else {
+        await submitEstoquePayload(payload);
+      }
 
       setEstoqueOpen(false);
-      const data = await carregarEstoque();
-      setEstoqueForm(createEstoqueForm(buildNextFicha(data, "ficha_estoque", "EP"), userName));
-      alert("Estoque salvo com sucesso.");
+      if (mode === "offline" || !window.navigator.onLine) {
+        setEstoqueForm(createEstoqueForm(estoqueForm.ficha, userName));
+        alert("Estoque salvo offline. Ele sera enviado quando a internet voltar.");
+      } else {
+        const data = await carregarEstoque();
+        setEstoqueForm(createEstoqueForm(buildNextFicha(data, "ficha_estoque", "EP"), userName));
+        alert("Estoque salvo com sucesso.");
+      }
     } catch (error) {
       console.error("Erro ao salvar estoque:", error);
+      if (mode !== "offline" && isNetworkError(error)) {
+        await queueEstoqueSubmission(payload);
+        setEstoqueOpen(false);
+        setEstoqueForm(createEstoqueForm(estoqueForm.ficha, userName));
+        alert("Sem internet no envio. O estoque foi guardado offline e sera enviado depois.");
+        return;
+      }
       alert(error?.message || "Nao foi possivel salvar o estoque.");
     } finally {
       setSaving(false);
@@ -1536,6 +2072,79 @@ export default function PCMTrocaPneus() {
       alert(error?.message || "Nao foi possivel gravar o lancamento no Transnet.");
     } finally {
       setTransnetSaving(false);
+    }
+  }
+
+  async function marcarAuditoriaStatus(posicao, status) {
+    if (!consulta.row?.id) return;
+
+    const key = `auditoria:${posicao}`;
+    try {
+      setCheckingStatusKey(key);
+      const nextPosicoes = getAuditoriaPosicoes(consulta.row).map((item) =>
+        item.posicao === posicao
+          ? {
+              ...item,
+              conferencia_status: status,
+              conferencia_em: new Date().toISOString(),
+              conferencia_por_nome: safeText(user?.nome),
+              conferencia_por_login: safeText(user?.login || user?.email),
+              conferencia_por_id: safeText(user?.auth_user_id || user?.id),
+            }
+          : item
+      );
+
+      const { error } = await supabase
+        .from("pcm_auditoria_pneus")
+        .update({ posicoes: nextPosicoes })
+        .eq("id", consulta.row.id);
+
+      if (error) throw error;
+
+      const updatedRow = { ...consulta.row, posicoes: nextPosicoes };
+      setAuditorias((current) => current.map((item) => (item.id === updatedRow.id ? updatedRow : item)));
+      setConsulta((current) => ({ ...current, row: updatedRow }));
+    } catch (error) {
+      console.error("Erro ao conferir auditoria:", error);
+      alert(error?.message || "Nao foi possivel atualizar a conferencia da auditoria.");
+    } finally {
+      setCheckingStatusKey("");
+    }
+  }
+
+  async function marcarEstoqueStatus(itemId, status) {
+    if (!itemId) return;
+
+    const key = `estoque:${itemId}`;
+    const payload = {
+      transnet_status: status,
+      transnet_conferido_em: new Date().toISOString(),
+      transnet_conferido_por_nome: safeText(user?.nome),
+      transnet_conferido_por_login: safeText(user?.login || user?.email),
+      transnet_conferido_por_id: safeText(user?.auth_user_id || user?.id),
+    };
+
+    try {
+      setCheckingStatusKey(key);
+      const { error } = await supabase.from("pcm_estoque_pneus").update(payload).eq("id", itemId);
+      if (error) throw error;
+
+      setEstoqueRows((current) =>
+        current.map((item) => (item.id === itemId ? { ...item, ...payload } : item))
+      );
+
+      const updatedGroup = {
+        ...consulta.row,
+        itens: (consulta.row?.itens || []).map((item) =>
+          item.id === itemId ? { ...item, ...payload } : item
+        ),
+      };
+      setConsulta((current) => ({ ...current, row: updatedGroup }));
+    } catch (error) {
+      console.error("Erro ao conferir estoque:", error);
+      alert(error?.message || "Nao foi possivel atualizar a conferencia do estoque.");
+    } finally {
+      setCheckingStatusKey("");
     }
   }
 
@@ -1643,29 +2252,38 @@ export default function PCMTrocaPneus() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 overflow-x-auto pb-1 sm:flex-row">
-        <TabButton
-          active={activeTab === TAB_TROCA}
-          onClick={() => setActiveTab(TAB_TROCA)}
-          icon={<FaClipboardList className="text-blue-600" />}
-          title="Troca de pneus"
-          count={trocas.length}
-        />
-        <TabButton
-          active={activeTab === TAB_AUDITORIA}
-          onClick={() => setActiveTab(TAB_AUDITORIA)}
-          icon={<FaClipboardCheck className="text-violet-600" />}
-          title="Auditoria de pneus"
-          count={auditorias.length}
-        />
-        <TabButton
-          active={activeTab === TAB_ESTOQUE}
-          onClick={() => setActiveTab(TAB_ESTOQUE)}
-          icon={<FaWarehouse className="text-amber-600" />}
-          title="Estoque de pneus"
-          count={estoqueRows.length}
-        />
-      </div>
+      {!isOnline || offlineCount > 0 ? (
+        <div className={`rounded-2xl border px-4 py-3 text-sm shadow-sm ${isOnline ? "border-amber-200 bg-amber-50 text-amber-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+          {!isOnline ? "Sem internet. Você pode usar 'Salvar offline' e o app vai subir depois automaticamente." : null}
+          {offlineCount > 0 ? ` ${offlineCount} envio(s) pendente(s) na fila${syncingOffline ? " · sincronizando agora" : ""}.` : null}
+        </div>
+      ) : null}
+
+      {!isNativeShell ? (
+        <div className="flex flex-col gap-3 overflow-x-auto pb-1 sm:flex-row">
+          <TabButton
+            active={activeTab === TAB_TROCA}
+            onClick={() => handleTabChange(TAB_TROCA)}
+            icon={<FaClipboardList className="text-blue-600" />}
+            title="Troca de pneus"
+            count={trocas.length}
+          />
+          <TabButton
+            active={activeTab === TAB_AUDITORIA}
+            onClick={() => handleTabChange(TAB_AUDITORIA)}
+            icon={<FaClipboardCheck className="text-violet-600" />}
+            title="Auditoria de pneus"
+            count={auditorias.length}
+          />
+          <TabButton
+            active={activeTab === TAB_ESTOQUE}
+            onClick={() => handleTabChange(TAB_ESTOQUE)}
+            icon={<FaWarehouse className="text-amber-600" />}
+            title="Estoque de pneus"
+            count={estoqueRows.length}
+          />
+        </div>
+      ) : null}
 
       {activeTab === TAB_TROCA ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
@@ -2056,7 +2674,10 @@ export default function PCMTrocaPneus() {
         onClose={() => setTrocaOpen(false)}
         onFieldChange={updateTrocaField}
         onFotoChange={updateTrocaFoto}
+        onCapturePhoto={captureTrocaPhoto}
+        onSalvarOffline={() => salvarTroca("offline")}
         onSalvar={salvarTroca}
+        isNativeShell={isNativeShell}
       />
 
       <AuditoriaModal
@@ -2066,7 +2687,10 @@ export default function PCMTrocaPneus() {
         onClose={() => setAuditoriaOpen(false)}
         onFieldChange={updateAuditoriaField}
         onPosicaoChange={updateAuditoriaPosicao}
+        onCapturePhoto={captureAuditoriaPhoto}
+        onSalvarOffline={() => salvarAuditoria("offline")}
         onSalvar={salvarAuditoria}
+        isNativeShell={isNativeShell}
       />
 
       <EstoqueModal
@@ -2078,6 +2702,7 @@ export default function PCMTrocaPneus() {
         onItemChange={updateEstoqueItem}
         onAddItem={addEstoqueItem}
         onRemoveItem={removeEstoqueItem}
+        onSalvarOffline={() => salvarEstoque("offline")}
         onSalvar={salvarEstoque}
       />
 
@@ -2086,8 +2711,11 @@ export default function PCMTrocaPneus() {
         tab={consulta.tab}
         row={consulta.row}
         transnetSaving={transnetSaving}
+        checkingStatusKey={checkingStatusKey}
         onClose={closeConsulta}
         onMarcarTransnet={marcarTransnet}
+        onMarcarAuditoriaStatus={marcarAuditoriaStatus}
+        onMarcarEstoqueStatus={marcarEstoqueStatus}
       />
     </div>
   );

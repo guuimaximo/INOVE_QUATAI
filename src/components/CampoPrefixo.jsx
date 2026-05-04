@@ -17,6 +17,10 @@ export default function CampoPrefixo({
   const [open, setOpen] = useState(false);
   const [errorLoading, setErrorLoading] = useState(null);
 
+  function normalizePrefixSearch(text) {
+    return String(text || "").trim().toLowerCase().replace(/^w/, "");
+  }
+
   // 1. Carrega todos os prefixos (agora inclui cluster)
   useEffect(() => {
     setErrorLoading(null);
@@ -38,12 +42,12 @@ export default function CampoPrefixo({
 
   // 2. Filtra os prefixos
   const filtrados = useMemo(() => {
-    const s = String(q || "").trim().toLowerCase();
+    const s = normalizePrefixSearch(q);
     if (!s) return [];
     if (!Array.isArray(todos)) return [];
 
     return todos
-      .filter((p) => String(p.codigo || "").toLowerCase().startsWith(s))
+      .filter((p) => normalizePrefixSearch(p.codigo).startsWith(s))
       .slice(0, 8);
   }, [q, todos]);
 
@@ -62,6 +66,8 @@ export default function CampoPrefixo({
     (todos || []).forEach((p) => {
       const cod = String(p?.codigo || "").trim();
       if (cod) m.set(cod, p);
+      const normalized = normalizePrefixSearch(cod);
+      if (normalized) m.set(normalized, p);
     });
     return m;
   }, [todos]);
@@ -92,7 +98,7 @@ export default function CampoPrefixo({
     onChange?.(v);
 
     if (onChangeCluster) {
-      const row = mapByCodigo.get(String(v || "").trim());
+      const row = mapByCodigo.get(String(v || "").trim()) || mapByCodigo.get(normalizePrefixSearch(v));
       const cl = String(row?.cluster || "").trim();
       onChangeCluster(cl);
     }

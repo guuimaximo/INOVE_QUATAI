@@ -62,8 +62,8 @@ export default function UpdateAppPrompt() {
               <RefreshCw size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900">Atualizacao disponivel</h2>
-              <p className="mt-1 text-sm text-slate-500">Uma versao nova do Inove ja esta pronta para este computador.</p>
+              <h2 className="text-lg font-black text-slate-900">Atualização disponível</h2>
+              <p className="mt-1 text-sm text-slate-500">Uma versão nova do Inove já está pronta para este computador.</p>
             </div>
           </div>
 
@@ -71,14 +71,14 @@ export default function UpdateAppPrompt() {
             type="button"
             onClick={() => setVisible(false)}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Fechar aviso de atualizacao"
+            aria-label="Fechar aviso de atualização"
           >
             <X size={18} />
           </button>
         </div>
 
         <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Clique em <span className="font-bold">Atualizar</span> para carregar o codigo mais recente sem precisar fechar o app.
+          Clique em <span className="font-bold">Atualizar</span> para carregar o código mais recente sem precisar fechar o app.
         </div>
 
         <div className="mt-6 flex justify-end gap-3">

@@ -125,6 +125,22 @@ function isResumoFile(name = "") {
   return n.includes("RESUMO");
 }
 
+function normalizeSugestaoRecord(item = {}) {
+  return {
+    motorista_chapa: item.motorista_chapa || item.chapa || null,
+    motorista_nome: item.motorista_nome || null,
+    linha_mais_rodada: item.linha_mais_rodada || null,
+    km_percorrido: item.km_percorrido,
+    combustivel_consumido: item.combustivel_consumido,
+    kml_realizado: item.kml_realizado,
+    kml_meta: item.kml_meta,
+    combustivel_desperdicado: item.combustivel_desperdicado,
+    detalhes_json: item.detalhes_json || null,
+    mes_ref: item.mes_ref || null,
+    created_at: item.created_at || null,
+  };
+}
+
 function buildIndividualFallbackItems(mesRef = "") {
   if (mesRef !== "2026-04") return [];
 
@@ -852,7 +868,37 @@ function DieselAgenteView({ onAlert }) {
       if (!mountedRef.current) return;
       setUltimaAnalise(ultAnalise || null);
 
-      const { data: sug } = await supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500);
+      let sugestoesFonte = [];
+      const fontesSugestoes = [
+        () => supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500),
+        () => supabaseBCNT.from("v_sugestoes_acompanhamento_30d").select("*").limit(500),
+        () =>
+          supabase
+            .from("diesel_sugestoes_acompanhamento")
+            .select(
+              "chapa, motorista_chapa, motorista_nome, linha_mais_rodada, km_percorrido, combustivel_consumido, kml_realizado, kml_meta, combustivel_desperdicado, detalhes_json, mes_ref, created_at"
+            )
+            .order("mes_ref", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(500),
+        () =>
+          supabaseBCNT
+            .from("diesel_sugestoes_acompanhamento")
+            .select(
+              "chapa, motorista_chapa, motorista_nome, linha_mais_rodada, km_percorrido, combustivel_consumido, kml_realizado, kml_meta, combustivel_desperdicado, detalhes_json, mes_ref, created_at"
+            )
+            .order("mes_ref", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(500),
+      ];
+
+      for (const buscar of fontesSugestoes) {
+        const { data } = await buscar();
+        if (Array.isArray(data) && data.length) {
+          sugestoesFonte = data.map(normalizeSugestaoRecord);
+          break;
+        }
+      }
 
       const { data: acompanhamentos } = await supabase
         .from("diesel_acompanhamentos")
@@ -864,7 +910,7 @@ function DieselAgenteView({ onAlert }) {
         mapStatusAtivo[a.motorista_chapa] = a.status;
       });
 
-      const sugestoesComStatus = (sug || []).map((s) => ({
+      const sugestoesComStatus = sugestoesFonte.map((s) => ({
         ...s,
         status_atual: mapStatusAtivo[s.motorista_chapa] || null,
       }));

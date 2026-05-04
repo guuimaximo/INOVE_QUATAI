@@ -1,4 +1,4 @@
-const CACHE_NAME = "inove-app-shell-v1";
+const CACHE_NAME = "inove-app-shell-v2";
 const ASSET_PATHS = ["/", "/index.html", "/manifest.webmanifest", "/favicon.png"];
 
 self.addEventListener("message", (event) => {

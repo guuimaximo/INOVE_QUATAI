@@ -425,7 +425,7 @@ export default function Sidebar() {
         {user && (
           <div className="text-center w-full">
             <p className="text-sm font-semibold text-white">OlÃ¡, {user.nome?.split(" ")[0]} ðŸ‘‹</p>
-            <p className="mt-1 text-xs text-blue-200">Seu painel de operacao</p>
+            <p className="mt-1 text-xs text-blue-200">Seu painel de operação</p>
 
             {podeVerFarol && (
               <button

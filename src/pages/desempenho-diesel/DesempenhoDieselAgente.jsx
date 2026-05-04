@@ -72,6 +72,17 @@ function fmtBRDateTime(v) {
   return dt.toLocaleString("pt-BR");
 }
 
+function maxIsoDate(...values) {
+  const valid = values
+    .flat()
+    .filter(Boolean)
+    .map((v) => new Date(v))
+    .filter((d) => !Number.isNaN(d.getTime()));
+
+  if (!valid.length) return null;
+  return new Date(Math.max(...valid.map((d) => d.getTime()))).toISOString();
+}
+
 function getPublicUrl(bucket, path, baseUrl = SUPABASE_BASE_URL) {
   if (!path) return null;
   if (path.startsWith("http")) return path;
@@ -126,12 +137,19 @@ function isResumoFile(name = "") {
 }
 
 function normalizeSugestaoRecord(item = {}) {
+  const chapa = item.motorista_chapa || item.chapa || null;
+
   return {
-    motorista_chapa: item.motorista_chapa || item.chapa || null,
+    motorista_chapa: chapa,
+    chapa,
     motorista_nome: item.motorista_nome || null,
     linha_mais_rodada: item.linha_mais_rodada || null,
     km_percorrido: item.km_percorrido,
-    combustivel_consumido: item.combustivel_consumido,
+    combustivel_consumido:
+      item.combustivel_consumido ??
+      item.consumo_realizado ??
+      item.litros_consumidos ??
+      0,
     kml_realizado: item.kml_realizado,
     kml_meta: item.kml_meta,
     combustivel_desperdicado: item.combustivel_desperdicado,
@@ -432,7 +450,6 @@ function ParcialMeritocraciaView({ onAlert }) {
   const [individuais, setIndividuais] = useState([]);
   const [consolidado, setConsolidado] = useState(null);
   const [resumo, setResumo] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [arquivosRaiz, setArquivosRaiz] = useState([]);
   const [debugStorage, setDebugStorage] = useState({ root: [], individuais: [], pathRoot: "", pathIndividuais: "" });
 
@@ -579,7 +596,6 @@ function ParcialMeritocraciaView({ onAlert }) {
             }
           : null
       );
-      setLastUpdated(new Date().toISOString());
     } catch (e) {
       onAlert?.({ type: "error", message: `Erro ao carregar parciais: ${e?.message || String(e)}` });
     } finally {
@@ -620,12 +636,26 @@ function ParcialMeritocraciaView({ onAlert }) {
   };
 
   const totalIndividuais = individuais.length;
+  const ultimaDataParcial = useMemo(() => {
+    return maxIsoDate(
+      (individuais || []).map((item) => item.updated_at),
+      consolidado?.updated_at,
+      resumo?.updated_at
+    );
+  }, [individuais, consolidado, resumo]);
 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border shadow-sm p-5 space-y-5">
         <SectionHeader
-          title="Parcial de Meritocracia"
+          title={
+            <div className="flex items-center gap-3 flex-wrap">
+              <span>Parcial de Meritocracia</span>
+              <span className="text-sm font-bold text-rose-600">
+                {ultimaDataParcial ? `Última parcial: ${fmtBRDateTime(ultimaDataParcial)}` : "Última parcial: não encontrada"}
+              </span>
+            </div>
+          }
           description="Central mensal para geração e consulta dos PDFs individuais, consolidado de motoristas e resumo geral."
           right={
             <button onClick={carregarArquivos} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar arquivos">
@@ -678,9 +708,6 @@ function ParcialMeritocraciaView({ onAlert }) {
           </div>
         </div>
 
-        <div className="text-xs text-slate-500">
-          Última atualização local: <span className="font-bold text-slate-700">{lastUpdated ? fmtBRDateTime(lastUpdated) : "-"}</span>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -847,7 +874,7 @@ function DieselAgenteView({ onAlert }) {
       if (!mountedRef.current) return;
       setUserSession(sess?.session || null);
 
-      const { data: rel } = await supabase
+      const { data: rel, error: relError } = await supabase
         .from("relatorios_gerados")
         .select("*")
         .eq("tipo", "diesel_gerencial")
@@ -855,64 +882,78 @@ function DieselAgenteView({ onAlert }) {
         .limit(1)
         .maybeSingle();
 
+      if (relError) {
+        console.error("Erro ao buscar relatorios_gerados:", relError);
+      }
+
       if (!mountedRef.current) return;
       setUltimoGerencial(rel || null);
 
-      const { data: ultAnalise } = await supabase
+      const { data: ultAnalise, error: ultAnaliseError } = await supabase
         .from("diesel_analise_gerencial_snapshot")
         .select("id, report_id, periodo_label, mes_atual_nome, created_at")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
+      if (ultAnaliseError) {
+        console.error("Erro ao buscar diesel_analise_gerencial_snapshot:", ultAnaliseError);
+      }
+
       if (!mountedRef.current) return;
       setUltimaAnalise(ultAnalise || null);
 
       let sugestoesFonte = [];
-      const fontesSugestoes = [
-        () => supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500),
-        () => supabaseBCNT.from("v_sugestoes_acompanhamento_30d").select("*").limit(500),
-        () =>
-          supabase
-            .from("diesel_sugestoes_acompanhamento")
-            .select(
-              "chapa, motorista_chapa, motorista_nome, linha_mais_rodada, km_percorrido, combustivel_consumido, kml_realizado, kml_meta, combustivel_desperdicado, detalhes_json, mes_ref, created_at"
-            )
-            .order("mes_ref", { ascending: false })
-            .order("created_at", { ascending: false })
-            .limit(500),
-        () =>
-          supabaseBCNT
-            .from("diesel_sugestoes_acompanhamento")
-            .select(
-              "chapa, motorista_chapa, motorista_nome, linha_mais_rodada, km_percorrido, combustivel_consumido, kml_realizado, kml_meta, combustivel_desperdicado, detalhes_json, mes_ref, created_at"
-            )
-            .order("mes_ref", { ascending: false })
-            .order("created_at", { ascending: false })
-            .limit(500),
-      ];
 
-      for (const buscar of fontesSugestoes) {
-        const { data } = await buscar();
-        if (Array.isArray(data) && data.length) {
-          sugestoesFonte = data.map(normalizeSugestaoRecord);
-          break;
+      const viewResp = await supabase
+        .from("v_sugestoes_acompanhamento_30d")
+        .select("*")
+        .limit(500);
+
+      if (viewResp.error) {
+        console.error("Erro ao buscar v_sugestoes_acompanhamento_30d:", viewResp.error);
+      }
+
+      if (Array.isArray(viewResp.data) && viewResp.data.length > 0) {
+        sugestoesFonte = viewResp.data.map(normalizeSugestaoRecord);
+      }
+
+      if (!sugestoesFonte.length) {
+        const tabelaResp = await supabase
+          .from("diesel_sugestoes_acompanhamento")
+          .select(
+            "chapa, motorista_chapa, motorista_nome, linha_mais_rodada, km_percorrido, consumo_realizado, combustivel_consumido, kml_realizado, kml_meta, combustivel_desperdicado, detalhes_json, mes_ref, created_at"
+          )
+          .order("mes_ref", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        if (tabelaResp.error) {
+          console.error("Erro ao buscar diesel_sugestoes_acompanhamento:", tabelaResp.error);
+        }
+
+        if (Array.isArray(tabelaResp.data) && tabelaResp.data.length > 0) {
+          sugestoesFonte = tabelaResp.data.map(normalizeSugestaoRecord);
         }
       }
 
-      const { data: acompanhamentos } = await supabase
+      const { data: acompanhamentos, error: acompanhamentosError } = await supabase
         .from("diesel_acompanhamentos")
         .select("motorista_chapa, status")
         .not("status", "in", '("OK","ENCERRADO","ATAS")');
 
+      if (acompanhamentosError) {
+        console.error("Erro ao buscar diesel_acompanhamentos:", acompanhamentosError);
+      }
+
       const mapStatusAtivo = {};
       (acompanhamentos || []).forEach((a) => {
-        mapStatusAtivo[a.motorista_chapa] = a.status;
+        mapStatusAtivo[String(a.motorista_chapa)] = a.status;
       });
 
       const sugestoesComStatus = sugestoesFonte.map((s) => ({
         ...s,
-        status_atual: mapStatusAtivo[s.motorista_chapa] || null,
+        status_atual: mapStatusAtivo[String(s.motorista_chapa)] || null,
       }));
 
       if (!mountedRef.current) return;
@@ -1129,6 +1170,9 @@ function DieselAgenteView({ onAlert }) {
 
   const kmlGeralMeta = litrosTeoricosTotal > 0 ? totalKm / litrosTeoricosTotal : 0;
   const ultimoPdfUrl = getPublicUrl(BUCKET_RELATORIOS, ultimoGerencial?.arquivo_pdf_path);
+  const ultimoGerencialDataLabel = ultimoGerencial?.created_at
+    ? `Último relatório: ${fmtBRDateTime(ultimoGerencial.created_at)}`
+    : "Último relatório: não encontrado";
   const ultimaAnaliseLabel = ultimaAnalise
     ? `Última análise gerada: Relatório #${ultimaAnalise.report_id || "-"} · ${ultimaAnalise.mes_atual_nome || ultimaAnalise.periodo_label || "-"} · ${ultimaAnalise.created_at ? new Date(ultimaAnalise.created_at).toLocaleDateString("pt-BR") : "-"}`
     : "Nenhuma análise gerada até o momento.";
@@ -1136,7 +1180,15 @@ function DieselAgenteView({ onAlert }) {
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-4">
-        <SectionHeader title="Relatório Gerencial" description="Disparo mensal do relatório e acompanhamento das sugestões de acompanhamento." />
+        <SectionHeader
+          title={
+            <div className="flex items-center gap-3 flex-wrap">
+              <span>Relatório Gerencial</span>
+              <span className="text-sm font-bold text-rose-600">{ultimoGerencialDataLabel}</span>
+            </div>
+          }
+          description="Disparo mensal do relatório e acompanhamento das sugestões de acompanhamento."
+        />
 
         <div className="flex items-center justify-between bg-slate-50 border rounded-xl px-4 py-3 gap-4 flex-wrap">
           <div className="text-sm">

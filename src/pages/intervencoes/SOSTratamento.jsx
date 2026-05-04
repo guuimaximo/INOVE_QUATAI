@@ -184,25 +184,29 @@ function CampoMecanico({ value, onChange }) {
     };
   }, []);
 
-  useEffect(() => {
-    const termo = (busca || "").trim().toLowerCase();
-    if (!termo) {
-      setOpcoes([]);
-      return;
-    }
+useEffect(() => {
+  const termo = (busca || "").trim().toLowerCase();
+  if (!termo) {
+    setOpcoes([]);
+    return;
+  }
 
-    const filtrados = (todos || [])
-      .filter((f) => {
-        return String(f.nome || "").toLowerCase().includes(termo) || String(f.chapa || "").toLowerCase().includes(termo);
-      })
-      .slice(0, 12)
-      .map((funcionario) => ({
-        chapa: funcionario.chapa,
-        nome: funcionario.nome,
-        cargo: funcionario.cargo,
-      }));
-    setOpcoes(filtrados);
-  }, [busca, todos]);
+  const filtrados = (todos || [])
+    .filter((f) => {
+      return (
+        String(f.nome || "").toLowerCase().includes(termo) ||
+        String(f.chapa || "").toLowerCase().includes(termo)
+      );
+    })
+    .slice(0, 12)
+    .map((funcionario) => ({
+      chapa: funcionario.chapa,
+      nome: funcionario.nome,
+      cargo: funcionario.cargo,
+    }));
+
+  setOpcoes(filtrados);
+}, [busca, todos]);
 
   function selecionar(m) {
     onChange({ chapa: m.chapa, nome: m.nome });

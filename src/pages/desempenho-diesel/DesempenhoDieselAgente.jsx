@@ -96,6 +96,83 @@ function deltaBadgeClass(v) {
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
+function normalizeLinhaFiltro(v) {
+  const raw = String(v || "").trim().toUpperCase();
+  if (!raw) return "";
+
+  // Trata formatos que podem vir do Python/view:
+  // "11TR", "Linha 11TR", "C6 - Linha 11TR", "C6 Linha 11TR"
+  const matchLinha = raw.match(/(?:LINHA\s*)?([0-9]{1,3}[A-Z]{1,3})\b/);
+  if (matchLinha?.[1]) return matchLinha[1];
+
+  return raw
+    .replace(/^LINHA\s+/i, "")
+    .replace(/^.*-\s*LINHA\s+/i, "")
+    .trim();
+}
+
+function normalizeChapa(v) {
+  const raw = String(v || "").trim();
+  if (!raw) return "";
+
+  // Trata chapa vinda como 30061156, 30061156.0 ou texto misturado.
+  const semDecimal = raw.split(".")[0];
+  return semDecimal.replace(/\D/g, "");
+}
+
+async function carregarMapaFuncionariosAtualizados() {
+  const mapa = {};
+  const clientes = [supabaseBCNT, supabase];
+
+  for (const client of clientes) {
+    try {
+      let start = 0;
+      const pageSize = 1000;
+      let encontrouAlgumaLinha = false;
+
+      while (true) {
+        const end = start + pageSize - 1;
+
+        const { data, error } = await client
+          .from("funcionarios_atualizada")
+          .select("id_funcionario, nr_cracha, nm_funcionario, status")
+          .range(start, end);
+
+        if (error) throw error;
+
+        const rows = data || [];
+        if (rows.length) encontrouAlgumaLinha = true;
+
+        rows.forEach((row) => {
+          const chapa = normalizeChapa(row.nr_cracha);
+          const nome = String(row.nm_funcionario || "").trim().toUpperCase();
+          const status = String(row.status || "").trim().toLowerCase();
+
+          if (!chapa || !nome) return;
+
+          // Preferir registro ativo. Se não houver status, ainda usa como fallback.
+          if (!mapa[chapa] || status === "ativo") {
+            mapa[chapa] = nome;
+          }
+        });
+
+        if (rows.length < pageSize) break;
+        start += pageSize;
+
+        if (start > 10000) break;
+      }
+
+      if (encontrouAlgumaLinha && Object.keys(mapa).length > 0) {
+        return mapa;
+      }
+    } catch (e) {
+      console.warn("Não foi possível carregar funcionarios_atualizada neste client:", e);
+    }
+  }
+
+  return mapa;
+}
+
 function maxIsoDate(...values) {
   const valid = values
     .flat()
@@ -1056,6 +1133,20 @@ function DieselAgenteView({ onAlert }) {
         }
       }
 
+      const mapaFuncionarios = await carregarMapaFuncionariosAtualizados();
+
+      sugestoesFonte = sugestoesFonte.map((s) => {
+        const chapa = normalizeChapa(s.motorista_chapa || s.chapa);
+        const nomeAtualizado = mapaFuncionarios[chapa];
+
+        return {
+          ...s,
+          motorista_chapa: chapa || s.motorista_chapa,
+          chapa: chapa || s.chapa,
+          motorista_nome: nomeAtualizado || s.motorista_nome || chapa || "-",
+        };
+      });
+
       const { data: acompanhamentos, error: acompanhamentosError } = await supabase
         .from("diesel_acompanhamentos")
         .select("motorista_chapa, status")
@@ -1067,12 +1158,12 @@ function DieselAgenteView({ onAlert }) {
 
       const mapStatusAtivo = {};
       (acompanhamentos || []).forEach((a) => {
-        mapStatusAtivo[String(a.motorista_chapa)] = a.status;
+        mapStatusAtivo[normalizeChapa(a.motorista_chapa)] = a.status;
       });
 
       const sugestoesComStatus = sugestoesFonte.map((s) => ({
         ...s,
-        status_atual: mapStatusAtivo[String(s.motorista_chapa)] || null,
+        status_atual: mapStatusAtivo[normalizeChapa(s.motorista_chapa)] || null,
       }));
 
       if (!mountedRef.current) return;
@@ -1126,19 +1217,25 @@ function DieselAgenteView({ onAlert }) {
   };
 
   const linhasUnicas = useMemo(() => {
-    const linhas = (sugestoes || []).map((r) => String(r.linha_mais_rodada || "").trim().toUpperCase()).filter(Boolean);
-    return [...new Set(linhas)].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const linhas = (sugestoes || [])
+      .map((r) => normalizeLinhaFiltro(r.linha_mais_rodada || r.linha || r.linha_foco))
+      .filter(Boolean);
+
+    return [...new Set(linhas)].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
   }, [sugestoes]);
 
   const sugestoesFiltradas = useMemo(() => {
+    const linhaSelecionada = normalizeLinhaFiltro(filtroLinha);
+
     return (sugestoes || []).filter((r) => {
-      const linha = String(r.linha_mais_rodada || "").trim().toUpperCase();
+      const linha = normalizeLinhaFiltro(r.linha_mais_rodada || r.linha || r.linha_foco);
       const nome = String(r.motorista_nome || "").toLowerCase();
       const chapa = String(r.motorista_chapa || "").toLowerCase();
+      const linhaTexto = String(r.linha_mais_rodada || r.linha || r.linha_foco || "").toLowerCase();
       const q = busca.toLowerCase().trim();
 
-      if (filtroLinha && linha !== filtroLinha) return false;
-      if (q && !nome.includes(q) && !chapa.includes(q) && !linha.toLowerCase().includes(q)) return false;
+      if (linhaSelecionada && linha !== linhaSelecionada) return false;
+      if (q && !nome.includes(q) && !chapa.includes(q) && !linha.toLowerCase().includes(q) && !linhaTexto.includes(q)) return false;
       return true;
     });
   }, [sugestoes, busca, filtroLinha]);
@@ -1238,7 +1335,7 @@ function DieselAgenteView({ onAlert }) {
       const itens = selecionados.map((r) => ({
         lote_id: lote.id,
         motorista_chapa: r.motorista_chapa,
-        linha_mais_rodada: r.linha_mais_rodada ?? null,
+        linha_mais_rodada: normalizeLinhaFiltro(r.linha_mais_rodada || r.linha || r.linha_foco) || null,
         km_percorrido: n(r.km_percorrido),
         combustivel_consumido: n(r.combustivel_consumido),
         kml_realizado: n(r.kml_realizado),
@@ -1451,7 +1548,7 @@ function DieselAgenteView({ onAlert }) {
                     </td>
                     <td className="p-3 font-bold">{r.motorista_chapa || "-"}</td>
                     <td className="p-3">{r.motorista_nome || "-"}</td>
-                    <td className="p-3">{r.linha_mais_rodada || "-"}</td>
+                    <td className="p-3">{normalizeLinhaFiltro(r.linha_mais_rodada || r.linha || r.linha_foco) || "-"}</td>
                     <td className="p-3 text-right">{n(r.km_percorrido).toFixed(0)}</td>
                     <td className="p-3 text-right">{n(r.combustivel_consumido).toFixed(0)}</td>
                     <td className="p-3 text-right font-bold">{n(r.kml_realizado).toFixed(2)}</td>

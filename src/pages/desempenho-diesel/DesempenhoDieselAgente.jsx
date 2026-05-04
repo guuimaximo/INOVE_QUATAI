@@ -18,6 +18,8 @@ import {
   FaFolderOpen,
   FaFilter,
   FaCalendarAlt,
+  FaInfoCircle,
+  FaChartLine,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { supabaseBCNT } from "../../supabaseBCNT";
@@ -70,6 +72,28 @@ function fmtBRDateTime(v) {
   const dt = new Date(v);
   if (Number.isNaN(dt.getTime())) return "-";
   return dt.toLocaleString("pt-BR");
+}
+
+function fmtSignedLitros(v) {
+  const x = n(v);
+  const abs = Math.abs(x).toFixed(0);
+  if (x > 0) return `+${abs} L`;
+  if (x < 0) return `-${abs} L`;
+  return "0 L";
+}
+
+function deltaToneClass(v) {
+  const x = n(v);
+  if (x > 0) return "text-rose-700";
+  if (x < 0) return "text-emerald-700";
+  return "text-slate-700";
+}
+
+function deltaBadgeClass(v) {
+  const x = n(v);
+  if (x > 0) return "bg-rose-100 text-rose-800 border-rose-200";
+  if (x < 0) return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
 function maxIsoDate(...values) {
@@ -152,7 +176,16 @@ function normalizeSugestaoRecord(item = {}) {
       0,
     kml_realizado: item.kml_realizado,
     kml_meta: item.kml_meta,
-    combustivel_desperdicado: item.combustivel_desperdicado,
+    delta_combustivel:
+      item.delta_combustivel ??
+      item.combustivel_desperdicado ??
+      item.desperdicio ??
+      0,
+    combustivel_desperdicado:
+      item.delta_combustivel ??
+      item.combustivel_desperdicado ??
+      item.desperdicio ??
+      0,
     detalhes_json: item.detalhes_json || null,
     mes_ref: item.mes_ref || null,
     created_at: item.created_at || null,
@@ -438,6 +471,87 @@ function IndividualParcialTable({ items, busca, setBusca, mesRef }) {
     </div>
   );
 }
+
+
+function EntenderCalculosDieselModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-[70] animate-in fade-in duration-200 p-4">
+      <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center mb-4 border-b pb-4 shrink-0">
+          <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <FaInfoCircle className="text-blue-600" /> Entender Cálculos (Agente Diesel)
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition">
+            <FaTimes size={20} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto pr-2 space-y-5 text-sm text-slate-700">
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2">
+              <FaFilter className="text-slate-500" /> Base de Dados
+            </h3>
+            <p>
+              O painel usa os dados processados pelo relatório gerencial do Python a partir da base diária de diesel.
+              A tela apenas consulta o último processamento salvo e lista as sugestões de acompanhamento geradas para o período.
+            </p>
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+            <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2">
+              <FaChartLine className="text-blue-600" /> KM/L Real e KM/L Meta
+            </h3>
+            <ul className="list-disc pl-5 space-y-2">
+              <li><strong>KM/L Real:</strong> soma do KM rodado dividido pela soma dos litros consumidos.</li>
+              <li><strong>KM/L Meta:</strong> referência usada pelo Python para comparar o motorista na linha/cluster analisado.</li>
+              <li><strong>Litros Ideais:</strong> KM rodado dividido pelo KM/L de referência.</li>
+            </ul>
+          </div>
+
+          <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+            <h3 className="font-black text-amber-900 mb-2 flex items-center gap-2">
+              <FaLayerGroup className="text-amber-600" /> Delta de Combustível
+            </h3>
+            <p className="mb-2">
+              O novo indicador substitui o antigo conceito de desperdício. Ele mostra a diferença entre o combustível real consumido e o combustível ideal esperado.
+            </p>
+            <div className="bg-white rounded-xl border p-3 font-black text-slate-800 text-center">
+              Delta de Combustível = Litros Consumidos - Litros Ideais
+            </div>
+          </div>
+
+          <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+            <h3 className="font-black text-emerald-900 mb-2 flex items-center gap-2">
+              <FaCheckCircle className="text-emerald-600" /> Como interpretar
+            </h3>
+            <ul className="list-disc pl-5 space-y-2">
+              <li><strong className="text-rose-700">Delta positivo:</strong> consumiu mais combustível que o ideal. É ruim e aparece em vermelho.</li>
+              <li><strong className="text-emerald-700">Delta negativo:</strong> consumiu menos combustível que o ideal. É economia e aparece em verde.</li>
+              <li><strong>Delta zero:</strong> consumo realizado ficou alinhado com a referência.</li>
+            </ul>
+          </div>
+
+          <div className="bg-rose-50 p-4 rounded-xl border border-rose-200">
+            <h3 className="font-black text-rose-900 mb-2 flex items-center gap-2">
+              <FaExclamationTriangle className="text-rose-600" /> Detalhes do Motorista
+            </h3>
+            <p>
+              Ao clicar em <strong>Detalhes</strong>, a regra é a mesma: linhas com delta positivo indicam oportunidade de correção;
+              linhas com delta negativo indicam economia. O consolidado do modal soma os deltas por linha/cluster.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 pt-4 border-t flex justify-end shrink-0">
+          <button onClick={onClose} className="px-6 py-2.5 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition shadow-md active:scale-95">
+            Entendi
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function ParcialMeritocraciaView({ onAlert }) {
   const [mesRef, setMesRef] = useState(fmtMesAtual());
@@ -857,52 +971,31 @@ function DieselAgenteView({ onAlert }) {
   const [ultimaAnalise, setUltimaAnalise] = useState(null);
   const [sugestoes, setSugestoes] = useState([]);
   const [selected, setSelected] = useState({});
-  const [debugCarregamento, setDebugCarregamento] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: "combustivel_desperdicado", direction: "desc" });
 
   const [busca, setBusca] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
   const [viewingDetails, setViewingDetails] = useState(null);
   const [modalContent, setModalContent] = useState({ raioX: [], chartData: [] });
+  const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
   const validarPeriodo = useCallback(() => {
     if (!periodoInicio || !periodoFim) return true;
     return periodoInicio <= periodoFim;
   }, [periodoInicio, periodoFim]);
-
-  const addDebug = useCallback((mensagem, payload = null) => {
-    const item = {
-      hora: new Date().toLocaleTimeString("pt-BR"),
-      mensagem,
-      payload,
-    };
-
-    console.log(`[Agente Diesel] ${mensagem}`, payload || "");
-    setDebugCarregamento((prev) => [item, ...prev].slice(0, 12));
-  }, []);
-
   async function carregarTela() {
     // Em ambiente dev/React StrictMode, o cleanup do useEffect pode marcar mountedRef como false
     // antes da segunda execução do efeito. Reativamos aqui para não abortar as consultas.
     mountedRef.current = true;
 
-    setDebugCarregamento([]);
-    addDebug("carregarTela iniciou");
-
     setLoading(true);
 
     try {
-      addDebug("Supabase normal carregado", !!supabase);
-
       const { data: sess, error: sessError } = await supabase.auth.getSession();
-      addDebug("Sessão carregada", { temSessao: !!sess?.session, sessError });
-
       if (sessError) throw sessError;
 
       if (!mountedRef.current) return;
       setUserSession(sess?.session || null);
-
-      addDebug("Buscando último relatório gerencial");
 
       const { data: rel, error: relError } = await supabase
         .from("relatorios_gerados")
@@ -912,14 +1005,10 @@ function DieselAgenteView({ onAlert }) {
         .limit(1)
         .maybeSingle();
 
-      addDebug("Resultado relatorios_gerados", { encontrou: !!rel, relError });
-
       if (relError) throw relError;
 
       if (!mountedRef.current) return;
       setUltimoGerencial(rel || null);
-
-      addDebug("Buscando última análise gerencial");
 
       const { data: ultAnalise, error: ultAnaliseError } = await supabase
         .from("diesel_analise_gerencial_snapshot")
@@ -928,10 +1017,8 @@ function DieselAgenteView({ onAlert }) {
         .limit(1)
         .maybeSingle();
 
-      addDebug("Resultado diesel_analise_gerencial_snapshot", { encontrou: !!ultAnalise, ultAnaliseError });
-
       if (ultAnaliseError) {
-        addDebug("Snapshot não carregou. Tela continuará sem bloquear", ultAnaliseError);
+        console.warn("Snapshot não carregou. A tela continuará sem bloquear.", ultAnaliseError);
       }
 
       if (!mountedRef.current) return;
@@ -939,17 +1026,13 @@ function DieselAgenteView({ onAlert }) {
 
       let sugestoesFonte = [];
 
-      addDebug("Buscando sugestões pela view v_sugestoes_acompanhamento_30d");
-
       const viewResp = await supabase
         .from("v_sugestoes_acompanhamento_30d")
         .select("*")
         .limit(500);
 
-      addDebug("Resultado view sugestões", { total: viewResp.data?.length || 0, error: viewResp.error });
-
       if (viewResp.error) {
-        addDebug("View de sugestões falhou. Tentando tabela base", viewResp.error);
+        console.warn("View de sugestões falhou. Tentando tabela base.", viewResp.error);
       }
 
       if (Array.isArray(viewResp.data) && viewResp.data.length > 0) {
@@ -957,8 +1040,6 @@ function DieselAgenteView({ onAlert }) {
       }
 
       if (!sugestoesFonte.length) {
-        addDebug("Buscando sugestões pela tabela diesel_sugestoes_acompanhamento");
-
         const tabelaResp = await supabase
           .from("diesel_sugestoes_acompanhamento")
           .select("*")
@@ -966,10 +1047,8 @@ function DieselAgenteView({ onAlert }) {
           .order("created_at", { ascending: false })
           .limit(500);
 
-        addDebug("Resultado tabela sugestões", { total: tabelaResp.data?.length || 0, error: tabelaResp.error });
-
         if (tabelaResp.error) {
-          addDebug("Tabela de sugestões falhou", tabelaResp.error);
+          console.warn("Tabela de sugestões falhou.", tabelaResp.error);
         }
 
         if (Array.isArray(tabelaResp.data) && tabelaResp.data.length > 0) {
@@ -977,19 +1056,13 @@ function DieselAgenteView({ onAlert }) {
         }
       }
 
-      addDebug("Sugestões normalizadas", { total: sugestoesFonte.length });
-
-      addDebug("Buscando acompanhamentos ativos");
-
       const { data: acompanhamentos, error: acompanhamentosError } = await supabase
         .from("diesel_acompanhamentos")
         .select("motorista_chapa, status")
         .not("status", "in", '("OK","ENCERRADO","ATAS")');
 
-      addDebug("Resultado acompanhamentos ativos", { total: acompanhamentos?.length || 0, acompanhamentosError });
-
       if (acompanhamentosError) {
-        addDebug("Acompanhamentos ativos não carregaram. Tela continuará sem bloquear", acompanhamentosError);
+        console.warn("Acompanhamentos ativos não carregaram. A tela continuará sem bloquear.", acompanhamentosError);
       }
 
       const mapStatusAtivo = {};
@@ -1004,11 +1077,8 @@ function DieselAgenteView({ onAlert }) {
 
       if (!mountedRef.current) return;
       setSugestoes(sugestoesComStatus);
-
-      addDebug("carregarTela finalizou com sucesso", { ultimoRelatorio: !!rel, ultimaAnalise: !!ultAnalise, totalSugestoes: sugestoesComStatus.length });
     } catch (e) {
-      addDebug("ERRO no carregarTela", e?.message || String(e));
-      console.error("❌ [Agente Diesel] Erro no carregarTela:", e);
+      console.error("Erro ao carregar Agente Diesel:", e);
 
       onAlert?.({
         type: "error",
@@ -1021,10 +1091,8 @@ function DieselAgenteView({ onAlert }) {
   }
 
   useEffect(() => {
-    addDebug("useEffect executou");
-
     carregarTela().catch((err) => {
-      console.error("❌ [Agente Diesel] Erro fora do carregarTela:", err);
+      console.error("Erro fora do carregarTela:", err);
       onAlert?.({
         type: "error",
         message: "Erro ao iniciar carregamento: " + (err?.message || String(err)),
@@ -1175,7 +1243,7 @@ function DieselAgenteView({ onAlert }) {
         combustivel_consumido: n(r.combustivel_consumido),
         kml_realizado: n(r.kml_realizado),
         kml_meta: n(r.kml_meta),
-        combustivel_desperdicado: n(r.combustivel_desperdicado),
+        combustivel_desperdicado: n(r.delta_combustivel ?? r.combustivel_desperdicado),
         extra: { motorista_nome: r.motorista_nome ?? null },
       }));
 
@@ -1222,7 +1290,7 @@ function DieselAgenteView({ onAlert }) {
 
   const totalKm = modalContent.raioX?.reduce((acc, r) => acc + n(r.km), 0) || 0;
   const totalLitros = modalContent.raioX?.reduce((acc, r) => acc + n(r.litros), 0) || 0;
-  const totalDesperdicio = modalContent.raioX?.reduce((acc, r) => acc + n(r.desperdicio), 0) || 0;
+  const totalDeltaCombustivel = modalContent.raioX?.reduce((acc, r) => acc + n(r.delta_combustivel ?? r.desperdicio), 0) || 0;
   const kmlGeralReal = totalLitros > 0 ? totalKm / totalLitros : 0;
 
   const litrosTeoricosTotal =
@@ -1251,6 +1319,15 @@ function DieselAgenteView({ onAlert }) {
             </div>
           }
           description="Disparo mensal do relatório e acompanhamento das sugestões de acompanhamento."
+          right={
+            <button
+              onClick={() => setMostrarExplicacao(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
+              title="Entender Cálculos"
+            >
+              <FaInfoCircle /> Entender Cálculos
+            </button>
+          }
         />
 
         <div className="flex items-center justify-between bg-slate-50 border rounded-xl px-4 py-3 gap-4 flex-wrap">
@@ -1297,35 +1374,6 @@ function DieselAgenteView({ onAlert }) {
 
       <div className="bg-white rounded-2xl border border-rose-200 bg-rose-50 shadow-sm p-4">
         <div className="text-sm font-extrabold text-rose-700">{ultimaAnaliseLabel}</div>
-      </div>
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="font-black">Diagnóstico temporário da Page</div>
-          <button
-            onClick={carregarTela}
-            className="rounded-lg bg-amber-600 text-white px-3 py-2 font-bold hover:bg-amber-700"
-          >
-            Testar carregamento
-          </button>
-        </div>
-
-        <div className="mt-2 space-y-1 max-h-40 overflow-auto">
-          {debugCarregamento.length === 0 ? (
-            <div>Nenhum passo executado ainda.</div>
-          ) : (
-            debugCarregamento.map((item, idx) => (
-              <div key={idx} className="border-t border-amber-200 pt-1">
-                <span className="font-bold">{item.hora}</span> — {item.mensagem}
-                {item.payload ? (
-                  <pre className="mt-1 whitespace-pre-wrap break-words text-[11px] bg-white/60 rounded p-2">
-                    {JSON.stringify(item.payload, null, 2)}
-                  </pre>
-                ) : null}
-              </div>
-            ))
-          )}
-        </div>
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
@@ -1389,7 +1437,7 @@ function DieselAgenteView({ onAlert }) {
                 <ThSortable label="Litros" columnKey="combustivel_consumido" sortConfig={sortConfig} onSort={handleSort} align="right" />
                 <ThSortable label="KM/L Real" columnKey="kml_realizado" sortConfig={sortConfig} onSort={handleSort} align="right" />
                 <ThSortable label="KM/L Meta" columnKey="kml_meta" sortConfig={sortConfig} onSort={handleSort} align="right" />
-                <ThSortable label="Desperdício" columnKey="combustivel_desperdicado" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                <ThSortable label="Delta Combustível" columnKey="combustivel_desperdicado" sortConfig={sortConfig} onSort={handleSort} align="right" />
                 <th className="p-3 text-right">Ações</th>
               </tr>
             </thead>
@@ -1408,7 +1456,7 @@ function DieselAgenteView({ onAlert }) {
                     <td className="p-3 text-right">{n(r.combustivel_consumido).toFixed(0)}</td>
                     <td className="p-3 text-right font-bold">{n(r.kml_realizado).toFixed(2)}</td>
                     <td className="p-3 text-right">{n(r.kml_meta).toFixed(2)}</td>
-                    <td className="p-3 text-right text-rose-700 font-bold">{n(r.combustivel_desperdicado).toFixed(0)} L</td>
+                    <td className={`p-3 text-right font-bold ${deltaToneClass(r.delta_combustivel ?? r.combustivel_desperdicado)}`}>{fmtSignedLitros(r.delta_combustivel ?? r.combustivel_desperdicado)}</td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {r.status_atual ? <StatusBadge status={r.status_atual} /> : null}
@@ -1430,6 +1478,8 @@ function DieselAgenteView({ onAlert }) {
           </table>
         </div>
       </div>
+
+      {mostrarExplicacao && <EntenderCalculosDieselModal onClose={() => setMostrarExplicacao(false)} />}
 
       {viewingDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -1458,7 +1508,7 @@ function DieselAgenteView({ onAlert }) {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <CardResumo icon={FaLayerGroup} titulo="KM Total" valor={totalKm.toFixed(0)} tone="cyan" />
                     <CardResumo icon={FaLayerGroup} titulo="Litros" valor={totalLitros.toFixed(0)} tone="amber" />
-                    <CardResumo icon={FaLayerGroup} titulo="Desperdício" valor={totalDesperdicio.toFixed(0)} tone="rose" />
+                    <CardResumo icon={FaLayerGroup} titulo="Delta Combustível" valor={fmtSignedLitros(totalDeltaCombustivel)} tone={totalDeltaCombustivel > 0 ? "rose" : totalDeltaCombustivel < 0 ? "emerald" : "slate"} />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1480,7 +1530,7 @@ function DieselAgenteView({ onAlert }) {
                             <th className="p-3 text-right">Litros</th>
                             <th className="p-3 text-right">KM/L Real</th>
                             <th className="p-3 text-right">KM/L Meta</th>
-                            <th className="p-3 text-right">Desperdício</th>
+                            <th className="p-3 text-right">Delta Combustível</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1491,7 +1541,7 @@ function DieselAgenteView({ onAlert }) {
                               <td className="p-3 text-right">{n(r.litros).toFixed(0)}</td>
                               <td className="p-3 text-right">{n(r.kml_real).toFixed(2)}</td>
                               <td className="p-3 text-right">{n(r.kml_meta).toFixed(2)}</td>
-                              <td className="p-3 text-right font-bold text-rose-700">{n(r.desperdicio).toFixed(0)}</td>
+                              <td className={`p-3 text-right font-bold ${deltaToneClass(r.delta_combustivel ?? r.desperdicio)}`}>{fmtSignedLitros(r.delta_combustivel ?? r.desperdicio)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1531,7 +1581,7 @@ export default function DesempenhoDieselAgente() {
   }, [feedback]);
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto relative">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-6 relative">
       <div className="flex items-center justify-between gap-4 border-b pb-4 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">

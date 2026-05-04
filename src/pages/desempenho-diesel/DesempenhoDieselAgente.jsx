@@ -855,6 +855,7 @@ function DieselAgenteView({ onAlert }) {
   const [ultimaAnalise, setUltimaAnalise] = useState(null);
   const [sugestoes, setSugestoes] = useState([]);
   const [selected, setSelected] = useState({});
+  const [debugCarregamento, setDebugCarregamento] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: "combustivel_desperdicado", direction: "desc" });
 
   const [busca, setBusca] = useState("");
@@ -867,23 +868,35 @@ function DieselAgenteView({ onAlert }) {
     return periodoInicio <= periodoFim;
   }, [periodoInicio, periodoFim]);
 
+  const addDebug = useCallback((mensagem, payload = null) => {
+    const item = {
+      hora: new Date().toLocaleTimeString("pt-BR"),
+      mensagem,
+      payload,
+    };
+
+    console.log(`[Agente Diesel] ${mensagem}`, payload || "");
+    setDebugCarregamento((prev) => [item, ...prev].slice(0, 12));
+  }, []);
+
   async function carregarTela() {
-    console.log("🚀 [Agente Diesel] carregarTela iniciou");
+    setDebugCarregamento([]);
+    addDebug("carregarTela iniciou");
 
     setLoading(true);
 
     try {
-      console.log("🔌 [Agente Diesel] Supabase normal:", supabase);
+      addDebug("Supabase normal carregado", !!supabase);
 
       const { data: sess, error: sessError } = await supabase.auth.getSession();
-      console.log("👤 [Agente Diesel] Sessão:", { sess, sessError });
+      addDebug("Sessão carregada", { temSessao: !!sess?.session, sessError });
 
       if (sessError) throw sessError;
 
       if (!mountedRef.current) return;
       setUserSession(sess?.session || null);
 
-      console.log("🔎 [Agente Diesel] Buscando último relatório gerencial...");
+      addDebug("Buscando último relatório gerencial");
 
       const { data: rel, error: relError } = await supabase
         .from("relatorios_gerados")
@@ -893,14 +906,14 @@ function DieselAgenteView({ onAlert }) {
         .limit(1)
         .maybeSingle();
 
-      console.log("📄 [Agente Diesel] Resultado relatorios_gerados:", { rel, relError });
+      addDebug("Resultado relatorios_gerados", { encontrou: !!rel, relError });
 
       if (relError) throw relError;
 
       if (!mountedRef.current) return;
       setUltimoGerencial(rel || null);
 
-      console.log("🔎 [Agente Diesel] Buscando última análise gerencial...");
+      addDebug("Buscando última análise gerencial");
 
       const { data: ultAnalise, error: ultAnaliseError } = await supabase
         .from("diesel_analise_gerencial_snapshot")
@@ -909,13 +922,10 @@ function DieselAgenteView({ onAlert }) {
         .limit(1)
         .maybeSingle();
 
-      console.log("📊 [Agente Diesel] Resultado diesel_analise_gerencial_snapshot:", {
-        ultAnalise,
-        ultAnaliseError,
-      });
+      addDebug("Resultado diesel_analise_gerencial_snapshot", { encontrou: !!ultAnalise, ultAnaliseError });
 
       if (ultAnaliseError) {
-        console.warn("⚠️ [Agente Diesel] Snapshot não carregou. A tela continuará sem bloquear.", ultAnaliseError);
+        addDebug("Snapshot não carregou. Tela continuará sem bloquear", ultAnaliseError);
       }
 
       if (!mountedRef.current) return;
@@ -923,17 +933,17 @@ function DieselAgenteView({ onAlert }) {
 
       let sugestoesFonte = [];
 
-      console.log("🔎 [Agente Diesel] Buscando sugestões pela view v_sugestoes_acompanhamento_30d...");
+      addDebug("Buscando sugestões pela view v_sugestoes_acompanhamento_30d");
 
       const viewResp = await supabase
         .from("v_sugestoes_acompanhamento_30d")
         .select("*")
         .limit(500);
 
-      console.log("📌 [Agente Diesel] Resultado view sugestões:", viewResp);
+      addDebug("Resultado view sugestões", { total: viewResp.data?.length || 0, error: viewResp.error });
 
       if (viewResp.error) {
-        console.warn("⚠️ [Agente Diesel] View de sugestões falhou. Tentando tabela base.", viewResp.error);
+        addDebug("View de sugestões falhou. Tentando tabela base", viewResp.error);
       }
 
       if (Array.isArray(viewResp.data) && viewResp.data.length > 0) {
@@ -941,7 +951,7 @@ function DieselAgenteView({ onAlert }) {
       }
 
       if (!sugestoesFonte.length) {
-        console.log("🔎 [Agente Diesel] Buscando sugestões pela tabela diesel_sugestoes_acompanhamento...");
+        addDebug("Buscando sugestões pela tabela diesel_sugestoes_acompanhamento");
 
         const tabelaResp = await supabase
           .from("diesel_sugestoes_acompanhamento")
@@ -950,10 +960,10 @@ function DieselAgenteView({ onAlert }) {
           .order("created_at", { ascending: false })
           .limit(500);
 
-        console.log("📌 [Agente Diesel] Resultado tabela sugestões:", tabelaResp);
+        addDebug("Resultado tabela sugestões", { total: tabelaResp.data?.length || 0, error: tabelaResp.error });
 
         if (tabelaResp.error) {
-          console.warn("⚠️ [Agente Diesel] Tabela de sugestões falhou.", tabelaResp.error);
+          addDebug("Tabela de sugestões falhou", tabelaResp.error);
         }
 
         if (Array.isArray(tabelaResp.data) && tabelaResp.data.length > 0) {
@@ -961,22 +971,19 @@ function DieselAgenteView({ onAlert }) {
         }
       }
 
-      console.log("✅ [Agente Diesel] Sugestões normalizadas:", sugestoesFonte);
+      addDebug("Sugestões normalizadas", { total: sugestoesFonte.length });
 
-      console.log("🔎 [Agente Diesel] Buscando acompanhamentos ativos...");
+      addDebug("Buscando acompanhamentos ativos");
 
       const { data: acompanhamentos, error: acompanhamentosError } = await supabase
         .from("diesel_acompanhamentos")
         .select("motorista_chapa, status")
         .not("status", "in", '("OK","ENCERRADO","ATAS")');
 
-      console.log("📋 [Agente Diesel] Resultado acompanhamentos ativos:", {
-        acompanhamentos,
-        acompanhamentosError,
-      });
+      addDebug("Resultado acompanhamentos ativos", { total: acompanhamentos?.length || 0, acompanhamentosError });
 
       if (acompanhamentosError) {
-        console.warn("⚠️ [Agente Diesel] Acompanhamentos ativos não carregaram. A tela continuará sem bloquear.", acompanhamentosError);
+        addDebug("Acompanhamentos ativos não carregaram. Tela continuará sem bloquear", acompanhamentosError);
       }
 
       const mapStatusAtivo = {};
@@ -992,12 +999,9 @@ function DieselAgenteView({ onAlert }) {
       if (!mountedRef.current) return;
       setSugestoes(sugestoesComStatus);
 
-      console.log("🏁 [Agente Diesel] carregarTela finalizou com sucesso:", {
-        ultimoRelatorio: rel,
-        ultimaAnalise: ultAnalise,
-        totalSugestoes: sugestoesComStatus.length,
-      });
+      addDebug("carregarTela finalizou com sucesso", { ultimoRelatorio: !!rel, ultimaAnalise: !!ultAnalise, totalSugestoes: sugestoesComStatus.length });
     } catch (e) {
+      addDebug("ERRO no carregarTela", e?.message || String(e));
       console.error("❌ [Agente Diesel] Erro no carregarTela:", e);
 
       onAlert?.({
@@ -1011,7 +1015,7 @@ function DieselAgenteView({ onAlert }) {
   }
 
   useEffect(() => {
-    console.log("✅ [Agente Diesel] useEffect executou");
+    addDebug("useEffect executou");
 
     carregarTela().catch((err) => {
       console.error("❌ [Agente Diesel] Erro fora do carregarTela:", err);
@@ -1287,6 +1291,35 @@ function DieselAgenteView({ onAlert }) {
 
       <div className="bg-white rounded-2xl border border-rose-200 bg-rose-50 shadow-sm p-4">
         <div className="text-sm font-extrabold text-rose-700">{ultimaAnaliseLabel}</div>
+      </div>
+
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="font-black">Diagnóstico temporário da Page</div>
+          <button
+            onClick={carregarTela}
+            className="rounded-lg bg-amber-600 text-white px-3 py-2 font-bold hover:bg-amber-700"
+          >
+            Testar carregamento
+          </button>
+        </div>
+
+        <div className="mt-2 space-y-1 max-h-40 overflow-auto">
+          {debugCarregamento.length === 0 ? (
+            <div>Nenhum passo executado ainda.</div>
+          ) : (
+            debugCarregamento.map((item, idx) => (
+              <div key={idx} className="border-t border-amber-200 pt-1">
+                <span className="font-bold">{item.hora}</span> — {item.mensagem}
+                {item.payload ? (
+                  <pre className="mt-1 whitespace-pre-wrap break-words text-[11px] bg-white/60 rounded p-2">
+                    {JSON.stringify(item.payload, null, 2)}
+                  </pre>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">

@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import {
   FaCarCrash,
+  FaClipboardCheck,
   FaClipboardList,
   FaCog,
   FaGasPump,
@@ -12,6 +13,7 @@ import {
   FaMicrochip,
   FaSignOutAlt,
   FaTools,
+  FaWarehouse,
 } from "react-icons/fa";
 
 import Sidebar from "./Sidebar";
@@ -30,7 +32,7 @@ function getPageTitle(pathname) {
   if (pathname.startsWith("/sos") || pathname.startsWith("/km-rodado")) return "Intervencoes";
   if (pathname.startsWith("/checklists")) return "Checklists";
   if (pathname.startsWith("/avarias") || pathname.startsWith("/cobrancas")) return "Avarias";
-  if (pathname.startsWith("/usuarios")) return "Configuracoes";
+  if (pathname.startsWith("/usuarios") || pathname.startsWith("/funcionarios")) return "Configuracoes";
   return "Inove";
 }
 
@@ -38,6 +40,12 @@ function getIconForNav(key) {
   switch (key) {
     case "pcm":
       return FaClipboardList;
+    case "troca":
+      return FaClipboardList;
+    case "auditoria":
+      return FaClipboardCheck;
+    case "estoque":
+      return FaWarehouse;
     case "tratativas":
       return FaClipboardList;
     case "avarias":
@@ -57,24 +65,23 @@ function getIconForNav(key) {
   }
 }
 
-function MobileBottomNav({ items, onOpenMenu }) {
+function MobileBottomNav({ items, onOpenMenu, currentPath }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-2 pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden">
-      <div className={`grid gap-1 pb-[calc(env(safe-area-inset-bottom,0px)+0.35rem)] ${onOpenMenu ? "grid-cols-4" : "grid-cols-1"}`}>
+      <div className={`grid gap-1 pb-[calc(env(safe-area-inset-bottom,0px)+0.35rem)] ${onOpenMenu ? "grid-cols-4" : items.length === 3 ? "grid-cols-3" : "grid-cols-1"}`}>
         {items.map((item) => {
           const Icon = getIconForNav(item.key);
+          const isActive = currentPath === item.path;
 
           return (
             <NavLink
               key={item.key}
               to={item.path}
-              className={({ isActive }) =>
-                `flex min-h-[56px] flex-col items-center justify-center rounded-2xl px-2 py-1.5 text-[10px] font-medium transition ${
-                  isActive
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                }`
-              }
+              className={`flex min-h-[56px] flex-col items-center justify-center rounded-2xl px-2 py-1.5 text-[10px] font-medium transition ${
+                isActive
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              }`}
             >
               <Icon className="mb-1 text-base" />
               <span className="text-center leading-tight">{item.label}</span>
@@ -109,7 +116,11 @@ export default function Layout() {
   const mobileNavItems = useMemo(
     () =>
       isLockedMobileModule
-        ? [{ key: "pcm", label: "Pneus", path: "/pcm-troca-pneus" }]
+        ? [
+            { key: "troca", label: "Troca", path: "/pcm-troca-pneus?aba=troca" },
+            { key: "auditoria", label: "Auditoria", path: "/pcm-troca-pneus?aba=auditoria" },
+            { key: "estoque", label: "Estoque", path: "/pcm-troca-pneus?aba=estoque" },
+          ]
         : getMobileNavItems(user?.nivel).slice(0, 3),
     [isLockedMobileModule, user?.nivel]
   );
@@ -193,6 +204,7 @@ export default function Layout() {
 
       <MobileBottomNav
         items={mobileNavItems}
+        currentPath={`${location.pathname}${location.search}`}
         onOpenMenu={isLockedMobileModule ? undefined : () => setMobileSidebarOpen(true)}
       />
     </div>

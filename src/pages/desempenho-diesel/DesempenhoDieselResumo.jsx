@@ -345,8 +345,9 @@ export default function DesempenhoDieselAnalise() {
     while (true) {
       const end = start + pageSize - 1;
       const { data, error } = await supabaseA
-        .from("funcionarios")
-        .select("nr_cracha, nm_funcionario")
+        .from("funcionarios_atualizada")
+        .select("nr_cracha, nm_funcionario, status")
+        .eq("status", "ativo")
         .range(start, end);
 
       if (error) throw error;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
+import { buscarCargoFuncionarioAtivo } from "../../utils/funcionariosBCNT";
 import {
   FaGavel,
   FaUser,
@@ -399,12 +400,8 @@ export default function TratarTratativa() {
       }
 
       if (data?.motorista_chapa) {
-        const { data: m } = await supabase
-          .from("motoristas")
-          .select("cargo")
-          .eq("chapa", data.motorista_chapa)
-          .maybeSingle();
-        setCargoMotorista((m?.cargo || data?.cargo || "Motorista").toUpperCase());
+        const funcionario = await buscarCargoFuncionarioAtivo(data.motorista_chapa);
+        setCargoMotorista((funcionario?.cargo || data?.cargo || "Motorista").toUpperCase());
       } else {
         setCargoMotorista((data?.cargo || "Motorista").toUpperCase());
       }

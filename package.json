@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/camera": "^7.0.5",
     "@capacitor/core": "^7.4.3",
     "@capacitor/ios": "^7.4.3",
     "@supabase/supabase-js": "^2.45.0",

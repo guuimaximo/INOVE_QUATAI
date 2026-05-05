@@ -9,6 +9,7 @@ export default function UpdateAppPrompt() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    // Keep the PWA layer informed so a plain DOM fallback can step in if React never paints the modal.
     window.__INOVE_REACT_UPDATE_PROMPT_VISIBLE__ = false;
 
     const pendingVersion = getStoredUpdateVersion();

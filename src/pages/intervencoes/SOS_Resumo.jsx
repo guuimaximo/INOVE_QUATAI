@@ -726,6 +726,8 @@ export default function SOSCentral() {
   const [filtroControlabilidade, setFiltroControlabilidade] = useState("");
   const [incluirSeguiuViagemReincidencia, setIncluirSeguiuViagemReincidencia] = useState(false);
   const [veiculoPopup, setVeiculoPopup] = useState(null);
+  const [analisePopup, setAnalisePopup] = useState(null);
+  const [tableSort, setTableSort] = useState({ table: "", key: "", direction: "desc" });
   
   const [abaAtiva, setAbaAtiva] = useState("EXECUTIVO");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
@@ -930,6 +932,7 @@ export default function SOSCentral() {
     const q = busca.trim().toLowerCase();
 
     return sosProcessado.filter((r) => {
+      if (!incluirSeguiuViagemReincidencia && r.tipo_norm === "SEGUIU VIAGEM") return false;
       if (mesReferencia && ![mesReferencia, mesComparacao].includes(r.mes_key)) return false;
       if (filtroLinha && r.linha !== filtroLinha) return false;
       if (filtroSetor && r.setor_manutencao !== filtroSetor) return false;
@@ -964,10 +967,140 @@ export default function SOSCentral() {
     filtroCluster,
     filtroStatus,
     filtroControlabilidade,
+    incluirSeguiuViagemReincidencia,
   ]);
 
   const baseRef = useMemo(() => baseFiltrada.filter((r) => r.mes_key === mesReferencia), [baseFiltrada, mesReferencia]);
   const baseComp = useMemo(() => baseFiltrada.filter((r) => r.mes_key === mesComparacao), [baseFiltrada, mesComparacao]);
+
+  const mesesHistorico3m = useMemo(() => {
+    if (!mesReferencia) return [];
+    const ref = firstDayOfMonth(mesReferencia);
+    if (!ref) return [];
+    return [addMonths(ref, -2), addMonths(ref, -1), ref].map(monthKey);
+  }, [mesReferencia]);
+
+  const baseHistorico3m = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+
+    return sosProcessado.filter((r) => {
+      if (!mesesHistorico3m.includes(r.mes_key)) return false;
+      if (!incluirSeguiuViagemReincidencia && r.tipo_norm === "SEGUIU VIAGEM") return false;
+      if (filtroLinha && r.linha !== filtroLinha) return false;
+      if (filtroSetor && r.setor_manutencao !== filtroSetor) return false;
+      if (filtroTipo && r.tipo_norm !== filtroTipo) return false;
+      if (filtroCluster && r.cluster !== filtroCluster) return false;
+      if (filtroStatus && r.status !== normalize(filtroStatus)) return false;
+      if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
+      if (filtroControlabilidade === "NÃO CONTROLÁVEL" && !r.nao_controlavel) return false;
+
+      if (!q) return true;
+
+      return [
+        r.numero_sos,
+        r.veiculo,
+        r.motorista,
+        r.linha,
+        r.tipo_norm,
+        r.problema_encontrado,
+        r.setor_manutencao,
+        r.status,
+        r.responsavel_revisao,
+      ].some((v) => String(v || "").toLowerCase().includes(q));
+    });
+  }, [
+    sosProcessado,
+    mesesHistorico3m,
+    incluirSeguiuViagemReincidencia,
+    busca,
+    filtroLinha,
+    filtroSetor,
+    filtroTipo,
+    filtroCluster,
+    filtroStatus,
+    filtroControlabilidade,
+  ]);
+
+  function buildHistoricoMensal(matchFn) {
+    const porMes = Object.fromEntries(mesesHistorico3m.map((m) => [monthLabelFromKey(m), 0]));
+    baseHistorico3m.filter(matchFn).forEach((r) => {
+      porMes[monthLabelFromKey(r.mes_key)] = n(porMes[monthLabelFromKey(r.mes_key)]) + 1;
+    });
+    return porMes;
+  }
+
+  function abrirPopupAnalise(titulo, matchFn) {
+    const ocorrencias = baseHistorico3m.filter(matchFn);
+    setAnalisePopup({
+      titulo,
+      subtitulo: `${ocorrencias.length} intervenção(ões) nos últimos 3 meses`,
+      ocorrencias,
+    });
+  }
+
+  function renderAnaliseLink(label, titulo, matchFn, className = "") {
+    return (
+      <button
+        type="button"
+        onClick={() => abrirPopupAnalise(titulo, matchFn)}
+        className={`font-black text-blue-700 hover:text-blue-900 hover:underline ${className}`}
+        title="Ver intervenções dos últimos 3 meses"
+      >
+        {label || "—"}
+      </button>
+    );
+  }
+
+  function getSortValue(row, key) {
+    const value = row?.[key];
+    if (typeof value === "number") return value;
+    if (value == null) return "";
+    const numeric = Number(String(value).replace(/\./g, "").replace(",", "."));
+    if (Number.isFinite(numeric) && String(value).trim() !== "") return numeric;
+    return String(value).toLowerCase();
+  }
+
+  function sortRows(rows, table, defaultKey = "total") {
+    const active = tableSort.table === table && tableSort.key;
+    const key = active ? tableSort.key : defaultKey;
+    const direction = active ? tableSort.direction : "desc";
+
+    return [...rows].sort((a, b) => {
+      const av = getSortValue(a, key);
+      const bv = getSortValue(b, key);
+
+      if (typeof av === "number" && typeof bv === "number") {
+        return direction === "asc" ? av - bv : bv - av;
+      }
+
+      const comp = String(av).localeCompare(String(bv), "pt-BR", { numeric: true });
+      return direction === "asc" ? comp : -comp;
+    });
+  }
+
+  function SortTh({ table, sortKey, children, className = "px-3 py-3 text-left" }) {
+    const active = tableSort.table === table && tableSort.key === sortKey;
+    const arrow = active ? (tableSort.direction === "asc" ? " ▲" : " ▼") : " ↕";
+
+    return (
+      <th className={className}>
+        <button
+          type="button"
+          onClick={() =>
+            setTableSort((prev) => ({
+              table,
+              key: sortKey,
+              direction: prev.table === table && prev.key === sortKey && prev.direction === "desc" ? "asc" : "desc",
+            }))
+          }
+          className="inline-flex items-center gap-1 hover:text-blue-700 transition"
+        >
+          {children}
+          <span className="text-[10px] text-slate-400">{arrow}</span>
+        </button>
+      </th>
+    );
+  }
 
   const baseReincidenciaRef = useMemo(() => {
     if (incluirSeguiuViagemReincidencia) return baseRef;
@@ -983,10 +1116,12 @@ export default function SOSCentral() {
     if (!veiculo) return;
 
     const veiculoNorm = String(veiculo || "").trim();
-    const ocorrencias = baseRef.filter((r) => String(r.veiculo || "").trim() === veiculoNorm);
+    const ocorrencias = baseHistorico3m.filter((r) => String(r.veiculo || "").trim() === veiculoNorm);
 
     setVeiculoPopup({
       veiculo: veiculoNorm,
+      titulo: `Ocorrências do veículo ${veiculoNorm}`,
+      subtitulo: `${ocorrencias.length} intervenção(ões) nos últimos 3 meses`,
       ocorrencias,
     });
   }
@@ -1256,7 +1391,12 @@ export default function SOSCentral() {
     }).sort((a, b) => b.veiculosReincidentes - a.veiculosReincidentes || b.totalAtual - a.totalAtual);
   }, [baseRef, baseComp, incluirSeguiuViagemReincidencia]);
 
-  const tabelaVeiculos = useMemo(() => reincidenciaCalcRef.detalhesVeiculo, [reincidenciaCalcRef]);
+  const tabelaVeiculos = useMemo(() => {
+    return reincidenciaCalcRef.detalhesVeiculo.map((r) => ({
+      ...r,
+      ...buildHistoricoMensal((x) => x.veiculo === r.veiculo),
+    }));
+  }, [reincidenciaCalcRef, baseHistorico3m, mesesHistorico3m]);
 
   const tabelaSetores = useMemo(() => {
     const map = new Map();
@@ -1286,8 +1426,9 @@ export default function SOSCentral() {
     return [...map.values()].map((r) => ({
       setor: r.setor, total: r.total, linhas: r.linhas.size, veiculos: r.veiculos.size, reincSetorial: r.reincSetorial,
       defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+      ...buildHistoricoMensal((x) => x.setor_manutencao === r.setor),
     })).sort((a, b) => b.reincSetorial - a.reincSetorial || b.total - a.total);
-  }, [baseRef, baseReincidenciaRef]);
+  }, [baseRef, baseReincidenciaRef, baseHistorico3m, mesesHistorico3m]);
 
   const tabelaDefeitos = useMemo(() => {
     const map = new Map();
@@ -1322,8 +1463,9 @@ export default function SOSCentral() {
       reincTecnica: n(reincPorDefeito.get(r.defeito)),
       mediaPrev: r.diasPrevQtd > 0 ? r.diasPrevSoma / r.diasPrevQtd : 0,
       mediaInsp: r.diasInspQtd > 0 ? r.diasInspSoma / r.diasInspQtd : 0,
+      ...buildHistoricoMensal((x) => x.problema_encontrado === r.defeito),
     })).sort((a, b) => b.reincTecnica - a.reincTecnica || b.total - a.total);
-  }, [baseRef, baseReincidenciaRef]);
+  }, [baseRef, baseReincidenciaRef, baseHistorico3m, mesesHistorico3m]);
 
   const tabelaMotoristas = useMemo(() => {
     const map = new Map();
@@ -1337,8 +1479,9 @@ export default function SOSCentral() {
     return [...map.values()].map((r) => ({
       motorista: r.motorista, total: r.total, veiculos: r.veiculos.size, linhas: r.linhas.size,
       defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
+      ...buildHistoricoMensal((x) => x.motorista === r.motorista),
     })).sort((a, b) => b.total - a.total);
-  }, [baseRef]);
+  }, [baseRef, baseHistorico3m, mesesHistorico3m]);
 
   // =============== LÓGICA DE AVALIAÇÃO DE FUNCIONÁRIOS ===============
   const tabelaFuncionarios = useMemo(() => {
@@ -1469,6 +1612,7 @@ export default function SOSCentral() {
 
     const base = sosProcessado.filter((r) => {
       if (!months3.includes(r.mes_key)) return false;
+      if (!incluirSeguiuViagemReincidencia && r.tipo_norm === "SEGUIU VIAGEM") return false;
       if (filtroControlabilidade === "CONTROLÁVEL" && !r.controlavel) return false;
       if (filtroControlabilidade === "NÃO CONTROLÁVEL" && !r.nao_controlavel) return false;
       return true;
@@ -1509,7 +1653,7 @@ export default function SOSCentral() {
       })
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
-  }, [mesReferencia, sosProcessado, filtroControlabilidade]);
+  }, [mesReferencia, sosProcessado, filtroControlabilidade, incluirSeguiuViagemReincidencia]);
 
   const leituraAnalitica = useMemo(() => {
     const linhaTop = tabelaLinhas[0]?.linha || "N/D";
@@ -1764,7 +1908,7 @@ export default function SOSCentral() {
               onChange={(e) => setIncluirSeguiuViagemReincidencia(e.target.checked)}
               className="rounded border-slate-300"
             />
-            Incluir “Seguiu Viagem” na reincidência
+            Incluir “Seguiu Viagem” em toda análise
           </label>
 
           <button onClick={() => { setBusca(""); setFiltroLinha(""); setFiltroSetor(""); setFiltroTipo(""); setFiltroCluster(""); setFiltroStatus(""); setFiltroControlabilidade(""); setIncluirSeguiuViagemReincidencia(false); }} className="px-3 py-3 rounded-xl border border-slate-200 bg-slate-800 text-white font-black hover:bg-slate-700 transition">
@@ -1945,22 +2089,22 @@ export default function SOSCentral() {
             <table className="w-full min-w-[1300px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
                 <tr>
-                  <th className="px-3 py-3 text-left">Funcionário</th>
-                  <th className="px-3 py-3 text-left">Função</th>
-                  <th className="px-3 py-3 text-left">Volume de Revisões no Mês</th>
-                  <th className="px-3 py-3 text-left">SOS Atribuídos no Mês</th>
-                  <th className="px-3 py-3 text-left">Eficácia da Revisão %</th>
-                  <th className="px-3 py-3 text-left">SOS Retrabalho Precoce</th>
-                  <th className="px-3 py-3 text-left">Taxa de Retrabalho Técnico</th>
-                  <th className="px-3 py-3 text-left">Média Dias até Quebrar</th>
-                  <th className="px-3 py-3 text-left">Média KM até Quebrar</th>
-                  <th className="px-3 py-3 text-left">Principal Defeito Associado</th>
+                  <SortTh table="FUNCIONARIOS" sortKey="nome">Funcionário</SortTh>
+                  <SortTh table="FUNCIONARIOS" sortKey="funcao">Função</SortTh>
+                  <SortTh table="FUNCIONARIOS" sortKey="revisoesFeitasMes">Volume de Revisões no Mês</SortTh>
+                  <SortTh table="FUNCIONARIOS" sortKey="sosAtribuidos">SOS Atribuídos no Mês</SortTh>
+                  <SortTh table="FUNCIONARIOS" sortKey="taxaEficacia">Eficácia da Revisão %</SortTh>
+                  <SortTh table="FUNCIONARIOS" sortKey="sosPrecoce">SOS Retrabalho Precoce</SortTh>
+                  <SortTh table="FUNCIONARIOS" sortKey="taxaRetrabalho">Taxa de Retrabalho Técnico</SortTh>
+                  <SortTh table="FUNCIONARIOS" sortKey="mediaDiasQuebra">Média Dias até Quebrar</SortTh>
+                  <SortTh table="FUNCIONARIOS" sortKey="mediaKmQuebra">Média KM até Quebrar</SortTh>
+                  <SortTh table="FUNCIONARIOS" sortKey="defeitoTop">Principal Defeito Associado</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {tabelaFuncionarios.map((r) => (
+                {sortRows(tabelaFuncionarios, "FUNCIONARIOS", "sosPrecoce").map((r) => (
                   <tr key={r.nome} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.nome}</td>
+                    <td className="px-3 py-3">{renderAnaliseLink(r.nome, `Intervenções do técnico ${r.nome}`, (x) => x.responsavel_revisao === r.nome)}</td>
                     <td className="px-3 py-3"><span className="bg-slate-100 px-2 py-1 rounded font-bold text-slate-600 text-xs">{r.funcao}</span></td>
                     <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.revisoesFeitasMes)}</td>
                     <td className="px-3 py-3 font-black text-blue-600">{fmtInt(r.sosAtribuidos)}</td>
@@ -2017,12 +2161,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Detalhe por veículo</h3>
             <table className="w-full min-w-[1200px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr><th className="px-3 py-3 text-left">Veículo</th><th className="px-3 py-3 text-left">Cluster</th><th className="px-3 py-3 text-left">Linha</th><th className="px-3 py-3 text-left">SOS Total</th><th className="px-3 py-3 text-left">Reinc. Veículo</th><th className="px-3 py-3 text-left">Reinc. Técnica</th><th className="px-3 py-3 text-left">Reinc. Setorial</th><th className="px-3 py-3 text-left">Intervalo Médio</th><th className="px-3 py-3 text-left">Defeito Top</th><th className="px-3 py-3 text-left">Setor Top</th></tr>
+                <tr><SortTh table="VEICULOS" sortKey="veiculo">Veículo</SortTh><SortTh table="VEICULOS" sortKey="cluster">Cluster</SortTh><SortTh table="VEICULOS" sortKey="linhaTop">Linha</SortTh><SortTh table="VEICULOS" sortKey="totalSOS">SOS Total</SortTh><SortTh table="VEICULOS" sortKey="reincVeiculo">Reinc. Veículo</SortTh><SortTh table="VEICULOS" sortKey="reincTecnica">Reinc. Técnica</SortTh><SortTh table="VEICULOS" sortKey="reincSetorial">Reinc. Setorial</SortTh><SortTh table="VEICULOS" sortKey="intervaloMedio">Intervalo Médio</SortTh>{mesesHistorico3m.map((m) => (<SortTh key={m} table="VEICULOS" sortKey={monthLabelFromKey(m)}>{monthLabelFromKey(m)}</SortTh>))}<SortTh table="VEICULOS" sortKey="defeitoTop">Defeito Top</SortTh><SortTh table="VEICULOS" sortKey="setorTop">Setor Top</SortTh></tr>
               </thead>
               <tbody>
-                {tabelaVeiculos.map((r) => (
+                {sortRows(tabelaVeiculos, "VEICULOS", "totalSOS").map((r) => (
                   <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{r.linhaTop}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
+                    <td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{r.linhaTop}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td><td className="px-3 py-3">{renderAnaliseLink(r.defeitoTop, `Intervenções do defeito ${r.defeitoTop}`, (x) => x.problema_encontrado === r.defeitoTop)}</td><td className="px-3 py-3">{renderAnaliseLink(r.setorTop, `Intervenções do setor ${r.setorTop}`, (x) => x.setor_manutencao === r.setorTop)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2067,13 +2211,13 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Base detalhada pós-preventiva / pós-inspeção</h3>
             <table className="w-full min-w-[1200px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr><th className="px-3 py-3 text-left">Data SOS</th><th className="px-3 py-3 text-left">Veículo</th><th className="px-3 py-3 text-left">Defeito</th><th className="px-3 py-3 text-left">Setor</th><th className="px-3 py-3 text-left">Resp. Última Revisão</th><th className="px-3 py-3 text-left">Dias Pós Prev.</th><th className="px-3 py-3 text-left">Faixa Prev.</th><th className="px-3 py-3 text-left">Dias Pós Insp.</th><th className="px-3 py-3 text-left">Faixa Insp.</th></tr>
+                <tr><SortTh table="PREV_INSPEC" sortKey="data_sos">Data SOS</SortTh><SortTh table="PREV_INSPEC" sortKey="veiculo">Veículo</SortTh><SortTh table="PREV_INSPEC" sortKey="problema_encontrado">Defeito</SortTh><SortTh table="PREV_INSPEC" sortKey="setor_manutencao">Setor</SortTh><SortTh table="PREV_INSPEC" sortKey="responsavel_revisao">Resp. Última Revisão</SortTh><SortTh table="PREV_INSPEC" sortKey="dias_ultima_preventiva_calc">Dias Pós Prev.</SortTh><SortTh table="PREV_INSPEC" sortKey="faixa_preventiva">Faixa Prev.</SortTh><SortTh table="PREV_INSPEC" sortKey="dias_ultima_inspecao_calc">Dias Pós Insp.</SortTh><SortTh table="PREV_INSPEC" sortKey="faixa_inspecao">Faixa Insp.</SortTh></tr>
               </thead>
               <tbody>
-                {baseRef.map((r) => (
+                {sortRows(baseRef, "PREV_INSPEC", "data_sos").map((r) => (
                   <tr key={r.id} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3">{fmtDateBr(r.data_sos)}</td><td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td><td className="px-3 py-3">{r.problema_encontrado}</td><td className="px-3 py-3">{r.setor_manutencao}</td>
-                    <td className="px-3 py-3"><span className="font-semibold text-slate-700">{r.responsavel_revisao}</span> <span className="text-[10px] text-slate-400 bg-slate-100 px-1 rounded ml-1">{r.tipo_revisao_atribuida}</span></td>
+                    <td className="px-3 py-3">{fmtDateBr(r.data_sos)}</td><td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td><td className="px-3 py-3">{renderAnaliseLink(r.problema_encontrado, `Intervenções do defeito ${r.problema_encontrado}`, (x) => x.problema_encontrado === r.problema_encontrado)}</td><td className="px-3 py-3">{renderAnaliseLink(r.setor_manutencao, `Intervenções do setor ${r.setor_manutencao}`, (x) => x.setor_manutencao === r.setor_manutencao)}</td>
+                    <td className="px-3 py-3">{renderAnaliseLink(r.responsavel_revisao, `Intervenções do técnico ${r.responsavel_revisao}`, (x) => x.responsavel_revisao === r.responsavel_revisao)} <span className="text-[10px] text-slate-400 bg-slate-100 px-1 rounded ml-1">{r.tipo_revisao_atribuida}</span></td>
                     <td className="px-3 py-3 font-semibold text-emerald-600">{fmtInt(r.dias_ultima_preventiva_calc)}</td><td className="px-3 py-3">{r.faixa_preventiva}</td><td className="px-3 py-3 font-semibold text-blue-600">{fmtInt(r.dias_ultima_inspecao_calc)}</td><td className="px-3 py-3">{r.faixa_inspecao}</td>
                   </tr>
                 ))}
@@ -2105,14 +2249,14 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Leitura detalhada por linha</h3>
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr><th className="px-3 py-3 text-left">Linha</th><th className="px-3 py-3 text-left">SOS Atual</th><th className="px-3 py-3 text-left">SOS Anterior</th><th className="px-3 py-3 text-left">Variação</th><th className="px-3 py-3 text-left">Veíc. Reincidentes</th><th className="px-3 py-3 text-left">Taxa Reinc.</th><th className="px-3 py-3 text-left">Defeito Top</th><th className="px-3 py-3 text-left">Setor Top</th></tr>
+                <tr><SortTh table="LINHAS" sortKey="linha">Linha</SortTh><SortTh table="LINHAS" sortKey="totalAtual">SOS Atual</SortTh><SortTh table="LINHAS" sortKey="totalAnterior">SOS Anterior</SortTh><SortTh table="LINHAS" sortKey="variacao_pct">Variação</SortTh><SortTh table="LINHAS" sortKey="veiculosReincidentes">Veíc. Reincidentes</SortTh><SortTh table="LINHAS" sortKey="taxaReincidencia">Taxa Reinc.</SortTh><SortTh table="LINHAS" sortKey="defeitoTop">Defeito Top</SortTh><SortTh table="LINHAS" sortKey="setorTop">Setor Top</SortTh></tr>
               </thead>
               <tbody>
-                {tabelaLinhas.map((r) => (
+                {sortRows(tabelaLinhas, "LINHAS", "totalAtual").map((r) => (
                   <tr key={r.linha} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.linha}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalAtual)}</td><td className="px-3 py-3">{fmtInt(r.totalAnterior)}</td>
+                    <td className="px-3 py-3">{renderAnaliseLink(r.linha, `Intervenções da linha ${r.linha}`, (x) => x.linha === r.linha)}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalAtual)}</td><td className="px-3 py-3">{fmtInt(r.totalAnterior)}</td>
                     <td className="px-3 py-3"><EvolucaoBadge value={r.variacao_pct} invert /></td>
-                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.veiculosReincidentes)}</td><td className="px-3 py-3">{fmtPct(r.taxaReincidencia)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
+                    <td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.veiculosReincidentes)}</td><td className="px-3 py-3">{fmtPct(r.taxaReincidencia)}</td><td className="px-3 py-3">{renderAnaliseLink(r.defeitoTop, `Intervenções do defeito ${r.defeitoTop}`, (x) => x.problema_encontrado === r.defeitoTop)}</td><td className="px-3 py-3">{renderAnaliseLink(r.setorTop, `Intervenções do setor ${r.setorTop}`, (x) => x.setor_manutencao === r.setorTop)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2143,12 +2287,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por veículo</h3>
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr><th className="px-3 py-3 text-left">Veículo</th><th className="px-3 py-3 text-left">Cluster</th><th className="px-3 py-3 text-left">Linha</th><th className="px-3 py-3 text-left">SOS Total</th><th className="px-3 py-3 text-left">Reinc. Veículo</th><th className="px-3 py-3 text-left">Reinc. Técnica</th><th className="px-3 py-3 text-left">Reinc. Setorial</th><th className="px-3 py-3 text-left">Intervalo Médio</th><th className="px-3 py-3 text-left">Defeito Top</th><th className="px-3 py-3 text-left">Setor Top</th></tr>
+                <tr><SortTh table="VEICULOS" sortKey="veiculo">Veículo</SortTh><SortTh table="VEICULOS" sortKey="cluster">Cluster</SortTh><SortTh table="VEICULOS" sortKey="linhaTop">Linha</SortTh><SortTh table="VEICULOS" sortKey="totalSOS">SOS Total</SortTh><SortTh table="VEICULOS" sortKey="reincVeiculo">Reinc. Veículo</SortTh><SortTh table="VEICULOS" sortKey="reincTecnica">Reinc. Técnica</SortTh><SortTh table="VEICULOS" sortKey="reincSetorial">Reinc. Setorial</SortTh><SortTh table="VEICULOS" sortKey="intervaloMedio">Intervalo Médio</SortTh>{mesesHistorico3m.map((m) => (<SortTh key={m} table="VEICULOS" sortKey={monthLabelFromKey(m)}>{monthLabelFromKey(m)}</SortTh>))}<SortTh table="VEICULOS" sortKey="defeitoTop">Defeito Top</SortTh><SortTh table="VEICULOS" sortKey="setorTop">Setor Top</SortTh></tr>
               </thead>
               <tbody>
-                {tabelaVeiculos.map((r) => (
+                {sortRows(tabelaVeiculos, "VEICULOS", "totalSOS").map((r) => (
                   <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{r.linhaTop}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
+                    <td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{renderAnaliseLink(r.linhaTop, `Intervenções da linha ${r.linhaTop}`, (x) => x.linha === r.linhaTop)}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td>{mesesHistorico3m.map((m) => (<td key={m} className="px-3 py-3 font-semibold text-slate-700">{fmtInt(r[monthLabelFromKey(m)])}</td>))}<td className="px-3 py-3">{renderAnaliseLink(r.defeitoTop, `Intervenções do defeito ${r.defeitoTop}`, (x) => x.problema_encontrado === r.defeitoTop)}</td><td className="px-3 py-3">{renderAnaliseLink(r.setorTop, `Intervenções do setor ${r.setorTop}`, (x) => x.setor_manutencao === r.setorTop)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2179,12 +2323,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por setor</h3>
             <table className="w-full min-w-[1000px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr><th className="px-3 py-3 text-left">Setor</th><th className="px-3 py-3 text-left">Total</th><th className="px-3 py-3 text-left">Linhas</th><th className="px-3 py-3 text-left">Veículos</th><th className="px-3 py-3 text-left">Reinc. Setorial</th><th className="px-3 py-3 text-left">Defeito Top</th></tr>
+                <tr><SortTh table="SETORES" sortKey="setor">Setor</SortTh><SortTh table="SETORES" sortKey="total">Total</SortTh><SortTh table="SETORES" sortKey="linhas">Linhas</SortTh><SortTh table="SETORES" sortKey="veiculos">Veículos</SortTh><SortTh table="SETORES" sortKey="reincSetorial">Reinc. Setorial</SortTh>{mesesHistorico3m.map((m) => (<SortTh key={m} table="SETORES" sortKey={monthLabelFromKey(m)}>{monthLabelFromKey(m)}</SortTh>))}<SortTh table="SETORES" sortKey="defeitoTop">Defeito Top</SortTh></tr>
               </thead>
               <tbody>
-                {tabelaSetores.map((r) => (
+                {sortRows(tabelaSetores, "SETORES", "total").map((r) => (
                   <tr key={r.setor} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.setor}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td><td className="px-3 py-3">{fmtInt(r.linhas)}</td><td className="px-3 py-3">{fmtInt(r.veiculos)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{r.defeitoTop}</td>
+                    <td className="px-3 py-3">{renderAnaliseLink(r.setor, `Intervenções do setor ${r.setor}`, (x) => x.setor_manutencao === r.setor)}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td><td className="px-3 py-3">{fmtInt(r.linhas)}</td><td className="px-3 py-3">{fmtInt(r.veiculos)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincSetorial)}</td>{mesesHistorico3m.map((m) => (<td key={m} className="px-3 py-3 font-semibold text-slate-700">{fmtInt(r[monthLabelFromKey(m)])}</td>))}<td className="px-3 py-3">{renderAnaliseLink(r.defeitoTop, `Intervenções do defeito ${r.defeitoTop}`, (x) => x.problema_encontrado === r.defeitoTop)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2215,12 +2359,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Consolidado por defeito</h3>
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr><th className="px-3 py-3 text-left">Defeito</th><th className="px-3 py-3 text-left">Total</th><th className="px-3 py-3 text-left">Veículos</th><th className="px-3 py-3 text-left">Setores</th><th className="px-3 py-3 text-left">Linhas</th><th className="px-3 py-3 text-left">Reinc. Técnica</th><th className="px-3 py-3 text-left">Média Pós Prev.</th><th className="px-3 py-3 text-left">Média Pós Insp.</th></tr>
+                <tr><SortTh table="DEFEITOS" sortKey="defeito">Defeito</SortTh><SortTh table="DEFEITOS" sortKey="total">Total</SortTh><SortTh table="DEFEITOS" sortKey="veiculos">Veículos</SortTh><SortTh table="DEFEITOS" sortKey="setores">Setores</SortTh><SortTh table="DEFEITOS" sortKey="linhas">Linhas</SortTh><SortTh table="DEFEITOS" sortKey="reincTecnica">Reinc. Técnica</SortTh>{mesesHistorico3m.map((m) => (<SortTh key={m} table="DEFEITOS" sortKey={monthLabelFromKey(m)}>{monthLabelFromKey(m)}</SortTh>))}<SortTh table="DEFEITOS" sortKey="mediaPrev">Média Pós Prev.</SortTh><SortTh table="DEFEITOS" sortKey="mediaInsp">Média Pós Insp.</SortTh></tr>
               </thead>
               <tbody>
-                {tabelaDefeitos.map((r) => (
+                {sortRows(tabelaDefeitos, "DEFEITOS", "total").map((r) => (
                   <tr key={r.defeito} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.defeito}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td><td className="px-3 py-3">{fmtInt(r.veiculos)}</td><td className="px-3 py-3">{fmtInt(r.setores)}</td><td className="px-3 py-3">{fmtInt(r.linhas)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaPrev, 1)}</td><td className="px-3 py-3 font-semibold text-blue-600">{fmtNum(r.mediaInsp, 1)}</td>
+                    <td className="px-3 py-3">{renderAnaliseLink(r.defeito, `Intervenções do defeito ${r.defeito}`, (x) => x.problema_encontrado === r.defeito)}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td><td className="px-3 py-3">{fmtInt(r.veiculos)}</td><td className="px-3 py-3">{fmtInt(r.setores)}</td><td className="px-3 py-3">{fmtInt(r.linhas)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td>{mesesHistorico3m.map((m) => (<td key={m} className="px-3 py-3 font-semibold text-slate-700">{fmtInt(r[monthLabelFromKey(m)])}</td>))}<td className="px-3 py-3 font-semibold text-emerald-600">{fmtNum(r.mediaPrev, 1)}</td><td className="px-3 py-3 font-semibold text-blue-600">{fmtNum(r.mediaInsp, 1)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2251,12 +2395,12 @@ export default function SOSCentral() {
             <h3 className="text-lg font-black text-slate-800 mb-3">Detalhamento por Motorista</h3>
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-slate-50 border-b text-slate-600 uppercase tracking-wider text-xs">
-                <tr><th className="px-3 py-3 text-left">Motorista</th><th className="px-3 py-3 text-left">Total de SOS</th><th className="px-3 py-3 text-left">Veículos Distintos</th><th className="px-3 py-3 text-left">Linhas Distintas</th><th className="px-3 py-3 text-left">Principal Defeito Relatado</th></tr>
+                <tr><SortTh table="MOTORISTAS" sortKey="motorista">Motorista</SortTh><SortTh table="MOTORISTAS" sortKey="total">Total de SOS</SortTh><SortTh table="MOTORISTAS" sortKey="veiculos">Veículos Distintos</SortTh><SortTh table="MOTORISTAS" sortKey="linhas">Linhas Distintas</SortTh>{mesesHistorico3m.map((m) => (<SortTh key={m} table="MOTORISTAS" sortKey={monthLabelFromKey(m)}>{monthLabelFromKey(m)}</SortTh>))}<SortTh table="MOTORISTAS" sortKey="defeitoTop">Principal Defeito Relatado</SortTh></tr>
               </thead>
               <tbody>
-                {tabelaMotoristas.map((r) => (
+                {sortRows(tabelaMotoristas, "MOTORISTAS", "total").map((r) => (
                   <tr key={r.motorista} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.motorista}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td><td className="px-3 py-3">{fmtInt(r.veiculos)}</td><td className="px-3 py-3">{fmtInt(r.linhas)}</td><td className="px-3 py-3">{r.defeitoTop}</td>
+                    <td className="px-3 py-3">{renderAnaliseLink(r.motorista, `Intervenções do motorista ${r.motorista}`, (x) => x.motorista === r.motorista)}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td><td className="px-3 py-3">{fmtInt(r.veiculos)}</td><td className="px-3 py-3">{fmtInt(r.linhas)}</td>{mesesHistorico3m.map((m) => (<td key={m} className="px-3 py-3 font-semibold text-slate-700">{fmtInt(r[monthLabelFromKey(m)])}</td>))}<td className="px-3 py-3">{renderAnaliseLink(r.defeitoTop, `Intervenções do defeito ${r.defeitoTop}`, (x) => x.problema_encontrado === r.defeitoTop)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2273,8 +2417,19 @@ export default function SOSCentral() {
       {veiculoPopup && (
         <OcorrenciasVeiculoModal
           veiculo={veiculoPopup.veiculo}
+          titulo={veiculoPopup.titulo}
+          subtitulo={veiculoPopup.subtitulo}
           ocorrencias={veiculoPopup.ocorrencias}
           onClose={() => setVeiculoPopup(null)}
+        />
+      )}
+
+      {analisePopup && (
+        <OcorrenciasVeiculoModal
+          titulo={analisePopup.titulo}
+          subtitulo={analisePopup.subtitulo}
+          ocorrencias={analisePopup.ocorrencias}
+          onClose={() => setAnalisePopup(null)}
         />
       )}
 

@@ -74,16 +74,11 @@ function montarResumoPreventiva(item, tipo, dias) {
   const data = formatDateBR(item.data_realizacao || item.data || item.created_at);
   const km = item.km_veiculo || item.km || item.hodometro || "—";
 
-  const mecanico = item.mecanico || "—";
-  const eletricista = item.eletricista || "—";
-
   return [
     `*${tipo}:* OS ${numeroOS}`,
     `   Data: ${data}`,
     `   KM: ${km}`,
     `   Dias desde a execução: ${dias ?? "—"}`,
-    `   Mecânico: ${mecanico}`,
-    `   Eletricista: ${eletricista}`,
   ].join("\n");
 }
 
@@ -337,6 +332,7 @@ export default function SolicitacaoSOS() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="text-sm text-gray-600">Plantonista</label>
+
           <input
             type="text"
             className="w-full border rounded p-2"
@@ -348,12 +344,14 @@ export default function SolicitacaoSOS() {
         {/* Prefixo do veículo */}
         <div>
           <label className="text-sm text-gray-600">Prefixo do Veículo</label>
+
           <select
             className="w-full border rounded p-2"
             value={form.veiculo}
             onChange={(e) => setForm({ ...form, veiculo: e.target.value })}
           >
             <option value="">Selecione...</option>
+
             {prefixos.map((p) => (
               <option key={p.codigo} value={p.codigo}>
                 {p.codigo}
@@ -369,6 +367,7 @@ export default function SolicitacaoSOS() {
 
         <div>
           <label className="text-sm text-gray-600">Local</label>
+
           <input
             type="text"
             className="w-full border rounded p-2"
@@ -381,12 +380,14 @@ export default function SolicitacaoSOS() {
 
         <div>
           <label className="text-sm text-gray-600">Linha</label>
+
           <select
             className="w-full border rounded p-2"
             value={form.linha}
             onChange={(e) => setForm({ ...form, linha: e.target.value })}
           >
             <option value="">Selecione</option>
+
             {linhas.map((l) => (
               <option key={l.codigo} value={l.codigo}>
                 {l.codigo} - {l.descricao}
@@ -397,6 +398,7 @@ export default function SolicitacaoSOS() {
 
         <div>
           <label className="text-sm text-gray-600">Tabela Operacional</label>
+
           <select
             className="w-full border rounded p-2"
             value={form.tabela_operacional}
@@ -405,6 +407,7 @@ export default function SolicitacaoSOS() {
             }
           >
             <option value="">Selecione</option>
+
             {tabelas.map((t) => (
               <option key={t.codigo} value={t.codigo}>
                 {t.descricao}
@@ -415,6 +418,7 @@ export default function SolicitacaoSOS() {
 
         <div className="md:col-span-2">
           <label className="text-sm text-gray-600">Reclamação / Defeito</label>
+
           <textarea
             rows="3"
             className="w-full border rounded p-2"

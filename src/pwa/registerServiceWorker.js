@@ -43,6 +43,7 @@ function showFallbackPrompt() {
   if (typeof document === "undefined") return;
   if (window.__INOVE_REACT_UPDATE_PROMPT_VISIBLE__) return;
   if (document.getElementById(UPDATE_PROMPT_ID)) return;
+  // This fallback keeps the update CTA visible even if the React tree misses the first event.
 
   const overlay = document.createElement("div");
   overlay.id = UPDATE_PROMPT_ID;

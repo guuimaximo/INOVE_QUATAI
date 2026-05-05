@@ -1652,8 +1652,13 @@ export default function PCMTrocaPneus() {
       ok: itens.filter((item) => norm(item.transnet_status) === "OK").length,
       incorretos: itens.filter((item) => norm(item.transnet_status) === "INCORRETO").length,
       pendentes: itens.filter((item) => !norm(item.transnet_status)).length,
+      novo: estoqueRows.filter((item) => norm(item.situacao) === "NOVO").length,
+      uso: estoqueRows.filter((item) => norm(item.situacao) === "USADO ( PARA USO )").length,
+      recapagem: estoqueRows.filter((item) => norm(item.situacao) === "ENVIAR PARA RECAPAGEM").length,
+      recapado: estoqueRows.filter((item) => norm(item.situacao) === "RECAPADO").length,
+      sucata: estoqueRows.filter((item) => norm(item.situacao) === "SUCATA").length,
     };
-  }, [estoqueAgrupado]);
+  }, [estoqueAgrupado, estoqueRows]);
 
   const trocasFiltradas = useMemo(() => {
     const busca = norm(trocaFiltros.busca).toLowerCase();
@@ -2565,12 +2570,21 @@ export default function PCMTrocaPneus() {
       ) : null}
 
       {!isNativeShell && activeTab === TAB_ESTOQUE ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <CardResumo label="Última ficha" value={cardsEstoque.ficha} color="text-slate-900" />
           <CardResumo label="Pneus na última" value={cardsEstoque.total} color="text-blue-600" />
           <CardResumo label="OK" value={cardsEstoque.ok} color="text-emerald-600" />
           <CardResumo label="Incorretos" value={cardsEstoque.incorretos} color="text-rose-600" />
           <CardResumo label="Pendentes" value={cardsEstoque.pendentes} color="text-amber-600" />
+          </div>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+            <CardResumo label="Novo" value={cardsEstoque.novo} color="text-blue-600" />
+            <CardResumo label="Para uso" value={cardsEstoque.uso} color="text-emerald-600" />
+            <CardResumo label="Recapagem" value={cardsEstoque.recapagem} color="text-amber-600" />
+            <CardResumo label="Recapado" value={cardsEstoque.recapado} color="text-violet-600" />
+            <CardResumo label="Sucata" value={cardsEstoque.sucata} color="text-rose-600" />
+          </div>
         </div>
       ) : null}
 

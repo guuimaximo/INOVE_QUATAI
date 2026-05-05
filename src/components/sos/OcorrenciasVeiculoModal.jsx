@@ -1,6 +1,15 @@
 // src/components/sos/OcorrenciasVeiculoModal.jsx
 import { FaBus, FaTimes } from "react-icons/fa";
 
+const OCORRENCIA_STYLES = {
+  SOS: "bg-rose-100 text-rose-700 border border-rose-200",
+  RECOLHEU: "bg-blue-100 text-blue-700 border border-blue-200",
+  TROCA: "bg-amber-100 text-amber-800 border border-amber-200",
+  AVARIA: "bg-slate-200 text-slate-800 border border-slate-300",
+  IMPROCEDENTE: "bg-purple-100 text-purple-700 border border-purple-200",
+  "SEGUIU VIAGEM": "bg-emerald-100 text-emerald-700 border border-emerald-200",
+};
+
 function safeDateStr(v) {
   if (!v) return "";
   const txt = String(v || "").trim();
@@ -24,7 +33,18 @@ function fmtDateBr(v) {
   return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dt;
 }
 
-export default function OcorrenciasVeiculoModal({ veiculo, ocorrencias = [], onClose }) {
+function getOcorrenciaStyle(tipo) {
+  const key = String(tipo || "").trim().toUpperCase();
+  return OCORRENCIA_STYLES[key] || "bg-slate-100 text-slate-700 border border-slate-200";
+}
+
+export default function OcorrenciasVeiculoModal({
+  veiculo,
+  titulo,
+  subtitulo,
+  ocorrencias = [],
+  onClose,
+}) {
   const lista = [...ocorrencias].sort((a, b) =>
     String(b.data_sos || b.created_at || "").localeCompare(
       String(a.data_sos || a.created_at || "")
@@ -33,7 +53,7 @@ export default function OcorrenciasVeiculoModal({ veiculo, ocorrencias = [], onC
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b bg-slate-50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center">
@@ -42,10 +62,10 @@ export default function OcorrenciasVeiculoModal({ veiculo, ocorrencias = [], onC
 
             <div>
               <h2 className="text-lg font-black text-slate-800">
-                Ocorrências do veículo {veiculo}
+                {titulo || `Ocorrências do veículo ${veiculo}`}
               </h2>
               <p className="text-xs text-slate-500 font-semibold">
-                {lista.length} ocorrência(s) encontrada(s)
+                {subtitulo || `${lista.length} ocorrência(s) encontrada(s)`}
               </p>
             </div>
           </div>
@@ -63,53 +83,45 @@ export default function OcorrenciasVeiculoModal({ veiculo, ocorrencias = [], onC
           <table className="w-full text-sm">
             <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-black uppercase">
-                  Data
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-black uppercase">
-                  Ocorrência
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-black uppercase">
-                  Defeito
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-black uppercase">
-                  Solução
-                </th>
+                <th className="px-4 py-3 text-left text-xs font-black uppercase">Data</th>
+                <th className="px-4 py-3 text-left text-xs font-black uppercase">Ocorrência</th>
+                <th className="px-4 py-3 text-left text-xs font-black uppercase">Defeito</th>
+                <th className="px-4 py-3 text-left text-xs font-black uppercase">Solução</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-100">
               {lista.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={4}
-                    className="px-4 py-8 text-center text-slate-500 font-semibold"
-                  >
-                    Nenhuma ocorrência encontrada para este veículo.
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500 font-semibold">
+                    Nenhuma ocorrência encontrada para esta análise.
                   </td>
                 </tr>
               ) : (
-                lista.map((item, idx) => (
-                  <tr key={item.id || `${item.veiculo}-${idx}`} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">
-                      {fmtDateBr(item.data_sos || item.created_at)}
-                    </td>
+                lista.map((item, idx) => {
+                  const tipo = item.tipo_norm || item.ocorrencia || "—";
+                  return (
+                    <tr key={item.id || `${item.veiculo}-${idx}`} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">
+                        {fmtDateBr(item.data_sos || item.created_at)}
+                      </td>
 
-                    <td className="px-4 py-3">
-                      <span className="inline-flex px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-black uppercase">
-                        {item.tipo_norm || item.ocorrencia || "—"}
-                      </span>
-                    </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2.5 py-1 rounded-lg text-[11px] font-black uppercase ${getOcorrenciaStyle(tipo)}`}>
+                          {tipo}
+                        </span>
+                      </td>
 
-                    <td className="px-4 py-3 font-semibold text-slate-700">
-                      {item.problema_encontrado || "—"}
-                    </td>
+                      <td className="px-4 py-3 font-semibold text-slate-700">
+                        {item.problema_encontrado || "—"}
+                      </td>
 
-                    <td className="px-4 py-3 text-slate-600 max-w-[420px]">
-                      {item.solucao || item.solucao_manutencao || "—"}
-                    </td>
-                  </tr>
-                ))
+                      <td className="px-4 py-3 text-slate-600 max-w-[520px]">
+                        {item.solucao || item.solucao_manutencao || "—"}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

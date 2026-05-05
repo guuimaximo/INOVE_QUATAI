@@ -2,6 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
 import * as XLSX from "xlsx";
 import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  LabelList,
+} from "recharts";
+import {
   FaClipboardList,
   FaDownload,
   FaFilter,
@@ -14,17 +25,41 @@ import {
   FaCheckCircle,
   FaFolderOpen,
   FaExclamationCircle,
+  FaInfoCircle,
+  FaTimes,
+  FaRedo,
+  FaCalendarAlt,
+  FaChartLine,
+  FaTable,
+  FaUserTie,
+  FaLayerGroup,
 } from "react-icons/fa";
+
+/* =========================
+   HELPERS
+========================= */
 
 function toISODateOnly(d) {
   if (!d) return "";
-  const dt = new Date(d);
+  const dt = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(dt.getTime())) return "";
-  return dt.toISOString().slice(0, 10);
+  return new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function startOfMonthISO(iso) {
+  const [y, m] = iso.split("-").map(Number);
+  return toISODateOnly(new Date(y, m - 1, 1));
+}
+
+function endOfMonthISO(iso) {
+  const [y, m] = iso.split("-").map(Number);
+  return toISODateOnly(new Date(y, m, 0));
 }
 
 function addDays(dateStr, days) {
-  const d = new Date(dateStr);
+  const d = new Date(`${dateStr}T00:00:00`);
   d.setDate(d.getDate() + days);
   return toISODateOnly(d);
 }
@@ -33,173 +68,426 @@ function normStr(v) {
   return String(v ?? "").trim();
 }
 
+function safeLower(v) {
+  return normStr(v).toLowerCase();
+}
+
 function ilikeContains(hay, needle) {
-  return normStr(hay).toLowerCase().includes(normStr(needle).toLowerCase());
+  return safeLower(hay).includes(safeLower(needle));
+}
+
+function fmtInt(v) {
+  return Math.round(Number(v || 0)).toLocaleString("pt-BR");
+}
+
+function formatDateBR(v) {
+  if (!v) return "—";
+  const txt = String(v).trim();
+  const date = txt.includes("T") ? txt.split("T")[0] : txt.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const [y, m, d] = date.split("-");
+    return `${d}/${m}/${y}`;
+  }
+  return txt;
+}
+
+function monthKeyFromDate(v) {
+  if (!v) return null;
+  const d = new Date(String(v).includes("T") ? v : `${v}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(ym) {
+  const [y, m] = String(ym || "").split("-");
+  const map = {
+    "01": "JAN",
+    "02": "FEV",
+    "03": "MAR",
+    "04": "ABR",
+    "05": "MAI",
+    "06": "JUN",
+    "07": "JUL",
+    "08": "AGO",
+    "09": "SET",
+    "10": "OUT",
+    "11": "NOV",
+    "12": "DEZ",
+  };
+  return `${map[m] || m}/${String(y).slice(2)}`;
 }
 
 function countBy(arr, keyFn) {
   const m = new Map();
   for (const it of arr) {
-    const k = keyFn(it);
+    const k = keyFn(it) || "Não informado";
     m.set(k, (m.get(k) || 0) + 1);
   }
   return m;
 }
 
 function sortMapDesc(m) {
-  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), "pt-BR"));
 }
 
-function Badge({ children, tone = "gray" }) {
-  const cls =
-    {
-      gray: "bg-slate-100 text-slate-700 border-slate-200",
-      blue: "bg-blue-50 text-blue-700 border-blue-200",
-      green: "bg-green-50 text-green-700 border-green-200",
-      yellow: "bg-yellow-50 text-yellow-700 border-yellow-200",
-      red: "bg-red-50 text-red-700 border-red-200",
-      purple: "bg-purple-50 text-purple-700 border-purple-200",
-      indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    }[tone] || "bg-slate-100 text-slate-700 border-slate-200";
+function isPendente(status) {
+  const s = safeLower(status);
+  return s.includes("pend") || s.includes("abert");
+}
+
+function isConcluida(status) {
+  const s = safeLower(status);
+  return s.includes("conclu") || s.includes("resolvid") || s.includes("finaliz");
+}
+
+function isAtrasada(row) {
+  if (!isPendente(row?.status)) return false;
+  if (!row?.created_at) return false;
+  const d = new Date(row.created_at);
+  if (Number.isNaN(d.getTime())) return false;
+  const limite = new Date();
+  limite.setDate(limite.getDate() - 10);
+  return d < limite;
+}
+
+function motoristaKey(t) {
+  const chapa = normStr(t?.motorista_chapa || t?.motorista_id);
+  const nome = normStr(t?.motorista_nome);
+  return `${chapa}|${nome}`;
+}
+
+function motoristaLabel(key) {
+  const [chapa, nome] = String(key || "").split("|");
+  if (chapa && nome) return `${chapa} - ${nome}`;
+  return nome || chapa || "Não informado";
+}
+
+function statusTone(status) {
+  if (isConcluida(status)) return "emerald";
+  if (isPendente(status)) return "amber";
+  return "slate";
+}
+
+function exportarCSV(dados, nomeArquivo) {
+  if (!dados?.length) {
+    alert("Não há dados para exportar.");
+    return;
+  }
+
+  const cols = Object.keys(dados[0]).filter((k) => typeof dados[0][k] !== "object");
+  const csv = [
+    cols.join(";"),
+    ...dados.map((row) =>
+      cols.map((col) => `"${String(row[col] ?? "").replace(/"/g, '""')}"`).join(";")
+    ),
+  ].join("\n");
+
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${nomeArquivo}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+/* =========================
+   COMPONENTES UI
+========================= */
+
+function CardKPI({ title, value, sub, icon, tone = "blue", className = "" }) {
+  const tones = {
+    blue: "from-blue-50 to-cyan-50 border-blue-200 text-blue-700",
+    emerald: "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700",
+    amber: "from-amber-50 to-orange-50 border-amber-200 text-amber-700",
+    rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
+    violet: "from-violet-50 to-fuchsia-50 border-violet-200 text-violet-700",
+    slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
+  };
 
   return (
-    <span className={`inline-flex items-center px-2 py-1 text-xs border rounded-lg font-semibold ${cls}`}>
+    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-3.5 shadow-sm ${className}`}>
+      <div className="flex items-start justify-between gap-3 h-full">
+        <div className="flex flex-col justify-between h-full">
+          <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
+          <div>
+            <p className="text-xl md:text-3xl font-black mt-2 text-slate-800">{value}</p>
+            {sub && <p className="text-[11px] mt-1 font-bold opacity-80">{sub}</p>}
+          </div>
+        </div>
+        <div className="text-xl mt-1 opacity-80">{icon}</div>
+      </div>
+    </div>
+  );
+}
+
+function Badge({ children, tone = "slate" }) {
+  const tones = {
+    slate: "bg-slate-100 text-slate-700 border-slate-200",
+    blue: "bg-blue-50 text-blue-700 border-blue-200",
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    amber: "bg-amber-50 text-amber-700 border-amber-200",
+    rose: "bg-rose-50 text-rose-700 border-rose-200",
+    violet: "bg-violet-50 text-violet-700 border-violet-200",
+    indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  };
+
+  return (
+    <span className={`inline-flex items-center px-2.5 py-1 text-xs border rounded-lg font-black ${tones[tone] || tones.slate}`}>
       {children}
     </span>
   );
 }
 
-function Card({ title, children, right = null, icon = null }) {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          {icon ? <span className="text-slate-400">{icon}</span> : null}
-          <div className="font-bold text-slate-800 truncate">{title}</div>
-        </div>
-        {right}
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
-
-function CardResumo({ titulo, valor, icon, border }) {
-  return (
-    <div className={`bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 ${border}`}>
-      <div className="min-w-0">
-        <p className="text-sm text-slate-500 font-bold">{titulo}</p>
-        <p className="text-2xl font-black text-slate-800">{valor}</p>
-      </div>
-      <div>{icon}</div>
-    </div>
-  );
-}
-
-function ListItemButton({ label, value, onClick, active = false, sub = null }) {
+function TabButton({ active, onClick, icon, children }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left flex items-center justify-between gap-3 px-3 py-3 rounded-xl border transition ${
-        active ? "bg-blue-50 border-blue-200" : "bg-white border-slate-200 hover:bg-slate-50"
+      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-black transition ${
+        active
+          ? "bg-slate-800 text-white border-slate-800 shadow"
+          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
       }`}
     >
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-slate-800 truncate">{label}</div>
-        {sub ? <div className="text-xs text-slate-500 truncate">{sub}</div> : null}
-      </div>
-
-      <div className="shrink-0 max-w-[200px] text-right">
-        <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-100 text-slate-700 whitespace-nowrap">
-          {value}
-        </span>
-      </div>
+      {icon}
+      {children}
     </button>
   );
 }
 
-export default function AtasResumo() {
+function RankingTable({ title, icon, rows, columns, emptyText = "Sem dados", onRowClick }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <h3 className="text-base font-black text-slate-800 flex items-center gap-2 mb-4">
+        {icon} {title}
+      </h3>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm border-collapse">
+          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
+            <tr>
+              {columns.map((c) => (
+                <th key={c.key} className={`p-3 font-black ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : ""}`}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr
+                key={row.key || row.nome || idx}
+                onClick={() => onRowClick?.(row)}
+                className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}
+              >
+                {columns.map((c) => (
+                  <td key={c.key} className={`p-3 ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : ""}`}>
+                    {c.render ? c.render(row, idx) : row[c.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="p-6 text-center text-slate-400 font-bold">
+                  {emptyText}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   MODAIS
+========================= */
+
+function ExplicacaoModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-[70] animate-in fade-in duration-200 p-4">
+      <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center mb-4 border-b pb-4 shrink-0">
+          <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <FaInfoCircle className="text-blue-600" /> Entender Cálculos (Tratativas)
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition">
+            <FaTimes size={20} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto pr-2 space-y-5 text-sm text-slate-700">
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2"><FaFilter className="text-slate-500" /> Base de dados</h3>
+            <p>O painel lê a tabela <strong>tratativas</strong> e cruza com <strong>tratativas_detalhes</strong> para mostrar o volume de tratativas e as ações executadas no período filtrado.</p>
+          </div>
+
+          <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+            <h3 className="font-black text-amber-900 mb-2 flex items-center gap-2"><FaClock className="text-amber-600" /> Pendentes e atrasadas</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong>Pendente:</strong> status contendo “pendente” ou “aberto”.</li>
+              <li><strong>Atrasada:</strong> tratativa pendente criada há mais de 10 dias.</li>
+            </ul>
+          </div>
+
+          <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+            <h3 className="font-black text-emerald-900 mb-2 flex items-center gap-2"><FaCheckCircle className="text-emerald-600" /> Concluídas</h3>
+            <p>São consideradas concluídas as tratativas com status contendo “concluída”, “resolvido” ou “finalizada”.</p>
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+            <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2"><FaChartLine className="text-blue-600" /> Evolução mensal</h3>
+            <p>O gráfico mensal considera a data de criação da tratativa (<strong>created_at</strong>) e separa total, pendentes, concluídas e atrasadas.</p>
+          </div>
+
+          <div className="bg-violet-50 p-4 rounded-xl border border-violet-200">
+            <h3 className="font-black text-violet-900 mb-2 flex items-center gap-2"><FaTasks className="text-violet-600" /> Ações aplicadas</h3>
+            <p>A aba de ações usa a tabela <strong>tratativas_detalhes</strong>. Uma tratativa pode aparecer sem ação aplicada caso ainda não tenha registro de detalhe.</p>
+          </div>
+        </div>
+
+        <div className="mt-5 pt-4 border-t flex justify-end shrink-0">
+          <button onClick={onClose} className="px-6 py-2.5 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition shadow-md active:scale-95">
+            Entendi
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TratativasModal({ title, rows, detalhes, onClose }) {
+  const detalhesPorTratativa = useMemo(() => {
+    const map = new Map();
+    for (const d of detalhes || []) {
+      if (!map.has(d.tratativa_id)) map.set(d.tratativa_id, []);
+      map.get(d.tratativa_id).push(d);
+    }
+    return map;
+  }, [detalhes]);
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-[70] animate-in fade-in duration-200 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="px-5 py-4 border-b bg-slate-50 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+              <FaClipboardList className="text-violet-600" /> {title}
+            </h2>
+            <p className="text-xs text-slate-500 font-semibold mt-1">{rows.length} tratativa(s) no recorte selecionado</p>
+          </div>
+
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition">
+            <FaTimes size={20} />
+          </button>
+        </div>
+
+        <div className="overflow-auto">
+          <table className="w-full min-w-[1000px] text-sm text-left">
+            <thead className="bg-white text-slate-500 uppercase font-black text-[10px] tracking-wider border-b sticky top-0 z-10">
+              <tr>
+                <th className="px-4 py-3">Data</th>
+                <th className="px-4 py-3">Motorista</th>
+                <th className="px-4 py-3">Linha</th>
+                <th className="px-4 py-3">Ocorrência</th>
+                <th className="px-4 py-3">Setor</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Descrição</th>
+                <th className="px-4 py-3">Última ação</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((t) => {
+                const dets = detalhesPorTratativa.get(t.id) || [];
+                const ultima = dets[0];
+
+                return (
+                  <tr key={t.id} className="hover:bg-slate-50 align-top">
+                    <td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">{formatDateBR(t.created_at)}</td>
+                    <td className="px-4 py-3 font-bold text-slate-800 min-w-[220px]">{motoristaLabel(motoristaKey(t))}</td>
+                    <td className="px-4 py-3 font-bold text-slate-700">{t.linha || "—"}</td>
+                    <td className="px-4 py-3"><Badge tone="violet">{t.tipo_ocorrencia || "—"}</Badge></td>
+                    <td className="px-4 py-3"><Badge tone="blue">{t.setor_origem || "—"}</Badge></td>
+                    <td className="px-4 py-3"><Badge tone={statusTone(t.status)}>{t.status || "—"}</Badge></td>
+                    <td className="px-4 py-3 text-slate-600 min-w-[280px] max-w-[420px]">{t.descricao || "—"}</td>
+                    <td className="px-4 py-3 text-slate-600 min-w-[240px]">
+                      {ultima ? (
+                        <div>
+                          <p className="font-black text-slate-800">{ultima.acao_aplicada || "Ação não informada"}</p>
+                          <p className="text-xs text-slate-500 mt-1">{ultima.observacoes || "Sem observação"}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">{formatDateBR(ultima.created_at)} • {ultima.tratado_por_nome || ultima.tratado_por_login || "—"}</p>
+                        </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-slate-400 font-bold">Sem tratativas no recorte.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-5 py-3 border-t bg-white flex justify-end">
+          <button onClick={onClose} className="px-5 py-2.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-700 transition">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   PAGE
+========================= */
+
+export default function TratativasResumo() {
+  const hojeISO = useMemo(() => toISODateOnly(new Date()), []);
+  const mesAtualIni = useMemo(() => startOfMonthISO(hojeISO), [hojeISO]);
+  const mesAtualFim = useMemo(() => endOfMonthISO(hojeISO), [hojeISO]);
+
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
+  const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
+  const [abaAtiva, setAbaAtiva] = useState("GERAL");
+  const [modalRecorte, setModalRecorte] = useState(null);
+
   const [filtros, setFiltros] = useState({
-    dataInicio: "",
-    dataFim: "",
+    dataInicio: mesAtualIni,
+    dataFim: mesAtualFim,
     busca: "",
     setor: "",
     status: "",
   });
 
   const [setoresDisponiveis, setSetoresDisponiveis] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [atas, setAtas] = useState([]);
+  const [tratativas, setTratativas] = useState([]);
   const [detalhes, setDetalhes] = useState([]);
 
-  const [selOcorrencia, setSelOcorrencia] = useState("");
-  const [selMotorista, setSelMotorista] = useState("");
-  const [selAcao, setSelAcao] = useState("");
-  const [selLinha, setSelLinha] = useState("");
-
-  const [totalCount, setTotalCount] = useState(0);
-  const [pendentesCount, setPendentesCount] = useState(0);
-  const [concluidasCount, setConcluidasCount] = useState(0);
-  const [atrasadasCount, setAtrasadasCount] = useState(0);
-
-  useEffect(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    setFiltros((f) => ({
-      ...f,
-      dataInicio: toISODateOnly(start),
-      dataFim: toISODateOnly(end),
-    }));
-
-    async function carregarSetores() {
-      const { data } = await supabase.from("tratativas").select("setor_origem");
-      if (data) {
-        const unicos = [...new Set(data.map((d) => d.setor_origem).filter(Boolean))];
-        setSetoresDisponiveis(unicos.sort());
-      }
-    }
-
-    carregarSetores();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function resetDrill() {
-    setSelOcorrencia("");
-    setSelMotorista("");
-    setSelAcao("");
-    setSelLinha("");
-  }
-
-  function computeCardsFromList(list) {
-    const total = list.length;
-
-    const pend = list.filter((t) => ilikeContains(t.status, "pend")).length;
-
-    const conc = list.filter(
-      (t) => ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid")
-    ).length;
-
-    const date10DaysAgo = new Date();
-    date10DaysAgo.setDate(date10DaysAgo.getDate() - 10);
-    const atr = list.filter((t) => {
-      if (!ilikeContains(t.status, "pend")) return false;
-      if (!t.created_at) return false;
-      const d = new Date(t.created_at);
-      return !Number.isNaN(d.getTime()) && d < date10DaysAgo;
-    }).length;
-
-    setTotalCount(total);
-    setPendentesCount(pend);
-    setConcluidasCount(conc);
-    setAtrasadasCount(atr);
+  async function carregarSetores() {
+    const { data } = await supabase.from("tratativas").select("setor_origem");
+    const unicos = [...new Set((data || []).map((d) => d.setor_origem).filter(Boolean))];
+    setSetoresDisponiveis(unicos.sort((a, b) => String(a).localeCompare(String(b), "pt-BR")));
   }
 
   async function carregar() {
     setLoading(true);
-    try {
-      resetDrill();
+    setErrMsg("");
 
+    try {
       const LINHA_FIELD = "linha";
 
       let q = supabase.from("tratativas").select(
@@ -224,29 +512,29 @@ export default function AtasResumo() {
           `motorista_nome.ilike.%${b}%,motorista_chapa.ilike.%${b}%,descricao.ilike.%${b}%,tipo_ocorrencia.ilike.%${b}%,${LINHA_FIELD}.ilike.%${b}%`
         );
       }
+
       if (filtros.setor) q = q.eq("setor_origem", filtros.setor);
       if (filtros.status) q = q.ilike("status", `%${filtros.status}%`);
-
       if (filtros.dataInicio) q = q.gte("created_at", filtros.dataInicio);
       if (filtros.dataFim) q = q.lt("created_at", addDays(filtros.dataFim, 1));
 
       const { data: tData, error: tErr } = await q
         .order("created_at", { ascending: false })
         .limit(100000);
+
       if (tErr) throw tErr;
 
-      const listAtas = tData || [];
-      setAtas(listAtas);
-      computeCardsFromList(listAtas);
+      const list = tData || [];
+      setTratativas(list);
 
-      const ids = listAtas.map((x) => x.id).filter(Boolean);
+      const ids = list.map((x) => x.id).filter(Boolean);
       if (!ids.length) {
         setDetalhes([]);
         return;
       }
 
-      const CHUNK = 500;
       const allDet = [];
+      const CHUNK = 500;
       for (let i = 0; i < ids.length; i += CHUNK) {
         const part = ids.slice(i, i + CHUNK);
         const { data: dData, error: dErr } = await supabase
@@ -270,27 +558,28 @@ export default function AtasResumo() {
       }
 
       setDetalhes(allDet);
-    } catch (e) {
-      console.error("Erro ao carregar resumo de atas:", e);
-      alert("Erro ao carregar Resumo de Atas. Verifique o console.");
+    } catch (error) {
+      console.error("Erro ao carregar resumo de tratativas:", error);
+      setErrMsg(error.message || "Erro ao carregar dados.");
+      setTratativas([]);
+      setDetalhes([]);
     } finally {
       setLoading(false);
     }
   }
 
-  async function aplicar() {
-    await carregar();
-  }
-
-  const ataById = useMemo(() => {
-    const m = new Map();
-    for (const t of atas) m.set(t.id, t);
-    return m;
-  }, [atas]);
+  useEffect(() => {
+    carregarSetores();
+    carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const detalhesJoin = useMemo(() => {
+    const byId = new Map();
+    for (const t of tratativas) byId.set(t.id, t);
+
     return (detalhes || []).map((d) => {
-      const t = ataById.get(d.tratativa_id);
+      const t = byId.get(d.tratativa_id);
       return {
         ...d,
         motorista_nome: t?.motorista_nome ?? "",
@@ -301,104 +590,107 @@ export default function AtasResumo() {
         prioridade: t?.prioridade ?? "",
         status: t?.status ?? "",
         linha: t?.linha ?? "",
-        ata_created_at: t?.created_at ?? "",
+        tratativa_created_at: t?.created_at ?? "",
       };
     });
-  }, [detalhes, ataById]);
+  }, [detalhes, tratativas]);
 
-  const recorteDrill = useMemo(() => {
-    let baseAtas = [...atas];
-    let baseDet = [...detalhesJoin];
+  const kpis = useMemo(() => {
+    const total = tratativas.length;
+    const pendentes = tratativas.filter((t) => isPendente(t.status));
+    const concluidas = tratativas.filter((t) => isConcluida(t.status));
+    const atrasadas = tratativas.filter(isAtrasada);
+    const comAcao = new Set(detalhes.map((d) => d.tratativa_id)).size;
 
-    if (selOcorrencia) {
-      baseAtas = baseAtas.filter((t) => normStr(t.tipo_ocorrencia) === normStr(selOcorrencia));
-      const ids = new Set(baseAtas.map((t) => t.id));
-      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
+    return {
+      total,
+      pendentes: pendentes.length,
+      concluidas: concluidas.length,
+      atrasadas: atrasadas.length,
+      comAcao,
+      semAcao: Math.max(0, total - comAcao),
+      taxaConclusao: total > 0 ? (concluidas.length / total) * 100 : 0,
+    };
+  }, [tratativas, detalhes]);
+
+  const chartData = useMemo(() => {
+    const map = new Map();
+
+    for (const t of tratativas) {
+      const key = monthKeyFromDate(t.created_at);
+      if (!key) continue;
+      if (!map.has(key)) map.set(key, { mes: key, total: 0, pendentes: 0, concluidas: 0, atrasadas: 0 });
+
+      const item = map.get(key);
+      item.total += 1;
+      if (isPendente(t.status)) item.pendentes += 1;
+      if (isConcluida(t.status)) item.concluidas += 1;
+      if (isAtrasada(t)) item.atrasadas += 1;
     }
 
-    if (selLinha) {
-      baseAtas = baseAtas.filter((t) => normStr(t.linha) === normStr(selLinha));
-      const ids = new Set(baseAtas.map((t) => t.id));
-      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
-    }
-
-    if (selMotorista) {
-      baseAtas = baseAtas.filter(
-        (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === selMotorista
-      );
-      const ids = new Set(baseAtas.map((t) => t.id));
-      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
-    }
-
-    if (selAcao) {
-      baseDet = baseDet.filter((d) => normStr(d.acao_aplicada) === normStr(selAcao));
-      const ids = new Set(baseDet.map((d) => d.tratativa_id));
-      baseAtas = baseAtas.filter((t) => ids.has(t.id));
-    }
-
-    return { baseAtas, baseDet };
-  }, [atas, detalhesJoin, selOcorrencia, selLinha, selMotorista, selAcao]);
-
-  const topOcorrencias = useMemo(() => {
-    const m = countBy(recorteDrill.baseAtas, (t) => normStr(t.tipo_ocorrencia) || "Sem ocorrência");
-    return sortMapDesc(m).slice(0, 12);
-  }, [recorteDrill.baseAtas]);
-
-  const topLinhas = useMemo(() => {
-    const m = countBy(recorteDrill.baseAtas, (t) => normStr(t.linha) || "Sem linha");
-    return sortMapDesc(m).slice(0, 12);
-  }, [recorteDrill.baseAtas]);
+    return [...map.values()]
+      .sort((a, b) => String(a.mes).localeCompare(String(b.mes)))
+      .map((x) => ({ ...x, mesLabel: monthLabel(x.mes) }));
+  }, [tratativas]);
 
   const topMotoristas = useMemo(() => {
-    const key = (t) =>
-      `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}`.trim() || "Sem motorista";
+    const map = new Map();
 
-    const m = countBy(recorteDrill.baseAtas, (t) => key(t));
+    for (const t of tratativas) {
+      const key = motoristaKey(t) || "Não informado";
+      if (!map.has(key)) map.set(key, { key, nome: motoristaLabel(key), total: 0, pendentes: 0, concluidas: 0, atrasadas: 0 });
+      const item = map.get(key);
+      item.total += 1;
+      if (isPendente(t.status)) item.pendentes += 1;
+      if (isConcluida(t.status)) item.concluidas += 1;
+      if (isAtrasada(t)) item.atrasadas += 1;
+    }
 
-    return sortMapDesc(m)
-      .slice(0, 12)
-      .map(([k, total]) => {
-        const [chapa, nome] = k.split("|");
-        const pend = recorteDrill.baseAtas.filter(
-          (t) =>
-            `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k &&
-            ilikeContains(t.status, "pend")
-        ).length;
+    return [...map.values()].sort((a, b) => b.total - a.total || b.pendentes - a.pendentes).slice(0, 10);
+  }, [tratativas]);
 
-        const conc = recorteDrill.baseAtas.filter(
-          (t) =>
-            `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === k &&
-            (ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid"))
-        ).length;
+  const topOcorrencias = useMemo(() => {
+    const map = countBy(tratativas, (t) => normStr(t.tipo_ocorrencia) || "Sem ocorrência");
+    return sortMapDesc(map).slice(0, 10).map(([nome, total]) => ({ key: nome, nome, total }));
+  }, [tratativas]);
 
-        return { k, chapa, nome, total, pend, conc };
-      });
-  }, [recorteDrill.baseAtas]);
+  const topLinhas = useMemo(() => {
+    const map = countBy(tratativas, (t) => normStr(t.linha) || "Sem linha");
+    return sortMapDesc(map).slice(0, 10).map(([nome, total]) => ({ key: nome, nome, total }));
+  }, [tratativas]);
+
+  const topSetores = useMemo(() => {
+    const map = countBy(tratativas, (t) => normStr(t.setor_origem) || "Sem setor");
+    return sortMapDesc(map).slice(0, 10).map(([nome, total]) => ({ key: nome, nome, total }));
+  }, [tratativas]);
 
   const topAcoes = useMemo(() => {
-    const m = countBy(recorteDrill.baseDet, (d) => normStr(d.acao_aplicada) || "Não aplicada");
-    return sortMapDesc(m).slice(0, 12);
-  }, [recorteDrill.baseDet]);
+    const map = countBy(detalhesJoin, (d) => normStr(d.acao_aplicada) || "Não aplicada");
+    return sortMapDesc(map).slice(0, 10).map(([nome, total]) => ({ key: nome, nome, total }));
+  }, [detalhesJoin]);
 
-  const headerChips = useMemo(() => {
-    const chips = [];
-    if (selOcorrencia) chips.push({ k: "oc", label: `Ocorrência: ${selOcorrencia}`, tone: "purple" });
-    if (selLinha) chips.push({ k: "li", label: `Linha: ${selLinha}`, tone: "indigo" });
-    if (selMotorista) {
-      const [chapa, nome] = selMotorista.split("|");
-      chips.push({ k: "mo", label: `Motorista: ${nome} (${chapa})`, tone: "blue" });
+  function abrirRecorte(tipo, valor) {
+    let rows = tratativas;
+
+    if (tipo === "motorista") rows = rows.filter((t) => motoristaKey(t) === valor);
+    if (tipo === "ocorrencia") rows = rows.filter((t) => normStr(t.tipo_ocorrencia) === normStr(valor));
+    if (tipo === "linha") rows = rows.filter((t) => normStr(t.linha || "Sem linha") === normStr(valor));
+    if (tipo === "setor") rows = rows.filter((t) => normStr(t.setor_origem || "Sem setor") === normStr(valor));
+
+    if (tipo === "acao") {
+      const dets = detalhesJoin.filter((d) => normStr(d.acao_aplicada || "Não aplicada") === normStr(valor));
+      const ids = new Set(dets.map((d) => d.tratativa_id));
+      rows = rows.filter((t) => ids.has(t.id));
     }
-    if (selAcao) chips.push({ k: "ac", label: `Ação: ${selAcao}`, tone: "green" });
-    return chips;
-  }, [selOcorrencia, selLinha, selMotorista, selAcao]);
+
+    setModalRecorte({
+      title: `${tipo.charAt(0).toUpperCase()}${tipo.slice(1)}: ${tipo === "motorista" ? motoristaLabel(valor) : valor}`,
+      rows,
+    });
+  }
 
   function baixarExcelUnificado() {
-    const { baseAtas } = recorteDrill;
-
-    const ids = new Set(baseAtas.map((t) => t.id));
-    const detFiltrado = detalhesJoin.filter((d) => ids.has(d.tratativa_id));
-
-    const sheetAtas = baseAtas.map((t) => ({
+    const sheetTratativas = tratativas.map((t) => ({
       id: t.id,
       created_at: t.created_at,
       motorista_chapa: t.motorista_chapa,
@@ -411,328 +703,349 @@ export default function AtasResumo() {
       descricao: t.descricao,
     }));
 
-    const sheetDet = detFiltrado.map((d) => ({
+    const sheetDetalhes = detalhesJoin.map((d) => ({
       id: d.id,
       created_at: d.created_at,
-      ata_id: d.tratativa_id,
+      tratativa_id: d.tratativa_id,
+      motorista_chapa: d.motorista_chapa,
+      motorista_nome: d.motorista_nome,
+      linha: d.linha,
+      tipo_ocorrencia: d.tipo_ocorrencia,
+      status: d.status,
       acao_aplicada: d.acao_aplicada,
       observacoes: d.observacoes,
       tratado_por_login: d.tratado_por_login,
       tratado_por_nome: d.tratado_por_nome,
     }));
 
-    const detByAta = new Map();
-    for (const d of detFiltrado) {
-      if (!detByAta.has(d.tratativa_id)) detByAta.set(d.tratativa_id, []);
-      detByAta.get(d.tratativa_id).push(d);
-    }
-
-    const sheetUni = [];
-    for (const t of baseAtas) {
-      const list = detByAta.get(t.id) || [];
-      if (!list.length) {
-        sheetUni.push({
-          ata_id: t.id,
-          ata_created_at: t.created_at,
-          motorista_chapa: t.motorista_chapa,
-          motorista_nome: t.motorista_nome,
-          linha: t.linha,
-          tipo_ocorrencia: t.tipo_ocorrencia,
-          setor_origem: t.setor_origem,
-          prioridade: t.prioridade,
-          status: t.status,
-          descricao: t.descricao,
-          detalhe_id: "",
-          detalhe_created_at: "",
-          acao_aplicada: "",
-          observacoes: "",
-          tratado_por_login: "",
-          tratado_por_nome: "",
-        });
-      } else {
-        for (const d of list) {
-          sheetUni.push({
-            ata_id: t.id,
-            ata_created_at: t.created_at,
-            motorista_chapa: t.motorista_chapa,
-            motorista_nome: t.motorista_nome,
-            linha: t.linha,
-            tipo_ocorrencia: t.tipo_ocorrencia,
-            setor_origem: t.setor_origem,
-            prioridade: t.prioridade,
-            status: t.status,
-            descricao: t.descricao,
-            detalhe_id: d.id,
-            detalhe_created_at: d.created_at,
-            acao_aplicada: d.acao_aplicada,
-            observacoes: d.observacoes,
-            tratado_por_login: d.tratado_por_login,
-            tratado_por_nome: d.tratado_por_nome,
-          });
-        }
-      }
-    }
-
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetAtas), "Atas");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetDet), "Detalhes");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetUni), "Unificado");
-
-    const nome = `atas_resumo_${filtros.dataInicio || "inicio"}_${filtros.dataFim || "fim"}.xlsx`;
-    XLSX.writeFile(wb, nome);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetTratativas), "Tratativas");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetDetalhes), "Detalhes");
+    XLSX.writeFile(wb, `tratativas_resumo_${filtros.dataInicio || "inicio"}_${filtros.dataFim || "fim"}.xlsx`);
   }
 
+  const rankingColumnsBasicas = [
+    {
+      key: "nome",
+      label: "Nome",
+      render: (r, idx) => (
+        <span className="font-black text-slate-800">
+          <span className="text-slate-400 mr-2">#{idx + 1}</span>
+          {r.nome}
+        </span>
+      ),
+    },
+    { key: "total", label: "Total", align: "center", render: (r) => <span className="font-black text-rose-600">{fmtInt(r.total)}</span> },
+  ];
+
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <FaClipboardList className="text-violet-500" />
-            Resumo de Atas
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Clique nos TOPs para filtrar como BI e exporte um único Excel unificado.
-          </p>
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
+        <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-50 text-violet-700 text-xs font-black border border-violet-200">
+              <FaClipboardList /> Gestão de Tratativas
+            </div>
+
+            <h1 className="mt-3 text-2xl font-black text-slate-800">Painel de tratativas</h1>
+
+            <p className="text-sm text-slate-500 mt-1 flex items-center gap-2 font-semibold">
+              <FaCalendarAlt /> Visão analítica de tratativas, pendências, ações aplicadas e rankings.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => exportarCSV(tratativas, `Tratativas_${filtros.dataInicio}_a_${filtros.dataFim}`)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition shadow-sm"
+            >
+              <FaDownload /> Exportar CSV
+            </button>
+
+            <button
+              onClick={baixarExcelUnificado}
+              disabled={loading || tratativas.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-green-700 text-white font-bold hover:bg-green-600 transition shadow-sm disabled:bg-slate-300"
+            >
+              <FaDownload /> Excel Unificado
+            </button>
+
+            <button
+              onClick={() => setMostrarExplicacao(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
+            >
+              <FaInfoCircle /> Entender Cálculos
+            </button>
+
+            <button
+              onClick={carregar}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-800 bg-slate-800 text-white font-black hover:bg-slate-700 transition"
+            >
+              <FaRedo /> Atualizar
+            </button>
+          </div>
         </div>
 
-        <button
-          onClick={baixarExcelUnificado}
-          disabled={loading || atas.length === 0}
-          className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300 font-bold text-sm flex items-center gap-2 shadow-sm"
-        >
-          <FaDownload />
-          Baixar Excel (Unificado)
-        </button>
-      </div>
-
-      <div className="bg-white p-4 rounded-xl border shadow-sm space-y-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-800">Filtros</h2>
-          <p className="text-sm text-slate-500">
-            Refine a visualização por período, texto, setor e status.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <input
-            type="date"
-            value={filtros.dataInicio}
-            onChange={(e) => setFiltros((f) => ({ ...f, dataInicio: e.target.value }))}
-            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-          />
-
-          <input
-            type="date"
-            value={filtros.dataFim}
-            onChange={(e) => setFiltros((f) => ({ ...f, dataFim: e.target.value }))}
-            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-          />
-
-          <div className="relative">
-            <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+        <div className="mt-5 pt-5 border-t grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 items-end">
+          <div className="xl:col-span-1">
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Data início</label>
             <input
-              type="text"
-              placeholder="Busca (motorista, ocorrência, descrição...)"
-              value={filtros.busca}
-              onChange={(e) => setFiltros((f) => ({ ...f, busca: e.target.value }))}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+              type="date"
+              value={filtros.dataInicio}
+              onChange={(e) => setFiltros((f) => ({ ...f, dataInicio: e.target.value }))}
+              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none"
             />
           </div>
 
-          <div className="relative">
-            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+          <div className="xl:col-span-1">
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Data fim</label>
+            <input
+              type="date"
+              value={filtros.dataFim}
+              onChange={(e) => setFiltros((f) => ({ ...f, dataFim: e.target.value }))}
+              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none"
+            />
+          </div>
+
+          <div className="xl:col-span-2 relative">
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Busca</label>
+            <FaSearch className="absolute left-3 bottom-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Motorista, ocorrência, descrição, linha..."
+              value={filtros.busca}
+              onChange={(e) => setFiltros((f) => ({ ...f, busca: e.target.value }))}
+              className="w-full pl-9 border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Setor</label>
             <select
               value={filtros.setor}
               onChange={(e) => setFiltros((f) => ({ ...f, setor: e.target.value }))}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none bg-white"
             >
-              <option value="">Todos os Setores</option>
+              <option value="">Todos</option>
               {setoresDisponiveis.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
 
-          <div className="relative">
-            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Status</label>
             <select
               value={filtros.status}
               onChange={(e) => setFiltros((f) => ({ ...f, status: e.target.value }))}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none bg-white"
             >
-              <option value="">Todos os Status</option>
+              <option value="">Todos</option>
               <option value="Pendente">Pendente</option>
+              <option value="Aberto">Aberto</option>
               <option value="Resolvido">Resolvido</option>
               <option value="Concluída">Concluída</option>
             </select>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-1 gap-3 flex-wrap">
-          <div className="flex flex-wrap gap-2">
-            {headerChips.map((c) => (
-              <Badge key={c.k} tone={c.tone}>
-                {c.label}
-              </Badge>
-            ))}
-            {(selOcorrencia || selLinha || selMotorista || selAcao) && (
-              <button
-                onClick={resetDrill}
-                className="text-xs px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50"
-              >
-                Limpar seleção
-              </button>
-            )}
-          </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => setFiltros({ dataInicio: mesAtualIni, dataFim: mesAtualFim, busca: "", setor: "", status: "" })}
+            className="px-4 py-2.5 rounded-xl font-black text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 transition shadow-sm border border-blue-200"
+          >
+            Mês Atual
+          </button>
 
           <button
-            onClick={aplicar}
+            onClick={() => setFiltros({ dataInicio: "", dataFim: "", busca: "", setor: "", status: "" })}
+            className="px-4 py-2.5 rounded-xl font-black text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+          >
+            Limpar filtros
+          </button>
+
+          <button
+            onClick={carregar}
             disabled={loading}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300 font-bold text-sm"
+            className="px-4 py-2.5 rounded-xl font-black text-sm bg-violet-600 text-white hover:bg-violet-700 transition disabled:bg-slate-300"
           >
             {loading ? "Carregando..." : "Aplicar"}
           </button>
         </div>
+
+        {errMsg && (
+          <div className="mt-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 text-sm font-bold flex items-center gap-2">
+            <FaExclamationTriangle /> {errMsg}
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <CardResumo
-          titulo="Total"
-          valor={totalCount}
-          icon={<FaFolderOpen className="text-4xl text-blue-50" />}
-          border="border-l-blue-500"
-        />
-        <CardResumo
-          titulo="Pendentes"
-          valor={pendentesCount}
-          icon={<FaClock className="text-4xl text-yellow-50" />}
-          border="border-l-yellow-500"
-        />
-        <CardResumo
-          titulo="Concluídas"
-          valor={concluidasCount}
-          icon={<FaCheckCircle className="text-4xl text-emerald-50" />}
-          border="border-l-emerald-500"
-        />
-        <CardResumo
-          titulo="Atrasadas (>10d)"
-          valor={atrasadasCount}
-          icon={<FaExclamationCircle className="text-4xl text-red-50" />}
-          border="border-l-red-500"
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardKPI title="Total de Tratativas" value={loading ? "-" : fmtInt(kpis.total)} sub={`${fmtInt(kpis.comAcao)} com ação aplicada`} icon={<FaFolderOpen />} tone="slate" />
+        <CardKPI title="Pendentes" value={loading ? "-" : fmtInt(kpis.pendentes)} sub={`${fmtInt(kpis.semAcao)} sem ação registrada`} icon={<FaClock />} tone="amber" />
+        <CardKPI title="Concluídas" value={loading ? "-" : fmtInt(kpis.concluidas)} sub={`Taxa: ${kpis.taxaConclusao.toFixed(1).replace(".", ",")}%`} icon={<FaCheckCircle />} tone="emerald" />
+        <CardKPI title="Atrasadas >10 dias" value={loading ? "-" : fmtInt(kpis.atrasadas)} sub="Pendentes antigas" icon={<FaExclamationCircle />} tone="rose" />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <div className="xl:col-span-5">
-          <Card
-            title="Top Motoristas (Atas)"
-            icon={<FaUsers />}
-            right={<Badge tone="blue">{recorteDrill.baseAtas.length} atas</Badge>}
-          >
-            <div className="space-y-2">
-              {topMotoristas.length === 0 ? (
-                <div className="text-sm text-slate-500">Sem dados no recorte.</div>
-              ) : (
-                topMotoristas.map((m) => (
-                  <ListItemButton
-                    key={m.k}
-                    label={m.nome || "Sem nome"}
-                    sub={m.chapa ? `Chapa ${m.chapa}` : "Chapa -"}
-                    value={`Total ${m.total} | Pend ${m.pend} | Conc ${m.conc}`}
-                    active={selMotorista === m.k}
-                    onClick={() => {
-                      setSelMotorista((cur) => (cur === m.k ? "" : m.k));
-                      setSelAcao("");
-                    }}
-                  />
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex flex-wrap gap-2">
+        <TabButton active={abaAtiva === "GERAL"} onClick={() => setAbaAtiva("GERAL")} icon={<FaChartLine />}>Resumo</TabButton>
+        <TabButton active={abaAtiva === "MOTORISTAS"} onClick={() => setAbaAtiva("MOTORISTAS")} icon={<FaUsers />}>Motoristas</TabButton>
+        <TabButton active={abaAtiva === "OCORRENCIAS"} onClick={() => setAbaAtiva("OCORRENCIAS")} icon={<FaExclamationTriangle />}>Ocorrências</TabButton>
+        <TabButton active={abaAtiva === "LINHAS_SETORES"} onClick={() => setAbaAtiva("LINHAS_SETORES")} icon={<FaLayerGroup />}>Linhas e Setores</TabButton>
+        <TabButton active={abaAtiva === "ACOES"} onClick={() => setAbaAtiva("ACOES")} icon={<FaTasks />}>Ações</TabButton>
+        <TabButton active={abaAtiva === "BASE"} onClick={() => setAbaAtiva("BASE")} icon={<FaTable />}>Base</TabButton>
+      </div>
 
-        <div className="xl:col-span-2">
-          <Card
-            title="Top Ocorrências"
-            icon={<FaExclamationTriangle />}
-            right={<Badge tone="purple">{topOcorrencias.reduce((a, b) => a + b[1], 0)}</Badge>}
-          >
-            <div className="space-y-2">
-              {topOcorrencias.length === 0 ? (
-                <div className="text-sm text-slate-500">Sem dados no recorte.</div>
-              ) : (
-                topOcorrencias.map(([label, qtd]) => (
-                  <ListItemButton
-                    key={label}
-                    label={label}
-                    value={qtd}
-                    active={selOcorrencia === label}
-                    onClick={() => {
-                      setSelOcorrencia((cur) => (cur === label ? "" : label));
-                      setSelMotorista("");
-                      setSelAcao("");
-                    }}
-                  />
-                ))
-              )}
+      {abaAtiva === "GERAL" && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm xl:col-span-3">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-black text-slate-800">Evolução Mensal de Tratativas</h3>
+                <p className="text-xs text-slate-500 font-semibold">Total, pendentes, concluídas e atrasadas.</p>
+              </div>
             </div>
-          </Card>
-        </div>
 
-        <div className="xl:col-span-2">
-          <Card
+            {tratativas.length === 0 && !loading ? (
+              <div className="h-72 flex items-center justify-center text-sm font-bold text-slate-400">Nenhum dado encontrado para o período.</div>
+            ) : (
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 25, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} />
+                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: "20px", fontSize: "12px", fontWeight: "bold" }} />
+                    <Bar dataKey="total" name="Total" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={28}>
+                      <LabelList dataKey="total" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
+                    </Bar>
+                    <Bar dataKey="pendentes" name="Pendentes" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={28} />
+                    <Bar dataKey="concluidas" name="Concluídas" fill="#10b981" radius={[4, 4, 0, 0]} barSize={28} />
+                    <Bar dataKey="atrasadas" name="Atrasadas" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={28} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {abaAtiva === "MOTORISTAS" && (
+        <RankingTable
+          title="Top 10 Motoristas"
+          icon={<FaUsers className="text-slate-400" />}
+          rows={topMotoristas}
+          onRowClick={(r) => abrirRecorte("motorista", r.key)}
+          columns={[
+            { key: "nome", label: "Motorista", render: (r, idx) => <span className="font-black text-slate-800"><span className="text-slate-400 mr-2">#{idx + 1}</span>{r.nome}</span> },
+            { key: "total", label: "Total", align: "center", render: (r) => <span className="font-black text-rose-600">{fmtInt(r.total)}</span> },
+            { key: "pendentes", label: "Pendentes", align: "center", render: (r) => <span className="font-bold text-amber-600">{fmtInt(r.pendentes)}</span> },
+            { key: "concluidas", label: "Concluídas", align: "center", render: (r) => <span className="font-bold text-emerald-600">{fmtInt(r.concluidas)}</span> },
+            { key: "atrasadas", label: "Atrasadas", align: "center", render: (r) => <span className="font-bold text-rose-600">{fmtInt(r.atrasadas)}</span> },
+          ]}
+        />
+      )}
+
+      {abaAtiva === "OCORRENCIAS" && (
+        <RankingTable
+          title="Top Ocorrências"
+          icon={<FaExclamationTriangle className="text-slate-400" />}
+          rows={topOcorrencias}
+          columns={rankingColumnsBasicas}
+          onRowClick={(r) => abrirRecorte("ocorrencia", r.key)}
+        />
+      )}
+
+      {abaAtiva === "LINHAS_SETORES" && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <RankingTable
             title="Top Linhas"
-            icon={<FaRoad />}
-            right={<Badge tone="indigo">{topLinhas.reduce((a, b) => a + b[1], 0)}</Badge>}
-          >
-            <div className="space-y-2">
-              {topLinhas.length === 0 ? (
-                <div className="text-sm text-slate-500">Sem linhas no recorte.</div>
-              ) : (
-                topLinhas.map(([label, qtd]) => (
-                  <ListItemButton
-                    key={label}
-                    label={label}
-                    value={qtd}
-                    active={selLinha === label}
-                    onClick={() => {
-                      setSelLinha((cur) => (cur === label ? "" : label));
-                      setSelMotorista("");
-                      setSelAcao("");
-                    }}
-                  />
-                ))
-              )}
-            </div>
-          </Card>
+            icon={<FaRoad className="text-slate-400" />}
+            rows={topLinhas}
+            columns={rankingColumnsBasicas}
+            onRowClick={(r) => abrirRecorte("linha", r.key)}
+          />
+          <RankingTable
+            title="Top Setores"
+            icon={<FaUserTie className="text-slate-400" />}
+            rows={topSetores}
+            columns={rankingColumnsBasicas}
+            onRowClick={(r) => abrirRecorte("setor", r.key)}
+          />
         </div>
+      )}
 
-        <div className="xl:col-span-3">
-          <Card
-            title="Top Ações Aplicadas (Detalhes)"
-            icon={<FaTasks />}
-            right={<Badge tone="green">{recorteDrill.baseDet.length} ações</Badge>}
-          >
-            <div className="space-y-2">
-              {topAcoes.length === 0 ? (
-                <div className="text-sm text-slate-500">Sem ações no recorte.</div>
-              ) : (
-                topAcoes.map(([label, qtd]) => (
-                  <ListItemButton
-                    key={label}
-                    label={label}
-                    value={qtd}
-                    active={selAcao === label}
-                    onClick={() => setSelAcao((cur) => (cur === label ? "" : label))}
-                  />
-                ))
-              )}
-            </div>
-          </Card>
+      {abaAtiva === "ACOES" && (
+        <RankingTable
+          title="Top Ações Aplicadas"
+          icon={<FaTasks className="text-slate-400" />}
+          rows={topAcoes}
+          columns={rankingColumnsBasicas}
+          onRowClick={(r) => abrirRecorte("acao", r.key)}
+        />
+      )}
+
+      {abaAtiva === "BASE" && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <h3 className="text-base font-black text-slate-800 flex items-center gap-2 mb-4">
+            <FaTable className="text-slate-400" /> Base de Tratativas
+          </h3>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-sm text-left">
+              <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] border-b">
+                <tr>
+                  <th className="p-3 font-black">Data</th>
+                  <th className="p-3 font-black">Motorista</th>
+                  <th className="p-3 font-black">Linha</th>
+                  <th className="p-3 font-black">Ocorrência</th>
+                  <th className="p-3 font-black">Setor</th>
+                  <th className="p-3 font-black">Prioridade</th>
+                  <th className="p-3 font-black">Status</th>
+                  <th className="p-3 font-black">Descrição</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {tratativas.map((t) => (
+                  <tr key={t.id} className="hover:bg-slate-50">
+                    <td className="p-3 font-bold text-slate-700">{formatDateBR(t.created_at)}</td>
+                    <td className="p-3 font-black text-slate-800">{motoristaLabel(motoristaKey(t))}</td>
+                    <td className="p-3 font-bold text-slate-700">{t.linha || "—"}</td>
+                    <td className="p-3"><Badge tone="violet">{t.tipo_ocorrencia || "—"}</Badge></td>
+                    <td className="p-3"><Badge tone="blue">{t.setor_origem || "—"}</Badge></td>
+                    <td className="p-3"><Badge tone="slate">{t.prioridade || "—"}</Badge></td>
+                    <td className="p-3"><Badge tone={statusTone(t.status)}>{t.status || "—"}</Badge></td>
+                    <td className="p-3 text-slate-600 max-w-[420px] truncate" title={t.descricao || ""}>{t.descricao || "—"}</td>
+                  </tr>
+                ))}
+                {tratativas.length === 0 && !loading && (
+                  <tr><td colSpan={8} className="p-8 text-center text-slate-400 font-bold">Sem dados</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {loading && (
+        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-[1px] flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl px-6 py-4 shadow-xl border border-slate-200 font-black text-slate-800">
+            Carregando Tratativas...
+          </div>
+        </div>
+      )}
+
+      {mostrarExplicacao && <ExplicacaoModal onClose={() => setMostrarExplicacao(false)} />}
+
+      {modalRecorte && (
+        <TratativasModal
+          title={modalRecorte.title}
+          rows={modalRecorte.rows}
+          detalhes={detalhes}
+          onClose={() => setModalRecorte(null)}
+        />
+      )}
     </div>
   );
 }

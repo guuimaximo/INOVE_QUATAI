@@ -280,6 +280,72 @@ function buildAuditoriaResumo(row) {
   return `${getAuditoriaPosicoes(row).length} posicoes auditadas`;
 }
 
+
+function getEstoqueSituacaoCounts(row) {
+  const counts = new Map();
+
+  for (const item of row?.itens || []) {
+    const key = norm(item.situacao) || "Sem situacao";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  return [...counts.entries()].map(([label, value]) => ({ label, value }));
+}
+
+function getEstoqueConferenciaCounts(row) {
+  const counts = new Map();
+
+  for (const item of row?.itens || []) {
+    const key = norm(item.transnet_status) || "Pendente";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  return [...counts.entries()].map(([label, value]) => ({ label, value }));
+}
+
+function BadgeList({ items, emptyText = "-" }) {
+  if (!items?.length) return <span className="text-slate-400">{emptyText}</span>;
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <span
+          key={item.label}
+          className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600"
+        >
+          {item.label}: {item.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function EstoqueNumerosPreview({ row, max = 8 }) {
+  const numeros = (row?.itens || []).map((item) => norm(item.numero_pneu)).filter(Boolean);
+  const visible = numeros.slice(0, max);
+  const restante = Math.max(numeros.length - visible.length, 0);
+
+  if (!visible.length) return <span className="text-slate-400">-</span>;
+
+  return (
+    <div className="flex max-w-[360px] flex-wrap gap-1.5">
+      {visible.map((numero) => (
+        <span
+          key={numero}
+          className="inline-flex rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+        >
+          {numero}
+        </span>
+      ))}
+      {restante > 0 ? (
+        <span className="inline-flex rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">
+          +{restante}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function isNetworkError(error) {
   const message = String(error?.message || "").toLowerCase();
   return (
@@ -1031,6 +1097,7 @@ function ConsultaModal({
   onMarcarEstoqueStatus,
 }) {
   const [auditoriaEditando, setAuditoriaEditando] = useState({});
+  const [estoqueEditando, setEstoqueEditando] = useState({});
 
   if (!open || !row) return null;
 
@@ -1232,44 +1299,78 @@ function ConsultaModal({
           <DetailRow label="Data" value={formatDate(row.created_at)} />
           <DetailRow label="Quem lancou" value={row.criado_por_nome || row.criado_por_login} />
           <DetailRow label="Quantidade de pneus" value={String(row.itens?.length || 0)} />
-          <DetailRow label="Resumo" value={(row.itens || []).map((item) => item.situacao).join(", ")} />
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Conferencia</div>
+            <div className="mt-2">
+              <BadgeList items={getEstoqueConferenciaCounts(row)} />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="mb-3 text-sm font-black uppercase tracking-wide text-slate-700">Resumo por situacao</div>
+          <BadgeList items={getEstoqueSituacaoCounts(row)} />
         </div>
 
         <div className="space-y-4">
-          {(row.itens || []).map((item, index) => (
-            <SectionBlock key={item.id || `${item.numero_pneu}-${index}`} title={`Pneu ${index + 1}`}>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <DetailRow label="Numero do pneu" value={item.numero_pneu} />
-                <DetailRow label="Marca" value={item.marca} />
-                <DetailRow label="Situacao" value={item.situacao} />
-              </div>
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <DetailRow label="Conferencia" value={item.transnet_status || "Pendente"} />
-                <button
-                  type="button"
-                  onClick={() => onMarcarEstoqueStatus(item.id, "OK")}
-                  disabled={checkingStatusKey === `estoque:${item.id}`}
-                  className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                >
-                  OK
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onMarcarEstoqueStatus(item.id, "INCORRETO")}
-                  disabled={checkingStatusKey === `estoque:${item.id}`}
-                  className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
-                >
-                  Incorreto
-                </button>
-              </div>
-              {item.transnet_conferido_por_nome || item.transnet_conferido_por_login ? (
-                <DetailRow
-                  label="Conferido por"
-                  value={`${item.transnet_conferido_por_nome || item.transnet_conferido_por_login} em ${formatDate(item.transnet_conferido_em)}`}
-                />
-              ) : null}
-            </SectionBlock>
-          ))}
+          {(row.itens || []).map((item, index) => {
+            const temConferencia = !!item.transnet_status;
+            const editando = !!estoqueEditando[item.id] || !temConferencia;
+
+            return (
+              <SectionBlock key={item.id || `${item.numero_pneu}-${index}`} title={`Pneu ${index + 1} · ${item.numero_pneu || "Sem numero"}`}>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <DetailRow label="Numero do pneu" value={item.numero_pneu} />
+                  <DetailRow label="Marca" value={item.marca} />
+                  <DetailRow label="Situacao" value={item.situacao} />
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <DetailRow label="Conferencia" value={item.transnet_status || "Pendente"} />
+
+                  {editando ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await onMarcarEstoqueStatus(item.id, "OK");
+                          setEstoqueEditando((current) => ({ ...current, [item.id]: false }));
+                        }}
+                        disabled={checkingStatusKey === `estoque:${item.id}`}
+                        className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        OK
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await onMarcarEstoqueStatus(item.id, "INCORRETO");
+                          setEstoqueEditando((current) => ({ ...current, [item.id]: false }));
+                        }}
+                        disabled={checkingStatusKey === `estoque:${item.id}`}
+                        className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                      >
+                        Incorreto
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEstoqueEditando((current) => ({ ...current, [item.id]: true }))}
+                      className="md:col-span-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                    >
+                      Editar conferencia
+                    </button>
+                  )}
+                </div>
+                {item.transnet_conferido_por_nome || item.transnet_conferido_por_login ? (
+                  <DetailRow
+                    label="Conferido por"
+                    value={`${item.transnet_conferido_por_nome || item.transnet_conferido_por_login} em ${formatDate(item.transnet_conferido_em)}`}
+                  />
+                ) : null}
+              </SectionBlock>
+            );
+          })}
         </div>
 
         {row.observacoes ? <DetailRow label="Observacoes" value={row.observacoes} /> : null}
@@ -2616,7 +2717,7 @@ export default function PCMTrocaPneus() {
                 <tbody className="divide-y divide-slate-100">
                   {!loading && trocasFiltradas.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
+                      <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
                         Nenhuma ficha encontrada com os filtros atuais.
                       </td>
                     </tr>
@@ -2763,6 +2864,7 @@ export default function PCMTrocaPneus() {
                     <th className="px-4 py-3">Quantidade</th>
                     <th className="px-4 py-3">Numeros</th>
                     <th className="px-4 py-3">Situacoes</th>
+                    <th className="px-4 py-3">Conferencia</th>
                     <th className="px-4 py-3">Quem lancou</th>
                     <th className="px-4 py-3 text-right">Acoes</th>
                   </tr>
@@ -2770,7 +2872,7 @@ export default function PCMTrocaPneus() {
                 <tbody className="divide-y divide-slate-100">
                   {!loading && estoqueFiltrado.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
+                      <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
                         Nenhum item de estoque encontrado com os filtros atuais.
                       </td>
                     </tr>
@@ -2780,8 +2882,9 @@ export default function PCMTrocaPneus() {
                         <td className="px-4 py-3 font-bold text-slate-700">{row.ficha_estoque}</td>
                         <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
                         <td className="px-4 py-3 font-medium text-slate-700">{row.itens.length}</td>
-                        <td className="px-4 py-3 text-slate-600">{row.itens.map((item) => item.numero_pneu).join(", ")}</td>
-                        <td className="px-4 py-3 text-slate-600">{row.itens.map((item) => item.situacao).join(", ")}</td>
+                        <td className="px-4 py-3 text-slate-600"><EstoqueNumerosPreview row={row} /></td>
+                        <td className="px-4 py-3 text-slate-600"><BadgeList items={getEstoqueSituacaoCounts(row)} /></td>
+                        <td className="px-4 py-3 text-slate-600"><BadgeList items={getEstoqueConferenciaCounts(row)} /></td>
                         <td className="px-4 py-3 text-slate-600">{row.criado_por_nome || row.criado_por_login || "-"}</td>
                         <td className="px-4 py-3 text-right">
                           <button

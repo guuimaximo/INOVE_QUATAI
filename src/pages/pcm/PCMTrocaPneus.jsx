@@ -161,6 +161,8 @@ function createAuditPositions() {
   return POSICOES.map((posicao) => ({
     posicao,
     numeroFogo: "",
+    calibragem: "",
+    sulco: "",
     foto: null,
   }));
 }
@@ -495,6 +497,46 @@ function PhotoField({ title, file, imageUrl = "", inputId, onChange, onNativeCap
   );
 }
 
+function ZoomableImage({ src, alt, isNativeShell }) {
+  const [open, setOpen] = useState(false);
+
+  if (!src) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          if (!isNativeShell) setOpen(true);
+        }}
+        className={`block w-full overflow-hidden rounded-2xl border border-slate-200 ${
+          isNativeShell ? "cursor-default" : "cursor-zoom-in hover:ring-2 hover:ring-blue-500/30"
+        }`}
+      >
+        <img src={src} alt={alt} className="h-56 w-full object-cover" />
+      </button>
+
+      {!isNativeShell && open ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="absolute right-4 top-4 rounded-xl bg-white/10 p-3 text-white transition hover:bg-white/20"
+            aria-label="Fechar imagem"
+          >
+            <FaTimes />
+          </button>
+          <img
+            src={src}
+            alt={alt}
+            className="max-h-[88vh] max-w-[95vw] rounded-2xl border border-white/20 bg-white object-contain shadow-2xl"
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function TabButton({ active, onClick, icon, title, count }) {
   return (
     <button
@@ -805,6 +847,23 @@ function AuditoriaModal({
                 pattern="[0-9]*"
               />
 
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <InputField
+                  label="Calibragem"
+                  value={posicao.calibragem}
+                  onChange={(value) => onPosicaoChange(index, "calibragem", value)}
+                  placeholder="Ex: 100"
+                  inputMode="decimal"
+                />
+                <InputField
+                  label="Sulco"
+                  value={posicao.sulco}
+                  onChange={(value) => onPosicaoChange(index, "sulco", value)}
+                  placeholder="Ex: 12"
+                  inputMode="decimal"
+                />
+              </div>
+
               <PhotoField
                 title="Foto do numero de fogo"
                 file={posicao.foto}
@@ -830,6 +889,7 @@ function EstoqueModal({
   onItemChange,
   onAddItem,
   onRemoveItem,
+  onCopiarEstoqueAnterior,
   onSalvarOffline,
   onSalvar,
 }) {
@@ -877,16 +937,25 @@ function EstoqueModal({
           <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
         </div>
 
-        <div className="sticky top-0 z-10 -mx-1 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm font-bold uppercase tracking-wide text-slate-700">Pneus do lancamento</div>
-          <button
-            type="button"
-            onClick={onAddItem}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-          >
-            <FaPlus />
-            Adicionar pneu
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={onCopiarEstoqueAnterior}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+            >
+              Copiar estoque anterior
+            </button>
+            <button
+              type="button"
+              onClick={onAddItem}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+            >
+              <FaPlus />
+              Adicionar pneu
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -955,11 +1024,14 @@ function ConsultaModal({
   row,
   transnetSaving,
   checkingStatusKey,
+  isNativeShell,
   onClose,
   onMarcarTransnet,
   onMarcarAuditoriaStatus,
   onMarcarEstoqueStatus,
 }) {
+  const [auditoriaEditando, setAuditoriaEditando] = useState({});
+
   if (!open || !row) return null;
 
   let title = "";
@@ -989,10 +1061,10 @@ function ConsultaModal({
               <DetailRow label="Posicao" value={row.posicao_retirada || row.posicao} />
               <DetailRow label="Numero do pneu" value={row.numero_fogo_retirado} />
               {row.foto_numero_fogo_retirado_url ? (
-                <img
+                <ZoomableImage
                   src={row.foto_numero_fogo_retirado_url}
                   alt="Numero do pneu retirado"
-                  className="h-56 w-full rounded-2xl border border-slate-200 object-cover"
+                  isNativeShell={isNativeShell}
                 />
               ) : null}
             </div>
@@ -1004,10 +1076,10 @@ function ConsultaModal({
               <DetailRow label="Posicao" value={row.posicao_instalacao || row.posicao} />
               <DetailRow label="Numero do pneu" value={row.numero_fogo_colocado || row.numero_fogo_pneu} />
               {row.foto_numero_fogo_colocado_url || row.foto_numero_fogo_url ? (
-                <img
+                <ZoomableImage
                   src={row.foto_numero_fogo_colocado_url || row.foto_numero_fogo_url}
                   alt="Numero do pneu colocado"
-                  className="h-56 w-full rounded-2xl border border-slate-200 object-cover"
+                  isNativeShell={isNativeShell}
                 />
               ) : null}
             </div>
@@ -1065,43 +1137,74 @@ function ConsultaModal({
         </div>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-          {getAuditoriaPosicoes(row).map((item) => (
-            <SectionBlock key={item.posicao} title={item.posicao}>
-              <DetailRow label="Numero de fogo" value={item.numero_fogo} />
-              {item.foto_url ? (
-                <img
-                  src={item.foto_url}
-                  alt={item.posicao}
-                  className="h-56 w-full rounded-2xl border border-slate-200 object-cover"
-                />
-              ) : null}
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <DetailRow label="Conferencia" value={item.conferencia_status || "Pendente"} />
-                <button
-                  type="button"
-                  onClick={() => onMarcarAuditoriaStatus(item.posicao, "OK")}
-                  disabled={checkingStatusKey === `auditoria:${item.posicao}`}
-                  className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                >
-                  OK
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onMarcarAuditoriaStatus(item.posicao, "INCORRETO")}
-                  disabled={checkingStatusKey === `auditoria:${item.posicao}`}
-                  className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
-                >
-                  Incorreto
-                </button>
-              </div>
-              {item.conferencia_por_nome || item.conferencia_por_login ? (
-                <DetailRow
-                  label="Conferido por"
-                  value={`${item.conferencia_por_nome || item.conferencia_por_login} em ${formatDate(item.conferencia_em)}`}
-                />
-              ) : null}
-            </SectionBlock>
-          ))}
+          {getAuditoriaPosicoes(row).map((item) => {
+            const temConferencia = !!item.conferencia_status;
+            const editando = !!auditoriaEditando[item.posicao] || !temConferencia;
+
+            return (
+              <SectionBlock key={item.posicao} title={item.posicao}>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <DetailRow label="Numero de fogo" value={item.numero_fogo} />
+                  <DetailRow label="Calibragem" value={item.calibragem} />
+                  <DetailRow label="Sulco" value={item.sulco} />
+                </div>
+
+                {item.foto_url ? (
+                  <ZoomableImage
+                    src={item.foto_url}
+                    alt={item.posicao}
+                    isNativeShell={isNativeShell}
+                  />
+                ) : null}
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <DetailRow label="Conferencia" value={item.conferencia_status || "Pendente"} />
+
+                  {editando ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await onMarcarAuditoriaStatus(item.posicao, "OK");
+                          setAuditoriaEditando((current) => ({ ...current, [item.posicao]: false }));
+                        }}
+                        disabled={checkingStatusKey === `auditoria:${item.posicao}`}
+                        className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        OK
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await onMarcarAuditoriaStatus(item.posicao, "INCORRETO");
+                          setAuditoriaEditando((current) => ({ ...current, [item.posicao]: false }));
+                        }}
+                        disabled={checkingStatusKey === `auditoria:${item.posicao}`}
+                        className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                      >
+                        Incorreto
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAuditoriaEditando((current) => ({ ...current, [item.posicao]: true }))}
+                      className="md:col-span-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                    >
+                      Editar conferencia
+                    </button>
+                  )}
+                </div>
+
+                {item.conferencia_por_nome || item.conferencia_por_login ? (
+                  <DetailRow
+                    label="Conferido por"
+                    value={`${item.conferencia_por_nome || item.conferencia_por_login} em ${formatDate(item.conferencia_em)}`}
+                  />
+                ) : null}
+              </SectionBlock>
+            );
+          })}
         </div>
 
         {row.observacoes ? <DetailRow label="Observacoes" value={row.observacoes} /> : null}
@@ -1645,6 +1748,28 @@ export default function PCMTrocaPneus() {
     }));
   }
 
+  function copiarEstoqueAnterior() {
+    const ultimaFicha = estoqueAgrupado[0];
+
+    if (!ultimaFicha?.itens?.length) {
+      alert("Nao encontrei estoque anterior para copiar.");
+      return;
+    }
+
+    const itensCopiados = ultimaFicha.itens.map((item) => ({
+      numeroPneu: norm(item.numero_pneu),
+      marca: MARCAS_PNEU.includes(norm(item.marca)) ? norm(item.marca) : "Outra",
+      marcaOutra: MARCAS_PNEU.includes(norm(item.marca)) ? "" : norm(item.marca),
+      situacao: SITUACOES_ESTOQUE.includes(norm(item.situacao)) ? norm(item.situacao) : SITUACOES_ESTOQUE[0],
+    }));
+
+    setEstoqueForm((current) => ({
+      ...current,
+      itens: itensCopiados.length ? itensCopiados : [createEstoqueItem()],
+      observacoes: current.observacoes || `Copiado da ficha ${ultimaFicha.ficha_estoque || "anterior"}`,
+    }));
+  }
+
   async function submitTrocaPayload(payload) {
     const trocaId = payload.id || createClientUuid();
     const fotoRetirada = await uploadFoto(
@@ -1709,6 +1834,8 @@ export default function PCMTrocaPneus() {
       posicoes.push({
         posicao: item.posicao,
         numero_fogo: item.numeroFogo,
+        calibragem: item.calibragem,
+        sulco: item.sulco,
         foto_path: uploaded.path,
         foto_url: uploaded.url,
       });
@@ -1928,11 +2055,11 @@ export default function PCMTrocaPneus() {
     }
 
     const hasInvalidPosition = auditoriaForm.posicoes.some(
-      (item) => !safeText(item.numeroFogo) || !item.foto
+      (item) => !safeText(item.numeroFogo) || !safeText(item.calibragem) || !safeText(item.sulco) || !item.foto
     );
 
     if (hasInvalidPosition) {
-      alert("Preencha numero de fogo e foto de todas as posicoes.");
+      alert("Preencha numero de fogo, calibragem, sulco e foto de todas as posicoes.");
       return;
     }
 
@@ -1947,6 +2074,8 @@ export default function PCMTrocaPneus() {
       posicoes: auditoriaForm.posicoes.map((item) => ({
         posicao: item.posicao,
         numeroFogo: safeText(item.numeroFogo),
+        calibragem: safeText(item.calibragem),
+        sulco: safeText(item.sulco),
         fotoFile: item.foto,
       })),
     };
@@ -2186,6 +2315,9 @@ export default function PCMTrocaPneus() {
         getAuditoriaPosicoes(row).forEach((item) => {
           const key = item.posicao.toLowerCase().replace(/[^\w]+/g, "_");
           base[`${key}_numero`] = item.numero_fogo || "";
+          base[`${key}_calibragem`] = item.calibragem || "";
+          base[`${key}_sulco`] = item.sulco || "";
+          base[`${key}_conferencia`] = item.conferencia_status || "Pendente";
           base[`${key}_foto`] = item.foto_url || "";
         });
 
@@ -2197,16 +2329,20 @@ export default function PCMTrocaPneus() {
       return;
     }
 
-      const sheet = estoqueFiltrado.map((row) => ({
-      ficha: row.ficha_estoque,
-      data: formatDate(row.created_at),
-      quem_lancou: row.criado_por_nome || row.criado_por_login,
-      quantidade_pneus: row.itens.length,
-      pneus: row.itens.map((item) => item.numero_pneu).join(", "),
-      marcas: row.itens.map((item) => item.marca).join(", "),
-      situacoes: row.itens.map((item) => item.situacao).join(", "),
-      observacoes: row.observacoes || "",
-    }));
+      const sheet = estoqueFiltrado.flatMap((row) =>
+      (row.itens || []).map((item) => ({
+        ficha: row.ficha_estoque,
+        data: formatDate(row.created_at),
+        quem_lancou: row.criado_por_nome || row.criado_por_login,
+        numero_fogo: item.numero_pneu,
+        marca: item.marca,
+        situacao: item.situacao,
+        conferencia: item.transnet_status || "Pendente",
+        conferido_em: item.transnet_conferido_em ? formatDate(item.transnet_conferido_em) : "",
+        conferido_por: item.transnet_conferido_por_nome || item.transnet_conferido_por_login || "",
+        observacoes: row.observacoes || "",
+      }))
+    );
 
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet), "Estoque");
     XLSX.writeFile(wb, "pcm_estoque_pneus.xlsx");
@@ -2285,7 +2421,7 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
-      {activeTab === TAB_TROCA ? (
+      {!isNativeShell && activeTab === TAB_TROCA ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <CardResumo label="Total" value={cardsTroca.total} color="text-slate-900" />
           <CardResumo label="Estoque -> Carro" value={cardsTroca.estoqueCarro} color="text-blue-600" />
@@ -2295,7 +2431,7 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
-      {activeTab === TAB_AUDITORIA ? (
+      {!isNativeShell && activeTab === TAB_AUDITORIA ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <CardResumo label="Total" value={cardsAuditoria.total} color="text-slate-900" />
           <CardResumo label="Hoje" value={cardsAuditoria.hoje} color="text-blue-600" />
@@ -2304,7 +2440,7 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
-      {activeTab === TAB_ESTOQUE ? (
+      {!isNativeShell && activeTab === TAB_ESTOQUE ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
           <CardResumo label="Pneus" value={cardsEstoque.total} color="text-slate-900" />
           <CardResumo label="Fichas" value={cardsEstoque.fichas} color="text-blue-600" />
@@ -2702,6 +2838,7 @@ export default function PCMTrocaPneus() {
         onItemChange={updateEstoqueItem}
         onAddItem={addEstoqueItem}
         onRemoveItem={removeEstoqueItem}
+        onCopiarEstoqueAnterior={copiarEstoqueAnterior}
         onSalvarOffline={() => salvarEstoque("offline")}
         onSalvar={salvarEstoque}
       />
@@ -2712,6 +2849,7 @@ export default function PCMTrocaPneus() {
         row={consulta.row}
         transnetSaving={transnetSaving}
         checkingStatusKey={checkingStatusKey}
+        isNativeShell={isNativeShell}
         onClose={closeConsulta}
         onMarcarTransnet={marcarTransnet}
         onMarcarAuditoriaStatus={marcarAuditoriaStatus}

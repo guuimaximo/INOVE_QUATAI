@@ -1,64 +1,54 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
 
-function isDesktopLikeDevice() {
-  const mobileUserAgent = /android|iphone|ipad|ipod/i.test(window.navigator.userAgent || "");
-  return !mobileUserAgent && window.innerWidth >= 900;
-}
+import { hardRefreshApp } from "../pwa/registerServiceWorker";
 
 export default function UpdateAppPrompt() {
   const [registration, setRegistration] = useState(null);
   const [visible, setVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const shouldRender = useMemo(() => isDesktopLikeDevice(), []);
-
   useEffect(() => {
-    if (!shouldRender) return undefined;
-
     function handleUpdateAvailable(event) {
       setRegistration(event.detail?.registration || null);
       setVisible(true);
-
-      if (event.detail?.autoApply) {
-        setRefreshing(true);
-      }
     }
-
-    window.addEventListener("inove:update-available", handleUpdateAvailable);
-    return () => {
-      window.removeEventListener("inove:update-available", handleUpdateAvailable);
-    };
-  }, [shouldRender]);
-
-  useEffect(() => {
-    if (!refreshing) return undefined;
 
     function handleControllerChange() {
       window.location.reload();
     }
 
-    navigator.serviceWorker?.addEventListener("controllerchange", handleControllerChange, {
-      once: true,
-    });
+    window.addEventListener("inove:update-available", handleUpdateAvailable);
+    navigator.serviceWorker?.addEventListener("controllerchange", handleControllerChange);
 
     return () => {
+      window.removeEventListener("inove:update-available", handleUpdateAvailable);
       navigator.serviceWorker?.removeEventListener("controllerchange", handleControllerChange);
     };
-  }, [refreshing]);
+  }, []);
 
   async function handleRefresh() {
-    if (!registration?.waiting) return;
     setRefreshing(true);
-    registration.waiting.postMessage({ type: "SKIP_WAITING" });
+
+    try {
+      if (registration?.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+        return;
+      }
+
+      await hardRefreshApp();
+    } catch (error) {
+      console.error("Falha ao atualizar o Inove:", error);
+      setRefreshing(false);
+    }
   }
 
-  if (!shouldRender || !visible) {
+  if (!visible) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/35 px-4 pb-6 pt-20 backdrop-blur-[2px] sm:items-center sm:pb-4">
       <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -66,11 +56,11 @@ export default function UpdateAppPrompt() {
               <RefreshCw size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900">{"Atualiza\u00e7\u00e3o dispon\u00edvel"}</h2>
+              <h2 className="text-lg font-black text-slate-900">Atualizacao disponivel</h2>
               <p className="mt-1 text-sm text-slate-500">
                 {refreshing
-                  ? "Aplicando a vers\u00e3o mais recente do Inove neste navegador."
-                  : "Uma vers\u00e3o nova do Inove j\u00e1 est\u00e1 pronta para este computador."}
+                  ? "Aplicando a versao mais recente do Inove neste navegador."
+                  : "Uma nova versao acabou de ser publicada e ja pode ser carregada agora."}
               </p>
             </div>
           </div>
@@ -80,7 +70,7 @@ export default function UpdateAppPrompt() {
             onClick={() => setVisible(false)}
             disabled={refreshing}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label={"Fechar aviso de atualiza\u00e7\u00e3o"}
+            aria-label="Fechar aviso de atualizacao"
           >
             <X size={18} />
           </button>
@@ -88,13 +78,11 @@ export default function UpdateAppPrompt() {
 
         <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           {refreshing ? (
-            <>{"Aguarde alguns segundos enquanto o Inove recarrega sozinho com o c\u00f3digo mais recente."}</>
+            <>Aguarde alguns segundos enquanto a pagina recarrega com o build mais recente.</>
           ) : (
             <>
-              {"Clique em "}
-              <span className="font-bold">Atualizar</span>
-              {" para carregar o c\u00f3digo mais recente sem"}
-              precisar fechar o app.
+              Clique em <span className="font-bold">Atualizar</span> para resetar a pagina e carregar o build mais
+              recente do Render.
             </>
           )}
         </div>

@@ -280,6 +280,25 @@ function buildAuditoriaResumo(row) {
   return `${getAuditoriaPosicoes(row).length} posicoes auditadas`;
 }
 
+function getAuditoriaConferenciaCounts(row) {
+  const counts = new Map();
+
+  for (const item of getAuditoriaPosicoes(row)) {
+    const key = norm(item.conferencia_status) || "Pendente";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  return [...counts.entries()].map(([label, value]) => ({ label, value }));
+}
+
+function isAuditoriaConcluida(row) {
+  const posicoes = getAuditoriaPosicoes(row);
+  return posicoes.length === POSICOES.length && posicoes.every((item) => !!norm(item.conferencia_status));
+}
+
+function hasAuditoriaIncorreta(row) {
+  return getAuditoriaPosicoes(row).some((item) => norm(item.conferencia_status) === "INCORRETO");
+}
 
 function getEstoqueSituacaoCounts(row) {
   const counts = new Map();
@@ -1597,40 +1616,44 @@ export default function PCMTrocaPneus() {
     setEstoqueForm((current) => ({ ...current, dataLancamento: nowDisplay(), quemLancou: userName }));
   }, [userName]);
 
+  const estoqueAgrupado = useMemo(() => groupEstoqueRows(estoqueRows), [estoqueRows]);
+
   const cardsTroca = useMemo(() => {
-    const hoje = extractDateOnly(new Date().toISOString());
+    const lancadasTransnet = trocas.filter((item) => !!item.transnet_lancado_em).length;
+
     return {
       total: trocas.length,
+      transnetLancadas: lancadasTransnet,
+      transnetPendentes: trocas.length - lancadasTransnet,
       estoqueCarro: trocas.filter((item) => norm(item.tipo_troca) === TIPO_TROCA_ESTOQUE).length,
       carroCarro: trocas.filter((item) => norm(item.tipo_troca) === TIPO_TROCA_CARRO).length,
-      transnet: trocas.filter((item) => !!item.transnet_lancado_em).length,
-      hoje: trocas.filter((item) => extractDateOnly(item.created_at) === hoje).length,
     };
   }, [trocas]);
 
   const cardsAuditoria = useMemo(() => {
-    const hoje = extractDateOnly(new Date().toISOString());
-    const prefixosUnicos = new Set(auditorias.map((item) => norm(item.prefixo)).filter(Boolean));
+    const concluidas = auditorias.filter((item) => isAuditoriaConcluida(item)).length;
+
     return {
       total: auditorias.length,
-      hoje: auditorias.filter((item) => extractDateOnly(item.created_at) === hoje).length,
-      prefixos: prefixosUnicos.size,
-      completas: auditorias.filter((item) => getAuditoriaPosicoes(item).length === POSICOES.length).length,
+      pendentes: auditorias.length - concluidas,
+      concluidas,
+      incorretas: auditorias.filter((item) => hasAuditoriaIncorreta(item)).length,
     };
   }, [auditorias]);
 
   const cardsEstoque = useMemo(() => {
-    return {
-      total: estoqueRows.length,
-      fichas: groupEstoqueRows(estoqueRows).length,
-      novo: estoqueRows.filter((item) => norm(item.situacao) === "NOVO").length,
-      uso: estoqueRows.filter((item) => norm(item.situacao) === "USADO ( PARA USO )").length,
-      recapagem: estoqueRows.filter((item) => norm(item.situacao) === "ENVIAR PARA RECAPAGEM").length,
-      sucata: estoqueRows.filter((item) => norm(item.situacao) === "SUCATA").length,
-    };
-  }, [estoqueRows]);
+    const ultimaFicha = estoqueAgrupado[0] || null;
+    const itens = ultimaFicha?.itens || [];
 
-  const estoqueAgrupado = useMemo(() => groupEstoqueRows(estoqueRows), [estoqueRows]);
+    return {
+      ficha: ultimaFicha?.ficha_estoque || "-",
+      data: ultimaFicha?.created_at ? formatDate(ultimaFicha.created_at) : "-",
+      total: itens.length,
+      ok: itens.filter((item) => norm(item.transnet_status) === "OK").length,
+      incorretos: itens.filter((item) => norm(item.transnet_status) === "INCORRETO").length,
+      pendentes: itens.filter((item) => !norm(item.transnet_status)).length,
+    };
+  }, [estoqueAgrupado]);
 
   const trocasFiltradas = useMemo(() => {
     const busca = norm(trocaFiltros.busca).toLowerCase();
@@ -2525,30 +2548,29 @@ export default function PCMTrocaPneus() {
       {!isNativeShell && activeTab === TAB_TROCA ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <CardResumo label="Total" value={cardsTroca.total} color="text-slate-900" />
+          <CardResumo label="Lançadas Transnet" value={cardsTroca.transnetLancadas} color="text-emerald-600" />
+          <CardResumo label="Pendentes Transnet" value={cardsTroca.transnetPendentes} color="text-rose-600" />
           <CardResumo label="Estoque -> Carro" value={cardsTroca.estoqueCarro} color="text-blue-600" />
           <CardResumo label="Carro -> Carro" value={cardsTroca.carroCarro} color="text-orange-600" />
-          <CardResumo label="Transnet" value={cardsTroca.transnet} color="text-emerald-600" />
-          <CardResumo label="Hoje" value={cardsTroca.hoje} color="text-violet-600" />
         </div>
       ) : null}
 
       {!isNativeShell && activeTab === TAB_AUDITORIA ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <CardResumo label="Total" value={cardsAuditoria.total} color="text-slate-900" />
-          <CardResumo label="Hoje" value={cardsAuditoria.hoje} color="text-blue-600" />
-          <CardResumo label="Prefixos" value={cardsAuditoria.prefixos} color="text-violet-600" />
-          <CardResumo label="Completas" value={cardsAuditoria.completas} color="text-emerald-600" />
+          <CardResumo label="Pendentes" value={cardsAuditoria.pendentes} color="text-amber-600" />
+          <CardResumo label="Concluídas" value={cardsAuditoria.concluidas} color="text-emerald-600" />
+          <CardResumo label="Com incorreto" value={cardsAuditoria.incorretas} color="text-rose-600" />
         </div>
       ) : null}
 
       {!isNativeShell && activeTab === TAB_ESTOQUE ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
-          <CardResumo label="Pneus" value={cardsEstoque.total} color="text-slate-900" />
-          <CardResumo label="Fichas" value={cardsEstoque.fichas} color="text-blue-600" />
-          <CardResumo label="Novo" value={cardsEstoque.novo} color="text-blue-600" />
-          <CardResumo label="Para uso" value={cardsEstoque.uso} color="text-emerald-600" />
-          <CardResumo label="Recapagem" value={cardsEstoque.recapagem} color="text-amber-600" />
-          <CardResumo label="Sucata" value={cardsEstoque.sucata} color="text-rose-600" />
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+          <CardResumo label="Última ficha" value={cardsEstoque.ficha} color="text-slate-900" />
+          <CardResumo label="Pneus na última" value={cardsEstoque.total} color="text-blue-600" />
+          <CardResumo label="OK" value={cardsEstoque.ok} color="text-emerald-600" />
+          <CardResumo label="Incorretos" value={cardsEstoque.incorretos} color="text-rose-600" />
+          <CardResumo label="Pendentes" value={cardsEstoque.pendentes} color="text-amber-600" />
         </div>
       ) : null}
 
@@ -2789,13 +2811,14 @@ export default function PCMTrocaPneus() {
                     <th className="px-4 py-3">Prefixo</th>
                     <th className="px-4 py-3">Quem lancou</th>
                     <th className="px-4 py-3">Resumo</th>
+                    <th className="px-4 py-3">Conferencia</th>
                     <th className="px-4 py-3 text-right">Acoes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {!loading && auditoriasFiltradas.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                      <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
                         Nenhuma auditoria encontrada com os filtros atuais.
                       </td>
                     </tr>
@@ -2807,6 +2830,7 @@ export default function PCMTrocaPneus() {
                         <td className="px-4 py-3 font-medium text-slate-700">{row.prefixo}</td>
                         <td className="px-4 py-3 text-slate-600">{row.criado_por_nome || row.criado_por_login || "-"}</td>
                         <td className="px-4 py-3 text-slate-600">{buildAuditoriaResumo(row)}</td>
+                        <td className="px-4 py-3 text-slate-600"><BadgeList items={getAuditoriaConferenciaCounts(row)} /></td>
                         <td className="px-4 py-3 text-right">
                           <button
                             type="button"

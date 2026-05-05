@@ -20,6 +20,7 @@ import {
   FaUsers,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
+import { formatPresenceTimestamp, isPresenceOnline } from "../../utils/presence";
 
 const NIVEIS = [
   "Pendente",
@@ -73,6 +74,12 @@ function getStatusTone(isActive) {
     : "bg-rose-50 text-rose-700 border-rose-200";
 }
 
+function getPresenceTone(isOnline) {
+  return isOnline
+    ? "bg-blue-50 text-blue-700 border-blue-200"
+    : "bg-slate-100 text-slate-700 border-slate-200";
+}
+
 function buildSearchBlob(usuario) {
   return [
     usuario?.nome,
@@ -92,7 +99,19 @@ function exportarCSV(dados, nomeArquivo) {
     return;
   }
 
-  const cabecalho = ["ID", "Nome", "Login", "Email", "Setor", "Nivel", "Ativo", "Status Cadastro", "Migrado Auth"];
+  const cabecalho = [
+    "ID",
+    "Nome",
+    "Login",
+    "Email",
+    "Setor",
+    "Nivel",
+    "Ativo",
+    "Status Cadastro",
+    "Migrado Auth",
+    "Online",
+    "Ultimo Ping",
+  ];
 
   const linhas = dados.map((row) =>
     [
@@ -105,6 +124,8 @@ function exportarCSV(dados, nomeArquivo) {
       isUsuarioAtivo(row.ativo) ? "Sim" : "Não",
       row.status_cadastro || "",
       row.migrado_auth ? "Sim" : "Não",
+      isPresenceOnline(row.ultimo_ping_em) ? "Sim" : "Nao",
+      formatPresenceTimestamp(row.ultimo_ping_em),
     ]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
       .join(";")
@@ -202,6 +223,7 @@ function UsuarioDetalhesModal({ usuario, onClose, onResetSenha, saving }) {
   if (!usuario) return null;
 
   const ativo = isUsuarioAtivo(usuario?.ativo);
+  const online = isPresenceOnline(usuario?.ultimo_ping_em);
 
   function campo(label, value) {
     return (
@@ -272,6 +294,8 @@ function UsuarioDetalhesModal({ usuario, onClose, onResetSenha, saving }) {
               {campo("Nível", usuario?.nivel || "Pendente")}
               {campo("Status Cadastro", usuario?.status_cadastro || "Aprovado")}
               {campo("Ativo", ativo ? "Sim" : "Não")}
+              {campo("Sessao", online ? "Online agora" : "Offline")}
+              {campo("Ultimo ping", formatPresenceTimestamp(usuario?.ultimo_ping_em))}
               {campo("Auth User ID", usuario?.auth_user_id)}
               {campo("Migrado Auth", usuario?.migrado_auth ? "Sim" : "Não")}
               {campo("Precisa redefinir senha", usuario?.precisa_redefinir_senha ? "Sim" : "Não")}
@@ -496,8 +520,9 @@ export default function Usuarios() {
       (usuario) => normalizeText(usuario?.nivel) === "pendente" || normalizeText(usuario?.status_cadastro) === "pendente"
     ).length;
     const administradores = usuarios.filter((usuario) => normalizeText(usuario?.nivel) === "administrador").length;
+    const online = usuarios.filter((usuario) => isPresenceOnline(usuario?.ultimo_ping_em)).length;
 
-    return { total, ativos, pendentes, administradores };
+    return { total, ativos, pendentes, administradores, online };
   }, [usuarios]);
 
   return (
@@ -602,11 +627,12 @@ export default function Usuarios() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
         <CardKPI title="Total" value={fmtInt(metricas.total)} sub="Usuários carregados" icon={<FaUsers />} tone="slate" />
         <CardKPI title="Ativos" value={fmtInt(metricas.ativos)} sub="Acessos liberados" icon={<FaUserCheck />} tone="emerald" />
         <CardKPI title="Pendentes" value={fmtInt(metricas.pendentes)} sub="Aguardando aprovação" icon={<FaUserClock />} tone="blue" />
         <CardKPI title="Administradores" value={fmtInt(metricas.administradores)} sub="Controle total" icon={<FaCrown />} tone="amber" />
+        <CardKPI title="Online agora" value={fmtInt(metricas.online)} sub="Atividade recente" icon={<FaSync />} tone="violet" />
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
@@ -618,7 +644,7 @@ export default function Usuarios() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse min-w-[1200px]">
+          <table className="w-full text-left text-sm border-collapse min-w-[1320px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="p-3 font-black">Usuário</th>
@@ -626,21 +652,23 @@ export default function Usuarios() {
                 <th className="p-3 font-black">Contato</th>
                 <th className="p-3 font-black">Nível</th>
                 <th className="p-3 font-black">Status</th>
+                <th className="p-3 font-black">Sessao</th>
                 <th className="p-3 font-black text-right">Ações</th>
               </tr>
             </thead>
 
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold">Atualizando base de usuários...</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold">Atualizando base de usuários...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold">Nenhum usuário encontrado para o filtro aplicado.</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold">Nenhum usuário encontrado para o filtro aplicado.</td></tr>
               ) : (
                 filtrados.map((usuario) => {
                   const isSaving = savingId === usuario.id;
                   const statusCadastro = usuario?.status_cadastro || "Aprovado";
                   const setor = usuario?.setor || "Nao informado";
                   const ativo = isUsuarioAtivo(usuario?.ativo);
+                  const online = isPresenceOnline(usuario?.ultimo_ping_em);
 
                   return (
                     <tr
@@ -699,6 +727,15 @@ export default function Usuarios() {
                           {ativo ? "Ativo" : "Inativo"}
                         </span>
                         <div className="text-xs text-slate-500 font-semibold mt-1">{ativo ? "Acesso liberado" : "Acesso bloqueado"}</div>
+                      </td>
+
+                      <td className="p-3">
+                        <span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-black border ${getPresenceTone(online)}`}>
+                          {online ? "Online" : "Offline"}
+                        </span>
+                        <div className="text-xs text-slate-500 font-semibold mt-1">
+                          {online ? "Ativo nos ultimos 2 min" : `Ultimo ping: ${formatPresenceTimestamp(usuario?.ultimo_ping_em)}`}
+                        </div>
                       </td>
 
                       <td className="p-3">

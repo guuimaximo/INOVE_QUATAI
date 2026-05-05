@@ -1,9 +1,41 @@
-const VERSION_CHECK_INTERVAL_MS = 60 * 1000;
+const VERSION_CHECK_INTERVAL_MS = 30 * 1000;
+const UPDATE_STORAGE_KEY = "inove:update-available-version";
 
 let updateInFlight = false;
 let announcedVersion = null;
 
+export function getStoredUpdateVersion() {
+  try {
+    return window.localStorage.getItem(UPDATE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearStoredUpdateVersion() {
+  try {
+    window.localStorage.removeItem(UPDATE_STORAGE_KEY);
+  } catch {
+    // Ignore storage access issues.
+  }
+}
+
+function storeUpdateVersion(version) {
+  if (!version) return;
+
+  try {
+    window.localStorage.setItem(UPDATE_STORAGE_KEY, version);
+  } catch {
+    // Ignore storage access issues.
+  }
+}
+
 function notifyUpdateAvailable({ registration = null, version = null } = {}) {
+  if (version && version !== __APP_BUILD_ID__) {
+    storeUpdateVersion(version);
+    announcedVersion = version;
+  }
+
   window.dispatchEvent(
     new CustomEvent("inove:update-available", {
       detail: { registration, version },
@@ -15,6 +47,7 @@ function applyUpdateNow(registration) {
   if (!registration?.waiting || updateInFlight) return;
 
   updateInFlight = true;
+  clearStoredUpdateVersion();
 
   navigator.serviceWorker?.addEventListener(
     "controllerchange",
@@ -41,11 +74,20 @@ async function checkVersionUpdate() {
     const payload = await response.json();
     const publishedVersion = payload?.version;
 
-    if (!publishedVersion || publishedVersion === __APP_BUILD_ID__ || announcedVersion === publishedVersion) {
+    if (!publishedVersion) {
       return;
     }
 
-    announcedVersion = publishedVersion;
+    if (publishedVersion === __APP_BUILD_ID__) {
+      announcedVersion = null;
+      clearStoredUpdateVersion();
+      return;
+    }
+
+    if (announcedVersion === publishedVersion || getStoredUpdateVersion() === publishedVersion) {
+      return;
+    }
+
     notifyUpdateAvailable({ version: publishedVersion });
   } catch (error) {
     console.error("Falha ao verificar se existe uma nova versao do Inove:", error);
@@ -70,7 +112,7 @@ function startVersionPolling() {
 
 function watchServiceWorkerRegistration(registration) {
   if (registration.waiting) {
-    notifyUpdateAvailable({ registration });
+    notifyUpdateAvailable({ registration, version: getStoredUpdateVersion() || "pending" });
   }
 
   registration.addEventListener("updatefound", () => {
@@ -79,7 +121,7 @@ function watchServiceWorkerRegistration(registration) {
 
     newWorker.addEventListener("statechange", () => {
       if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-        notifyUpdateAvailable({ registration });
+        notifyUpdateAvailable({ registration, version: getStoredUpdateVersion() || "pending" });
       }
     });
   });
@@ -100,6 +142,8 @@ function watchServiceWorkerRegistration(registration) {
 }
 
 export async function hardRefreshApp() {
+  clearStoredUpdateVersion();
+
   const registrations =
     typeof navigator.serviceWorker?.getRegistrations === "function"
       ? await navigator.serviceWorker.getRegistrations()
@@ -130,7 +174,7 @@ export function registerServiceWorker({ disable = false } = {}) {
     return;
   }
 
-  window.addEventListener("load", () => {
+  const registerWorker = () => {
     navigator.serviceWorker
       .register("/sw.js")
       .then((registration) => {
@@ -139,5 +183,12 @@ export function registerServiceWorker({ disable = false } = {}) {
       .catch((error) => {
         console.error("Falha ao registrar service worker do Inove:", error);
       });
-  });
+  };
+
+  if (document.readyState === "complete") {
+    registerWorker();
+    return;
+  }
+
+  window.addEventListener("load", registerWorker, { once: true });
 }

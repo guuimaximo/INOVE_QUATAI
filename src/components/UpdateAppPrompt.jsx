@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
 
-import { hardRefreshApp } from "../pwa/registerServiceWorker";
+import { getStoredUpdateVersion, hardRefreshApp } from "../pwa/registerServiceWorker";
 
 export default function UpdateAppPrompt() {
   const [registration, setRegistration] = useState(null);
@@ -9,6 +9,11 @@ export default function UpdateAppPrompt() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    const pendingVersion = getStoredUpdateVersion();
+    if (pendingVersion) {
+      setVisible(true);
+    }
+
     function handleUpdateAvailable(event) {
       setRegistration(event.detail?.registration || null);
       setVisible(true);

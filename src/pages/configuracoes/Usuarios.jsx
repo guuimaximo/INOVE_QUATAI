@@ -6,6 +6,9 @@ import {
   FaDownload,
   FaFilter,
   FaInfoCircle,
+  FaEye,
+  FaKey,
+  FaSave,
   FaSearch,
   FaShieldAlt,
   FaSync,
@@ -37,6 +40,18 @@ function normalizeText(value = "") {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+function isUsuarioAtivo(value) {
+  if (value === true) return true;
+  if (value === false) return false;
+
+  const clean = normalizeText(value);
+
+  if (["true", "t", "1", "sim", "ativo", "active"].includes(clean)) return true;
+  if (["false", "f", "0", "nao", "não", "inativo", "inactive"].includes(clean)) return false;
+
+  return false;
 }
 
 function fmtInt(v) {
@@ -87,7 +102,7 @@ function exportarCSV(dados, nomeArquivo) {
       row.email || "",
       row.setor || "",
       row.nivel || "",
-      row.ativo ? "Sim" : "Não",
+      isUsuarioAtivo(row.ativo) ? "Sim" : "Não",
       row.status_cadastro || "",
       row.migrado_auth ? "Sim" : "Não",
     ]
@@ -178,6 +193,162 @@ function ExplicacaoModal({ onClose }) {
   );
 }
 
+
+function UsuarioDetalhesModal({ usuario, onClose, onResetSenha, saving }) {
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [confirmou, setConfirmou] = useState(false);
+
+  if (!usuario) return null;
+
+  const ativo = isUsuarioAtivo(usuario?.ativo);
+
+  function campo(label, value) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
+        <p className="mt-1 text-sm font-bold text-slate-800 break-words">{value || "—"}</p>
+      </div>
+    );
+  }
+
+  async function handleResetSenha() {
+    if (!novaSenha || !confirmarSenha) {
+      alert("Informe e confirme a nova senha temporária.");
+      return;
+    }
+
+    if (novaSenha.length < 6) {
+      alert("A nova senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (novaSenha !== confirmarSenha) {
+      alert("As senhas não conferem.");
+      return;
+    }
+
+    if (!confirmou) {
+      alert("Confirme que o usuário deverá redefinir a senha antes de acessar o sistema.");
+      return;
+    }
+
+    await onResetSenha(usuario, novaSenha);
+    setNovaSenha("");
+    setConfirmarSenha("");
+    setConfirmou(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b bg-slate-50">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center">
+              <FaUsers />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-800">Detalhes do usuário</h2>
+              <p className="text-xs text-slate-500 font-semibold">
+                {usuario?.nome || "Sem nome"} • ID {usuario?.id}
+              </p>
+            </div>
+          </div>
+
+          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5 space-y-5 bg-slate-50/60">
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4">Dados cadastrais</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {campo("ID", usuario?.id)}
+              {campo("Nome", usuario?.nome)}
+              {campo("Login", usuario?.login)}
+              {campo("E-mail", usuario?.email)}
+              {campo("Setor", usuario?.setor)}
+              {campo("Nível", usuario?.nivel || "Pendente")}
+              {campo("Status Cadastro", usuario?.status_cadastro || "Aprovado")}
+              {campo("Ativo", ativo ? "Sim" : "Não")}
+              {campo("Auth User ID", usuario?.auth_user_id)}
+              {campo("Migrado Auth", usuario?.migrado_auth ? "Sim" : "Não")}
+              {campo("Precisa redefinir senha", usuario?.precisa_redefinir_senha ? "Sim" : "Não")}
+              {campo("Senha alterada em", usuario?.senha_alterada_em)}
+              {campo("Senha alterada por", usuario?.senha_alterada_por)}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-amber-200 p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <FaKey />
+              </div>
+
+              <div className="flex-1">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Reset de senha</h3>
+                <p className="text-xs text-slate-500 font-semibold mt-1">
+                  A senha atual não é exibida por segurança. Defina uma senha temporária e marque o usuário para redefinir antes de acessar o sistema.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500">Nova senha temporária</label>
+                    <input
+                      type="password"
+                      value={novaSenha}
+                      onChange={(e) => setNovaSenha(e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                      placeholder="Mínimo 6 caracteres"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500">Confirmar senha</label>
+                    <input
+                      type="password"
+                      value={confirmarSenha}
+                      onChange={(e) => setConfirmarSenha(e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                      placeholder="Repita a senha"
+                    />
+                  </div>
+                </div>
+
+                <label className="mt-4 flex items-start gap-2 text-sm font-bold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={confirmou}
+                    onChange={(e) => setConfirmou(e.target.checked)}
+                    className="mt-1"
+                  />
+                  O usuário deverá criar uma nova senha antes de continuar usando o sistema.
+                </label>
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={handleResetSenha}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-black text-white hover:bg-amber-600 disabled:opacity-60"
+                  >
+                    <FaSave />
+                    {saving ? "Salvando..." : "Salvar reset de senha"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-800 font-semibold">
+            Regra: após o reset, o próximo login solicita a criação de uma nova senha. Depois da confirmação, o acesso é liberado normalmente.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -187,6 +358,8 @@ export default function Usuarios() {
   const [statusFiltro, setStatusFiltro] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
+  const [usuarioSelecionado, setUsuarioSelecionado] = useState(null);
+  const [resetandoSenha, setResetandoSenha] = useState(false);
 
   async function carregarUsuarios() {
     setLoading(true);
@@ -236,14 +409,18 @@ export default function Usuarios() {
   }
 
   async function alternarAtivo(id, atual) {
-    const novoStatus = !atual;
+    const ativoAtual = isUsuarioAtivo(atual);
+    const novoStatus = !ativoAtual;
+
     setSavingId(id);
     setFeedback(null);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("usuarios_aprovadores")
       .update({ ativo: novoStatus })
-      .eq("id", id);
+      .eq("id", id)
+      .select("*")
+      .single();
 
     if (error) {
       console.error(error.message);
@@ -252,9 +429,47 @@ export default function Usuarios() {
       return;
     }
 
-    setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? { ...usuario, ativo: novoStatus } : usuario)));
+    setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? data : usuario)));
+    if (usuarioSelecionado?.id === id) setUsuarioSelecionado(data);
+
     setFeedback({ type: "success", text: `Usuario ${novoStatus ? "ativado" : "desativado"} com sucesso.` });
     setSavingId(null);
+  }
+
+  async function resetarSenhaUsuario(usuario, novaSenha) {
+    if (!usuario?.id) return;
+
+    setResetandoSenha(true);
+    setFeedback(null);
+
+    const payload = {
+      senha: novaSenha,
+      precisa_redefinir_senha: true,
+      senha_alterada_em: new Date().toISOString(),
+      senha_alterada_por: "admin",
+    };
+
+    const { data, error } = await supabase
+      .from("usuarios_aprovadores")
+      .update(payload)
+      .eq("id", usuario.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error(error.message);
+      setFeedback({ type: "error", text: "Erro ao redefinir a senha do usuário." });
+      setResetandoSenha(false);
+      return;
+    }
+
+    setUsuarios((prev) => prev.map((item) => (item.id === usuario.id ? data : item)));
+    setUsuarioSelecionado(data);
+    setFeedback({
+      type: "success",
+      text: `Senha redefinida para ${data?.nome || "usuário"}. Ele deverá criar uma nova senha no próximo login.`,
+    });
+    setResetandoSenha(false);
   }
 
   const filtrados = useMemo(() => {
@@ -263,8 +478,9 @@ export default function Usuarios() {
     return usuarios.filter((usuario) => {
       if (term && !buildSearchBlob(usuario).includes(term)) return false;
       if (nivelFiltro && usuario?.nivel !== nivelFiltro) return false;
-      if (statusFiltro === "ativo" && !usuario?.ativo) return false;
-      if (statusFiltro === "inativo" && usuario?.ativo) return false;
+      const ativo = isUsuarioAtivo(usuario?.ativo);
+      if (statusFiltro === "ativo" && !ativo) return false;
+      if (statusFiltro === "inativo" && ativo) return false;
       if (statusFiltro === "pendente") {
         const pendente = normalizeText(usuario?.nivel) === "pendente" || normalizeText(usuario?.status_cadastro) === "pendente";
         if (!pendente) return false;
@@ -275,7 +491,7 @@ export default function Usuarios() {
 
   const metricas = useMemo(() => {
     const total = usuarios.length;
-    const ativos = usuarios.filter((usuario) => usuario?.ativo).length;
+    const ativos = usuarios.filter((usuario) => isUsuarioAtivo(usuario?.ativo)).length;
     const pendentes = usuarios.filter(
       (usuario) => normalizeText(usuario?.nivel) === "pendente" || normalizeText(usuario?.status_cadastro) === "pendente"
     ).length;
@@ -424,9 +640,14 @@ export default function Usuarios() {
                   const isSaving = savingId === usuario.id;
                   const statusCadastro = usuario?.status_cadastro || "Aprovado";
                   const setor = usuario?.setor || "Nao informado";
+                  const ativo = isUsuarioAtivo(usuario?.ativo);
 
                   return (
-                    <tr key={usuario.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                    <tr
+                      key={usuario.id}
+                      onClick={() => setUsuarioSelecionado(usuario)}
+                      className="border-b border-slate-100 last:border-0 hover:bg-blue-50/60 transition-colors cursor-pointer"
+                    >
                       <td className="p-3">
                         <div className="flex min-w-[260px] items-start gap-3">
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-100">
@@ -462,6 +683,7 @@ export default function Usuarios() {
                           <select
                             value={usuario?.nivel || "Pendente"}
                             disabled={isSaving}
+                            onClick={(event) => event.stopPropagation()}
                             onChange={(event) => atualizarNivel(usuario.id, event.target.value)}
                             className="min-w-[160px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
                           >
@@ -473,25 +695,42 @@ export default function Usuarios() {
                       </td>
 
                       <td className="p-3">
-                        <span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-black border ${getStatusTone(!!usuario?.ativo)}`}>
-                          {usuario?.ativo ? "Ativo" : "Inativo"}
+                        <span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-black border ${getStatusTone(ativo)}`}>
+                          {ativo ? "Ativo" : "Inativo"}
                         </span>
-                        <div className="text-xs text-slate-500 font-semibold mt-1">{usuario?.ativo ? "Acesso liberado" : "Acesso bloqueado"}</div>
+                        <div className="text-xs text-slate-500 font-semibold mt-1">{ativo ? "Acesso liberado" : "Acesso bloqueado"}</div>
                       </td>
 
                       <td className="p-3">
                         <div className="flex justify-end gap-2">
                           <button
-                            onClick={() => alternarAtivo(usuario.id, usuario?.ativo)}
-                            disabled={isSaving}
-                            className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white transition disabled:opacity-60 ${usuario?.ativo ? "bg-rose-500 hover:bg-rose-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setUsuarioSelecionado(usuario);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
                           >
-                            {usuario?.ativo ? <FaUserSlash /> : <FaCheckCircle />}
-                            {usuario?.ativo ? "Desativar" : "Ativar"}
+                            <FaEye />
+                            Detalhes
                           </button>
 
                           <button
-                            onClick={() => atualizarNivel(usuario.id, "Administrador")}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              alternarAtivo(usuario.id, ativo);
+                            }}
+                            disabled={isSaving}
+                            className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white transition disabled:opacity-60 ${ativo ? "bg-rose-500 hover:bg-rose-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                          >
+                            {ativo ? <FaUserSlash /> : <FaCheckCircle />}
+                            {ativo ? "Desativar" : "Ativar"}
+                          </button>
+
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              atualizarNivel(usuario.id, "Administrador");
+                            }}
                             disabled={isSaving}
                             className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-3 py-2 text-sm font-bold text-white transition hover:bg-amber-600 disabled:opacity-60"
                           >
@@ -518,6 +757,15 @@ export default function Usuarios() {
       )}
 
       {mostrarExplicacao && <ExplicacaoModal onClose={() => setMostrarExplicacao(false)} />}
+
+      {usuarioSelecionado && (
+        <UsuarioDetalhesModal
+          usuario={usuarioSelecionado}
+          onClose={() => setUsuarioSelecionado(null)}
+          onResetSenha={resetarSenhaUsuario}
+          saving={resetandoSenha}
+        />
+      )}
     </div>
   );
 }

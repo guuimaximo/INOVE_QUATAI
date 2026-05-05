@@ -74,13 +74,25 @@ function normalizeAccessValue(value) {
     .toLowerCase();
 }
 
+function isRecordActive(value) {
+  if (value === true) return true;
+  if (value === false) return false;
+
+  const clean = normalizeAccessValue(value);
+
+  if (["true", "t", "1", "sim", "ativo", "active"].includes(clean)) return true;
+  if (["false", "f", "0", "nao", "não", "inativo", "inactive"].includes(clean)) return false;
+
+  return false;
+}
+
 function isPendingStatus(status) {
   return normalizeAccessValue(status) === "pendente";
 }
 
 function hasApprovalBlock(record) {
   return (
-    !record?.ativo ||
+    !isRecordActive(record?.ativo) ||
     isPendingAccessLevel(record?.nivel) ||
     isPendingStatus(record?.status_cadastro)
   );
@@ -127,6 +139,10 @@ export default function Login() {
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [forceResetUser, setForceResetUser] = useState(null);
+  const [forceResetIdentifier, setForceResetIdentifier] = useState("");
+  const [novaSenhaObrigatoria, setNovaSenhaObrigatoria] = useState("");
+  const [confirmarSenhaObrigatoria, setConfirmarSenhaObrigatoria] = useState("");
 
   const [loginInput, setLoginInput] = useState("");
   const [senha, setSenha] = useState("");
@@ -239,7 +255,7 @@ export default function Login() {
       email: legacyUser?.email || "",
       nivel: legacyUser?.nivel || "Pendente",
       setor: legacyUser?.setor || "",
-      ativo: legacyUser?.ativo !== false,
+      ativo: isRecordActive(legacyUser?.ativo),
       status_cadastro: legacyUser?.status_cadastro || "Aprovado",
       migrado_auth: !!legacyUser?.migrado_auth,
       legacy_user: legacyUser,
@@ -288,6 +304,14 @@ export default function Login() {
     if (hasApprovalBlock(loggedUser)) {
       await logout();
       pushFeedback("error", getApprovalMessage(loggedUser));
+      return false;
+    }
+
+    if (loggedUser?.precisa_redefinir_senha) {
+      await logout();
+      setForceResetUser(loggedUser);
+      setForceResetIdentifier(identifier);
+      pushFeedback("error", "Antes de acessar, crie uma nova senha para confirmar o reset solicitado pelo administrador.");
       return false;
     }
 
@@ -388,6 +412,60 @@ export default function Login() {
     return true;
   }
 
+  async function handleConfirmarSenhaObrigatoria(event) {
+    event.preventDefault();
+    setFeedback(null);
+
+    if (!forceResetUser?.id) {
+      pushFeedback("error", "Nao foi possivel localizar o usuario para redefinicao.");
+      return;
+    }
+
+    if (!novaSenhaObrigatoria || !confirmarSenhaObrigatoria) {
+      pushFeedback("error", "Informe e confirme a nova senha.");
+      return;
+    }
+
+    if (novaSenhaObrigatoria.length < 6) {
+      pushFeedback("error", "A nova senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (novaSenhaObrigatoria !== confirmarSenhaObrigatoria) {
+      pushFeedback("error", "As senhas nao conferem.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("usuarios_aprovadores")
+        .update({
+          senha: novaSenhaObrigatoria,
+          precisa_redefinir_senha: false,
+          senha_alterada_em: new Date().toISOString(),
+          senha_alterada_por: forceResetUser?.login || forceResetIdentifier || loginInput.trim(),
+        })
+        .eq("id", forceResetUser.id)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      setNovaSenhaObrigatoria("");
+      setConfirmarSenhaObrigatoria("");
+      setForceResetUser(null);
+
+      await finalizeLegacyFallbackLogin(forceResetIdentifier || loginInput.trim(), data);
+    } catch (error) {
+      console.error("Falha ao redefinir senha obrigatoria:", error);
+      pushFeedback("error", getFriendlyError(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleEntrar(event) {
     event.preventDefault();
     setFeedback(null);
@@ -408,6 +486,14 @@ export default function Login() {
       if (legacyUser) {
         if (hasApprovalBlock(legacyUser)) {
           pushFeedback("error", getApprovalMessage(legacyUser));
+          return;
+        }
+
+        if (legacyUser?.precisa_redefinir_senha) {
+          setForceResetUser(legacyUser);
+          setForceResetIdentifier(identifier);
+          setSenha("");
+          pushFeedback("error", "Antes de acessar, crie uma nova senha para confirmar o reset solicitado pelo administrador.");
           return;
         }
 
@@ -617,6 +703,9 @@ export default function Login() {
             criado_em: new Date().toISOString(),
             auth_user_id: null,
             migrado_auth: false,
+            precisa_redefinir_senha: false,
+            senha_alterada_em: null,
+            senha_alterada_por: null,
           },
         ]);
 
@@ -724,11 +813,67 @@ export default function Login() {
             </div>
           )}
 
+          {forceResetUser ? (
+            <form onSubmit={handleConfirmarSenhaObrigatoria} className="space-y-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div>
+                <h2 className="text-lg font-black text-slate-900">Redefinição obrigatória de senha</h2>
+                <p className="mt-1 text-sm font-semibold text-amber-800">
+                  O administrador solicitou reset de senha para {forceResetUser?.nome || forceResetUser?.login || "este usuário"}. Crie uma nova senha para continuar.
+                </p>
+              </div>
+
+              <div className="relative group">
+                <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                <input
+                  type="password"
+                  placeholder="Nova senha"
+                  value={novaSenhaObrigatoria}
+                  onChange={(event) => setNovaSenhaObrigatoria(event.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none transition-all"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="relative group">
+                <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                <input
+                  type="password"
+                  placeholder="Confirmar nova senha"
+                  value={confirmarSenhaObrigatoria}
+                  onChange={(event) => setConfirmarSenhaObrigatoria(event.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none transition-all"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+              >
+                {loading ? <Loader2 className="animate-spin" size={22} /> : "Confirmar nova senha e entrar"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setForceResetUser(null);
+                  setForceResetIdentifier("");
+                  setNovaSenhaObrigatoria("");
+                  setConfirmarSenhaObrigatoria("");
+                  setFeedback(null);
+                }}
+                className="w-full text-sm font-bold text-slate-600 hover:text-slate-900"
+              >
+                Voltar para o login
+              </button>
+            </form>
+          ) : (
           <form
             onSubmit={isCadastro ? handleCadastro : handleEntrar}
             className="space-y-5"
           >
-            {!isCadastro && (
+          {!isCadastro && (
               <>
                 <div className="relative group">
                   <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
@@ -878,8 +1023,9 @@ export default function Login() {
               )}
             </button>
           </form>
+          )}
 
-          {!isCadastro && (
+          {!forceResetUser && !isCadastro && (
             <div className="grid gap-3">
               <button
                 type="button"
@@ -892,7 +1038,7 @@ export default function Login() {
             </div>
           )}
 
-          {showReset && !isCadastro && (
+          {!forceResetUser && showReset && !isCadastro && (
             <form
               onSubmit={handleSolicitarReset}
               className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3"
@@ -918,6 +1064,7 @@ export default function Login() {
             </form>
           )}
 
+          {!forceResetUser && (
           <div className="mt-4 text-center">
             <p className="text-slate-600">
               {isCadastro ? "Ja possui cadastro?" : "Nao tem uma conta?"}{" "}
@@ -934,6 +1081,7 @@ export default function Login() {
               </button>
             </p>
           </div>
+          )}
 
           <div className="text-center mt-6">
             <p className="text-xs text-slate-400">

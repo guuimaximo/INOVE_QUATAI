@@ -1,6 +1,7 @@
 // src/pages/SOSCentral.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
+import OcorrenciasVeiculoModal from "../../components/sos/OcorrenciasVeiculoModal";
 import {
   FaSearch,
   FaEye,
@@ -393,7 +394,7 @@ function ExplicacaoModal({ onClose }) {
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
             <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2"><FaChartLine className="text-blue-600"/> Regras de Reincidência (Até 30 dias)</h3>
             <ul className="list-disc pl-5 space-y-1">
-              <li><strong>Reincidência Veículo:</strong> O mesmo carro apresentou um novo SOS (de qualquer tipo) em um intervalo menor ou igual a 30 dias.</li>
+              <li><strong>Reincidência Veículo:</strong> O mesmo carro apresentou uma nova ocorrência em intervalo menor ou igual a 30 dias. Por padrão, ocorrências classificadas como <strong>SEGUIU VIAGEM</strong> ficam fora da reincidência.</li>
               <li><strong>Reincidência Técnica:</strong> O mesmo carro apresentou um novo SOS com o <em>exatamente o mesmo defeito</em> em até 30 dias.</li>
               <li><strong>Reincidência Setorial:</strong> O mesmo carro apresentou um novo SOS atendido pelo <em>mesmo setor de manutenção</em> em até 30 dias.</li>
             </ul>
@@ -723,6 +724,8 @@ export default function SOSCentral() {
   const [filtroCluster, setFiltroCluster] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroControlabilidade, setFiltroControlabilidade] = useState("");
+  const [incluirSeguiuViagemReincidencia, setIncluirSeguiuViagemReincidencia] = useState(false);
+  const [veiculoPopup, setVeiculoPopup] = useState(null);
   
   const [abaAtiva, setAbaAtiva] = useState("EXECUTIVO");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
@@ -966,6 +969,41 @@ export default function SOSCentral() {
   const baseRef = useMemo(() => baseFiltrada.filter((r) => r.mes_key === mesReferencia), [baseFiltrada, mesReferencia]);
   const baseComp = useMemo(() => baseFiltrada.filter((r) => r.mes_key === mesComparacao), [baseFiltrada, mesComparacao]);
 
+  const baseReincidenciaRef = useMemo(() => {
+    if (incluirSeguiuViagemReincidencia) return baseRef;
+    return baseRef.filter((r) => r.tipo_norm !== "SEGUIU VIAGEM");
+  }, [baseRef, incluirSeguiuViagemReincidencia]);
+
+  const baseReincidenciaComp = useMemo(() => {
+    if (incluirSeguiuViagemReincidencia) return baseComp;
+    return baseComp.filter((r) => r.tipo_norm !== "SEGUIU VIAGEM");
+  }, [baseComp, incluirSeguiuViagemReincidencia]);
+
+  function abrirOcorrenciasVeiculo(veiculo) {
+    if (!veiculo) return;
+
+    const veiculoNorm = String(veiculo || "").trim();
+    const ocorrencias = baseRef.filter((r) => String(r.veiculo || "").trim() === veiculoNorm);
+
+    setVeiculoPopup({
+      veiculo: veiculoNorm,
+      ocorrencias,
+    });
+  }
+
+  function renderVeiculoLink(veiculo) {
+    return (
+      <button
+        type="button"
+        onClick={() => abrirOcorrenciasVeiculo(veiculo)}
+        className="font-black text-blue-700 hover:text-blue-900 hover:underline"
+        title="Ver ocorrências do veículo"
+      >
+        {veiculo || "—"}
+      </button>
+    );
+  }
+
   const kmMesMap = useMemo(() => {
     const map = new Map();
     kmProcessado.forEach((r) => {
@@ -977,7 +1015,7 @@ export default function SOSCentral() {
 
   const reincidenciaCalcRef = useMemo(() => {
     const porVeiculo = new Map();
-    [...baseRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+    [...baseReincidenciaRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
       if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
       porVeiculo.get(r.veiculo).push(r);
     });
@@ -1053,7 +1091,7 @@ export default function SOSCentral() {
       intervaloMedioGeral,
       detalhesVeiculo: detalhesVeiculo.sort((a, b) => b.reincVeiculo - a.reincVeiculo || b.totalSOS - a.totalSOS),
     };
-  }, [baseRef]);
+  }, [baseReincidenciaRef]);
 
   const resumoAtual = useMemo(() => {
     const kmTotal = n(kmMesMap.get(mesReferencia));
@@ -1095,7 +1133,7 @@ export default function SOSCentral() {
     });
 
     const porVeiculo = new Map();
-    [...baseComp].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+    [...baseReincidenciaComp].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
       if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
       porVeiculo.get(r.veiculo).push(r);
     });
@@ -1115,7 +1153,7 @@ export default function SOSCentral() {
     const mediaFechamento = baseComp.filter((r) => r.tempo_solucao_horas > 0).reduce((acc, r) => acc + r.tempo_solucao_horas, 0) / Math.max(1, baseComp.filter((r) => r.tempo_solucao_horas > 0).length);
 
     return { kmTotal, interv, mkbf, porTipoMap, taxaReincidencia, mediaFechamento };
-  }, [kmMesMap, mesComparacao, baseComp]);
+  }, [kmMesMap, mesComparacao, baseComp, baseReincidenciaComp]);
 
   const historico12m = useMemo(() => {
     return mesesDisponiveis.slice(-12).map((mes) => {
@@ -1129,9 +1167,12 @@ export default function SOSCentral() {
       const kmTotal = n(kmMesMap.get(mes));
       const validasParaMkbf = baseMes.filter((r) => r.valida_mkbf).length;
       const mkbf = validasParaMkbf > 0 ? kmTotal / validasParaMkbf : 0;
+      const baseMesReincidencia = incluirSeguiuViagemReincidencia
+        ? baseMes
+        : baseMes.filter((r) => r.tipo_norm !== "SEGUIU VIAGEM");
 
       const porVeiculo = new Map();
-      [...baseMes].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+      [...baseMesReincidencia].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
         if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
         porVeiculo.get(r.veiculo).push(r);
       });
@@ -1158,7 +1199,7 @@ export default function SOSCentral() {
         meta: MKBF_META,
       };
     });
-  }, [mesesDisponiveis, sosProcessado, kmMesMap, filtroControlabilidade]);
+  }, [mesesDisponiveis, sosProcessado, kmMesMap, filtroControlabilidade, incluirSeguiuViagemReincidencia]);
 
   const graficoTipos = useMemo(() => TIPOS_GRAFICO.map((tipo) => ({
     tipo, anterior: n(resumoComp.porTipoMap?.[tipo]), atual: n(resumoAtual.porTipoMap?.[tipo]),
@@ -1181,9 +1222,12 @@ export default function SOSCentral() {
     return linhas.map((linha) => {
       const atual = baseRef.filter((r) => r.linha === linha);
       const anterior = baseComp.filter((r) => r.linha === linha);
+      const atualReincidencia = incluirSeguiuViagemReincidencia
+        ? atual
+        : atual.filter((r) => r.tipo_norm !== "SEGUIU VIAGEM");
 
       const porVeiculo = new Map();
-      [...atual].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+      [...atualReincidencia].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
         if (!porVeiculo.has(r.veiculo)) porVeiculo.set(r.veiculo, []);
         porVeiculo.get(r.veiculo).push(r);
       });
@@ -1210,7 +1254,7 @@ export default function SOSCentral() {
         setorTop: Object.entries(atual.reduce((acc, r) => { acc[r.setor_manutencao] = n(acc[r.setor_manutencao]) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
       };
     }).sort((a, b) => b.veiculosReincidentes - a.veiculosReincidentes || b.totalAtual - a.totalAtual);
-  }, [baseRef, baseComp]);
+  }, [baseRef, baseComp, incluirSeguiuViagemReincidencia]);
 
   const tabelaVeiculos = useMemo(() => reincidenciaCalcRef.detalhesVeiculo, [reincidenciaCalcRef]);
 
@@ -1224,7 +1268,7 @@ export default function SOSCentral() {
     });
 
     const porVeiculoSetor = new Map();
-    [...baseRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+    [...baseReincidenciaRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
       const key = `${r.veiculo}__${r.setor_manutencao}`;
       if (!porVeiculoSetor.has(key)) porVeiculoSetor.set(key, []);
       porVeiculoSetor.get(key).push(r);
@@ -1243,7 +1287,7 @@ export default function SOSCentral() {
       setor: r.setor, total: r.total, linhas: r.linhas.size, veiculos: r.veiculos.size, reincSetorial: r.reincSetorial,
       defeitoTop: Object.entries(r.defeitos).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/D",
     })).sort((a, b) => b.reincSetorial - a.reincSetorial || b.total - a.total);
-  }, [baseRef]);
+  }, [baseRef, baseReincidenciaRef]);
 
   const tabelaDefeitos = useMemo(() => {
     const map = new Map();
@@ -1257,7 +1301,7 @@ export default function SOSCentral() {
     });
 
     const porVeiculoDefeito = new Map();
-    [...baseRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
+    [...baseReincidenciaRef].sort((a, b) => String(a.data_sos).localeCompare(String(b.data_sos))).forEach((r) => {
       const key = `${r.veiculo}__${r.problema_encontrado}`;
       if (!porVeiculoDefeito.has(key)) porVeiculoDefeito.set(key, []);
       porVeiculoDefeito.get(key).push(r);
@@ -1279,7 +1323,7 @@ export default function SOSCentral() {
       mediaPrev: r.diasPrevQtd > 0 ? r.diasPrevSoma / r.diasPrevQtd : 0,
       mediaInsp: r.diasInspQtd > 0 ? r.diasInspSoma / r.diasInspQtd : 0,
     })).sort((a, b) => b.reincTecnica - a.reincTecnica || b.total - a.total);
-  }, [baseRef]);
+  }, [baseRef, baseReincidenciaRef]);
 
   const tabelaMotoristas = useMemo(() => {
     const map = new Map();
@@ -1713,7 +1757,17 @@ export default function SOSCentral() {
             <option value="NÃO CONTROLÁVEL">Não Controlável</option>
           </select>
 
-          <button onClick={() => { setBusca(""); setFiltroLinha(""); setFiltroSetor(""); setFiltroTipo(""); setFiltroCluster(""); setFiltroStatus(""); setFiltroControlabilidade(""); }} className="px-3 py-3 rounded-xl border border-slate-200 bg-slate-800 text-white font-black hover:bg-slate-700 transition">
+          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-black text-slate-700">
+            <input
+              type="checkbox"
+              checked={incluirSeguiuViagemReincidencia}
+              onChange={(e) => setIncluirSeguiuViagemReincidencia(e.target.checked)}
+              className="rounded border-slate-300"
+            />
+            Incluir “Seguiu Viagem” na reincidência
+          </label>
+
+          <button onClick={() => { setBusca(""); setFiltroLinha(""); setFiltroSetor(""); setFiltroTipo(""); setFiltroCluster(""); setFiltroStatus(""); setFiltroControlabilidade(""); setIncluirSeguiuViagemReincidencia(false); }} className="px-3 py-3 rounded-xl border border-slate-200 bg-slate-800 text-white font-black hover:bg-slate-700 transition">
             Limpar filtros
           </button>
         </div>
@@ -1722,7 +1776,7 @@ export default function SOSCentral() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <CardKPI title="Total SOS Analisado" value={fmtInt(resumoAtual.interv)} sub={filtroControlabilidade ? `Filtro: ${filtroControlabilidade}` : "Todos os SOS"} icon={<FaExclamationTriangle />} tone="rose" className="md:col-span-2 xl:col-span-2" />
         <CardKPI title="Tempo Médio Fechamento" value={fmtHoras(resumoAtual.mediaFechamento)} sub="Desde abertura da etiqueta" icon={<FaClock />} tone="slate" />
-        <CardKPI title="Veículos Reincidentes" value={fmtInt(resumoAtual.veiculosReincidentes)} sub="Mesmo veículo em até 30 dias" icon={<FaBus />} tone="violet" />
+        <CardKPI title="Veículos Reincidentes" value={fmtInt(resumoAtual.veiculosReincidentes)} sub={incluirSeguiuViagemReincidencia ? "Mesmo veículo em até 30 dias, com Seguiu Viagem" : "Mesmo veículo em até 30 dias, sem Seguiu Viagem"} icon={<FaBus />} tone="violet" />
         <CardKPI title="Taxa Reincidência" value={fmtPct(resumoAtual.taxaReincidencia)} sub="Sobre veículos da base atual" icon={<FaChartLine />} tone="amber" />
         <CardKPI title="MKBF" value={fmtNum(resumoAtual.mkbf)} sub={`Meta ${fmtNum(MKBF_META)}`} icon={<FaBolt />} tone="blue" />
         <CardKPI title="Dias após Preventiva" value={fmtNum(resumoAtual.mediaPrev, 1)} sub="Média do mês" icon={<FaWrench />} tone="emerald" />
@@ -1848,7 +1902,7 @@ export default function SOSCentral() {
                   <tbody>
                     {top5Veiculos3m.map((r) => (
                       <tr key={r.veiculo} className="border-b last:border-b-0">
-                        <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td>
+                        <td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td>
                         <td className="px-3 py-3">{r.cluster}</td>
                         <td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.total)}</td>
                         {Object.keys(r).filter((k) => k.includes("/")).map((m) => (<td key={m} className="px-3 py-3">{fmtInt(r[m])}</td>))}
@@ -1968,7 +2022,7 @@ export default function SOSCentral() {
               <tbody>
                 {tabelaVeiculos.map((r) => (
                   <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{r.linhaTop}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
+                    <td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{r.linhaTop}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3 text-slate-600">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2018,7 +2072,7 @@ export default function SOSCentral() {
               <tbody>
                 {baseRef.map((r) => (
                   <tr key={r.id} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3">{fmtDateBr(r.data_sos)}</td><td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td><td className="px-3 py-3">{r.problema_encontrado}</td><td className="px-3 py-3">{r.setor_manutencao}</td>
+                    <td className="px-3 py-3">{fmtDateBr(r.data_sos)}</td><td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td><td className="px-3 py-3">{r.problema_encontrado}</td><td className="px-3 py-3">{r.setor_manutencao}</td>
                     <td className="px-3 py-3"><span className="font-semibold text-slate-700">{r.responsavel_revisao}</span> <span className="text-[10px] text-slate-400 bg-slate-100 px-1 rounded ml-1">{r.tipo_revisao_atribuida}</span></td>
                     <td className="px-3 py-3 font-semibold text-emerald-600">{fmtInt(r.dias_ultima_preventiva_calc)}</td><td className="px-3 py-3">{r.faixa_preventiva}</td><td className="px-3 py-3 font-semibold text-blue-600">{fmtInt(r.dias_ultima_inspecao_calc)}</td><td className="px-3 py-3">{r.faixa_inspecao}</td>
                   </tr>
@@ -2094,7 +2148,7 @@ export default function SOSCentral() {
               <tbody>
                 {tabelaVeiculos.map((r) => (
                   <tr key={r.veiculo} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-black text-slate-800">{r.veiculo}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{r.linhaTop}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
+                    <td className="px-3 py-3">{renderVeiculoLink(r.veiculo)}</td><td className="px-3 py-3">{r.cluster}</td><td className="px-3 py-3">{r.linhaTop}</td><td className="px-3 py-3 font-bold text-slate-700">{fmtInt(r.totalSOS)}</td><td className="px-3 py-3">{fmtInt(r.reincVeiculo)}</td><td className="px-3 py-3 text-rose-600 font-semibold">{fmtInt(r.reincTecnica)}</td><td className="px-3 py-3">{fmtInt(r.reincSetorial)}</td><td className="px-3 py-3">{fmtNum(r.intervaloMedio, 1)}</td><td className="px-3 py-3">{r.defeitoTop}</td><td className="px-3 py-3">{r.setorTop}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2212,6 +2266,18 @@ export default function SOSCentral() {
       )}
 
       {/* MODAIS GLOBAIS DA PÁGINA */}
+      {selected && (
+        <DetalheSOSModal sos={selected} onClose={() => setSelected(null)} onAtualizar={() => carregarTudo()} />
+      )}
+
+      {veiculoPopup && (
+        <OcorrenciasVeiculoModal
+          veiculo={veiculoPopup.veiculo}
+          ocorrencias={veiculoPopup.ocorrencias}
+          onClose={() => setVeiculoPopup(null)}
+        />
+      )}
+
       {mostrarExplicacao && (
         <ExplicacaoModal onClose={() => setMostrarExplicacao(false)} />
       )}

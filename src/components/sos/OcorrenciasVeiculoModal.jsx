@@ -1,6 +1,5 @@
 // src/components/sos/OcorrenciasVeiculoModal.jsx
-
-import { FaTimes, FaBus } from "react-icons/fa";
+import { FaBus, FaTimes } from "react-icons/fa";
 
 function safeDateStr(v) {
   if (!v) return "";
@@ -25,11 +24,7 @@ function fmtDateBr(v) {
   return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dt;
 }
 
-export default function OcorrenciasVeiculoModal({
-  veiculo,
-  ocorrencias = [],
-  onClose,
-}) {
+export default function OcorrenciasVeiculoModal({ veiculo, ocorrencias = [], onClose }) {
   const lista = [...ocorrencias].sort((a, b) =>
     String(b.data_sos || b.created_at || "").localeCompare(
       String(a.data_sos || a.created_at || "")
@@ -58,6 +53,7 @@ export default function OcorrenciasVeiculoModal({
           <button
             onClick={onClose}
             className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+            title="Fechar"
           >
             <FaTimes />
           </button>

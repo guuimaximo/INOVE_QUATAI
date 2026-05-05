@@ -9,6 +9,8 @@ export default function UpdateAppPrompt() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    window.__INOVE_REACT_UPDATE_PROMPT_VISIBLE__ = false;
+
     const pendingVersion = getStoredUpdateVersion();
     if (pendingVersion) {
       setVisible(true);
@@ -27,10 +29,15 @@ export default function UpdateAppPrompt() {
     navigator.serviceWorker?.addEventListener("controllerchange", handleControllerChange);
 
     return () => {
+      window.__INOVE_REACT_UPDATE_PROMPT_VISIBLE__ = false;
       window.removeEventListener("inove:update-available", handleUpdateAvailable);
       navigator.serviceWorker?.removeEventListener("controllerchange", handleControllerChange);
     };
   }, []);
+
+  useEffect(() => {
+    window.__INOVE_REACT_UPDATE_PROMPT_VISIBLE__ = visible;
+  }, [visible]);
 
   async function handleRefresh() {
     setRefreshing(true);

@@ -1,3 +1,4 @@
+// Keep a pending update visible even if the modal mounts after the version check runs.
 const VERSION_CHECK_INTERVAL_MS = 30 * 1000;
 const UPDATE_STORAGE_KEY = "inove:update-available-version";
 

@@ -27,6 +27,7 @@ function normalizeStoredAppUser(userData) {
     setor: userData.setor || "",
     ativo: userData.ativo !== false,
     status_cadastro: userData.status_cadastro || (userData.nivel === "Pendente" ? "Pendente" : "Aprovado"),
+    estrutura_fisica_liberada: userData.estrutura_fisica_liberada === true,
     requires_profile_review: !!userData.requires_profile_review,
     profile_review_reasons: Array.isArray(userData.profile_review_reasons) ? userData.profile_review_reasons : [],
   };

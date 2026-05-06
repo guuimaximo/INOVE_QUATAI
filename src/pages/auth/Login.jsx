@@ -215,6 +215,7 @@ export default function Login() {
       setor: legacyUser?.setor || "",
       ativo: legacyUser?.ativo !== false,
       status_cadastro: legacyUser?.status_cadastro || "Aprovado",
+      estrutura_fisica_liberada: legacyUser?.estrutura_fisica_liberada === true,
       migrado_auth: !!legacyUser?.migrado_auth,
       legacy_user: legacyUser,
       profile: null,

@@ -33,6 +33,7 @@ import {
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
+import { canAccessEstruturaFisica } from "../utils/access";
 
 /* =========================
    ROTAS
@@ -208,6 +209,9 @@ function canSee(user, path) {
   if (!user?.nivel) return false;
   if (user.nivel === "Administrador") return true;
   if (user.nivel === "Gestor") return ACCESS.Gestor.includes(path);
+  if (Object.values(ESTRUTURA_FISICA_ROUTES).includes(path)) {
+    return canAccessEstruturaFisica(user);
+  }
 
   const allowed = ACCESS[user.nivel] || [];
   return allowed.includes(path);
@@ -395,9 +399,7 @@ export default function Sidebar() {
     isEmbarcados ||
     links.embarcados.tabs.some((t) => canSee(user, t.path));
 
-  const showEstruturaFisica =
-    (isAdmin || isGestor) &&
-    links.estruturaFisica.tabs.some((t) => canSee(user, t.path));
+  const showEstruturaFisica = links.estruturaFisica.tabs.some((t) => canSee(user, t.path));
 
   const showTratativas = links.tratativas.some((l) => {
     if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;

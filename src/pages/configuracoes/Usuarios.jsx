@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   FaCheckCircle,
+  FaBuilding,
   FaCrown,
   FaSearch,
   FaShieldAlt,
@@ -46,6 +47,12 @@ function getStatusTone(isActive) {
   return isActive
     ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"
     : "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200";
+}
+
+function getPermissionTone(enabled) {
+  return enabled
+    ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200"
+    : "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200";
 }
 
 function buildSearchBlob(usuario) {
@@ -141,9 +148,14 @@ export default function Usuarios() {
     setSavingId(id);
     setFeedback(null);
 
+    const payload = {
+      ativo: novoStatus,
+      ...(novoStatus ? { status_cadastro: "Aprovado" } : {}),
+    };
+
     const { error } = await supabase
       .from("usuarios_aprovadores")
-      .update({ ativo: novoStatus })
+      .update(payload)
       .eq("id", id);
 
     if (error) {
@@ -156,10 +168,52 @@ export default function Usuarios() {
       return;
     }
 
-    setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? { ...usuario, ativo: novoStatus } : usuario)));
+    setUsuarios((prev) =>
+      prev.map((usuario) =>
+        usuario.id === id
+          ? {
+              ...usuario,
+              ativo: novoStatus,
+              status_cadastro: novoStatus ? "Aprovado" : usuario.status_cadastro,
+            }
+          : usuario
+      )
+    );
     setFeedback({
       type: "success",
-      text: `Usuario ${novoStatus ? "ativado" : "desativado"} com sucesso.`,
+      text: `Usuario ${novoStatus ? "ativado" : "desativado"} com sucesso.${novoStatus ? " Status do cadastro ajustado para Aprovado." : ""}`,
+    });
+    setSavingId(null);
+  }
+
+  async function alternarEstruturaFisica(id, atual) {
+    const novoStatus = !atual;
+    setSavingId(id);
+    setFeedback(null);
+
+    const { error } = await supabase
+      .from("usuarios_aprovadores")
+      .update({ estrutura_fisica_liberada: novoStatus })
+      .eq("id", id);
+
+    if (error) {
+      console.error(error.message);
+      setFeedback({
+        type: "error",
+        text: "Erro ao atualizar a liberacao de Estrutura Fisica.",
+      });
+      setSavingId(null);
+      return;
+    }
+
+    setUsuarios((prev) =>
+      prev.map((usuario) =>
+        usuario.id === id ? { ...usuario, estrutura_fisica_liberada: novoStatus } : usuario
+      )
+    );
+    setFeedback({
+      type: "success",
+      text: `Acesso de Estrutura Fisica ${novoStatus ? "liberado" : "bloqueado"} com sucesso.`,
     });
     setSavingId(null);
   }
@@ -290,6 +344,7 @@ export default function Usuarios() {
                 <th className="px-6 py-4">Login</th>
                 <th className="px-6 py-4">Contato</th>
                 <th className="px-6 py-4">Nivel</th>
+                <th className="px-6 py-4">Estrutura Fisica</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right md:px-8">Acoes</th>
               </tr>
@@ -298,13 +353,13 @@ export default function Usuarios() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-10 text-center text-sm font-medium text-slate-500 md:px-8">
+                  <td colSpan="7" className="px-6 py-10 text-center text-sm font-medium text-slate-500 md:px-8">
                     Atualizando base de usuarios...
                   </td>
                 </tr>
               ) : filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-10 text-center text-sm font-medium text-slate-500 md:px-8">
+                  <td colSpan="7" className="px-6 py-10 text-center text-sm font-medium text-slate-500 md:px-8">
                     Nenhum usuario encontrado para o filtro aplicado.
                   </td>
                 </tr>
@@ -313,6 +368,10 @@ export default function Usuarios() {
                   const isSaving = savingId === usuario.id;
                   const statusCadastro = usuario?.status_cadastro || "Aprovado";
                   const setor = usuario?.setor || "Nao informado";
+                  const nivel = normalizeText(usuario?.nivel);
+                  const estruturaNativa = nivel === "administrador" || nivel === "gestor";
+                  const podeConfigurarEstrutura = nivel === "rh";
+                  const estruturaLiberada = usuario?.estrutura_fisica_liberada === true;
 
                   return (
                     <tr key={usuario.id} className="transition hover:bg-slate-50/80">
@@ -368,6 +427,45 @@ export default function Usuarios() {
                               </option>
                             ))}
                           </select>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="space-y-2">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                              getPermissionTone(estruturaNativa || estruturaLiberada)
+                            }`}
+                          >
+                            {estruturaNativa
+                              ? "Nativo"
+                              : estruturaLiberada
+                              ? "Liberado"
+                              : podeConfigurarEstrutura
+                              ? "Bloqueado"
+                              : "Nao se aplica"}
+                          </span>
+
+                          {podeConfigurarEstrutura ? (
+                            <button
+                              onClick={() => alternarEstruturaFisica(usuario.id, estruturaLiberada)}
+                              disabled={isSaving}
+                              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                estruturaLiberada
+                                  ? "bg-slate-600 hover:bg-slate-700"
+                                  : "bg-blue-600 hover:bg-blue-700"
+                              }`}
+                            >
+                              <FaBuilding />
+                              {estruturaLiberada ? "Bloquear aba" : "Liberar aba"}
+                            </button>
+                          ) : (
+                            <div className="text-xs text-slate-500">
+                              {estruturaNativa
+                                ? "Perfil ja possui acesso por nivel."
+                                : "Liberacao usada apenas para RH."}
+                            </div>
+                          )}
                         </div>
                       </td>
 

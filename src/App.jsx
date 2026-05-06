@@ -38,6 +38,7 @@ import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
 
 import Usuarios from "./pages/configuracoes/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
+import RequireEstruturaFisicaAccess from "./routes/RequireEstruturaFisicaAccess";
 
 import DesempenhoLancamento from "./pages/desempenho-diesel/DesempenhoLancamento";
 import DesempenhoDieselResumo from "./pages/desempenho-diesel/DesempenhoDieselResumo";
@@ -143,11 +144,46 @@ export default function App() {
             <Route path="/solicitar" element={<SolicitacaoTratativa />} />
             <Route path="/tratativas-rh" element={<TratativasRH />} />
 
-            <Route path="/estrutura-fisica/solicitacao" element={<EstruturaFisicaSolicitacao />} />
-            <Route path="/estrutura-fisica/central" element={<EstruturaFisicaCentral />} />
-            <Route path="/estrutura-fisica/consultar/:id" element={<EstruturaFisicaConsultar />} />
-            <Route path="/estrutura-fisica/tratar/:id" element={<EstruturaFisicaTratar />} />
-            <Route path="/estrutura-fisica" element={<Navigate to="/estrutura-fisica/central" replace />} />
+            <Route
+              path="/estrutura-fisica/solicitacao"
+              element={
+                <RequireEstruturaFisicaAccess>
+                  <EstruturaFisicaSolicitacao />
+                </RequireEstruturaFisicaAccess>
+              }
+            />
+            <Route
+              path="/estrutura-fisica/central"
+              element={
+                <RequireEstruturaFisicaAccess>
+                  <EstruturaFisicaCentral />
+                </RequireEstruturaFisicaAccess>
+              }
+            />
+            <Route
+              path="/estrutura-fisica/consultar/:id"
+              element={
+                <RequireEstruturaFisicaAccess>
+                  <EstruturaFisicaConsultar />
+                </RequireEstruturaFisicaAccess>
+              }
+            />
+            <Route
+              path="/estrutura-fisica/tratar/:id"
+              element={
+                <RequireEstruturaFisicaAccess>
+                  <EstruturaFisicaTratar />
+                </RequireEstruturaFisicaAccess>
+              }
+            />
+            <Route
+              path="/estrutura-fisica"
+              element={
+                <RequireEstruturaFisicaAccess>
+                  <Navigate to="/estrutura-fisica/central" replace />
+                </RequireEstruturaFisicaAccess>
+              }
+            />
 
             <Route path="/lancar-avaria" element={<LancarAvaria />} />
             <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />

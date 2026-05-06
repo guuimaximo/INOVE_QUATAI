@@ -220,11 +220,33 @@ export default function NiveisAcesso() {
       updated_at: new Date().toISOString(),
     };
 
-    const query = profile.id
-      ? supabase.from("app_niveis_acesso").update(payload).eq("id", profile.id)
-      : supabase.from("app_niveis_acesso").insert(payload);
+    let error = null;
 
-    const { error } = await query;
+    if (profile.id) {
+      const response = await supabase.from("app_niveis_acesso").update(payload).eq("id", profile.id);
+      error = response.error;
+    } else {
+      const { data: existing, error: existingError } = await supabase
+        .from("app_niveis_acesso")
+        .select("id")
+        .eq("nome", payload.nome)
+        .maybeSingle();
+
+      if (existingError) {
+        console.error(existingError);
+        alert("Não foi possível verificar o nível informado.");
+        return;
+      }
+
+      if (existing?.id) {
+        const response = await supabase.from("app_niveis_acesso").update(payload).eq("id", existing.id);
+        error = response.error;
+      } else {
+        const response = await supabase.from("app_niveis_acesso").insert(payload);
+        error = response.error;
+      }
+    }
+
     if (error) {
       console.error(error);
       alert("Não foi possível salvar o nível de acesso.");

@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import logoInova from "../../assets/logoInovaQuatai.png";
 import { useAuth } from "../../context/AuthContext";
+import { useAccessGovernance } from "../../context/AccessContext";
 import {
   buildPlaceholderEmail,
   ensureLegacyAuthLink,
@@ -15,6 +16,7 @@ import {
   isValidEmail,
   resolveAuthAccount,
 } from "../../utils/authBridge";
+import { canUserAccessPath, canUserSeeFarol } from "../../utils/access";
 import {
   User,
   Lock,
@@ -29,8 +31,6 @@ import {
   EyeOff,
   KeyRound,
 } from "lucide-react";
-
-const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 
 const SETORES = [
   "Manutencao",
@@ -133,6 +133,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { refreshUser, logout, login: persistLocalLogin } = useAuth();
+  const { profileMap } = useAccessGovernance();
 
   const [isCadastro, setIsCadastro] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -319,18 +320,16 @@ export default function Login() {
 
     const safeFarolRedirect = getSafeFarolRedirect(redirectParam);
 
-    if (
-      safeFarolRedirect &&
-      NIVEIS_PORTAL.has(String(loggedUser?.nivel || "").trim())
-    ) {
+    if (safeFarolRedirect && canUserSeeFarol(loggedUser, profileMap)) {
       window.location.href = safeFarolRedirect;
       return true;
     }
 
+    const defaultNextPath = canUserAccessPath(loggedUser, "/painel", profileMap) ? "/painel" : decideDefaultNext();
     navigate(
       loggedUser.requires_profile_review
         ? "/atualizar-perfil"
-        : nextPathState || decideDefaultNext(),
+        : nextPathState || defaultNextPath,
       {
         replace: true,
       }

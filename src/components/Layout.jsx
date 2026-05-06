@@ -18,6 +18,7 @@ import {
 
 import Sidebar from "./Sidebar";
 import { AuthContext } from "../context/AuthContext";
+import { useAccessGovernance } from "../context/AccessContext";
 import { getMobileNavItems } from "../utils/mobileNavigation";
 
 function getPageTitle(pathname) {
@@ -108,6 +109,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useContext(AuthContext);
+  const { profileMap } = useAccessGovernance();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isNativeShell = Capacitor.isNativePlatform();
   const isLockedMobileModule = isNativeShell;
@@ -121,8 +123,8 @@ export default function Layout() {
             { key: "auditoria", label: "Auditoria", path: "/pcm-troca-pneus?aba=auditoria" },
             { key: "estoque", label: "Estoque", path: "/pcm-troca-pneus?aba=estoque" },
           ]
-        : getMobileNavItems(user?.nivel).slice(0, 3),
-    [isLockedMobileModule, user?.nivel]
+        : getMobileNavItems(user, profileMap).slice(0, 3),
+    [isLockedMobileModule, profileMap, user]
   );
 
   useEffect(() => {

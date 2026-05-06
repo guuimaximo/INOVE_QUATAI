@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { AccessProvider } from "./context/AccessContext";
+import { useAccessGovernance } from "./context/AccessContext";
 import Layout from "./components/Layout";
 import Login from "./pages/auth/Login";
 import AtualizarSenha from "./pages/auth/AtualizarSenha";
@@ -38,6 +40,7 @@ import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
 
 import Usuarios from "./pages/configuracoes/Usuarios";
 import Funcionarios from "./pages/configuracoes/Funcionarios";
+import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
 import RequireAuth from "./routes/RequireAuth";
 
 import DesempenhoLancamento from "./pages/desempenho-diesel/DesempenhoLancamento";
@@ -70,16 +73,16 @@ import { Capacitor } from "@capacitor/core";
 import { AuthContext } from "./context/AuthContext";
 import InstallAppPrompt from "./components/InstallAppPrompt";
 import UpdateAppPrompt from "./components/UpdateAppPrompt";
+import { canUserAccessPath } from "./utils/access";
 
 function HomeDecider() {
   const { user } = useContext(AuthContext);
+  const { profileMap } = useAccessGovernance();
   const isNativeShell = Capacitor.isNativePlatform();
-
-  const isAdmin = user?.nivel === "Administrador";
-  const isGestor = user?.nivel === "Gestor";
+  const canSeePainel = canUserAccessPath(user, "/painel", profileMap);
 
   if (isNativeShell) return <Navigate to="/pcm-troca-pneus" replace />;
-  if (isAdmin || isGestor) return <Dashboard />;
+  if (canSeePainel) return <Dashboard />;
   return <InicioRapido />;
 }
 
@@ -91,8 +94,9 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <>
-        <Routes>
+      <AccessProvider>
+        <>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/atualizar-senha" element={<AtualizarSenha />} />
 
@@ -168,14 +172,16 @@ export default function App() {
 
             <Route path="/usuarios" element={<Usuarios />} />
             <Route path="/funcionarios" element={<Funcionarios />} />
+            <Route path="/niveis-acesso" element={<NiveisAcesso />} />
           </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
 
-        <InstallAppPrompt />
-        <UpdateAppPrompt />
-      </>
+          <InstallAppPrompt />
+          <UpdateAppPrompt />
+        </>
+      </AccessProvider>
     </AuthProvider>
   );
 }

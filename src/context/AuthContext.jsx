@@ -15,6 +15,9 @@ export const AuthContext = createContext(null);
 function normalizeStoredAppUser(userData) {
   if (!userData) return null;
 
+  const paginasLiberadas = Array.isArray(userData.paginas_liberadas) ? userData.paginas_liberadas : [];
+  const paginasBloqueadas = Array.isArray(userData.paginas_bloqueadas) ? userData.paginas_bloqueadas : [];
+
   return {
     ...userData,
     auth_source: userData.auth_source || (userData.auth_user_id ? "supabase" : "legacy"),
@@ -28,6 +31,9 @@ function normalizeStoredAppUser(userData) {
     setor: userData.setor || "",
     ativo: userData.ativo !== false,
     status_cadastro: userData.status_cadastro || (userData.nivel === "Pendente" ? "Pendente" : "Aprovado"),
+    estrutura_fisica_liberada: userData.estrutura_fisica_liberada === true,
+    paginas_liberadas: paginasLiberadas,
+    paginas_bloqueadas: paginasBloqueadas,
     requires_profile_review: !!userData.requires_profile_review,
     profile_review_reasons: Array.isArray(userData.profile_review_reasons) ? userData.profile_review_reasons : [],
   };

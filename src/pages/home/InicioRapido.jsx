@@ -1,6 +1,7 @@
 import React, { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
+import { useAccessGovernance } from "../../context/AccessContext";
 import {
   FaChevronRight,
   FaInfoCircle,
@@ -70,6 +71,7 @@ function formatNowBR() {
 
 export default function InicioRapido() {
   const { user } = useContext(AuthContext);
+  const { profileMap } = useAccessGovernance();
 
   const firstName = useMemo(() => {
     const name = String(user?.nome || "").trim();
@@ -91,7 +93,7 @@ export default function InicioRapido() {
   }, []);
 
   const statusSistema = "ONLINE";
-  const quickLinks = useMemo(() => getMobileQuickLinks(user?.nivel), [user?.nivel]);
+  const quickLinks = useMemo(() => getMobileQuickLinks(user, profileMap), [profileMap, user]);
 
   return (
     <div className="space-y-5">

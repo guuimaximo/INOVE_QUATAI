@@ -90,10 +90,6 @@ export function getLevelOptions(rows = []) {
 export function canAccessEstruturaFisica(user, accessProfileMap = {}) {
   if (!user?.nivel) return false;
 
-  if (user.nivel === "Administrador" || user.nivel === "Gestor") {
-    return true;
-  }
-
   const explicitKeys = new Set(normalizePageKeyArray(user?.paginas_liberadas));
   if (
     explicitKeys.has("estrutura_fisica_solicitacao") ||
@@ -122,7 +118,6 @@ export function canUserAccessPageKey(user, pageKey, accessProfileMap = {}) {
   const key = normalizeText(pageKey);
   if (!key) return false;
   if (!user?.nivel) return false;
-  if (user.nivel === "Administrador") return true;
 
   const explicitBlocked = new Set(normalizePageKeyArray(user?.paginas_bloqueadas));
   if (explicitBlocked.has(key)) return false;
@@ -152,7 +147,6 @@ export function canUserAccessPath(user, pathname, accessProfileMap = {}) {
 
 export function canUserSeeFarol(user, accessProfileMap = {}) {
   if (!user?.nivel) return false;
-  if (user.nivel === "Administrador") return true;
 
   const profile = accessProfileMap?.[user.nivel];
   return profile?.farol_liberado === true;

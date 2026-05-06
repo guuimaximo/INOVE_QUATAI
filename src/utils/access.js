@@ -183,3 +183,35 @@ export function getMobileQuickLinksForUser(user, accessProfileMap = {}) {
 export function summarizeEffectivePages(user, accessProfileMap = {}) {
   return APP_ACCESS_PAGES.filter((page) => canUserAccessPageKey(user, page.key, accessProfileMap)).map((page) => page.key);
 }
+
+const ACCESS_FALLBACK_PRIORITY = [
+  "/painel",
+  "/inove",
+  "/inicio-rapido",
+  "/central",
+  "/tratativas-resumo",
+  "/cobrancas",
+  "/sos-resumo",
+  "/sos-solicitacao",
+  "/desempenho-diesel-resumo",
+  "/diesel-tratativas",
+  "/embarcados-central",
+  "/pcm-resumo",
+  "/pcm-troca-pneus",
+];
+
+export function getDefaultAccessiblePath(user, accessProfileMap = {}) {
+  for (const path of ACCESS_FALLBACK_PRIORITY) {
+    if (canUserAccessPath(user, path, accessProfileMap)) {
+      return path;
+    }
+  }
+
+  const fallbackPage = APP_ACCESS_PAGES.find((page) => {
+    const plainPath = page.path || "";
+    if (!plainPath || plainPath.includes("/:")) return false;
+    return canUserAccessPageKey(user, page.key, accessProfileMap);
+  });
+
+  return fallbackPage?.path || "/inicio-rapido";
+}

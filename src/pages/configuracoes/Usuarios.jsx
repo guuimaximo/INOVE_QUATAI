@@ -542,6 +542,20 @@ export default function Usuarios() {
     carregarUsuarios();
   }, []);
 
+  async function sincronizarProfileUsuario({ authUserId, nivel, ativo }) {
+    if (!authUserId) return;
+
+    const payload = {};
+    if (nivel !== undefined) payload.nivel = nivel;
+    if (ativo !== undefined) payload.ativo = ativo;
+    if (!Object.keys(payload).length) return;
+
+    const { error } = await supabase.from("profiles").update(payload).eq("id", authUserId);
+    if (error) {
+      console.warn("Falha ao sincronizar profile do usuario:", error.message);
+    }
+  }
+
   async function atualizarNivel(id, nivel) {
     setSavingId(id);
     setFeedback(null);
@@ -558,6 +572,8 @@ export default function Usuarios() {
       return;
     }
 
+    const usuarioAtualizado = usuarios.find((usuario) => usuario.id === id);
+    await sincronizarProfileUsuario({ authUserId: usuarioAtualizado?.auth_user_id, nivel });
     setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? { ...usuario, nivel } : usuario)));
     if (currentUser?.usuario_id === id || currentUser?.id === id) {
       persistCurrentUser({ ...currentUser, nivel });
@@ -588,6 +604,7 @@ export default function Usuarios() {
     }
 
     setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? data : usuario)));
+    await sincronizarProfileUsuario({ authUserId: data?.auth_user_id, ativo: novoStatus });
     if (usuarioSelecionado?.id === id) setUsuarioSelecionado(data);
     if (currentUser?.usuario_id === id || currentUser?.id === id) {
       persistCurrentUser({ ...currentUser, ...data });

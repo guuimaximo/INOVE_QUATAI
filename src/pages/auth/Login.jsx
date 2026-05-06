@@ -16,7 +16,7 @@ import {
   isValidEmail,
   resolveAuthAccount,
 } from "../../utils/authBridge";
-import { canUserAccessPath, canUserSeeFarol } from "../../utils/access";
+import { canUserAccessPath, canUserSeeFarol, getDefaultAccessiblePath } from "../../utils/access";
 import {
   User,
   Lock,
@@ -175,7 +175,7 @@ export default function Login() {
   const nextPathState = location.state?.from?.pathname || null;
 
   function decideDefaultNext() {
-    return "/inove";
+    return getDefaultAccessiblePath(forceResetUser || null, profileMap);
   }
 
   function resetForm(clearFeedback = true) {
@@ -271,7 +271,7 @@ export default function Login() {
 
     rememberUserHints(identifier, localUser);
 
-    navigate(nextPathState || decideDefaultNext(), { replace: true });
+    navigate(nextPathState || getDefaultAccessiblePath(localUser, profileMap), { replace: true });
 
     pushFeedback(
       "success",
@@ -325,7 +325,7 @@ export default function Login() {
       return true;
     }
 
-    const defaultNextPath = canUserAccessPath(loggedUser, "/painel", profileMap) ? "/painel" : decideDefaultNext();
+    const defaultNextPath = getDefaultAccessiblePath(loggedUser, profileMap);
     navigate(
       loggedUser.requires_profile_review
         ? "/atualizar-perfil"

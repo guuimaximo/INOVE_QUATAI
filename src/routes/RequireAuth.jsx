@@ -2,7 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Capacitor } from "@capacitor/core";
 import { useAccessGovernance } from "../context/AccessContext";
-import { canUserAccessPath } from "../utils/access";
+import { canUserAccessPath, getDefaultAccessiblePath } from "../utils/access";
 
 export default function RequireAuth({ children }) {
   const { user, loading } = useAuth();
@@ -32,7 +32,7 @@ export default function RequireAuth({ children }) {
   }
 
   if (!canUserAccessPath(user, location.pathname, profileMap)) {
-    return <Navigate to="/" replace state={{ from: location }} />;
+    return <Navigate to={getDefaultAccessiblePath(user, profileMap)} replace state={{ from: location }} />;
   }
 
   return children;

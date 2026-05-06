@@ -73,17 +73,18 @@ import { Capacitor } from "@capacitor/core";
 import { AuthContext } from "./context/AuthContext";
 import InstallAppPrompt from "./components/InstallAppPrompt";
 import UpdateAppPrompt from "./components/UpdateAppPrompt";
-import { canUserAccessPath } from "./utils/access";
+import { canUserAccessPath, getDefaultAccessiblePath } from "./utils/access";
 
 function HomeDecider() {
   const { user } = useContext(AuthContext);
   const { profileMap } = useAccessGovernance();
   const isNativeShell = Capacitor.isNativePlatform();
-  const canSeePainel = canUserAccessPath(user, "/painel", profileMap);
 
   if (isNativeShell) return <Navigate to="/pcm-troca-pneus" replace />;
-  if (canSeePainel) return <Dashboard />;
-  return <InicioRapido />;
+  const destination = getDefaultAccessiblePath(user, profileMap);
+  if (destination === "/painel") return <Dashboard />;
+  if (destination === "/inicio-rapido") return <InicioRapido />;
+  return <Navigate to={destination} replace />;
 }
 
 export default function App() {

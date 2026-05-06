@@ -21,6 +21,7 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { useAccessGovernance } from "../../context/AccessContext";
+import { useAuth } from "../../context/AuthContext";
 import { APP_ACCESS_PAGES } from "../../utils/accessCatalog";
 import { formatPresenceTimestamp, isPresenceOnline } from "../../utils/presence";
 
@@ -498,6 +499,7 @@ function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
 
 export default function Usuarios() {
   const { profiles } = useAccessGovernance();
+  const { user: currentUser, login: persistCurrentUser } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState(null);
@@ -540,6 +542,20 @@ export default function Usuarios() {
     carregarUsuarios();
   }, []);
 
+  async function sincronizarProfileUsuario({ authUserId, nivel, ativo }) {
+    if (!authUserId) return;
+
+    const payload = {};
+    if (nivel !== undefined) payload.nivel = nivel;
+    if (ativo !== undefined) payload.ativo = ativo;
+    if (!Object.keys(payload).length) return;
+
+    const { error } = await supabase.from("profiles").update(payload).eq("id", authUserId);
+    if (error) {
+      console.warn("Falha ao sincronizar profile do usuario:", error.message);
+    }
+  }
+
   async function atualizarNivel(id, nivel) {
     setSavingId(id);
     setFeedback(null);
@@ -556,7 +572,12 @@ export default function Usuarios() {
       return;
     }
 
+    const usuarioAtualizado = usuarios.find((usuario) => usuario.id === id);
+    await sincronizarProfileUsuario({ authUserId: usuarioAtualizado?.auth_user_id, nivel });
     setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? { ...usuario, nivel } : usuario)));
+    if (currentUser?.usuario_id === id || currentUser?.id === id) {
+      persistCurrentUser({ ...currentUser, nivel });
+    }
     setFeedback({ type: "success", text: `Nivel atualizado com sucesso para ${nivel}.` });
     setSavingId(null);
   }
@@ -583,7 +604,11 @@ export default function Usuarios() {
     }
 
     setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? data : usuario)));
+    await sincronizarProfileUsuario({ authUserId: data?.auth_user_id, ativo: novoStatus });
     if (usuarioSelecionado?.id === id) setUsuarioSelecionado(data);
+    if (currentUser?.usuario_id === id || currentUser?.id === id) {
+      persistCurrentUser({ ...currentUser, ...data });
+    }
 
     setFeedback({ type: "success", text: `Usuario ${novoStatus ? "ativado" : "desativado"} com sucesso.` });
     setSavingId(null);
@@ -650,6 +675,9 @@ export default function Usuarios() {
 
     setUsuarios((prev) => prev.map((item) => (item.id === usuario.id ? data : item)));
     if (usuarioSelecionado?.id === usuario.id) setUsuarioSelecionado(data);
+    if (currentUser?.usuario_id === usuario.id || currentUser?.id === usuario.id) {
+      persistCurrentUser({ ...currentUser, ...data });
+    }
     setUsuarioPermissoes(null);
     setFeedback({
       type: "success",

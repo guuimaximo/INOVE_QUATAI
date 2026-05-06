@@ -411,31 +411,48 @@ export default function CobrancaDetalheModal({
 
   // impressão
   const handlePrint = () => {
+    const sourceNode = document.getElementById("printable-area");
+    if (!sourceNode) return;
+
     const baseUrl = window.location.origin;
-    let printContents = document.getElementById("printable-area").innerHTML;
-    printContents = printContents.replace(/src="(\/[^\"]+)"/g, (_m, path) => `src="${baseUrl}${path}"`);
-    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-      .map((el) => el.outerHTML)
-      .join("\n");
     const printWindow = window.open("", "_blank");
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Imprimir Cobrança - ${avaria.prefixo || ""}</title>
-          ${styles}
-          <style>
-            @page { margin: 16mm; }
-            body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          </style>
-        </head>
-        <body class="bg-gray-100 p-8">
-          <div class="max-w-4xl mx-auto bg-white p-12 shadow-lg rounded-lg">
-            ${printContents}
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    if (!printWindow) return;
+
+    const doc = printWindow.document;
+    doc.open();
+    doc.write("<!doctype html><html><head></head><body></body></html>");
+    doc.close();
+
+    // Titulo via textContent (avaria.prefixo nao vai pro innerHTML).
+    doc.title = `Imprimir Cobranca - ${avaria.prefixo || ""}`;
+
+    // Copia <link rel="stylesheet"> e <style> do documento atual.
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach((el) => {
+      doc.head.appendChild(el.cloneNode(true));
+    });
+
+    const printStyle = doc.createElement("style");
+    printStyle.textContent =
+      "@page { margin: 16mm; } body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }";
+    doc.head.appendChild(printStyle);
+
+    doc.body.className = "bg-gray-100 p-8";
+
+    const wrapper = doc.createElement("div");
+    wrapper.className = "max-w-4xl mx-auto bg-white p-12 shadow-lg rounded-lg";
+
+    // Clona o no original (DOM real, ja escapado pelo React) ao inves de re-injetar innerHTML.
+    const clone = sourceNode.cloneNode(true);
+    // Resolve src relativos para absolutos (assets locais).
+    clone.querySelectorAll("img[src]").forEach((img) => {
+      const src = img.getAttribute("src");
+      if (src && src.startsWith("/")) {
+        img.setAttribute("src", `${baseUrl}${src}`);
+      }
+    });
+    wrapper.appendChild(clone);
+    doc.body.appendChild(wrapper);
+
     setTimeout(() => {
       printWindow.focus();
       printWindow.print();

@@ -8,26 +8,20 @@ import {
   formatDateBR,
   getAcompanhamentoWindowInfo,
 } from "../../utils/dieselAcompanhamento";
-import { 
-  FaBolt, 
-  FaClock, 
-  FaExclamationTriangle, 
-  FaRobot, 
-  FaTrash, 
-  FaFileUpload, 
+import {
+  FaBolt,
+  FaClock,
+  FaExclamationTriangle,
+  FaRobot,
+  FaTrash,
+  FaFileUpload,
   FaCheckCircle,
   FaArrowRight
 } from "react-icons/fa";
+import { dispatchWorkflow } from "../../utils/dispatchWorkflow";
 
-// =============================================================================
-// CONFIG (GitHub Actions)
-// =============================================================================
-const GH_USER = import.meta.env.VITE_GITHUB_USER;
-const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
-const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
-const GH_REF = "main";
 const WF_ACOMP = "ordem-acompanhamento.yml";
-const WF_TRAT = "ordem-tratativa.yml"; 
+const WF_TRAT = "ordem-tratativa.yml";
 
 // =============================================================================
 // Configurações Gerais
@@ -75,31 +69,8 @@ async function uploadManyToStorage({ files, bucket, folder }) {
   return out;
 }
 
-// CORREÇÃO: Conversão rigorosa dos inputs para String para evitar erro 422 e 500 do GitHub
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
-  if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes.");
-  
-  const safeInputs = {};
-  for (const key in inputs) {
-    safeInputs[key] = String(inputs[key] || "");
-  }
-
-  const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${GH_TOKEN}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ref: GH_REF, inputs: safeInputs }),
-  });
-  
-  if (response.status !== 204) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.message || `Erro GitHub: ${response.status}`);
-  }
+  await dispatchWorkflow(workflowFile, inputs);
   return true;
 }
 
@@ -302,7 +273,15 @@ export default function DesempenhoLancamento() {
           status: "PROCESSANDO", qtd: 1, extra: { tipo: TIPO_PRONTUARIO, chapa }
         }).select("id").single();
         
-        await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
+        await supabase.from("acompanhamento_lote_itens").insert([{
+          lote_id: lote.id,
+          motorista_chapa: chapa,
+          extra: {
+            motorista_nome: nomeMot,
+            acompanhamento_id: acompData.id,
+            origem: "lancamento_manual",
+          },
+        }]);
         await dispatchGitHubWorkflow(WF_ACOMP, { ordem_batch_id: String(lote.id), qtd: "1" });
       } 
       
@@ -332,7 +311,15 @@ export default function DesempenhoLancamento() {
           status: "PROCESSANDO", qtd: 1, extra: { tipo: "prontuario_tratativa", chapa }
         }).select("id").single();
         
-        await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
+        await supabase.from("acompanhamento_lote_itens").insert([{
+          lote_id: lote.id,
+          motorista_chapa: chapa,
+          extra: {
+            motorista_nome: nomeMot,
+            tratativa_id: tratData.id,
+            origem: "lancamento_manual",
+          },
+        }]);
         await dispatchGitHubWorkflow(WF_TRAT, { ordem_batch_id: String(lote.id), qtd: "1" });
       }
 

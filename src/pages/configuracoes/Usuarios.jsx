@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   FaBan,
+  FaBuilding,
   FaCheckCircle,
   FaCrown,
   FaDownload,
@@ -80,6 +81,12 @@ function getPresenceTone(isOnline) {
     : "bg-slate-100 text-slate-700 border-slate-200";
 }
 
+function getPermissionTone(enabled) {
+  return enabled
+    ? "bg-blue-50 text-blue-700 border-blue-200"
+    : "bg-slate-100 text-slate-700 border-slate-200";
+}
+
 function buildSearchBlob(usuario) {
   return [
     usuario?.nome,
@@ -109,6 +116,7 @@ function exportarCSV(dados, nomeArquivo) {
     "Ativo",
     "Status Cadastro",
     "Migrado Auth",
+    "Estrutura Fisica",
     "Online",
     "Ultimo Ping",
   ];
@@ -124,6 +132,7 @@ function exportarCSV(dados, nomeArquivo) {
       isUsuarioAtivo(row.ativo) ? "Sim" : "Não",
       row.status_cadastro || "",
       row.migrado_auth ? "Sim" : "Não",
+      row.estrutura_fisica_liberada ? "Sim" : "Não",
       isPresenceOnline(row.ultimo_ping_em) ? "Sim" : "Nao",
       formatPresenceTimestamp(row.ultimo_ping_em),
     ]
@@ -298,6 +307,7 @@ function UsuarioDetalhesModal({ usuario, onClose, onResetSenha, saving }) {
               {campo("Ultimo ping", formatPresenceTimestamp(usuario?.ultimo_ping_em))}
               {campo("Auth User ID", usuario?.auth_user_id)}
               {campo("Migrado Auth", usuario?.migrado_auth ? "Sim" : "Não")}
+              {campo("Estrutura Física", usuario?.estrutura_fisica_liberada ? "Liberada" : "Bloqueada")}
               {campo("Precisa redefinir senha", usuario?.precisa_redefinir_senha ? "Sim" : "Não")}
               {campo("Senha alterada em", usuario?.senha_alterada_em)}
               {campo("Senha alterada por", usuario?.senha_alterada_por)}
@@ -439,9 +449,14 @@ export default function Usuarios() {
     setSavingId(id);
     setFeedback(null);
 
+    const payload = {
+      ativo: novoStatus,
+      ...(novoStatus ? { status_cadastro: "Aprovado" } : {}),
+    };
+
     const { data, error } = await supabase
       .from("usuarios_aprovadores")
-      .update({ ativo: novoStatus })
+      .update(payload)
       .eq("id", id)
       .select("*")
       .single();
@@ -456,7 +471,38 @@ export default function Usuarios() {
     setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? data : usuario)));
     if (usuarioSelecionado?.id === id) setUsuarioSelecionado(data);
 
-    setFeedback({ type: "success", text: `Usuario ${novoStatus ? "ativado" : "desativado"} com sucesso.` });
+    setFeedback({
+      type: "success",
+      text: `Usuario ${novoStatus ? "ativado" : "desativado"} com sucesso.${novoStatus ? " Status do cadastro ajustado para Aprovado." : ""}`,
+    });
+    setSavingId(null);
+  }
+
+  async function alternarEstruturaFisica(id, atual) {
+    const novoStatus = !atual;
+    setSavingId(id);
+    setFeedback(null);
+
+    const { data, error } = await supabase
+      .from("usuarios_aprovadores")
+      .update({ estrutura_fisica_liberada: novoStatus })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error(error.message);
+      setFeedback({ type: "error", text: "Erro ao atualizar a liberacao de Estrutura Fisica." });
+      setSavingId(null);
+      return;
+    }
+
+    setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? data : usuario)));
+    if (usuarioSelecionado?.id === id) setUsuarioSelecionado(data);
+    setFeedback({
+      type: "success",
+      text: `Acesso de Estrutura Fisica ${novoStatus ? "liberado" : "bloqueado"} com sucesso.`,
+    });
     setSavingId(null);
   }
 
@@ -651,6 +697,7 @@ export default function Usuarios() {
                 <th className="p-3 font-black">Login</th>
                 <th className="p-3 font-black">Contato</th>
                 <th className="p-3 font-black">Nível</th>
+                <th className="p-3 font-black">Estrutura Física</th>
                 <th className="p-3 font-black">Status</th>
                 <th className="p-3 font-black">Sessao</th>
                 <th className="p-3 font-black text-right">Ações</th>
@@ -659,9 +706,9 @@ export default function Usuarios() {
 
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold">Atualizando base de usuários...</td></tr>
+                <tr><td colSpan={8} className="p-8 text-center text-slate-400 font-bold">Atualizando base de usuários...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold">Nenhum usuário encontrado para o filtro aplicado.</td></tr>
+                <tr><td colSpan={8} className="p-8 text-center text-slate-400 font-bold">Nenhum usuário encontrado para o filtro aplicado.</td></tr>
               ) : (
                 filtrados.map((usuario) => {
                   const isSaving = savingId === usuario.id;
@@ -669,6 +716,10 @@ export default function Usuarios() {
                   const setor = usuario?.setor || "Nao informado";
                   const ativo = isUsuarioAtivo(usuario?.ativo);
                   const online = isPresenceOnline(usuario?.ultimo_ping_em);
+                  const nivelNormalizado = normalizeText(usuario?.nivel);
+                  const estruturaNativa = nivelNormalizado === "administrador" || nivelNormalizado === "gestor";
+                  const podeConfigurarEstrutura = nivelNormalizado === "rh";
+                  const estruturaLiberada = usuario?.estrutura_fisica_liberada === true;
 
                   return (
                     <tr
@@ -719,6 +770,44 @@ export default function Usuarios() {
                               <option key={nivel} value={nivel}>{nivel}</option>
                             ))}
                           </select>
+                        </div>
+                      </td>
+
+                      <td className="p-3">
+                        <div className="space-y-2">
+                          <span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-black border ${getPermissionTone(estruturaNativa || estruturaLiberada)}`}>
+                            {estruturaNativa
+                              ? "Nativo"
+                              : estruturaLiberada
+                              ? "Liberado"
+                              : podeConfigurarEstrutura
+                              ? "Bloqueado"
+                              : "Nao se aplica"}
+                          </span>
+
+                          {podeConfigurarEstrutura ? (
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                alternarEstruturaFisica(usuario.id, estruturaLiberada);
+                              }}
+                              disabled={isSaving}
+                              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white transition disabled:opacity-60 ${
+                                estruturaLiberada
+                                  ? "bg-slate-600 hover:bg-slate-700"
+                                  : "bg-blue-600 hover:bg-blue-700"
+                              }`}
+                            >
+                              <FaBuilding />
+                              {estruturaLiberada ? "Bloquear aba" : "Liberar aba"}
+                            </button>
+                          ) : (
+                            <div className="text-xs text-slate-500 font-semibold">
+                              {estruturaNativa
+                                ? "Perfil já possui acesso por nível."
+                                : "Liberação usada apenas para RH."}
+                            </div>
+                          )}
                         </div>
                       </td>
 

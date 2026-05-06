@@ -18,6 +18,8 @@ import {
   FaFolderOpen,
   FaFilter,
   FaCalendarAlt,
+  FaInfoCircle,
+  FaChartLine,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { supabaseBCNT } from "../../supabaseBCNT";
@@ -66,6 +68,116 @@ function fmtBRDateTime(v) {
   const dt = new Date(v);
   if (Number.isNaN(dt.getTime())) return "-";
   return dt.toLocaleString("pt-BR");
+}
+
+function fmtSignedLitros(v) {
+  const x = n(v);
+  const abs = Math.abs(x).toFixed(0);
+  if (x > 0) return `+${abs} L`;
+  if (x < 0) return `-${abs} L`;
+  return "0 L";
+}
+
+function deltaToneClass(v) {
+  const x = n(v);
+  if (x > 0) return "text-rose-700";
+  if (x < 0) return "text-emerald-700";
+  return "text-slate-700";
+}
+
+function deltaBadgeClass(v) {
+  const x = n(v);
+  if (x > 0) return "bg-rose-100 text-rose-800 border-rose-200";
+  if (x < 0) return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  return "bg-slate-100 text-slate-700 border-slate-200";
+}
+
+function normalizeLinhaFiltro(v) {
+  const raw = String(v || "").trim().toUpperCase();
+  if (!raw) return "";
+
+  // Trata formatos que podem vir do Python/view:
+  // "11TR", "Linha 11TR", "C6 - Linha 11TR", "C6 Linha 11TR"
+  const matchLinha = raw.match(/(?:LINHA\s*)?([0-9]{1,3}[A-Z]{1,3})\b/);
+  if (matchLinha?.[1]) return matchLinha[1];
+
+  return raw
+    .replace(/^LINHA\s+/i, "")
+    .replace(/^.*-\s*LINHA\s+/i, "")
+    .trim();
+}
+
+function normalizeChapa(v) {
+  const raw = String(v || "").trim();
+  if (!raw) return "";
+
+  // Trata chapa vinda como 30061156, 30061156.0 ou texto misturado.
+  const semDecimal = raw.split(".")[0];
+  return semDecimal.replace(/\D/g, "");
+}
+
+async function carregarMapaFuncionariosAtualizados() {
+  const mapa = {};
+  const clientes = [supabaseBCNT, supabase];
+
+  for (const client of clientes) {
+    try {
+      let start = 0;
+      const pageSize = 1000;
+      let encontrouAlgumaLinha = false;
+
+      while (true) {
+        const end = start + pageSize - 1;
+
+        const { data, error } = await client
+          .from("funcionarios_atualizada")
+          .select("id_funcionario, nr_cracha, nm_funcionario, status")
+          .range(start, end);
+
+        if (error) throw error;
+
+        const rows = data || [];
+        if (rows.length) encontrouAlgumaLinha = true;
+
+        rows.forEach((row) => {
+          const chapa = normalizeChapa(row.nr_cracha);
+          const nome = String(row.nm_funcionario || "").trim().toUpperCase();
+          const status = String(row.status || "").trim().toLowerCase();
+
+          if (!chapa || !nome) return;
+
+          // Preferir registro ativo. Se não houver status, ainda usa como fallback.
+          if (!mapa[chapa] || status === "ativo") {
+            mapa[chapa] = nome;
+          }
+        });
+
+        if (rows.length < pageSize) break;
+        start += pageSize;
+
+        if (start > 10000) break;
+      }
+
+      if (encontrouAlgumaLinha && Object.keys(mapa).length > 0) {
+        return mapa;
+      }
+    } catch (e) {
+      console.warn("Não foi possível carregar funcionarios_atualizada neste client:", e);
+    }
+  }
+
+  return mapa;
+}
+
+function maxIsoDate(...values) {
+  const valid = values
+    .flat()
+    .filter(Boolean)
+    .map((v) => new Date(v))
+    .filter((d) => !Number.isNaN(d.getTime()));
+
+  if (!valid.length) return null;
+  return new Date(Math.max(...valid.map((d) => d.getTime()))).toISOString();
 }
 
 function getPublicUrl(bucket, path, baseUrl = SUPABASE_BASE_URL) {
@@ -119,6 +231,38 @@ function isConsolidadoFile(name = "") {
 function isResumoFile(name = "") {
   const n = normalizeFileName(name);
   return n.includes("RESUMO");
+}
+
+function normalizeSugestaoRecord(item = {}) {
+  const chapa = item.motorista_chapa || item.chapa || null;
+
+  return {
+    motorista_chapa: chapa,
+    chapa,
+    motorista_nome: item.motorista_nome || null,
+    linha_mais_rodada: item.linha_mais_rodada || null,
+    km_percorrido: item.km_percorrido,
+    combustivel_consumido:
+      item.combustivel_consumido ??
+      item.consumo_realizado ??
+      item.litros_consumidos ??
+      0,
+    kml_realizado: item.kml_realizado,
+    kml_meta: item.kml_meta,
+    delta_combustivel:
+      item.delta_combustivel ??
+      item.combustivel_desperdicado ??
+      item.desperdicio ??
+      0,
+    combustivel_desperdicado:
+      item.delta_combustivel ??
+      item.combustivel_desperdicado ??
+      item.desperdicio ??
+      0,
+    detalhes_json: item.detalhes_json || null,
+    mes_ref: item.mes_ref || null,
+    created_at: item.created_at || null,
+  };
 }
 
 function buildIndividualFallbackItems(mesRef = "") {
@@ -383,6 +527,87 @@ function IndividualParcialTable({ items, busca, setBusca, mesRef }) {
   );
 }
 
+
+function EntenderCalculosDieselModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-[70] animate-in fade-in duration-200 p-4">
+      <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center mb-4 border-b pb-4 shrink-0">
+          <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <FaInfoCircle className="text-blue-600" /> Entender Cálculos (Agente Diesel)
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition">
+            <FaTimes size={20} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto pr-2 space-y-5 text-sm text-slate-700">
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2">
+              <FaFilter className="text-slate-500" /> Base de Dados
+            </h3>
+            <p>
+              O painel usa os dados processados pelo relatório gerencial do Python a partir da base diária de diesel.
+              A tela apenas consulta o último processamento salvo e lista as sugestões de acompanhamento geradas para o período.
+            </p>
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+            <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2">
+              <FaChartLine className="text-blue-600" /> KM/L Real e KM/L Meta
+            </h3>
+            <ul className="list-disc pl-5 space-y-2">
+              <li><strong>KM/L Real:</strong> soma do KM rodado dividido pela soma dos litros consumidos.</li>
+              <li><strong>KM/L Meta:</strong> referência usada pelo Python para comparar o motorista na linha/cluster analisado.</li>
+              <li><strong>Litros Ideais:</strong> KM rodado dividido pelo KM/L de referência.</li>
+            </ul>
+          </div>
+
+          <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+            <h3 className="font-black text-amber-900 mb-2 flex items-center gap-2">
+              <FaLayerGroup className="text-amber-600" /> Delta de Combustível
+            </h3>
+            <p className="mb-2">
+              O novo indicador substitui o antigo conceito de desperdício. Ele mostra a diferença entre o combustível real consumido e o combustível ideal esperado.
+            </p>
+            <div className="bg-white rounded-xl border p-3 font-black text-slate-800 text-center">
+              Delta de Combustível = Litros Consumidos - Litros Ideais
+            </div>
+          </div>
+
+          <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+            <h3 className="font-black text-emerald-900 mb-2 flex items-center gap-2">
+              <FaCheckCircle className="text-emerald-600" /> Como interpretar
+            </h3>
+            <ul className="list-disc pl-5 space-y-2">
+              <li><strong className="text-rose-700">Delta positivo:</strong> consumiu mais combustível que o ideal. É ruim e aparece em vermelho.</li>
+              <li><strong className="text-emerald-700">Delta negativo:</strong> consumiu menos combustível que o ideal. É economia e aparece em verde.</li>
+              <li><strong>Delta zero:</strong> consumo realizado ficou alinhado com a referência.</li>
+            </ul>
+          </div>
+
+          <div className="bg-rose-50 p-4 rounded-xl border border-rose-200">
+            <h3 className="font-black text-rose-900 mb-2 flex items-center gap-2">
+              <FaExclamationTriangle className="text-rose-600" /> Detalhes do Motorista
+            </h3>
+            <p>
+              Ao clicar em <strong>Detalhes</strong>, a regra é a mesma: linhas com delta positivo indicam oportunidade de correção;
+              linhas com delta negativo indicam economia. O consolidado do modal soma os deltas por linha/cluster.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 pt-4 border-t flex justify-end shrink-0">
+          <button onClick={onClose} className="px-6 py-2.5 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition shadow-md active:scale-95">
+            Entendi
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function ParcialMeritocraciaView({ onAlert }) {
   const [mesRef, setMesRef] = useState(fmtMesAtual());
   const [chapasExcluir, setChapasExcluir] = useState("");
@@ -394,7 +619,6 @@ function ParcialMeritocraciaView({ onAlert }) {
   const [individuais, setIndividuais] = useState([]);
   const [consolidado, setConsolidado] = useState(null);
   const [resumo, setResumo] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [arquivosRaiz, setArquivosRaiz] = useState([]);
   const [debugStorage, setDebugStorage] = useState({ root: [], individuais: [], pathRoot: "", pathIndividuais: "" });
 
@@ -541,7 +765,6 @@ function ParcialMeritocraciaView({ onAlert }) {
             }
           : null
       );
-      setLastUpdated(new Date().toISOString());
     } catch (e) {
       onAlert?.({ type: "error", message: `Erro ao carregar parciais: ${e?.message || String(e)}` });
     } finally {
@@ -582,12 +805,26 @@ function ParcialMeritocraciaView({ onAlert }) {
   };
 
   const totalIndividuais = individuais.length;
+  const ultimaDataParcial = useMemo(() => {
+    return maxIsoDate(
+      (individuais || []).map((item) => item.updated_at),
+      consolidado?.updated_at,
+      resumo?.updated_at
+    );
+  }, [individuais, consolidado, resumo]);
 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border shadow-sm p-5 space-y-5">
         <SectionHeader
-          title="Parcial de Meritocracia"
+          title={
+            <div className="flex items-center gap-3 flex-wrap">
+              <span>Parcial de Meritocracia</span>
+              <span className="text-sm font-bold text-rose-600">
+                {ultimaDataParcial ? `Última parcial: ${fmtBRDateTime(ultimaDataParcial)}` : "Última parcial: não encontrada"}
+              </span>
+            </div>
+          }
           description="Central mensal para geração e consulta dos PDFs individuais, consolidado de motoristas e resumo geral."
           right={
             <button onClick={carregarArquivos} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar arquivos">
@@ -640,9 +877,6 @@ function ParcialMeritocraciaView({ onAlert }) {
           </div>
         </div>
 
-        <div className="text-xs text-slate-500">
-          Última atualização local: <span className="font-bold text-slate-700">{lastUpdated ? fmtBRDateTime(lastUpdated) : "-"}</span>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -770,6 +1004,8 @@ function DieselAgenteView({ onAlert }) {
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
     };
@@ -796,20 +1032,27 @@ function DieselAgenteView({ onAlert }) {
   const [filtroLinha, setFiltroLinha] = useState("");
   const [viewingDetails, setViewingDetails] = useState(null);
   const [modalContent, setModalContent] = useState({ raioX: [], chartData: [] });
+  const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
 
   const validarPeriodo = useCallback(() => {
     if (!periodoInicio || !periodoFim) return true;
     return periodoInicio <= periodoFim;
   }, [periodoInicio, periodoFim]);
-
   async function carregarTela() {
+    // Em ambiente dev/React StrictMode, o cleanup do useEffect pode marcar mountedRef como false
+    // antes da segunda execução do efeito. Reativamos aqui para não abortar as consultas.
+    mountedRef.current = true;
+
     setLoading(true);
+
     try {
-      const { data: sess } = await supabase.auth.getSession();
+      const { data: sess, error: sessError } = await supabase.auth.getSession();
+      if (sessError) throw sessError;
+
       if (!mountedRef.current) return;
       setUserSession(sess?.session || null);
 
-      const { data: rel } = await supabase
+      const { data: rel, error: relError } = await supabase
         .from("relatorios_gerados")
         .select("*")
         .eq("tipo", "diesel_gerencial")
@@ -817,40 +1060,99 @@ function DieselAgenteView({ onAlert }) {
         .limit(1)
         .maybeSingle();
 
+      if (relError) throw relError;
+
       if (!mountedRef.current) return;
       setUltimoGerencial(rel || null);
 
-      const { data: ultAnalise } = await supabase
+      const { data: ultAnalise, error: ultAnaliseError } = await supabase
         .from("diesel_analise_gerencial_snapshot")
         .select("id, report_id, periodo_label, mes_atual_nome, created_at")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
+      if (ultAnaliseError) {
+        console.warn("Snapshot não carregou. A tela continuará sem bloquear.", ultAnaliseError);
+      }
+
       if (!mountedRef.current) return;
       setUltimaAnalise(ultAnalise || null);
 
-      const { data: sug } = await supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500);
+      let sugestoesFonte = [];
 
-      const { data: acompanhamentos } = await supabase
+      const viewResp = await supabase
+        .from("v_sugestoes_acompanhamento_30d")
+        .select("*")
+        .limit(500);
+
+      if (viewResp.error) {
+        console.warn("View de sugestões falhou. Tentando tabela base.", viewResp.error);
+      }
+
+      if (Array.isArray(viewResp.data) && viewResp.data.length > 0) {
+        sugestoesFonte = viewResp.data.map(normalizeSugestaoRecord);
+      }
+
+      if (!sugestoesFonte.length) {
+        const tabelaResp = await supabase
+          .from("diesel_sugestoes_acompanhamento")
+          .select("*")
+          .order("mes_ref", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        if (tabelaResp.error) {
+          console.warn("Tabela de sugestões falhou.", tabelaResp.error);
+        }
+
+        if (Array.isArray(tabelaResp.data) && tabelaResp.data.length > 0) {
+          sugestoesFonte = tabelaResp.data.map(normalizeSugestaoRecord);
+        }
+      }
+
+      const mapaFuncionarios = await carregarMapaFuncionariosAtualizados();
+
+      sugestoesFonte = sugestoesFonte.map((s) => {
+        const chapa = normalizeChapa(s.motorista_chapa || s.chapa);
+        const nomeAtualizado = mapaFuncionarios[chapa];
+
+        return {
+          ...s,
+          motorista_chapa: chapa || s.motorista_chapa,
+          chapa: chapa || s.chapa,
+          motorista_nome: nomeAtualizado || s.motorista_nome || chapa || "-",
+        };
+      });
+
+      const { data: acompanhamentos, error: acompanhamentosError } = await supabase
         .from("diesel_acompanhamentos")
         .select("motorista_chapa, status")
         .not("status", "in", '("OK","ENCERRADO","ATAS")');
 
+      if (acompanhamentosError) {
+        console.warn("Acompanhamentos ativos não carregaram. A tela continuará sem bloquear.", acompanhamentosError);
+      }
+
       const mapStatusAtivo = {};
       (acompanhamentos || []).forEach((a) => {
-        mapStatusAtivo[a.motorista_chapa] = a.status;
+        mapStatusAtivo[normalizeChapa(a.motorista_chapa)] = a.status;
       });
 
-      const sugestoesComStatus = (sug || []).map((s) => ({
+      const sugestoesComStatus = sugestoesFonte.map((s) => ({
         ...s,
-        status_atual: mapStatusAtivo[s.motorista_chapa] || null,
+        status_atual: mapStatusAtivo[normalizeChapa(s.motorista_chapa)] || null,
       }));
 
       if (!mountedRef.current) return;
       setSugestoes(sugestoesComStatus);
     } catch (e) {
-      onAlert?.({ type: "error", message: "Erro ao carregar: " + (e?.message || String(e)) });
+      console.error("Erro ao carregar Agente Diesel:", e);
+
+      onAlert?.({
+        type: "error",
+        message: "Erro ao carregar Agente Diesel: " + (e?.message || String(e)),
+      });
     } finally {
       if (!mountedRef.current) return;
       setLoading(false);
@@ -858,8 +1160,15 @@ function DieselAgenteView({ onAlert }) {
   }
 
   useEffect(() => {
-    carregarTela();
+    carregarTela().catch((err) => {
+      console.error("Erro fora do carregarTela:", err);
+      onAlert?.({
+        type: "error",
+        message: "Erro ao iniciar carregamento: " + (err?.message || String(err)),
+      });
+    });
   }, []);
+
 
   const openModal = async (motorista) => {
     let detalhes = motorista.detalhes_json || null;
@@ -886,19 +1195,25 @@ function DieselAgenteView({ onAlert }) {
   };
 
   const linhasUnicas = useMemo(() => {
-    const linhas = (sugestoes || []).map((r) => String(r.linha_mais_rodada || "").trim().toUpperCase()).filter(Boolean);
-    return [...new Set(linhas)].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const linhas = (sugestoes || [])
+      .map((r) => normalizeLinhaFiltro(r.linha_mais_rodada || r.linha || r.linha_foco))
+      .filter(Boolean);
+
+    return [...new Set(linhas)].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
   }, [sugestoes]);
 
   const sugestoesFiltradas = useMemo(() => {
+    const linhaSelecionada = normalizeLinhaFiltro(filtroLinha);
+
     return (sugestoes || []).filter((r) => {
-      const linha = String(r.linha_mais_rodada || "").trim().toUpperCase();
+      const linha = normalizeLinhaFiltro(r.linha_mais_rodada || r.linha || r.linha_foco);
       const nome = String(r.motorista_nome || "").toLowerCase();
       const chapa = String(r.motorista_chapa || "").toLowerCase();
+      const linhaTexto = String(r.linha_mais_rodada || r.linha || r.linha_foco || "").toLowerCase();
       const q = busca.toLowerCase().trim();
 
-      if (filtroLinha && linha !== filtroLinha) return false;
-      if (q && !nome.includes(q) && !chapa.includes(q) && !linha.toLowerCase().includes(q)) return false;
+      if (linhaSelecionada && linha !== linhaSelecionada) return false;
+      if (q && !nome.includes(q) && !chapa.includes(q) && !linha.toLowerCase().includes(q) && !linhaTexto.includes(q)) return false;
       return true;
     });
   }, [sugestoes, busca, filtroLinha]);
@@ -998,7 +1313,7 @@ function DieselAgenteView({ onAlert }) {
       const itens = selecionados.map((r) => ({
         lote_id: lote.id,
         motorista_chapa: r.motorista_chapa,
-        linha_mais_rodada: r.linha_mais_rodada ?? null,
+        linha_mais_rodada: normalizeLinhaFiltro(r.linha_mais_rodada || r.linha || r.linha_foco) || null,
         km_percorrido: n(r.km_percorrido),
         combustivel_consumido: n(r.combustivel_consumido),
         kml_realizado: n(r.kml_realizado),
@@ -1054,7 +1369,7 @@ function DieselAgenteView({ onAlert }) {
 
   const totalKm = modalContent.raioX?.reduce((acc, r) => acc + n(r.km), 0) || 0;
   const totalLitros = modalContent.raioX?.reduce((acc, r) => acc + n(r.litros), 0) || 0;
-  const totalDesperdicio = modalContent.raioX?.reduce((acc, r) => acc + n(r.desperdicio), 0) || 0;
+  const totalDeltaCombustivel = modalContent.raioX?.reduce((acc, r) => acc + n(r.delta_combustivel ?? r.desperdicio), 0) || 0;
   const kmlGeralReal = totalLitros > 0 ? totalKm / totalLitros : 0;
 
   const litrosTeoricosTotal =
@@ -1065,6 +1380,9 @@ function DieselAgenteView({ onAlert }) {
 
   const kmlGeralMeta = litrosTeoricosTotal > 0 ? totalKm / litrosTeoricosTotal : 0;
   const ultimoPdfUrl = getPublicUrl(BUCKET_RELATORIOS, ultimoGerencial?.arquivo_pdf_path);
+  const ultimoGerencialDataLabel = ultimoGerencial?.created_at
+    ? `Último relatório: ${fmtBRDateTime(ultimoGerencial.created_at)}`
+    : "Último relatório: não encontrado";
   const ultimaAnaliseLabel = ultimaAnalise
     ? `Última análise gerada: Relatório #${ultimaAnalise.report_id || "-"} · ${ultimaAnalise.mes_atual_nome || ultimaAnalise.periodo_label || "-"} · ${ultimaAnalise.created_at ? new Date(ultimaAnalise.created_at).toLocaleDateString("pt-BR") : "-"}`
     : "Nenhuma análise gerada até o momento.";
@@ -1072,7 +1390,24 @@ function DieselAgenteView({ onAlert }) {
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-4">
-        <SectionHeader title="Relatório Gerencial" description="Disparo mensal do relatório e acompanhamento das sugestões de acompanhamento." />
+        <SectionHeader
+          title={
+            <div className="flex items-center gap-3 flex-wrap">
+              <span>Relatório Gerencial</span>
+              <span className="text-sm font-bold text-rose-600">{ultimoGerencialDataLabel}</span>
+            </div>
+          }
+          description="Disparo mensal do relatório e acompanhamento das sugestões de acompanhamento."
+          right={
+            <button
+              onClick={() => setMostrarExplicacao(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
+              title="Entender Cálculos"
+            >
+              <FaInfoCircle /> Entender Cálculos
+            </button>
+          }
+        />
 
         <div className="flex items-center justify-between bg-slate-50 border rounded-xl px-4 py-3 gap-4 flex-wrap">
           <div className="text-sm">
@@ -1181,7 +1516,7 @@ function DieselAgenteView({ onAlert }) {
                 <ThSortable label="Litros" columnKey="combustivel_consumido" sortConfig={sortConfig} onSort={handleSort} align="right" />
                 <ThSortable label="KM/L Real" columnKey="kml_realizado" sortConfig={sortConfig} onSort={handleSort} align="right" />
                 <ThSortable label="KM/L Meta" columnKey="kml_meta" sortConfig={sortConfig} onSort={handleSort} align="right" />
-                <ThSortable label="Desperdício" columnKey="combustivel_desperdicado" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                <ThSortable label="Delta Combustível" columnKey="combustivel_desperdicado" sortConfig={sortConfig} onSort={handleSort} align="right" />
                 <th className="p-3 text-right">Ações</th>
               </tr>
             </thead>
@@ -1195,12 +1530,12 @@ function DieselAgenteView({ onAlert }) {
                     </td>
                     <td className="p-3 font-bold">{r.motorista_chapa || "-"}</td>
                     <td className="p-3">{r.motorista_nome || "-"}</td>
-                    <td className="p-3">{r.linha_mais_rodada || "-"}</td>
+                    <td className="p-3">{normalizeLinhaFiltro(r.linha_mais_rodada || r.linha || r.linha_foco) || "-"}</td>
                     <td className="p-3 text-right">{n(r.km_percorrido).toFixed(0)}</td>
                     <td className="p-3 text-right">{n(r.combustivel_consumido).toFixed(0)}</td>
                     <td className="p-3 text-right font-bold">{n(r.kml_realizado).toFixed(2)}</td>
                     <td className="p-3 text-right">{n(r.kml_meta).toFixed(2)}</td>
-                    <td className="p-3 text-right text-rose-700 font-bold">{n(r.combustivel_desperdicado).toFixed(0)} L</td>
+                    <td className={`p-3 text-right font-bold ${deltaToneClass(r.delta_combustivel ?? r.combustivel_desperdicado)}`}>{fmtSignedLitros(r.delta_combustivel ?? r.combustivel_desperdicado)}</td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {r.status_atual ? <StatusBadge status={r.status_atual} /> : null}
@@ -1222,6 +1557,8 @@ function DieselAgenteView({ onAlert }) {
           </table>
         </div>
       </div>
+
+      {mostrarExplicacao && <EntenderCalculosDieselModal onClose={() => setMostrarExplicacao(false)} />}
 
       {viewingDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -1250,7 +1587,7 @@ function DieselAgenteView({ onAlert }) {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <CardResumo icon={FaLayerGroup} titulo="KM Total" valor={totalKm.toFixed(0)} tone="cyan" />
                     <CardResumo icon={FaLayerGroup} titulo="Litros" valor={totalLitros.toFixed(0)} tone="amber" />
-                    <CardResumo icon={FaLayerGroup} titulo="Desperdício" valor={totalDesperdicio.toFixed(0)} tone="rose" />
+                    <CardResumo icon={FaLayerGroup} titulo="Delta Combustível" valor={fmtSignedLitros(totalDeltaCombustivel)} tone={totalDeltaCombustivel > 0 ? "rose" : totalDeltaCombustivel < 0 ? "emerald" : "slate"} />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1272,7 +1609,7 @@ function DieselAgenteView({ onAlert }) {
                             <th className="p-3 text-right">Litros</th>
                             <th className="p-3 text-right">KM/L Real</th>
                             <th className="p-3 text-right">KM/L Meta</th>
-                            <th className="p-3 text-right">Desperdício</th>
+                            <th className="p-3 text-right">Delta Combustível</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1283,7 +1620,7 @@ function DieselAgenteView({ onAlert }) {
                               <td className="p-3 text-right">{n(r.litros).toFixed(0)}</td>
                               <td className="p-3 text-right">{n(r.kml_real).toFixed(2)}</td>
                               <td className="p-3 text-right">{n(r.kml_meta).toFixed(2)}</td>
-                              <td className="p-3 text-right font-bold text-rose-700">{n(r.desperdicio).toFixed(0)}</td>
+                              <td className={`p-3 text-right font-bold ${deltaToneClass(r.delta_combustivel ?? r.desperdicio)}`}>{fmtSignedLitros(r.delta_combustivel ?? r.desperdicio)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1323,7 +1660,7 @@ export default function DesempenhoDieselAgente() {
   }, [feedback]);
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto relative">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-6 relative">
       <div className="flex items-center justify-between gap-4 border-b pb-4 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">

@@ -1,4 +1,4 @@
-import { useState, useContext, useMemo, useEffect } from "react";
+﻿import { useState, useContext, useMemo, useEffect } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   FaHome,
@@ -29,6 +29,7 @@ import {
   FaExchangeAlt,
   FaFileInvoice,
   FaBuilding,
+  FaIdBadge,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -203,6 +204,8 @@ const ACCESS = {
     "/inicio-rapido",
     ...Object.values(EMBARCADOS_ROUTES),
   ],
+
+  Borracheiro: [PCM_ROUTES.trocaPneus],
 };
 
 function canSee(user, path) {
@@ -240,6 +243,7 @@ export default function Sidebar() {
   const isCCO = user?.nivel === "CCO";
   const isTratativa = user?.nivel === "Tratativa";
   const isEmbarcados = user?.nivel === "Embarcados";
+  const isBorracheiro = user?.nivel === "Borracheiro";
 
   const showInicioExecutivo = isAdmin || isGestor || isRH;
   const showInicioBasico = !showInicioExecutivo;
@@ -352,7 +356,10 @@ export default function Sidebar() {
         { path: "/km-rodado", label: "KM Rodado (Dia)", icon: <FaRoad /> },
       ],
 
-      configuracoes: [{ path: "/usuarios", label: "Usuários", icon: <FaUserCog /> }],
+      configuracoes: [
+        { path: "/usuarios", label: "Usuários", icon: <FaUserCog /> },
+        { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
+      ],
     }),
     []
   );
@@ -374,7 +381,7 @@ export default function Sidebar() {
     if (path.startsWith("/sos") || path.startsWith("/km-rodado")) setIntervencoesOpen(true);
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
-    if (path.startsWith("/usuarios")) setConfigOpen(true);
+    if (path.startsWith("/usuarios") || path.startsWith("/funcionarios")) setConfigOpen(true);
   }, [location.pathname]);
 
   const navLinkClass = ({ isActive }) =>
@@ -388,7 +395,7 @@ export default function Sidebar() {
     }`;
 
   const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
-  const showPCM = isAdmin || isGestor || isManutencao;
+  const showPCM = isAdmin || isGestor || isManutencao || isBorracheiro;
 
   const showEmbarcados =
     isAdmin ||
@@ -423,7 +430,7 @@ export default function Sidebar() {
         {user && (
           <div className="text-center w-full">
             <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
-            <p className="mt-1 text-xs text-blue-200">Seu painel de operacao</p>
+            <p className="mt-1 text-xs text-blue-200">Seu painel de operação</p>
 
             {podeVerFarol && (
               <button
@@ -703,9 +710,11 @@ export default function Sidebar() {
 
             {configOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                <NavLink to="/usuarios" className={subNavLinkClass}>
-                  <FaUserCog /> <span>Usuários</span>
-                </NavLink>
+                {links.configuracoes.map((link) => (
+                  <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
+                    {link.icon} <span>{link.label}</span>
+                  </NavLink>
+                ))}
               </div>
             )}
           </>

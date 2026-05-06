@@ -14,6 +14,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { dispatchWorkflow } from "../../utils/dispatchWorkflow";
 
 const WF_TRAT = "ordem-tratativa.yml";
+const PRIORIDADES = ["Gravíssima", "Alta", "Média", "Baixa"];
 
 // =============================================================================
 // HELPERS
@@ -202,6 +203,7 @@ export default function ModalCheckpointAnalise({
 
   const [actionLoading, setActionLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
+  const [prioridadeTratativa, setPrioridadeTratativa] = useState("");
 
   const isCheckpoint30 = isCheckpointFinal30(checkpointTipo);
 
@@ -358,6 +360,14 @@ export default function ModalCheckpointAnalise({
   }
 
   async function handleEnviarTratativa() {
+    if (!prioridadeTratativa) {
+      setStatusMsg({
+        type: "error",
+        text: "Selecione a prioridade antes de enviar para tratativa.",
+      });
+      return;
+    }
+
     const confirmar = window.confirm(
       "Confirma o envio deste caso para tratativa?"
     );
@@ -404,6 +414,7 @@ export default function ModalCheckpointAnalise({
         const { error: upTratErr } = await supabase
           .from("diesel_tratativas")
           .update({
+            prioridade: prioridadeTratativa,
             evidencias_urls: [...new Set(novasEvidencias)],
           })
           .eq("id", tratativaId);
@@ -427,7 +438,7 @@ export default function ModalCheckpointAnalise({
             motorista_chapa: chapa || null,
             motorista_nome: nomeMot,
             status: "Pendente",
-            prioridade: "Alta",
+            prioridade: prioridadeTratativa,
             descricao,
             evidencias_urls: (evento?.evidencias_urls || []).filter(Boolean),
             tipo_ocorrencia: "DIESEL_KML",
@@ -677,6 +688,27 @@ export default function ModalCheckpointAnalise({
                   </div>
                   <div className="text-sm text-violet-800 leading-relaxed mb-4">
                     Escolha abaixo se o caso deve ser encerrado como OK ou encaminhado para tratativa. Ambas as ações irão registrar histórico do checkpoint.
+                  </div>
+
+                  <div className="mb-4 rounded-lg border border-violet-200 bg-white px-4 py-3">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                      Prioridade da tratativa
+                    </div>
+                    <select
+                      value={prioridadeTratativa}
+                      onChange={(e) => setPrioridadeTratativa(e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-violet-400"
+                    >
+                      <option value="">Selecione a prioridade antes de enviar</option>
+                      {PRIORIDADES.map((prioridade) => (
+                        <option key={prioridade} value={prioridade}>
+                          {prioridade}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-2 text-xs text-slate-500">
+                      A prioridade escolhida será gravada na tratativa aberta a partir deste checkpoint.
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-3">

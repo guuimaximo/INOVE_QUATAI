@@ -12,10 +12,10 @@ load_dotenv()
 AWS_REGION = os.getenv("AWS_REGION")
 ATHENA_S3_STAGING_DIR = os.getenv("ATHENA_S3_STAGING_DIR")
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
+SUPABASE_BCNT_URL = os.getenv("SUPABASE_BCNT_URL") or os.getenv("SUPABASE_URL")
+SUPABASE_BCNT_API_KEY = os.getenv("SUPABASE_BCNT_API_KEY") or os.getenv("SUPABASE_API_KEY")
 
-DESTINATION_TABLE_NAME = "motoristas"   # TABELA CORRETA
+DESTINATION_TABLE_NAME = "funcionarios_atualizada"
 
 # --------------------------------------
 # 2. EXTRACT ATHENA
@@ -29,8 +29,8 @@ athena_conn = (
 
 query = """
 SELECT 
-    matricula_motorista AS chapa,
-    ope_nome AS nome
+    matricula_motorista AS nr_cracha,
+    ope_nome AS nm_funcionario
 FROM "csc-views-gestao-informacao"."dim_motorista";
 """
 
@@ -47,7 +47,8 @@ except Exception as e:
 df = df.dropna()              # remove nulos
 df = df.drop_duplicates()     # remove duplicados de chapa
 
-df["cargo"] = "MOTORISTA"     # campo fixo
+df["nm_funcao"] = "MOTORISTA"
+df["status"] = "ativo"
 
 # id será gerado pelo Supabase automaticamente
 
@@ -57,7 +58,7 @@ print(f"Total de registros após transformação: {len(df)}")
 # 4. LOAD → Supabase REST
 # --------------------------------------
 print("\n🚀 Conectando ao Supabase...")
-supabase = create_client(SUPABASE_URL, SUPABASE_API_KEY)
+supabase = create_client(SUPABASE_BCNT_URL, SUPABASE_BCNT_API_KEY)
 
 records = df.to_dict(orient="records")
 
@@ -67,7 +68,7 @@ records = df.to_dict(orient="records")
 print("🗑️ Apagando todos os registros existentes...")
 
 try:
-    supabase.table(DESTINATION_TABLE_NAME).delete().neq("chapa", "__NONE__").execute()
+    supabase.table(DESTINATION_TABLE_NAME).delete().neq("nr_cracha", "__NONE__").execute()
     print("🗑️ Registros antigos apagados com sucesso.")
 except Exception as e:
     print(f"⚠️ Falha ao apagar registros (possível RLS): {e}")

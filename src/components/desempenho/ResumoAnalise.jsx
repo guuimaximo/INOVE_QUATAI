@@ -36,6 +36,42 @@ function buildEmptyResumo() {
   };
 }
 
+function getResultadoBadge(statusNorm, resumo) {
+  const meta = n(resumo?.meta);
+  const realizado = n(resumo?.realizado);
+  const atingiuMeta = meta > 0 && realizado >= meta;
+
+  if (statusNorm === "ATAS") {
+    return {
+      className: "bg-rose-50 text-rose-700 border-rose-200",
+      text: "ENCAMINHADO PARA TRATATIVA",
+      success: false,
+    };
+  }
+
+  if (statusNorm === "OK" || statusNorm === "ENCERRADO") {
+    if (atingiuMeta) {
+      return {
+        className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        text: "META ATINGIDA (ENCERRADO)",
+        success: true,
+      };
+    }
+
+    return {
+      className: "bg-amber-50 text-amber-700 border-amber-200",
+      text: "ACOMPANHAMENTO ENCERRADO",
+      success: false,
+    };
+  }
+
+  return {
+    className: "bg-blue-50 text-blue-700 border-blue-200",
+    text: "RESULTADO DA ANÁLISE",
+    success: false,
+  };
+}
+
 function pickMelhorEvento(eventos = []) {
   if (!Array.isArray(eventos) || eventos.length === 0) return null;
 
@@ -167,17 +203,7 @@ export default function ResumoAnalise({ item }) {
     [item]
   );
 
-  const isAtas = statusNorm === "ATAS";
-  const isOk = statusNorm === "OK" || statusNorm === "ENCERRADO";
-  const badgeClass = isAtas
-    ? "bg-rose-50 text-rose-700 border-rose-200"
-    : "bg-emerald-50 text-emerald-700 border-emerald-200";
-
-  const badgeText = isAtas
-    ? "ENCAMINHADO PARA TRATATIVA"
-    : isOk
-    ? "META ATINGIDA (ENCERRADO)"
-    : "RESULTADO DA ANÁLISE";
+  const badge = useMemo(() => getResultadoBadge(statusNorm, resumo), [statusNorm, resumo]);
 
   if (!item) return null;
 
@@ -189,7 +215,10 @@ export default function ResumoAnalise({ item }) {
             <FaChartLine className="text-indigo-600" /> Resultado do Monitoramento
           </h4>
           <p className="text-xs text-slate-500 mt-1">
-            Período avaliado: {resumo.periodoInicio || "—"} até {resumo.periodoFim || "—"}
+            {"Período avaliado: "}
+            {resumo.periodoInicio || "—"}
+            {" até "}
+            {resumo.periodoFim || "—"}
           </p>
           {resumo.tipoEvento && (
             <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase">
@@ -199,10 +228,10 @@ export default function ResumoAnalise({ item }) {
         </div>
 
         <div
-          className={`px-4 py-2 rounded-lg border font-bold text-xs flex items-center gap-2 ${badgeClass}`}
+          className={`px-4 py-2 rounded-lg border font-bold text-xs flex items-center gap-2 ${badge.className}`}
         >
-          {isAtas ? <FaExclamationTriangle size={14} /> : <FaCheckCircle size={14} />}
-          {badgeText}
+          {badge.success ? <FaCheckCircle size={14} /> : <FaExclamationTriangle size={14} />}
+          {badge.text}
         </div>
       </div>
 
@@ -292,7 +321,8 @@ export default function ResumoAnalise({ item }) {
                   Regras
                 </div>
                 <div>
-                  Este resumo usa o checkpoint mais recente do acompanhamento como base da anÃ¡lise. A decisÃ£o final de <strong>OK</strong> ou <strong>ATAS</strong> continua reservada ao checkpoint de 30 dias.
+                  Este resumo usa o checkpoint mais recente do acompanhamento como base da análise.
+                  A decisão final de <strong>OK</strong> ou <strong>ATAS</strong> continua reservada ao checkpoint de 30 dias.
                 </div>
               </div>
             </div>

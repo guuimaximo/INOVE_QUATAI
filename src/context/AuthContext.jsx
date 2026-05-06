@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import {
   clearStoredUser,
@@ -8,6 +8,7 @@ import {
   touchActivity,
 } from "../utils/auth";
 import { hydrateAuthenticatedUser } from "../utils/authBridge";
+import { PRESENCE_SYNC_INTERVAL_MS } from "../utils/presence";
 
 export const AuthContext = createContext(null);
 
@@ -47,6 +48,7 @@ export function AuthProvider({ children }) {
     return getStoredUser();
   });
   const [loading, setLoading] = useState(true);
+  const lastPresenceSyncRef = useRef(0);
 
   const persistUser = useCallback((userData) => {
     const normalized = normalizeStoredAppUser(userData);
@@ -118,6 +120,33 @@ export function AuthProvider({ children }) {
     return syncFromSession(session.user);
   }, [syncFromSession]);
 
+  const syncPresence = useCallback(
+    async ({ force = false } = {}) => {
+      const usuarioId = user?.usuario_id ?? user?.id ?? null;
+
+      if (!usuarioId || typeof usuarioId !== "number") return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+
+      const now = Date.now();
+      if (!force && now - lastPresenceSyncRef.current < PRESENCE_SYNC_INTERVAL_MS) {
+        return;
+      }
+
+      lastPresenceSyncRef.current = now;
+
+      const { error } = await supabase
+        .from("usuarios_aprovadores")
+        .update({ ultimo_ping_em: new Date(now).toISOString() })
+        .eq("id", usuarioId);
+
+      if (error) {
+        lastPresenceSyncRef.current = 0;
+        console.error("Falha ao atualizar presenca do usuario:", error);
+      }
+    },
+    [user?.id, user?.usuario_id]
+  );
+
   useEffect(() => {
     let mounted = true;
 
@@ -180,6 +209,12 @@ export function AuthProvider({ children }) {
   }, [syncFromSession]);
 
   useEffect(() => {
+    if (!user) return;
+
+    void syncPresence({ force: true });
+  }, [user, syncPresence]);
+
+  useEffect(() => {
     function onStorage(event) {
       if (event.key === "user") setUser(getStoredUser());
     }
@@ -195,6 +230,7 @@ export function AuthProvider({ children }) {
       if (document.visibilityState === "visible") {
         touchActivity();
         setUser(getStoredUser());
+        void syncPresence();
       }
     };
 
@@ -203,11 +239,17 @@ export function AuthProvider({ children }) {
     const timer = window.setInterval(() => {
       if (window.location.pathname === "/sos-dashboard") {
         touchActivity();
+        void syncPresence();
         return;
       }
 
       if (!isSessionValid()) {
         void logout();
+        return;
+      }
+
+      if (document.visibilityState === "visible") {
+        void syncPresence();
       }
     }, 30 * 1000);
 
@@ -215,7 +257,7 @@ export function AuthProvider({ children }) {
       activityEvents.forEach((eventName) => window.removeEventListener(eventName, onActivity));
       window.clearInterval(timer);
     };
-  }, [logout]);
+  }, [logout, syncPresence]);
 
   const value = useMemo(
     () => ({

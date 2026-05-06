@@ -169,7 +169,7 @@ function statusBadgeClass(status) {
 
 function isEmAnalise(item) {
   const st = getStatusView(item);
-  return st === "EM_ANALISE" || !!item?.prontuario_pendente || !!item?.prontuario_30_gerado_em;
+  return ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
 }
 
 // =============================================================================

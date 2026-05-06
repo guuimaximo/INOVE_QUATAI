@@ -37,6 +37,7 @@ import PCM_Preventivas from "./pages/pcm/PCM_Preventivas";
 import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
 
 import Usuarios from "./pages/configuracoes/Usuarios";
+import Funcionarios from "./pages/configuracoes/Funcionarios";
 import RequireAuth from "./routes/RequireAuth";
 import RequireEstruturaFisicaAccess from "./routes/RequireEstruturaFisicaAccess";
 
@@ -69,6 +70,7 @@ import { useContext, useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 import { AuthContext } from "./context/AuthContext";
 import InstallAppPrompt from "./components/InstallAppPrompt";
+import UpdateAppPrompt from "./components/UpdateAppPrompt";
 
 function HomeDecider() {
   const { user } = useContext(AuthContext);
@@ -201,12 +203,14 @@ export default function App() {
             <Route path="/km-rodado" element={<KMRodado />} />
 
             <Route path="/usuarios" element={<Usuarios />} />
+            <Route path="/funcionarios" element={<Funcionarios />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
 
         <InstallAppPrompt />
+        <UpdateAppPrompt />
       </>
     </AuthProvider>
   );

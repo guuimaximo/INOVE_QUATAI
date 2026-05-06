@@ -15,11 +15,46 @@ import {
   FaSearch,
   FaCheckCircle,
   FaExclamationTriangle,
+  FaEdit,
 } from "react-icons/fa";
 import CampoMotorista from "../../components/CampoMotorista";
 
+const FORM_INICIAL = {
+  prefixo: "",
+  numero_os: "",
+  km_veiculo: "",
+  data_realizacao: new Date().toISOString().split("T")[0],
+  tipo: "Preventiva - 10.000",
+  mecanico: { chapa: "", nome: "" },
+  eletricista: { chapa: "", nome: "" },
+  funilaria: { chapa: "", nome: "" },
+  borracharia: { chapa: "", nome: "" },
+};
+
+function parseColaborador(valor) {
+  if (!valor) return { chapa: "", nome: "" };
+
+  const texto = String(valor).trim();
+
+  if (texto.includes(" - ")) {
+    const [chapa, ...nomeParts] = texto.split(" - ");
+    return {
+      chapa: String(chapa || "").trim(),
+      nome: nomeParts.join(" - ").trim(),
+    };
+  }
+
+  return {
+    chapa: "",
+    nome: texto,
+  };
+}
+
 export default function PCM_Preventivas() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [modoModal, setModoModal] = useState("novo"); // novo | editar
+  const [registroSelecionado, setRegistroSelecionado] = useState(null);
+
   const [loading, setLoading] = useState(false);
   const [prefixos, setPrefixos] = useState([]);
   const [listaPreventivas, setListaPreventivas] = useState([]);
@@ -31,17 +66,7 @@ export default function PCM_Preventivas() {
     status: "",
   });
 
-  const [form, setForm] = useState({
-    prefixo: "",
-    numero_os: "",
-    km_veiculo: "",
-    data_realizacao: new Date().toISOString().split("T")[0],
-    tipo: "Preventiva - 10.000",
-    mecanico: { chapa: "", nome: "" },
-    eletricista: { chapa: "", nome: "" },
-    funilaria: { chapa: "", nome: "" },
-    borracharia: { chapa: "", nome: "" },
-  });
+  const [form, setForm] = useState(FORM_INICIAL);
 
   useEffect(() => {
     carregarDados();
@@ -52,6 +77,7 @@ export default function PCM_Preventivas() {
       .from("prefixos")
       .select("codigo")
       .order("codigo");
+
     setPrefixos(prefixosData || []);
 
     const { data: prevData } = await supabase
@@ -60,6 +86,46 @@ export default function PCM_Preventivas() {
       .order("created_at", { ascending: false });
 
     setListaPreventivas(prevData || []);
+  }
+
+  function resetForm() {
+    setForm({
+      ...FORM_INICIAL,
+      data_realizacao: new Date().toISOString().split("T")[0],
+    });
+    setRegistroSelecionado(null);
+    setModoModal("novo");
+  }
+
+  function abrirNovo() {
+    resetForm();
+    setModoModal("novo");
+    setModalOpen(true);
+  }
+
+  function abrirEdicao(item) {
+    setRegistroSelecionado(item);
+    setModoModal("editar");
+
+    setForm({
+      prefixo: item.prefixo || "",
+      numero_os: item.numero_os || "",
+      km_veiculo: item.km_veiculo || "",
+      data_realizacao:
+        item.data_realizacao || new Date().toISOString().split("T")[0],
+      tipo: item.tipo || "Preventiva - 10.000",
+      mecanico: parseColaborador(item.mecanico),
+      eletricista: parseColaborador(item.eletricista),
+      funilaria: parseColaborador(item.funilaria),
+      borracharia: parseColaborador(item.borracharia),
+    });
+
+    setModalOpen(true);
+  }
+
+  function fecharModal() {
+    setModalOpen(false);
+    resetForm();
   }
 
   const formatarColaborador = (colab) => {
@@ -90,23 +156,26 @@ export default function PCM_Preventivas() {
       const status = getStatusPreventiva(item);
 
       const matchData = !filtros.data || item.data_realizacao === filtros.data;
+
       const matchPrefixo =
         !filtros.prefixo ||
         String(item.prefixo || "")
           .toLowerCase()
           .includes(filtros.prefixo.toLowerCase());
+
       const matchOS =
         !filtros.os ||
         String(item.numero_os || "")
           .toLowerCase()
           .includes(filtros.os.toLowerCase());
+
       const matchStatus = !filtros.status || status === filtros.status;
 
       return matchData && matchPrefixo && matchOS && matchStatus;
     });
   }, [listaPreventivas, filtros]);
 
-  async function salvarPreventiva() {
+  function validarFormulario() {
     if (
       !form.prefixo ||
       !form.numero_os ||
@@ -118,45 +187,61 @@ export default function PCM_Preventivas() {
       alert(
         "Preencha os campos obrigatórios (Prefixo, OS, KM, Tipo, Mecânico, Eletricista)!"
       );
-      return;
+      return false;
     }
 
+    return true;
+  }
+
+  function montarPayload() {
+    return {
+      prefixo: form.prefixo,
+      numero_os: form.numero_os,
+      km_veiculo: Number(form.km_veiculo),
+      data_realizacao: form.data_realizacao,
+      tipo: form.tipo,
+      mecanico: formatarColaborador(form.mecanico),
+      eletricista: formatarColaborador(form.eletricista),
+      funilaria:
+        form.tipo === "Preventiva - 10.000"
+          ? formatarColaborador(form.funilaria)
+          : null,
+      borracharia:
+        form.tipo === "Preventiva - 10.000"
+          ? formatarColaborador(form.borracharia)
+          : null,
+    };
+  }
+
+  async function salvarPreventiva() {
+    if (!validarFormulario()) return;
+
     setLoading(true);
+
     try {
-      const payload = {
-        prefixo: form.prefixo,
-        numero_os: form.numero_os,
-        km_veiculo: Number(form.km_veiculo),
-        data_realizacao: form.data_realizacao,
-        tipo: form.tipo,
-        mecanico: formatarColaborador(form.mecanico),
-        eletricista: formatarColaborador(form.eletricista),
-        funilaria:
-          form.tipo === "Preventiva - 10.000"
-            ? formatarColaborador(form.funilaria)
-            : null,
-        borracharia:
-          form.tipo === "Preventiva - 10.000"
-            ? formatarColaborador(form.borracharia)
-            : null,
-      };
+      const payload = montarPayload();
 
-      const { error } = await supabase.from("preventivas").insert(payload);
-      if (error) throw error;
+      if (modoModal === "editar" && registroSelecionado?.id) {
+        const { error } = await supabase
+          .from("preventivas")
+          .update({
+            ...payload,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", registroSelecionado.id);
 
-      alert("Preventiva registrada com sucesso!");
-      setModalOpen(false);
-      setForm({
-        prefixo: "",
-        numero_os: "",
-        km_veiculo: "",
-        data_realizacao: new Date().toISOString().split("T")[0],
-        tipo: "Preventiva - 10.000",
-        mecanico: { chapa: "", nome: "" },
-        eletricista: { chapa: "", nome: "" },
-        funilaria: { chapa: "", nome: "" },
-        borracharia: { chapa: "", nome: "" },
-      });
+        if (error) throw error;
+
+        alert("Registro atualizado com sucesso!");
+      } else {
+        const { error } = await supabase.from("preventivas").insert(payload);
+
+        if (error) throw error;
+
+        alert("Preventiva registrada com sucesso!");
+      }
+
+      fecharModal();
       carregarDados();
     } catch (err) {
       console.error(err);
@@ -173,16 +258,18 @@ export default function PCM_Preventivas() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200 mb-2">
             <FaWrench /> Gestão de Frota
           </div>
+
           <h1 className="text-2xl md:text-3xl font-black text-slate-800">
             Controle de Preventivas
           </h1>
+
           <p className="text-sm text-slate-500 mt-1">
             Acompanhamento e registro de manutenções preventivas e inspeções.
           </p>
         </div>
 
         <button
-          onClick={() => setModalOpen(true)}
+          onClick={abrirNovo}
           className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-xl shadow-md transition-all active:scale-95"
         >
           <FaPlus /> Nova Preventiva
@@ -200,6 +287,7 @@ export default function PCM_Preventivas() {
             <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
               <FaCalendarAlt className="text-slate-400" /> Data
             </label>
+
             <input
               type="date"
               value={filtros.data}
@@ -214,6 +302,7 @@ export default function PCM_Preventivas() {
             <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
               <FaBus className="text-slate-400" /> Prefixo
             </label>
+
             <input
               type="text"
               placeholder="Buscar prefixo"
@@ -229,6 +318,7 @@ export default function PCM_Preventivas() {
             <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
               <FaSearch className="text-slate-400" /> OS
             </label>
+
             <input
               type="text"
               placeholder="Buscar número da OS"
@@ -244,6 +334,7 @@ export default function PCM_Preventivas() {
             <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
               <FaClipboardList className="text-slate-400" /> Status
             </label>
+
             <select
               value={filtros.status}
               onChange={(e) =>
@@ -280,9 +371,15 @@ export default function PCM_Preventivas() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        <div className="p-4 border-b bg-slate-50 flex items-center gap-2">
-          <FaClipboardList className="text-slate-400" />
-          <h2 className="font-bold text-slate-700">Histórico de Lançamentos</h2>
+        <div className="p-4 border-b bg-slate-50 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <FaClipboardList className="text-slate-400" />
+            <h2 className="font-bold text-slate-700">Histórico de Lançamentos</h2>
+          </div>
+
+          <p className="text-xs text-slate-500 font-semibold">
+            Clique em uma linha para editar
+          </p>
         </div>
 
         <div className="overflow-x-auto">
@@ -299,6 +396,7 @@ export default function PCM_Preventivas() {
                 <th className="px-6 py-4">Eletricista</th>
                 <th className="px-6 py-4">Funilaria</th>
                 <th className="px-6 py-4">Borracharia</th>
+                <th className="px-6 py-4">Ação</th>
               </tr>
             </thead>
 
@@ -307,7 +405,11 @@ export default function PCM_Preventivas() {
                 const status = getStatusPreventiva(item);
 
                 return (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <tr
+                    key={item.id}
+                    onClick={() => abrirEdicao(item)}
+                    className="hover:bg-blue-50/60 transition-colors cursor-pointer"
+                  >
                     <td className="px-6 py-4 font-black text-slate-700">
                       #{item.numero_os}
                     </td>
@@ -333,7 +435,7 @@ export default function PCM_Preventivas() {
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold border ${
-                          item.tipo.includes("10.000")
+                          item.tipo?.includes("10.000")
                             ? "bg-amber-50 border-amber-200 text-amber-700"
                             : "bg-emerald-50 border-emerald-200 text-emerald-700"
                         }`}
@@ -360,14 +462,14 @@ export default function PCM_Preventivas() {
                     </td>
 
                     <td className="px-6 py-4 text-slate-600">{item.mecanico || "-"}</td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {item.eletricista || "-"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {item.funilaria || "-"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {item.borracharia || "-"}
+                    <td className="px-6 py-4 text-slate-600">{item.eletricista || "-"}</td>
+                    <td className="px-6 py-4 text-slate-600">{item.funilaria || "-"}</td>
+                    <td className="px-6 py-4 text-slate-600">{item.borracharia || "-"}</td>
+
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center gap-1.5 text-blue-700 font-black text-xs bg-blue-50 border border-blue-200 px-3 py-1 rounded-lg">
+                        <FaEdit size={10} /> Editar
+                      </span>
                     </td>
                   </tr>
                 );
@@ -375,7 +477,7 @@ export default function PCM_Preventivas() {
 
               {listaFiltrada.length === 0 && (
                 <tr>
-                  <td colSpan="10" className="px-6 py-16">
+                  <td colSpan="11" className="px-6 py-16">
                     <div className="flex flex-col items-center justify-center text-slate-400">
                       <FaInbox size={48} className="mb-4 text-slate-300" />
                       <p className="text-lg font-bold text-slate-600">
@@ -398,21 +500,33 @@ export default function PCM_Preventivas() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-200">
             <div className="px-6 py-5 border-b flex items-center justify-between bg-white relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-transparent opacity-50"></div>
+
               <div className="relative flex items-center gap-3">
-                <div className="bg-blue-600 text-white p-2 rounded-lg">
-                  <FaWrench />
+                <div
+                  className={`text-white p-2 rounded-lg ${
+                    modoModal === "editar" ? "bg-amber-500" : "bg-blue-600"
+                  }`}
+                >
+                  {modoModal === "editar" ? <FaEdit /> : <FaWrench />}
                 </div>
+
                 <div>
                   <h2 className="text-xl font-black text-slate-800">
-                    Lançar Manutenção
+                    {modoModal === "editar"
+                      ? `Editar Lançamento #${registroSelecionado?.numero_os || ""}`
+                      : "Lançar Manutenção"}
                   </h2>
+
                   <p className="text-xs text-slate-500 font-medium">
-                    Preencha os dados da preventiva ou inspeção
+                    {modoModal === "editar"
+                      ? "Altere os dados lançados e salve novamente"
+                      : "Preencha os dados da preventiva ou inspeção"}
                   </p>
                 </div>
               </div>
+
               <button
-                onClick={() => setModalOpen(false)}
+                onClick={fecharModal}
                 className="relative text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-colors"
               >
                 <FaTimes size={20} />
@@ -424,12 +538,14 @@ export default function PCM_Preventivas() {
                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2">
                   Dados da Ordem
                 </h3>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
                       <FaBus className="text-slate-400" /> Prefixo{" "}
                       <span className="text-rose-500">*</span>
                     </label>
+
                     <select
                       value={form.prefixo}
                       onChange={(e) =>
@@ -438,6 +554,7 @@ export default function PCM_Preventivas() {
                       className="w-full border border-slate-300 rounded-xl p-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-semibold"
                     >
                       <option value="">Selecione...</option>
+
                       {prefixos.map((p) => (
                         <option key={p.codigo} value={p.codigo}>
                           {p.codigo}
@@ -451,6 +568,7 @@ export default function PCM_Preventivas() {
                       <FaClipboardList className="text-slate-400" /> Número da OS{" "}
                       <span className="text-rose-500">*</span>
                     </label>
+
                     <input
                       type="text"
                       value={form.numero_os}
@@ -467,6 +585,7 @@ export default function PCM_Preventivas() {
                       <FaRoad className="text-slate-400" /> KM do Veículo{" "}
                       <span className="text-rose-500">*</span>
                     </label>
+
                     <input
                       type="number"
                       value={form.km_veiculo}
@@ -483,6 +602,7 @@ export default function PCM_Preventivas() {
                       <FaCalendarAlt className="text-slate-400" /> Data{" "}
                       <span className="text-rose-500">*</span>
                     </label>
+
                     <input
                       type="date"
                       value={form.data_realizacao}
@@ -498,6 +618,7 @@ export default function PCM_Preventivas() {
                       <FaWrench className="text-slate-400" /> Tipo{" "}
                       <span className="text-rose-500">*</span>
                     </label>
+
                     <select
                       value={form.tipo}
                       onChange={(e) =>
@@ -522,12 +643,14 @@ export default function PCM_Preventivas() {
                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2">
                   Equipe Técnica
                 </h3>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
                   <div>
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
                       <FaUserTie className="text-slate-400" /> Mecânico{" "}
                       <span className="text-rose-500">*</span>
                     </label>
+
                     <CampoMotorista
                       value={form.mecanico}
                       onChange={(val) => setForm({ ...form, mecanico: val })}
@@ -539,6 +662,7 @@ export default function PCM_Preventivas() {
                       <FaUserTie className="text-slate-400" /> Eletricista{" "}
                       <span className="text-rose-500">*</span>
                     </label>
+
                     <CampoMotorista
                       value={form.eletricista}
                       onChange={(val) => setForm({ ...form, eletricista: val })}
@@ -551,15 +675,20 @@ export default function PCM_Preventivas() {
                         <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
                           <FaUserTie className="text-slate-400" /> Funilaria
                         </label>
+
                         <CampoMotorista
                           value={form.funilaria}
-                          onChange={(val) => setForm({ ...form, funilaria: val })}
+                          onChange={(val) =>
+                            setForm({ ...form, funilaria: val })
+                          }
                         />
                       </div>
+
                       <div>
                         <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
                           <FaUserTie className="text-slate-400" /> Borracharia
                         </label>
+
                         <CampoMotorista
                           value={form.borracharia}
                           onChange={(val) =>
@@ -575,15 +704,20 @@ export default function PCM_Preventivas() {
 
             <div className="px-6 py-5 border-t bg-white flex justify-end gap-3">
               <button
-                onClick={() => setModalOpen(false)}
+                onClick={fecharModal}
                 className="px-6 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
               >
                 Cancelar
               </button>
+
               <button
                 onClick={salvarPreventiva}
                 disabled={loading}
-                className="px-6 py-2.5 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:active:scale-100"
+                className={`px-6 py-2.5 rounded-xl font-bold text-white shadow-md transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:active:scale-100 ${
+                  modoModal === "editar"
+                    ? "bg-amber-500 hover:bg-amber-600"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
               >
                 {loading ? (
                   <>
@@ -601,14 +735,18 @@ export default function PCM_Preventivas() {
                         stroke="currentColor"
                         strokeWidth="4"
                       ></circle>
+
                       <path
                         className="opacity-75"
                         fill="currentColor"
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       ></path>
                     </svg>
+
                     Salvando...
                   </>
+                ) : modoModal === "editar" ? (
+                  "Salvar Alterações"
                 ) : (
                   "Salvar Registro"
                 )}

@@ -20,9 +20,11 @@ import {
   FaUsers,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
+import { useAccessGovernance } from "../../context/AccessContext";
+import { APP_ACCESS_PAGES } from "../../utils/accessCatalog";
 import { formatPresenceTimestamp, isPresenceOnline } from "../../utils/presence";
 
-const NIVEIS = [
+const FALLBACK_NIVEIS = [
   "Pendente",
   "CCO",
   "Manutenção",
@@ -34,6 +36,12 @@ const NIVEIS = [
   "Gestor",
   "Administrador",
 ];
+
+const PAGINAS_POR_CATEGORIA = APP_ACCESS_PAGES.reduce((acc, page) => {
+  if (!acc[page.category]) acc[page.category] = [];
+  acc[page.category].push(page);
+  return acc;
+}, {});
 
 function normalizeText(value = "") {
   return String(value || "")
@@ -373,7 +381,123 @@ function UsuarioDetalhesModal({ usuario, onClose, onResetSenha, saving }) {
   );
 }
 
+function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
+  const [paginasLiberadas, setPaginasLiberadas] = useState(
+    Array.isArray(usuario?.paginas_liberadas) ? usuario.paginas_liberadas : []
+  );
+  const [paginasBloqueadas, setPaginasBloqueadas] = useState(
+    Array.isArray(usuario?.paginas_bloqueadas) ? usuario.paginas_bloqueadas : []
+  );
+
+  function getState(pageKey) {
+    if (paginasLiberadas.includes(pageKey)) return "liberar";
+    if (paginasBloqueadas.includes(pageKey)) return "bloquear";
+    return "herdar";
+  }
+
+  function setState(pageKey, state) {
+    if (state === "liberar") {
+      setPaginasLiberadas((current) => Array.from(new Set([...current.filter((item) => item !== pageKey), pageKey])));
+      setPaginasBloqueadas((current) => current.filter((item) => item !== pageKey));
+      return;
+    }
+
+    if (state === "bloquear") {
+      setPaginasBloqueadas((current) => Array.from(new Set([...current.filter((item) => item !== pageKey), pageKey])));
+      setPaginasLiberadas((current) => current.filter((item) => item !== pageKey));
+      return;
+    }
+
+    setPaginasLiberadas((current) => current.filter((item) => item !== pageKey));
+    setPaginasBloqueadas((current) => current.filter((item) => item !== pageKey));
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-6xl max-h-[92vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b bg-slate-50">
+          <div>
+            <h2 className="text-lg font-black text-slate-800">Permissões por usuário</h2>
+            <p className="text-xs font-semibold text-slate-500">
+              {usuario?.nome || "Usuário"} • Nível base: {usuario?.nivel || "Pendente"}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5 space-y-4 bg-slate-50/70">
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">
+            Use <strong>Herdar</strong> para seguir o nível. Use <strong>Liberar</strong> para abrir uma página só para esse usuário e <strong>Bloquear</strong> para esconder uma página mesmo que o nível permita.
+          </div>
+
+          {Object.entries(PAGINAS_POR_CATEGORIA).map(([categoria, paginas]) => (
+            <div key={categoria} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 mb-3">{categoria}</h3>
+              <div className="space-y-3">
+                {paginas.map((pagina) => (
+                  <div key={pagina.key} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-black text-slate-800">{pagina.label}</p>
+                        <p className="text-[11px] font-semibold text-slate-500 mt-1">{pagina.path}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { value: "herdar", label: "Herdar" },
+                          { value: "liberar", label: "Liberar" },
+                          { value: "bloquear", label: "Bloquear" },
+                        ].map((option) => {
+                          const active = getState(pagina.key) === option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setState(pagina.key, option.value)}
+                              className={`rounded-xl px-3 py-2 text-xs font-black transition ${
+                                active
+                                  ? option.value === "liberar"
+                                    ? "bg-emerald-600 text-white"
+                                    : option.value === "bloquear"
+                                    ? "bg-rose-600 text-white"
+                                    : "bg-slate-800 text-white"
+                                  : "bg-white text-slate-700 border border-slate-200"
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-5 py-4 border-t bg-white flex justify-end gap-3">
+          <button onClick={onClose} className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-200">
+            Cancelar
+          </button>
+          <button
+            onClick={() => onSave(usuario, paginasLiberadas, paginasBloqueadas)}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            <FaSave />
+            {saving ? "Salvando..." : "Salvar permissões"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Usuarios() {
+  const { profiles } = useAccessGovernance();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState(null);
@@ -383,7 +507,12 @@ export default function Usuarios() {
   const [feedback, setFeedback] = useState(null);
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
   const [usuarioSelecionado, setUsuarioSelecionado] = useState(null);
+  const [usuarioPermissoes, setUsuarioPermissoes] = useState(null);
   const [resetandoSenha, setResetandoSenha] = useState(false);
+  const niveisDisponiveis = useMemo(() => {
+    const nomes = profiles?.length ? profiles.map((item) => item.nome) : FALLBACK_NIVEIS;
+    return Array.from(new Set(nomes)).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [profiles]);
 
   async function carregarUsuarios() {
     setLoading(true);
@@ -496,6 +625,39 @@ export default function Usuarios() {
     setResetandoSenha(false);
   }
 
+  async function salvarPermissoesUsuario(usuario, paginasLiberadas, paginasBloqueadas) {
+    if (!usuario?.id) return;
+
+    setSavingId(usuario.id);
+    setFeedback(null);
+
+    const { data, error } = await supabase
+      .from("usuarios_aprovadores")
+      .update({
+        paginas_liberadas: Array.isArray(paginasLiberadas) ? paginasLiberadas : [],
+        paginas_bloqueadas: Array.isArray(paginasBloqueadas) ? paginasBloqueadas : [],
+      })
+      .eq("id", usuario.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error(error.message);
+      setFeedback({ type: "error", text: "Erro ao salvar as permissões personalizadas." });
+      setSavingId(null);
+      return;
+    }
+
+    setUsuarios((prev) => prev.map((item) => (item.id === usuario.id ? data : item)));
+    if (usuarioSelecionado?.id === usuario.id) setUsuarioSelecionado(data);
+    setUsuarioPermissoes(null);
+    setFeedback({
+      type: "success",
+      text: `Permissões personalizadas salvas para ${data?.nome || "usuário"}.`,
+    });
+    setSavingId(null);
+  }
+
   const filtrados = useMemo(() => {
     const term = normalizeText(busca);
 
@@ -585,7 +747,7 @@ export default function Usuarios() {
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
             >
               <option value="">Todos os níveis</option>
-              {NIVEIS.map((nivel) => <option key={nivel} value={nivel}>{nivel}</option>)}
+              {niveisDisponiveis.map((nivel) => <option key={nivel} value={nivel}>{nivel}</option>)}
             </select>
           </div>
 
@@ -715,7 +877,7 @@ export default function Usuarios() {
                             onChange={(event) => atualizarNivel(usuario.id, event.target.value)}
                             className="min-w-[160px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
                           >
-                            {NIVEIS.map((nivel) => (
+                            {niveisDisponiveis.map((nivel) => (
                               <option key={nivel} value={nivel}>{nivel}</option>
                             ))}
                           </select>
@@ -749,6 +911,17 @@ export default function Usuarios() {
                           >
                             <FaEye />
                             Detalhes
+                          </button>
+
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setUsuarioPermissoes(usuario);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-800"
+                          >
+                            <FaShieldAlt />
+                            Páginas
                           </button>
 
                           <button
@@ -801,6 +974,15 @@ export default function Usuarios() {
           onClose={() => setUsuarioSelecionado(null)}
           onResetSenha={resetarSenhaUsuario}
           saving={resetandoSenha}
+        />
+      )}
+
+      {usuarioPermissoes && (
+        <PermissoesUsuarioModal
+          usuario={usuarioPermissoes}
+          onClose={() => setUsuarioPermissoes(null)}
+          onSave={salvarPermissoesUsuario}
+          saving={savingId === usuarioPermissoes.id}
         />
       )}
     </div>

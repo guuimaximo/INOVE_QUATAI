@@ -30,10 +30,13 @@ import {
   FaFileInvoice,
   FaBuilding,
   FaIdBadge,
+  FaShieldAlt,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
+import { useAccessGovernance } from "../context/AccessContext";
+import { canUserAccessPath, canUserSeeFarol } from "../utils/access";
 
 /* =========================
    ROTAS
@@ -72,149 +75,7 @@ const ESTRUTURA_FISICA_ROUTES = {
   tratar: "/estrutura-fisica/tratar/:id",
 };
 
-/* =========================
-   FAROL TÁTICO
-========================= */
-const NIVEIS_LIBERADOS_FAROL = new Set(["Gestor", "Administrador", "RH"]);
 const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
-
-/* =========================
-   ACESSO POR NÍVEL
-========================= */
-
-const ACCESS = {
-  Administrador: "ALL",
-
-  Gestor: [
-    "/",
-    "/inove",
-    "/inicio-rapido",
-
-    "/solicitar",
-    "/central",
-    "/tratativas-resumo",
-    "/tratativas-rh",
-
-    "/lancar-avaria",
-    "/avarias-em-revisao",
-    "/aprovar-avarias",
-    "/cobrancas",
-    "/avarias-resumo",
-
-    "/sos-resumo",
-    "/sos-solicitacao",
-    "/sos-fechamento",
-    "/sos-tratamento",
-    "/sos-central",
-    "/sos-dashboard",
-
-    "/km-rodado",
-
-    // PCM
-    PCM_ROUTES.resumo,
-    PCM_ROUTES.inicio,
-    PCM_ROUTES.diario,
-    PCM_ROUTES.preventivas,
-    PCM_ROUTES.trocaPneus,
-
-    // Embarcados
-    ...Object.values(EMBARCADOS_ROUTES),
-
-    // Desempenho Diesel
-    ...Object.values(DIESEL_ROUTES),
-
-    // Tratativas Diesel
-    ...Object.values(DIESEL_TRATATIVAS_ROUTES),
-
-    // Estrutura Física
-    ESTRUTURA_FISICA_ROUTES.solicitacao,
-    ESTRUTURA_FISICA_ROUTES.central,
-    ESTRUTURA_FISICA_ROUTES.consultar,
-    ESTRUTURA_FISICA_ROUTES.tratar,
-
-    // Checklists
-    "/checklists",
-  ],
-
-  RH: [
-    "/",
-    "/tratativas-resumo",
-    "/central",
-    "/tratativas-rh",
-    "/avarias-resumo",
-    "/cobrancas",
-
-    DIESEL_TRATATIVAS_ROUTES.central,
-  ],
-
-  Tratativa: [
-    "/inicio-rapido",
-    "/solicitar",
-    "/central",
-    "/cobrancas",
-
-    EMBARCADOS_ROUTES.reparos,
-  ],
-
-  Manutenção: [
-    "/inicio-rapido",
-    "/solicitar",
-
-    "/lancar-avaria",
-    "/avarias-em-revisao",
-    "/aprovar-avarias",
-
-    "/sos-resumo",
-    "/sos-fechamento",
-    "/sos-tratamento",
-    "/sos-central",
-    "/sos-dashboard",
-
-    "/km-rodado",
-
-    // PCM
-    PCM_ROUTES.resumo,
-    PCM_ROUTES.inicio,
-    PCM_ROUTES.diario,
-    PCM_ROUTES.preventivas,
-    PCM_ROUTES.trocaPneus,
-
-    ...Object.values(EMBARCADOS_ROUTES),
-  ],
-
-  CCO: [
-    "/inicio-rapido",
-    "/solicitar",
-    "/sos-solicitacao",
-    "/sos-fechamento",
-    "/sos-dashboard",
-    "/km-rodado",
-
-    EMBARCADOS_ROUTES.reparos,
-  ],
-
-  Instrutor: [
-    "/inicio-rapido",
-    ...Object.values(DIESEL_ROUTES),
-    DIESEL_TRATATIVAS_ROUTES.central,
-  ],
-
-  Embarcados: [
-    "/inicio-rapido",
-    ...Object.values(EMBARCADOS_ROUTES),
-  ],
-
-  Borracheiro: [PCM_ROUTES.trocaPneus],
-};
-
-function canSee(user, path) {
-  if (!user?.nivel) return false;
-  if (user.nivel === "Administrador") return true;
-  if (user.nivel === "Gestor") return ACCESS.Gestor.includes(path);
-
-  const allowed = ACCESS[user.nivel] || [];
-  return allowed.includes(path);
-}
 
 export default function Sidebar() {
   const location = useLocation();
@@ -229,25 +90,17 @@ export default function Sidebar() {
   const [configOpen, setConfigOpen] = useState(false);
 
   const { user, logout } = useContext(AuthContext);
+  const { profileMap } = useAccessGovernance();
   const navigate = useNavigate();
 
   const isAdmin = user?.nivel === "Administrador";
-  const isGestor = user?.nivel === "Gestor";
-  const isManutencao = user?.nivel === "Manutenção";
-  const isRH = user?.nivel === "RH";
-  const isInstrutor = user?.nivel === "Instrutor";
-  const isCCO = user?.nivel === "CCO";
-  const isTratativa = user?.nivel === "Tratativa";
-  const isEmbarcados = user?.nivel === "Embarcados";
-  const isBorracheiro = user?.nivel === "Borracheiro";
-
-  const showInicioExecutivo = isAdmin || isGestor || isRH;
+  const canSee = useMemo(
+    () => (path) => canUserAccessPath(user, path, profileMap),
+    [profileMap, user]
+  );
+  const showInicioExecutivo = canSee("/painel");
   const showInicioBasico = !showInicioExecutivo;
-
-  const podeVerFarol = useMemo(() => {
-    const nivel = String(user?.nivel || "").trim();
-    return NIVEIS_LIBERADOS_FAROL.has(nivel);
-  }, [user?.nivel]);
+  const podeVerFarol = useMemo(() => canUserSeeFarol(user, profileMap), [profileMap, user]);
 
   function abrirFarol() {
     try {
@@ -326,10 +179,10 @@ export default function Sidebar() {
       },
 
       tratativas: [
-        { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie />, onlyAdminGestor: true },
+        { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie /> },
         { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
         { path: "/central", label: "Central", icon: <FaListAlt /> },
-        { path: "/tratativas-rh", label: "Tratativas RH", icon: <FaUserCog />, onlyAdminGestorRH: true },
+        { path: "/tratativas-rh", label: "Tratativas RH", icon: <FaUserCog /> },
       ],
 
       avarias: [
@@ -355,6 +208,7 @@ export default function Sidebar() {
       configuracoes: [
         { path: "/usuarios", label: "Usuários", icon: <FaUserCog /> },
         { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
+        { path: "/niveis-acesso", label: "Níveis de acesso", icon: <FaShieldAlt /> },
       ],
     }),
     []
@@ -377,7 +231,7 @@ export default function Sidebar() {
     if (path.startsWith("/sos") || path.startsWith("/km-rodado")) setIntervencoesOpen(true);
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
-    if (path.startsWith("/usuarios") || path.startsWith("/funcionarios")) setConfigOpen(true);
+    if (path.startsWith("/usuarios") || path.startsWith("/funcionarios") || path.startsWith("/niveis-acesso")) setConfigOpen(true);
   }, [location.pathname]);
 
   const navLinkClass = ({ isActive }) =>
@@ -390,36 +244,15 @@ export default function Sidebar() {
       isActive ? "bg-blue-500 shadow-sm" : "hover:bg-blue-600"
     }`;
 
-  const showDesempenhoDiesel = isAdmin || isGestor || isInstrutor || isRH;
-  const showPCM = isAdmin || isGestor || isManutencao || isBorracheiro;
-
-  const showEmbarcados =
-    isAdmin ||
-    isGestor ||
-    isManutencao ||
-    isCCO ||
-    isTratativa ||
-    isEmbarcados ||
-    links.embarcados.tabs.some((t) => canSee(user, t.path));
-
-  const showEstruturaFisica =
-    (isAdmin || isGestor) &&
-    links.estruturaFisica.tabs.some((t) => canSee(user, t.path));
-
-  const showTratativas = links.tratativas.some((l) => {
-    if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
-    if (l.onlyAdminGestorRH && !(isAdmin || isGestor || isRH)) return null;
-    return canSee(user, l.path);
-  });
-
-  const showAvarias = links.avarias.some((l) => {
-    if (l.path === "/avarias-resumo" && !(isAdmin || isGestor || isRH)) return null;
-    return canSee(user, l.path);
-  });
-
-  const showChecklists = (isAdmin || isGestor) && canSee(user, "/checklists");
-  const showSOS = links.sos.some((l) => canSee(user, l.path));
-  const showConfig = isAdmin;
+  const showPCM = links.pcm.tabs.some((t) => canSee(t.path));
+  const showEmbarcados = links.embarcados.tabs.some((t) => canSee(t.path));
+  const showDesempenhoDiesel = links.desempenhoDiesel.tabs.some((t) => canSee(t.path));
+  const showEstruturaFisica = links.estruturaFisica.tabs.some((t) => canSee(t.path));
+  const showTratativas = links.tratativas.some((l) => canSee(l.path));
+  const showAvarias = links.avarias.some((l) => canSee(l.path));
+  const showChecklists = links.checklists.some((l) => canSee(l.path));
+  const showSOS = links.sos.some((l) => canSee(l.path));
+  const showConfig = links.configuracoes.some((l) => canSee(l.path));
 
   return (
     <aside className="flex h-full w-72 flex-col bg-blue-700 text-white shadow-2xl lg:shadow-none">
@@ -446,14 +279,14 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-3 pb-24">
-        {showInicioExecutivo && canSee(user, links.inicioExecutivo.path) && (
+        {showInicioExecutivo && canSee(links.inicioExecutivo.path) && (
           <NavLink to={links.inicioExecutivo.path} className={navLinkClass}>
             {links.inicioExecutivo.icon}
             <span className="whitespace-nowrap">{links.inicioExecutivo.label}</span>
           </NavLink>
         )}
 
-        {showInicioBasico && canSee(user, links.inicioBasico.path) && (
+        {showInicioBasico && canSee(links.inicioBasico.path) && (
           <NavLink to={links.inicioBasico.path} className={navLinkClass}>
             {links.inicioBasico.icon}
             <span className="whitespace-nowrap">{links.inicioBasico.label}</span>
@@ -477,7 +310,7 @@ export default function Sidebar() {
             {pcmOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.pcm.tabs.map((t) =>
-                  canSee(user, t.path) ? (
+                  canSee(t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
                       {t.icon}
                       <span className="whitespace-nowrap">{t.label}</span>
@@ -506,7 +339,7 @@ export default function Sidebar() {
             {embarcadosOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.embarcados.tabs.map((t) =>
-                  canSee(user, t.path) ? (
+                  canSee(t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
                       {t.icon}
                       <span className="whitespace-nowrap">{t.label}</span>
@@ -535,7 +368,7 @@ export default function Sidebar() {
             {desempenhoDieselOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.desempenhoDiesel.tabs.map((t) =>
-                  canSee(user, t.path) ? (
+                  canSee(t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
                       {t.icon}
                       <span className="whitespace-nowrap">{t.label}</span>
@@ -564,7 +397,7 @@ export default function Sidebar() {
             {estruturaFisicaOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.estruturaFisica.tabs.map((t) =>
-                  canSee(user, t.path) ? (
+                  canSee(t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
                       {t.icon}
                       <span className="whitespace-nowrap">{t.label}</span>
@@ -591,18 +424,13 @@ export default function Sidebar() {
 
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
-                {links.tratativas.map((link) => {
-                  if (link.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
-                  if (link.onlyAdminGestorRH && !(isAdmin || isGestor || isRH)) return null;
-                  if (!link.onlyAdminGestor && !link.onlyAdminGestorRH && !canSee(user, link.path)) return null;
-                  if (user?.nivel === "RH" && !canSee(user, link.path)) return null;
-
-                  return (
+                {links.tratativas.map((link) =>
+                  canSee(link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
                     </NavLink>
-                  );
-                })}
+                  ) : null
+                )}
               </div>
             )}
           </>
@@ -623,16 +451,13 @@ export default function Sidebar() {
 
             {avariasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                {links.avarias.map((link) => {
-                  if (link.path === "/avarias-resumo" && !(isAdmin || isGestor || isRH)) return null;
-
-                  return canSee(user, link.path) ||
-                    (link.path === "/avarias-resumo" && (isAdmin || isGestor || isRH)) ? (
+                {links.avarias.map((link) =>
+                  canSee(link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
                     </NavLink>
-                  ) : null;
-                })}
+                  ) : null
+                )}
               </div>
             )}
           </>
@@ -654,7 +479,7 @@ export default function Sidebar() {
             {checklistsOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.checklists.map((link) =>
-                  canSee(user, link.path) ? (
+                  canSee(link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
                     </NavLink>
@@ -681,7 +506,7 @@ export default function Sidebar() {
             {intervencoesOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.sos.map((link) =>
-                  canSee(user, link.path) ? (
+                  canSee(link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
                     </NavLink>

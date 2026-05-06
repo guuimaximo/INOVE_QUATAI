@@ -1,9 +1,12 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Capacitor } from "@capacitor/core";
+import { useAccessGovernance } from "../context/AccessContext";
+import { canUserAccessPath } from "../utils/access";
 
 export default function RequireAuth({ children }) {
   const { user, loading } = useAuth();
+  const { profileMap } = useAccessGovernance();
   const location = useLocation();
   const isNativeShell = Capacitor.isNativePlatform();
   const allowedNativePaths = new Set(["/pcm-troca-pneus", "/atualizar-perfil"]);
@@ -26,6 +29,10 @@ export default function RequireAuth({ children }) {
 
   if (isNativeShell && !allowedNativePaths.has(location.pathname)) {
     return <Navigate to="/pcm-troca-pneus" replace state={{ from: location }} />;
+  }
+
+  if (!canUserAccessPath(user, location.pathname, profileMap)) {
+    return <Navigate to="/" replace state={{ from: location }} />;
   }
 
   return children;

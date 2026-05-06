@@ -1,7 +1,6 @@
 // src/pages/AvariasResumo.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
-import { escapeIlikePattern } from "../../utils/supabaseQuery";
 import {
   ResponsiveContainer,
   BarChart,
@@ -267,8 +266,7 @@ export default function AvariasResumo() {
     if (dataFim) query = query.lte("dataAvaria", `${dataFim}T23:59:59`);
 
     if (origemFiltro) {
-      const padraoOrigem = escapeIlikePattern(origemFiltro);
-      query = query.or(`origem.ilike.${padraoOrigem},origem_cobranca.ilike.${padraoOrigem}`);
+      query = query.or(`origem.ilike.${origemFiltro},origem_cobranca.ilike.${origemFiltro}`);
     }
 
     const { data, error } = await query;

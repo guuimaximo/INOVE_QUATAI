@@ -11,8 +11,14 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
-import { dispatchWorkflow } from "../../utils/dispatchWorkflow";
 
+// =============================================================================
+// CONFIG (GitHub Actions)
+// =============================================================================
+const GH_USER = import.meta.env.VITE_GITHUB_USER;
+const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
+const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
+const GH_REF = "main";
 const WF_TRAT = "ordem-tratativa.yml";
 const PRIORIDADES = ["Gravíssima", "Alta", "Média", "Baixa"];
 
@@ -182,7 +188,33 @@ function getNotaInstrutorFaixa(nota) {
 }
 
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
-  await dispatchWorkflow(workflowFile, inputs);
+  if (!GH_USER || !GH_REPO || !GH_TOKEN) {
+    throw new Error("Credenciais GitHub ausentes.");
+  }
+
+  const safeInputs = {};
+  for (const key in inputs) {
+    safeInputs[key] = String(inputs[key] || "");
+  }
+
+  const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${GH_TOKEN}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ref: GH_REF, inputs: safeInputs }),
+  });
+
+  if (response.status !== 204) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Erro GitHub: ${response.status}`);
+  }
+
   return true;
 }
 
@@ -501,17 +533,7 @@ export default function ModalCheckpointAnalise({
 
       const { error: itemLoteErr } = await supabase
         .from("acompanhamento_lote_itens")
-        .insert([{
-          lote_id: lote.id,
-          motorista_chapa: chapa,
-          extra: {
-            motorista_nome: nomeMot,
-            tratativa_id: tratativaId,
-            acompanhamento_id: item.id,
-            mes_ref: item?.mes_ref || item?.metadata?.mes_ref || null,
-            origem: "checkpoint_analise",
-          },
-        }]);
+        .insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
 
       if (itemLoteErr) throw itemLoteErr;
 

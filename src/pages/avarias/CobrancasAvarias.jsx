@@ -3,7 +3,6 @@ import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../../supabase";
 import { FaSearch } from "react-icons/fa";
 import CobrancaDetalheModal from "../../components/CobrancaDetalheModal";
-import { escapeIlikePattern } from "../../utils/supabaseQuery";
 
 function CardResumo({ titulo, valor, cor, subValor = null }) {
   return (
@@ -123,7 +122,7 @@ export default function CobrancasAvarias() {
     }
 
     if (origemFiltro) {
-      query = query.or(`origem.ilike.${escapeIlikePattern(origemFiltro)},origem_cobranca.ilike.${escapeIlikePattern(origemFiltro)}`);
+      query = query.or(`origem.ilike.${origemFiltro},origem_cobranca.ilike.${origemFiltro}`);
     }
 
     if (filtro) {
@@ -156,7 +155,7 @@ export default function CobrancasAvarias() {
       .eq("status", "Aprovado");
 
     if (origemFiltro) {
-      query = query.or(`origem.ilike.${escapeIlikePattern(origemFiltro)},origem_cobranca.ilike.${escapeIlikePattern(origemFiltro)}`);
+      query = query.or(`origem.ilike.${origemFiltro},origem_cobranca.ilike.${origemFiltro}`);
     }
 
     if (dataInicio) {

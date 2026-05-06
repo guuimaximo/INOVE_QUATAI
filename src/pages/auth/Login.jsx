@@ -15,7 +15,6 @@ import {
   isValidEmail,
   resolveAuthAccount,
 } from "../../utils/authBridge";
-import { escapePostgrestValue } from "../../utils/supabaseQuery";
 import {
   User,
   Lock,
@@ -258,7 +257,6 @@ export default function Login() {
       setor: legacyUser?.setor || "",
       ativo: isRecordActive(legacyUser?.ativo),
       status_cadastro: legacyUser?.status_cadastro || "Aprovado",
-      estrutura_fisica_liberada: legacyUser?.estrutura_fisica_liberada === true,
       migrado_auth: !!legacyUser?.migrado_auth,
       legacy_user: legacyUser,
       profile: null,
@@ -286,7 +284,7 @@ export default function Login() {
     const { data, error } = await supabase
       .from("usuarios_aprovadores")
       .select("*")
-      .or(`login.eq.${escapePostgrestValue(identifier)},email.eq.${escapePostgrestValue(identifier)}`)
+      .or(`login.eq.${identifier},email.eq.${identifier}`)
       .eq("senha", currentPassword)
       .maybeSingle();
 
@@ -676,7 +674,7 @@ export default function Login() {
       const { data: existingUser, error: checkError } = await supabase
         .from("usuarios_aprovadores")
         .select("id")
-        .or(`login.eq.${escapePostgrestValue(loginTrim)},email.eq.${escapePostgrestValue(emailTrim)}`)
+        .or(`login.eq.${loginTrim},email.eq.${emailTrim}`)
         .maybeSingle();
 
       if (checkError) {

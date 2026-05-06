@@ -1,8 +1,8 @@
 // src/pages/SOSTratamento.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
+import { listarFuncionariosAtivos } from "../../utils/funcionariosBCNT";
 import { FaTools, FaCheckCircle, FaTimes, FaBus, FaCalendarAlt, FaRoad, FaWrench, FaInfoCircle } from "react-icons/fa";
-import { escapeIlikePattern } from "../../utils/supabaseQuery";
 
 function calcularDiasDecorridos(data) {
   if (!data) return null;
@@ -149,6 +149,7 @@ export default function SOSTratamento() {
 // ===============================
 function CampoMecanico({ value, onChange }) {
   const [busca, setBusca] = useState(value?.nome || value?.chapa || "");
+  const [todos, setTodos] = useState([]);
   const [opcoes, setOpcoes] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -158,42 +159,54 @@ function CampoMecanico({ value, onChange }) {
 
   useEffect(() => {
     let alive = true;
-
-    async function buscar() {
-      const termo = (busca || "").trim();
-      if (termo.length < 2) {
-        setOpcoes([]);
-        return;
-      }
-
+    async function carregarTodos() {
       setLoading(true);
-
-      const { data, error } = await supabase
-        .from("motoristas")
-        .select("chapa, nome, cargo")
-        .not("cargo", "ilike", "MOTORISTA%")
-        .or(`nome.ilike.${escapeIlikePattern(`%${termo}%`)},chapa.ilike.${escapeIlikePattern(`%${termo}%`)}`)
-        .order("nome", { ascending: true })
-        .limit(10);
-
-      if (!alive) return;
-
-      setLoading(false);
-
-      if (error) {
-        console.error("Erro ao buscar colaboradores:", error);
-        setOpcoes([]);
-        return;
+      try {
+        const data = await listarFuncionariosAtivos({
+          columns: "id_funcionario, nr_cracha, nm_funcionario, nm_funcao, status",
+          from: 0,
+          to: 9999,
+        });
+        if (!alive) return;
+        const semMotorista = (data || []).filter((f) => !String(f.cargo || "").toUpperCase().includes("MOTORISTA"));
+        setTodos(semMotorista);
+      } catch (error) {
+        if (!alive) return;
+        console.error("Erro ao carregar colaboradores:", error);
+        setTodos([]);
+      } finally {
+        if (alive) setLoading(false);
       }
-
-      setOpcoes(data || []);
     }
-
-    buscar();
+    carregarTodos();
     return () => {
       alive = false;
     };
-  }, [busca]);
+  }, []);
+
+useEffect(() => {
+  const termo = (busca || "").trim().toLowerCase();
+  if (!termo) {
+    setOpcoes([]);
+    return;
+  }
+
+  const filtrados = (todos || [])
+    .filter((f) => {
+      return (
+        String(f.nome || "").toLowerCase().includes(termo) ||
+        String(f.chapa || "").toLowerCase().includes(termo)
+      );
+    })
+    .slice(0, 12)
+    .map((funcionario) => ({
+      chapa: funcionario.chapa,
+      nome: funcionario.nome,
+      cargo: funcionario.cargo,
+    }));
+
+  setOpcoes(filtrados);
+}, [busca, todos]);
 
   function selecionar(m) {
     onChange({ chapa: m.chapa, nome: m.nome });

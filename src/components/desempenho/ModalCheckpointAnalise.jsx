@@ -490,7 +490,17 @@ export default function ModalCheckpointAnalise({
 
       const { error: itemLoteErr } = await supabase
         .from("acompanhamento_lote_itens")
-        .insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
+        .insert([{
+          lote_id: lote.id,
+          motorista_chapa: chapa,
+          extra: {
+            motorista_nome: nomeMot,
+            tratativa_id: tratativaId,
+            acompanhamento_id: item.id,
+            mes_ref: item?.mes_ref || item?.metadata?.mes_ref || null,
+            origem: "checkpoint_analise",
+          },
+        }]);
 
       if (itemLoteErr) throw itemLoteErr;
 

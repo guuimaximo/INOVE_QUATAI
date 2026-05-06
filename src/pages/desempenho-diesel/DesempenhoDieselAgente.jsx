@@ -1004,7 +1004,11 @@ function DieselAgenteView({ onAlert }) {
         kml_realizado: n(r.kml_realizado),
         kml_meta: n(r.kml_meta),
         combustivel_desperdicado: n(r.combustivel_desperdicado),
-        extra: { motorista_nome: r.motorista_nome ?? null },
+        extra: {
+          motorista_nome: r.motorista_nome ?? null,
+          mes_ref: r.mes_ref ?? null,
+          sugestao_id: r.id ?? null,
+        },
       }));
 
       const { error: errI } = await supabase.from("acompanhamento_lote_itens").insert(itens);

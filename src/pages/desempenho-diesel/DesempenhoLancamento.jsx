@@ -273,7 +273,15 @@ export default function DesempenhoLancamento() {
           status: "PROCESSANDO", qtd: 1, extra: { tipo: TIPO_PRONTUARIO, chapa }
         }).select("id").single();
         
-        await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
+        await supabase.from("acompanhamento_lote_itens").insert([{
+          lote_id: lote.id,
+          motorista_chapa: chapa,
+          extra: {
+            motorista_nome: nomeMot,
+            acompanhamento_id: acompData.id,
+            origem: "lancamento_manual",
+          },
+        }]);
         await dispatchGitHubWorkflow(WF_ACOMP, { ordem_batch_id: String(lote.id), qtd: "1" });
       } 
       
@@ -303,7 +311,15 @@ export default function DesempenhoLancamento() {
           status: "PROCESSANDO", qtd: 1, extra: { tipo: "prontuario_tratativa", chapa }
         }).select("id").single();
         
-        await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
+        await supabase.from("acompanhamento_lote_itens").insert([{
+          lote_id: lote.id,
+          motorista_chapa: chapa,
+          extra: {
+            motorista_nome: nomeMot,
+            tratativa_id: tratData.id,
+            origem: "lancamento_manual",
+          },
+        }]);
         await dispatchGitHubWorkflow(WF_TRAT, { ordem_batch_id: String(lote.id), qtd: "1" });
       }
 

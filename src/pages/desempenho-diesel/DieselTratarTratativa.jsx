@@ -333,7 +333,7 @@ export default function DieselTratarTratativa() {
       if (upd.error) throw upd.error;
 
       alert("Tratativa Diesel concluída com sucesso!");
-      nav("/desempenho-diesel/tratativas");
+      nav("/diesel-tratativas");
     } catch (e) {
       alert(`Erro: ${e.message}`);
     } finally {
@@ -376,7 +376,7 @@ export default function DieselTratarTratativa() {
       if (delMain.error) throw delMain.error;
 
       alert("Tratativa excluída com sucesso!");
-      nav("/desempenho-diesel/tratativas");
+      nav("/diesel-tratativas");
     } catch (e) {
       alert(`Erro ao excluir: ${e.message}`);
     } finally {
@@ -915,7 +915,7 @@ export default function DieselTratarTratativa() {
           </div>
 
           <button
-            onClick={() => nav("/desempenho-diesel/tratativas")}
+            onClick={() => nav("/diesel-tratativas")}
             className="mt-6 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors shadow-md"
           >
             Voltar à Central

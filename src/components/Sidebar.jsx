@@ -31,6 +31,7 @@ import {
   FaBuilding,
   FaIdBadge,
   FaShieldAlt,
+  FaWarehouse,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -51,6 +52,13 @@ const DIESEL_ROUTES = {
 
 const DIESEL_TRATATIVAS_ROUTES = {
   central: "/diesel-tratativas",
+};
+
+const ESTOQUE_DIESEL_ROUTES = {
+  resumo: "/estoque-diesel/resumo",
+  operacao: "/estoque-diesel/operacao",
+  planejamentoControle: "/estoque-diesel/planejamento-controle",
+  parametros: "/estoque-diesel/parametros",
 };
 
 const PCM_ROUTES = {
@@ -81,6 +89,7 @@ export default function Sidebar() {
   const location = useLocation();
   const [pcmOpen, setPcmOpen] = useState(false);
   const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
+  const [estoqueDieselOpen, setEstoqueDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
   const [checklistsOpen, setChecklistsOpen] = useState(false);
@@ -93,7 +102,6 @@ export default function Sidebar() {
   const { profileMap } = useAccessGovernance();
   const navigate = useNavigate();
 
-  const isAdmin = user?.nivel === "Administrador";
   const canSee = useMemo(
     () => (path) => canUserAccessPath(user, path, profileMap),
     [profileMap, user]
@@ -161,6 +169,17 @@ export default function Sidebar() {
         ],
       },
 
+      estoqueDiesel: {
+        label: "Estoque de Diesel",
+        icon: <FaWarehouse />,
+        tabs: [
+          { path: ESTOQUE_DIESEL_ROUTES.resumo, label: "Resumo Suprimentos", icon: <FaChartPie /> },
+          { path: ESTOQUE_DIESEL_ROUTES.operacao, label: "Operacao do Tanque", icon: <FaGasPump /> },
+          { path: ESTOQUE_DIESEL_ROUTES.planejamentoControle, label: "Planejamento e Controle", icon: <FaClipboardCheck /> },
+          { path: ESTOQUE_DIESEL_ROUTES.parametros, label: "Parametros", icon: <FaTools /> },
+        ],
+      },
+
       estruturaFisica: {
         label: "Estrutura Física",
         icon: <FaBuilding />,
@@ -225,6 +244,7 @@ export default function Sidebar() {
     const path = location.pathname;
     if (path.startsWith("/pcm")) setPcmOpen(true);
     if (path.startsWith("/desempenho") || path.startsWith("/diesel")) setDesempenhoDieselOpen(true);
+    if (path.startsWith("/estoque-diesel")) setEstoqueDieselOpen(true);
     if (path.startsWith("/tratativas") || path.startsWith("/central") || path.startsWith("/solicitar")) setTratativasOpen(true);
     if (path.startsWith("/avarias") || path.startsWith("/lancar-avaria") || path.startsWith("/aprovar-avarias") || path.startsWith("/cobrancas")) setAvariasOpen(true);
     if (path.startsWith("/checklists")) setChecklistsOpen(true);
@@ -247,6 +267,7 @@ export default function Sidebar() {
   const showPCM = links.pcm.tabs.some((t) => canSee(t.path));
   const showEmbarcados = links.embarcados.tabs.some((t) => canSee(t.path));
   const showDesempenhoDiesel = links.desempenhoDiesel.tabs.some((t) => canSee(t.path));
+  const showEstoqueDiesel = links.estoqueDiesel.tabs.some((t) => canSee(t.path));
   const showEstruturaFisica = links.estruturaFisica.tabs.some((t) => canSee(t.path));
   const showTratativas = links.tratativas.some((l) => canSee(l.path));
   const showAvarias = links.avarias.some((l) => canSee(l.path));
@@ -368,6 +389,35 @@ export default function Sidebar() {
             {desempenhoDieselOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.desempenhoDiesel.tabs.map((t) =>
+                  canSee(t.path) ? (
+                    <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
+                      {t.icon}
+                      <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {showEstoqueDiesel && (
+          <>
+            <button
+              onClick={() => setEstoqueDieselOpen(!estoqueDieselOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {links.estoqueDiesel.icon}
+                <span className="whitespace-nowrap truncate">{links.estoqueDiesel.label}</span>
+              </div>
+              {estoqueDieselOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {estoqueDieselOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.estoqueDiesel.tabs.map((t) =>
                   canSee(t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
                       {t.icon}

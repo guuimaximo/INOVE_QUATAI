@@ -1,176 +1,176 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { FaChevronRight, FaGasPump, FaPlus, FaTint } from "react-icons/fa";
-import EstoqueDieselPageShell, { EstoqueDieselPanel } from "../../components/estoque-diesel/EstoqueDieselPageShell";
+import { Link } from "react-router-dom";
+import { FaCalendarAlt, FaChevronRight, FaExclamationTriangle, FaGasPump, FaTint } from "react-icons/fa";
+import EstoqueDieselPageShell, {
+  EstoqueDieselPanel,
+  EstoqueDieselStat,
+} from "../../components/estoque-diesel/EstoqueDieselPageShell";
 import {
   MONTHS_2026,
-  PRODUCT_CONFIG,
-  fetchDieselReceipts,
   fetchMeasurementContext,
   fetchMeasurementEntries,
-  getYearFromDate,
-  todayISO,
+  getMonthLabel,
 } from "./medicaoModel";
 
-function parseLiters(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return "0 L";
-  return `${Number(value).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} L`;
-}
+function MonthRow({ month, entries, isCurrentMonth }) {
+  const s500Count = entries.filter((entry) => entry.product === "S500").length;
+  const s10Count = entries.filter((entry) => entry.product === "S10").length;
+  const criticalCount = entries.filter((entry) => entry.status === "Critico").length;
 
-function ProductSwitcher({ product }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      {Object.values(PRODUCT_CONFIG).map((item) => {
-        const active = item.code === product;
-        return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-500">
+              <FaCalendarAlt />
+              2026
+            </span>
+            {isCurrentMonth ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-blue-700">
+                Mes atual
+              </span>
+            ) : null}
+          </div>
+          <h2 className="mt-3 text-xl font-black text-slate-800">{getMonthLabel(month)}</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-500">
+            Abra o mes para lancar a medicao diaria e conferir a tabela de S500 e S10.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 lg:min-w-[360px]">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-wider text-blue-700">S500</p>
+            <p className="mt-1 text-lg font-black text-slate-800">{s500Count}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-wider text-emerald-700">S10</p>
+            <p className="mt-1 text-lg font-black text-slate-800">{s10Count}</p>
+          </div>
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-wider text-rose-700">Alertas</p>
+            <p className="mt-1 text-lg font-black text-slate-800">{criticalCount}</p>
+          </div>
+        </div>
+
+        <div className="lg:min-w-[160px]">
           <Link
-            key={item.code}
-            to={`/estoque-diesel/resumo?produto=${item.code}`}
-            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition ${
-              active ? "border-slate-800 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
+            to={`/estoque-diesel/operacao/2026/${month}`}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700"
           >
-            {item.code === "S500" ? <FaTint /> : <FaGasPump />}
-            {item.code}
+            Abrir mes
+            <FaChevronRight />
           </Link>
-        );
-      })}
-    </div>
-  );
-}
-
-function MonthTable({ year, product, entries, receipts }) {
-  const rows = MONTHS_2026.map((item) => {
-    const key = `${year}-${item.month}`;
-    const monthEntries = entries.filter((entry) => entry.product === product && entry.date?.startsWith(key));
-    const monthReceipts = receipts.filter((receipt) => receipt.product === product && receipt.date?.startsWith(key));
-    const saidaTanque = monthEntries.reduce((sum, entry) => sum + (Number(entry.saidaTanque) || 0), 0);
-    const saidaTransnet = monthEntries.reduce((sum, entry) => sum + (Number(entry.saidaTransnet) || 0), 0);
-    const alertas = monthEntries.filter((entry) => entry.status && entry.status !== "OK").length + monthReceipts.filter((receipt) => receipt.status && receipt.status !== "OK").length;
-    return { ...item, lancamentos: monthEntries.length, recebimentos: monthReceipts.length, saidaTanque, saidaTransnet, alertas };
-  });
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-left text-sm">
-        <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-500">
-          <tr>
-            {["Mês", "Lançamentos", "Recebimentos", "Saída tanque", "Transnet", "Alertas", "Ação"].map((header, index, array) => (
-              <th key={header} className={`px-4 py-3 ${index === 0 ? "rounded-l-2xl" : ""} ${index === array.length - 1 ? "rounded-r-2xl" : ""}`}>
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {rows.map((row) => (
-            <tr key={row.month} className="hover:bg-slate-50">
-              <td className="px-4 py-3 font-black text-slate-800">{row.label}</td>
-              <td className="px-4 py-3 font-semibold text-slate-600">{row.lancamentos}</td>
-              <td className="px-4 py-3 font-semibold text-slate-600">{row.recebimentos}</td>
-              <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(row.saidaTanque)}</td>
-              <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(row.saidaTransnet)}</td>
-              <td className="px-4 py-3 font-semibold text-slate-600">{row.alertas}</td>
-              <td className="px-4 py-3">
-                <Link
-                  to={`/estoque-diesel/operacao/${year}/${row.month}?produto=${product}`}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-700 transition hover:bg-slate-50"
-                >
-                  Abrir mês
-                  <FaChevronRight />
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function EstoqueDieselResumo() {
-  const [searchParams] = useSearchParams();
-  const productParam = searchParams.get("produto") || "S500";
-  const product = productParam in PRODUCT_CONFIG ? productParam : "S500";
-  const year = getYearFromDate(todayISO());
-
   const [entries, setEntries] = useState([]);
-  const [receipts, setReceipts] = useState([]);
-  const [feedback, setFeedback] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     let active = true;
-    async function load() {
+
+    async function loadData() {
       try {
         setLoading(true);
-        setFeedback(null);
-        const context = await fetchMeasurementContext();
-        const [nextEntries, nextReceipts] = await Promise.all([
-          fetchMeasurementEntries({ year, metadata: context.metadata, paramStore: context.paramStore, includePumps: true }),
-          fetchDieselReceipts({ year, metadata: context.metadata, paramStore: context.paramStore }),
-        ]);
+        setErrorMessage("");
+        const { metadata, paramStore } = await fetchMeasurementContext();
+        const nextEntries = await fetchMeasurementEntries({
+          year: "2026",
+          metadata,
+          paramStore,
+          includePumps: false,
+        });
         if (!active) return;
         setEntries(nextEntries);
-        setReceipts(nextReceipts);
       } catch (error) {
-        console.error("Erro EstoqueDieselResumo:", error);
-        if (active) setFeedback(error?.message || "Não foi possível carregar o estoque de diesel no Supabase.");
+        if (!active) return;
+        console.error("Falha ao carregar medicoes de diesel:", error);
+        setErrorMessage("Nao foi possivel carregar as medicoes do Supabase.");
       } finally {
         if (active) setLoading(false);
       }
     }
-    load();
+
+    loadData();
     return () => {
       active = false;
     };
-  }, [year]);
+  }, []);
 
-  const totals = useMemo(() => {
-    const filteredEntries = entries.filter((entry) => entry.product === product);
-    const filteredReceipts = receipts.filter((receipt) => receipt.product === product);
+  const stats = useMemo(() => {
+    const entries2026 = entries.filter((entry) => entry.date?.startsWith("2026-"));
     return {
-      lancamentos: filteredEntries.length,
-      recebimentos: filteredReceipts.length,
-      saidaTanque: filteredEntries.reduce((sum, entry) => sum + (Number(entry.saidaTanque) || 0), 0),
-      saidaTransnet: filteredEntries.reduce((sum, entry) => sum + (Number(entry.saidaTransnet) || 0), 0),
+      total: entries2026.length,
+      s500: entries2026.filter((entry) => entry.product === "S500").length,
+      s10: entries2026.filter((entry) => entry.product === "S10").length,
+      critical: entries2026.filter((entry) => entry.status === "Critico").length,
     };
-  }, [entries, product, receipts]);
+  }, [entries]);
+
+  const currentMonth = new Date().toISOString().slice(5, 7);
 
   return (
-    <EstoqueDieselPageShell title="Estoque de Diesel" description="Tela inicial do módulo: meses em linha, produto e acesso aos lançamentos/recebimentos.">
+    <EstoqueDieselPageShell
+      title="Medicao de Diesel"
+      description="Controle mensal de 2026 com abertura por mes e lancamento diario no formato da operacao."
+    >
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <EstoqueDieselStat title="2026" value="12 meses" sub="Calendario operacional" icon={<FaCalendarAlt />} tone="blue" />
+        <EstoqueDieselStat title="Lancamentos" value={String(stats.total)} sub="Dias salvos no Supabase" icon={<FaTint />} tone="slate" />
+        <EstoqueDieselStat title="S500 / S10" value={`${stats.s500} / ${stats.s10}`} sub="Separados por produto" icon={<FaGasPump />} tone="emerald" />
+        <EstoqueDieselStat title="Criticos" value={String(stats.critical)} sub="Dias acima do limite" icon={<FaExclamationTriangle />} tone="rose" />
+      </div>
+
       <EstoqueDieselPanel className="p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <Link to="/estoque-diesel" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">
-              ← Voltar para 2026
-            </Link>
-            <h2 className="mt-4 text-lg font-black text-slate-800">Meses em linha</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">A parte dos meses agora fica em tabela, com botão para abrir o mês.</p>
-          </div>
-
-          <div className="flex flex-col gap-3 md:items-end">
-            <ProductSwitcher product={product} />
-            <Link to={`/estoque-diesel/recebimento?produto=${product}`} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white transition hover:bg-blue-600">
-              <FaPlus />
-              Recebimento de Diesel
-            </Link>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-black uppercase text-slate-500">Lançamentos</p><p className="mt-2 text-2xl font-black text-slate-800">{totals.lancamentos}</p></div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-black uppercase text-slate-500">Recebimentos</p><p className="mt-2 text-2xl font-black text-slate-800">{totals.recebimentos}</p></div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-black uppercase text-slate-500">Saída tanque</p><p className="mt-2 text-2xl font-black text-slate-800">{parseLiters(totals.saidaTanque)}</p></div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-black uppercase text-slate-500">Transnet</p><p className="mt-2 text-2xl font-black text-slate-800">{parseLiters(totals.saidaTransnet)}</p></div>
-        </div>
-
-        {feedback ? <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{feedback}</div> : null}
-
-        <div className="mt-5">
-          {loading ? <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-sm font-bold text-slate-500">Carregando dados do Supabase...</div> : <MonthTable year={year} product={product} entries={entries} receipts={receipts} />}
+        <h2 className="text-lg font-black text-slate-800">Fluxo da medicao</h2>
+        <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-4">
+          {[
+            "1. Abrir o mes na linha abaixo",
+            "2. Lancar o dia com medicao atual",
+            "3. Conferir recebimento, bombas e Transnet",
+            "4. Validar a tabela do mes na mesma pagina",
+          ].map((item) => (
+            <div
+              key={item}
+              className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600"
+            >
+              {item}
+            </div>
+          ))}
         </div>
       </EstoqueDieselPanel>
+
+      {errorMessage ? (
+        <EstoqueDieselPanel className="border-rose-200 bg-rose-50 p-5">
+          <p className="text-sm font-semibold text-rose-700">{errorMessage}</p>
+        </EstoqueDieselPanel>
+      ) : null}
+
+      <div className="space-y-4">
+        {MONTHS_2026.map((item) => {
+          const monthEntries = entries.filter((entry) => entry.date?.startsWith(`2026-${item.month}`));
+          return (
+            <MonthRow
+              key={item.month}
+              month={item.month}
+              entries={monthEntries}
+              isCurrentMonth={item.month === currentMonth}
+            />
+          );
+        })}
+      </div>
+
+      {loading ? (
+        <EstoqueDieselPanel className="p-5">
+          <p className="text-sm font-semibold text-slate-500">Carregando medicoes de 2026...</p>
+        </EstoqueDieselPanel>
+      ) : null}
     </EstoqueDieselPageShell>
   );
 }

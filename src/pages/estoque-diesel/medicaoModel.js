@@ -524,9 +524,12 @@ export async function fetchDieselReceipts({
 }
 
 export function isMeaningfulEntry(entry) {
+  const hasFinalRule =
+    Number(parseNumber(entry?.reguaFinalT1) || 0) > 0 ||
+    Number(parseNumber(entry?.reguaFinalT2) || 0) > 0;
+
   return Boolean(
-    entry?.reguaFinalT1 !== null ||
-      entry?.reguaFinalT2 !== null ||
+    hasFinalRule ||
       Number(entry?.nfVolumeLitros || 0) > 0 ||
       Number(entry?.transnetOutput || entry?.saidaTransnet || 0) > 0 ||
       Number(entry?.saidaTotalBombas || 0) > 0 ||

@@ -1,11 +1,16 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FaCalendarAlt, FaGasPump, FaTint } from "react-icons/fa";
 import EstoqueDieselPageShell, {
   EstoqueDieselPanel,
   EstoqueDieselStat,
 } from "../../components/estoque-diesel/EstoqueDieselPageShell";
-import { MONTHS_2026, getMonthLabel, loadEntries } from "./medicaoModel";
+import {
+  MONTHS_2026,
+  fetchMeasurementContext,
+  fetchMeasurementEntries,
+  getMonthLabel,
+} from "./medicaoModel";
 
 function MonthCard({ month, entries }) {
   const s500Count = entries.filter((entry) => entry.product === "S500").length;
@@ -63,7 +68,40 @@ function MonthCard({ month, entries }) {
 }
 
 export default function EstoqueDieselResumo() {
-  const entries = loadEntries();
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadData() {
+      try {
+        setLoading(true);
+        setErrorMessage("");
+        const { metadata, paramStore } = await fetchMeasurementContext();
+        const nextEntries = await fetchMeasurementEntries({
+          year: "2026",
+          metadata,
+          paramStore,
+          includePumps: false,
+        });
+        if (!active) return;
+        setEntries(nextEntries);
+      } catch (error) {
+        if (!active) return;
+        console.error("Falha ao carregar medições de diesel:", error);
+        setErrorMessage("Nao foi possivel carregar as medicoes do Supabase.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const entries2026 = entries.filter((entry) => entry.date?.startsWith("2026-"));
@@ -106,15 +144,24 @@ export default function EstoqueDieselResumo() {
         </div>
       </EstoqueDieselPanel>
 
+      {errorMessage ? (
+        <EstoqueDieselPanel className="border-rose-200 bg-rose-50 p-5">
+          <p className="text-sm font-semibold text-rose-700">{errorMessage}</p>
+        </EstoqueDieselPanel>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
-        {MONTHS_2026.map((item) => (
-          <MonthCard
-            key={item.month}
-            month={item.month}
-            entries={entries.filter((entry) => entry.date?.startsWith(`2026-${item.month}`))}
-          />
-        ))}
+        {MONTHS_2026.map((item) => {
+          const monthEntries = entries.filter((entry) => entry.date?.startsWith(`2026-${item.month}`));
+          return <MonthCard key={item.month} month={item.month} entries={monthEntries} />;
+        })}
       </div>
+
+      {loading ? (
+        <EstoqueDieselPanel className="p-5">
+          <p className="text-sm font-semibold text-slate-500">Carregando medições de 2026...</p>
+        </EstoqueDieselPanel>
+      ) : null}
     </EstoqueDieselPageShell>
   );
 }

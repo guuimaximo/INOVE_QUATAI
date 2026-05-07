@@ -25,6 +25,7 @@ function getPageTitle(pathname) {
   if (pathname === "/" || pathname === "/inove") return "Inicio";
   if (pathname.startsWith("/painel")) return "Painel";
   if (pathname.startsWith("/inicio-rapido")) return "Inicio";
+  if (pathname.startsWith("/estoque-diesel")) return "Estoque de Diesel";
   if (pathname.startsWith("/desempenho")) return "Diesel";
   if (pathname.startsWith("/embarcados")) return "Embarcados";
   if (pathname.startsWith("/pcm-troca-pneus")) return "Troca de pneus";
@@ -38,6 +39,10 @@ function getPageTitle(pathname) {
 }
 
 function getIconForNav(key) {
+  const normalizedKey = String(key || "").toLowerCase();
+  if (normalizedKey.includes("estoque")) return FaWarehouse;
+  if (normalizedKey.includes("diesel")) return FaGasPump;
+
   switch (key) {
     case "pcm":
       return FaClipboardList;

@@ -49,6 +49,10 @@ import DesempenhoDieselAcompanhamento from "./pages/desempenho-diesel/Desempenho
 import DesempenhoDieselTratativas from "./pages/desempenho-diesel/DesempenhoDieselTratativas";
 import DesempenhoDieselAgente from "./pages/desempenho-diesel/DesempenhoDieselAgente";
 import DesempenhoDieselCheckpoint from "./pages/desempenho-diesel/DesempenhoDieselCheckpoint";
+import EstoqueDieselResumo from "./pages/estoque-diesel/EstoqueDieselResumo";
+import EstoqueDieselOperacao from "./pages/estoque-diesel/EstoqueDieselOperacao";
+import EstoqueDieselPlanejamentoControle from "./pages/estoque-diesel/EstoqueDieselPlanejamentoControle";
+import EstoqueDieselParametros from "./pages/estoque-diesel/EstoqueDieselParametros";
 
 import ChecklistCentral from "./pages/checklists/ChecklistCentral";
 
@@ -122,6 +126,12 @@ export default function App() {
             <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
             <Route path="/desempenho-diesel-checkpoint/:id" element={<DesempenhoDieselCheckpoint />} />
             <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
+
+            <Route path="/estoque-diesel/resumo" element={<EstoqueDieselResumo />} />
+            <Route path="/estoque-diesel/operacao" element={<EstoqueDieselOperacao />} />
+            <Route path="/estoque-diesel/planejamento-controle" element={<EstoqueDieselPlanejamentoControle />} />
+            <Route path="/estoque-diesel/parametros" element={<EstoqueDieselParametros />} />
+            <Route path="/estoque-diesel" element={<Navigate to="/estoque-diesel/resumo" replace />} />
 
             <Route path="/diesel-tratativas" element={<Desempenho_Diesel_Tratativas_Central />} />
             <Route path="/diesel-tratar/:id" element={<DieselTratarTratativa />} />

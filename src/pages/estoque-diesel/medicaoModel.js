@@ -85,7 +85,21 @@ export const DEFAULT_PARAMS = {
 export function parseNumber(value) {
   if (value === null || value === undefined || value === "") return null;
 
-  const normalized = String(value).trim().replace(/\./g, "").replace(",", ".");
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  let normalized = raw;
+
+  if (raw.includes(",") && raw.includes(".")) {
+    normalized = raw.replace(/\./g, "").replace(",", ".");
+  } else if (raw.includes(",")) {
+    normalized = raw.replace(",", ".");
+  }
+
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }

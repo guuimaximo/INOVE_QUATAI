@@ -3,6 +3,7 @@ import {
   FaBolt,
   FaSync,
   FaSearch,
+  FaFilter,
   FaRoad,
   FaTruck,
   FaUser,
@@ -1452,7 +1453,7 @@ export default function DesempenhoDieselAnalise() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 space-y-5">
-      <div className="bg-white rounded-2xl border shadow-sm p-4 md:p-5">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
         <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
@@ -1491,21 +1492,21 @@ export default function DesempenhoDieselAnalise() {
                   }
                 }
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition shadow-sm"
             >
               <FaDownload /> Baixar Excel
             </button>
 
             <button
               onClick={() => setMostrarExplicacao(!mostrarExplicacao)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-100 text-blue-800 font-bold hover:bg-blue-200 transition"
             >
               <FaInfoCircle /> {mostrarExplicacao ? "Ocultar Cálculos" : "Entender Cálculos"}
             </button>
 
             <button
               onClick={carregarTudo}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-700 transition"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-800 bg-slate-800 text-white font-black hover:bg-slate-700 transition"
             >
               <FaSync /> Atualizar
             </button>
@@ -1532,21 +1533,21 @@ export default function DesempenhoDieselAnalise() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-5">
+        <div className="mt-5 pt-5 border-t grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="relative">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar linha, carro, motorista..."
-              className="w-full pl-10 pr-3 py-2.5 rounded-lg border bg-white"
+              className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
             />
           </div>
 
           <select
             value={mesReferencia}
             onChange={(e) => setMesReferencia(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-lg border bg-white"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
           >
             <option value="">Selecione o mês</option>
             {mesesDisponiveis.map((mes) => (
@@ -1559,7 +1560,7 @@ export default function DesempenhoDieselAnalise() {
           <select
             value={filtroLinha}
             onChange={(e) => setFiltroLinha(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-lg border bg-white"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
           >
             <option value="">Todas as linhas</option>
             {linhasUnicas.map((linha) => (
@@ -1572,7 +1573,7 @@ export default function DesempenhoDieselAnalise() {
           <select
             value={filtroCluster}
             onChange={(e) => setFiltroCluster(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-lg border bg-white"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
           >
             <option value="">Todos os clusters</option>
             {clustersUnicos.map((cluster) => (
@@ -1587,7 +1588,7 @@ export default function DesempenhoDieselAnalise() {
               <select
                 value={filtroInstrutor}
                 onChange={(e) => setFiltroInstrutor(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border bg-white"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
               >
                 <option value="">Todos os instrutores</option>
                 {instrutoresUnicos.map((instrutor) => (
@@ -1600,7 +1601,7 @@ export default function DesempenhoDieselAnalise() {
               <select
                 value={filtroProntuario}
                 onChange={(e) => setFiltroProntuario(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border bg-white"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
               >
                 <option value="">Todos os prontuários</option>
                 <option value="PRONTUARIO_10">PRONTUARIO_10</option>
@@ -1613,7 +1614,7 @@ export default function DesempenhoDieselAnalise() {
               <select
                 value={filtroStatus}
                 onChange={(e) => setFiltroStatus(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border bg-white"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
               >
                 <option value="">Todos os status</option>
                 <option value="AGUARDANDO_INSTRUTOR">AGUARDANDO_INSTRUTOR</option>
@@ -1627,7 +1628,7 @@ export default function DesempenhoDieselAnalise() {
               <select
                 value={filtroConclusao}
                 onChange={(e) => setFiltroConclusao(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border bg-white"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
               >
                 <option value="">Todas as conclusões</option>
                 <option value="MELHOROU">MELHOROU</option>
@@ -1637,9 +1638,31 @@ export default function DesempenhoDieselAnalise() {
             </>
           )}
         </div>
+
+        <div className="mt-4 flex flex-wrap gap-2 items-center">
+          <button
+            onClick={() => {
+              setBusca("");
+              setFiltroLinha("");
+              setFiltroCluster("");
+              setFiltroInstrutor("");
+              setFiltroProntuario("");
+              setFiltroStatus("");
+              setFiltroConclusao("");
+              setMesReferencia("");
+            }}
+            className="px-4 py-2 rounded-xl font-black text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+          >
+            Limpar filtros
+          </button>
+          <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 font-bold text-sm">
+            <FaFilter /> {fmtInt(rowsBase.length)} registro(s) na base
+          </span>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2">
+        <div className="flex flex-wrap gap-2">
         {abas.map((aba) => (
           <button
             key={aba.key}
@@ -1653,6 +1676,7 @@ export default function DesempenhoDieselAnalise() {
             {aba.icon} {aba.label}
           </button>
         ))}
+        </div>
       </div>
 
       {abaAtiva === "ACOMPANHAMENTOS" && (

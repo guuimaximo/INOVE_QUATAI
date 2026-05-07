@@ -549,7 +549,7 @@ export default function DesempenhoDieselAcompanhamento() {
   ]);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-7xl mx-auto font-sans text-slate-800">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5 font-sans text-slate-800">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
@@ -573,10 +573,11 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-amber-500">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3 h-full">
           <div>
-            <p className="text-sm text-gray-500 font-bold">Aguardando</p>
+            <p className="text-xs font-black uppercase tracking-wider text-amber-700/80">Aguardando</p>
             <div className="flex items-end gap-2 flex-wrap">
               <p className="text-2xl font-black text-slate-800">{countAguardando}</p>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
@@ -584,12 +585,16 @@ export default function DesempenhoDieselAcompanhamento() {
               </span>
             </div>
           </div>
-          <FaClock className="text-4xl text-amber-50" />
+          <div className="h-11 w-11 rounded-xl bg-white/80 border border-white/90 flex items-center justify-center text-amber-700">
+            <FaClock className="text-lg" />
+          </div>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-blue-500">
+        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3 h-full">
           <div>
-            <p className="text-sm text-gray-500 font-bold">Monitoramento</p>
+            <p className="text-xs font-black uppercase tracking-wider text-blue-700/80">Monitoramento</p>
             <div className="flex items-end gap-2 flex-wrap">
               <p className="text-2xl font-black text-slate-800">{countMonitoramento}</p>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
@@ -597,12 +602,16 @@ export default function DesempenhoDieselAcompanhamento() {
               </span>
             </div>
           </div>
-          <FaRoad className="text-4xl text-blue-50" />
+          <div className="h-11 w-11 rounded-xl bg-white/80 border border-white/90 flex items-center justify-center text-blue-700">
+            <FaRoad className="text-lg" />
+          </div>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-rose-500">
+        <div className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 to-pink-50 p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3 h-full">
           <div>
-            <p className="text-sm text-gray-500 font-bold">Prontuários Pendentes</p>
+            <p className="text-xs font-black uppercase tracking-wider text-rose-700/80">Prontuários Pendentes</p>
             <div className="flex items-end gap-2 flex-wrap">
               <p className="text-2xl font-black text-slate-800">{countProntuariosPendentes}</p>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
@@ -610,12 +619,16 @@ export default function DesempenhoDieselAcompanhamento() {
               </span>
             </div>
           </div>
-          <FaClipboardList className="text-4xl text-rose-50" />
+          <div className="h-11 w-11 rounded-xl bg-white/80 border border-white/90 flex items-center justify-center text-rose-700">
+            <FaClipboardList className="text-lg" />
+          </div>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-violet-500">
+        <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-fuchsia-50 p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3 h-full">
           <div>
-            <p className="text-sm text-gray-500 font-bold">Em Análise</p>
+            <p className="text-xs font-black uppercase tracking-wider text-violet-700/80">Em Análise</p>
             <div className="flex items-end gap-2 flex-wrap">
               <p className="text-2xl font-black text-slate-800">{countEmAnalise}</p>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
@@ -623,7 +636,10 @@ export default function DesempenhoDieselAcompanhamento() {
               </span>
             </div>
           </div>
-          <FaChartLine className="text-4xl text-violet-50" />
+          <div className="h-11 w-11 rounded-xl bg-white/80 border border-white/90 flex items-center justify-center text-violet-700">
+            <FaChartLine className="text-lg" />
+          </div>
+          </div>
         </div>
       </div>
 
@@ -673,67 +689,94 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="relative w-full md:flex-1">
-          <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar motorista..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-          />
-        </div>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="md:col-span-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Busca</label>
+            <div className="relative">
+              <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar motorista ou chapa..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+              />
+            </div>
+          </div>
 
-        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-          <FaFilter className="text-gray-400 ml-2" />
-          <select
-            value={filtroLinha}
-            onChange={(e) => setFiltroLinha(e.target.value)}
-            className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-36 font-medium text-slate-600"
-          >
-            <option value="">Todas Linhas</option>
-            <option value="Sem Linha">Sem Linha</option>
-            {linhasUnicas
-              .filter((x) => x !== "Sem Linha")
-              .map((ln) => (
-                <option key={ln} value={ln}>
-                  {ln}
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Linha</label>
+            <select
+              value={filtroLinha}
+              onChange={(e) => setFiltroLinha(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+            >
+              <option value="">Todas as linhas</option>
+              <option value="Sem Linha">Sem Linha</option>
+              {linhasUnicas
+                .filter((x) => x !== "Sem Linha")
+                .map((ln) => (
+                  <option key={ln} value={ln}>
+                    {ln}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Status</label>
+            <select
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+            >
+              <option value="">Todos os status</option>
+              {statusUnicos.map((st) => (
+                <option key={st} value={st}>
+                  {st}
                 </option>
               ))}
-          </select>
+            </select>
+          </div>
         </div>
 
-        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg px-2">
-          <FaFilter className="text-gray-400 ml-2" />
-          <select
-            value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
-            className="p-2.5 bg-transparent text-sm outline-none flex-1 md:w-36 font-medium text-slate-600"
-          >
-            <option value="">Todos Status</option>
-            {statusUnicos.map((st) => (
-              <option key={st} value={st}>
-                {st}
-              </option>
-            ))}
-          </select>
-        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Período</label>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="date"
+                value={filtroDataIni}
+                onChange={(e) => setFiltroDataIni(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+              />
+              <input
+                type="date"
+                value={filtroDataFim}
+                onChange={(e) => setFiltroDataFim(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+              />
+            </div>
+          </div>
 
-        <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 border rounded-lg p-1">
-          <input
-            type="date"
-            value={filtroDataIni}
-            onChange={(e) => setFiltroDataIni(e.target.value)}
-            className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium flex-1"
-          />
-          <span className="text-gray-400 font-bold text-xs">até</span>
-          <input
-            type="date"
-            value={filtroDataFim}
-            onChange={(e) => setFiltroDataFim(e.target.value)}
-            className="p-1.5 bg-transparent text-sm outline-none text-slate-600 font-medium flex-1"
-          />
+          <div className="flex flex-wrap gap-2 items-center md:justify-end">
+            <button
+              onClick={() => {
+                setBusca("");
+                setFiltroLinha("");
+                setFiltroStatus("");
+                setFiltroDataIni("");
+                setFiltroDataFim("");
+              }}
+              className="px-4 py-2 rounded-xl font-black text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+            >
+              Limpar filtros
+            </button>
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 font-bold text-sm">
+              <FaFilter /> {listaFiltrada.length} registro(s)
+            </span>
+          </div>
         </div>
       </div>
 

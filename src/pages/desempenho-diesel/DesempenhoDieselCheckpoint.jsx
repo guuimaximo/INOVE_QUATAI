@@ -822,7 +822,7 @@ export default function DesempenhoDieselCheckpoint() {
   const lancPeriodoFim = acomp?.metadata?.lancamento_periodo_fim || null;
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-4xl mx-auto">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 flex items-start justify-between gap-3">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
@@ -1138,8 +1138,8 @@ export default function DesempenhoDieselCheckpoint() {
       </div>
 
       {/* Detalhes do acompanhamento */}
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Detalhes do acompanhamento</h2>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4">
+        <h2 className="text-lg font-black text-slate-800">Detalhes do acompanhamento</h2>
 
         <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -1258,8 +1258,8 @@ export default function DesempenhoDieselCheckpoint() {
       </div>
 
       {/* Observações */}
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-        <h2 className="text-lg font-semibold text-gray-800 mb-2">Observações (obrigatório)</h2>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4">
+        <h2 className="text-lg font-black text-slate-800 mb-2">Observações (obrigatório)</h2>
         <textarea
           className="w-full min-h-[120px] rounded-md border px-3 py-2"
           placeholder="Descreva o que foi orientado / observado..."
@@ -1269,8 +1269,8 @@ export default function DesempenhoDieselCheckpoint() {
       </div>
 
       {/* Evidências */}
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-        <h2 className="text-lg font-semibold text-gray-800 mb-2">Evidências (obrigatório)</h2>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4">
+        <h2 className="text-lg font-black text-slate-800 mb-2">Evidências (obrigatório)</h2>
         <input
           type="file"
           multiple

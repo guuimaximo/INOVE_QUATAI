@@ -219,14 +219,14 @@ export default function DieselConsultarTratativa() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-6xl mx-auto font-sans text-slate-800">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5 font-sans text-slate-800">
       {/* HEADER PAGE (mesmo conceito do Tratar) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
             <FaGavel className="text-rose-600" /> Governanca Diesel
           </div>
-          <h1 className="mt-3 text-3xl font-black flex items-center gap-3 text-slate-900">
+          <h1 className="mt-3 text-2xl font-black flex items-center gap-3 text-slate-900">
             <FaGavel className="text-rose-600" /> Consulta de Tratativa
           </h1>
           <p className="text-sm font-semibold text-slate-500 mt-1">
@@ -263,7 +263,7 @@ export default function DieselConsultarTratativa() {
           ========================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* DADOS */}
-        <div className="lg:col-span-2 bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
           <div className="bg-rose-50/50 border-b border-rose-100 px-6 py-4 flex items-center justify-between">
             <h2 className="font-black text-rose-800 flex items-center gap-2">
               <FaUser /> Dados da Tratativa
@@ -318,7 +318,7 @@ export default function DieselConsultarTratativa() {
         </div>
 
         {/* DOCUMENTOS E EVIDÊNCIAS (igual ao Tratar) */}
-        <div className="lg:col-span-1 bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
+        <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
           <div className="bg-slate-50 border-b border-slate-100 px-6 py-4">
             <h2 className="font-black text-slate-800 flex items-center gap-2">
               <FaFolderOpen className="text-slate-400" /> Documentos Oficiais
@@ -412,7 +412,7 @@ export default function DieselConsultarTratativa() {
       {/* ==========================================
           BLOCO 2: CONCLUSÃO (mesmo conceito visual)
           ========================================== */}
-      <div className="bg-emerald-50 rounded-[1.5rem] border border-emerald-200 p-6 md:p-8 shadow-sm">
+      <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-6 md:p-8 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div className="flex items-center gap-2 text-emerald-800 font-black">
             <FaCheckCircle /> Conclusão / Último Registro

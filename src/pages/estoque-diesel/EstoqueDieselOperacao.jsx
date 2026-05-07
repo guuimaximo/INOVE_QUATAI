@@ -19,15 +19,15 @@ import {
   PRODUCT_CONFIG,
   buildDefaultForm,
   computeMeasurement,
+  fetchMeasurementContext,
+  fetchMeasurementEntries,
   getMonthLabel,
   getPreviousEntry,
-  loadEntries,
-  loadParams,
   measurementStatus,
-  saveEntries,
-  serializeEntry,
+  saveMeasurementEntry,
   validateMeasurement,
 } from "./medicaoModel";
+import { useAuth } from "../../context/AuthContext";
 
 function parsePct(value) {
   if (value === null || value === undefined) return "--";
@@ -149,26 +149,58 @@ export default function EstoqueDieselOperacao() {
   const params = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const year = params.ano || "2026";
   const month = params.mes || "01";
   const initialProduct = searchParams.get("produto") || "S500";
 
-  const [entries, setEntries] = useState(() => loadEntries());
-  const [paramStore, setParamStore] = useState(() => loadParams());
+  const [entries, setEntries] = useState([]);
+  const [paramStore, setParamStore] = useState(DEFAULT_PARAMS);
+  const [metadata, setMetadata] = useState(null);
   const [product, setProduct] = useState(initialProduct in PRODUCT_CONFIG ? initialProduct : "S500");
   const [form, setForm] = useState(() => buildDefaultForm(initialProduct in PRODUCT_CONFIG ? initialProduct : "S500", year, month));
   const [feedback, setFeedback] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setEntries(loadEntries());
-    setParamStore(loadParams());
-  }, []);
+    let active = true;
 
-  useEffect(() => {
+    async function loadData(nextProduct) {
+      try {
+        setLoading(true);
+        setFeedback(null);
+        const context = await fetchMeasurementContext();
+        const nextEntries = await fetchMeasurementEntries({
+          year,
+          metadata: context.metadata,
+          paramStore: context.paramStore,
+          includePumps: false,
+        });
+        if (!active) return;
+        setMetadata(context.metadata);
+        setParamStore(context.paramStore);
+        setEntries(nextEntries);
+        setProduct(nextProduct);
+        setForm(buildDefaultForm(nextProduct, year, month));
+      } catch (error) {
+        if (!active) return;
+        console.error("Falha ao carregar medição de diesel:", error);
+        setFeedback({
+          type: "error",
+          message: "Nao foi possivel carregar os dados do Supabase.",
+        });
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
     const nextProduct = initialProduct in PRODUCT_CONFIG ? initialProduct : "S500";
-    setProduct(nextProduct);
-    setForm(buildDefaultForm(nextProduct, year, month));
-    setFeedback(null);
+    loadData(nextProduct);
+
+    return () => {
+      active = false;
+    };
   }, [initialProduct, month, year]);
 
   const productParams = paramStore[product] || DEFAULT_PARAMS[product];
@@ -213,7 +245,7 @@ export default function EstoqueDieselOperacao() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (Object.keys(validation.errors).length > 0) {
       setFeedback({
         type: "error",
@@ -222,17 +254,47 @@ export default function EstoqueDieselOperacao() {
       return;
     }
 
-    const payload = serializeEntry(form, computed, productParams);
-    const nextEntries = [...entries.filter((entry) => entry.id !== payload.id), payload].sort(
-      (a, b) => new Date(a.date) - new Date(b.date)
-    );
-    saveEntries(nextEntries);
-    setEntries(nextEntries);
-    setFeedback({
-      type: "success",
-      message: "Lancamento salvo no Inove. A tabela abaixo ja foi atualizada.",
-    });
-    setForm(buildDefaultForm(product, year, month));
+    if (!metadata) {
+      setFeedback({
+        type: "error",
+        message: "Os metadados do tanque ainda nao foram carregados.",
+      });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await saveMeasurementEntry({
+        form,
+        computed,
+        product,
+        params: productParams,
+        metadata,
+        userId: Number.isInteger(user?.usuario_id) ? user.usuario_id : null,
+      });
+
+      const nextEntries = await fetchMeasurementEntries({
+        year,
+        metadata,
+        paramStore,
+        includePumps: false,
+      });
+
+      setEntries(nextEntries);
+      setFeedback({
+        type: "success",
+        message: "Lancamento salvo no Supabase. A tabela abaixo ja foi atualizada.",
+      });
+      setForm(buildDefaultForm(product, year, month));
+    } catch (error) {
+      console.error("Falha ao salvar medição:", error);
+      setFeedback({
+        type: "error",
+        message: error?.message || "Nao foi possivel salvar o lancamento no Supabase.",
+      });
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleProductChange(nextProduct) {
@@ -371,15 +433,16 @@ export default function EstoqueDieselOperacao() {
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm font-semibold text-slate-600">
-              O sistema calcula os indicadores automaticamente e salva o lancamento diretamente na tabela do mes.
+              O sistema calcula os indicadores automaticamente e salva o lancamento no Supabase.
             </div>
             <button
               type="button"
               onClick={handleSave}
+              disabled={saving || loading}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700"
             >
               <FaSave />
-              Salvar lancamento
+              {saving ? "Salvando..." : "Salvar lancamento"}
             </button>
           </div>
 
@@ -461,7 +524,7 @@ export default function EstoqueDieselOperacao() {
               {monthlyEntries.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
-                    Ainda nao ha lancamentos para este mes.
+                    {loading ? "Carregando lançamentos..." : "Ainda nao ha lancamentos para este mes."}
                   </td>
                 </tr>
               ) : (

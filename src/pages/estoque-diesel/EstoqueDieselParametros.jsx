@@ -3,7 +3,12 @@ import { FaSave, FaSlidersH } from "react-icons/fa";
 import EstoqueDieselPageShell, {
   EstoqueDieselPanel,
 } from "../../components/estoque-diesel/EstoqueDieselPageShell";
-import { DEFAULT_PARAMS, PRODUCT_CONFIG, loadParams, saveParams } from "./medicaoModel";
+import {
+  DEFAULT_PARAMS,
+  PRODUCT_CONFIG,
+  fetchMeasurementContext,
+  saveMeasurementParams,
+} from "./medicaoModel";
 
 function NumberField({ label, value, onChange, step = "0.0001" }) {
   return (
@@ -21,11 +26,35 @@ function NumberField({ label, value, onChange, step = "0.0001" }) {
 }
 
 export default function EstoqueDieselParametros() {
-  const [params, setParams] = useState(() => loadParams());
+  const [params, setParams] = useState(DEFAULT_PARAMS);
+  const [metadata, setMetadata] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setParams(loadParams());
+    let active = true;
+
+    async function loadData() {
+      try {
+        setLoading(true);
+        const context = await fetchMeasurementContext();
+        if (!active) return;
+        setMetadata(context.metadata);
+        setParams(context.paramStore);
+      } catch (error) {
+        if (!active) return;
+        console.error("Falha ao carregar parametros de diesel:", error);
+        setFeedback("Nao foi possivel carregar os parametros do Supabase.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
   }, []);
 
   function updateProductField(product, field, value) {
@@ -50,9 +79,22 @@ export default function EstoqueDieselParametros() {
     }));
   }
 
-  function handleSave() {
-    saveParams(params);
-    setFeedback("Parametros salvos. Os calculos da medicao ja passam a usar esses valores.");
+  async function handleSave() {
+    if (!metadata) {
+      setFeedback("Os metadados do tanque ainda nao foram carregados.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await saveMeasurementParams(params, metadata);
+      setFeedback("Parametros salvos no Supabase. Os calculos da medicao ja passam a usar esses valores.");
+    } catch (error) {
+      console.error("Falha ao salvar parametros:", error);
+      setFeedback(error?.message || "Nao foi possivel salvar os parametros no Supabase.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -154,14 +196,21 @@ export default function EstoqueDieselParametros() {
           <button
             type="button"
             onClick={handleSave}
+            disabled={saving || loading}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700"
           >
             <FaSave />
-            Salvar parametros
+            {saving ? "Salvando..." : "Salvar parametros"}
           </button>
         </div>
         {feedback ? (
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+          <div
+            className={`mt-4 rounded-xl border px-4 py-3 text-sm font-semibold ${
+              feedback.includes("nao foi") || feedback.includes("Nao foi")
+                ? "border-rose-200 bg-rose-50 text-rose-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+          >
             {feedback}
           </div>
         ) : null}

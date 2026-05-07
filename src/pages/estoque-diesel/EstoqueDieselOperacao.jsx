@@ -4,6 +4,7 @@ import {
   FaArrowLeft,
   FaCheckCircle,
   FaExclamationTriangle,
+  FaCamera,
   FaGasPump,
   FaInfoCircle,
   FaSave,
@@ -39,7 +40,7 @@ function parseLiters(value) {
   return `${Number(value).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} L`;
 }
 
-function FormInput({ label, value, onChange, type = "number", min, step = "0.1", placeholder, required = false }) {
+function FormInput({ label, value, onChange, type = "number", min, step = "0.1", placeholder, required = false, readOnly = false }) {
   return (
     <label className="block">
       <span className="text-xs font-black uppercase tracking-wider text-slate-500">
@@ -53,8 +54,24 @@ function FormInput({ label, value, onChange, type = "number", min, step = "0.1",
         step={type === "number" ? step : undefined}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        readOnly={readOnly}
+        className={`mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 ${
+          readOnly ? "bg-slate-100" : "bg-white"
+        }`}
       />
+    </label>
+  );
+}
+
+function FileInput({ label, onChange, fileName }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</span>
+      <label className="mt-2 flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50">
+        <FaCamera className="text-slate-400" />
+        <span className="min-w-0 truncate">{fileName || "Selecionar foto"}</span>
+        <input type="file" accept="image/*" className="hidden" onChange={(event) => onChange(event.target.files?.[0] || null)} />
+      </label>
     </label>
   );
 }
@@ -162,6 +179,7 @@ export default function EstoqueDieselOperacao() {
   const [feedback, setFeedback] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [receiptFiles, setReceiptFiles] = useState({ before: null, after: null });
 
   useEffect(() => {
     let active = true;
@@ -175,7 +193,7 @@ export default function EstoqueDieselOperacao() {
           year,
           metadata: context.metadata,
           paramStore: context.paramStore,
-          includePumps: false,
+          includePumps: true,
         });
         if (!active) return;
         setMetadata(context.metadata);
@@ -183,6 +201,7 @@ export default function EstoqueDieselOperacao() {
         setEntries(nextEntries);
         setProduct(nextProduct);
         setForm(buildDefaultForm(nextProduct, year, month));
+        setReceiptFiles({ before: null, after: null });
       } catch (error) {
         if (!active) return;
         console.error("Falha ao carregar medição de diesel:", error);
@@ -245,11 +264,60 @@ export default function EstoqueDieselOperacao() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  useEffect(() => {
+    setForm((current) => {
+      const next = { ...current };
+      const hasExistingPreviousRule =
+        current.reguaAnteriorT1 !== "" || current.reguaAnteriorT2 !== "";
+
+      if (!hasExistingPreviousRule && previousEntry) {
+        next.reguaAnteriorT1 = previousEntry.reguaFinalT1 ?? "";
+        next.reguaAnteriorT2 = previousEntry.reguaFinalT2 ?? "";
+      }
+
+      next.pumps = current.pumps.map((pump) => {
+        const previousPump = (previousEntry?.pumps || []).find(
+          (entryPump) => Number(entryPump.number) === Number(pump.number)
+        );
+        if (previousPump && (pump.initial === "" || pump.initial === null || pump.initial === undefined)) {
+          return { ...pump, initial: previousPump.final ?? "" };
+        }
+        return pump;
+      });
+
+      return next;
+    });
+  }, [previousEntry]);
+
   async function handleSave() {
     if (Object.keys(validation.errors).length > 0) {
       setFeedback({
         type: "error",
         message: Object.values(validation.errors)[0],
+      });
+      return;
+    }
+
+    if (
+      form.hasReceipt &&
+      !receiptFiles.before &&
+      !String(form.receiptPhotoBeforeUrl || "").trim()
+    ) {
+      setFeedback({
+        type: "error",
+        message: "Anexe a foto da regua antes do recebimento.",
+      });
+      return;
+    }
+
+    if (
+      form.hasReceipt &&
+      !receiptFiles.after &&
+      !String(form.receiptPhotoAfterUrl || "").trim()
+    ) {
+      setFeedback({
+        type: "error",
+        message: "Anexe a foto da regua depois do recebimento.",
       });
       return;
     }
@@ -271,13 +339,14 @@ export default function EstoqueDieselOperacao() {
         params: productParams,
         metadata,
         userId: Number.isInteger(user?.usuario_id) ? user.usuario_id : null,
+        receiptFiles,
       });
 
       const nextEntries = await fetchMeasurementEntries({
         year,
         metadata,
         paramStore,
-        includePumps: false,
+        includePumps: true,
       });
 
       setEntries(nextEntries);
@@ -286,6 +355,7 @@ export default function EstoqueDieselOperacao() {
         message: "Lancamento salvo no Supabase. A tabela abaixo ja foi atualizada.",
       });
       setForm(buildDefaultForm(product, year, month));
+      setReceiptFiles({ before: null, after: null });
     } catch (error) {
       console.error("Falha ao salvar medição:", error);
       setFeedback({
@@ -328,9 +398,9 @@ export default function EstoqueDieselOperacao() {
               <FaArrowLeft />
               Voltar para 2026
             </Link>
-            <h2 className="mt-4 text-lg font-black text-slate-800">Entrada por periodo</h2>
+            <h2 className="mt-4 text-lg font-black text-slate-800">Abertura do mes</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">
-              Escolha o mes e o produto antes de lancar a medicao do dia.
+              O mes fica fixo aqui em cima. Dentro da pagina, o lancamento do dia ja vem com a data de hoje quando ela pertence a este mes.
             </p>
           </div>
           <div className="space-y-3">
@@ -346,52 +416,143 @@ export default function EstoqueDieselOperacao() {
             <div>
               <h2 className="text-lg font-black text-slate-800">Lancamento do dia</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                Os campos seguem a logica da planilha: tanque, recebimento, bombas e Transnet.
+                O operador informa a medicao atual, a saida do Transnet e, se houver, o recebimento do diesel. O restante vem do D-1 e dos calculos automaticos.
               </p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
-              Preencha somente a entrada do operador
+              Fluxo operacional da medicao
             </div>
           </div>
 
           <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <FormInput label="Data" type="date" value={form.date} onChange={(value) => updateField("date", value)} required />
-            <FormInput label="Volume NF (litros)" value={form.nfVolumeLitros} onChange={(value) => updateField("nfVolumeLitros", value)} />
-            <SelectInput
-              label="Fornecedor"
-              value={form.supplier}
-              options={productParams.suppliers || []}
-              onChange={(value) => updateField("supplier", value)}
-            />
-            <FormInput label="Numero da NF" type="text" value={form.nfNumero} onChange={(value) => updateField("nfNumero", value)} />
-            <FormInput label="Regua anterior T1 (cm)" value={form.reguaAnteriorT1} onChange={(value) => updateField("reguaAnteriorT1", value)} />
-            <FormInput label="Regua anterior T2 (cm)" value={form.reguaAnteriorT2} onChange={(value) => updateField("reguaAnteriorT2", value)} />
-            <FormInput label="Regua final T1 (cm)" value={form.reguaFinalT1} onChange={(value) => updateField("reguaFinalT1", value)} required />
-            <FormInput label="Regua final T2 (cm)" value={form.reguaFinalT2} onChange={(value) => updateField("reguaFinalT2", value)} />
+            <FormInput label="Regua atual T1 (cm)" value={form.reguaFinalT1} onChange={(value) => updateField("reguaFinalT1", value)} required />
+            <FormInput label="Regua atual T2 (cm)" value={form.reguaFinalT2} onChange={(value) => updateField("reguaFinalT2", value)} />
             <FormInput label="Saida Transnet (litros)" value={form.transnetOutput} onChange={(value) => updateField("transnetOutput", value)} />
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">Medicao D-1</h3>
+              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoD1)}</p>
+              <p className="mt-1 text-sm font-semibold text-slate-500">
+                Vem automaticamente do ultimo saldo final salvo para {product}.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <h3 className="text-sm font-black uppercase tracking-wider text-blue-700">Medicao atual</h3>
+              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoAtual)}</p>
+              <p className="mt-1 text-sm font-semibold text-blue-700">
+                Calculada a partir da regua atual T1 e T2.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <h3 className="text-sm font-black uppercase tracking-wider text-amber-700">Saida do dia</h3>
+              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.saidaTanque)}</p>
+              <p className="mt-1 text-sm font-semibold text-amber-700">
+                Calculada automaticamente com D-1, recebimento e medicao atual.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider text-emerald-700">Recebimento de diesel</h3>
+                <p className="mt-1 text-sm font-semibold text-emerald-700">
+                  Se houve recebimento, informe NF, fornecedor, regua antes e depois, e anexe as fotos.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateField("hasReceipt", !form.hasReceipt)}
+                className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-black transition ${
+                  form.hasReceipt
+                    ? "bg-emerald-700 text-white hover:bg-emerald-800"
+                    : "border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
+                }`}
+              >
+                {form.hasReceipt ? "Recebimento ativo" : "Sem recebimento"}
+              </button>
+            </div>
+
+            {form.hasReceipt ? (
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <FormInput label="Volume NF (litros)" value={form.nfVolumeLitros} onChange={(value) => updateField("nfVolumeLitros", value)} required />
+                <SelectInput
+                  label="Fornecedor"
+                  value={form.supplier}
+                  options={productParams.suppliers || []}
+                  onChange={(value) => updateField("supplier", value)}
+                />
+                <FormInput label="Numero da NF" type="text" value={form.nfNumero} onChange={(value) => updateField("nfNumero", value)} />
+                <FormInput label="Regua antes T1 (cm)" value={form.receiptRuleBeforeT1} onChange={(value) => updateField("receiptRuleBeforeT1", value)} />
+                <FormInput label="Regua antes T2 (cm)" value={form.receiptRuleBeforeT2} onChange={(value) => updateField("receiptRuleBeforeT2", value)} />
+                <FileInput
+                  label="Foto da regua antes"
+                  onChange={(file) => setReceiptFiles((current) => ({ ...current, before: file }))}
+                  fileName={receiptFiles.before?.name || form.receiptPhotoBeforeUrl?.split("/").pop() || ""}
+                />
+                <FormInput label="Regua depois T1 (cm)" value={form.receiptRuleAfterT1} onChange={(value) => updateField("receiptRuleAfterT1", value)} />
+                <FormInput label="Regua depois T2 (cm)" value={form.receiptRuleAfterT2} onChange={(value) => updateField("receiptRuleAfterT2", value)} />
+                <FileInput
+                  label="Foto da regua depois"
+                  onChange={(file) => setReceiptFiles((current) => ({ ...current, after: file }))}
+                  fileName={receiptFiles.after?.name || form.receiptPhotoAfterUrl?.split("/").pop() || ""}
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">Bombas</h3>
               <div className="mt-4 space-y-4">
-                {form.pumps.map((pump, index) => (
-                  <div key={pump.number} className="rounded-xl border border-slate-200 bg-white p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-black text-slate-800">Bomba {pump.number}</p>
-                      <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                        Saida {parseLiters(computed.pumpDetails[index]?.output)}
+                {form.pumps.map((pump, index) => {
+                  const previousPump = (previousEntry?.pumps || []).find(
+                    (entryPump) => Number(entryPump.number) === Number(pump.number)
+                  );
+                  const hasPreviousPump = Boolean(
+                    previousPump &&
+                      previousPump.final !== null &&
+                      previousPump.final !== undefined &&
+                      previousPump.final !== ""
+                  );
+
+                  return (
+                    <div key={pump.number} className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-black text-slate-800">Bomba {pump.number}</p>
+                        <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                          Saida {parseLiters(computed.pumpDetails[index]?.output)}
+                        </div>
                       </div>
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <FormInput
+                          label="Hodometro inicial"
+                          value={pump.initial}
+                          onChange={(value) => updatePump(index, "initial", value)}
+                          readOnly={hasPreviousPump}
+                        />
+                        <FormInput
+                          label="Hodometro final"
+                          value={pump.final}
+                          onChange={(value) => updatePump(index, "final", value)}
+                        />
+                      </div>
+                      <p className="mt-2 text-xs font-semibold text-slate-500">
+                        {hasPreviousPump
+                          ? "O hodometro inicial veio automaticamente do encerrante do dia anterior."
+                          : "Sem historico anterior para esta bomba. Informe o hodometro inicial manualmente no primeiro lancamento."}
+                      </p>
+                      {validation.errors[`pump_${pump.number}`] ? (
+                        <p className="mt-2 text-xs font-bold text-rose-600">
+                          {validation.errors[`pump_${pump.number}`]}
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <FormInput label="Hodometro inicial" value={pump.initial} onChange={(value) => updatePump(index, "initial", value)} />
-                      <FormInput label="Hodometro final" value={pump.final} onChange={(value) => updatePump(index, "final", value)} />
-                    </div>
-                    {validation.errors[`pump_${pump.number}`] ? (
-                      <p className="mt-2 text-xs font-bold text-rose-600">{validation.errors[`pump_${pump.number}`]}</p>
-                    ) : null}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -409,9 +570,35 @@ export default function EstoqueDieselOperacao() {
                 Medicao D-1 considerada: <span className="font-black">{parseLiters(computed.medicaoD1)}</span>
               </div>
 
+              {form.hasReceipt ? (
+                <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                  Recebimento medido: <span className="font-black">{parseLiters(computed.receiptMeasuredLiters)}</span>
+                  <br />
+                  Tolerancia da faixa: <span className="font-black">{parseLiters(computed.receiptToleranceLiters)}</span>
+                  <br />
+                  Situacao:{" "}
+                  <span className="font-black">
+                    {computed.receiptWithinTolerance === null
+                      ? "Aguardando dados"
+                      : computed.receiptWithinTolerance
+                      ? "Dentro da tolerancia"
+                      : "Fora da tolerancia"}
+                  </span>
+                </div>
+              ) : null}
+
               {validation.errors.reguaFinal ? (
                 <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
                   {validation.errors.reguaFinal}
+                </div>
+              ) : null}
+
+              {validation.errors.nfVolumeLitros || validation.errors.supplier || validation.errors.receiptBefore || validation.errors.receiptAfter ? (
+                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                  {validation.errors.nfVolumeLitros ||
+                    validation.errors.supplier ||
+                    validation.errors.receiptBefore ||
+                    validation.errors.receiptAfter}
                 </div>
               ) : null}
 
@@ -462,16 +649,21 @@ export default function EstoqueDieselOperacao() {
         <EstoqueDieselPanel className="p-5">
           <h2 className="text-lg font-black text-slate-800">Resumo calculado</h2>
           <div className="mt-4 space-y-3">
-            <SummaryCard title="Litros anterior T1" value={parseLiters(computed.litrosAnteriorT1)} tone="slate" />
-            <SummaryCard title="Litros anterior T2" value={parseLiters(computed.litrosAnteriorT2)} tone="slate" />
-            <SummaryCard title="Litros final T1" value={parseLiters(computed.litrosFinalT1)} tone="blue" />
-            <SummaryCard title="Litros final T2" value={parseLiters(computed.litrosFinalT2)} tone="blue" />
-            <SummaryCard title="Saldo anterior" value={parseLiters(computed.saldoAnterior)} tone="slate" />
-            <SummaryCard title="Saldo final" value={parseLiters(computed.saldoFinal)} tone="emerald" />
-            <SummaryCard title="Entrada diesel" value={parseLiters(computed.entradaDiesel)} tone="emerald" />
+            <SummaryCard title="Medicao D-1" value={parseLiters(computed.medicaoD1)} tone="slate" />
+            <SummaryCard title="Medicao atual" value={parseLiters(computed.medicaoAtual)} tone="blue" />
+            <SummaryCard
+              title="Recebimento considerado"
+              value={parseLiters(computed.entradaDiesel)}
+              tone={form.hasReceipt ? "emerald" : "slate"}
+            />
             <SummaryCard title="Saida tanque" value={parseLiters(computed.saidaTanque)} tone="amber" />
             <SummaryCard title="Saida total bombas" value={parseLiters(computed.saidaTotalBombas)} tone="amber" />
             <SummaryCard title="Saida Transnet" value={parseLiters(computed.saidaTransnet)} tone="amber" />
+            <SummaryCard
+              title="Recebimento medido"
+              value={parseLiters(computed.receiptMeasuredLiters)}
+              tone={computed.receiptWithinTolerance === false ? "rose" : "emerald"}
+            />
             <SummaryCard title="% Dif NF x Recebido" value={parsePct(computed.pctDiffNF)} tone={Math.abs(computed.pctDiffNF || 0) > (productParams.nfDiffWarnPct || 0.01) ? "amber" : "slate"} />
             <SummaryCard title="% Dif Tanque x Transnet" value={parsePct(computed.pctDiffTransnet)} tone={Math.abs(computed.pctDiffTransnet || 0) > (productParams.transnetWarnPct || 0.02) ? "amber" : "slate"} />
           </div>

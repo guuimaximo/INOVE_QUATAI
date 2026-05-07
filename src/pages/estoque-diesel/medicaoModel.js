@@ -24,14 +24,14 @@ export const PRODUCT_CONFIG = {
   S500: {
     code: "S500",
     label: "Diesel S500",
-    pumps: 3,
+    pumps: [2, 3],
     usesTransnet: true,
     monthSheetPattern: "Medicao Combustivel S500",
   },
   S10: {
     code: "S10",
     label: "Diesel S10",
-    pumps: 1,
+    pumps: [1],
     usesTransnet: true,
     monthSheetPattern: "Medicao Combustivel S10",
   },
@@ -92,6 +92,32 @@ function round(value, decimals = 2) {
   return Number(value.toFixed(decimals));
 }
 
+function getTodayIsoDate() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function sanitizeFileName(name = "arquivo") {
+  return String(name)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+function findToleranceRow(params, nfVolumeLitros) {
+  const nfVolume = parseNumber(nfVolumeLitros) || 0;
+  const rows = Array.isArray(params?.toleranceRows) ? params.toleranceRows : [];
+  if (nfVolume <= 0 || rows.length === 0) return null;
+  return (
+    rows.find((row) => nfVolume <= Number(row.nfVolume || 0)) ||
+    rows[rows.length - 1] ||
+    null
+  );
+}
+
 function cloneDefaults() {
   return JSON.parse(JSON.stringify(DEFAULT_PARAMS));
 }
@@ -142,6 +168,16 @@ function mapMeasurementRowToEntry(row, metadata, paramStore, pumpRows = []) {
     reguaAnteriorT2: row.regua_anterior_t2,
     reguaFinalT1: row.regua_final_t1,
     reguaFinalT2: row.regua_final_t2,
+    hasReceipt: row.houve_recebimento === true || Number(row.nf_volume_litros || 0) > 0,
+    receiptRuleBeforeT1: row.regua_recebimento_antes_t1,
+    receiptRuleBeforeT2: row.regua_recebimento_antes_t2,
+    receiptRuleAfterT1: row.regua_recebimento_depois_t1,
+    receiptRuleAfterT2: row.regua_recebimento_depois_t2,
+    receiptPhotoBeforeUrl: row.foto_regua_antes_url || "",
+    receiptPhotoAfterUrl: row.foto_regua_depois_url || "",
+    receiptMeasuredLiters: row.recebimento_litros_calculado,
+    receiptToleranceLiters: row.recebimento_tolerancia_litros,
+    receiptWithinTolerance: row.recebimento_dentro_tolerancia,
     transnetOutput: row.saida_transnet ?? 0,
     pumps: sortedPumps,
     litrosAnteriorT1: row.litros_anterior_t1,
@@ -167,7 +203,21 @@ function mapMeasurementRowToEntry(row, metadata, paramStore, pumpRows = []) {
   return entry;
 }
 
+export function isMeaningfulEntry(entry) {
+  return Boolean(
+    entry?.reguaFinalT1 !== null ||
+      entry?.reguaFinalT2 !== null ||
+      Number(entry?.nfVolumeLitros || 0) > 0 ||
+      Number(entry?.transnetOutput || entry?.saidaTransnet || 0) > 0 ||
+      Number(entry?.saidaTotalBombas || 0) > 0 ||
+      Number(entry?.receiptMeasuredLiters || 0) > 0 ||
+      String(entry?.observation || entry?.observacao || "").trim()
+  );
+}
+
 export function getDefaultDateForMonth(year, month) {
+  const today = getTodayIsoDate();
+  if (today.startsWith(`${year}-${month}`)) return today;
   return `${year}-${month}-01`;
 }
 
@@ -327,9 +377,7 @@ export async function fetchMeasurementEntries({
   const to = `${year}-12-31`;
   let query = supabase
     .from("estoque_diesel_medicoes_diarias")
-    .select(
-      "id, tanque_id, data_medicao, regua_anterior_t1, regua_anterior_t2, regua_final_t1, regua_final_t2, nf_volume_litros, fornecedor_id, nf_numero, saida_transnet, litros_anterior_t1, litros_anterior_t2, litros_final_t1, litros_final_t2, saldo_anterior, saldo_final, entrada_diesel, medicao_d1, medicao_atual, saida_tanque, diff_recebimento, pct_diff_nf, pct_diff_transnet, saida_total_bombas, status_lancamento, observacao, criado_em"
-    )
+    .select("*")
     .gte("data_medicao", from)
     .lte("data_medicao", to)
     .order("data_medicao", { ascending: true });
@@ -362,9 +410,9 @@ export async function fetchMeasurementEntries({
     }, {});
   }
 
-  return (rows || []).map((row) =>
-    mapMeasurementRowToEntry(row, metadata, paramStore, pumpRowsByMeasurement[row.id] || [])
-  );
+  return (rows || [])
+    .map((row) => mapMeasurementRowToEntry(row, metadata, paramStore, pumpRowsByMeasurement[row.id] || []))
+    .filter(isMeaningfulEntry);
 }
 
 export async function saveMeasurementEntry({
@@ -374,6 +422,7 @@ export async function saveMeasurementEntry({
   params,
   metadata,
   userId = null,
+  receiptFiles = {},
 }) {
   const tank = metadata?.tanksByProduct?.[product];
   if (!tank?.id) {
@@ -399,16 +448,43 @@ export async function saveMeasurementEntry({
     }
   }
 
+  async function uploadReceiptPhoto(file, kind) {
+    if (!file) return null;
+    const extension = file.name?.split(".").pop() || "jpg";
+    const safeName = sanitizeFileName(file.name || `${kind}.${extension}`);
+    const path = `recebimentos/${product}/${form.date}/${Date.now()}-${kind}-${safeName}`;
+    const { error: uploadError } = await supabase.storage
+      .from("estoque_diesel")
+      .upload(path, file, { upsert: true });
+    if (uploadError) throw uploadError;
+    return supabase.storage.from("estoque_diesel").getPublicUrl(path).data.publicUrl;
+  }
+
+  const receiptPhotoBeforeUrl =
+    (await uploadReceiptPhoto(receiptFiles.before, "antes")) || form.receiptPhotoBeforeUrl || null;
+  const receiptPhotoAfterUrl =
+    (await uploadReceiptPhoto(receiptFiles.after, "depois")) || form.receiptPhotoAfterUrl || null;
+
   const payload = {
     tanque_id: tank.id,
     data_medicao: form.date,
-    regua_anterior_t1: parseNumber(form.reguaAnteriorT1),
-    regua_anterior_t2: parseNumber(form.reguaAnteriorT2),
+    regua_anterior_t1: computed.reguaAnteriorT1,
+    regua_anterior_t2: computed.reguaAnteriorT2,
     regua_final_t1: parseNumber(form.reguaFinalT1),
     regua_final_t2: parseNumber(form.reguaFinalT2),
     nf_volume_litros: parseNumber(form.nfVolumeLitros) || 0,
     fornecedor_id: supplierId,
     nf_numero: form.nfNumero || null,
+    houve_recebimento: form.hasReceipt === true,
+    regua_recebimento_antes_t1: form.hasReceipt ? parseNumber(form.receiptRuleBeforeT1) : null,
+    regua_recebimento_antes_t2: form.hasReceipt ? parseNumber(form.receiptRuleBeforeT2) : null,
+    regua_recebimento_depois_t1: form.hasReceipt ? parseNumber(form.receiptRuleAfterT1) : null,
+    regua_recebimento_depois_t2: form.hasReceipt ? parseNumber(form.receiptRuleAfterT2) : null,
+    foto_regua_antes_url: receiptPhotoBeforeUrl,
+    foto_regua_depois_url: receiptPhotoAfterUrl,
+    recebimento_litros_calculado: computed.receiptMeasuredLiters,
+    recebimento_tolerancia_litros: computed.receiptToleranceLiters,
+    recebimento_dentro_tolerancia: computed.receiptWithinTolerance,
     saida_transnet: parseNumber(form.transnetOutput) || 0,
     litros_anterior_t1: computed.litrosAnteriorT1,
     litros_anterior_t2: computed.litrosAnteriorT2,
@@ -541,8 +617,8 @@ export function getPreviousEntry(entries, product, currentDate, currentId = null
 }
 
 export function buildDefaultForm(product, year, month) {
-  const pumps = Array.from({ length: PRODUCT_CONFIG[product].pumps }, (_, index) => ({
-    number: index + 1,
+  const pumps = PRODUCT_CONFIG[product].pumps.map((pumpNumber) => ({
+    number: pumpNumber,
     initial: "",
     final: "",
   }));
@@ -555,10 +631,17 @@ export function buildDefaultForm(product, year, month) {
     reguaAnteriorT2: "",
     reguaFinalT1: "",
     reguaFinalT2: "",
+    hasReceipt: false,
     nfVolumeLitros: "",
     supplier: "",
     supplierId: null,
     nfNumero: "",
+    receiptRuleBeforeT1: "",
+    receiptRuleBeforeT2: "",
+    receiptRuleAfterT1: "",
+    receiptRuleAfterT2: "",
+    receiptPhotoBeforeUrl: "",
+    receiptPhotoAfterUrl: "",
     transnetOutput: "",
     observation: "",
     pumps,
@@ -571,22 +654,47 @@ export function computeMeasurement(form, params, previousEntry) {
     : parseNumber(params.radiusM);
   const length = parseNumber(params.lengthM);
 
-  const litrosAnteriorT1 = calculateVolumeLiters(form.reguaAnteriorT1, radius, length);
-  const litrosAnteriorT2 = calculateVolumeLiters(form.reguaAnteriorT2, radius, length);
+  const reguaAnteriorT1 =
+    parseNumber(form.reguaAnteriorT1) ?? parseNumber(previousEntry?.reguaFinalT1);
+  const reguaAnteriorT2 =
+    parseNumber(form.reguaAnteriorT2) ?? parseNumber(previousEntry?.reguaFinalT2);
+  const litrosAnteriorT1 = calculateVolumeLiters(reguaAnteriorT1, radius, length);
+  const litrosAnteriorT2 = calculateVolumeLiters(reguaAnteriorT2, radius, length);
   const litrosFinalT1 = calculateVolumeLiters(form.reguaFinalT1, radius, length);
   const litrosFinalT2 = calculateVolumeLiters(form.reguaFinalT2, radius, length);
 
-  const saldoAnterior = round((litrosAnteriorT1 || 0) + (litrosAnteriorT2 || 0), 2);
+  const saldoAnteriorCalculado = round((litrosAnteriorT1 || 0) + (litrosAnteriorT2 || 0), 2);
+  const saldoAnterior = previousEntry?.saldoFinal ?? saldoAnteriorCalculado;
   const saldoFinal = round((litrosFinalT1 || 0) + (litrosFinalT2 || 0), 2);
   const nfVolumeLitros = parseNumber(form.nfVolumeLitros) || 0;
-  const entradaDiesel = round(saldoFinal - saldoAnterior, 2);
   const medicaoD1 = previousEntry?.saldoFinal ?? saldoAnterior;
   const medicaoAtual = saldoFinal;
+  const receiptBeforeT1 = calculateVolumeLiters(form.receiptRuleBeforeT1, radius, length);
+  const receiptBeforeT2 = calculateVolumeLiters(form.receiptRuleBeforeT2, radius, length);
+  const receiptAfterT1 = calculateVolumeLiters(form.receiptRuleAfterT1, radius, length);
+  const receiptAfterT2 = calculateVolumeLiters(form.receiptRuleAfterT2, radius, length);
+  const hasReceipt = form.hasReceipt === true;
+  const receiptMeasuredLiters = hasReceipt
+    ? round(
+        (receiptAfterT1 || 0) +
+          (receiptAfterT2 || 0) -
+          (receiptBeforeT1 || 0) -
+          (receiptBeforeT2 || 0),
+        2
+      )
+    : null;
+  const entradaConsiderada = hasReceipt
+    ? receiptMeasuredLiters ?? nfVolumeLitros
+    : 0;
+  const entradaDiesel = round(entradaConsiderada, 2);
   const saidaTanque =
-    medicaoAtual !== null ? round((medicaoD1 || 0) + nfVolumeLitros - medicaoAtual, 2) : null;
+    medicaoAtual !== null ? round((medicaoD1 || 0) + entradaConsiderada - medicaoAtual, 2) : null;
 
   const pumpDetails = form.pumps.map((pump) => {
-    const initial = parseNumber(pump.initial) || 0;
+    const previousPump = (previousEntry?.pumps || []).find(
+      (prevPump) => Number(prevPump.number) === Number(pump.number)
+    );
+    const initial = parseNumber(pump.initial) ?? parseNumber(previousPump?.final) ?? 0;
     const final = parseNumber(pump.final) || 0;
     return {
       ...pump,
@@ -601,13 +709,24 @@ export function computeMeasurement(form, params, previousEntry) {
     2
   );
   const saidaTransnet = parseNumber(form.transnetOutput) || 0;
-  const diffRecebimento = round(entradaDiesel - nfVolumeLitros, 2);
+  const diffRecebimento =
+    hasReceipt && nfVolumeLitros > 0 ? round(entradaDiesel - nfVolumeLitros, 2) : null;
   const pctDiffNF =
-    nfVolumeLitros > 0 ? round((entradaDiesel - nfVolumeLitros) / nfVolumeLitros, 4) : null;
+    hasReceipt && nfVolumeLitros > 0
+      ? round((entradaDiesel - nfVolumeLitros) / nfVolumeLitros, 4)
+      : null;
   const pctDiffTransnet =
     saidaTanque && saidaTanque !== 0 ? round((saidaTransnet - saidaTanque) / saidaTanque, 4) : null;
+  const toleranceRow = findToleranceRow(params, nfVolumeLitros);
+  const receiptToleranceLiters = toleranceRow?.acceptableDiffLiters ?? null;
+  const receiptWithinTolerance =
+    hasReceipt && receiptToleranceLiters !== null && diffRecebimento !== null
+      ? Math.abs(diffRecebimento) <= receiptToleranceLiters
+      : null;
 
   return {
+    reguaAnteriorT1,
+    reguaAnteriorT2,
     litrosAnteriorT1,
     litrosAnteriorT2,
     litrosFinalT1,
@@ -621,6 +740,13 @@ export function computeMeasurement(form, params, previousEntry) {
     pumpDetails,
     saidaTotalBombas,
     saidaTransnet,
+    receiptBeforeT1,
+    receiptBeforeT2,
+    receiptAfterT1,
+    receiptAfterT2,
+    receiptMeasuredLiters,
+    receiptToleranceLiters,
+    receiptWithinTolerance,
     diffRecebimento,
     pctDiffNF,
     pctDiffTransnet,
@@ -633,6 +759,27 @@ export function validateMeasurement(form, computed, params) {
 
   if (parseNumber(form.reguaFinalT1) === null && parseNumber(form.reguaFinalT2) === null) {
     errors.reguaFinal = "Informe ao menos uma regua final.";
+  }
+
+  if (form.hasReceipt) {
+    if ((parseNumber(form.nfVolumeLitros) || 0) <= 0) {
+      errors.nfVolumeLitros = "Informe o volume da NF quando houver recebimento.";
+    }
+    if (!String(form.supplier || "").trim()) {
+      errors.supplier = "Selecione o fornecedor quando houver recebimento.";
+    }
+    if (
+      parseNumber(form.receiptRuleBeforeT1) === null &&
+      parseNumber(form.receiptRuleBeforeT2) === null
+    ) {
+      errors.receiptBefore = "Informe a regua antes do recebimento.";
+    }
+    if (
+      parseNumber(form.receiptRuleAfterT1) === null &&
+      parseNumber(form.receiptRuleAfterT2) === null
+    ) {
+      errors.receiptAfter = "Informe a regua depois do recebimento.";
+    }
   }
 
   form.pumps.forEach((pump, index) => {
@@ -652,6 +799,10 @@ export function validateMeasurement(form, computed, params) {
 
   if (computed.pctDiffNF !== null && Math.abs(computed.pctDiffNF) > (params.nfDiffWarnPct || 0.01)) {
     warnings.push("Diferenca NF x recebido acima da faixa de atencao.");
+  }
+
+  if (form.hasReceipt && computed.receiptWithinTolerance === false) {
+    warnings.push("Recebimento fora da tolerancia configurada para a faixa da NF.");
   }
 
   if (

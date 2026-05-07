@@ -354,18 +354,21 @@ export default function DesempenhoLancamento() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto min-h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-5xl mx-auto font-sans text-slate-900">
       
       {/* HEADER E TABS */}
-      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-black flex items-center gap-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
+            <FaBolt className="text-amber-500" /> Operacao Diesel
+          </div>
+          <h1 className="mt-3 text-3xl font-black flex items-center gap-3">
             <FaBolt className="text-yellow-500" /> Central de Lançamentos
           </h1>
           <p className="text-slate-500 font-medium mt-1">Registre ocorrências e acione a inteligência do robô automaticamente.</p>
         </div>
         
-        <div className="flex bg-slate-200 p-1.5 rounded-2xl w-fit shadow-inner">
+        <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit shadow-inner">
           <button 
             onClick={() => { setDestino(DESTINOS.ACOMP); limparTudo(); }} 
             disabled={saving}
@@ -397,7 +400,7 @@ export default function DesempenhoLancamento() {
       )}
 
       {/* FORMULÁRIO PRINCIPAL */}
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden transition-all duration-500">
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden transition-all duration-500">
         <div className={`h-3 w-full ${destino === DESTINOS.ACOMP ? "bg-blue-600" : "bg-rose-600"}`} />
         
         <div className="p-6 md:p-12 space-y-10">

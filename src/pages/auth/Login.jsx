@@ -158,6 +158,7 @@ export default function Login() {
     hasSpecial: false,
     minChar: false,
   });
+  const [didHydrateStoredLogin, setDidHydrateStoredLogin] = useState(false);
 
   const redirectParam = useMemo(() => {
     const sp = new URLSearchParams(location.search);
@@ -200,9 +201,11 @@ export default function Login() {
   }
 
   useEffect(() => {
+    if (didHydrateStoredLogin) return;
     const storedLogin = localStorage.getItem("inove_login");
-    if (storedLogin && !loginInput) setLoginInput(storedLogin);
-  }, [loginInput]);
+    if (storedLogin) setLoginInput(storedLogin);
+    setDidHydrateStoredLogin(true);
+  }, [didHydrateStoredLogin]);
 
   useEffect(() => {
     if (!isCadastro) return;
@@ -242,6 +245,21 @@ export default function Login() {
     return (
       code === "unexpected_failure" ||
       message.includes("database error querying schema")
+    );
+  }
+
+  function isInvalidCredentialError(error) {
+    const message = String(error?.message || "").toLowerCase();
+    const code = String(error?.code || error?.status || "").toLowerCase();
+
+    return (
+      code === "invalid_credentials" ||
+      code === "400" ||
+      message.includes("invalid login credentials") ||
+      message.includes("invalid credentials") ||
+      message.includes("email or password") ||
+      message.includes("senha") ||
+      message.includes("credentials")
     );
   }
 
@@ -541,8 +559,18 @@ export default function Login() {
         authSignInError = error;
       }
 
+      if (bridge && !signInEmail) {
+        pushFeedback("error", "Senha incorreta.");
+        return;
+      }
+
       if (authSignInError && /email not confirmed/i.test(String(authSignInError.message || ""))) {
         pushFeedback("error", "Seu e-mail do Auth ainda nao foi confirmado. Verifique sua caixa de entrada.");
+        return;
+      }
+
+      if (authSignInError && isInvalidCredentialError(authSignInError)) {
+        pushFeedback("error", "Senha incorreta.");
         return;
       }
 

@@ -333,13 +333,17 @@ export default function Desempenho_Diesel_Tratativas_Central() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-7xl mx-auto font-sans text-slate-800">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
+            <FaGavel className="text-violet-500" /> Governanca Diesel
+          </div>
+          <h1 className="mt-3 text-2xl font-black flex items-center gap-2 text-slate-800">
             <FaGavel className="text-violet-500" /> Central de Tratativas — Diesel
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 mt-1 font-semibold">
             Acompanhe pendências, atrasos por SLA e resoluções das tratativas.
           </p>
         </div>
@@ -366,6 +370,7 @@ export default function Desempenho_Diesel_Tratativas_Central() {
           >
             PENDENTES & ATRASADAS
           </button>
+        </div>
         </div>
       </div>
 
@@ -514,7 +519,7 @@ export default function Desempenho_Diesel_Tratativas_Central() {
         />
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
         <table className="w-full text-left min-w-[1100px]">
           <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
             <tr>

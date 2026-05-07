@@ -219,14 +219,17 @@ export default function DieselConsultarTratativa() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-4 md:p-8 font-sans bg-slate-50 min-h-screen text-slate-800 space-y-6">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-6xl mx-auto font-sans text-slate-800">
       {/* HEADER PAGE (mesmo conceito do Tratar) */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black flex items-center gap-3 text-slate-900">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
+            <FaGavel className="text-rose-600" /> Governanca Diesel
+          </div>
+          <h1 className="mt-3 text-3xl font-black flex items-center gap-3 text-slate-900">
             <FaGavel className="text-rose-600" /> Consulta de Tratativa
           </h1>
-          <p className="text-sm font-medium text-slate-500 mt-1">
+          <p className="text-sm font-semibold text-slate-500 mt-1">
             Visualize os dados, evidências e histórico. Para editar, use o botão de tratar.
           </p>
         </div>

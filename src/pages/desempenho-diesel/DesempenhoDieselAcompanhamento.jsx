@@ -549,23 +549,28 @@ export default function DesempenhoDieselAcompanhamento() {
   ]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-7xl mx-auto font-sans text-slate-800">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
+            <FaBolt className="text-amber-500" /> Operacao Diesel
+          </div>
+          <h1 className="mt-3 text-2xl font-black flex items-center gap-2 text-slate-800">
             <FaBolt className="text-yellow-500" /> Ordens de Acompanhamento
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 mt-1 font-semibold">
             Gestão de ordens, checkpoints e análises pós-acompanhamento.
           </p>
         </div>
 
         <button
           onClick={carregarOrdens}
-          className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm font-bold w-full md:w-auto justify-center"
+          className="px-4 py-2 rounded-xl bg-slate-800 text-white font-black hover:bg-slate-700 transition flex items-center gap-2 text-sm w-full md:w-auto justify-center"
         >
           <FaSync className={loading ? "animate-spin" : ""} /> Atualizar
         </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
@@ -622,7 +627,8 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       </div>
 
-      <div className="flex flex-wrap bg-slate-200/50 p-1 rounded-lg w-fit gap-1">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2">
+        <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl w-fit gap-1">
         <button
           onClick={() => {
             setAbaAtiva("AGUARDANDO");
@@ -664,9 +670,10 @@ export default function DesempenhoDieselAcompanhamento() {
         >
           🧠 Análise Final
         </button>
+        </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 items-center bg-white p-3 md:p-4 rounded-lg border shadow-sm">
+      <div className="flex flex-col md:flex-row gap-3 items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
         <div className="relative w-full md:flex-1">
           <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
           <input
@@ -730,7 +737,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
         <table className="w-full text-left min-w-[1180px]">
           <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
             <tr>

@@ -1451,7 +1451,7 @@ export default function DesempenhoDieselAnalise() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5">
       <div className="bg-white rounded-2xl border shadow-sm p-4 md:p-5">
         <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
           <div>
@@ -1461,7 +1461,7 @@ export default function DesempenhoDieselAnalise() {
             <h1 className="text-2xl md:text-3xl font-black text-slate-800 mt-3">
               Painel de Análises
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 mt-1 font-semibold">
               A página atua como container. Toda a renderização fica nos 4 componentes.
             </p>
           </div>

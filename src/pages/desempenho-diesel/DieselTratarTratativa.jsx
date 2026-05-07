@@ -556,7 +556,7 @@ export default function DieselTratarTratativa() {
       : "Sistema";
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-6xl mx-auto font-sans text-slate-800">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5 font-sans text-slate-800">
       {/* HEADER PAGE */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>

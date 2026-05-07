@@ -167,7 +167,7 @@ export default function Diesel_tratativas_central() {
   const conclusaoObs = ultima?.observacoes || 'Sem observações registradas.'
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
+    <div className="p-4 md:p-6 space-y-6 min-h-screen bg-slate-50 font-sans text-slate-800">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Consultar</h1>

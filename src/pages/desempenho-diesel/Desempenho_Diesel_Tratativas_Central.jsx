@@ -333,7 +333,7 @@ export default function Desempenho_Diesel_Tratativas_Central() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-7xl mx-auto font-sans text-slate-800">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5 font-sans text-slate-800">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
@@ -348,13 +348,13 @@ export default function Desempenho_Diesel_Tratativas_Central() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1">
           <button
             onClick={() => setViewMode(VIEW.ALL)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition ${
               viewMode === VIEW.ALL
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                ? "bg-white text-blue-700 shadow-sm"
+                : "text-slate-600 hover:text-slate-800"
             }`}
           >
             VER TUDO
@@ -362,10 +362,10 @@ export default function Desempenho_Diesel_Tratativas_Central() {
 
           <button
             onClick={() => setViewMode(VIEW.OPEN_ONLY)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition ${
               viewMode === VIEW.OPEN_ONLY
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                ? "bg-white text-blue-700 shadow-sm"
+                : "text-slate-600 hover:text-slate-800"
             }`}
           >
             PENDENTES & ATRASADAS
@@ -374,46 +374,50 @@ export default function Desempenho_Diesel_Tratativas_Central() {
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border shadow-sm space-y-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-800">Filtros</h2>
-          <p className="text-sm text-slate-500">
-            Refine a visualização por texto, período, prioridade e status.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <div className="relative md:col-span-2">
-            <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+          <div className="md:col-span-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Busca</label>
+            <div className="relative">
+            <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Buscar (nome, chapa, descrição, ocorrência...)"
               value={filtros.busca}
               onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+              className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+            />
+          </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Data inicial</label>
+            <input
+              type="date"
+              value={filtros.dataInicio}
+              onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
             />
           </div>
 
-          <input
-            type="date"
-            value={filtros.dataInicio}
-            onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-          />
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Data final</label>
+            <input
+              type="date"
+              value={filtros.dataFim}
+              onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+            />
+          </div>
 
-          <input
-            type="date"
-            value={filtros.dataFim}
-            onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
-          />
-
-          <div className="relative">
-            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Prioridade</label>
+            <div className="relative">
+            <FaFilter className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <select
               value={filtros.prioridade}
               onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+              className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
             >
               <option value="">Todas as Prioridades</option>
               <option value="Gravíssima">Gravíssima</option>
@@ -422,13 +426,16 @@ export default function Desempenho_Diesel_Tratativas_Central() {
               <option value="Baixa">Baixa</option>
             </select>
           </div>
+          </div>
 
-          <div className="relative">
-            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Status</label>
+            <div className="relative">
+            <FaFilter className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <select
               value={filtros.status}
               onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+              className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
             >
               <option value="">Todos os Status</option>
               <option value="Pendente">Pendente</option>
@@ -436,22 +443,28 @@ export default function Desempenho_Diesel_Tratativas_Central() {
               <option value="Concluída">Concluída</option>
             </select>
           </div>
+          </div>
         </div>
 
-        <div className="flex justify-end gap-2 flex-wrap">
+        <div className="mt-4 flex flex-wrap gap-2 items-center justify-between">
+          <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 font-bold text-sm">
+            <FaFilter /> {tratativasOrdenadas.length} registro(s)
+          </span>
+          <div className="flex justify-end gap-2 flex-wrap">
           <button
             onClick={limparFiltros}
-            className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-bold text-sm"
+            className="px-4 py-2 rounded-xl font-black text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
           >
             Limpar
           </button>
           <button
             onClick={aplicar}
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-400 font-bold text-sm"
+            className="px-4 py-2 rounded-xl bg-slate-800 text-white font-black hover:bg-slate-700 transition disabled:opacity-70 text-sm"
           >
             {loading ? "Aplicando..." : "Aplicar"}
           </button>
+        </div>
         </div>
 
         <div className="text-xs text-slate-500">
@@ -489,33 +502,29 @@ export default function Desempenho_Diesel_Tratativas_Central() {
         <CardResumo
           titulo="Total"
           valor={totalCount}
-          icone={<FaFolderOpen className="text-4xl text-blue-50" />}
-          border="border-l-blue-500"
-          badgeClass="bg-blue-50 text-blue-700 border-blue-200"
+          icone={<FaFolderOpen className="text-lg text-blue-700" />}
+          tone="blue"
         />
 
         <CardResumo
           titulo="Pendentes"
           valor={pendentesCount}
-          icone={<FaClock className="text-4xl text-yellow-50" />}
-          border="border-l-yellow-500"
-          badgeClass="bg-yellow-50 text-yellow-700 border-yellow-200"
+          icone={<FaClock className="text-lg text-amber-700" />}
+          tone="amber"
         />
 
         <CardResumo
           titulo="Concluídas"
           valor={concluidasCount}
-          icone={<FaCheckCircle className="text-4xl text-emerald-50" />}
-          border="border-l-emerald-500"
-          badgeClass="bg-emerald-50 text-emerald-700 border-emerald-200"
+          icone={<FaCheckCircle className="text-lg text-emerald-700" />}
+          tone="emerald"
         />
 
         <CardResumo
           titulo="Atrasadas (SLA)"
           valor={atrasadasCount}
-          icone={<FaExclamationCircle className="text-4xl text-red-50" />}
-          border="border-l-red-500"
-          badgeClass="bg-red-50 text-red-700 border-red-200"
+          icone={<FaExclamationCircle className="text-lg text-rose-700" />}
+          tone="rose"
         />
       </div>
 
@@ -642,14 +651,25 @@ export default function Desempenho_Diesel_Tratativas_Central() {
   );
 }
 
-function CardResumo({ titulo, valor, icone, border }) {
+function CardResumo({ titulo, valor, icone, tone = "slate" }) {
+  const tones = {
+    slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
+    blue: "from-blue-50 to-cyan-50 border-blue-200 text-blue-700",
+    emerald: "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700",
+    amber: "from-amber-50 to-orange-50 border-amber-200 text-amber-700",
+    rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
+  };
   return (
-    <div className={`bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 ${border}`}>
+    <div className={`rounded-2xl border bg-gradient-to-br p-4 shadow-sm ${tones[tone] || tones.slate}`}>
+      <div className="flex items-start justify-between gap-3 h-full">
       <div>
-        <p className="text-sm text-slate-500 font-bold">{titulo}</p>
-        <p className="text-2xl font-black text-slate-800">{valor}</p>
+        <p className="text-xs font-black uppercase tracking-wider opacity-80">{titulo}</p>
+        <p className="text-2xl font-black mt-2 text-slate-800">{valor}</p>
       </div>
-      {icone}
+      <div className="h-11 w-11 rounded-xl bg-white/80 border border-white/90 flex items-center justify-center">
+        {icone}
+      </div>
+      </div>
     </div>
   );
 }

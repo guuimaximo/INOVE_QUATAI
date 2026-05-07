@@ -85,7 +85,21 @@ export const DEFAULT_PARAMS = {
 export function parseNumber(value) {
   if (value === null || value === undefined || value === "") return null;
 
-  const normalized = String(value).trim().replace(/\./g, "").replace(",", ".");
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  let normalized = raw;
+
+  if (raw.includes(",") && raw.includes(".")) {
+    normalized = raw.replace(/\./g, "").replace(",", ".");
+  } else if (raw.includes(",")) {
+    normalized = raw.replace(",", ".");
+  }
+
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -524,9 +538,12 @@ export async function fetchDieselReceipts({
 }
 
 export function isMeaningfulEntry(entry) {
+  const hasFinalRule =
+    Number(parseNumber(entry?.reguaFinalT1) || 0) > 0 ||
+    Number(parseNumber(entry?.reguaFinalT2) || 0) > 0;
+
   return Boolean(
-    entry?.reguaFinalT1 !== null ||
-      entry?.reguaFinalT2 !== null ||
+    hasFinalRule ||
       Number(entry?.nfVolumeLitros || 0) > 0 ||
       Number(entry?.transnetOutput || entry?.saidaTransnet || 0) > 0 ||
       Number(entry?.saidaTotalBombas || 0) > 0 ||

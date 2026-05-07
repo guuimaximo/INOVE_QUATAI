@@ -6,6 +6,18 @@
 
 begin;
 
+-- Limpa a importacao automatica anterior antes de recriar os dados validos.
+
+delete from public.estoque_diesel_leituras_bomba
+where medicao_id in (
+  select id
+  from public.estoque_diesel_medicoes_diarias
+  where status_lancamento = 'IMPORTADO_PLANILHA'
+);
+
+delete from public.estoque_diesel_medicoes_diarias
+where status_lancamento = 'IMPORTADO_PLANILHA';
+
 
 
 insert into public.estoque_diesel_fornecedores (nome) values ('Ale') on conflict do nothing;
@@ -18,7 +30,10589 @@ insert into public.estoque_diesel_fornecedores (nome) values ('Raizen') on confl
 
 insert into public.estoque_diesel_fornecedores (nome) values ('Vibra') on conflict do nothing;
 
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-01',
+  null,
+  null,
+  119.3,
+  0,
+  0,
+  null,
+  null,
+  3374,
+  null,
+  null,
+  14368,
+  0,
+  0,
+  14368,
+  null,
+  17801,
+  14368,
+  3433,
+  0,
+  null,
+  -0.0172,
+  3374,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
 
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-02',
+  110.6,
+  0,
+  213.5,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  1329,
+  13016,
+  0,
+  27980,
+  0,
+  13016,
+  27980,
+  14964,
+  14368,
+  27980,
+  1352,
+  -36,
+  -0.0024,
+  -0.017,
+  1330,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-03',
+  null,
+  null,
+  187.6,
+  0,
+  0,
+  null,
+  null,
+  3397,
+  null,
+  null,
+  24678,
+  0,
+  0,
+  24678,
+  null,
+  27980,
+  24678,
+  3302,
+  0,
+  null,
+  0.0288,
+  3398,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-04',
+  null,
+  null,
+  164,
+  0,
+  0,
+  null,
+  null,
+  3114,
+  null,
+  null,
+  21273,
+  0,
+  0,
+  21273,
+  null,
+  24678,
+  21273,
+  3405,
+  0,
+  null,
+  -0.0855,
+  3114,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-05',
+  null,
+  null,
+  154.3,
+  0,
+  0,
+  null,
+  null,
+  1377,
+  null,
+  null,
+  19805,
+  0,
+  0,
+  19805,
+  null,
+  21273,
+  19805,
+  1468,
+  0,
+  null,
+  -0.062,
+  1378,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-06',
+  null,
+  null,
+  124.2,
+  0,
+  0,
+  null,
+  null,
+  4914,
+  null,
+  null,
+  15133,
+  0,
+  0,
+  15133,
+  null,
+  19805,
+  15133,
+  4672,
+  0,
+  null,
+  0.0518,
+  4914,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-07',
+  91.5,
+  0,
+  192.3,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Vibra' limit 1),
+  null,
+  4995,
+  10099,
+  0,
+  25318,
+  0,
+  10099,
+  25318,
+  15219,
+  15133,
+  25318,
+  5034,
+  219,
+  0.0146,
+  -0.0077,
+  4996,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-08',
+  null,
+  null,
+  156.6,
+  0,
+  0,
+  null,
+  null,
+  4973,
+  null,
+  null,
+  20156,
+  0,
+  0,
+  20156,
+  null,
+  25318,
+  20156,
+  5162,
+  0,
+  null,
+  -0.0366,
+  4973,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-09',
+  null,
+  null,
+  127.6,
+  0,
+  0,
+  null,
+  null,
+  4744,
+  null,
+  0,
+  15664,
+  0,
+  0,
+  15664,
+  null,
+  20156,
+  15664,
+  4492,
+  0,
+  null,
+  0.0561,
+  4744,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-10',
+  96.2,
+  0,
+  197.2,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Vibra' limit 1),
+  null,
+  4781,
+  10807,
+  0,
+  25968,
+  0,
+  10807,
+  25968,
+  15161,
+  15664,
+  25968,
+  4857,
+  161,
+  0.0107,
+  -0.0156,
+  4782,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-11',
+  null,
+  null,
+  172.8,
+  0,
+  0,
+  null,
+  null,
+  3336,
+  null,
+  null,
+  22574,
+  0,
+  0,
+  22574,
+  null,
+  25968,
+  22574,
+  3394,
+  0,
+  null,
+  -0.0171,
+  3336,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-12',
+  null,
+  null,
+  163.1,
+  0,
+  0,
+  null,
+  null,
+  1457,
+  null,
+  null,
+  21138,
+  0,
+  0,
+  21138,
+  null,
+  22574,
+  21138,
+  1436,
+  0,
+  null,
+  0.0146,
+  1458,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-13',
+  null,
+  null,
+  133.5,
+  0,
+  0,
+  null,
+  null,
+  4317,
+  null,
+  null,
+  16586,
+  0,
+  0,
+  16586,
+  null,
+  21138,
+  16586,
+  4552,
+  0,
+  null,
+  -0.0516,
+  4317,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-14',
+  null,
+  null,
+  106.4,
+  0,
+  0,
+  null,
+  null,
+  4173,
+  null,
+  null,
+  12367,
+  0,
+  0,
+  12367,
+  null,
+  16586,
+  12367,
+  4219,
+  0,
+  null,
+  -0.0109,
+  4173,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-15',
+  78.5,
+  0,
+  216.7,
+  0,
+  20000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
+  null,
+  4176,
+  8185,
+  0,
+  28343,
+  0,
+  8185,
+  28343,
+  20158,
+  12367,
+  28343,
+  4182,
+  158,
+  0.0079,
+  -0.0014,
+  4176,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-16',
+  null,
+  null,
+  185.5,
+  0,
+  0,
+  null,
+  null,
+  3920,
+  null,
+  null,
+  24387,
+  0,
+  0,
+  24387,
+  null,
+  28343,
+  24387,
+  3956,
+  0,
+  null,
+  -0.0091,
+  3921,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-17',
+  null,
+  null,
+  156.8,
+  0,
+  0,
+  null,
+  null,
+  4107,
+  null,
+  null,
+  20186,
+  0,
+  0,
+  20186,
+  null,
+  24387,
+  20186,
+  4201,
+  0,
+  null,
+  -0.0224,
+  4108,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-18',
+  null,
+  null,
+  139.5,
+  0,
+  0,
+  null,
+  null,
+  2714,
+  null,
+  null,
+  17521,
+  0,
+  0,
+  17521,
+  null,
+  20186,
+  17521,
+  2665,
+  0,
+  null,
+  0.0184,
+  2714,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-19',
+  null,
+  null,
+  127.8,
+  0,
+  0,
+  null,
+  null,
+  1825,
+  null,
+  null,
+  15696,
+  0,
+  0,
+  15696,
+  null,
+  17521,
+  15696,
+  1825,
+  0,
+  null,
+  0,
+  1826,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-20',
+  98.5,
+  0,
+  199.3,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Ale' limit 1),
+  null,
+  4410,
+  11157,
+  0,
+  26241,
+  0,
+  11157,
+  26241,
+  15084,
+  15696,
+  26241,
+  4539,
+  84,
+  0.0056,
+  -0.0284,
+  4410,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-21',
+  null,
+  null,
+  169.3,
+  0,
+  0,
+  null,
+  null,
+  4132,
+  null,
+  null,
+  22061,
+  0,
+  0,
+  22061,
+  null,
+  26241,
+  22061,
+  4180,
+  0,
+  null,
+  -0.0115,
+  4133,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-22',
+  null,
+  null,
+  144.5,
+  0,
+  0,
+  null,
+  null,
+  3758,
+  null,
+  null,
+  18297,
+  0,
+  0,
+  18297,
+  null,
+  22061,
+  18297,
+  3764,
+  0,
+  null,
+  -0.0016,
+  3757,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-23',
+  119.3,
+  0,
+  228.5,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Ale' limit 1),
+  null,
+  3904,
+  14368,
+  0,
+  29568,
+  0,
+  14368,
+  29568,
+  15200,
+  18297,
+  29568,
+  3929,
+  200,
+  0.0133,
+  -0.0064,
+  3905,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-24',
+  null,
+  null,
+  190.4,
+  0,
+  0,
+  null,
+  null,
+  4360,
+  null,
+  null,
+  25061,
+  0,
+  0,
+  25061,
+  null,
+  29568,
+  25061,
+  4507,
+  0,
+  null,
+  -0.0326,
+  4361,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-25',
+  null,
+  null,
+  173,
+  0,
+  0,
+  null,
+  null,
+  2618,
+  null,
+  null,
+  22604,
+  0,
+  0,
+  22604,
+  null,
+  25061,
+  22604,
+  2457,
+  0,
+  null,
+  0.0655,
+  2619,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-26',
+  null,
+  null,
+  164.5,
+  0,
+  0,
+  null,
+  null,
+  1344,
+  null,
+  null,
+  21347,
+  0,
+  0,
+  21347,
+  null,
+  22604,
+  21347,
+  1257,
+  0,
+  null,
+  0.0692,
+  1344,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-27',
+  null,
+  null,
+  135.5,
+  0,
+  0,
+  null,
+  null,
+  4375,
+  null,
+  null,
+  16898,
+  0,
+  0,
+  16898,
+  null,
+  21347,
+  16898,
+  4449,
+  0,
+  null,
+  -0.0166,
+  4376,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-28',
+  null,
+  null,
+  107.2,
+  0,
+  0,
+  null,
+  null,
+  4415,
+  null,
+  null,
+  12490,
+  0,
+  0,
+  12490,
+  null,
+  16898,
+  12490,
+  4408,
+  0,
+  null,
+  0.0016,
+  4416,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-29',
+  79.2,
+  0,
+  218.2,
+  0,
+  20000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4098,
+  8286,
+  0,
+  28509,
+  0,
+  8286,
+  28509,
+  20223,
+  12490,
+  28509,
+  4204,
+  223,
+  0.0112,
+  -0.0252,
+  4099,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-30',
+  null,
+  null,
+  182.5,
+  0,
+  0,
+  null,
+  null,
+  4356,
+  null,
+  null,
+  23967,
+  0,
+  0,
+  23967,
+  null,
+  28509,
+  23967,
+  4542,
+  0,
+  null,
+  -0.041,
+  4357,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-01-31',
+  null,
+  null,
+  152.5,
+  0,
+  0,
+  null,
+  null,
+  4472,
+  null,
+  null,
+  19530,
+  0,
+  0,
+  19530,
+  null,
+  23967,
+  19530,
+  4437,
+  0,
+  null,
+  0.0079,
+  4472,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-01',
+  null,
+  null,
+  134,
+  0,
+  0,
+  null,
+  null,
+  2905,
+  null,
+  null,
+  16664,
+  0,
+  0,
+  16664,
+  null,
+  19530,
+  16664,
+  2866,
+  0,
+  null,
+  0.0136,
+  2901,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-02',
+  null,
+  null,
+  122.5,
+  0,
+  0,
+  null,
+  null,
+  1659,
+  null,
+  null,
+  14868,
+  0,
+  0,
+  14868,
+  null,
+  16664,
+  14868,
+  1796,
+  0,
+  null,
+  -0.0763,
+  1660,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-03',
+  90.2,
+  0,
+  190.1,
+  0,
+  15000,
+  null,
+  null,
+  4946,
+  9904,
+  0,
+  25020,
+  0,
+  9904,
+  25020,
+  15116,
+  14868,
+  25020,
+  4964,
+  116,
+  0.0077,
+  -0.0036,
+  4944,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-04',
+  null,
+  null,
+  156.4,
+  0,
+  0,
+  null,
+  null,
+  4839,
+  null,
+  null,
+  20125,
+  0,
+  0,
+  20125,
+  null,
+  25020,
+  20125,
+  4895,
+  0,
+  null,
+  -0.0114,
+  4839,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-05',
+  null,
+  null,
+  126.6,
+  0,
+  0,
+  null,
+  null,
+  4645,
+  null,
+  null,
+  15508,
+  0,
+  0,
+  15508,
+  null,
+  20125,
+  15508,
+  4617,
+  0,
+  null,
+  0.0061,
+  4646,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-06',
+  97.5,
+  0,
+  198.1,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
+  null,
+  4430,
+  11004,
+  0,
+  26085,
+  0,
+  11004,
+  26085,
+  15081,
+  15508,
+  26085,
+  4504,
+  81,
+  0.0054,
+  -0.0164,
+  4430,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-07',
+  null,
+  null,
+  165.5,
+  0,
+  0,
+  null,
+  null,
+  4441,
+  null,
+  null,
+  21497,
+  0,
+  0,
+  21497,
+  null,
+  26085,
+  21497,
+  4588,
+  0,
+  null,
+  -0.032,
+  4441,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-08',
+  null,
+  null,
+  143.7,
+  0,
+  0,
+  null,
+  null,
+  3378,
+  null,
+  null,
+  18173,
+  0,
+  0,
+  18173,
+  null,
+  21497,
+  18173,
+  3324,
+  0,
+  null,
+  0.0162,
+  3378,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-09',
+  null,
+  null,
+  134.3,
+  0,
+  0,
+  null,
+  null,
+  1446,
+  null,
+  0,
+  16711,
+  0,
+  0,
+  16711,
+  null,
+  18173,
+  16711,
+  1462,
+  0,
+  null,
+  -0.0109,
+  1447,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-10',
+  null,
+  null,
+  102.3,
+  0,
+  0,
+  null,
+  null,
+  4939,
+  null,
+  null,
+  11737,
+  0,
+  0,
+  11737,
+  null,
+  16711,
+  11737,
+  4974,
+  0,
+  null,
+  -0.007,
+  4939,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-11',
+  104.2,
+  0,
+  206.4,
+  0,
+  15000,
+  null,
+  null,
+  4945,
+  12028,
+  null,
+  27135,
+  0,
+  12028,
+  27135,
+  15107,
+  27135,
+  27135,
+  15107,
+  107,
+  0.0071,
+  -0.6727,
+  4946,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-12',
+  null,
+  null,
+  170.7,
+  0,
+  0,
+  null,
+  null,
+  4790,
+  null,
+  null,
+  22267,
+  0,
+  0,
+  22267,
+  null,
+  27135,
+  22267,
+  4868,
+  0,
+  null,
+  -0.016,
+  4791,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-13',
+  null,
+  null,
+  140,
+  0,
+  0,
+  null,
+  null,
+  4958,
+  null,
+  null,
+  17599,
+  0,
+  0,
+  17599,
+  null,
+  22267,
+  17599,
+  4668,
+  0,
+  null,
+  0.0621,
+  4959,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-14',
+  null,
+  null,
+  106.3,
+  0,
+  0,
+  null,
+  null,
+  5005,
+  null,
+  null,
+  12351,
+  0,
+  0,
+  12351,
+  null,
+  17599,
+  12351,
+  5248,
+  0,
+  null,
+  -0.0463,
+  5005,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-15',
+  null,
+  null,
+  84.9,
+  0,
+  0,
+  null,
+  null,
+  3318,
+  null,
+  null,
+  9118,
+  0,
+  0,
+  9118,
+  null,
+  12351,
+  9118,
+  3233,
+  0,
+  null,
+  0.0263,
+  3318,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-16',
+  77.4,
+  0,
+  214.4,
+  0,
+  20000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
+  null,
+  1072,
+  8026,
+  0,
+  28084,
+  0,
+  8026,
+  28084,
+  20058,
+  9118,
+  28084,
+  1092,
+  58,
+  0.0029,
+  -0.0183,
+  1073,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-17',
+  null,
+  null,
+  185.6,
+  0,
+  0,
+  null,
+  null,
+  3714,
+  null,
+  null,
+  24401,
+  0,
+  0,
+  24401,
+  null,
+  28084,
+  24401,
+  3683,
+  0,
+  null,
+  0.0084,
+  3714,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-18',
+  null,
+  null,
+  165.3,
+  0,
+  0,
+  null,
+  null,
+  2810,
+  null,
+  null,
+  21467,
+  0,
+  0,
+  21467,
+  null,
+  24401,
+  21467,
+  2934,
+  0,
+  null,
+  -0.0423,
+  2811,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-19',
+  null,
+  null,
+  137.5,
+  0,
+  0,
+  null,
+  null,
+  4375,
+  null,
+  null,
+  17210,
+  0,
+  0,
+  17210,
+  null,
+  21467,
+  17210,
+  4257,
+  0,
+  null,
+  0.0277,
+  4375,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-20',
+  null,
+  null,
+  104.3,
+  0,
+  0,
+  null,
+  null,
+  5004,
+  null,
+  null,
+  12044,
+  0,
+  0,
+  12044,
+  null,
+  17210,
+  12044,
+  5166,
+  0,
+  null,
+  -0.0314,
+  5005,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-21',
+  69.3,
+  0,
+  205.4,
+  0,
+  20000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
+  null,
+  5198,
+  6881,
+  0,
+  27012,
+  0,
+  6881,
+  27012,
+  20131,
+  12044,
+  27012,
+  5163,
+  131,
+  0.0066,
+  0.0068,
+  5199,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-22',
+  null,
+  null,
+  181.4,
+  0,
+  0,
+  null,
+  null,
+  3084,
+  null,
+  null,
+  23812,
+  0,
+  0,
+  23812,
+  null,
+  27012,
+  23812,
+  3200,
+  0,
+  null,
+  -0.0362,
+  3084,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-23',
+  null,
+  null,
+  174.3,
+  0,
+  0,
+  null,
+  null,
+  1043,
+  null,
+  null,
+  22793,
+  0,
+  0,
+  22793,
+  null,
+  23812,
+  22793,
+  1019,
+  0,
+  null,
+  0.0236,
+  1043,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-24',
+  null,
+  null,
+  140,
+  0,
+  0,
+  null,
+  null,
+  5145,
+  null,
+  null,
+  17599,
+  0,
+  0,
+  17599,
+  null,
+  22793,
+  17599,
+  5194,
+  0,
+  null,
+  -0.0094,
+  5146,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-25',
+  121.8,
+  0,
+  232.7,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  2845,
+  14758,
+  0,
+  29953,
+  0,
+  14758,
+  29953,
+  15195,
+  17599,
+  29953,
+  2841,
+  195,
+  0.013,
+  0.0014,
+  2845,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-26',
+  null,
+  null,
+  190.5,
+  0,
+  0,
+  null,
+  null,
+  4821,
+  null,
+  null,
+  25075,
+  0,
+  0,
+  25075,
+  null,
+  29953,
+  25075,
+  4878,
+  0,
+  null,
+  -0.0117,
+  4822,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-27',
+  null,
+  null,
+  158.3,
+  0,
+  0,
+  null,
+  null,
+  4681,
+  null,
+  null,
+  20414,
+  0,
+  0,
+  20414,
+  null,
+  25075,
+  20414,
+  4661,
+  0,
+  null,
+  0.0043,
+  4682,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-02-28',
+  null,
+  null,
+  128,
+  0,
+  0,
+  null,
+  null,
+  4661,
+  null,
+  null,
+  15727,
+  0,
+  0,
+  15727,
+  null,
+  20414,
+  15727,
+  4687,
+  0,
+  null,
+  -0.0055,
+  4661,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-01',
+  null,
+  null,
+  107,
+  0,
+  0,
+  null,
+  null,
+  3237,
+  null,
+  null,
+  12459,
+  0,
+  0,
+  12459,
+  null,
+  15727,
+  12459,
+  3268,
+  0,
+  null,
+  -0.0095,
+  3238,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-02',
+  97.6,
+  0,
+  198.6,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  1428,
+  11020,
+  0,
+  26150,
+  0,
+  11020,
+  26150,
+  15130,
+  12459,
+  26150,
+  1439,
+  130,
+  0.0087,
+  -0.0076,
+  1428,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-03',
+  null,
+  null,
+  164.4,
+  0,
+  0,
+  null,
+  null,
+  4712,
+  null,
+  null,
+  21332,
+  0,
+  0,
+  21332,
+  null,
+  26150,
+  21332,
+  4818,
+  0,
+  null,
+  -0.022,
+  4712,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-04',
+  null,
+  null,
+  134.8,
+  0,
+  0,
+  null,
+  null,
+  4719,
+  null,
+  null,
+  16789,
+  0,
+  0,
+  16789,
+  null,
+  21332,
+  16789,
+  4543,
+  0,
+  null,
+  0.0387,
+  4719,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-05',
+  101.6,
+  0,
+  203.2,
+  0,
+  15000,
+  null,
+  null,
+  4950,
+  11630,
+  0,
+  26738,
+  0,
+  11630,
+  26738,
+  15108,
+  16789,
+  26738,
+  5159,
+  108,
+  0.0072,
+  -0.0405,
+  4952,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-06',
+  null,
+  null,
+  169.5,
+  0,
+  0,
+  null,
+  null,
+  4613,
+  null,
+  null,
+  22090,
+  0,
+  0,
+  22090,
+  null,
+  26738,
+  22090,
+  4648,
+  0,
+  null,
+  -0.0075,
+  4614,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-07',
+  null,
+  null,
+  138.3,
+  0,
+  0,
+  null,
+  null,
+  4777,
+  null,
+  null,
+  17334,
+  0,
+  0,
+  17334,
+  null,
+  22090,
+  17334,
+  4756,
+  0,
+  null,
+  0.0044,
+  4777,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-08',
+  null,
+  null,
+  118,
+  0,
+  0,
+  null,
+  null,
+  3240,
+  null,
+  null,
+  14166,
+  0,
+  0,
+  14166,
+  null,
+  17334,
+  14166,
+  3168,
+  0,
+  null,
+  0.0227,
+  3240,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-09',
+  108.8,
+  0,
+  174.04,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  1331,
+  12737,
+  0,
+  22755,
+  0,
+  12737,
+  22755,
+  10018,
+  14166,
+  22755,
+  1429,
+  18,
+  0.0018,
+  -0.0686,
+  1331,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-10',
+  null,
+  null,
+  142.5,
+  0,
+  0,
+  null,
+  null,
+  4801,
+  null,
+  null,
+  17987,
+  0,
+  0,
+  17987,
+  null,
+  22755,
+  17987,
+  4768,
+  0,
+  null,
+  0.0069,
+  4801,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-11',
+  111.7,
+  0,
+  144.5,
+  0,
+  5000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4757,
+  13186,
+  0,
+  18297,
+  0,
+  13186,
+  18297,
+  5111,
+  17987,
+  18297,
+  4801,
+  111,
+  0.0222,
+  -0.0092,
+  4758,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-12',
+  115,
+  0,
+  148.5,
+  0,
+  5000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4595,
+  13699,
+  null,
+  18915,
+  0,
+  13699,
+  18915,
+  5216,
+  18297,
+  18915,
+  4598,
+  216,
+  0.0432,
+  -0.0007,
+  4595,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-13',
+  148,
+  0,
+  219,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Combustran' limit 1),
+  null,
+  4998,
+  18838,
+  0,
+  28597,
+  0,
+  18838,
+  28597,
+  9759,
+  18838,
+  28597,
+  0,
+  -241,
+  -0.0241,
+  null,
+  4999,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-14',
+  182.5,
+  0,
+  224.5,
+  0,
+  5000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4703,
+  23967,
+  0,
+  29174,
+  0,
+  23967,
+  29174,
+  5207,
+  28597,
+  29174,
+  4630,
+  207,
+  0.0414,
+  0.0158,
+  4704,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-15',
+  null,
+  null,
+  198.5,
+  0,
+  0,
+  null,
+  null,
+  3009,
+  null,
+  null,
+  26137,
+  0,
+  0,
+  26137,
+  null,
+  29174,
+  26137,
+  3037,
+  0,
+  null,
+  -0.0092,
+  3009,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-16',
+  187.7,
+  0,
+  230,
+  0,
+  5000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  1400,
+  24692,
+  0,
+  29709,
+  0,
+  24692,
+  29709,
+  5017,
+  26137,
+  29709,
+  1445,
+  17,
+  0.0034,
+  -0.0311,
+  1401,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-17',
+  null,
+  null,
+  187.5,
+  0,
+  0,
+  null,
+  null,
+  5075,
+  null,
+  null,
+  24664,
+  0,
+  0,
+  24664,
+  null,
+  29709,
+  24664,
+  5045,
+  0,
+  null,
+  0.0059,
+  5076,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-18',
+  153.7,
+  0,
+  231,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4835,
+  19713,
+  0,
+  29801,
+  0,
+  19713,
+  29801,
+  10088,
+  24664,
+  29801,
+  4951,
+  88,
+  0.0088,
+  -0.0234,
+  4835,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-19',
+  189.2,
+  0,
+  232.5,
+  0,
+  5000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4821,
+  24897,
+  0,
+  29935,
+  0,
+  24897,
+  29935,
+  5038,
+  29801,
+  29935,
+  4904,
+  38,
+  0.0076,
+  -0.0169,
+  4821,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-20',
+  null,
+  null,
+  192.5,
+  0,
+  0,
+  null,
+  null,
+  4782,
+  null,
+  null,
+  25345,
+  0,
+  0,
+  25345,
+  null,
+  29935,
+  25345,
+  4590,
+  0,
+  null,
+  0.0418,
+  4783,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-21',
+  158.7,
+  0,
+  238.5,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4899,
+  20474,
+  0,
+  30432,
+  0,
+  20474,
+  30432,
+  9958,
+  25345,
+  30432,
+  4871,
+  -42,
+  -0.0042,
+  0.0057,
+  4899,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-22',
+  null,
+  null,
+  207.6,
+  0,
+  0,
+  null,
+  null,
+  3006,
+  null,
+  null,
+  27281,
+  0,
+  0,
+  27281,
+  null,
+  30432,
+  27281,
+  3151,
+  0,
+  null,
+  -0.046,
+  3007,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-23',
+  null,
+  null,
+  0,
+  195.5,
+  0,
+  null,
+  null,
+  1420,
+  null,
+  null,
+  0,
+  25745,
+  0,
+  25745,
+  null,
+  27281,
+  25745,
+  1536,
+  0,
+  null,
+  -0.0755,
+  1421,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-24',
+  161.8,
+  0,
+  197.5,
+  0,
+  5000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4966,
+  20942,
+  0,
+  26007,
+  0,
+  20942,
+  26007,
+  5065,
+  25745,
+  26007,
+  4803,
+  65,
+  0.013,
+  0.0339,
+  4966,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-25',
+  null,
+  null,
+  164,
+  0,
+  0,
+  null,
+  null,
+  4755,
+  null,
+  null,
+  21273,
+  0,
+  0,
+  21273,
+  null,
+  26007,
+  21273,
+  4734,
+  0,
+  null,
+  0.0044,
+  4756,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-26',
+  131.6,
+  0,
+  200.5,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4983,
+  16289,
+  0,
+  26395,
+  0,
+  16289,
+  26395,
+  10106,
+  21273,
+  26395,
+  4984,
+  106,
+  0.0106,
+  -0.0002,
+  4983,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-27',
+  167.3,
+  0,
+  204.6,
+  0,
+  5000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4694,
+  21765,
+  0,
+  26913,
+  0,
+  21765,
+  26913,
+  5148,
+  26395,
+  26913,
+  4630,
+  148,
+  0.0296,
+  0.0138,
+  4693,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-28',
+  null,
+  null,
+  165.5,
+  0,
+  0,
+  null,
+  null,
+  5198,
+  null,
+  null,
+  21497,
+  0,
+  0,
+  21497,
+  null,
+  26913,
+  21497,
+  5416,
+  0,
+  null,
+  -0.0403,
+  5198,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-29',
+  null,
+  null,
+  142,
+  0,
+  0,
+  null,
+  null,
+  3540,
+  null,
+  null,
+  17909,
+  0,
+  0,
+  17909,
+  null,
+  21497,
+  17909,
+  3588,
+  0,
+  null,
+  -0.0134,
+  3541,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-30',
+  131.3,
+  0,
+  165,
+  0,
+  5000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  1675,
+  16242,
+  0,
+  21422,
+  0,
+  16242,
+  21422,
+  5180,
+  17909,
+  21422,
+  1667,
+  180,
+  0.036,
+  0.0048,
+  1676,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-03-31',
+  131.5,
+  0,
+  200.4,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4909,
+  16274,
+  0,
+  26382,
+  0,
+  16274,
+  26382,
+  10108,
+  21422,
+  26382,
+  5148,
+  108,
+  0.0108,
+  -0.0464,
+  4910,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-01',
+  165.4,
+  0,
+  202.4,
+  0,
+  5000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4848,
+  21482,
+  0,
+  26637,
+  0,
+  21482,
+  26637,
+  5155,
+  26382,
+  26637,
+  4900,
+  155,
+  0.031,
+  -0.0106,
+  4842,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-02',
+  165.5,
+  0,
+  249,
+  0,
+  9600,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  5080,
+  21497,
+  0,
+  31096,
+  0,
+  21497,
+  31096,
+  9599,
+  26637,
+  31096,
+  5140,
+  -1,
+  -0.0001,
+  -0.0117,
+  5080,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-03',
+  null,
+  null,
+  197.8,
+  0,
+  0,
+  null,
+  null,
+  5072,
+  null,
+  null,
+  26046,
+  0,
+  0,
+  26046,
+  null,
+  31096,
+  26046,
+  5050,
+  0,
+  null,
+  0.0044,
+  5073,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-04',
+  null,
+  null,
+  185.6,
+  0,
+  0,
+  null,
+  null,
+  1638,
+  null,
+  null,
+  24401,
+  0,
+  0,
+  24401,
+  null,
+  26046,
+  24401,
+  1645,
+  0,
+  null,
+  -0.0043,
+  1638,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-05',
+  null,
+  null,
+  165.5,
+  0,
+  0,
+  null,
+  null,
+  3057,
+  null,
+  null,
+  21497,
+  0,
+  0,
+  21497,
+  null,
+  24401,
+  21497,
+  2904,
+  0,
+  null,
+  0.0527,
+  3057,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-06',
+  156.5,
+  0,
+  235.7,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  1449,
+  20140,
+  0,
+  30209,
+  0,
+  20140,
+  30209,
+  10069,
+  21497,
+  30209,
+  1357,
+  69,
+  0.0069,
+  0.0678,
+  1449,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-07',
+  null,
+  null,
+  188.8,
+  0,
+  0,
+  null,
+  null,
+  5048,
+  null,
+  null,
+  24843,
+  0,
+  0,
+  24843,
+  null,
+  30209,
+  24843,
+  5366,
+  0,
+  null,
+  -0.0593,
+  5048,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-08',
+  154.5,
+  0,
+  231.5,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  5087,
+  19836,
+  0,
+  29846,
+  0,
+  19836,
+  29846,
+  10010,
+  24843,
+  29846,
+  5007,
+  10,
+  0.001,
+  0.016,
+  5088,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-09',
+  null,
+  null,
+  197,
+  0,
+  0,
+  null,
+  null,
+  5275,
+  null,
+  null,
+  25942,
+  0,
+  0,
+  25942,
+  null,
+  29846,
+  25942,
+  3904,
+  0,
+  null,
+  0.3512,
+  5275,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-10',
+  153.5,
+  0,
+  231,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4900,
+  19683,
+  0,
+  29801,
+  0,
+  19683,
+  29801,
+  10118,
+  25942,
+  29801,
+  6259,
+  118,
+  0.0118,
+  -0.2171,
+  4900,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-11',
+  null,
+  null,
+  188.6,
+  0,
+  0,
+  null,
+  null,
+  4867,
+  null,
+  null,
+  24815,
+  0,
+  0,
+  24815,
+  null,
+  29801,
+  24815,
+  4986,
+  0,
+  null,
+  -0.0239,
+  4868,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-12',
+  null,
+  null,
+  165.7,
+  0,
+  0,
+  null,
+  null,
+  3217,
+  null,
+  null,
+  21527,
+  0,
+  0,
+  21527,
+  null,
+  24815,
+  21527,
+  3288,
+  0,
+  null,
+  -0.0216,
+  3216,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-13',
+  null,
+  null,
+  155.8,
+  0,
+  0,
+  null,
+  null,
+  1462,
+  null,
+  null,
+  20034,
+  0,
+  0,
+  20034,
+  null,
+  21527,
+  20034,
+  1493,
+  0,
+  null,
+  -0.0208,
+  1460,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-14',
+  125.5,
+  0,
+  192.5,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4760,
+  15336,
+  0,
+  25345,
+  0,
+  15336,
+  25345,
+  10009,
+  20034,
+  25345,
+  4698,
+  9,
+  0.0009,
+  0.0132,
+  4760,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-15',
+  null,
+  null,
+  157.7,
+  0,
+  0,
+  null,
+  null,
+  4953,
+  null,
+  null,
+  20323,
+  0,
+  0,
+  20323,
+  null,
+  25345,
+  20323,
+  5022,
+  0,
+  null,
+  -0.0137,
+  4954,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-16',
+  127,
+  0,
+  194.5,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  4858,
+  15571,
+  0,
+  25612,
+  0,
+  15571,
+  25612,
+  10041,
+  20323,
+  25612,
+  4752,
+  41,
+  0.0041,
+  0.0223,
+  4858,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-17',
+  null,
+  null,
+  158.7,
+  0,
+  0,
+  null,
+  null,
+  4859,
+  null,
+  null,
+  20474,
+  0,
+  0,
+  20474,
+  null,
+  25612,
+  20474,
+  5138,
+  0,
+  null,
+  -0.0543,
+  4859,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-18',
+  null,
+  null,
+  128.7,
+  0,
+  0,
+  null,
+  null,
+  4723,
+  null,
+  null,
+  15836,
+  0,
+  0,
+  15836,
+  null,
+  20474,
+  15836,
+  4638,
+  0,
+  null,
+  0.0183,
+  4723,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-19',
+  null,
+  null,
+  106.4,
+  0,
+  0,
+  null,
+  null,
+  3403,
+  null,
+  null,
+  12367,
+  0,
+  0,
+  12367,
+  null,
+  15836,
+  12367,
+  3469,
+  0,
+  null,
+  -0.019,
+  3403,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-20',
+  95.4,
+  0,
+  161.5,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  1826,
+  10686,
+  0,
+  20897,
+  0,
+  10686,
+  20897,
+  10211,
+  12367,
+  20897,
+  1681,
+  211,
+  0.0211,
+  0.0863,
+  1823,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-21',
+  null,
+  null,
+  134.3,
+  0,
+  0,
+  null,
+  null,
+  4010,
+  null,
+  null,
+  16711,
+  0,
+  0,
+  16711,
+  null,
+  20897,
+  16711,
+  4186,
+  0,
+  null,
+  -0.042,
+  4011,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-22',
+  122.8,
+  0,
+  189.4,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  1756,
+  14914,
+  0,
+  24925,
+  0,
+  14914,
+  24925,
+  10011,
+  16711,
+  24925,
+  1797,
+  11,
+  0.0011,
+  -0.0228,
+  1754,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-23',
+  null,
+  null,
+  153.6,
+  0,
+  0,
+  null,
+  null,
+  4958,
+  null,
+  null,
+  19698,
+  0,
+  0,
+  19698,
+  null,
+  24925,
+  19698,
+  5227,
+  0,
+  null,
+  -0.0515,
+  4955,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-24',
+  124.7,
+  0,
+  191.5,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
+  null,
+  4723,
+  15211,
+  0,
+  25210,
+  0,
+  15211,
+  25210,
+  9999,
+  19698,
+  25210,
+  4487,
+  -1,
+  -0.0001,
+  0.0526,
+  4723,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-25',
+  null,
+  null,
+  158.2,
+  0,
+  0,
+  null,
+  null,
+  4603,
+  null,
+  null,
+  20399,
+  0,
+  0,
+  20399,
+  null,
+  25210,
+  20399,
+  4811,
+  0,
+  null,
+  -0.0432,
+  4603,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-26',
+  null,
+  null,
+  138,
+  0,
+  0,
+  null,
+  null,
+  3007,
+  null,
+  null,
+  17287,
+  0,
+  0,
+  17287,
+  null,
+  20399,
+  17287,
+  3112,
+  0,
+  null,
+  -0.0337,
+  3002,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-27',
+  null,
+  null,
+  130.4,
+  0,
+  0,
+  null,
+  null,
+  1414,
+  null,
+  null,
+  16102,
+  0,
+  0,
+  16102,
+  null,
+  17287,
+  16102,
+  1185,
+  0,
+  null,
+  0.1932,
+  1413,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-28',
+  100.5,
+  0,
+  201.9,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Combustran' limit 1),
+  null,
+  4629,
+  11461,
+  0,
+  26573,
+  0,
+  11461,
+  26573,
+  15112,
+  16102,
+  26573,
+  4641,
+  112,
+  0.0075,
+  -0.0026,
+  4627,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-29',
+  null,
+  null,
+  168.6,
+  0,
+  0,
+  null,
+  null,
+  4554,
+  null,
+  null,
+  21957,
+  0,
+  0,
+  21957,
+  null,
+  26573,
+  21957,
+  4616,
+  0,
+  null,
+  -0.0134,
+  4554,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-04-30',
+  136,
+  0,
+  205.6,
+  0,
+  10000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
+  null,
+  5050,
+  16976,
+  0,
+  27037,
+  0,
+  16976,
+  27037,
+  10061,
+  21957,
+  27037,
+  4981,
+  61,
+  0.0061,
+  0.0139,
+  5051,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-05-01',
+  null,
+  null,
+  170.4,
+  0,
+  0,
+  null,
+  null,
+  4640,
+  null,
+  null,
+  22223,
+  0,
+  0,
+  22223,
+  null,
+  27037,
+  22223,
+  4814,
+  0,
+  null,
+  -0.0361,
+  4640,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-05-02',
+  null,
+  null,
+  157.4,
+  0,
+  0,
+  null,
+  null,
+  1924,
+  null,
+  null,
+  20277,
+  0,
+  0,
+  20277,
+  null,
+  22223,
+  20277,
+  1946,
+  0,
+  null,
+  -0.0113,
+  1925,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-05-03',
+  null,
+  null,
+  138.5,
+  0,
+  0,
+  null,
+  null,
+  2940,
+  null,
+  null,
+  17365,
+  0,
+  0,
+  17365,
+  null,
+  20277,
+  17365,
+  2912,
+  0,
+  null,
+  0.0096,
+  2941,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-05-04',
+  null,
+  null,
+  127.7,
+  0,
+  0,
+  null,
+  null,
+  1679,
+  null,
+  null,
+  15680,
+  0,
+  0,
+  15680,
+  null,
+  17365,
+  15680,
+  1685,
+  0,
+  null,
+  -0.0036,
+  1679,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-05-05',
+  98.4,
+  0,
+  199.3,
+  0,
+  15000,
+  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
+  null,
+  0,
+  11141,
+  0,
+  26241,
+  0,
+  11141,
+  26241,
+  15100,
+  15680,
+  26241,
+  4539,
+  100,
+  0.0067,
+  -1,
+  0,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
+
+insert into public.estoque_diesel_medicoes_diarias (
+  tanque_id,
+  data_medicao,
+  regua_anterior_t1,
+  regua_anterior_t2,
+  regua_final_t1,
+  regua_final_t2,
+  nf_volume_litros,
+  fornecedor_id,
+  nf_numero,
+  saida_transnet,
+  litros_anterior_t1,
+  litros_anterior_t2,
+  litros_final_t1,
+  litros_final_t2,
+  saldo_anterior,
+  saldo_final,
+  entrada_diesel,
+  medicao_d1,
+  medicao_atual,
+  saida_tanque,
+  diff_recebimento,
+  pct_diff_nf,
+  pct_diff_transnet,
+  saida_total_bombas,
+  status_lancamento,
+  observacao
+)
+select
+  t.id,
+  date '2026-05-06',
+  null,
+  0,
+  164.4,
+  0,
+  0,
+  null,
+  null,
+  0,
+  null,
+  0,
+  21332,
+  0,
+  0,
+  21332,
+  null,
+  26241,
+  21332,
+  4909,
+  0,
+  null,
+  -1,
+  0,
+  'IMPORTADO_PLANILHA',
+  'Carga automatica 2026 a partir da planilha de medicao.'
+from public.estoque_diesel_tanques t
+where t.tipo_diesel = 'S10'
+on conflict (tanque_id, data_medicao) do update
+set regua_anterior_t1 = excluded.regua_anterior_t1,
+    regua_anterior_t2 = excluded.regua_anterior_t2,
+    regua_final_t1 = excluded.regua_final_t1,
+    regua_final_t2 = excluded.regua_final_t2,
+    nf_volume_litros = excluded.nf_volume_litros,
+    fornecedor_id = excluded.fornecedor_id,
+    nf_numero = excluded.nf_numero,
+    saida_transnet = excluded.saida_transnet,
+    litros_anterior_t1 = excluded.litros_anterior_t1,
+    litros_anterior_t2 = excluded.litros_anterior_t2,
+    litros_final_t1 = excluded.litros_final_t1,
+    litros_final_t2 = excluded.litros_final_t2,
+    saldo_anterior = excluded.saldo_anterior,
+    saldo_final = excluded.saldo_final,
+    entrada_diesel = excluded.entrada_diesel,
+    medicao_d1 = excluded.medicao_d1,
+    medicao_atual = excluded.medicao_atual,
+    saida_tanque = excluded.saida_tanque,
+    diff_recebimento = excluded.diff_recebimento,
+    pct_diff_nf = excluded.pct_diff_nf,
+    pct_diff_transnet = excluded.pct_diff_transnet,
+    saida_total_bombas = excluded.saida_total_bombas,
+    status_lancamento = excluded.status_lancamento,
+    observacao = excluded.observacao,
+    atualizado_em = now();
 
 insert into public.estoque_diesel_medicoes_diarias (
   tanque_id,
@@ -1249,90 +11843,6 @@ select
   0.0073,
   0.0065,
   4644,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-16',
-  null,
-  null,
-  0,
-  176.4,
-  0,
-  null,
-  null,
-  4810,
-  null,
-  null,
-  0,
-  23097,
-  0,
-  23097,
-  null,
-  27985,
-  null,
-  null,
-  0,
-  null,
-  null,
-  4811,
   'IMPORTADO_PLANILHA',
   'Carga automatica 2026 a partir da planilha de medicao.'
 from public.estoque_diesel_tanques t
@@ -10604,14791 +21114,2361 @@ set regua_anterior_t1 = excluded.regua_anterior_t1,
     observacao = excluded.observacao,
     atualizado_em = now();
 
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-07',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  19683,
-  0,
-  19683,
-  0,
-  null,
-  -1,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-08',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-09',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-10',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-11',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-12',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-13',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-14',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-15',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-16',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-17',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-18',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-19',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-20',
-  0,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-21',
-  0,
-  null,
-  0,
-  null,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  0,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  5000,
-  0,
-  -5000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-22',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  5000,
-  0,
-  5000,
-  0,
-  null,
-  -1,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-23',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-24',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-25',
-  0,
-  null,
-  0,
-  null,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  0,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  15000,
-  0,
-  -15000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-26',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  15000,
-  0,
-  15000,
-  0,
-  null,
-  -1,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-27',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-28',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  0,
-  0,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-29',
-  0,
-  null,
-  0,
-  null,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  0,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  0,
-  15000,
-  0,
-  -15000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-30',
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  15000,
-  0,
-  15000,
-  0,
-  null,
-  -1,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S500'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-01',
-  null,
-  null,
-  119.3,
-  0,
-  0,
-  null,
-  null,
-  3374,
-  null,
-  null,
-  14368,
-  0,
-  0,
-  14368,
-  null,
-  17801,
-  14368,
-  3433,
-  0,
-  null,
-  -0.0172,
-  3374,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-02',
-  110.6,
-  0,
-  213.5,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  1329,
-  13016,
-  0,
-  27980,
-  0,
-  13016,
-  27980,
-  14964,
-  14368,
-  27980,
-  1352,
-  -36,
-  -0.0024,
-  -0.017,
-  1330,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-03',
-  null,
-  null,
-  187.6,
-  0,
-  0,
-  null,
-  null,
-  3397,
-  null,
-  null,
-  24678,
-  0,
-  0,
-  24678,
-  null,
-  27980,
-  24678,
-  3302,
-  0,
-  null,
-  0.0288,
-  3398,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-04',
-  null,
-  null,
-  164,
-  0,
-  0,
-  null,
-  null,
-  3114,
-  null,
-  null,
-  21273,
-  0,
-  0,
-  21273,
-  null,
-  24678,
-  21273,
-  3405,
-  0,
-  null,
-  -0.0855,
-  3114,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-05',
-  null,
-  null,
-  154.3,
-  0,
-  0,
-  null,
-  null,
-  1377,
-  null,
-  null,
-  19805,
-  0,
-  0,
-  19805,
-  null,
-  21273,
-  19805,
-  1468,
-  0,
-  null,
-  -0.062,
-  1378,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-06',
-  null,
-  null,
-  124.2,
-  0,
-  0,
-  null,
-  null,
-  4914,
-  null,
-  null,
-  15133,
-  0,
-  0,
-  15133,
-  null,
-  19805,
-  15133,
-  4672,
-  0,
-  null,
-  0.0518,
-  4914,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-07',
-  91.5,
-  0,
-  192.3,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Vibra' limit 1),
-  null,
-  4995,
-  10099,
-  0,
-  25318,
-  0,
-  10099,
-  25318,
-  15219,
-  15133,
-  25318,
-  5034,
-  219,
-  0.0146,
-  -0.0077,
-  4996,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-08',
-  null,
-  null,
-  156.6,
-  0,
-  0,
-  null,
-  null,
-  4973,
-  null,
-  null,
-  20156,
-  0,
-  0,
-  20156,
-  null,
-  25318,
-  20156,
-  5162,
-  0,
-  null,
-  -0.0366,
-  4973,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-09',
-  null,
-  null,
-  127.6,
-  0,
-  0,
-  null,
-  null,
-  4744,
-  null,
-  0,
-  15664,
-  0,
-  0,
-  15664,
-  null,
-  20156,
-  15664,
-  4492,
-  0,
-  null,
-  0.0561,
-  4744,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-10',
-  96.2,
-  0,
-  197.2,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Vibra' limit 1),
-  null,
-  4781,
-  10807,
-  0,
-  25968,
-  0,
-  10807,
-  25968,
-  15161,
-  15664,
-  25968,
-  4857,
-  161,
-  0.0107,
-  -0.0156,
-  4782,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-11',
-  null,
-  null,
-  172.8,
-  0,
-  0,
-  null,
-  null,
-  3336,
-  null,
-  null,
-  22574,
-  0,
-  0,
-  22574,
-  null,
-  25968,
-  22574,
-  3394,
-  0,
-  null,
-  -0.0171,
-  3336,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-12',
-  null,
-  null,
-  163.1,
-  0,
-  0,
-  null,
-  null,
-  1457,
-  null,
-  null,
-  21138,
-  0,
-  0,
-  21138,
-  null,
-  22574,
-  21138,
-  1436,
-  0,
-  null,
-  0.0146,
-  1458,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-13',
-  null,
-  null,
-  133.5,
-  0,
-  0,
-  null,
-  null,
-  4317,
-  null,
-  null,
-  16586,
-  0,
-  0,
-  16586,
-  null,
-  21138,
-  16586,
-  4552,
-  0,
-  null,
-  -0.0516,
-  4317,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-14',
-  null,
-  null,
-  106.4,
-  0,
-  0,
-  null,
-  null,
-  4173,
-  null,
-  null,
-  12367,
-  0,
-  0,
-  12367,
-  null,
-  16586,
-  12367,
-  4219,
-  0,
-  null,
-  -0.0109,
-  4173,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-15',
-  78.5,
-  0,
-  216.7,
-  0,
-  20000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
-  null,
-  4176,
-  8185,
-  0,
-  28343,
-  0,
-  8185,
-  28343,
-  20158,
-  12367,
-  28343,
-  4182,
-  158,
-  0.0079,
-  -0.0014,
-  4176,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-16',
-  null,
-  null,
-  185.5,
-  0,
-  0,
-  null,
-  null,
-  3920,
-  null,
-  null,
-  24387,
-  0,
-  0,
-  24387,
-  null,
-  28343,
-  24387,
-  3956,
-  0,
-  null,
-  -0.0091,
-  3921,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-17',
-  null,
-  null,
-  156.8,
-  0,
-  0,
-  null,
-  null,
-  4107,
-  null,
-  null,
-  20186,
-  0,
-  0,
-  20186,
-  null,
-  24387,
-  20186,
-  4201,
-  0,
-  null,
-  -0.0224,
-  4108,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-18',
-  null,
-  null,
-  139.5,
-  0,
-  0,
-  null,
-  null,
-  2714,
-  null,
-  null,
-  17521,
-  0,
-  0,
-  17521,
-  null,
-  20186,
-  17521,
-  2665,
-  0,
-  null,
-  0.0184,
-  2714,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-19',
-  null,
-  null,
-  127.8,
-  0,
-  0,
-  null,
-  null,
-  1825,
-  null,
-  null,
-  15696,
-  0,
-  0,
-  15696,
-  null,
-  17521,
-  15696,
-  1825,
-  0,
-  null,
-  0,
-  1826,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-20',
-  98.5,
-  0,
-  199.3,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ale' limit 1),
-  null,
-  4410,
-  11157,
-  0,
-  26241,
-  0,
-  11157,
-  26241,
-  15084,
-  15696,
-  26241,
-  4539,
-  84,
-  0.0056,
-  -0.0284,
-  4410,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-21',
-  null,
-  null,
-  169.3,
-  0,
-  0,
-  null,
-  null,
-  4132,
-  null,
-  null,
-  22061,
-  0,
-  0,
-  22061,
-  null,
-  26241,
-  22061,
-  4180,
-  0,
-  null,
-  -0.0115,
-  4133,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-22',
-  null,
-  null,
-  144.5,
-  0,
-  0,
-  null,
-  null,
-  3758,
-  null,
-  null,
-  18297,
-  0,
-  0,
-  18297,
-  null,
-  22061,
-  18297,
-  3764,
-  0,
-  null,
-  -0.0016,
-  3757,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-23',
-  119.3,
-  0,
-  228.5,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ale' limit 1),
-  null,
-  3904,
-  14368,
-  0,
-  29568,
-  0,
-  14368,
-  29568,
-  15200,
-  18297,
-  29568,
-  3929,
-  200,
-  0.0133,
-  -0.0064,
-  3905,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-24',
-  null,
-  null,
-  190.4,
-  0,
-  0,
-  null,
-  null,
-  4360,
-  null,
-  null,
-  25061,
-  0,
-  0,
-  25061,
-  null,
-  29568,
-  25061,
-  4507,
-  0,
-  null,
-  -0.0326,
-  4361,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-25',
-  null,
-  null,
-  173,
-  0,
-  0,
-  null,
-  null,
-  2618,
-  null,
-  null,
-  22604,
-  0,
-  0,
-  22604,
-  null,
-  25061,
-  22604,
-  2457,
-  0,
-  null,
-  0.0655,
-  2619,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-26',
-  null,
-  null,
-  164.5,
-  0,
-  0,
-  null,
-  null,
-  1344,
-  null,
-  null,
-  21347,
-  0,
-  0,
-  21347,
-  null,
-  22604,
-  21347,
-  1257,
-  0,
-  null,
-  0.0692,
-  1344,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-27',
-  null,
-  null,
-  135.5,
-  0,
-  0,
-  null,
-  null,
-  4375,
-  null,
-  null,
-  16898,
-  0,
-  0,
-  16898,
-  null,
-  21347,
-  16898,
-  4449,
-  0,
-  null,
-  -0.0166,
-  4376,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-28',
-  null,
-  null,
-  107.2,
-  0,
-  0,
-  null,
-  null,
-  4415,
-  null,
-  null,
-  12490,
-  0,
-  0,
-  12490,
-  null,
-  16898,
-  12490,
-  4408,
-  0,
-  null,
-  0.0016,
-  4416,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-29',
-  79.2,
-  0,
-  218.2,
-  0,
-  20000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4098,
-  8286,
-  0,
-  28509,
-  0,
-  8286,
-  28509,
-  20223,
-  12490,
-  28509,
-  4204,
-  223,
-  0.0112,
-  -0.0252,
-  4099,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-30',
-  null,
-  null,
-  182.5,
-  0,
-  0,
-  null,
-  null,
-  4356,
-  null,
-  null,
-  23967,
-  0,
-  0,
-  23967,
-  null,
-  28509,
-  23967,
-  4542,
-  0,
-  null,
-  -0.041,
-  4357,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-01-31',
-  null,
-  null,
-  152.5,
-  0,
-  0,
-  null,
-  null,
-  4472,
-  null,
-  null,
-  19530,
-  0,
-  0,
-  19530,
-  null,
-  23967,
-  19530,
-  4437,
-  0,
-  null,
-  0.0079,
-  4472,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-01',
-  null,
-  null,
-  134,
-  0,
-  0,
-  null,
-  null,
-  2905,
-  null,
-  null,
-  16664,
-  0,
-  0,
-  16664,
-  null,
-  19530,
-  16664,
-  2866,
-  0,
-  null,
-  0.0136,
-  2901,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-02',
-  null,
-  null,
-  122.5,
-  0,
-  0,
-  null,
-  null,
-  1659,
-  null,
-  null,
-  14868,
-  0,
-  0,
-  14868,
-  null,
-  16664,
-  14868,
-  1796,
-  0,
-  null,
-  -0.0763,
-  1660,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-03',
-  90.2,
-  0,
-  190.1,
-  0,
-  15000,
-  null,
-  null,
-  4946,
-  9904,
-  0,
-  25020,
-  0,
-  9904,
-  25020,
-  15116,
-  14868,
-  25020,
-  4964,
-  116,
-  0.0077,
-  -0.0036,
-  4944,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-04',
-  null,
-  null,
-  156.4,
-  0,
-  0,
-  null,
-  null,
-  4839,
-  null,
-  null,
-  20125,
-  0,
-  0,
-  20125,
-  null,
-  25020,
-  20125,
-  4895,
-  0,
-  null,
-  -0.0114,
-  4839,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-05',
-  null,
-  null,
-  126.6,
-  0,
-  0,
-  null,
-  null,
-  4645,
-  null,
-  null,
-  15508,
-  0,
-  0,
-  15508,
-  null,
-  20125,
-  15508,
-  4617,
-  0,
-  null,
-  0.0061,
-  4646,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-06',
-  97.5,
-  0,
-  198.1,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
-  null,
-  4430,
-  11004,
-  0,
-  26085,
-  0,
-  11004,
-  26085,
-  15081,
-  15508,
-  26085,
-  4504,
-  81,
-  0.0054,
-  -0.0164,
-  4430,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-07',
-  null,
-  null,
-  165.5,
-  0,
-  0,
-  null,
-  null,
-  4441,
-  null,
-  null,
-  21497,
-  0,
-  0,
-  21497,
-  null,
-  26085,
-  21497,
-  4588,
-  0,
-  null,
-  -0.032,
-  4441,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-08',
-  null,
-  null,
-  143.7,
-  0,
-  0,
-  null,
-  null,
-  3378,
-  null,
-  null,
-  18173,
-  0,
-  0,
-  18173,
-  null,
-  21497,
-  18173,
-  3324,
-  0,
-  null,
-  0.0162,
-  3378,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-09',
-  null,
-  null,
-  134.3,
-  0,
-  0,
-  null,
-  null,
-  1446,
-  null,
-  0,
-  16711,
-  0,
-  0,
-  16711,
-  null,
-  18173,
-  16711,
-  1462,
-  0,
-  null,
-  -0.0109,
-  1447,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-10',
-  null,
-  null,
-  102.3,
-  0,
-  0,
-  null,
-  null,
-  4939,
-  null,
-  null,
-  11737,
-  0,
-  0,
-  11737,
-  null,
-  16711,
-  11737,
-  4974,
-  0,
-  null,
-  -0.007,
-  4939,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-11',
-  69.4,
-  0,
-  206.4,
-  0,
-  5000,
-  null,
-  null,
-  4945,
-  6894,
-  0,
-  27135,
-  0,
-  6894,
-  27135,
-  20241,
-  11737,
-  27135,
-  4843,
-  15241,
-  3.0482,
-  0.0211,
-  4946,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-11',
-  104.2,
-  0,
-  206.4,
-  0,
-  15000,
-  null,
-  null,
-  4945,
-  12028,
-  null,
-  27135,
-  0,
-  12028,
-  27135,
-  15107,
-  27135,
-  27135,
-  15107,
-  107,
-  0.0071,
-  -0.6727,
-  4946,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-12',
-  null,
-  null,
-  170.7,
-  0,
-  0,
-  null,
-  null,
-  4790,
-  null,
-  null,
-  22267,
-  0,
-  0,
-  22267,
-  null,
-  27135,
-  22267,
-  4868,
-  0,
-  null,
-  -0.016,
-  4791,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-13',
-  null,
-  null,
-  140,
-  0,
-  0,
-  null,
-  null,
-  4958,
-  null,
-  null,
-  17599,
-  0,
-  0,
-  17599,
-  null,
-  22267,
-  17599,
-  4668,
-  0,
-  null,
-  0.0621,
-  4959,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-14',
-  null,
-  null,
-  106.3,
-  0,
-  0,
-  null,
-  null,
-  5005,
-  null,
-  null,
-  12351,
-  0,
-  0,
-  12351,
-  null,
-  17599,
-  12351,
-  5248,
-  0,
-  null,
-  -0.0463,
-  5005,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-15',
-  null,
-  null,
-  84.9,
-  0,
-  0,
-  null,
-  null,
-  3318,
-  null,
-  null,
-  9118,
-  0,
-  0,
-  9118,
-  null,
-  12351,
-  9118,
-  3233,
-  0,
-  null,
-  0.0263,
-  3318,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-16',
-  77.4,
-  0,
-  214.4,
-  0,
-  20000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
-  null,
-  1072,
-  8026,
-  0,
-  28084,
-  0,
-  8026,
-  28084,
-  20058,
-  9118,
-  28084,
-  1092,
-  58,
-  0.0029,
-  -0.0183,
-  1073,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-17',
-  null,
-  null,
-  185.6,
-  0,
-  0,
-  null,
-  null,
-  3714,
-  null,
-  null,
-  24401,
-  0,
-  0,
-  24401,
-  null,
-  28084,
-  24401,
-  3683,
-  0,
-  null,
-  0.0084,
-  3714,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-18',
-  null,
-  null,
-  165.3,
-  0,
-  0,
-  null,
-  null,
-  2810,
-  null,
-  null,
-  21467,
-  0,
-  0,
-  21467,
-  null,
-  24401,
-  21467,
-  2934,
-  0,
-  null,
-  -0.0423,
-  2811,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-19',
-  null,
-  null,
-  137.5,
-  0,
-  0,
-  null,
-  null,
-  4375,
-  null,
-  null,
-  17210,
-  0,
-  0,
-  17210,
-  null,
-  21467,
-  17210,
-  4257,
-  0,
-  null,
-  0.0277,
-  4375,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-20',
-  null,
-  null,
-  104.3,
-  0,
-  0,
-  null,
-  null,
-  5004,
-  null,
-  null,
-  12044,
-  0,
-  0,
-  12044,
-  null,
-  17210,
-  12044,
-  5166,
-  0,
-  null,
-  -0.0314,
-  5005,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-21',
-  69.3,
-  0,
-  205.4,
-  0,
-  20000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
-  null,
-  5198,
-  6881,
-  0,
-  27012,
-  0,
-  6881,
-  27012,
-  20131,
-  12044,
-  27012,
-  5163,
-  131,
-  0.0066,
-  0.0068,
-  5199,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-22',
-  null,
-  null,
-  181.4,
-  0,
-  0,
-  null,
-  null,
-  3084,
-  null,
-  null,
-  23812,
-  0,
-  0,
-  23812,
-  null,
-  27012,
-  23812,
-  3200,
-  0,
-  null,
-  -0.0362,
-  3084,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-23',
-  null,
-  null,
-  174.3,
-  0,
-  0,
-  null,
-  null,
-  1043,
-  null,
-  null,
-  22793,
-  0,
-  0,
-  22793,
-  null,
-  23812,
-  22793,
-  1019,
-  0,
-  null,
-  0.0236,
-  1043,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-24',
-  null,
-  null,
-  140,
-  0,
-  0,
-  null,
-  null,
-  5145,
-  null,
-  null,
-  17599,
-  0,
-  0,
-  17599,
-  null,
-  22793,
-  17599,
-  5194,
-  0,
-  null,
-  -0.0094,
-  5146,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-25',
-  121.8,
-  0,
-  232.7,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  2845,
-  14758,
-  0,
-  29953,
-  0,
-  14758,
-  29953,
-  15195,
-  17599,
-  29953,
-  2841,
-  195,
-  0.013,
-  0.0014,
-  2845,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-26',
-  null,
-  null,
-  190.5,
-  0,
-  0,
-  null,
-  null,
-  4821,
-  null,
-  null,
-  25075,
-  0,
-  0,
-  25075,
-  null,
-  29953,
-  25075,
-  4878,
-  0,
-  null,
-  -0.0117,
-  4822,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-27',
-  null,
-  null,
-  158.3,
-  0,
-  0,
-  null,
-  null,
-  4681,
-  null,
-  null,
-  20414,
-  0,
-  0,
-  20414,
-  null,
-  25075,
-  20414,
-  4661,
-  0,
-  null,
-  0.0043,
-  4682,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-02-28',
-  null,
-  null,
-  128,
-  0,
-  0,
-  null,
-  null,
-  4661,
-  null,
-  null,
-  15727,
-  0,
-  0,
-  15727,
-  null,
-  20414,
-  15727,
-  4687,
-  0,
-  null,
-  -0.0055,
-  4661,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-01',
-  null,
-  null,
-  107,
-  0,
-  0,
-  null,
-  null,
-  3237,
-  null,
-  null,
-  12459,
-  0,
-  0,
-  12459,
-  null,
-  15727,
-  12459,
-  3268,
-  0,
-  null,
-  -0.0095,
-  3238,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-02',
-  97.6,
-  0,
-  198.6,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  1428,
-  11020,
-  0,
-  26150,
-  0,
-  11020,
-  26150,
-  15130,
-  12459,
-  26150,
-  1439,
-  130,
-  0.0087,
-  -0.0076,
-  1428,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-03',
-  null,
-  null,
-  164.4,
-  0,
-  0,
-  null,
-  null,
-  4712,
-  null,
-  null,
-  21332,
-  0,
-  0,
-  21332,
-  null,
-  26150,
-  21332,
-  4818,
-  0,
-  null,
-  -0.022,
-  4712,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-04',
-  null,
-  null,
-  134.8,
-  0,
-  0,
-  null,
-  null,
-  4719,
-  null,
-  null,
-  16789,
-  0,
-  0,
-  16789,
-  null,
-  21332,
-  16789,
-  4543,
-  0,
-  null,
-  0.0387,
-  4719,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-05',
-  101.6,
-  0,
-  203.2,
-  0,
-  15000,
-  null,
-  null,
-  4950,
-  11630,
-  0,
-  26738,
-  0,
-  11630,
-  26738,
-  15108,
-  16789,
-  26738,
-  5159,
-  108,
-  0.0072,
-  -0.0405,
-  4952,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-06',
-  null,
-  null,
-  169.5,
-  0,
-  0,
-  null,
-  null,
-  4613,
-  null,
-  null,
-  22090,
-  0,
-  0,
-  22090,
-  null,
-  26738,
-  22090,
-  4648,
-  0,
-  null,
-  -0.0075,
-  4614,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9231972,
+  9235346
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-01'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9235346,
+  9236676
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-02'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9236676,
+  9240074
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-03'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9240074,
+  9243188
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-04'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9243188,
+  9244566
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-05'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
 select
-  t.id,
-  date '2026-03-07',
-  null,
-  null,
-  138.3,
-  0,
-  0,
-  null,
-  null,
-  4777,
-  null,
-  null,
-  17334,
-  0,
-  0,
-  17334,
-  null,
-  22090,
-  17334,
-  4756,
-  0,
-  null,
-  0.0044,
-  4777,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-08',
-  null,
-  null,
-  118,
-  0,
-  0,
-  null,
-  null,
-  3240,
-  null,
-  null,
-  14166,
-  0,
-  0,
-  14166,
-  null,
-  17334,
-  14166,
-  3168,
-  0,
-  null,
-  0.0227,
-  3240,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-09',
-  108.8,
-  0,
-  174.04,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  1331,
-  12737,
-  0,
-  22755,
-  0,
-  12737,
-  22755,
-  10018,
-  14166,
-  22755,
-  1429,
-  18,
-  0.0018,
-  -0.0686,
-  1331,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-10',
-  null,
-  null,
-  142.5,
-  0,
-  0,
-  null,
-  null,
-  4801,
-  null,
-  null,
-  17987,
-  0,
-  0,
-  17987,
-  null,
-  22755,
-  17987,
-  4768,
-  0,
-  null,
-  0.0069,
-  4801,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-11',
-  111.7,
-  0,
-  144.5,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4757,
-  13186,
-  0,
-  18297,
-  0,
-  13186,
-  18297,
-  5111,
-  17987,
-  18297,
-  4801,
-  111,
-  0.0222,
-  -0.0092,
-  4758,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-12',
-  115,
-  0,
-  148.5,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4595,
-  13699,
-  null,
-  18915,
-  0,
-  13699,
-  18915,
-  5216,
-  18297,
-  18915,
-  4598,
-  216,
-  0.0432,
-  -0.0007,
-  4595,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-13',
-  114.5,
-  0,
-  148,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4998,
-  13621,
-  0,
-  18838,
-  0,
-  13621,
-  18838,
-  5217,
-  18915,
-  18838,
-  5294,
-  217,
-  0.0434,
-  -0.0559,
-  4999,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-13',
-  148,
-  0,
-  219,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Combustran' limit 1),
-  null,
-  4998,
-  18838,
-  0,
-  28597,
-  0,
-  18838,
-  28597,
-  9759,
-  18838,
-  28597,
-  0,
-  -241,
-  -0.0241,
-  null,
-  4999,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-14',
-  182.5,
-  0,
-  224.5,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4703,
-  23967,
-  0,
-  29174,
-  0,
-  23967,
-  29174,
-  5207,
-  28597,
-  29174,
-  4630,
-  207,
-  0.0414,
-  0.0158,
-  4704,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-15',
-  null,
-  null,
-  198.5,
-  0,
-  0,
-  null,
-  null,
-  3009,
-  null,
-  null,
-  26137,
-  0,
-  0,
-  26137,
-  null,
-  29174,
-  26137,
-  3037,
-  0,
-  null,
-  -0.0092,
-  3009,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-16',
-  187.7,
-  0,
-  230,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  1400,
-  24692,
-  0,
-  29709,
-  0,
-  24692,
-  29709,
-  5017,
-  26137,
-  29709,
-  1445,
-  17,
-  0.0034,
-  -0.0311,
-  1401,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-17',
-  null,
-  null,
-  187.5,
-  0,
-  0,
-  null,
-  null,
-  5075,
-  null,
-  null,
-  24664,
-  0,
-  0,
-  24664,
-  null,
-  29709,
-  24664,
-  5045,
-  0,
-  null,
-  0.0059,
-  5076,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-18',
-  153.7,
-  0,
-  231,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4835,
-  19713,
-  0,
-  29801,
-  0,
-  19713,
-  29801,
-  10088,
-  24664,
-  29801,
-  4951,
-  88,
-  0.0088,
-  -0.0234,
-  4835,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-19',
-  189.2,
-  0,
-  232.5,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4821,
-  24897,
-  0,
-  29935,
-  0,
-  24897,
-  29935,
-  5038,
-  29801,
-  29935,
-  4904,
-  38,
-  0.0076,
-  -0.0169,
-  4821,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-20',
-  null,
-  null,
-  192.5,
-  0,
-  0,
-  null,
-  null,
-  4782,
-  null,
-  null,
-  25345,
-  0,
-  0,
-  25345,
-  null,
-  29935,
-  25345,
-  4590,
-  0,
-  null,
-  0.0418,
-  4783,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-21',
-  158.7,
-  0,
-  238.5,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4899,
-  20474,
-  0,
-  30432,
-  0,
-  20474,
-  30432,
-  9958,
-  25345,
-  30432,
-  4871,
-  -42,
-  -0.0042,
-  0.0057,
-  4899,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-22',
-  null,
-  null,
-  207.6,
-  0,
-  0,
-  null,
-  null,
-  3006,
-  null,
-  null,
-  27281,
-  0,
-  0,
-  27281,
-  null,
-  30432,
-  27281,
-  3151,
-  0,
-  null,
-  -0.046,
-  3007,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-23',
-  null,
-  null,
-  0,
-  195.5,
-  0,
-  null,
-  null,
-  1420,
-  null,
-  null,
-  0,
-  25745,
-  0,
-  25745,
-  null,
-  27281,
-  25745,
-  1536,
-  0,
-  null,
-  -0.0755,
-  1421,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-24',
-  161.8,
-  0,
-  197.5,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4966,
-  20942,
-  0,
-  26007,
-  0,
-  20942,
-  26007,
-  5065,
-  25745,
-  26007,
-  4803,
-  65,
-  0.013,
-  0.0339,
-  4966,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-25',
-  null,
-  null,
-  164,
-  0,
-  0,
-  null,
-  null,
-  4755,
-  null,
-  null,
-  21273,
-  0,
-  0,
-  21273,
-  null,
-  26007,
-  21273,
-  4734,
-  0,
-  null,
-  0.0044,
-  4756,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-26',
-  131.6,
-  0,
-  200.5,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4983,
-  16289,
-  0,
-  26395,
-  0,
-  16289,
-  26395,
-  10106,
-  21273,
-  26395,
-  4984,
-  106,
-  0.0106,
-  -0.0002,
-  4983,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-27',
-  167.3,
-  0,
-  204.6,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4694,
-  21765,
-  0,
-  26913,
-  0,
-  21765,
-  26913,
-  5148,
-  26395,
-  26913,
-  4630,
-  148,
-  0.0296,
-  0.0138,
-  4693,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-28',
-  null,
-  null,
-  165.5,
-  0,
-  0,
-  null,
-  null,
-  5198,
-  null,
-  null,
-  21497,
-  0,
-  0,
-  21497,
-  null,
-  26913,
-  21497,
-  5416,
-  0,
-  null,
-  -0.0403,
-  5198,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-29',
-  null,
-  null,
-  142,
-  0,
-  0,
-  null,
-  null,
-  3540,
-  null,
-  null,
-  17909,
-  0,
-  0,
-  17909,
-  null,
-  21497,
-  17909,
-  3588,
-  0,
-  null,
-  -0.0134,
-  3541,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-30',
-  131.3,
-  0,
-  165,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  1675,
-  16242,
-  0,
-  21422,
-  0,
-  16242,
-  21422,
-  5180,
-  17909,
-  21422,
-  1667,
-  180,
-  0.036,
-  0.0048,
-  1676,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-03-31',
-  131.5,
-  0,
-  200.4,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4909,
-  16274,
-  0,
-  26382,
-  0,
-  16274,
-  26382,
-  10108,
-  21422,
-  26382,
-  5148,
-  108,
-  0.0108,
-  -0.0464,
-  4910,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-01',
-  165.4,
-  0,
-  202.4,
-  0,
-  5000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4848,
-  21482,
-  0,
-  26637,
-  0,
-  21482,
-  26637,
-  5155,
-  26382,
-  26637,
-  4900,
-  155,
-  0.031,
-  -0.0106,
-  4842,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-02',
-  165.5,
-  0,
-  249,
-  0,
-  9600,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  5080,
-  21497,
-  0,
-  31096,
-  0,
-  21497,
-  31096,
-  9599,
-  26637,
-  31096,
-  5140,
-  -1,
-  -0.0001,
-  -0.0117,
-  5080,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-03',
-  null,
-  null,
-  197.8,
-  0,
-  0,
-  null,
-  null,
-  5072,
-  null,
-  null,
-  26046,
-  0,
-  0,
-  26046,
-  null,
-  31096,
-  26046,
-  5050,
-  0,
-  null,
-  0.0044,
-  5073,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-04',
-  null,
-  null,
-  185.6,
-  0,
-  0,
-  null,
-  null,
-  1638,
-  null,
-  null,
-  24401,
-  0,
-  0,
-  24401,
-  null,
-  26046,
-  24401,
-  1645,
-  0,
-  null,
-  -0.0043,
-  1638,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-05',
-  null,
-  null,
-  165.5,
-  0,
-  0,
-  null,
-  null,
-  3057,
-  null,
-  null,
-  21497,
-  0,
-  0,
-  21497,
-  null,
-  24401,
-  21497,
-  2904,
-  0,
-  null,
-  0.0527,
-  3057,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-06',
-  156.5,
-  0,
-  235.7,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  1449,
-  20140,
-  0,
-  30209,
-  0,
-  20140,
-  30209,
-  10069,
-  21497,
-  30209,
-  1357,
-  69,
-  0.0069,
-  0.0678,
-  1449,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-07',
-  null,
-  null,
-  188.8,
-  0,
-  0,
-  null,
-  null,
-  5048,
-  null,
-  null,
-  24843,
-  0,
-  0,
-  24843,
-  null,
-  30209,
-  24843,
-  5366,
-  0,
-  null,
-  -0.0593,
-  5048,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-08',
-  154.5,
-  0,
-  231.5,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  5087,
-  19836,
-  0,
-  29846,
-  0,
-  19836,
-  29846,
-  10010,
-  24843,
-  29846,
-  5007,
-  10,
-  0.001,
-  0.016,
-  5088,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-09',
-  null,
-  null,
-  197,
-  0,
-  0,
-  null,
-  null,
-  5275,
-  null,
-  null,
-  25942,
-  0,
-  0,
-  25942,
-  null,
-  29846,
-  25942,
-  3904,
-  0,
-  null,
-  0.3512,
-  5275,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-10',
-  153.5,
-  0,
-  231,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4900,
-  19683,
-  0,
-  29801,
-  0,
-  19683,
-  29801,
-  10118,
-  25942,
-  29801,
-  6259,
-  118,
-  0.0118,
-  -0.2171,
-  4900,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-11',
-  null,
-  null,
-  188.6,
-  0,
-  0,
-  null,
-  null,
-  4867,
-  null,
-  null,
-  24815,
-  0,
-  0,
-  24815,
-  null,
-  29801,
-  24815,
-  4986,
-  0,
-  null,
-  -0.0239,
-  4868,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-12',
-  null,
-  null,
-  165.7,
-  0,
-  0,
-  null,
-  null,
-  3217,
-  null,
-  null,
-  21527,
-  0,
-  0,
-  21527,
-  null,
-  24815,
-  21527,
-  3288,
-  0,
-  null,
-  -0.0216,
-  3216,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-13',
-  null,
-  null,
-  155.8,
-  0,
-  0,
-  null,
-  null,
-  1462,
-  null,
-  null,
-  20034,
-  0,
-  0,
-  20034,
-  null,
-  21527,
-  20034,
-  1493,
-  0,
-  null,
-  -0.0208,
-  1460,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-14',
-  125.5,
-  0,
-  192.5,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4760,
-  15336,
-  0,
-  25345,
-  0,
-  15336,
-  25345,
-  10009,
-  20034,
-  25345,
-  4698,
-  9,
-  0.0009,
-  0.0132,
-  4760,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-15',
-  null,
-  null,
-  157.7,
-  0,
-  0,
-  null,
-  null,
-  4953,
-  null,
-  null,
-  20323,
-  0,
-  0,
-  20323,
-  null,
-  25345,
-  20323,
-  5022,
-  0,
-  null,
-  -0.0137,
-  4954,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-16',
-  127,
-  0,
-  194.5,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  4858,
-  15571,
-  0,
-  25612,
-  0,
-  15571,
-  25612,
-  10041,
-  20323,
-  25612,
-  4752,
-  41,
-  0.0041,
-  0.0223,
-  4858,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-17',
-  null,
-  null,
-  158.7,
-  0,
-  0,
-  null,
-  null,
-  4859,
-  null,
-  null,
-  20474,
-  0,
-  0,
-  20474,
-  null,
-  25612,
-  20474,
-  5138,
-  0,
-  null,
-  -0.0543,
-  4859,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-18',
-  null,
-  null,
-  128.7,
-  0,
-  0,
-  null,
-  null,
-  4723,
-  null,
-  null,
-  15836,
-  0,
-  0,
-  15836,
-  null,
-  20474,
-  15836,
-  4638,
-  0,
-  null,
-  0.0183,
-  4723,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-19',
-  null,
-  null,
-  106.4,
-  0,
-  0,
-  null,
-  null,
-  3403,
-  null,
-  null,
-  12367,
-  0,
-  0,
-  12367,
-  null,
-  15836,
-  12367,
-  3469,
-  0,
-  null,
-  -0.019,
-  3403,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-20',
-  95.4,
-  0,
-  161.5,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  1826,
-  10686,
-  0,
-  20897,
-  0,
-  10686,
-  20897,
-  10211,
-  12367,
-  20897,
-  1681,
-  211,
-  0.0211,
-  0.0863,
-  1823,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-21',
-  null,
-  null,
-  134.3,
-  0,
-  0,
-  null,
-  null,
-  4010,
-  null,
-  null,
-  16711,
-  0,
-  0,
-  16711,
-  null,
-  20897,
-  16711,
-  4186,
-  0,
-  null,
-  -0.042,
-  4011,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-22',
-  122.8,
-  0,
-  189.4,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  1756,
-  14914,
-  0,
-  24925,
-  0,
-  14914,
-  24925,
-  10011,
-  16711,
-  24925,
-  1797,
-  11,
-  0.0011,
-  -0.0228,
-  1754,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-23',
-  null,
-  null,
-  153.6,
-  0,
-  0,
-  null,
-  null,
-  4958,
-  null,
-  null,
-  19698,
-  0,
-  0,
-  19698,
-  null,
-  24925,
-  19698,
-  5227,
-  0,
-  null,
-  -0.0515,
-  4955,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-24',
-  124.7,
-  0,
-  191.5,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
-  null,
-  4723,
-  15211,
-  0,
-  25210,
-  0,
-  15211,
-  25210,
-  9999,
-  19698,
-  25210,
-  4487,
-  -1,
-  -0.0001,
-  0.0526,
-  4723,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-25',
-  null,
-  null,
-  158.2,
-  0,
-  0,
-  null,
-  null,
-  4603,
-  null,
-  null,
-  20399,
-  0,
-  0,
-  20399,
-  null,
-  25210,
-  20399,
-  4811,
-  0,
-  null,
-  -0.0432,
-  4603,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-26',
-  null,
-  null,
-  138,
-  0,
-  0,
-  null,
-  null,
-  3007,
-  null,
-  null,
-  17287,
-  0,
-  0,
-  17287,
-  null,
-  20399,
-  17287,
-  3112,
-  0,
-  null,
-  -0.0337,
-  3002,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-27',
-  null,
-  null,
-  130.4,
-  0,
-  0,
-  null,
-  null,
-  1414,
-  null,
-  null,
-  16102,
-  0,
-  0,
-  16102,
-  null,
-  17287,
-  16102,
-  1185,
-  0,
-  null,
-  0.1932,
-  1413,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-28',
-  100.5,
-  0,
-  201.9,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Combustran' limit 1),
-  null,
-  4629,
-  11461,
-  0,
-  26573,
-  0,
-  11461,
-  26573,
-  15112,
-  16102,
-  26573,
-  4641,
-  112,
-  0.0075,
-  -0.0026,
-  4627,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-29',
-  null,
-  null,
-  168.6,
-  0,
-  0,
-  null,
-  null,
-  4554,
-  null,
-  null,
-  21957,
-  0,
-  0,
-  21957,
-  null,
-  26573,
-  21957,
-  4616,
-  0,
-  null,
-  -0.0134,
-  4554,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-04-30',
-  136,
-  0,
-  205.6,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
-  null,
-  5050,
-  16976,
-  0,
-  27037,
-  0,
-  16976,
-  27037,
-  10061,
-  21957,
-  27037,
-  4981,
-  61,
-  0.0061,
-  0.0139,
-  5051,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-01',
-  null,
-  null,
-  170.4,
-  0,
-  0,
-  null,
-  null,
-  4640,
-  null,
-  null,
-  22223,
-  0,
-  0,
-  22223,
-  null,
-  27037,
-  22223,
-  4814,
-  0,
-  null,
-  -0.0361,
-  4640,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-02',
-  null,
-  null,
-  157.4,
-  0,
-  0,
-  null,
-  null,
-  1924,
-  null,
-  null,
-  20277,
-  0,
-  0,
-  20277,
-  null,
-  22223,
-  20277,
-  1946,
-  0,
-  null,
-  -0.0113,
-  1925,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-03',
-  null,
-  null,
-  138.5,
-  0,
-  0,
-  null,
-  null,
-  2940,
-  null,
-  null,
-  17365,
-  0,
-  0,
-  17365,
-  null,
-  20277,
-  17365,
-  2912,
-  0,
-  null,
-  0.0096,
-  2941,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-04',
-  null,
-  null,
-  127.7,
-  0,
-  0,
-  null,
-  null,
-  1679,
-  null,
-  null,
-  15680,
-  0,
-  0,
-  15680,
-  null,
-  17365,
-  15680,
-  1685,
-  0,
-  null,
-  -0.0036,
-  1679,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-05',
-  98.4,
-  0,
-  199.3,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  0,
-  11141,
-  0,
-  26241,
-  0,
-  11141,
-  26241,
-  15100,
-  15680,
-  26241,
-  4539,
-  100,
-  0.0067,
-  -1,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-06',
-  null,
-  0,
-  164.4,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  21332,
-  0,
-  0,
-  21332,
-  null,
-  26241,
-  21332,
-  4909,
-  0,
-  null,
-  -1,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-07',
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  21332,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-08',
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-09',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-10',
-  null,
-  0,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-11',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-12',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-13',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-14',
-  null,
-  0,
-  null,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  -10000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-15',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-16',
-  null,
-  0,
-  null,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  -10000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-17',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-18',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-19',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-20',
-  null,
-  0,
-  null,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  -10000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-21',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-22',
-  null,
-  0,
-  null,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Raizen' limit 1),
-  null,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  -10000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-23',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-24',
-  null,
-  0,
-  null,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
-  null,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  -10000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-25',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-26',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-27',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-28',
-  null,
-  0,
-  null,
-  0,
-  15000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Combustran' limit 1),
-  null,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  -15000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-29',
-  null,
-  null,
-  null,
-  0,
-  0,
-  null,
-  null,
-  0,
-  null,
-  null,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  0,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-insert into public.estoque_diesel_medicoes_diarias (
-  tanque_id,
-  data_medicao,
-  regua_anterior_t1,
-  regua_anterior_t2,
-  regua_final_t1,
-  regua_final_t2,
-  nf_volume_litros,
-  fornecedor_id,
-  nf_numero,
-  saida_transnet,
-  litros_anterior_t1,
-  litros_anterior_t2,
-  litros_final_t1,
-  litros_final_t2,
-  saldo_anterior,
-  saldo_final,
-  entrada_diesel,
-  medicao_d1,
-  medicao_atual,
-  saida_tanque,
-  diff_recebimento,
-  pct_diff_nf,
-  pct_diff_transnet,
-  saida_total_bombas,
-  status_lancamento,
-  observacao
-)
-select
-  t.id,
-  date '2026-05-30',
-  null,
-  0,
-  null,
-  0,
-  10000,
-  (select id from public.estoque_diesel_fornecedores where nome = 'Ipiranga' limit 1),
-  null,
-  0,
-  null,
-  0,
-  null,
-  0,
-  0,
-  0,
-  null,
-  null,
-  null,
-  null,
-  -10000,
-  null,
-  null,
-  0,
-  'IMPORTADO_PLANILHA',
-  'Carga automatica 2026 a partir da planilha de medicao.'
-from public.estoque_diesel_tanques t
-where t.tipo_diesel = 'S10'
-on conflict (tanque_id, data_medicao) do update
-set regua_anterior_t1 = excluded.regua_anterior_t1,
-    regua_anterior_t2 = excluded.regua_anterior_t2,
-    regua_final_t1 = excluded.regua_final_t1,
-    regua_final_t2 = excluded.regua_final_t2,
-    nf_volume_litros = excluded.nf_volume_litros,
-    fornecedor_id = excluded.fornecedor_id,
-    nf_numero = excluded.nf_numero,
-    saida_transnet = excluded.saida_transnet,
-    litros_anterior_t1 = excluded.litros_anterior_t1,
-    litros_anterior_t2 = excluded.litros_anterior_t2,
-    litros_final_t1 = excluded.litros_final_t1,
-    litros_final_t2 = excluded.litros_final_t2,
-    saldo_anterior = excluded.saldo_anterior,
-    saldo_final = excluded.saldo_final,
-    entrada_diesel = excluded.entrada_diesel,
-    medicao_d1 = excluded.medicao_d1,
-    medicao_atual = excluded.medicao_atual,
-    saida_tanque = excluded.saida_tanque,
-    diff_recebimento = excluded.diff_recebimento,
-    pct_diff_nf = excluded.pct_diff_nf,
-    pct_diff_transnet = excluded.pct_diff_transnet,
-    saida_total_bombas = excluded.saida_total_bombas,
-    status_lancamento = excluded.status_lancamento,
-    observacao = excluded.observacao,
-    atualizado_em = now();
-
-
+  m.id,
+  b.id,
+  9244566,
+  9249480
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-06'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9249480,
+  9254476
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-07'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9254476,
+  9259449
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-08'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9259449,
+  9264193
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-09'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9264193,
+  9268975
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-10'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9268975,
+  9272311
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-11'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9272311,
+  9273769
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-12'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9273769,
+  9278086
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-13'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9278086,
+  9282259
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-14'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9282259,
+  9286435
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-15'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9286435,
+  9290356
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-16'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9290356,
+  9294464
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-17'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9294464,
+  9297178
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-18'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9297178,
+  9299004
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-19'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9299004,
+  9303414
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-20'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9303414,
+  9307547
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-21'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9307547,
+  9311304
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-22'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9311304,
+  9315209
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-23'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9315209,
+  9319570
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-24'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9319570,
+  9322189
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-25'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9322189,
+  9323533
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-26'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9323533,
+  9327909
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-27'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9327909,
+  9332325
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-28'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9332325,
+  9336424
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-29'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9336424,
+  9340781
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-30'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9340781,
+  9345253
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-01-31'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9345253,
+  9348154
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-01'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9348154,
+  9349814
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-02'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9349814,
+  9354758
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-03'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9354758,
+  9359597
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-04'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9359597,
+  9364243
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-05'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9364243,
+  9368673
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-06'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9368673,
+  9373114
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-07'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9373114,
+  9376492
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-08'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9376492,
+  9377939
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-09'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9377939,
+  9382878
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-10'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9382878,
+  9387824
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-11'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9387824,
+  9392615
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-12'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9392615,
+  9397574
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-13'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9397574,
+  9402579
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-14'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9402580,
+  9405898
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-15'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9405898,
+  9406971
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-16'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9406971,
+  9410685
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-17'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9410685,
+  9413496
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-18'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9413496,
+  9417871
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-19'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9417871,
+  9422876
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-20'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9422876,
+  9428075
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-21'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9428075,
+  9431159
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-22'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9431159,
+  9432202
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-23'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9432202,
+  9437348
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-24'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9437348,
+  9440193
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-25'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9440193,
+  9445015
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-26'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9445015,
+  9449697
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-27'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9449697,
+  9454358
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-02-28'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9454358,
+  9457596
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-01'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9457596,
+  9459024
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-02'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9459024,
+  9463736
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-03'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9463736,
+  9468455
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-04'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9468455,
+  9473407
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-05'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9473407,
+  9478021
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-06'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9478021,
+  9482798
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-07'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9482798,
+  9486038
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-08'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9486038,
+  9487369
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-09'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9487369,
+  9492170
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-10'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9492170,
+  9496928
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-11'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9496928,
+  9501523
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-12'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9501523,
+  9506522
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-13'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9506522,
+  9511226
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-14'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9511226,
+  9514235
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-15'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9514235,
+  9515636
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-16'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9515636,
+  9520712
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-17'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9520712,
+  9525547
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-18'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9525547,
+  9530368
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-19'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9530368,
+  9535151
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-20'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9535151,
+  9540050
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-21'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9540050,
+  9543057
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-22'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9543057,
+  9544478
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-23'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9544478,
+  9549444
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-24'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9549444,
+  9554200
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-25'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9554200,
+  9559183
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-26'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9559183,
+  9563876
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-27'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9563876,
+  9569074
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-28'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9569074,
+  9572615
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-29'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9572615,
+  9574291
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-30'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9574291,
+  9579201
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-03-31'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9579207,
+  9584049
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-01'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9584049,
+  9589129
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-02'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9589129,
+  9594202
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-03'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9594202,
+  9595840
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-04'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9595840,
+  9598897
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-05'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9598897,
+  9600346
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-06'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9600346,
+  9605394
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-07'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9605394,
+  9610482
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-08'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9610482,
+  9615757
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-09'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9615757,
+  9620657
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-10'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9620657,
+  9625525
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-11'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9625523,
+  9628739
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-12'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9628739,
+  9630199
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-13'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9630199,
+  9634959
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-14'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9634959,
+  9639913
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-15'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9639913,
+  9644771
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-16'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9644771,
+  9649630
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-17'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9649630,
+  9654353
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-18'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9654353,
+  9657756
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-19'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9657756,
+  9659579
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-20'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9659579,
+  9663590
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-21'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9663590,
+  9665344
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-22'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9665344,
+  9670299
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-23'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9670299,
+  9675022
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-24'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9675022,
+  9679625
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-25'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9679625,
+  9682627
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-26'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9682628,
+  9684041
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-27'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9684041,
+  9688668
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-28'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9688668,
+  9693222
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-29'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9693222,
+  9698273
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-04-30'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9698273,
+  9702913
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-05-01'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9702913,
+  9704838
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-05-02'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9704838,
+  9707779
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-05-03'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
+
+insert into public.estoque_diesel_leituras_bomba (
+  medicao_id,
+  bomba_id,
+  hodometro_inicial,
+  hodometro_final
+)
+select
+  m.id,
+  b.id,
+  9707779,
+  9709458
+from public.estoque_diesel_medicoes_diarias m
+join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
+join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
+where m.data_medicao = date '2026-05-04'
+on conflict (medicao_id, bomba_id) do update
+set hodometro_inicial = excluded.hodometro_inicial,
+    hodometro_final = excluded.hodometro_final;
 
 insert into public.estoque_diesel_leituras_bomba (
   medicao_id,
@@ -25956,44 +24036,6 @@ from public.estoque_diesel_medicoes_diarias m
 join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S500'
 join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 3
 where m.data_medicao = date '2026-01-15'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  2242015,
-  2242015
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S500'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 2
-where m.data_medicao = date '2026-01-16'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  6887361,
-  6892172
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S500'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 3
-where m.data_medicao = date '2026-01-16'
 on conflict (medicao_id, bomba_id) do update
 set hodometro_inicial = excluded.hodometro_inicial,
     hodometro_final = excluded.hodometro_final;
@@ -30101,2401 +28143,5 @@ where m.data_medicao = date '2026-05-04'
 on conflict (medicao_id, bomba_id) do update
 set hodometro_inicial = excluded.hodometro_inicial,
     hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9231972,
-  9235346
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-01'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9235346,
-  9236676
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-02'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9236676,
-  9240074
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-03'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9240074,
-  9243188
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-04'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9243188,
-  9244566
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-05'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9244566,
-  9249480
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-06'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9249480,
-  9254476
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-07'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9254476,
-  9259449
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-08'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9259449,
-  9264193
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-09'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9264193,
-  9268975
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-10'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9268975,
-  9272311
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-11'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9272311,
-  9273769
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-12'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9273769,
-  9278086
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-13'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9278086,
-  9282259
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-14'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9282259,
-  9286435
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-15'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9286435,
-  9290356
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-16'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9290356,
-  9294464
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-17'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9294464,
-  9297178
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-18'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9297178,
-  9299004
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-19'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9299004,
-  9303414
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-20'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9303414,
-  9307547
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-21'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9307547,
-  9311304
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-22'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9311304,
-  9315209
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-23'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9315209,
-  9319570
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-24'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9319570,
-  9322189
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-25'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9322189,
-  9323533
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-26'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9323533,
-  9327909
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-27'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9327909,
-  9332325
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-28'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9332325,
-  9336424
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-29'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9336424,
-  9340781
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-30'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9340781,
-  9345253
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-01-31'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9345253,
-  9348154
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-01'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9348154,
-  9349814
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-02'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9349814,
-  9354758
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-03'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9354758,
-  9359597
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-04'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9359597,
-  9364243
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-05'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9364243,
-  9368673
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-06'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9368673,
-  9373114
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-07'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9373114,
-  9376492
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-08'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9376492,
-  9377939
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-09'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9377939,
-  9382878
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-10'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9382878,
-  9387824
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-11'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9382878,
-  9387824
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-11'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9387824,
-  9392615
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-12'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9392615,
-  9397574
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-13'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9397574,
-  9402579
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-14'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9402580,
-  9405898
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-15'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9405898,
-  9406971
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-16'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9406971,
-  9410685
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-17'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9410685,
-  9413496
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-18'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9413496,
-  9417871
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-19'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9417871,
-  9422876
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-20'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9422876,
-  9428075
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-21'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9428075,
-  9431159
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-22'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9431159,
-  9432202
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-23'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9432202,
-  9437348
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-24'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9437348,
-  9440193
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-25'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9440193,
-  9445015
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-26'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9445015,
-  9449697
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-27'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9449697,
-  9454358
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-02-28'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9454358,
-  9457596
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-01'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9457596,
-  9459024
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-02'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9459024,
-  9463736
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-03'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9463736,
-  9468455
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-04'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9468455,
-  9473407
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-05'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9473407,
-  9478021
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-06'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9478021,
-  9482798
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-07'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9482798,
-  9486038
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-08'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9486038,
-  9487369
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-09'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9487369,
-  9492170
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-10'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9492170,
-  9496928
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-11'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9496928,
-  9501523
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-12'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9501523,
-  9506522
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-13'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9501523,
-  9506522
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-13'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9506522,
-  9511226
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-14'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9511226,
-  9514235
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-15'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9514235,
-  9515636
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-16'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9515636,
-  9520712
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-17'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9520712,
-  9525547
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-18'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9525547,
-  9530368
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-19'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9530368,
-  9535151
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-20'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9535151,
-  9540050
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-21'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9540050,
-  9543057
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-22'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9543057,
-  9544478
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-23'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9544478,
-  9549444
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-24'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9549444,
-  9554200
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-25'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9554200,
-  9559183
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-26'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9559183,
-  9563876
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-27'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9563876,
-  9569074
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-28'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9569074,
-  9572615
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-29'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9572615,
-  9574291
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-30'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9574291,
-  9579201
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-03-31'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9579207,
-  9584049
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-01'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9584049,
-  9589129
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-02'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9589129,
-  9594202
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-03'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9594202,
-  9595840
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-04'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9595840,
-  9598897
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-05'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9598897,
-  9600346
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-06'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9600346,
-  9605394
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-07'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9605394,
-  9610482
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-08'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9610482,
-  9615757
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-09'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9615757,
-  9620657
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-10'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9620657,
-  9625525
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-11'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9625523,
-  9628739
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-12'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9628739,
-  9630199
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-13'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9630199,
-  9634959
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-14'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9634959,
-  9639913
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-15'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9639913,
-  9644771
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-16'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9644771,
-  9649630
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-17'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9649630,
-  9654353
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-18'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9654353,
-  9657756
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-19'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9657756,
-  9659579
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-20'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9659579,
-  9663590
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-21'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9663590,
-  9665344
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-22'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9665344,
-  9670299
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-23'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9670299,
-  9675022
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-24'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9675022,
-  9679625
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-25'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9679625,
-  9682627
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-26'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9682628,
-  9684041
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-27'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9684041,
-  9688668
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-28'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9688668,
-  9693222
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-29'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9693222,
-  9698273
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-04-30'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9698273,
-  9702913
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-05-01'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9702913,
-  9704838
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-05-02'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9704838,
-  9707779
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-05-03'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-insert into public.estoque_diesel_leituras_bomba (
-  medicao_id,
-  bomba_id,
-  hodometro_inicial,
-  hodometro_final
-)
-select
-  m.id,
-  b.id,
-  9707779,
-  9709458
-from public.estoque_diesel_medicoes_diarias m
-join public.estoque_diesel_tanques t on t.id = m.tanque_id and t.tipo_diesel = 'S10'
-join public.estoque_diesel_bombas b on b.tanque_id = t.id and b.numero = 1
-where m.data_medicao = date '2026-05-04'
-on conflict (medicao_id, bomba_id) do update
-set hodometro_inicial = excluded.hodometro_inicial,
-    hodometro_final = excluded.hodometro_final;
-
-
 
 commit;

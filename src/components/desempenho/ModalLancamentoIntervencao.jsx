@@ -138,13 +138,13 @@ const TEC_OPCOES = [
   },
   {
     value: "NAO",
-    label: "NÃ£o",
+    label: "Nao",
     icon: FaX,
     cls: "bg-rose-50 border-rose-200 text-rose-700",
   },
   {
     value: "DUVIDAS",
-    label: "DÃºvidas",
+    label: "Duvidas",
     icon: FaQuestionCircle,
     cls: "bg-amber-50 border-amber-200 text-amber-700",
   },
@@ -152,15 +152,15 @@ const TEC_OPCOES = [
 
 const NIVEIS = {
   1: {
-    label: "NÃ­vel 1",
+    label: "Nivel 1",
     color: "bg-blue-50 border-blue-200 text-blue-700",
   },
   2: {
-    label: "NÃ­vel 2",
+    label: "Nivel 2",
     color: "bg-amber-50 border-amber-200 text-amber-700",
   },
   3: {
-    label: "NÃ­vel 3",
+    label: "Nivel 3",
     color: "bg-rose-50 border-rose-200 text-rose-700",
   },
 };
@@ -734,12 +734,12 @@ export default function ModalLancamentoIntervencao({
           acompanhamento_id: item.id,
           tipo: "INTERVENCAO_TECNICA",
           observacoes:
-            `IntervenÃ§Ã£o tÃ©cnica lanÃ§ada por ${instrutorNome || instrutorLogin}.\n` +
-            `Hora inÃ­cio: ${form.horaInicio}\n` +
+            `Intervencao tecnica lancada por ${instrutorNome || instrutorLogin}.\n` +
+            `Hora inicio: ${form.horaInicio}\n` +
             `Hora fim: ${form.horaFim || "-"}\n` +
-            `KM inÃ­cio: ${form.kmInicio}\n` +
+            `KM inicio: ${form.kmInicio}\n` +
             `KM fim: ${form.kmFim || "-"}\n` +
-            `MÃ©dia teste: ${form.mediaTeste}\n\n` +
+            `Media teste: ${form.mediaTeste}\n\n` +
             `${form.obs || ""}`,
           criado_por_login: instrutorLogin,
           criado_por_nome: instrutorNome,
@@ -787,7 +787,7 @@ export default function ModalLancamentoIntervencao({
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-4 border-b bg-slate-50 sticky top-0 z-10">
           <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-            <FaRoad /> LanÃ§ar IntervenÃ§Ã£o TÃ©cnica
+            <FaRoad /> Lancar Intervencao Tecnica
           </h3>
           <button onClick={onClose}>
             <FaTimes className="text-gray-400 hover:text-red-500 text-xl" />
@@ -814,8 +814,8 @@ export default function ModalLancamentoIntervencao({
               {item?.motivo || "-"}
             </div>
             <div className="text-xs mt-2 text-blue-700 font-bold">
-              O monitoramento agora serÃ¡ fixo em 30 dias, dividido em 3 checkpoints
-              automÃ¡ticos: 10, 20 e 30 dias.
+              O monitoramento agora sera fixo em 30 dias, dividido em 3 checkpoints
+              automaticos: 10, 20 e 30 dias.
             </div>
           </div>
 
@@ -899,7 +899,7 @@ export default function ModalLancamentoIntervencao({
                   <div className="text-sm font-black text-slate-800">{form.horaInicio || "-"}</div>
                   <div className="mt-1 text-xs text-slate-500">
                     {localizacaoInfo?.inicio
-                      ? `Lat ${formatCoordinate(localizacaoInfo.inicio.latitude)} â€¢ Lng ${formatCoordinate(localizacaoInfo.inicio.longitude)}`
+                      ? `Lat ${formatCoordinate(localizacaoInfo.inicio.latitude)} - Lng ${formatCoordinate(localizacaoInfo.inicio.longitude)}`
                       : "Aguardando inicio"}
                   </div>
                   <div className="mt-1 text-[11px] text-slate-400">
@@ -915,7 +915,7 @@ export default function ModalLancamentoIntervencao({
                   <div className="text-sm font-black text-slate-800">{form.horaFim || "-"}</div>
                   <div className="mt-1 text-xs text-slate-500">
                     {localizacaoInfo?.fim
-                      ? `Lat ${formatCoordinate(localizacaoInfo.fim.latitude)} â€¢ Lng ${formatCoordinate(localizacaoInfo.fim.longitude)}`
+                      ? `Lat ${formatCoordinate(localizacaoInfo.fim.latitude)} - Lng ${formatCoordinate(localizacaoInfo.fim.longitude)}`
                       : "Aguardando encerramento"}
                   </div>
                   <div className="mt-1 text-[11px] text-slate-400">
@@ -936,7 +936,7 @@ export default function ModalLancamentoIntervencao({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <label className="text-xs font-bold text-gray-500 mb-1 block">
-                  Hora InÃ­cio *
+                  Hora Inicio *
                 </label>
                 <input
                   type="time"
@@ -960,7 +960,7 @@ export default function ModalLancamentoIntervencao({
 
               <div>
                 <label className="text-xs font-bold text-gray-500 mb-1 block">
-                  KM InÃ­cio *
+                  KM Inicio *
                 </label>
                 <input
                   type="number"
@@ -985,7 +985,7 @@ export default function ModalLancamentoIntervencao({
 
             <div className="mt-4">
               <label className="text-xs font-bold text-blue-600 block mb-1">
-                MÃ‰DIA REALIZADA NO TESTE (KM/L) *
+                MEDIA REALIZADA NO TESTE (KM/L) *
               </label>
               <input
                 type="number"
@@ -1000,7 +1000,7 @@ export default function ModalLancamentoIntervencao({
 
           <div>
             <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
-              <FaClipboardList /> ConduÃ§Ã£o Inteligente
+              <FaClipboardList /> Conducao Inteligente
             </h4>
             <div className="space-y-2">
               {itensConducao.map((it) => {
@@ -1014,7 +1014,7 @@ export default function ModalLancamentoIntervencao({
                   >
                     <div>
                       <div className="text-sm font-extrabold text-slate-700 leading-tight">
-                        {String(it.ordem).padStart(2, "0")} â€¢ {it.descricao}
+                        {String(it.ordem).padStart(2, "0")} - {it.descricao}
                       </div>
                       {it.ajuda && (
                         <div className="text-xs text-slate-500 mt-1">
@@ -1053,7 +1053,7 @@ export default function ModalLancamentoIntervencao({
                             : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
                         }`}
                       >
-                        NÃƒO
+                        NAO
                       </button>
                     </div>
                   </div>
@@ -1064,7 +1064,7 @@ export default function ModalLancamentoIntervencao({
 
           <div>
             <h4 className="font-bold text-slate-700 text-sm mb-3">
-              AvaliaÃ§Ã£o TÃ©cnica
+              Avaliacao Tecnica
             </h4>
             <div className="space-y-3">
               {itensTecnica.map((q) => (
@@ -1074,7 +1074,7 @@ export default function ModalLancamentoIntervencao({
                 >
                   <div>
                     <div className="text-sm text-slate-700 font-semibold leading-tight">
-                      {String(q.ordem).padStart(2, "0")} â€¢ {q.descricao}
+                      {String(q.ordem).padStart(2, "0")} - {q.descricao}
                     </div>
                     {q.ajuda && (
                       <div className="text-xs text-slate-500 mt-1">{q.ajuda}</div>
@@ -1105,7 +1105,7 @@ export default function ModalLancamentoIntervencao({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <h4 className="font-bold text-slate-700 text-sm mb-2">
-                Severidade da IntervenÃ§Ã£o
+                Severidade da Intervencao
               </h4>
               <div className="grid grid-cols-3 gap-2">
                 {[1, 2, 3].map((lvl) => (
@@ -1127,14 +1127,14 @@ export default function ModalLancamentoIntervencao({
 
             <div>
               <h4 className="font-bold text-slate-700 text-sm mb-2">
-                ObservaÃ§Ã£o (opcional)
+                Observacao (opcional)
               </h4>
               <textarea
                 rows={3}
                 value={form.obs}
                 onChange={(e) => setForm({ ...form, obs: e.target.value })}
                 className="w-full p-2.5 border rounded-lg text-sm outline-none focus:border-blue-500"
-                placeholder="Ex.: ajustes aplicados e pontos de atenÃ§Ã£o..."
+                placeholder="Ex.: ajustes aplicados e pontos de atencao..."
               />
             </div>
           </div>
@@ -1145,7 +1145,7 @@ export default function ModalLancamentoIntervencao({
               disabled={salvando || loadingItens}
               className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black text-lg rounded-xl shadow-md flex justify-center items-center gap-2"
             >
-              <FaSave /> {salvando ? "SALVANDO..." : "SALVAR LANÃ‡AMENTO"}
+              <FaSave /> {salvando ? "SALVANDO..." : "SALVAR LANCAMENTO"}
             </button>
           </div>
         </div>

@@ -400,18 +400,37 @@ export default function DesempenhoLancamento() {
       )}
 
       {/* FORMULÁRIO PRINCIPAL */}
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden transition-all duration-500">
-        <div className={`h-3 w-full ${destino === DESTINOS.ACOMP ? "bg-blue-600" : "bg-rose-600"}`} />
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-500">
+        <div className={`h-2 w-full ${destino === DESTINOS.ACOMP ? "bg-blue-600" : "bg-rose-600"}`} />
         
-        <div className="p-6 md:p-12 space-y-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black text-slate-800">Base do Lançamento</h2>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              Preencha os dados do motorista, defina o motivo e escolha o fluxo correto.
+            </p>
+          </div>
+          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-black border ${
+            destino === DESTINOS.ACOMP
+              ? "bg-blue-50 text-blue-700 border-blue-200"
+              : "bg-rose-50 text-rose-700 border-rose-200"
+          }`}>
+            {destino === DESTINOS.ACOMP ? <FaClock /> : <FaExclamationTriangle />}
+            {destino === DESTINOS.ACOMP ? "Fluxo de acompanhamento" : "Fluxo de tratativa"}
+          </div>
+        </div>
+
+        <div className="p-5 md:p-6 space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Identificação do Motorista</label>
-              <CampoMotorista value={motorista} onChange={setMotorista} />
+              <div className="rounded-xl border border-slate-300 bg-white p-2">
+                <CampoMotorista value={motorista} onChange={setMotorista} />
+              </div>
             </div>
 
-            <div className="space-y-8">
+            <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               {destino === DESTINOS.TRAT && (
                 <div>
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Nível de Gravidade</label>
@@ -420,7 +439,7 @@ export default function DesempenhoLancamento() {
                       <button 
                         key={p} 
                         onClick={() => setPrioridadeTratativa(p)}
-                        className={`py-3 px-4 rounded-xl border-2 text-sm font-bold transition-all ${prioridadeTratativa === p ? "bg-rose-600 border-rose-600 text-white shadow-lg" : "bg-white text-slate-600 border-slate-100 hover:border-rose-200"}`}
+                        className={`py-3 px-4 rounded-xl border text-sm font-black transition-all ${prioridadeTratativa === p ? "bg-rose-600 border-rose-600 text-white" : "bg-white text-slate-600 border-slate-200 hover:border-rose-200 hover:bg-rose-50"}`}
                       >
                         {p}
                       </button>
@@ -434,7 +453,7 @@ export default function DesempenhoLancamento() {
                 <select 
                   value={motivo} 
                   onChange={(e) => setMotivo(e.target.value)}
-                  className="w-full p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 font-bold text-slate-700 focus:border-blue-500 focus:bg-white outline-none transition-all appearance-none cursor-pointer"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white font-bold text-slate-700 focus:border-blue-500 focus:bg-white outline-none transition-all appearance-none cursor-pointer focus:ring-4 focus:ring-blue-500/10"
                 >
                   {MOTIVOS.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
@@ -442,28 +461,28 @@ export default function DesempenhoLancamento() {
                   <input 
                     value={motivoOutro} 
                     onChange={(e) => setMotivoOutro(e.target.value)} 
-                    className="mt-4 w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-blue-500 outline-none font-bold" 
+                    className="mt-4 w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-blue-500 outline-none font-bold focus:ring-4 focus:ring-blue-500/10" 
                     placeholder="Especifique o motivo..." 
                   />
                 )}
               </div>
             </div>
 
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Detalhamento da Ocorrência</label>
               <textarea 
                 value={observacaoInicial} 
                 onChange={(e) => setObservacaoInicial(e.target.value)} 
-                className="w-full flex-1 p-5 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:border-blue-500 focus:bg-white outline-none font-semibold text-slate-700 resize-none min-h-[140px] transition-all"
+                className="w-full flex-1 px-4 py-3 rounded-xl border border-slate-300 bg-white focus:border-blue-500 focus:bg-white outline-none font-semibold text-slate-700 resize-none min-h-[180px] transition-all focus:ring-4 focus:ring-blue-500/10"
                 placeholder="Descreva aqui os fatos, contextos ou as orientações passadas ao motorista..."
               />
             </div>
 
             {destino === DESTINOS.TRAT && (
-              <div className="md:col-span-2 bg-slate-50 p-6 rounded-[1.5rem] border-2 border-slate-100">
+              <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Provas e Evidências <span className="text-rose-500">* Obrigatório</span></label>
                 <div className="flex flex-col md:flex-row gap-6">
-                  <label className="group flex-shrink-0 cursor-pointer bg-white border-2 border-dashed border-slate-300 rounded-2xl p-8 flex flex-col items-center justify-center hover:border-rose-400 hover:bg-rose-50 transition-all w-full md:w-56 shadow-sm">
+                  <label className="group flex-shrink-0 cursor-pointer bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-8 flex flex-col items-center justify-center hover:border-rose-400 hover:bg-rose-50 transition-all w-full md:w-56">
                     <input type="file" multiple onChange={handleFileChange} className="hidden" />
                     <FaFileUpload className="text-3xl text-slate-300 group-hover:text-rose-400 mb-3" />
                     <span className="text-xs font-bold text-slate-500 group-hover:text-rose-600">Carregar Arquivos</span>
@@ -471,7 +490,7 @@ export default function DesempenhoLancamento() {
                   
                   <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {evidencias.map((f, idx) => (
-                      <div key={idx} className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-3 shadow-sm group animate-in zoom-in-95">
+                      <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-3">
                         <div className="truncate flex-1">
                           <p className="text-xs font-bold text-slate-700 truncate">{f.name}</p>
                           <p className="text-[10px] text-slate-400 font-bold uppercase">{(f.size/1024/1024).toFixed(2)} MB</p>
@@ -482,7 +501,7 @@ export default function DesempenhoLancamento() {
                       </div>
                     ))}
                     {evidencias.length === 0 && (
-                      <div className="flex items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-4 text-slate-300 text-xs italic font-medium w-full col-span-full">
+                      <div className="flex items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-4 text-slate-400 text-xs font-semibold w-full col-span-full bg-slate-50">
                         Nenhum anexo inserido ainda
                       </div>
                     )}
@@ -504,7 +523,7 @@ export default function DesempenhoLancamento() {
           </div>
         )}
 
-        <div className="bg-slate-50 px-6 py-6 md:px-12 md:py-8 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="bg-slate-50 px-5 py-5 md:px-6 md:py-5 border-t border-slate-200 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-tighter">
             <FaRobot className="text-slate-300 text-xl" />
             <span>Processamento automatizado via inteligência artificial</span>
@@ -514,16 +533,16 @@ export default function DesempenhoLancamento() {
             <button 
               onClick={limparTudo} 
               disabled={saving} 
-              className="px-8 py-4 rounded-2xl text-sm font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-all flex-1 md:flex-none"
+              className="px-6 py-3 rounded-xl text-sm font-black bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all flex-1 md:flex-none"
             >
               Limpar
             </button>
             <button 
               onClick={handleLancar} 
               disabled={!pronto || saving} 
-              className={`flex items-center justify-center gap-3 px-12 py-4 rounded-2xl text-sm font-black text-white shadow-2xl transition-all flex-1 md:flex-none transform active:scale-95 ${
+              className={`flex items-center justify-center gap-3 px-8 py-3 rounded-xl text-sm font-black text-white transition-all flex-1 md:flex-none transform active:scale-95 ${
                 !pronto ? "bg-slate-300 cursor-not-allowed shadow-none" : 
-                destino === DESTINOS.ACOMP ? "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/40" : "bg-rose-600 hover:bg-rose-700 hover:shadow-rose-500/40"
+                destino === DESTINOS.ACOMP ? "bg-blue-600 hover:bg-blue-700" : "bg-rose-600 hover:bg-rose-700"
               }`}
             >
               {saving ? "Processando..." : (

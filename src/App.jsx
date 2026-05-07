@@ -53,6 +53,8 @@ import EstoqueDieselResumo from "./pages/estoque-diesel/EstoqueDieselResumo";
 import EstoqueDieselOperacao from "./pages/estoque-diesel/EstoqueDieselOperacao";
 import EstoqueDieselPlanejamentoControle from "./pages/estoque-diesel/EstoqueDieselPlanejamentoControle";
 import EstoqueDieselParametros from "./pages/estoque-diesel/EstoqueDieselParametros";
+import EstoqueDieselRecebimento from "./pages/estoque-diesel/EstoqueDieselRecebimento";
+import EstoqueDieselRecebimento from "./pages/estoque-diesel/EstoqueDieselRecebimento";
 
 import ChecklistCentral from "./pages/checklists/ChecklistCentral";
 
@@ -133,6 +135,7 @@ export default function App() {
             <Route path="/estoque-diesel/planejamento-controle" element={<EstoqueDieselPlanejamentoControle />} />
             <Route path="/estoque-diesel/parametros" element={<EstoqueDieselParametros />} />
             <Route path="/estoque-diesel" element={<Navigate to="/estoque-diesel/resumo" replace />} />
+            <Route path="/estoque-diesel/recebimento" element={<EstoqueDieselRecebimento />} />
 
             <Route path="/diesel-tratativas" element={<Desempenho_Diesel_Tratativas_Central />} />
             <Route path="/diesel-tratar/:id" element={<DieselTratarTratativa />} />

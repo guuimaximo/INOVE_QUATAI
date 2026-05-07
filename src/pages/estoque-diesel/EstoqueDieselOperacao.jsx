@@ -42,6 +42,48 @@ function parseLiters(value) {
   return `${Number(value).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} L`;
 }
 
+function toFormValue(value) {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function buildFormFromEntry(entry, product, year, month) {
+  const base = buildDefaultForm(product, year, month);
+  const pumpNumbers = PRODUCT_CONFIG[product]?.requiredPumpNumbers || [];
+  const entryPumps = Array.isArray(entry?.pumps) ? entry.pumps : [];
+
+  return {
+    ...base,
+    id: entry?.id || null,
+    product,
+    date: entry?.date || base.date,
+    reguaAnteriorT1: toFormValue(entry?.reguaAnteriorT1),
+    reguaAnteriorT2: toFormValue(entry?.reguaAnteriorT2),
+    reguaFinalT1: toFormValue(entry?.reguaFinalT1),
+    reguaFinalT2: toFormValue(entry?.reguaFinalT2),
+    hasReceipt: Boolean(entry?.hasReceipt || Number(entry?.nfVolumeLitros || 0) > 0),
+    nfVolumeLitros: toFormValue(entry?.nfVolumeLitros),
+    supplier: entry?.supplier || "",
+    supplierId: entry?.supplierId || null,
+    nfNumero: entry?.nfNumero || "",
+    receiptRuleBeforeT1: toFormValue(entry?.receiptRuleBeforeT1),
+    receiptRuleBeforeT2: toFormValue(entry?.receiptRuleBeforeT2),
+    receiptRuleAfterT1: toFormValue(entry?.receiptRuleAfterT1),
+    receiptRuleAfterT2: toFormValue(entry?.receiptRuleAfterT2),
+    receiptPhotoBeforeUrl: entry?.receiptPhotoBeforeUrl || "",
+    receiptPhotoAfterUrl: entry?.receiptPhotoAfterUrl || "",
+    transnetOutput: toFormValue(entry?.transnetOutput ?? entry?.saidaTransnet),
+    observation: entry?.observation || "",
+    pumps: pumpNumbers.map((number) => {
+      const currentPump = entryPumps.find((pump) => Number(pump.number) === Number(number));
+      return {
+        number,
+        initial: toFormValue(currentPump?.initial),
+        final: toFormValue(currentPump?.final),
+      };
+    }),
+  };
+}
+
 function FormInput({ label, value, onChange, type = "number", min, step = "0.1", placeholder, required = false, readOnly = false }) {
   return (
     <label className="block">
@@ -277,6 +319,15 @@ export default function EstoqueDieselOperacao() {
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleSelectEntry(entry) {
+    setForm(buildFormFromEntry(entry, product, year, month));
+    setReceiptFiles({ before: null, after: null });
+    setFeedback({
+      type: "success",
+      message: `Lancamento de ${new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")} carregado para conferencia.`,
+    });
   }
 
   useEffect(() => {
@@ -749,9 +800,23 @@ export default function EstoqueDieselOperacao() {
                   </td>
                 </tr>
               ) : (
-                monthlyEntries.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="px-4 py-3 font-black text-slate-800">{new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")}</td>
+                monthlyEntries.map((entry) => {
+                  const isSelected = form.id === entry.id;
+                  return (
+                  <tr key={entry.id} className={isSelected ? "bg-blue-50/60" : ""}>
+                    <td className="px-4 py-3 font-black text-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectEntry(entry)}
+                        className={`rounded-lg px-2 py-1 text-left transition ${
+                          isSelected
+                            ? "bg-blue-100 text-blue-700"
+                            : "text-slate-800 hover:bg-slate-100 hover:text-blue-700"
+                        }`}
+                      >
+                        {new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoAnterior)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.nfVolumeLitros)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.entradaDiesel)}</td>
@@ -776,7 +841,7 @@ export default function EstoqueDieselOperacao() {
                       </span>
                     </td>
                   </tr>
-                ))
+                )})
               )}
             </tbody>
           </table>

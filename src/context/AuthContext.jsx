@@ -54,6 +54,7 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
   const lastPresenceSyncRef = useRef(0);
+  const lastAccessSyncRef = useRef(0);
 
   const persistUser = useCallback((userData) => {
     const normalized = normalizeStoredAppUser(userData);
@@ -124,6 +125,44 @@ export function AuthProvider({ children }) {
 
     return syncFromSession(session.user);
   }, [syncFromSession]);
+
+  const syncAccessSnapshot = useCallback(
+    async ({ force = false } = {}) => {
+      const usuarioId = user?.usuario_id ?? user?.id ?? null;
+      if (!usuarioId || typeof usuarioId !== "number") return null;
+
+      const now = Date.now();
+      if (!force && now - lastAccessSyncRef.current < 60 * 1000) {
+        return null;
+      }
+
+      lastAccessSyncRef.current = now;
+
+      const { data, error } = await supabase
+        .from("usuarios_aprovadores")
+        .select(
+          "id, auth_user_id, nome, login, email, nivel, setor, ativo, status_cadastro, estrutura_fisica_liberada, paginas_liberadas, paginas_bloqueadas, migrado_auth"
+        )
+        .eq("id", usuarioId)
+        .maybeSingle();
+
+      if (error) {
+        lastAccessSyncRef.current = 0;
+        console.error("Falha ao sincronizar snapshot de acesso:", error);
+        return null;
+      }
+
+      if (!data) return null;
+
+      return persistUser({
+        ...user,
+        ...data,
+        usuario_id: data.id ?? user?.usuario_id ?? user?.id ?? null,
+        id: data.id ?? user?.usuario_id ?? user?.id ?? null,
+      });
+    },
+    [persistUser, user]
+  );
 
   const syncPresence = useCallback(
     async ({ force = false } = {}) => {
@@ -217,7 +256,8 @@ export function AuthProvider({ children }) {
     if (!user) return;
 
     void syncPresence({ force: true });
-  }, [user, syncPresence]);
+    void syncAccessSnapshot({ force: true });
+  }, [user, syncAccessSnapshot, syncPresence]);
 
   useEffect(() => {
     function onStorage(event) {
@@ -236,6 +276,7 @@ export function AuthProvider({ children }) {
         touchActivity();
         setUser(getStoredUser());
         void syncPresence();
+        void syncAccessSnapshot();
       }
     };
 
@@ -245,6 +286,7 @@ export function AuthProvider({ children }) {
       if (window.location.pathname === "/sos-dashboard") {
         touchActivity();
         void syncPresence();
+        void syncAccessSnapshot();
         return;
       }
 
@@ -255,6 +297,7 @@ export function AuthProvider({ children }) {
 
       if (document.visibilityState === "visible") {
         void syncPresence();
+        void syncAccessSnapshot();
       }
     }, 30 * 1000);
 
@@ -262,7 +305,7 @@ export function AuthProvider({ children }) {
       activityEvents.forEach((eventName) => window.removeEventListener(eventName, onActivity));
       window.clearInterval(timer);
     };
-  }, [logout, syncPresence]);
+  }, [logout, syncAccessSnapshot, syncPresence]);
 
   const value = useMemo(
     () => ({

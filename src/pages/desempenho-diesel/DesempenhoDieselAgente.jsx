@@ -23,6 +23,7 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { supabaseBCNT } from "../../supabaseBCNT";
+import { DieselPageShell } from "../../components/desempenho/DieselPageShell";
 
 const GH_USER = import.meta.env.VITE_GITHUB_USER;
 const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
@@ -1678,7 +1679,20 @@ export default function DesempenhoDieselAgente() {
   }, [feedback]);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 space-y-6 relative">
+    <DieselPageShell
+      badge={
+        <>
+          {mainTab === "agente" ? <FaBolt /> : <FaTrophy />}
+          InteligÃªncia Diesel
+        </>
+      }
+      title={mainTab === "agente" ? "Agente Diesel" : "Parcial de Meritocracia"}
+      description={
+        mainTab === "agente"
+          ? "SugestÃµes de acompanhamento, relatÃ³rio gerencial e geraÃ§Ã£o de formulÃ¡rios."
+          : "Central mensal de parciais individuais, consolidado e resumo executivo."
+      }
+    >
       <div className="flex items-center justify-between gap-4 border-b pb-4 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
@@ -1732,6 +1746,6 @@ export default function DesempenhoDieselAgente() {
       </div>
 
       {mainTab === "agente" ? <DieselAgenteView onAlert={handleAlert} /> : <ParcialMeritocraciaView onAlert={handleAlert} />}
-    </div>
+    </DieselPageShell>
   );
 }

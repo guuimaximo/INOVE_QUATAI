@@ -822,16 +822,19 @@ export default function DesempenhoDieselCheckpoint() {
   const lancPeriodoFim = acomp?.metadata?.lancamento_periodo_fim || null;
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <div className="min-h-screen bg-slate-50 p-4 space-y-5 max-w-4xl mx-auto">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Checkpoint do Instrutor</h1>
-          <p className="text-sm text-gray-600 mt-1">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
+            <FaInfoCircle className="text-blue-600" /> Operacao Diesel
+          </div>
+          <h1 className="mt-3 text-2xl font-black text-gray-800">Checkpoint do Instrutor</h1>
+          <p className="text-sm text-gray-600 mt-1 font-semibold">
             Preencha o checklist (OK/NOK), adicione evidências e salve o acompanhamento.
           </p>
         </div>
         <button
-          className="rounded-md bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"
+          className="rounded-xl bg-slate-800 px-4 py-2 text-white font-black hover:bg-slate-700"
           onClick={() => navigate("/desempenho-diesel-acompanhamento")}
           disabled={saving}
         >

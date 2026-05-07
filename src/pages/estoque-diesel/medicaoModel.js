@@ -631,6 +631,15 @@ export function getPreviousEntry(entries, product, currentDate, currentId = null
   );
 }
 
+export function getDailyReceipts(receipts, product, date) {
+  if (!Array.isArray(receipts) || !product || !date) return [];
+  return receipts.filter(
+    (receipt) =>
+      (receipt.product === product || receipt.tipoDiesel === product) &&
+      (receipt.date === date || receipt.dataRecebimento === date)
+  );
+}
+
 export function getPreviousPumpReading(entries, product, currentDate, pumpNumber) {
   const previous = getPreviousEntry(entries, product, currentDate);
 

@@ -24,6 +24,7 @@ export const PRODUCT_CONFIG = {
   S500: {
     code: "S500",
     label: "Diesel S500",
+    requiredPumpNumbers: [2, 3],
     pumps: [2, 3],
     usesTransnet: true,
     monthSheetPattern: "Medicao Combustivel S500",
@@ -31,6 +32,7 @@ export const PRODUCT_CONFIG = {
   S10: {
     code: "S10",
     label: "Diesel S10",
+    requiredPumpNumbers: [1],
     pumps: [1],
     usesTransnet: true,
     monthSheetPattern: "Medicao Combustivel S10",
@@ -47,7 +49,7 @@ export const DEFAULT_PARAMS = {
     transnetWarnPct: 0.02,
     transnetCriticalPct: 0.03,
     lowStockAlertLiters: 0,
-    suppliers: ["Raizen", "BR Distribuidora", "Ipiranga"],
+    suppliers: ["Ale", "Combustran", "Ipiranga", "Raizen", "Vibra"],
     toleranceRows: [
       { nfVolume: 5000, variationPct: 0.0105, acceptableDiffLiters: 4.947 },
       { nfVolume: 10000, variationPct: 0.0105, acceptableDiffLiters: 9.895 },
@@ -67,7 +69,7 @@ export const DEFAULT_PARAMS = {
     transnetWarnPct: 0.02,
     transnetCriticalPct: 0.03,
     lowStockAlertLiters: 0,
-    suppliers: ["Raizen", "BR Distribuidora", "Ipiranga"],
+    suppliers: ["Ale", "Combustran", "Ipiranga", "Raizen", "Vibra"],
     toleranceRows: [
       { nfVolume: 5000, variationPct: 0.0105, acceptableDiffLiters: 4.947 },
       { nfVolume: 10000, variationPct: 0.0105, acceptableDiffLiters: 9.895 },
@@ -80,23 +82,52 @@ export const DEFAULT_PARAMS = {
   },
 };
 
-function parseNumber(value) {
+export function parseNumber(value) {
   if (value === null || value === undefined || value === "") return null;
-  const normalized = String(value).replace(",", ".");
+
+  const normalized = String(value).trim().replace(/\./g, "").replace(",", ".");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function round(value, decimals = 2) {
+export function round(value, decimals = 2) {
   if (!Number.isFinite(value)) return null;
   return Number(value.toFixed(decimals));
 }
 
-function getTodayIsoDate() {
+export function getTodayISO() {
   const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
+  const offset = now.getTimezoneOffset();
+  const local = new Date(now.getTime() - offset * 60 * 1000);
+  return local.toISOString().slice(0, 10);
+}
+
+export const todayISO = getTodayISO;
+
+export function getYearFromDate(dateValue) {
+  if (!dateValue) return String(new Date().getFullYear());
+
+  const value = String(dateValue);
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 4);
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(new Date().getFullYear());
+
+  return String(parsed.getFullYear());
+}
+
+export function getDefaultDateForMonth(year, month) {
+  const today = getTodayISO();
+  if (today.startsWith(`${year}-${month}`)) return today;
+  return `${year}-${month}-01`;
+}
+
+export function getMonthLabel(month) {
+  return MONTHS_2026.find((item) => item.month === month)?.label || month;
+}
+
+function cloneDefaults() {
+  return JSON.parse(JSON.stringify(DEFAULT_PARAMS));
 }
 
 function sanitizeFileName(name = "arquivo") {
@@ -105,21 +136,6 @@ function sanitizeFileName(name = "arquivo") {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/-+/g, "-");
-}
-
-function findToleranceRow(params, nfVolumeLitros) {
-  const nfVolume = parseNumber(nfVolumeLitros) || 0;
-  const rows = Array.isArray(params?.toleranceRows) ? params.toleranceRows : [];
-  if (nfVolume <= 0 || rows.length === 0) return null;
-  return (
-    rows.find((row) => nfVolume <= Number(row.nfVolume || 0)) ||
-    rows[rows.length - 1] ||
-    null
-  );
-}
-
-function cloneDefaults() {
-  return JSON.parse(JSON.stringify(DEFAULT_PARAMS));
 }
 
 function normalizeToleranceRows(rows = []) {
@@ -132,8 +148,63 @@ function normalizeToleranceRows(rows = []) {
     .sort((a, b) => a.nfVolume - b.nfVolume);
 }
 
+export function calculateVolumeLiters(ruleCm, radiusM, lengthM) {
+  const regua = parseNumber(ruleCm);
+  const raio = parseNumber(radiusM);
+  const comprimento = parseNumber(lengthM);
+
+  if (regua === null || raio === null || comprimento === null) return null;
+
+  const h = regua / 100;
+  const r = raio;
+  const l = comprimento;
+
+  if (h <= 0 || r <= 0 || l <= 0) return 0;
+  if (h > 2 * r) return null;
+
+  const volume =
+    (r * r * Math.acos(1 - h / r) -
+      Math.sqrt(Math.max(0, 2 * r * h - h * h)) * (r - h)) *
+    1000 *
+    l;
+
+  return round(volume, 0);
+}
+
+function getRadiusFromParams(params) {
+  const diameter = parseNumber(params?.diameterM);
+  if (diameter) return diameter / 2;
+
+  const radius = parseNumber(params?.radiusM);
+  if (radius) return radius;
+
+  return DEFAULT_PARAMS.S500.diameterM / 2;
+}
+
+function findToleranceRow(params, nfVolumeLitros) {
+  const nfVolume = parseNumber(nfVolumeLitros) || 0;
+  const rows = Array.isArray(params?.toleranceRows) ? params.toleranceRows : [];
+
+  if (nfVolume <= 0 || rows.length === 0) return null;
+
+  return rows.find((row) => nfVolume <= Number(row.nfVolume || 0)) || rows[rows.length - 1] || null;
+}
+
+export function getRequiredPumpNumbers(product) {
+  return PRODUCT_CONFIG[product]?.requiredPumpNumbers || [];
+}
+
+function getTankByProduct(metadata, product) {
+  return metadata?.tanksByProduct?.[product] || null;
+}
+
+function getProductByTankId(metadata, tankId) {
+  const tank = metadata?.tanksById?.[tankId];
+  return tank?.tipo_diesel || "S500";
+}
+
 function buildStatusLabel(entryLike, params) {
-  if (entryLike?.status && ["OK", "Atencao", "Critico"].includes(entryLike.status)) {
+  if (entryLike?.status && ["OK", "Atencao", "Critico", "IMPORTADO_PLANILHA"].includes(entryLike.status)) {
     return entryLike.status;
   }
 
@@ -141,25 +212,30 @@ function buildStatusLabel(entryLike, params) {
 }
 
 function mapMeasurementRowToEntry(row, metadata, paramStore, pumpRows = []) {
-  const tank = metadata.tanksById[row.tanque_id];
-  const product = tank?.tipo_diesel || "S500";
-  const params = paramStore[product] || DEFAULT_PARAMS[product];
+  const product = getProductByTankId(metadata, row.tanque_id);
+  const params = paramStore?.[product] || DEFAULT_PARAMS[product];
 
   const sortedPumps = pumpRows
     .map((pump) => ({
       id: pump.bomba_id,
-      number: metadata.pumpsById[pump.bomba_id]?.numero || 0,
+      number: metadata?.pumpsById?.[pump.bomba_id]?.numero || 0,
       initial: pump.hodometro_inicial ?? 0,
       final: pump.hodometro_final ?? 0,
-      output: pump.saida_bomba ?? round((pump.hodometro_final || 0) - (pump.hodometro_inicial || 0), 2),
+      output:
+        pump.saida_bomba ??
+        round((Number(pump.hodometro_final || 0) || 0) - (Number(pump.hodometro_inicial || 0) || 0), 2),
     }))
     .sort((a, b) => a.number - b.number);
+
+  const saidaTanque = row.saida_tanque ?? null;
+  const saidaTotalBombas = row.saida_total_bombas ?? 0;
+  const saidaTransnet = row.saida_transnet ?? 0;
 
   const entry = {
     id: row.id,
     product,
     date: row.data_medicao,
-    supplier: metadata.suppliersById[row.fornecedor_id]?.nome || "",
+    supplier: metadata?.suppliersById?.[row.fornecedor_id]?.nome || "",
     supplierId: row.fornecedor_id ?? null,
     nfNumero: row.nf_numero || "",
     nfVolumeLitros: row.nf_volume_litros ?? 0,
@@ -178,7 +254,7 @@ function mapMeasurementRowToEntry(row, metadata, paramStore, pumpRows = []) {
     receiptMeasuredLiters: row.recebimento_litros_calculado,
     receiptToleranceLiters: row.recebimento_tolerancia_litros,
     receiptWithinTolerance: row.recebimento_dentro_tolerancia,
-    transnetOutput: row.saida_transnet ?? 0,
+    transnetOutput: saidaTransnet,
     pumps: sortedPumps,
     litrosAnteriorT1: row.litros_anterior_t1,
     litrosAnteriorT2: row.litros_anterior_t2,
@@ -189,12 +265,15 @@ function mapMeasurementRowToEntry(row, metadata, paramStore, pumpRows = []) {
     entradaDiesel: row.entrada_diesel,
     medicaoD1: row.medicao_d1,
     medicaoAtual: row.medicao_atual,
-    saidaTanque: row.saida_tanque,
-    saidaTotalBombas: row.saida_total_bombas,
-    saidaTransnet: row.saida_transnet ?? 0,
+    saidaTanque,
+    saidaTotalBombas,
+    saidaTransnet,
     diffRecebimento: row.diff_recebimento,
     pctDiffNF: row.pct_diff_nf,
     pctDiffTransnet: row.pct_diff_transnet,
+    diffTanqueTransnet: saidaTanque !== null ? round(saidaTransnet - saidaTanque, 2) : null,
+    diffBombasTransnet: round(saidaTransnet - saidaTotalBombas, 2),
+    diffTanqueBombas: saidaTanque !== null ? round(saidaTotalBombas - saidaTanque, 2) : null,
     status: row.status_lancamento,
     createdAt: row.criado_em,
   };
@@ -203,26 +282,33 @@ function mapMeasurementRowToEntry(row, metadata, paramStore, pumpRows = []) {
   return entry;
 }
 
-export function isMeaningfulEntry(entry) {
-  return Boolean(
-    entry?.reguaFinalT1 !== null ||
-      entry?.reguaFinalT2 !== null ||
-      Number(entry?.nfVolumeLitros || 0) > 0 ||
-      Number(entry?.transnetOutput || entry?.saidaTransnet || 0) > 0 ||
-      Number(entry?.saidaTotalBombas || 0) > 0 ||
-      Number(entry?.receiptMeasuredLiters || 0) > 0 ||
-      String(entry?.observation || entry?.observacao || "").trim()
-  );
-}
+function mapReceiptRow(row, metadata) {
+  const product = row.tipo_diesel || getProductByTankId(metadata, row.tanque_id);
 
-export function getDefaultDateForMonth(year, month) {
-  const today = getTodayIsoDate();
-  if (today.startsWith(`${year}-${month}`)) return today;
-  return `${year}-${month}-01`;
-}
-
-export function getMonthLabel(month) {
-  return MONTHS_2026.find((item) => item.month === month)?.label || month;
+  return {
+    id: row.id,
+    product,
+    tipoDiesel: product,
+    tanqueId: row.tanque_id,
+    date: row.data_recebimento,
+    dataRecebimento: row.data_recebimento,
+    supplierId: row.fornecedor_id,
+    supplier: row.fornecedor_nome || metadata?.suppliersById?.[row.fornecedor_id]?.nome || "",
+    nfNumero: row.nf_numero || "",
+    nfVolumeLitros: row.nf_volume_litros ?? 0,
+    reguaAntesCm: row.regua_antes_cm,
+    reguaDepoisCm: row.regua_depois_cm,
+    litrosAntes: row.litros_antes,
+    litrosDepois: row.litros_depois,
+    volumeRecebidoLitros: row.volume_recebido_litros,
+    diffRecebimentoLitros: row.diff_recebimento_litros,
+    pctDiffRecebimento: row.pct_diff_recebimento,
+    status: row.status_recebimento || "OK",
+    fotoAntesUrl: row.foto_antes_url,
+    fotoDepoisUrl: row.foto_depois_url,
+    observation: row.observacao || "",
+    createdAt: row.criado_em,
+  };
 }
 
 export function loadEntries() {
@@ -234,7 +320,7 @@ export function loadEntries() {
 }
 
 export function saveEntries(entries) {
-  localStorage.setItem(STORAGE_KEYS.entries, JSON.stringify(entries));
+  localStorage.setItem(STORAGE_KEYS.entries, JSON.stringify(entries || []));
 }
 
 export function loadParams() {
@@ -247,46 +333,41 @@ export function loadParams() {
 }
 
 export function saveParams(params) {
-  localStorage.setItem(STORAGE_KEYS.params, JSON.stringify(params));
+  localStorage.setItem(STORAGE_KEYS.params, JSON.stringify(params || DEFAULT_PARAMS));
 }
 
 export async function fetchMeasurementContext() {
-  const [tanksResponse, paramsResponse, tolerancesResponse, suppliersResponse, pumpsResponse] = await Promise.all([
-    supabase
-      .from("estoque_diesel_tanques")
-      .select("id, nome, tipo_diesel, diametro_m, raio_m, comprimento_m, capacidade_max_litros")
-      .eq("ativo", true),
-    supabase
-      .from("estoque_diesel_parametros")
-      .select(
-        "tanque_id, regua_max_cm, pct_diff_nf_alerta, pct_diff_nf_critico, pct_diff_transnet_alerta, pct_diff_transnet_critico"
-      )
-      .eq("ativo", true),
-    supabase
-      .from("estoque_diesel_tolerancias_nf")
-      .select("tipo_diesel, volume_nf, pct_variacao_aceitavel, diff_volume_aceitavel")
-      .eq("ativo", true)
-      .order("tipo_diesel")
-      .order("volume_nf"),
-    supabase
-      .from("estoque_diesel_fornecedores")
-      .select("id, nome")
-      .eq("ativo", true)
-      .order("nome"),
-    supabase
-      .from("estoque_diesel_bombas")
-      .select("id, tanque_id, numero, descricao")
-      .eq("ativo", true)
-      .order("numero"),
-  ]);
+  const [tanksResponse, paramsResponse, tolerancesResponse, suppliersResponse, pumpsResponse] =
+    await Promise.all([
+      supabase
+        .from("estoque_diesel_tanques")
+        .select("id, nome, tipo_diesel, diametro_m, raio_m, comprimento_m, capacidade_max_litros")
+        .eq("ativo", true),
+      supabase
+        .from("estoque_diesel_parametros")
+        .select(
+          "tanque_id, regua_max_cm, pct_diff_nf_alerta, pct_diff_nf_critico, pct_diff_transnet_alerta, pct_diff_transnet_critico"
+        )
+        .eq("ativo", true),
+      supabase
+        .from("estoque_diesel_tolerancias_nf")
+        .select("tipo_diesel, volume_nf, pct_variacao_aceitavel, diff_volume_aceitavel")
+        .eq("ativo", true)
+        .order("tipo_diesel")
+        .order("volume_nf"),
+      supabase
+        .from("estoque_diesel_fornecedores")
+        .select("id, nome")
+        .eq("ativo", true)
+        .order("nome"),
+      supabase
+        .from("estoque_diesel_bombas")
+        .select("id, tanque_id, numero, descricao")
+        .eq("ativo", true)
+        .order("numero"),
+    ]);
 
-  for (const response of [
-    tanksResponse,
-    paramsResponse,
-    tolerancesResponse,
-    suppliersResponse,
-    pumpsResponse,
-  ]) {
+  for (const response of [tanksResponse, paramsResponse, tolerancesResponse, suppliersResponse, pumpsResponse]) {
     if (response.error) throw response.error;
   }
 
@@ -299,22 +380,24 @@ export async function fetchMeasurementContext() {
     suppliersById: {},
   };
 
-  const paramsByTankId = Object.fromEntries(
-    (paramsResponse.data || []).map((row) => [row.tanque_id, row])
-  );
+  const paramsByTankId = Object.fromEntries((paramsResponse.data || []).map((row) => [row.tanque_id, row]));
 
   for (const supplier of suppliersResponse.data || []) {
     metadata.suppliersById[supplier.id] = supplier;
   }
 
   for (const tank of tanksResponse.data || []) {
-    metadata.tanksByProduct[tank.tipo_diesel] = tank;
+    const product = tank.tipo_diesel || "S500";
+    const currentDefault = paramStore[product] || DEFAULT_PARAMS[product] || DEFAULT_PARAMS.S500;
+
+    metadata.tanksByProduct[product] = tank;
     metadata.tanksById[tank.id] = tank;
+
     const productParams = {
-      ...(paramStore[tank.tipo_diesel] || cloneDefaults()[tank.tipo_diesel]),
-      diameterM: Number(tank.diametro_m || paramStore[tank.tipo_diesel]?.diameterM || DEFAULT_PARAMS[tank.tipo_diesel].diameterM),
-      lengthM: Number(tank.comprimento_m || paramStore[tank.tipo_diesel]?.lengthM || DEFAULT_PARAMS[tank.tipo_diesel].lengthM),
-      radiusM: Number(tank.raio_m || 0),
+      ...currentDefault,
+      diameterM: Number(tank.diametro_m || currentDefault.diameterM),
+      lengthM: Number(tank.comprimento_m || currentDefault.lengthM),
+      radiusM: Number(tank.raio_m || currentDefault.diameterM / 2),
     };
 
     const dbParam = paramsByTankId[tank.id];
@@ -322,15 +405,11 @@ export async function fetchMeasurementContext() {
       productParams.maxRuleCm = Number(dbParam.regua_max_cm ?? productParams.maxRuleCm);
       productParams.nfDiffWarnPct = Number(dbParam.pct_diff_nf_alerta ?? productParams.nfDiffWarnPct);
       productParams.nfDiffCriticalPct = Number(dbParam.pct_diff_nf_critico ?? productParams.nfDiffCriticalPct);
-      productParams.transnetWarnPct = Number(
-        dbParam.pct_diff_transnet_alerta ?? productParams.transnetWarnPct
-      );
-      productParams.transnetCriticalPct = Number(
-        dbParam.pct_diff_transnet_critico ?? productParams.transnetCriticalPct
-      );
+      productParams.transnetWarnPct = Number(dbParam.pct_diff_transnet_alerta ?? productParams.transnetWarnPct);
+      productParams.transnetCriticalPct = Number(dbParam.pct_diff_transnet_critico ?? productParams.transnetCriticalPct);
     }
 
-    paramStore[tank.tipo_diesel] = productParams;
+    paramStore[product] = productParams;
   }
 
   const suppliers = (suppliersResponse.data || []).map((supplier) => supplier.nome);
@@ -340,27 +419,33 @@ export async function fetchMeasurementContext() {
 
   const toleranceRowsByProduct = {};
   for (const row of tolerancesResponse.data || []) {
-    if (!toleranceRowsByProduct[row.tipo_diesel]) toleranceRowsByProduct[row.tipo_diesel] = [];
-    toleranceRowsByProduct[row.tipo_diesel].push({
+    const product = row.tipo_diesel || "S500";
+    if (!toleranceRowsByProduct[product]) toleranceRowsByProduct[product] = [];
+
+    toleranceRowsByProduct[product].push({
       nfVolume: Number(row.volume_nf || 0),
       variationPct: Number(row.pct_variacao_aceitavel || 0),
       acceptableDiffLiters: Number(row.diff_volume_aceitavel || 0),
     });
   }
+
   Object.keys(toleranceRowsByProduct).forEach((product) => {
     paramStore[product].toleranceRows = toleranceRowsByProduct[product];
   });
 
   for (const pump of pumpsResponse.data || []) {
     metadata.pumpsById[pump.id] = pump;
+
     const tank = metadata.tanksById[pump.tanque_id];
     if (!tank) continue;
-    if (!metadata.pumpsByProduct[tank.tipo_diesel]) metadata.pumpsByProduct[tank.tipo_diesel] = [];
-    metadata.pumpsByProduct[tank.tipo_diesel].push(pump);
+
+    const product = tank.tipo_diesel || "S500";
+    if (!metadata.pumpsByProduct[product]) metadata.pumpsByProduct[product] = [];
+    metadata.pumpsByProduct[product].push(pump);
   }
 
   Object.keys(metadata.pumpsByProduct).forEach((product) => {
-    metadata.pumpsByProduct[product].sort((a, b) => a.numero - b.numero);
+    metadata.pumpsByProduct[product].sort((a, b) => Number(a.numero || 0) - Number(b.numero || 0));
   });
 
   return { metadata, paramStore };
@@ -375,6 +460,7 @@ export async function fetchMeasurementEntries({
 }) {
   const from = `${year}-01-01`;
   const to = `${year}-12-31`;
+
   let query = supabase
     .from("estoque_diesel_medicoes_diarias")
     .select("*")
@@ -396,10 +482,7 @@ export async function fetchMeasurementEntries({
     const { data: pumpRows, error: pumpsError } = await supabase
       .from("estoque_diesel_leituras_bomba")
       .select("medicao_id, bomba_id, hodometro_inicial, hodometro_final, saida_bomba")
-      .in(
-        "medicao_id",
-        rows.map((row) => row.id)
-      );
+      .in("medicao_id", rows.map((row) => row.id));
 
     if (pumpsError) throw pumpsError;
 
@@ -415,6 +498,475 @@ export async function fetchMeasurementEntries({
     .filter(isMeaningfulEntry);
 }
 
+export async function fetchDieselReceipts({
+  year = "2026",
+  product = null,
+  metadata,
+}) {
+  const from = `${year}-01-01`;
+  const to = `${year}-12-31`;
+
+  let query = supabase
+    .from("estoque_diesel_recebimentos")
+    .select("*")
+    .gte("data_recebimento", from)
+    .lte("data_recebimento", to)
+    .order("data_recebimento", { ascending: true });
+
+  if (product) {
+    query = query.eq("tipo_diesel", product);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data || []).map((row) => mapReceiptRow(row, metadata));
+}
+
+export function isMeaningfulEntry(entry) {
+  return Boolean(
+    entry?.reguaFinalT1 !== null ||
+      entry?.reguaFinalT2 !== null ||
+      Number(entry?.nfVolumeLitros || 0) > 0 ||
+      Number(entry?.transnetOutput || entry?.saidaTransnet || 0) > 0 ||
+      Number(entry?.saidaTotalBombas || 0) > 0 ||
+      Number(entry?.receiptMeasuredLiters || 0) > 0 ||
+      String(entry?.observation || entry?.observacao || "").trim()
+  );
+}
+
+export function getPreviousEntry(entries, product, currentDate, currentId = null) {
+  const current = new Date(`${currentDate}T00:00:00`);
+
+  return (
+    [...(entries || [])]
+      .filter((entry) => entry.product === product && entry.date && entry.id !== currentId)
+      .filter((entry) => new Date(`${entry.date}T00:00:00`) < current)
+      .sort((a, b) => new Date(`${b.date}T00:00:00`) - new Date(`${a.date}T00:00:00`))[0] ||
+    null
+  );
+}
+
+export function getDailyReceipts(receipts, product, date) {
+  if (!Array.isArray(receipts) || !product || !date) return [];
+  return receipts.filter(
+    (receipt) =>
+      (receipt.product === product || receipt.tipoDiesel === product) &&
+      (receipt.date === date || receipt.dataRecebimento === date)
+  );
+}
+
+export function getPreviousPumpReading(entries, product, currentDate, pumpNumber) {
+  const previous = getPreviousEntry(entries, product, currentDate);
+  const pump = previous?.pumps?.find((item) => Number(item.number) === Number(pumpNumber));
+  return pump?.final ?? pump?.initial ?? null;
+}
+
+export function buildDefaultForm(product, year, month) {
+  const selectedProduct = product in PRODUCT_CONFIG ? product : "S500";
+  const pumpNumbers = getRequiredPumpNumbers(selectedProduct);
+
+  return {
+    id: null,
+    product: selectedProduct,
+    date: getDefaultDateForMonth(year, month),
+    reguaAnteriorT1: "",
+    reguaAnteriorT2: "",
+    reguaFinalT1: "",
+    reguaFinalT2: "",
+    hasReceipt: false,
+    nfVolumeLitros: "",
+    supplier: "",
+    supplierId: null,
+    nfNumero: "",
+    receiptRuleBeforeT1: "",
+    receiptRuleBeforeT2: "",
+    receiptRuleAfterT1: "",
+    receiptRuleAfterT2: "",
+    receiptPhotoBeforeUrl: "",
+    receiptPhotoAfterUrl: "",
+    transnetOutput: "",
+    observation: "",
+    pumps: pumpNumbers.map((number) => ({
+      number,
+      initial: "",
+      final: "",
+    })),
+  };
+}
+
+export function buildDefaultReceiptForm(product = "S500") {
+  return {
+    id: null,
+    product: product in PRODUCT_CONFIG ? product : "S500",
+    date: getTodayISO(),
+    supplier: "",
+    supplierId: null,
+    nfNumero: "",
+    nfVolumeLitros: "",
+    reguaAntesCm: "",
+    reguaDepoisCm: "",
+    fotoAntesFile: null,
+    fotoDepoisFile: null,
+    observation: "",
+  };
+}
+
+export function computeReceipt(form, params) {
+  const radius = getRadiusFromParams(params);
+  const length = parseNumber(params?.lengthM) || DEFAULT_PARAMS.S500.lengthM;
+
+  const litrosAntes = calculateVolumeLiters(form.reguaAntesCm, radius, length);
+  const litrosDepois = calculateVolumeLiters(form.reguaDepoisCm, radius, length);
+  const nfVolumeLitros = parseNumber(form.nfVolumeLitros) || 0;
+
+  const volumeRecebidoLitros =
+    litrosAntes !== null && litrosDepois !== null ? round(litrosDepois - litrosAntes, 2) : null;
+
+  const diffRecebimentoLitros =
+    volumeRecebidoLitros !== null ? round(volumeRecebidoLitros - nfVolumeLitros, 2) : null;
+
+  const pctDiffRecebimento =
+    nfVolumeLitros > 0 && diffRecebimentoLitros !== null
+      ? round(diffRecebimentoLitros / nfVolumeLitros, 6)
+      : null;
+
+  return {
+    litrosAntes,
+    litrosDepois,
+    volumeRecebidoLitros,
+    diffRecebimentoLitros,
+    pctDiffRecebimento,
+  };
+}
+
+export function receiptStatus(computed, params) {
+  const pct = computed?.pctDiffRecebimento;
+  if (pct === null || pct === undefined) return { tone: "slate", label: "OK" };
+
+  const absPct = Math.abs(Number(pct));
+  const warn = Number(params?.nfDiffWarnPct ?? 0.01);
+  const critical = Number(params?.nfDiffCriticalPct ?? 0.03);
+
+  if (absPct > critical) return { tone: "rose", label: "Critico" };
+  if (absPct > warn) return { tone: "amber", label: "Atencao" };
+  return { tone: "emerald", label: "OK" };
+}
+
+export function computeMeasurement(form, params, previousEntry, receipts = []) {
+  const radius = getRadiusFromParams(params);
+  const length = parseNumber(params?.lengthM) || DEFAULT_PARAMS.S500.lengthM;
+
+  const reguaAnteriorT1 =
+    parseNumber(form.reguaAnteriorT1) ?? parseNumber(previousEntry?.reguaFinalT1);
+  const reguaAnteriorT2 =
+    parseNumber(form.reguaAnteriorT2) ?? parseNumber(previousEntry?.reguaFinalT2);
+  const reguaFinalT1 = parseNumber(form.reguaFinalT1);
+  const reguaFinalT2 = parseNumber(form.reguaFinalT2);
+
+  const litrosAnteriorT1 = calculateVolumeLiters(reguaAnteriorT1, radius, length);
+  const litrosAnteriorT2 = calculateVolumeLiters(reguaAnteriorT2, radius, length);
+  const litrosFinalT1 = calculateVolumeLiters(reguaFinalT1, radius, length);
+  const litrosFinalT2 = calculateVolumeLiters(reguaFinalT2, radius, length);
+
+  const saldoAnteriorCalculado = round((litrosAnteriorT1 || 0) + (litrosAnteriorT2 || 0), 2);
+  const saldoFinal = round((litrosFinalT1 || 0) + (litrosFinalT2 || 0), 2);
+
+  const medicaoD1 =
+    previousEntry?.medicaoAtual ??
+    previousEntry?.saldoFinal ??
+    previousEntry?.medicao_atual ??
+    previousEntry?.saldo_final ??
+    saldoAnteriorCalculado ??
+    0;
+
+  const medicaoAtual = saldoFinal;
+  const saldoAnterior = medicaoD1;
+
+  const hasInlineReceipt = form.hasReceipt === true;
+  const nfVolumeLitros = parseNumber(form.nfVolumeLitros) || 0;
+
+  const receiptBeforeT1 = calculateVolumeLiters(form.receiptRuleBeforeT1, radius, length);
+  const receiptBeforeT2 = calculateVolumeLiters(form.receiptRuleBeforeT2, radius, length);
+  const receiptAfterT1 = calculateVolumeLiters(form.receiptRuleAfterT1, radius, length);
+  const receiptAfterT2 = calculateVolumeLiters(form.receiptRuleAfterT2, radius, length);
+
+  const inlineReceiptMeasuredLiters = hasInlineReceipt
+    ? round(
+        (receiptAfterT1 || 0) +
+          (receiptAfterT2 || 0) -
+          (receiptBeforeT1 || 0) -
+          (receiptBeforeT2 || 0),
+        2
+      )
+    : null;
+
+  const inlineReceiptLiters = hasInlineReceipt
+    ? round(inlineReceiptMeasuredLiters ?? nfVolumeLitros, 2)
+    : 0;
+
+  const externalDailyReceipts = round(
+    (receipts || []).reduce((sum, receipt) => {
+      const value =
+        parseNumber(receipt.volumeRecebidoLitros) ??
+        parseNumber(receipt.nfVolumeLitros) ??
+        0;
+      return sum + value;
+    }, 0),
+    2
+  );
+
+  const entradaRecebimentos = round((externalDailyReceipts || 0) + (inlineReceiptLiters || 0), 2);
+  const entradaDiesel = round(entradaRecebimentos || 0, 2);
+
+  const saidaTanque =
+    medicaoAtual !== null ? round((medicaoD1 || 0) + entradaDiesel - medicaoAtual, 2) : null;
+
+  const pumpDetails = (form.pumps || []).map((pump) => {
+    const previousPump = (previousEntry?.pumps || []).find(
+      (item) => Number(item.number) === Number(pump.number)
+    );
+
+    const initial = parseNumber(pump.initial) ?? parseNumber(previousPump?.final) ?? 0;
+    const final = parseNumber(pump.final) || 0;
+
+    return {
+      ...pump,
+      number: pump.number,
+      initial,
+      final,
+      output: round(final - initial, 2),
+    };
+  });
+
+  const saidaTotalBombas = round(
+    pumpDetails.reduce((sum, pump) => sum + (pump.output || 0), 0),
+    2
+  );
+
+  const saidaTransnet = parseNumber(form.transnetOutput) || 0;
+  const diffRecebimento =
+    hasInlineReceipt && nfVolumeLitros > 0 ? round((inlineReceiptLiters || 0) - nfVolumeLitros, 2) : null;
+  const pctDiffNF =
+    hasInlineReceipt && nfVolumeLitros > 0 ? round(((inlineReceiptLiters || 0) - nfVolumeLitros) / nfVolumeLitros, 6) : null;
+
+  const pctDiffTransnet =
+    saidaTanque && saidaTanque !== 0 ? round((saidaTransnet - saidaTanque) / saidaTanque, 6) : null;
+
+  const diffTanqueTransnet =
+    saidaTanque !== null ? round(saidaTransnet - saidaTanque, 2) : null;
+
+  const diffBombasTransnet = round(saidaTransnet - saidaTotalBombas, 2);
+  const diffTanqueBombas =
+    saidaTanque !== null ? round(saidaTotalBombas - saidaTanque, 2) : null;
+
+  const toleranceRow = findToleranceRow(params, nfVolumeLitros);
+  const receiptToleranceLiters = toleranceRow?.acceptableDiffLiters ?? null;
+  const receiptWithinTolerance =
+    hasInlineReceipt && receiptToleranceLiters !== null && diffRecebimento !== null
+      ? Math.abs(diffRecebimento) <= receiptToleranceLiters
+      : null;
+
+  return {
+    reguaAnteriorT1,
+    reguaAnteriorT2,
+    litrosAnteriorT1,
+    litrosAnteriorT2,
+    litrosFinalT1,
+    litrosFinalT2,
+    saldoAnterior,
+    saldoFinal,
+    entradaDiesel,
+    entradaRecebimentos,
+    medicaoD1,
+    medicaoAtual,
+    saidaTanque,
+    pumpDetails,
+    saidaTotalBombas,
+    saidaTransnet,
+    receiptBeforeT1,
+    receiptBeforeT2,
+    receiptAfterT1,
+    receiptAfterT2,
+    receiptMeasuredLiters: inlineReceiptMeasuredLiters,
+    receiptToleranceLiters,
+    receiptWithinTolerance,
+    diffRecebimento,
+    pctDiffNF,
+    pctDiffTransnet,
+    diffTanqueTransnet,
+    diffBombasTransnet,
+    diffTanqueBombas,
+  };
+}
+
+export function validateMeasurement(form, computed, params) {
+  const errors = {};
+  const warnings = [];
+
+  if (!form.date) {
+    errors.date = "Informe a data do lancamento.";
+  }
+
+  if (parseNumber(form.reguaFinalT1) === null && parseNumber(form.reguaFinalT2) === null) {
+    errors.reguaFinal = "Informe ao menos uma regua final.";
+  }
+
+  if (form.transnetOutput === "" || form.transnetOutput === null || form.transnetOutput === undefined) {
+    warnings.push("Saida Transnet ainda nao foi informada.");
+  }
+
+  if (form.hasReceipt) {
+    if ((parseNumber(form.nfVolumeLitros) || 0) <= 0) {
+      errors.nfVolumeLitros = "Informe o volume da NF quando houver recebimento.";
+    }
+    if (!String(form.supplier || "").trim()) {
+      errors.supplier = "Selecione o fornecedor quando houver recebimento.";
+    }
+    if (parseNumber(form.receiptRuleBeforeT1) === null && parseNumber(form.receiptRuleBeforeT2) === null) {
+      errors.receiptBefore = "Informe a regua antes do recebimento.";
+    }
+    if (parseNumber(form.receiptRuleAfterT1) === null && parseNumber(form.receiptRuleAfterT2) === null) {
+      errors.receiptAfter = "Informe a regua depois do recebimento.";
+    }
+  }
+
+  (form.pumps || []).forEach((pump) => {
+    const initial = parseNumber(pump.initial);
+    const final = parseNumber(pump.final);
+
+    if (final === null) {
+      errors[`pump_${pump.number}`] = `Informe o encerrante atual da bomba ${pump.number}.`;
+    }
+
+    if (initial !== null && final !== null && final < initial) {
+      errors[`pump_${pump.number}`] = `Bomba ${pump.number}: encerrante atual nao pode ser menor que o D-1.`;
+    }
+  });
+
+  ["reguaAnteriorT1", "reguaAnteriorT2", "reguaFinalT1", "reguaFinalT2"].forEach((field) => {
+    const value = parseNumber(form[field]);
+    if (value !== null && params?.maxRuleCm && value > params.maxRuleCm) {
+      warnings.push(`${field} acima do limite fisico do tanque.`);
+    }
+  });
+
+  if (
+    computed?.pctDiffNF !== null &&
+    computed?.pctDiffNF !== undefined &&
+    Math.abs(computed.pctDiffNF) > (params?.nfDiffWarnPct || 0.01)
+  ) {
+    warnings.push("Diferenca NF x recebido acima da faixa de atencao.");
+  }
+
+  if (form.hasReceipt && computed?.receiptWithinTolerance === false) {
+    warnings.push("Recebimento fora da tolerancia configurada para a faixa da NF.");
+  }
+
+  if (
+    computed?.pctDiffTransnet !== null &&
+    computed?.pctDiffTransnet !== undefined &&
+    Math.abs(computed.pctDiffTransnet) > (params?.transnetWarnPct || 0.02)
+  ) {
+    warnings.push("Diferenca tanque x Transnet acima da faixa de atencao.");
+  }
+
+  if ((computed?.saldoFinal || 0) < 0) {
+    warnings.push("Saldo final negativo. Revise as medicoes.");
+  }
+
+  return { errors, warnings };
+}
+
+export function validateReceipt(form, computed, params) {
+  const errors = {};
+  const warnings = [];
+
+  if (!form.date) errors.date = "Informe a data do recebimento.";
+  if (!form.product) errors.product = "Informe o produto.";
+  if (!parseNumber(form.nfVolumeLitros)) errors.nfVolumeLitros = "Informe o volume da NF.";
+  if (parseNumber(form.reguaAntesCm) === null) errors.reguaAntesCm = "Informe a regua antes do recebimento.";
+  if (parseNumber(form.reguaDepoisCm) === null) errors.reguaDepoisCm = "Informe a regua depois do recebimento.";
+
+  if (computed?.volumeRecebidoLitros !== null && computed?.volumeRecebidoLitros < 0) {
+    errors.volumeRecebidoLitros = "Volume recebido ficou negativo. Confira as reguas.";
+  }
+
+  const status = receiptStatus(computed, params);
+  if (status.label === "Atencao") warnings.push("Recebimento fora da faixa de atencao.");
+  if (status.label === "Critico") warnings.push("Recebimento fora da faixa critica.");
+
+  return { errors, warnings };
+}
+
+export function measurementStatus(computed, params) {
+  const nfCritical =
+    computed?.pctDiffNF !== null &&
+    computed?.pctDiffNF !== undefined &&
+    Math.abs(computed.pctDiffNF) > (params?.nfDiffCriticalPct || 0.03);
+
+  const transnetCritical =
+    computed?.pctDiffTransnet !== null &&
+    computed?.pctDiffTransnet !== undefined &&
+    Math.abs(computed.pctDiffTransnet) > (params?.transnetCriticalPct || 0.03);
+
+  const nfWarn =
+    computed?.pctDiffNF !== null &&
+    computed?.pctDiffNF !== undefined &&
+    Math.abs(computed.pctDiffNF) > (params?.nfDiffWarnPct || 0.01);
+
+  const transnetWarn =
+    computed?.pctDiffTransnet !== null &&
+    computed?.pctDiffTransnet !== undefined &&
+    Math.abs(computed.pctDiffTransnet) > (params?.transnetWarnPct || 0.02);
+
+  if (nfCritical || transnetCritical) return { tone: "rose", label: "Critico" };
+  if (nfWarn || transnetWarn) return { tone: "amber", label: "Atencao" };
+  return { tone: "emerald", label: "OK" };
+}
+
+async function resolveSupplierId(form, metadata) {
+  let supplierId = form.supplierId || null;
+
+  if (!supplierId && form.supplier) {
+    const existingSupplier = Object.values(metadata?.suppliersById || {}).find(
+      (supplier) => supplier.nome === form.supplier
+    );
+
+    if (existingSupplier) {
+      supplierId = existingSupplier.id;
+    } else {
+      const { data: newSupplier, error: supplierError } = await supabase
+        .from("estoque_diesel_fornecedores")
+        .insert({ nome: form.supplier, ativo: true })
+        .select("id, nome")
+        .single();
+
+      if (supplierError) throw supplierError;
+
+      supplierId = newSupplier.id;
+      if (metadata?.suppliersById) metadata.suppliersById[newSupplier.id] = newSupplier;
+    }
+  }
+
+  return supplierId;
+}
+
+async function uploadReceiptPhoto(file, product, date, kind) {
+  if (!file) return null;
+
+  const extension = file.name?.split(".").pop() || "jpg";
+  const safeName = sanitizeFileName(file.name || `${kind}.${extension}`);
+  const path = `recebimentos/${product}/${date}/${Date.now()}-${kind}-${safeName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("estoque-diesel")
+    .upload(path, file, { cacheControl: "3600", upsert: true });
+
+  if (uploadError) throw uploadError;
+  return supabase.storage.from("estoque-diesel").getPublicUrl(path).data.publicUrl;
+}
+
 export async function saveMeasurementEntry({
   form,
   computed,
@@ -424,46 +976,18 @@ export async function saveMeasurementEntry({
   userId = null,
   receiptFiles = {},
 }) {
-  const tank = metadata?.tanksByProduct?.[product];
-  if (!tank?.id) {
-    throw new Error(`Tanque de ${product} nao encontrado no Supabase.`);
-  }
+  const tank = getTankByProduct(metadata, product);
+  if (!tank?.id) throw new Error(`Tanque de ${product} nao encontrado no Supabase.`);
 
-  let supplierId = form.supplierId || null;
-  if (!supplierId && form.supplier) {
-    const existingSupplier = Object.values(metadata.suppliersById || {}).find(
-      (supplier) => supplier.nome === form.supplier
-    );
-    if (existingSupplier) {
-      supplierId = existingSupplier.id;
-    } else {
-      const { data: newSupplier, error: supplierError } = await supabase
-        .from("estoque_diesel_fornecedores")
-        .insert({ nome: form.supplier, ativo: true })
-        .select("id, nome")
-        .single();
-      if (supplierError) throw supplierError;
-      supplierId = newSupplier.id;
-      metadata.suppliersById[newSupplier.id] = newSupplier;
-    }
-  }
-
-  async function uploadReceiptPhoto(file, kind) {
-    if (!file) return null;
-    const extension = file.name?.split(".").pop() || "jpg";
-    const safeName = sanitizeFileName(file.name || `${kind}.${extension}`);
-    const path = `recebimentos/${product}/${form.date}/${Date.now()}-${kind}-${safeName}`;
-    const { error: uploadError } = await supabase.storage
-      .from("estoque_diesel")
-      .upload(path, file, { upsert: true });
-    if (uploadError) throw uploadError;
-    return supabase.storage.from("estoque_diesel").getPublicUrl(path).data.publicUrl;
-  }
-
+  const supplierId = await resolveSupplierId(form, metadata);
   const receiptPhotoBeforeUrl =
-    (await uploadReceiptPhoto(receiptFiles.before, "antes")) || form.receiptPhotoBeforeUrl || null;
+    (await uploadReceiptPhoto(receiptFiles.before, product, form.date, "antes")) ||
+    form.receiptPhotoBeforeUrl ||
+    null;
   const receiptPhotoAfterUrl =
-    (await uploadReceiptPhoto(receiptFiles.after, "depois")) || form.receiptPhotoAfterUrl || null;
+    (await uploadReceiptPhoto(receiptFiles.after, product, form.date, "depois")) ||
+    form.receiptPhotoAfterUrl ||
+    null;
 
   const payload = {
     tanque_id: tank.id,
@@ -514,22 +1038,80 @@ export async function saveMeasurementEntry({
 
   if (measurementError) throw measurementError;
 
-  const dbPumps = (metadata.pumpsByProduct?.[product] || []).sort((a, b) => a.numero - b.numero);
-  const pumpPayload = dbPumps.map((pump, index) => ({
-    medicao_id: savedMeasurement.id,
-    bomba_id: pump.id,
-    hodometro_inicial: parseNumber(form.pumps[index]?.initial) || 0,
-    hodometro_final: parseNumber(form.pumps[index]?.final) || 0,
-  }));
+  const dbPumps = (metadata?.pumpsByProduct?.[product] || [])
+    .filter((pump) => getRequiredPumpNumbers(product).includes(Number(pump.numero)))
+    .sort((a, b) => Number(a.numero || 0) - Number(b.numero || 0));
+
+  const pumpPayload = dbPumps.map((pump) => {
+    const formPump = (form.pumps || []).find((item) => Number(item.number) === Number(pump.numero));
+
+    return {
+      medicao_id: savedMeasurement.id,
+      bomba_id: pump.id,
+      hodometro_inicial: parseNumber(formPump?.initial) || 0,
+      hodometro_final: parseNumber(formPump?.final) || 0,
+    };
+  });
 
   if (pumpPayload.length > 0) {
     const { error: pumpError } = await supabase
       .from("estoque_diesel_leituras_bomba")
       .upsert(pumpPayload, { onConflict: "medicao_id,bomba_id" });
+
     if (pumpError) throw pumpError;
   }
 
   return savedMeasurement.id;
+}
+
+export async function saveDieselReceipt({
+  form,
+  computed,
+  product,
+  params,
+  metadata,
+  userId = null,
+}) {
+  const tank = getTankByProduct(metadata, product);
+  if (!tank?.id) throw new Error(`Tanque de ${product} nao encontrado no Supabase.`);
+
+  const supplierId = await resolveSupplierId(form, metadata);
+  const [fotoAntesUrl, fotoDepoisUrl] = await Promise.all([
+    uploadReceiptPhoto(form.fotoAntesFile, product, form.date, "antes"),
+    uploadReceiptPhoto(form.fotoDepoisFile, product, form.date, "depois"),
+  ]);
+
+  const payload = {
+    tanque_id: tank.id,
+    data_recebimento: form.date,
+    tipo_diesel: product,
+    fornecedor_id: supplierId,
+    fornecedor_nome: form.supplier || null,
+    nf_numero: form.nfNumero || null,
+    nf_volume_litros: parseNumber(form.nfVolumeLitros) || 0,
+    regua_antes_cm: parseNumber(form.reguaAntesCm),
+    regua_depois_cm: parseNumber(form.reguaDepoisCm),
+    litros_antes: computed.litrosAntes,
+    litros_depois: computed.litrosDepois,
+    volume_recebido_litros: computed.volumeRecebidoLitros,
+    diff_recebimento_litros: computed.diffRecebimentoLitros,
+    pct_diff_recebimento: computed.pctDiffRecebimento,
+    status_recebimento: receiptStatus(computed, params).label,
+    foto_antes_url: fotoAntesUrl,
+    foto_depois_url: fotoDepoisUrl,
+    observacao: form.observation || null,
+    usuario_id: Number.isInteger(userId) ? userId : null,
+    atualizado_em: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from("estoque_diesel_recebimentos")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data.id;
 }
 
 export async function saveMeasurementParams(paramStore, metadata) {
@@ -539,26 +1121,26 @@ export async function saveMeasurementParams(paramStore, metadata) {
 
   for (const product of Object.keys(PRODUCT_CONFIG)) {
     const tank = metadata?.tanksByProduct?.[product];
-    const current = paramStore[product] || DEFAULT_PARAMS[product];
-    if (tank?.id) {
-      tanksPayload.push({
-        id: tank.id,
-        diametro_m: parseNumber(current.diameterM) || DEFAULT_PARAMS[product].diameterM,
-        comprimento_m: parseNumber(current.lengthM) || DEFAULT_PARAMS[product].lengthM,
-      });
-      paramsPayload.push({
-        tanque_id: tank.id,
-        regua_max_cm: parseNumber(current.maxRuleCm) || DEFAULT_PARAMS[product].maxRuleCm,
-        pct_diff_nf_alerta: parseNumber(current.nfDiffWarnPct) || DEFAULT_PARAMS[product].nfDiffWarnPct,
-        pct_diff_nf_critico: parseNumber(current.nfDiffCriticalPct) || DEFAULT_PARAMS[product].nfDiffCriticalPct,
-        pct_diff_transnet_alerta:
-          parseNumber(current.transnetWarnPct) || DEFAULT_PARAMS[product].transnetWarnPct,
-        pct_diff_transnet_critico:
-          parseNumber(current.transnetCriticalPct) || DEFAULT_PARAMS[product].transnetCriticalPct,
-        ativo: true,
-        atualizado_em: new Date().toISOString(),
-      });
-    }
+    const current = paramStore?.[product] || DEFAULT_PARAMS[product];
+    if (!tank?.id) continue;
+
+    tanksPayload.push({
+      id: tank.id,
+      diametro_m: parseNumber(current.diameterM) || DEFAULT_PARAMS[product].diameterM,
+      comprimento_m: parseNumber(current.lengthM) || DEFAULT_PARAMS[product].lengthM,
+      ativo: true,
+    });
+
+    paramsPayload.push({
+      tanque_id: tank.id,
+      regua_max_cm: parseNumber(current.maxRuleCm) || DEFAULT_PARAMS[product].maxRuleCm,
+      pct_diff_nf_alerta: parseNumber(current.nfDiffWarnPct) || DEFAULT_PARAMS[product].nfDiffWarnPct,
+      pct_diff_nf_critico: parseNumber(current.nfDiffCriticalPct) || DEFAULT_PARAMS[product].nfDiffCriticalPct,
+      pct_diff_transnet_alerta: parseNumber(current.transnetWarnPct) || DEFAULT_PARAMS[product].transnetWarnPct,
+      pct_diff_transnet_critico: parseNumber(current.transnetCriticalPct) || DEFAULT_PARAMS[product].transnetCriticalPct,
+      ativo: true,
+      atualizado_em: new Date().toISOString(),
+    });
 
     for (const row of normalizeToleranceRows(current.toleranceRows)) {
       tolerancesPayload.push({
@@ -571,273 +1153,28 @@ export async function saveMeasurementParams(paramStore, metadata) {
     }
   }
 
-  const { error: tanksError } = await supabase
-    .from("estoque_diesel_tanques")
-    .upsert(tanksPayload, { onConflict: "id" });
-  if (tanksError) throw tanksError;
-
-  const { error: paramsError } = await supabase
-    .from("estoque_diesel_parametros")
-    .upsert(paramsPayload, { onConflict: "tanque_id" });
-  if (paramsError) throw paramsError;
-
-  const { error: toleranceError } = await supabase
-    .from("estoque_diesel_tolerancias_nf")
-    .upsert(tolerancesPayload, { onConflict: "tipo_diesel,volume_nf" });
-  if (toleranceError) throw toleranceError;
-}
-
-export function calculateVolumeLiters(ruleCm, radiusM, lengthM) {
-  const regua = parseNumber(ruleCm);
-  const raio = parseNumber(radiusM);
-  const comprimento = parseNumber(lengthM);
-  if (!regua || !raio || !comprimento) return null;
-
-  const h = regua / 100;
-  const r = raio;
-  const l = comprimento;
-
-  if (h <= 0 || r <= 0 || l <= 0) return null;
-  if (h > 2 * r) return null;
-
-  const volume =
-    (r * r * Math.acos(1 - h / r) - Math.sqrt(Math.max(0, 2 * r * h - h * h)) * (r - h)) *
-    1000 *
-    l;
-
-  return round(volume, 0);
-}
-
-export function getPreviousEntry(entries, product, currentDate, currentId = null) {
-  const current = new Date(currentDate);
-  return [...entries]
-    .filter((entry) => entry.product === product && entry.date && entry.id !== currentId)
-    .filter((entry) => new Date(entry.date) < current)
-    .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
-}
-
-export function buildDefaultForm(product, year, month) {
-  const pumps = PRODUCT_CONFIG[product].pumps.map((pumpNumber) => ({
-    number: pumpNumber,
-    initial: "",
-    final: "",
-  }));
-
-  return {
-    id: null,
-    product,
-    date: getDefaultDateForMonth(year, month),
-    reguaAnteriorT1: "",
-    reguaAnteriorT2: "",
-    reguaFinalT1: "",
-    reguaFinalT2: "",
-    hasReceipt: false,
-    nfVolumeLitros: "",
-    supplier: "",
-    supplierId: null,
-    nfNumero: "",
-    receiptRuleBeforeT1: "",
-    receiptRuleBeforeT2: "",
-    receiptRuleAfterT1: "",
-    receiptRuleAfterT2: "",
-    receiptPhotoBeforeUrl: "",
-    receiptPhotoAfterUrl: "",
-    transnetOutput: "",
-    observation: "",
-    pumps,
-  };
-}
-
-export function computeMeasurement(form, params, previousEntry) {
-  const radius = parseNumber(params.diameterM)
-    ? parseNumber(params.diameterM) / 2
-    : parseNumber(params.radiusM);
-  const length = parseNumber(params.lengthM);
-
-  const reguaAnteriorT1 =
-    parseNumber(form.reguaAnteriorT1) ?? parseNumber(previousEntry?.reguaFinalT1);
-  const reguaAnteriorT2 =
-    parseNumber(form.reguaAnteriorT2) ?? parseNumber(previousEntry?.reguaFinalT2);
-  const litrosAnteriorT1 = calculateVolumeLiters(reguaAnteriorT1, radius, length);
-  const litrosAnteriorT2 = calculateVolumeLiters(reguaAnteriorT2, radius, length);
-  const litrosFinalT1 = calculateVolumeLiters(form.reguaFinalT1, radius, length);
-  const litrosFinalT2 = calculateVolumeLiters(form.reguaFinalT2, radius, length);
-
-  const saldoAnteriorCalculado = round((litrosAnteriorT1 || 0) + (litrosAnteriorT2 || 0), 2);
-  const saldoAnterior = previousEntry?.saldoFinal ?? saldoAnteriorCalculado;
-  const saldoFinal = round((litrosFinalT1 || 0) + (litrosFinalT2 || 0), 2);
-  const nfVolumeLitros = parseNumber(form.nfVolumeLitros) || 0;
-  const medicaoD1 = previousEntry?.saldoFinal ?? saldoAnterior;
-  const medicaoAtual = saldoFinal;
-  const receiptBeforeT1 = calculateVolumeLiters(form.receiptRuleBeforeT1, radius, length);
-  const receiptBeforeT2 = calculateVolumeLiters(form.receiptRuleBeforeT2, radius, length);
-  const receiptAfterT1 = calculateVolumeLiters(form.receiptRuleAfterT1, radius, length);
-  const receiptAfterT2 = calculateVolumeLiters(form.receiptRuleAfterT2, radius, length);
-  const hasReceipt = form.hasReceipt === true;
-  const receiptMeasuredLiters = hasReceipt
-    ? round(
-        (receiptAfterT1 || 0) +
-          (receiptAfterT2 || 0) -
-          (receiptBeforeT1 || 0) -
-          (receiptBeforeT2 || 0),
-        2
-      )
-    : null;
-  const entradaConsiderada = hasReceipt
-    ? receiptMeasuredLiters ?? nfVolumeLitros
-    : 0;
-  const entradaDiesel = round(entradaConsiderada, 2);
-  const saidaTanque =
-    medicaoAtual !== null ? round((medicaoD1 || 0) + entradaConsiderada - medicaoAtual, 2) : null;
-
-  const pumpDetails = form.pumps.map((pump) => {
-    const previousPump = (previousEntry?.pumps || []).find(
-      (prevPump) => Number(prevPump.number) === Number(pump.number)
-    );
-    const initial = parseNumber(pump.initial) ?? parseNumber(previousPump?.final) ?? 0;
-    const final = parseNumber(pump.final) || 0;
-    return {
-      ...pump,
-      initial,
-      final,
-      output: round(final - initial, 2),
-    };
-  });
-
-  const saidaTotalBombas = round(
-    pumpDetails.reduce((sum, pump) => sum + (pump.output || 0), 0),
-    2
-  );
-  const saidaTransnet = parseNumber(form.transnetOutput) || 0;
-  const diffRecebimento =
-    hasReceipt && nfVolumeLitros > 0 ? round(entradaDiesel - nfVolumeLitros, 2) : null;
-  const pctDiffNF =
-    hasReceipt && nfVolumeLitros > 0
-      ? round((entradaDiesel - nfVolumeLitros) / nfVolumeLitros, 4)
-      : null;
-  const pctDiffTransnet =
-    saidaTanque && saidaTanque !== 0 ? round((saidaTransnet - saidaTanque) / saidaTanque, 4) : null;
-  const toleranceRow = findToleranceRow(params, nfVolumeLitros);
-  const receiptToleranceLiters = toleranceRow?.acceptableDiffLiters ?? null;
-  const receiptWithinTolerance =
-    hasReceipt && receiptToleranceLiters !== null && diffRecebimento !== null
-      ? Math.abs(diffRecebimento) <= receiptToleranceLiters
-      : null;
-
-  return {
-    reguaAnteriorT1,
-    reguaAnteriorT2,
-    litrosAnteriorT1,
-    litrosAnteriorT2,
-    litrosFinalT1,
-    litrosFinalT2,
-    saldoAnterior,
-    saldoFinal,
-    entradaDiesel,
-    medicaoD1,
-    medicaoAtual,
-    saidaTanque,
-    pumpDetails,
-    saidaTotalBombas,
-    saidaTransnet,
-    receiptBeforeT1,
-    receiptBeforeT2,
-    receiptAfterT1,
-    receiptAfterT2,
-    receiptMeasuredLiters,
-    receiptToleranceLiters,
-    receiptWithinTolerance,
-    diffRecebimento,
-    pctDiffNF,
-    pctDiffTransnet,
-  };
-}
-
-export function validateMeasurement(form, computed, params) {
-  const errors = {};
-  const warnings = [];
-
-  if (parseNumber(form.reguaFinalT1) === null && parseNumber(form.reguaFinalT2) === null) {
-    errors.reguaFinal = "Informe ao menos uma regua final.";
+  if (tanksPayload.length > 0) {
+    const { error: tanksError } = await supabase
+      .from("estoque_diesel_tanques")
+      .upsert(tanksPayload, { onConflict: "id" });
+    if (tanksError) throw tanksError;
   }
 
-  if (form.hasReceipt) {
-    if ((parseNumber(form.nfVolumeLitros) || 0) <= 0) {
-      errors.nfVolumeLitros = "Informe o volume da NF quando houver recebimento.";
-    }
-    if (!String(form.supplier || "").trim()) {
-      errors.supplier = "Selecione o fornecedor quando houver recebimento.";
-    }
-    if (
-      parseNumber(form.receiptRuleBeforeT1) === null &&
-      parseNumber(form.receiptRuleBeforeT2) === null
-    ) {
-      errors.receiptBefore = "Informe a regua antes do recebimento.";
-    }
-    if (
-      parseNumber(form.receiptRuleAfterT1) === null &&
-      parseNumber(form.receiptRuleAfterT2) === null
-    ) {
-      errors.receiptAfter = "Informe a regua depois do recebimento.";
-    }
+  if (paramsPayload.length > 0) {
+    const { error: paramsError } = await supabase
+      .from("estoque_diesel_parametros")
+      .upsert(paramsPayload, { onConflict: "tanque_id" });
+    if (paramsError) throw paramsError;
   }
 
-  form.pumps.forEach((pump, index) => {
-    const initial = parseNumber(pump.initial);
-    const final = parseNumber(pump.final);
-    if (initial !== null && final !== null && final < initial) {
-      errors[`pump_${index + 1}`] = `Bomba ${index + 1}: hodometro final nao pode ser menor que o inicial.`;
-    }
-  });
-
-  ["reguaAnteriorT1", "reguaAnteriorT2", "reguaFinalT1", "reguaFinalT2"].forEach((field) => {
-    const value = parseNumber(form[field]);
-    if (value !== null && params.maxRuleCm && value > params.maxRuleCm) {
-      warnings.push(`${field} acima do limite fisico do tanque.`);
-    }
-  });
-
-  if (computed.pctDiffNF !== null && Math.abs(computed.pctDiffNF) > (params.nfDiffWarnPct || 0.01)) {
-    warnings.push("Diferenca NF x recebido acima da faixa de atencao.");
+  if (tolerancesPayload.length > 0) {
+    const { error: toleranceError } = await supabase
+      .from("estoque_diesel_tolerancias_nf")
+      .upsert(tolerancesPayload, { onConflict: "tipo_diesel,volume_nf" });
+    if (toleranceError) throw toleranceError;
   }
 
-  if (form.hasReceipt && computed.receiptWithinTolerance === false) {
-    warnings.push("Recebimento fora da tolerancia configurada para a faixa da NF.");
-  }
-
-  if (
-    computed.pctDiffTransnet !== null &&
-    Math.abs(computed.pctDiffTransnet) > (params.transnetWarnPct || 0.02)
-  ) {
-    warnings.push("Diferenca tanque x Transnet acima da faixa de atencao.");
-  }
-
-  if ((computed.saldoFinal || 0) < 0) {
-    warnings.push("Saldo final negativo. Revise as medicoes.");
-  }
-
-  return { errors, warnings };
-}
-
-export function measurementStatus(computed, params) {
-  const nfCritical =
-    computed.pctDiffNF !== null && Math.abs(computed.pctDiffNF) > (params.nfDiffCriticalPct || 0.03);
-  const transnetCritical =
-    computed.pctDiffTransnet !== null &&
-    Math.abs(computed.pctDiffTransnet) > (params.transnetCriticalPct || 0.03);
-  const nfWarn =
-    computed.pctDiffNF !== null && Math.abs(computed.pctDiffNF) > (params.nfDiffWarnPct || 0.01);
-  const transnetWarn =
-    computed.pctDiffTransnet !== null &&
-    Math.abs(computed.pctDiffTransnet) > (params.transnetWarnPct || 0.02);
-
-  if (nfCritical || transnetCritical) {
-    return { tone: "rose", label: "Critico" };
-  }
-  if (nfWarn || transnetWarn) {
-    return { tone: "amber", label: "Atencao" };
-  }
-  return { tone: "emerald", label: "OK" };
+  return true;
 }
 
 export function serializeEntry(form, computed, params) {
@@ -850,8 +1187,8 @@ export function serializeEntry(form, computed, params) {
     nfNumero: form.nfNumero,
     nfVolumeLitros: parseNumber(form.nfVolumeLitros) || 0,
     observation: form.observation,
-    reguaAnteriorT1: parseNumber(form.reguaAnteriorT1),
-    reguaAnteriorT2: parseNumber(form.reguaAnteriorT2),
+    reguaAnteriorT1: computed.reguaAnteriorT1,
+    reguaAnteriorT2: computed.reguaAnteriorT2,
     reguaFinalT1: parseNumber(form.reguaFinalT1),
     reguaFinalT2: parseNumber(form.reguaFinalT2),
     transnetOutput: parseNumber(form.transnetOutput) || 0,

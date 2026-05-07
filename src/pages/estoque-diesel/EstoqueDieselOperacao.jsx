@@ -12,7 +12,6 @@ import {
 } from "react-icons/fa";
 import EstoqueDieselPageShell, {
   EstoqueDieselPanel,
-  EstoqueDieselStat,
 } from "../../components/estoque-diesel/EstoqueDieselPageShell";
 import {
   DEFAULT_PARAMS,
@@ -20,12 +19,15 @@ import {
   PRODUCT_CONFIG,
   buildDefaultForm,
   computeMeasurement,
+  fetchDieselReceipts,
   fetchMeasurementContext,
   fetchMeasurementEntries,
+  getDailyReceipts,
   getMonthLabel,
   getPreviousEntry,
   measurementStatus,
   saveMeasurementEntry,
+  todayISO,
   validateMeasurement,
 } from "./medicaoModel";
 import { useAuth } from "../../context/AuthContext";
@@ -168,10 +170,11 @@ export default function EstoqueDieselOperacao() {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const year = params.ano || "2026";
-  const month = params.mes || "01";
+  const month = params.mes || todayISO().slice(5, 7);
   const initialProduct = searchParams.get("produto") || "S500";
 
   const [entries, setEntries] = useState([]);
+  const [receipts, setReceipts] = useState([]);
   const [paramStore, setParamStore] = useState(DEFAULT_PARAMS);
   const [metadata, setMetadata] = useState(null);
   const [product, setProduct] = useState(initialProduct in PRODUCT_CONFIG ? initialProduct : "S500");
@@ -189,16 +192,23 @@ export default function EstoqueDieselOperacao() {
         setLoading(true);
         setFeedback(null);
         const context = await fetchMeasurementContext();
-        const nextEntries = await fetchMeasurementEntries({
-          year,
-          metadata: context.metadata,
-          paramStore: context.paramStore,
-          includePumps: true,
-        });
+        const [nextEntries, nextReceipts] = await Promise.all([
+          fetchMeasurementEntries({
+            year,
+            metadata: context.metadata,
+            paramStore: context.paramStore,
+            includePumps: true,
+          }),
+          fetchDieselReceipts({
+            year,
+            metadata: context.metadata,
+          }),
+        ]);
         if (!active) return;
         setMetadata(context.metadata);
         setParamStore(context.paramStore);
         setEntries(nextEntries);
+        setReceipts(nextReceipts);
         setProduct(nextProduct);
         setForm(buildDefaultForm(nextProduct, year, month));
         setReceiptFiles({ before: null, after: null });
@@ -236,9 +246,14 @@ export default function EstoqueDieselOperacao() {
     [entries, form.date, form.id, product]
   );
 
+  const dailyReceipts = useMemo(
+    () => getDailyReceipts(receipts, product, form.date),
+    [form.date, product, receipts]
+  );
+
   const computed = useMemo(
-    () => computeMeasurement(form, productParams, previousEntry),
-    [form, productParams, previousEntry]
+    () => computeMeasurement(form, productParams, previousEntry, dailyReceipts),
+    [dailyReceipts, form, previousEntry, productParams]
   );
 
   const validation = useMemo(
@@ -348,8 +363,13 @@ export default function EstoqueDieselOperacao() {
         paramStore,
         includePumps: true,
       });
+      const nextReceipts = await fetchDieselReceipts({
+        year,
+        metadata,
+      });
 
       setEntries(nextEntries);
+      setReceipts(nextReceipts);
       setFeedback({
         type: "success",
         message: "Lancamento salvo no Supabase. A tabela abaixo ja foi atualizada.",
@@ -460,7 +480,7 @@ export default function EstoqueDieselOperacao() {
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider text-emerald-700">Recebimento de diesel</h3>
                 <p className="mt-1 text-sm font-semibold text-emerald-700">
-                  Se houve recebimento, informe NF, fornecedor, regua antes e depois, e anexe as fotos.
+                  Se houve recebimento, informe NF, fornecedor, regua antes e depois, e anexe as fotos. O volume entra automaticamente na conta do dia.
                 </p>
               </div>
               <button
@@ -507,6 +527,7 @@ export default function EstoqueDieselOperacao() {
           <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">Bombas</h3>
+              <p className="mt-1 text-xs font-bold text-slate-500">S500 usa bombas 2 e 3. S10 usa bomba 1.</p>
               <div className="mt-4 space-y-4">
                 {form.pumps.map((pump, index) => {
                   const previousPump = (previousEntry?.pumps || []).find(
@@ -569,6 +590,14 @@ export default function EstoqueDieselOperacao() {
               <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
                 Medicao D-1 considerada: <span className="font-black">{parseLiters(computed.medicaoD1)}</span>
               </div>
+
+              {dailyReceipts.length > 0 ? (
+                <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                  Recebimentos separados do dia: <span className="font-black">{dailyReceipts.length}</span>
+                  <br />
+                  Volume total dessas entradas: <span className="font-black">{parseLiters(computed.entradaRecebimentos)}</span>
+                </div>
+              ) : null}
 
               {form.hasReceipt ? (
                 <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
@@ -654,7 +683,7 @@ export default function EstoqueDieselOperacao() {
             <SummaryCard
               title="Recebimento considerado"
               value={parseLiters(computed.entradaDiesel)}
-              tone={form.hasReceipt ? "emerald" : "slate"}
+              tone={form.hasReceipt || dailyReceipts.length > 0 ? "emerald" : "slate"}
             />
             <SummaryCard title="Saida tanque" value={parseLiters(computed.saidaTanque)} tone="amber" />
             <SummaryCard title="Saida total bombas" value={parseLiters(computed.saidaTotalBombas)} tone="amber" />

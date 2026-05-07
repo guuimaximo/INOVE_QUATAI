@@ -1693,7 +1693,7 @@ export default function DesempenhoDieselAgente() {
           : "Central mensal de parciais individuais, consolidado e resumo executivo."
       }
     >
-      <div className="flex items-center justify-between gap-4 border-b pb-4 flex-wrap">
+      <div className="hidden">
         <div className="flex items-center gap-3">
           <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
             {mainTab === "agente" ? <FaBolt size={20} /> : <FaTrophy size={20} />}

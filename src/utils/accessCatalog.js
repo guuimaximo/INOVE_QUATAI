@@ -49,10 +49,10 @@ export const APP_ACCESS_PAGES = [
   { key: "diesel_tratativas_tratar", label: "Diesel Tratativas Tratar", category: "Desempenho Diesel", path: "/diesel-tratar/:id", patterns: ["/diesel-tratar/:id"] },
   { key: "diesel_tratativas_consultar", label: "Diesel Tratativas Consultar", category: "Desempenho Diesel", path: "/diesel-consultar/:id", patterns: ["/diesel-consultar/:id"] },
 
-  { key: "estoque_diesel_resumo", label: "Resumo Suprimentos", category: "Estoque de Diesel", path: "/estoque-diesel/resumo", patterns: ["/estoque-diesel/resumo", "/estoque-diesel"] },
-  { key: "estoque_diesel_operacao", label: "Operacao do Tanque", category: "Estoque de Diesel", path: "/estoque-diesel/operacao", patterns: ["/estoque-diesel/operacao"] },
-  { key: "estoque_diesel_planejamento_controle", label: "Planejamento e Controle", category: "Estoque de Diesel", path: "/estoque-diesel/planejamento-controle", patterns: ["/estoque-diesel/planejamento-controle"] },
-  { key: "estoque_diesel_parametros", label: "Parametros", category: "Estoque de Diesel", path: "/estoque-diesel/parametros", patterns: ["/estoque-diesel/parametros"] },
+  { key: "estoque_diesel_resumo", label: "Medicao de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/resumo", patterns: ["/estoque-diesel/resumo", "/estoque-diesel", "/estoque-diesel/operacao", "/estoque-diesel/operacao/:ano/:mes"] },
+  { key: "estoque_diesel_operacao", label: "Medicao Mensal de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/operacao/:ano/:mes", patterns: ["/estoque-diesel/operacao", "/estoque-diesel/operacao/:ano/:mes"] },
+  { key: "estoque_diesel_planejamento_controle", label: "Estoque Diesel Fluxo Legado", category: "Estoque de Diesel", path: "/estoque-diesel/planejamento-controle", patterns: ["/estoque-diesel/planejamento-controle"] },
+  { key: "estoque_diesel_parametros", label: "Parametros de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/parametros", patterns: ["/estoque-diesel/parametros"] },
 
   { key: "estrutura_fisica_solicitacao", label: "Estrutura Fisica Solicitacao", category: "Estrutura Fisica", path: "/estrutura-fisica/solicitacao", patterns: ["/estrutura-fisica/solicitacao"] },
   { key: "estrutura_fisica_central", label: "Estrutura Fisica Central", category: "Estrutura Fisica", path: "/estrutura-fisica/central", patterns: ["/estrutura-fisica/central", "/estrutura-fisica"] },

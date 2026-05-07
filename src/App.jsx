@@ -128,7 +128,8 @@ export default function App() {
             <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
 
             <Route path="/estoque-diesel/resumo" element={<EstoqueDieselResumo />} />
-            <Route path="/estoque-diesel/operacao" element={<EstoqueDieselOperacao />} />
+            <Route path="/estoque-diesel/operacao" element={<Navigate to="/estoque-diesel/operacao/2026/01" replace />} />
+            <Route path="/estoque-diesel/operacao/:ano/:mes" element={<EstoqueDieselOperacao />} />
             <Route path="/estoque-diesel/planejamento-controle" element={<EstoqueDieselPlanejamentoControle />} />
             <Route path="/estoque-diesel/parametros" element={<EstoqueDieselParametros />} />
             <Route path="/estoque-diesel" element={<Navigate to="/estoque-diesel/resumo" replace />} />

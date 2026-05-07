@@ -56,8 +56,7 @@ const DIESEL_TRATATIVAS_ROUTES = {
 
 const ESTOQUE_DIESEL_ROUTES = {
   resumo: "/estoque-diesel/resumo",
-  operacao: "/estoque-diesel/operacao",
-  planejamentoControle: "/estoque-diesel/planejamento-controle",
+  operacao: "/estoque-diesel/operacao/2026/01",
   parametros: "/estoque-diesel/parametros",
 };
 
@@ -173,10 +172,8 @@ export default function Sidebar() {
         label: "Estoque de Diesel",
         icon: <FaWarehouse />,
         tabs: [
-          { path: ESTOQUE_DIESEL_ROUTES.resumo, label: "Resumo Suprimentos", icon: <FaChartPie /> },
-          { path: ESTOQUE_DIESEL_ROUTES.operacao, label: "Operacao do Tanque", icon: <FaGasPump /> },
-          { path: ESTOQUE_DIESEL_ROUTES.planejamentoControle, label: "Planejamento e Controle", icon: <FaClipboardCheck /> },
-          { path: ESTOQUE_DIESEL_ROUTES.parametros, label: "Parametros", icon: <FaTools /> },
+          { path: ESTOQUE_DIESEL_ROUTES.resumo, label: "Medição de Diesel", icon: <FaChartPie /> },
+          { path: ESTOQUE_DIESEL_ROUTES.parametros, label: "Parâmetros", icon: <FaTools /> },
         ],
       },
 

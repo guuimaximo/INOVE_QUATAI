@@ -1,25 +1,9 @@
-import { useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { useState } from "react";
 import {
-  FaChartLine,
-  FaGasPump,
   FaInfoCircle,
-  FaSlidersH,
-  FaTasks,
   FaTimes,
   FaWarehouse,
 } from "react-icons/fa";
-
-const ESTOQUE_DIESEL_NAV = [
-  { path: "/estoque-diesel/resumo", label: "Resumo Suprimentos", icon: <FaChartLine /> },
-  { path: "/estoque-diesel/operacao", label: "Operacao do Tanque", icon: <FaGasPump /> },
-  {
-    path: "/estoque-diesel/planejamento-controle",
-    label: "Planejamento e Controle",
-    icon: <FaTasks />,
-  },
-  { path: "/estoque-diesel/parametros", label: "Parametros", icon: <FaSlidersH /> },
-];
 
 function FlowStage({ title, description, bullets }) {
   return (
@@ -92,45 +76,45 @@ function EntenderFluxoModal({ onClose }) {
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <FlowStage
               title="1. Operacao diaria"
-              description="Tudo comeca no fechamento operacional do tanque."
+              description="O operador mede o tanque e registra o dia exatamente como na planilha."
               bullets={[
-                "Produto, tanque, fornecedor e NF",
-                "Regua inicial/final e litros calculados",
-                "Entrada real, saidas por bomba e Transnet",
-                "Medicao externa e observacoes do dia",
+                "Produto, data, NF e fornecedor",
+                "Regua anterior e final em T1 e T2",
+                "Leituras das bombas e saida Transnet",
+                "Calculos automaticos do fechamento",
               ]}
             />
 
             <FlowStage
-              title="2. Conciliacao automatica"
-              description="O sistema fecha o dia e aponta o que nao bateu."
+              title="2. Fechamento automatico"
+              description="A aplicacao converte regua em litros e fecha o dia em tempo real."
               bullets={[
-                "NF x volume realmente recebido",
-                "Saldo teorico x medicao externa",
-                "Saida do tanque x saida operacional",
-                "Diferenca acima da tolerancia configurada",
+                "Saldo anterior e saldo final",
+                "Entrada diesel e medicao D-1",
+                "Saida tanque, bombas e Transnet",
+                "Diferencas percentuais e alertas",
               ]}
             />
 
             <FlowStage
-              title="3. Programacao"
-              description="O suprimentos passa a comprar usando saldo real e cobertura."
+              title="3. Historico mensal"
+              description="Cada mes de 2026 fica pronto para lancamento e conferencia."
               bullets={[
-                "Consumo 7d e 30d",
-                "Cobertura em dias",
-                "Estoque minimo, medio e maximo",
-                "Data e volume sugerido de compra",
+                "Entrada por mes antes de abrir a medicao",
+                "Tabela com todos os dias do periodo",
+                "Status por produto e por mes",
+                "Base para relatorio e consolidacao depois",
               ]}
             />
 
             <FlowStage
-              title="4. Fila tratavel"
-              description="As divergencias deixam de ser aba e viram trabalho."
+              title="4. Parametros oficiais"
+              description="As regras do tanque e das tolerancias ja ficam alimentadas no modulo."
               bullets={[
-                "Recebimento fora da faixa",
-                "Inventario com desvio",
-                "Lancamento faltante",
-                "Estoque critico ou compra pendente",
+                "Geometria do tanque",
+                "Curva regua x litros",
+                "Limites de divergencia",
+                "Fornecedores e faixas de recebimento",
               ]}
             />
           </div>
@@ -178,20 +162,6 @@ export function EstoqueDieselStat({ title, value, sub, icon, tone = "slate" }) {
 export default function EstoqueDieselPageShell({ badge, title, description, children }) {
   const [showFlow, setShowFlow] = useState(false);
 
-  const tabs = useMemo(
-    () =>
-      ESTOQUE_DIESEL_NAV.map((item) => ({
-        ...item,
-        className: ({ isActive }) =>
-          `inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-black transition ${
-            isActive
-              ? "border-slate-800 bg-slate-800 text-white"
-              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          }`,
-      })),
-    []
-  );
-
   return (
     <div className="min-h-screen bg-slate-50 p-4 space-y-5">
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
@@ -215,15 +185,6 @@ export default function EstoqueDieselPageShell({ badge, title, description, chil
             <FaInfoCircle />
             Entender fluxo
           </button>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-200 pt-5">
-          {tabs.map((tab) => (
-            <NavLink key={tab.path} to={tab.path} className={tab.className}>
-              {tab.icon}
-              <span>{tab.label}</span>
-            </NavLink>
-          ))}
         </div>
       </div>
 

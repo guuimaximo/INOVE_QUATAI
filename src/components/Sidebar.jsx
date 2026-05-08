@@ -32,6 +32,7 @@ import {
   FaIdBadge,
   FaShieldAlt,
   FaWarehouse,
+  FaCalendarAlt,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";

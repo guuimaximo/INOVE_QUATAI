@@ -51,7 +51,7 @@ export const APP_ACCESS_PAGES = [
 
   { key: "estoque_diesel_resumo", label: "Medicao de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/resumo", patterns: ["/estoque-diesel/resumo", "/estoque-diesel", "/estoque-diesel/operacao", "/estoque-diesel/operacao/:ano/:mes"] },
   { key: "estoque_diesel_operacao", label: "Medicao Mensal de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/operacao/:ano/:mes", patterns: ["/estoque-diesel/operacao", "/estoque-diesel/operacao/:ano/:mes"] },
-  { key: "estoque_diesel_planejamento_controle", label: "Estoque Diesel Fluxo Legado", category: "Estoque de Diesel", path: "/estoque-diesel/planejamento-controle", patterns: ["/estoque-diesel/planejamento-controle"] },
+  { key: "estoque_diesel_planejamento_controle", label: "Programacao de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/programacao", patterns: ["/estoque-diesel/programacao", "/estoque-diesel/programacao/:ano/:mes", "/estoque-diesel/planejamento-controle"] },
   { key: "estoque_diesel_parametros", label: "Parametros de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/parametros", patterns: ["/estoque-diesel/parametros"] },
 
   { key: "estrutura_fisica_solicitacao", label: "Estrutura Fisica Solicitacao", category: "Estrutura Fisica", path: "/estrutura-fisica/solicitacao", patterns: ["/estrutura-fisica/solicitacao"] },

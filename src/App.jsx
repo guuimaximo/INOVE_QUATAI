@@ -104,6 +104,12 @@ function HomeDecider() {
   return <Navigate to={destination} replace />;
 }
 
+function EstoqueDieselProgramacaoRedirect() {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  return <Navigate to={`/estoque-diesel/programacao/2026/${month}`} replace />;
+}
+
 export default function App() {
   useEffect(() => {
     window.__INOVE_SET_BOOT_STAGE?.(
@@ -170,6 +176,14 @@ export default function App() {
               <Route path="/estoque-diesel/operacao/:ano/:mes" element={<EstoqueDieselOperacao />} />
               <Route
                 path="/estoque-diesel/planejamento-controle"
+                element={<EstoqueDieselPlanejamentoControle />}
+              />
+              <Route
+                path="/estoque-diesel/programacao"
+                element={<EstoqueDieselProgramacaoRedirect />}
+              />
+              <Route
+                path="/estoque-diesel/programacao/:ano/:mes"
                 element={<EstoqueDieselPlanejamentoControle />}
               />
               <Route path="/estoque-diesel/parametros" element={<EstoqueDieselParametros />} />

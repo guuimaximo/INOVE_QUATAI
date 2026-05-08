@@ -820,13 +820,20 @@ export function computeMeasurement(form, params, previousEntry, receipts = []) {
 export function validateMeasurement(form, computed, params) {
   const errors = {};
   const warnings = [];
+  const product = form?.product || "S500";
+  const requiresT1 = product === "S10";
+  const requiresT2 = product === "S500";
 
   if (!form.date) {
     errors.date = "Informe a data do lancamento.";
   }
 
-  if (parseNumber(form.reguaFinalT1) === null && parseNumber(form.reguaFinalT2) === null) {
-    errors.reguaFinal = "Informe ao menos uma regua final.";
+  if (requiresT1 && parseNumber(form.reguaFinalT1) === null) {
+    errors.reguaFinal = "Para S10, informe obrigatoriamente a regua atual T1.";
+  }
+
+  if (requiresT2 && parseNumber(form.reguaFinalT2) === null) {
+    errors.reguaFinal = "Para S500, informe obrigatoriamente a regua atual T2.";
   }
 
   if (form.transnetOutput === "" || form.transnetOutput === null || form.transnetOutput === undefined) {

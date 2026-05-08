@@ -12,6 +12,82 @@ import {
   getMonthLabel,
 } from "./medicaoModel";
 
+const TANK_CAPACITY_LITERS = 30000;
+
+function formatLiters(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "0 L";
+  return `${Number(value).toLocaleString("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })} L`;
+}
+
+function TankColumn({ label, liters, tone = "blue" }) {
+  const safeLiters = Math.max(0, Number(liters || 0));
+  const percentage = Math.max(0, Math.min(100, (safeLiters / TANK_CAPACITY_LITERS) * 100));
+  const gradients = {
+    blue: "from-blue-500 via-cyan-500 to-sky-300",
+    emerald: "from-emerald-500 via-teal-500 to-cyan-300",
+  };
+
+  return (
+    <div className="flex min-w-[150px] flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p>
+          <p className="mt-1 text-xl font-black text-slate-800">{formatLiters(safeLiters)}</p>
+        </div>
+        <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-500">
+          {percentage.toFixed(1)}%
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-center">
+        <div className="relative flex h-56 w-24 items-end overflow-hidden rounded-[28px] border-4 border-slate-300 bg-white shadow-inner">
+          <div
+            className={`absolute inset-x-0 bottom-0 rounded-b-[20px] bg-gradient-to-t ${gradients[tone]} transition-all duration-700 ease-out`}
+            style={{ height: `${percentage}%` }}
+          >
+            <div className="absolute inset-x-2 top-3 h-4 rounded-full bg-white/30 blur-sm" />
+          </div>
+          <div className="relative z-10 flex w-full items-start justify-center pt-5 text-[11px] font-black uppercase tracking-wider text-slate-500">
+            30.000 L
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TankProductSummary({ product, entry }) {
+  const tones = product === "S500" ? ["blue", "emerald"] : ["emerald", "blue"];
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-500">
+            {product}
+          </div>
+          <h2 className="mt-3 text-xl font-black text-slate-800">Resumo visual dos tanques</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-500">
+            Volume atual dos lados T1 e T2. Cada lado considera capacidade de 30.000 L.
+          </p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
+          {entry?.date
+            ? `Base ${new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")}`
+            : "Sem leitura carregada"}
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-col gap-4 lg:flex-row">
+        <TankColumn label="T1" liters={entry?.litrosFinalT1 || 0} tone={tones[0]} />
+        <TankColumn label="T2" liters={entry?.litrosFinalT2 || 0} tone={tones[1]} />
+      </div>
+    </div>
+  );
+}
+
 function MonthRow({ month, entries, isCurrentMonth }) {
   const s500Count = entries.filter((entry) => entry.product === "S500").length;
   const s10Count = entries.filter((entry) => entry.product === "S10").length;
@@ -114,6 +190,15 @@ export default function EstoqueDieselResumo() {
   }, [entries]);
 
   const currentMonth = new Date().toISOString().slice(5, 7);
+  const latestEntriesByProduct = useMemo(() => {
+    return ["S500", "S10"].reduce((acc, product) => {
+      acc[product] =
+        [...entries]
+          .filter((entry) => entry.product === product)
+          .sort((a, b) => new Date(`${b.date}T00:00:00`) - new Date(`${a.date}T00:00:00`))[0] || null;
+      return acc;
+    }, {});
+  }, [entries]);
 
   return (
     <EstoqueDieselPageShell
@@ -124,7 +209,12 @@ export default function EstoqueDieselResumo() {
         <EstoqueDieselStat title="2026" value="12 meses" sub="Calendario operacional" icon={<FaCalendarAlt />} tone="blue" />
         <EstoqueDieselStat title="Lancamentos" value={String(stats.total)} sub="Dias salvos no Supabase" icon={<FaTint />} tone="slate" />
         <EstoqueDieselStat title="S500 / S10" value={`${stats.s500} / ${stats.s10}`} sub="Separados por produto" icon={<FaGasPump />} tone="emerald" />
-        <EstoqueDieselStat title="Criticos" value={String(stats.critical)} sub="Dias acima do limite" icon={<FaExclamationTriangle />} tone="rose" />
+        <EstoqueDieselStat title="Dias criticos" value={String(stats.critical)} sub="NF ou Transnet acima do limite critico" icon={<FaExclamationTriangle />} tone="rose" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <TankProductSummary product="S500" entry={latestEntriesByProduct.S500} />
+        <TankProductSummary product="S10" entry={latestEntriesByProduct.S10} />
       </div>
 
       <EstoqueDieselPanel className="p-5">

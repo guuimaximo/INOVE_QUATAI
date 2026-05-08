@@ -158,6 +158,16 @@ function SummaryCard({ title, value, sub, tone = "slate" }) {
   );
 }
 
+function getStatusDescription(label) {
+  if (label === "Critico") {
+    return "Diferenca de NF ou de Transnet acima do limite critico configurado.";
+  }
+  if (label === "Atencao") {
+    return "Existe divergencia acima da faixa de atencao e o dia pede conferencia.";
+  }
+  return "Dia dentro da faixa esperada para NF, tanque, bombas e Transnet.";
+}
+
 function MonthNavigation({ month, product }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -308,6 +318,8 @@ export default function EstoqueDieselOperacao() {
     () => measurementStatus(computed, productParams),
     [computed, productParams]
   );
+  const isS500 = product === "S500";
+  const isS10 = product === "S10";
 
   function updatePump(index, field, value) {
     setForm((current) => ({
@@ -459,7 +471,7 @@ export default function EstoqueDieselOperacao() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
         <SummaryCard title="Produto" value={product} sub={PRODUCT_CONFIG[product].label} tone="blue" />
         <SummaryCard title="Mes" value={getMonthLabel(month)} sub={`${year} pronto no Inove`} tone="slate" />
-        <SummaryCard title="Status" value={status.label} sub="Calculado em tempo real" tone={status.tone} />
+        <SummaryCard title="Status do dia" value={status.label} sub={getStatusDescription(status.label)} tone={status.tone} />
         <SummaryCard
           title="Lancamentos no mes"
           value={String(monthlyEntries.length)}
@@ -491,14 +503,22 @@ export default function EstoqueDieselOperacao() {
       </EstoqueDieselPanel>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div ref={launchPanelRef}>
-        <EstoqueDieselPanel className="p-5 xl:col-span-2">
+        <div ref={launchPanelRef} className="xl:col-span-2">
+        <EstoqueDieselPanel className="p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <h2 className="text-lg font-black text-slate-800">Lancamento do dia</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
                 O operador informa a medicao atual, a saida do Transnet e, se houver, o recebimento do diesel. O restante vem do D-1 e dos calculos automaticos.
               </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
+              {isS500
+                ? "S500 exige regua atual T2 e usa bombas 2 e 3."
+                : "S10 exige regua atual T1 e usa bomba 1."}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {form.id ? (
@@ -524,8 +544,8 @@ export default function EstoqueDieselOperacao() {
 
           <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <FormInput label="Data" type="date" value={form.date} onChange={(value) => updateField("date", value)} required readOnly={Boolean(form.id)} />
-            <FormInput label="Regua atual T1 (cm)" value={form.reguaFinalT1} onChange={(value) => updateField("reguaFinalT1", value)} required />
-            <FormInput label="Regua atual T2 (cm)" value={form.reguaFinalT2} onChange={(value) => updateField("reguaFinalT2", value)} />
+            <FormInput label="Regua atual T1 (cm)" value={form.reguaFinalT1} onChange={(value) => updateField("reguaFinalT1", value)} required={isS10} />
+            <FormInput label="Regua atual T2 (cm)" value={form.reguaFinalT2} onChange={(value) => updateField("reguaFinalT2", value)} required={isS500} />
             <FormInput label="Saida Transnet (litros)" value={form.transnetOutput} onChange={(value) => updateField("transnetOutput", value)} />
           </div>
 
@@ -831,19 +851,13 @@ export default function EstoqueDieselOperacao() {
                 monthlyEntries.map((entry) => {
                   const isSelected = form.id === entry.id;
                   return (
-                  <tr key={entry.id} className={isSelected ? "bg-blue-50/60" : ""}>
-                    <td className="px-4 py-3 font-black text-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => handleSelectEntry(entry)}
-                        className={`rounded-lg px-2 py-1 text-left transition ${
-                          isSelected
-                            ? "bg-blue-100 text-blue-700"
-                            : "text-slate-800 hover:bg-slate-100 hover:text-blue-700"
-                        }`}
-                      >
-                        {new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")}
-                      </button>
+                  <tr
+                    key={entry.id}
+                    onClick={() => handleSelectEntry(entry)}
+                    className={`cursor-pointer transition hover:bg-slate-50 ${isSelected ? "bg-blue-50/60" : ""}`}
+                  >
+                    <td className={`px-4 py-3 font-black ${isSelected ? "text-blue-700" : "text-slate-800"}`}>
+                      {new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")}
                     </td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoAnterior)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.nfVolumeLitros)}</td>

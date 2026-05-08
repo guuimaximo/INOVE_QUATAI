@@ -60,7 +60,11 @@ function TankColumn({ label, liters, tone = "blue" }) {
 }
 
 function TankProductSummary({ product, entry }) {
-  const tones = product === "S500" ? ["blue", "emerald"] : ["emerald", "blue"];
+  const tankColumns =
+    product === "S500"
+      ? [{ label: "T2", liters: entry?.litrosFinalT2 || 0, tone: "emerald" }]
+      : [{ label: "T1", liters: entry?.litrosFinalT1 || 0, tone: "blue" }];
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
@@ -70,7 +74,9 @@ function TankProductSummary({ product, entry }) {
           </div>
           <h2 className="mt-3 text-xl font-black text-slate-800">Resumo visual dos tanques</h2>
           <p className="mt-1 text-sm font-semibold text-slate-500">
-            Volume atual dos lados T1 e T2. Cada lado considera capacidade de 30.000 L.
+            {product === "S500"
+              ? "Volume atual do lado T2. O acompanhamento visual usa capacidade de 30.000 L."
+              : "Volume atual do lado T1. O acompanhamento visual usa capacidade de 30.000 L."}
           </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
@@ -81,8 +87,9 @@ function TankProductSummary({ product, entry }) {
       </div>
 
       <div className="mt-5 flex flex-col gap-4 lg:flex-row">
-        <TankColumn label="T1" liters={entry?.litrosFinalT1 || 0} tone={tones[0]} />
-        <TankColumn label="T2" liters={entry?.litrosFinalT2 || 0} tone={tones[1]} />
+        {tankColumns.map((tank) => (
+          <TankColumn key={tank.label} label={tank.label} liters={tank.liters} tone={tank.tone} />
+        ))}
       </div>
     </div>
   );

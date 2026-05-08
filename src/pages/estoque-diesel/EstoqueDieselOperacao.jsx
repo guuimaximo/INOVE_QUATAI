@@ -304,6 +304,7 @@ export default function EstoqueDieselOperacao() {
   const [savingReceipt, setSavingReceipt] = useState(false);
   const [receiptFiles, setReceiptFiles] = useState({ before: null, after: null });
   const [customSupplierMode, setCustomSupplierMode] = useState(false);
+  const [selectedReceiptId, setSelectedReceiptId] = useState(null);
   const launchPanelRef = useRef(null);
 
   useEffect(() => {
@@ -335,6 +336,7 @@ export default function EstoqueDieselOperacao() {
         setForm(buildDefaultForm(nextProduct, year, month));
         setReceiptFiles({ before: null, after: null });
         setCustomSupplierMode(false);
+        setSelectedReceiptId(null);
       } catch (error) {
         if (!active) return;
         console.error("Falha ao carregar medição de diesel:", error);
@@ -372,6 +374,10 @@ export default function EstoqueDieselOperacao() {
   const dailyReceipts = useMemo(
     () => getDailyReceipts(receipts, product, form.date),
     [form.date, product, receipts]
+  );
+  const selectedDailyReceipt = useMemo(
+    () => dailyReceipts.find((receipt) => receipt.id === selectedReceiptId) || null,
+    [dailyReceipts, selectedReceiptId]
   );
 
   const computed = useMemo(
@@ -415,6 +421,7 @@ export default function EstoqueDieselOperacao() {
     setForm(buildDefaultForm(product, year, month));
     setReceiptFiles({ before: null, after: null });
     setCustomSupplierMode(false);
+    setSelectedReceiptId(null);
     setFeedback(null);
   }
 
@@ -422,6 +429,7 @@ export default function EstoqueDieselOperacao() {
     setForm(buildFormFromEntry(entry, product, year, month));
     setReceiptFiles({ before: null, after: null });
     setCustomSupplierMode(Boolean(entry?.supplier && !supplierOptions.includes(entry.supplier)));
+    setSelectedReceiptId(null);
     setFeedback({
       type: "success",
       message: `Lancamento de ${new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")} carregado para conferencia.`,
@@ -609,6 +617,7 @@ export default function EstoqueDieselOperacao() {
       });
       setReceipts(nextReceipts);
       setReceiptFiles({ before: null, after: null });
+      setSelectedReceiptId(null);
       setForm((current) => ({
         ...current,
         hasReceipt: false,
@@ -642,6 +651,27 @@ export default function EstoqueDieselOperacao() {
 
   function handleProductChange(nextProduct) {
     navigate(`/estoque-diesel/operacao/${year}/${month}?produto=${nextProduct}`);
+  }
+
+  function prepareNewReceipt() {
+    setSelectedReceiptId(null);
+    setReceiptFiles({ before: null, after: null });
+    setCustomSupplierMode(false);
+    setForm((current) => ({
+      ...current,
+      hasReceipt: true,
+      nfVolumeLitros: "",
+      unitPrice: "",
+      supplier: "",
+      supplierId: null,
+      nfNumero: "",
+      receiptRuleBeforeT1: "",
+      receiptRuleBeforeT2: "",
+      receiptRuleAfterT1: "",
+      receiptRuleAfterT2: "",
+      receiptPhotoBeforeUrl: "",
+      receiptPhotoAfterUrl: "",
+    }));
   }
 
   return (
@@ -739,17 +769,17 @@ export default function EstoqueDieselOperacao() {
               </p>
             </div>
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-blue-700">Medicao atual</h3>
-              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoAtual)}</p>
+              <h3 className="text-sm font-black uppercase tracking-wider text-blue-700">Medicao inicial</h3>
+              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoInicial)}</p>
               <p className="mt-1 text-sm font-semibold text-blue-700">
-                Calculada a partir da regua atual T1 e T2.
+                Leitura realizada pela regua atual T1 e T2 no inicio do dia.
               </p>
             </div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-amber-700">Saida do dia</h3>
-              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.saidaTanque)}</p>
+              <h3 className="text-sm font-black uppercase tracking-wider text-amber-700">Medicao atual</h3>
+              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoAtual)}</p>
               <p className="mt-1 text-sm font-semibold text-amber-700">
-                Calculada automaticamente com D-1, recebimento e medicao atual.
+                Soma da medicao inicial com o recebimento considerado no dia.
               </p>
             </div>
           </div>
@@ -854,6 +884,98 @@ export default function EstoqueDieselOperacao() {
                 </div>
               </div>
             ) : null}
+            {dailyReceipts.length > 0 ? (
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-white p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-wider text-emerald-700">Recebimentos salvos do dia</h4>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">
+                      Clique em um recebimento para consultar os dados. Se precisar, lance outro logo abaixo.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={prepareNewReceipt}
+                    className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
+                  >
+                    Lançar mais um
+                  </button>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+                  {dailyReceipts.map((receipt) => (
+                    <button
+                      key={receipt.id}
+                      type="button"
+                      onClick={() => setSelectedReceiptId(receipt.id)}
+                      className={`rounded-xl border px-4 py-3 text-left transition ${
+                        selectedReceiptId === receipt.id
+                          ? "border-emerald-300 bg-emerald-50"
+                          : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-black uppercase tracking-wider text-slate-500">
+                            NF {receipt.nfNumero || "-"} • {receipt.supplier || "Sem fornecedor"}
+                          </div>
+                          <div className="mt-2 text-lg font-black text-slate-800">
+                            {parseLiters(receipt.volumeRecebidoLitros || receipt.nfVolumeLitros)}
+                          </div>
+                        </div>
+                        <div className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider ${
+                          receipt.status === "Critico"
+                            ? "bg-rose-50 text-rose-700"
+                            : receipt.status === "Atencao"
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-emerald-50 text-emerald-700"
+                        }`}>
+                          {receipt.status}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {selectedDailyReceipt ? (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <h5 className="text-sm font-black uppercase tracking-wider text-slate-600">
+                          Consulta do recebimento
+                        </h5>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          {selectedDailyReceipt.supplier || "Sem fornecedor"} • NF {selectedDailyReceipt.nfNumero || "-"}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
+                        {selectedDailyReceipt.date
+                          ? new Date(`${selectedDailyReceipt.date}T00:00:00`).toLocaleDateString("pt-BR")
+                          : "Sem data"}
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Volume NF</div>
+                        <div className="mt-2 text-lg font-black text-slate-800">{parseLiters(selectedDailyReceipt.nfVolumeLitros)}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Recebimento medido</div>
+                        <div className="mt-2 text-lg font-black text-slate-800">{parseLiters(selectedDailyReceipt.volumeRecebidoLitros)}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Valor unitario</div>
+                        <div className="mt-2 text-lg font-black text-slate-800">{parseCurrency(selectedDailyReceipt.unitPrice)}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Valor total</div>
+                        <div className="mt-2 text-lg font-black text-slate-800">{parseCurrency(selectedDailyReceipt.totalValue)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {form.hasReceipt ? (
               <div className="mt-4 flex flex-wrap justify-end gap-3">
                 <button
@@ -938,9 +1060,9 @@ export default function EstoqueDieselOperacao() {
 
               {dailyReceipts.length > 0 ? (
                 <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-                  Recebimentos separados do dia: <span className="font-black">{dailyReceipts.length}</span>
+                  Recebimentos do dia considerados no fechamento: <span className="font-black">{dailyReceipts.length}</span>
                   <br />
-                  Volume total dessas entradas: <span className="font-black">{parseLiters(computed.entradaRecebimentos)}</span>
+                  Volume total somado na medicao atual: <span className="font-black">{parseLiters(computed.entradaRecebimentos)}</span>
                 </div>
               ) : null}
 
@@ -1037,6 +1159,7 @@ export default function EstoqueDieselOperacao() {
           <h2 className="text-lg font-black text-slate-800">Resumo calculado</h2>
           <div className="mt-4 space-y-3">
             <SummaryCard title="Medicao D-1" value={parseLiters(computed.medicaoD1)} tone="slate" />
+            <SummaryCard title="Medicao inicial" value={parseLiters(computed.medicaoInicial)} tone="blue" />
             <SummaryCard title="Medicao atual" value={parseLiters(computed.medicaoAtual)} tone="blue" />
             <SummaryCard
               title="Recebimento considerado"

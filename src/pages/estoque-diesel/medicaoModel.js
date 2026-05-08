@@ -706,7 +706,7 @@ export function computeMeasurement(form, params, previousEntry, receipts = []) {
   const litrosFinalT2 = calculateVolumeLiters(reguaFinalT2, radius, length);
 
   const saldoAnteriorCalculado = round((litrosAnteriorT1 || 0) + (litrosAnteriorT2 || 0), 2);
-  const medicaoAtual = round((litrosFinalT1 || 0) + (litrosFinalT2 || 0), 2);
+  const medicaoInicial = round((litrosFinalT1 || 0) + (litrosFinalT2 || 0), 2);
 
   const medicaoD1 =
     previousEntry?.saldoFinal ??
@@ -753,7 +753,8 @@ export function computeMeasurement(form, params, previousEntry, receipts = []) {
 
   const entradaRecebimentos = round((externalDailyReceipts || 0) + (inlineReceiptLiters || 0), 2);
   const entradaDiesel = round(entradaRecebimentos || 0, 2);
-  const saldoFinal = round((medicaoAtual || 0) + (entradaDiesel || 0), 2);
+  const saldoFinal = round((medicaoInicial || 0) + (entradaDiesel || 0), 2);
+  const medicaoAtual = saldoFinal;
 
   const saidaTanque =
     medicaoAtual !== null ? round((medicaoD1 || 0) + entradaDiesel - medicaoAtual, 2) : null;
@@ -819,6 +820,7 @@ export function computeMeasurement(form, params, previousEntry, receipts = []) {
     litrosAnteriorT2,
     litrosFinalT1,
     litrosFinalT2,
+    medicaoInicial,
     saldoAnterior,
     saldoFinal,
     entradaDiesel,

@@ -26,6 +26,7 @@ import {
   getMonthLabel,
   getPreviousEntry,
   measurementStatus,
+  saveDieselReceipt,
   saveMeasurementEntry,
   todayISO,
   validateMeasurement,
@@ -40,6 +41,16 @@ function parsePct(value) {
 function parseLiters(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "--";
   return `${Number(value).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} L`;
+}
+
+function parseCurrency(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "--";
+  return Number(value).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function toFormValue(value) {
@@ -62,6 +73,7 @@ function buildFormFromEntry(entry, product, year, month) {
     reguaFinalT2: toFormValue(entry?.reguaFinalT2),
     hasReceipt: Boolean(entry?.hasReceipt || Number(entry?.nfVolumeLitros || 0) > 0),
     nfVolumeLitros: toFormValue(entry?.nfVolumeLitros),
+    unitPrice: toFormValue(entry?.unitPrice),
     supplier: entry?.supplier || "",
     supplierId: entry?.supplierId || null,
     nfNumero: entry?.nfNumero || "",
@@ -108,14 +120,60 @@ function FormInput({ label, value, onChange, type = "number", min, step = "0.1",
 }
 
 function FileInput({ label, onChange, fileName }) {
+  const inputRef = useRef(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  function pickFile(file) {
+    if (!file) return;
+    onChange(file);
+  }
+
+  function handlePaste(event) {
+    const items = Array.from(event.clipboardData?.items || []);
+    const imageItem = items.find((item) => item.type?.startsWith("image/"));
+    if (!imageItem) return;
+    const file = imageItem.getAsFile();
+    if (file) {
+      event.preventDefault();
+      pickFile(file);
+    }
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    setDragActive(false);
+    const file = Array.from(event.dataTransfer?.files || []).find((item) => item.type?.startsWith("image/"));
+    pickFile(file || null);
+  }
+
   return (
     <label className="block">
       <span className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</span>
-      <label className="mt-2 flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        onPaste={handlePaste}
+        onDrop={handleDrop}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={() => setDragActive(false)}
+        className={`mt-2 flex w-full cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 py-3 text-left text-sm font-semibold text-slate-600 transition ${
+          dragActive
+            ? "border-blue-400 bg-blue-50"
+            : "border-slate-300 bg-white hover:border-blue-300 hover:bg-blue-50"
+        }`}
+      >
         <FaCamera className="text-slate-400" />
-        <span className="min-w-0 truncate">{fileName || "Selecionar foto"}</span>
-        <input type="file" accept="image/*" className="hidden" onChange={(event) => onChange(event.target.files?.[0] || null)} />
-      </label>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate">{fileName || "Selecionar foto, arrastar aqui ou colar com CTRL+V"}</span>
+          <span className="mt-1 block text-xs font-bold text-slate-400">
+            Aceita clique, arrastar e soltar, ou colar imagem.
+          </span>
+        </div>
+        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(event) => onChange(event.target.files?.[0] || null)} />
+      </button>
     </label>
   );
 }
@@ -130,6 +188,7 @@ function SelectInput({ label, value, options, onChange }) {
         className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
       >
         <option value="">Selecione</option>
+        {value === "__custom__" ? <option value="__custom__">Cadastrar novo fornecedor</option> : null}
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
@@ -166,6 +225,14 @@ function getStatusDescription(label) {
     return "Existe divergencia acima da faixa de atencao e o dia pede conferencia.";
   }
   return "Dia dentro da faixa esperada para NF, tanque, bombas e Transnet.";
+}
+
+function getPctTone(value, warn = 0.01, critical = 0.03) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "slate";
+  const absValue = Math.abs(Number(value));
+  if (absValue > critical) return "rose";
+  if (absValue > warn) return "amber";
+  return "emerald";
 }
 
 function MonthNavigation({ month, product }) {
@@ -234,7 +301,9 @@ export default function EstoqueDieselOperacao() {
   const [feedback, setFeedback] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingReceipt, setSavingReceipt] = useState(false);
   const [receiptFiles, setReceiptFiles] = useState({ before: null, after: null });
+  const [customSupplierMode, setCustomSupplierMode] = useState(false);
   const launchPanelRef = useRef(null);
 
   useEffect(() => {
@@ -265,6 +334,7 @@ export default function EstoqueDieselOperacao() {
         setProduct(nextProduct);
         setForm(buildDefaultForm(nextProduct, year, month));
         setReceiptFiles({ before: null, after: null });
+        setCustomSupplierMode(false);
       } catch (error) {
         if (!active) return;
         console.error("Falha ao carregar medição de diesel:", error);
@@ -320,6 +390,13 @@ export default function EstoqueDieselOperacao() {
   );
   const isS500 = product === "S500";
   const isS10 = product === "S10";
+  const receiptRuleBeforeField = isS500 ? "receiptRuleBeforeT2" : "receiptRuleBeforeT1";
+  const receiptRuleAfterField = isS500 ? "receiptRuleAfterT2" : "receiptRuleAfterT1";
+  const supplierOptions = useMemo(
+    () => [...new Set((productParams.suppliers || []).map((item) => String(item || "").trim()).filter(Boolean))],
+    [productParams.suppliers]
+  );
+  const showCustomSupplierInput = customSupplierMode || (form.supplier && !supplierOptions.includes(form.supplier));
 
   function updatePump(index, field, value) {
     setForm((current) => ({
@@ -337,12 +414,14 @@ export default function EstoqueDieselOperacao() {
   function resetFormForNewEntry() {
     setForm(buildDefaultForm(product, year, month));
     setReceiptFiles({ before: null, after: null });
+    setCustomSupplierMode(false);
     setFeedback(null);
   }
 
   function handleSelectEntry(entry) {
     setForm(buildFormFromEntry(entry, product, year, month));
     setReceiptFiles({ before: null, after: null });
+    setCustomSupplierMode(Boolean(entry?.supplier && !supplierOptions.includes(entry.supplier)));
     setFeedback({
       type: "success",
       message: `Lancamento de ${new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")} carregado para conferencia.`,
@@ -376,6 +455,12 @@ export default function EstoqueDieselOperacao() {
       return next;
     });
   }, [previousEntry]);
+
+  useEffect(() => {
+    if (!form.supplier) {
+      setCustomSupplierMode(false);
+    }
+  }, [form.supplier]);
 
   async function handleSave() {
     if (Object.keys(validation.errors).length > 0) {
@@ -456,6 +541,102 @@ export default function EstoqueDieselOperacao() {
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveReceipt() {
+    if (!form.hasReceipt) {
+      setFeedback({
+        type: "error",
+        message: "Ative o recebimento e preencha os dados antes de salvar.",
+      });
+      return;
+    }
+
+    if ((computed.receiptMeasuredLiters ?? null) === null) {
+      setFeedback({
+        type: "error",
+        message: "Preencha as reguas do recebimento para salvar essa entrada.",
+      });
+      return;
+    }
+
+    if (
+      !receiptFiles.before &&
+      !String(form.receiptPhotoBeforeUrl || "").trim()
+    ) {
+      setFeedback({
+        type: "error",
+        message: "Anexe a foto da regua antes do recebimento.",
+      });
+      return;
+    }
+
+    if (
+      !receiptFiles.after &&
+      !String(form.receiptPhotoAfterUrl || "").trim()
+    ) {
+      setFeedback({
+        type: "error",
+        message: "Anexe a foto da regua depois do recebimento.",
+      });
+      return;
+    }
+
+    if (!metadata) {
+      setFeedback({
+        type: "error",
+        message: "Os metadados do tanque ainda nao foram carregados.",
+      });
+      return;
+    }
+
+    try {
+      setSavingReceipt(true);
+      await saveDieselReceipt({
+        form,
+        computed,
+        product,
+        params: productParams,
+        metadata,
+        userId: Number.isInteger(user?.usuario_id) ? user.usuario_id : null,
+        receiptFiles,
+      });
+
+      const nextReceipts = await fetchDieselReceipts({
+        year,
+        metadata,
+      });
+      setReceipts(nextReceipts);
+      setReceiptFiles({ before: null, after: null });
+      setForm((current) => ({
+        ...current,
+        hasReceipt: false,
+        nfVolumeLitros: "",
+        unitPrice: "",
+        supplier: "",
+        supplierId: null,
+        nfNumero: "",
+        receiptRuleBeforeT1: "",
+        receiptRuleBeforeT2: "",
+        receiptRuleAfterT1: "",
+        receiptRuleAfterT2: "",
+        receiptPhotoBeforeUrl: "",
+        receiptPhotoAfterUrl: "",
+      }));
+      setCustomSupplierMode(false);
+      setFeedback({
+        type: "success",
+        message: "Recebimento salvo e somado automaticamente no dia.",
+      });
+    } catch (error) {
+      console.error("Falha ao salvar recebimento:", error);
+      setFeedback({
+        type: "error",
+        message: error?.message || "Nao foi possivel salvar o recebimento.",
+      });
+    } finally {
+      setSavingReceipt(false);
     }
   }
 
@@ -597,27 +778,93 @@ export default function EstoqueDieselOperacao() {
             {form.hasReceipt ? (
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <FormInput label="Volume NF (litros)" value={form.nfVolumeLitros} onChange={(value) => updateField("nfVolumeLitros", value)} required />
-                <SelectInput
-                  label="Fornecedor"
-                  value={form.supplier}
-                  options={productParams.suppliers || []}
-                  onChange={(value) => updateField("supplier", value)}
-                />
+                <div className="space-y-2">
+                  <SelectInput
+                    label="Fornecedor"
+                    value={showCustomSupplierInput ? "__custom__" : form.supplier}
+                    options={supplierOptions}
+                    onChange={(value) => {
+                      if (value === "__custom__") {
+                        setCustomSupplierMode(true);
+                        setForm((current) => ({ ...current, supplier: "", supplierId: null }));
+                        return;
+                      }
+                      setCustomSupplierMode(false);
+                      updateField("supplier", value);
+                      updateField("supplierId", null);
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomSupplierMode(true);
+                        updateField("supplier", "");
+                        updateField("supplierId", null);
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
+                    >
+                      Novo fornecedor
+                    </button>
+                    {showCustomSupplierInput ? (
+                      <div className="min-w-[220px] flex-1">
+                        <FormInput
+                          label="Cadastrar fornecedor"
+                          type="text"
+                          value={form.supplier}
+                          onChange={(value) => {
+                            updateField("supplier", value);
+                            updateField("supplierId", null);
+                          }}
+                          placeholder="Digite o nome do fornecedor"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
                 <FormInput label="Numero da NF" type="text" value={form.nfNumero} onChange={(value) => updateField("nfNumero", value)} />
-                <FormInput label="Regua antes T1 (cm)" value={form.receiptRuleBeforeT1} onChange={(value) => updateField("receiptRuleBeforeT1", value)} />
-                <FormInput label="Regua antes T2 (cm)" value={form.receiptRuleBeforeT2} onChange={(value) => updateField("receiptRuleBeforeT2", value)} />
+                <FormInput label="Valor unitario" value={form.unitPrice} onChange={(value) => updateField("unitPrice", value)} step="0.01" />
+                <FormInput
+                  label={`Regua antes ${isS500 ? "T2" : "T1"} (cm)`}
+                  value={form[receiptRuleBeforeField]}
+                  onChange={(value) => updateField(receiptRuleBeforeField, value)}
+                  required
+                />
                 <FileInput
                   label="Foto da regua antes"
                   onChange={(file) => setReceiptFiles((current) => ({ ...current, before: file }))}
                   fileName={receiptFiles.before?.name || form.receiptPhotoBeforeUrl?.split("/").pop() || ""}
                 />
-                <FormInput label="Regua depois T1 (cm)" value={form.receiptRuleAfterT1} onChange={(value) => updateField("receiptRuleAfterT1", value)} />
-                <FormInput label="Regua depois T2 (cm)" value={form.receiptRuleAfterT2} onChange={(value) => updateField("receiptRuleAfterT2", value)} />
+                <FormInput
+                  label={`Regua depois ${isS500 ? "T2" : "T1"} (cm)`}
+                  value={form[receiptRuleAfterField]}
+                  onChange={(value) => updateField(receiptRuleAfterField, value)}
+                  required
+                />
                 <FileInput
                   label="Foto da regua depois"
                   onChange={(file) => setReceiptFiles((current) => ({ ...current, after: file }))}
                   fileName={receiptFiles.after?.name || form.receiptPhotoAfterUrl?.split("/").pop() || ""}
                 />
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600">
+                  <div className="text-xs font-black uppercase tracking-wider text-slate-500">Valor total da NF</div>
+                  <div className="mt-2 text-lg font-black text-slate-800">
+                    {parseCurrency((Number(form.unitPrice || 0) || 0) * (Number(form.nfVolumeLitros || 0) || 0))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {form.hasReceipt ? (
+              <div className="mt-4 flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleSaveReceipt}
+                  disabled={savingReceipt}
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
+                >
+                  <FaSave />
+                  {savingReceipt ? "Salvando recebimento..." : "Salvar recebimento"}
+                </button>
               </div>
             ) : null}
           </div>
@@ -698,18 +945,30 @@ export default function EstoqueDieselOperacao() {
               ) : null}
 
               {form.hasReceipt ? (
-                <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                <div
+                  className={`mt-3 rounded-xl border px-4 py-3 text-sm font-semibold ${
+                    computed.receiptBelowExpected
+                      ? "border-rose-200 bg-rose-50 text-rose-700"
+                      : computed.receiptWithinTolerance === false
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
                   Recebimento medido: <span className="font-black">{parseLiters(computed.receiptMeasuredLiters)}</span>
                   <br />
                   Tolerancia da faixa: <span className="font-black">{parseLiters(computed.receiptToleranceLiters)}</span>
+                  <br />
+                  Valor unitario: <span className="font-black">{parseCurrency(Number(form.unitPrice || 0) || 0)}</span>
                   <br />
                   Situacao:{" "}
                   <span className="font-black">
                     {computed.receiptWithinTolerance === null
                       ? "Aguardando dados"
+                      : computed.receiptBelowExpected
+                      ? "Abaixo do esperado"
                       : computed.receiptWithinTolerance
                       ? "Dentro da tolerancia"
-                      : "Fora da tolerancia"}
+                      : "Acima da tolerancia"}
                   </span>
                 </div>
               ) : null}
@@ -790,10 +1049,17 @@ export default function EstoqueDieselOperacao() {
             <SummaryCard
               title="Recebimento medido"
               value={parseLiters(computed.receiptMeasuredLiters)}
-              tone={computed.receiptWithinTolerance === false ? "rose" : "emerald"}
+              tone={
+                computed.receiptBelowExpected
+                  ? "rose"
+                  : computed.receiptWithinTolerance === false
+                  ? "amber"
+                  : "emerald"
+              }
             />
-            <SummaryCard title="% Dif NF x Recebido" value={parsePct(computed.pctDiffNF)} tone={Math.abs(computed.pctDiffNF || 0) > (productParams.nfDiffWarnPct || 0.01) ? "amber" : "slate"} />
-            <SummaryCard title="% Dif Tanque x Transnet" value={parsePct(computed.pctDiffTransnet)} tone={Math.abs(computed.pctDiffTransnet || 0) > (productParams.transnetWarnPct || 0.02) ? "amber" : "slate"} />
+            <SummaryCard title="% Dif NF x Recebido" value={parsePct(computed.pctDiffNF)} tone={computed.receiptBelowExpected ? "rose" : getPctTone(computed.pctDiffNF, productParams.nfDiffWarnPct || 0.01, productParams.nfDiffCriticalPct || 0.03)} />
+            <SummaryCard title="% Dif Tanque x Bombas" value={parsePct(computed.pctDiffTankBombas)} tone={getPctTone(computed.pctDiffTankBombas, productParams.transnetWarnPct || 0.02, productParams.transnetCriticalPct || 0.03)} />
+            <SummaryCard title="% Dif Tanque x Transnet" value={parsePct(computed.pctDiffTransnet)} tone={getPctTone(computed.pctDiffTransnet, productParams.transnetWarnPct || 0.02, productParams.transnetCriticalPct || 0.03)} />
           </div>
         </EstoqueDieselPanel>
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   FaArrowLeft,
@@ -225,6 +225,7 @@ export default function EstoqueDieselOperacao() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [receiptFiles, setReceiptFiles] = useState({ before: null, after: null });
+  const launchPanelRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -321,12 +322,21 @@ export default function EstoqueDieselOperacao() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  function resetFormForNewEntry() {
+    setForm(buildDefaultForm(product, year, month));
+    setReceiptFiles({ before: null, after: null });
+    setFeedback(null);
+  }
+
   function handleSelectEntry(entry) {
     setForm(buildFormFromEntry(entry, product, year, month));
     setReceiptFiles({ before: null, after: null });
     setFeedback({
       type: "success",
       message: `Lancamento de ${new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")} carregado para conferencia.`,
+    });
+    window.requestAnimationFrame(() => {
+      launchPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 
@@ -425,8 +435,7 @@ export default function EstoqueDieselOperacao() {
         type: "success",
         message: "Lancamento salvo no Supabase. A tabela abaixo ja foi atualizada.",
       });
-      setForm(buildDefaultForm(product, year, month));
-      setReceiptFiles({ before: null, after: null });
+      resetFormForNewEntry();
     } catch (error) {
       console.error("Falha ao salvar medição:", error);
       setFeedback({
@@ -482,6 +491,7 @@ export default function EstoqueDieselOperacao() {
       </EstoqueDieselPanel>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div ref={launchPanelRef}>
         <EstoqueDieselPanel className="p-5 xl:col-span-2">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -490,13 +500,30 @@ export default function EstoqueDieselOperacao() {
                 O operador informa a medicao atual, a saida do Transnet e, se houver, o recebimento do diesel. O restante vem do D-1 e dos calculos automaticos.
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
-              Fluxo operacional da medicao
+            <div className="flex flex-wrap items-center gap-2">
+              {form.id ? (
+                <>
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-blue-700">
+                    Editando {new Date(`${form.date}T00:00:00`).toLocaleDateString("pt-BR")}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetFormForNewEntry}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Novo lancamento
+                  </button>
+                </>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
+                  Fluxo operacional da medicao
+                </div>
+              )}
             </div>
           </div>
 
           <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <FormInput label="Data" type="date" value={form.date} onChange={(value) => updateField("date", value)} required />
+            <FormInput label="Data" type="date" value={form.date} onChange={(value) => updateField("date", value)} required readOnly={Boolean(form.id)} />
             <FormInput label="Regua atual T1 (cm)" value={form.reguaFinalT1} onChange={(value) => updateField("reguaFinalT1", value)} required />
             <FormInput label="Regua atual T2 (cm)" value={form.reguaFinalT2} onChange={(value) => updateField("reguaFinalT2", value)} />
             <FormInput label="Saida Transnet (litros)" value={form.transnetOutput} onChange={(value) => updateField("transnetOutput", value)} />
@@ -725,6 +752,7 @@ export default function EstoqueDieselOperacao() {
             </div>
           ) : null}
         </EstoqueDieselPanel>
+        </div>
 
         <EstoqueDieselPanel className="p-5">
           <h2 className="text-lg font-black text-slate-800">Resumo calculado</h2>

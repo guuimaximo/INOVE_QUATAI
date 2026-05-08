@@ -57,6 +57,7 @@ const DIESEL_TRATATIVAS_ROUTES = {
 const ESTOQUE_DIESEL_ROUTES = {
   resumo: "/estoque-diesel/resumo",
   operacao: "/estoque-diesel/operacao/2026/01",
+  programacao: "/estoque-diesel/programacao",
   parametros: "/estoque-diesel/parametros",
 };
 
@@ -173,6 +174,7 @@ export default function Sidebar() {
         icon: <FaWarehouse />,
         tabs: [
           { path: ESTOQUE_DIESEL_ROUTES.resumo, label: "Medição de Diesel", icon: <FaChartPie /> },
+          { path: ESTOQUE_DIESEL_ROUTES.programacao, label: "Programação de Diesel", icon: <FaCalendarAlt /> },
           { path: ESTOQUE_DIESEL_ROUTES.parametros, label: "Parâmetros", icon: <FaTools /> },
         ],
       },

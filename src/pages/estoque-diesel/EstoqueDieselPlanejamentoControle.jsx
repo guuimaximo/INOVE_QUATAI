@@ -561,7 +561,7 @@ export default function EstoqueDieselPlanejamentoControle() {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <Link
-              to="/estoque-diesel/resumo"
+              to={`/estoque-diesel/programacao?produto=${product}`}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"
             >
               <FaArrowLeft />

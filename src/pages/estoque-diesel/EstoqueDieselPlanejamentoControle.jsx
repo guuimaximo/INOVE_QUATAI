@@ -25,8 +25,30 @@ import {
   getMonthLabel,
   parseNumber,
   round,
-  todayISO,
 } from "./medicaoModel";
+
+const PROGRAMMING_RULES = {
+  S500: {
+    minimum: 14000,
+    medium: 30000,
+    maximum: 47000,
+    indicatorLowLabel: "Baixo - 15 mil",
+    indicatorHighLabel: "Alto - 29 mil",
+    defaultWeekdayOutput: 8500,
+    defaultSaturdayOutput: 5500,
+    defaultSundayOutput: 3500,
+  },
+  S10: {
+    minimum: 10000,
+    medium: 15000,
+    maximum: 25000,
+    indicatorLowLabel: "Baixo - 15 mil",
+    indicatorHighLabel: "Alto - 29 mil",
+    defaultWeekdayOutput: 4600,
+    defaultSaturdayOutput: 3000,
+    defaultSundayOutput: 1500,
+  },
+};
 
 function formatLiters(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
@@ -36,9 +58,70 @@ function formatLiters(value) {
   })} L`;
 }
 
+function formatMoney(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+  return Number(value).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatPct(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+  return `${Number(value).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`;
+}
+
 function formatNumberInput(value) {
   if (value === null || value === undefined || value === "") return "";
   return String(value);
+}
+
+function getWeekdayShort(date) {
+  if (!date) return "--";
+  const weekday = new Date(`${date}T00:00:00`).toLocaleDateString("pt-BR", {
+    weekday: "short",
+  });
+  return weekday.replace(".", "").toLowerCase();
+}
+
+function getDefaultPlannedOutput(product, date) {
+  const rules = PROGRAMMING_RULES[product] || PROGRAMMING_RULES.S500;
+  const weekday = getWeekdayShort(date);
+  if (weekday.startsWith("dom")) return rules.defaultSundayOutput;
+  if (weekday.startsWith("sáb") || weekday.startsWith("sab")) return rules.defaultSaturdayOutput;
+  return rules.defaultWeekdayOutput;
+}
+
+function getStockIndicator(product, liters) {
+  const rules = PROGRAMMING_RULES[product] || PROGRAMMING_RULES.S500;
+  const level = Number(liters || 0);
+
+  if (level <= rules.minimum) {
+    return {
+      label: rules.indicatorLowLabel,
+      tone: "rose",
+      description: "Estoque abaixo da faixa minima operacional.",
+    };
+  }
+
+  if (level >= 29000) {
+    return {
+      label: rules.indicatorHighLabel,
+      tone: "emerald",
+      description: "Estoque alto para sustentar a operacao.",
+    };
+  }
+
+  return {
+    label: "Faixa intermediaria",
+    tone: "amber",
+    description: "Estoque entre a faixa minima e a faixa alta.",
+  };
 }
 
 function FormInput({
@@ -74,7 +157,27 @@ function FormInput({
   );
 }
 
-function StatBox({ title, value, tone = "slate", help }) {
+function SelectInput({ label, value, options, onChange }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</span>
+      <select
+        value={value || ""}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+      >
+        <option value="">Selecione</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SummaryBox({ title, value, tone = "slate", helper }) {
   const tones = {
     slate: "border-slate-200 bg-slate-50 text-slate-700",
     blue: "border-blue-200 bg-blue-50 text-blue-700",
@@ -87,7 +190,7 @@ function StatBox({ title, value, tone = "slate", help }) {
     <div className={`rounded-2xl border p-4 ${tones[tone] || tones.slate}`}>
       <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
       <p className="mt-2 text-2xl font-black text-slate-800">{value}</p>
-      {help ? <p className="mt-1 text-[11px] font-bold opacity-80">{help}</p> : null}
+      {helper ? <p className="mt-1 text-[11px] font-bold opacity-80">{helper}</p> : null}
     </div>
   );
 }
@@ -139,81 +242,13 @@ function ProductSwitcher({ activeProduct, month }) {
   );
 }
 
-function buildPlanningStatus(row) {
-  if (row.hasActual) return { label: "Realizado", tone: "emerald" };
-  if ((row.plannedOutput || 0) > 0 || (row.plannedReceipt || 0) > 0) {
-    if ((row.projectedBalance || 0) < 0) return { label: "Critico", tone: "rose" };
-    return { label: "Programado", tone: "blue" };
-  }
-  return { label: "Sem programacao", tone: "slate" };
-}
+function normalizeSuppliers(metadata, paramStore, product) {
+  const metadataSuppliers = Object.values(metadata?.suppliersById || {})
+    .map((supplier) => String(supplier.nome || "").trim())
+    .filter(Boolean);
+  const paramSuppliers = (paramStore?.[product]?.suppliers || []).map((item) => String(item || "").trim());
 
-function buildMonthRows({ year, month, product, measurements, planningRows }) {
-  const monthEntries = [...(measurements || [])]
-    .filter((entry) => entry.product === product && entry.date?.startsWith(`${year}-${month}`))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const monthPlanning = [...(planningRows || [])]
-    .filter((item) => item.product === product && item.date?.startsWith(`${year}-${month}`))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const measurementByDate = Object.fromEntries(monthEntries.map((entry) => [entry.date, entry]));
-  const planningByDate = Object.fromEntries(monthPlanning.map((entry) => [entry.date, entry]));
-
-  const monthNumber = Number(month);
-  const daysInMonth = new Date(Number(year), monthNumber, 0).getDate();
-
-  const previousEntry =
-    [...(measurements || [])]
-      .filter((entry) => entry.product === product && entry.date < `${year}-${month}-01`)
-      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
-
-  let runningBalance = Number(previousEntry?.saldoFinal ?? previousEntry?.medicaoAtual ?? 0);
-
-  return Array.from({ length: daysInMonth }, (_, index) => {
-    const day = String(index + 1).padStart(2, "0");
-    const date = `${year}-${month}-${day}`;
-    const actual = measurementByDate[date] || null;
-    const plan = planningByDate[date] || null;
-
-    const openingBalance = actual
-      ? Number(actual.medicaoD1 ?? runningBalance ?? 0)
-      : Number(runningBalance || 0);
-
-    const actualReceipt = Number(actual?.entradaDiesel ?? 0);
-    const actualOutput = Number(actual?.saidaTanque ?? 0);
-    const actualBalance = actual
-      ? Number(actual.saldoFinal ?? actual.medicaoAtual ?? openingBalance)
-      : Number(openingBalance);
-
-    const plannedReceipt = Number(plan?.plannedReceipt ?? 0);
-    const plannedOutput = Number(plan?.plannedOutput ?? 0);
-    const projectedBalance = round(actualBalance + plannedReceipt - plannedOutput, 2) ?? actualBalance;
-
-    runningBalance = actual ? actualBalance : projectedBalance;
-
-    const row = {
-      date,
-      actual,
-      plan,
-      hasActual: Boolean(actual),
-      openingBalance,
-      actualReceipt,
-      actualOutput,
-      actualBalance,
-      plannedReceipt,
-      plannedOutput,
-      projectedBalance,
-      supplier: plan?.supplier || "",
-      notes: plan?.notes || "",
-      id: plan?.id || null,
-    };
-
-    return {
-      ...row,
-      statusMeta: buildPlanningStatus(row),
-    };
-  });
+  return [...new Set([...metadataSuppliers, ...paramSuppliers])].sort((a, b) => a.localeCompare(b));
 }
 
 function mapPlanningRow(row, metadata) {
@@ -226,6 +261,8 @@ function mapPlanningRow(row, metadata) {
     plannedReceipt: row.entrada_prevista_litros ?? 0,
     plannedOutput: row.saida_prevista_litros ?? 0,
     supplier: row.fornecedor_previsto || "",
+    dieselPrice: row.preco_diesel ?? null,
+    cbieGap: row.defasagem_cbie ?? null,
     notes: row.observacao || "",
   };
 }
@@ -260,6 +297,8 @@ async function savePlanningRow({ form, product, metadata, userId = null }) {
     entrada_prevista_litros: parseNumber(form.plannedReceipt) || 0,
     saida_prevista_litros: parseNumber(form.plannedOutput) || 0,
     fornecedor_previsto: String(form.supplier || "").trim() || null,
+    preco_diesel: parseNumber(form.dieselPrice),
+    defasagem_cbie: parseNumber(form.cbieGap),
     observacao: String(form.notes || "").trim() || null,
     usuario_id: Number.isInteger(userId) ? userId : null,
     atualizado_em: new Date().toISOString(),
@@ -272,22 +311,105 @@ async function savePlanningRow({ form, product, metadata, userId = null }) {
   if (error) throw error;
 }
 
-function buildForm(date, selectedRow = null) {
+function buildForm(date, product, selectedRow = null) {
   return {
     date,
-    plannedReceipt: formatNumberInput(selectedRow?.plannedReceipt ?? ""),
-    plannedOutput: formatNumberInput(selectedRow?.plannedOutput ?? ""),
     supplier: selectedRow?.supplier || "",
+    dieselPrice: formatNumberInput(selectedRow?.dieselPrice ?? ""),
+    cbieGap: formatNumberInput(selectedRow?.cbieGap ?? ""),
+    plannedReceipt: formatNumberInput(selectedRow?.plannedReceipt ?? ""),
+    plannedOutput: formatNumberInput(
+      selectedRow?.plannedOutput ?? getDefaultPlannedOutput(product, date)
+    ),
     notes: selectedRow?.notes || "",
   };
 }
 
+function buildMonthRows({ year, month, product, measurements, planningRows }) {
+  const monthEntries = [...(measurements || [])]
+    .filter((entry) => entry.product === product && entry.date?.startsWith(`${year}-${month}`))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const monthPlanning = [...(planningRows || [])]
+    .filter((item) => item.product === product && item.date?.startsWith(`${year}-${month}`))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const measurementByDate = Object.fromEntries(monthEntries.map((entry) => [entry.date, entry]));
+  const planningByDate = Object.fromEntries(monthPlanning.map((entry) => [entry.date, entry]));
+
+  const monthNumber = Number(month);
+  const daysInMonth = new Date(Number(year), monthNumber, 0).getDate();
+
+  const previousEntry =
+    [...(measurements || [])]
+      .filter((entry) => entry.product === product && entry.date < `${year}-${month}-01`)
+      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+
+  let runningProjectedBalance = Number(previousEntry?.saldoFinal ?? previousEntry?.medicaoAtual ?? 0);
+
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const day = String(index + 1).padStart(2, "0");
+    const date = `${year}-${month}-${day}`;
+    const actual = measurementByDate[date] || null;
+    const plan = planningByDate[date] || null;
+    const weekday = getWeekdayShort(date);
+
+    const saldoPlanejado = actual
+      ? Number(actual.saldoFinal ?? actual.medicaoAtual ?? runningProjectedBalance ?? 0)
+      : Number(runningProjectedBalance || 0);
+
+    const actualReceipt = Number(actual?.entradaDiesel ?? 0);
+    const actualOutput = Number(actual?.saidaTanque ?? 0);
+    const actualBalance = actual
+      ? Number(actual.saldoFinal ?? actual.medicaoAtual ?? saldoPlanejado)
+      : Number(saldoPlanejado);
+
+    const plannedReceipt = Number(plan?.plannedReceipt ?? 0);
+    const plannedOutput = Number(
+      plan?.plannedOutput ?? getDefaultPlannedOutput(product, date)
+    );
+    const saldoPosEntrega = round(saldoPlanejado + plannedReceipt, 2) ?? saldoPlanejado;
+    const saldoProjetado = round(saldoPosEntrega - plannedOutput, 2) ?? saldoPosEntrega;
+
+    const dieselPrice = Number(plan?.dieselPrice ?? 0) || null;
+    const cbieGap = Number(plan?.cbieGap ?? 0) || null;
+    const gapValue =
+      dieselPrice !== null && cbieGap !== null ? round((cbieGap * dieselPrice) / 100, 4) : null;
+
+    const indicator = getStockIndicator(product, actual ? actualBalance : saldoProjetado);
+
+    runningProjectedBalance = actual ? actualBalance : saldoProjetado;
+
+    return {
+      date,
+      weekday,
+      actual,
+      hasActual: Boolean(actual),
+      actualReceipt,
+      actualOutput,
+      actualBalance,
+      saldoPlanejado,
+      plannedReceipt,
+      saldoPosEntrega,
+      plannedOutput,
+      saldoProjetado,
+      dieselPrice,
+      cbieGap,
+      gapValue,
+      supplier: plan?.supplier || "",
+      notes: plan?.notes || "",
+      indicator,
+    };
+  });
+}
+
 export default function EstoqueDieselPlanejamentoControle() {
   const { ano = "2026", mes = "01" } = useParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
+
   const year = /^\d{4}$/.test(String(ano)) ? String(ano) : "2026";
   const month = MONTHS_2026.some((item) => item.month === mes) ? mes : "01";
-  const [searchParams] = useSearchParams();
   const productParam = searchParams.get("produto") || "S500";
   const product = productParam in PRODUCT_CONFIG ? productParam : "S500";
 
@@ -297,7 +419,9 @@ export default function EstoqueDieselPlanejamentoControle() {
   const [measurements, setMeasurements] = useState([]);
   const [planningRows, setPlanningRows] = useState([]);
   const [selectedDate, setSelectedDate] = useState(getDefaultDateForMonth(year, month));
-  const [form, setForm] = useState(() => buildForm(getDefaultDateForMonth(year, month)));
+  const [form, setForm] = useState(() =>
+    buildForm(getDefaultDateForMonth(year, month), product)
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -312,24 +436,48 @@ export default function EstoqueDieselPlanejamentoControle() {
     [monthRows, selectedDate]
   );
 
-  const currentStatus = selectedRow?.statusMeta || { label: "Sem programacao", tone: "slate" };
+  const suppliers = useMemo(
+    () => normalizeSuppliers(metadata, paramStore, product),
+    [metadata, paramStore, product]
+  );
 
-  const topStats = useMemo(() => {
-    const latestRealized =
-      [...monthRows]
-        .filter((row) => row.hasActual)
-        .sort((a, b) => b.date.localeCompare(a.date))[0] || selectedRow;
-
+  const summary = useMemo(() => {
+    const latest = [...monthRows].reverse().find((row) => row.hasActual) || selectedRow;
     const totalActualOutput = monthRows.reduce((sum, row) => sum + Number(row.actualOutput || 0), 0);
     const totalPlannedOutput = monthRows.reduce((sum, row) => sum + Number(row.plannedOutput || 0), 0);
-    const currentBalance = Number(latestRealized?.actualBalance ?? latestRealized?.projectedBalance ?? 0);
-
+    const totalPlannedReceipt = monthRows.reduce((sum, row) => sum + Number(row.plannedReceipt || 0), 0);
+    const balance = Number(latest?.actualBalance ?? latest?.saldoProjetado ?? 0);
     return {
-      currentBalance,
+      balance,
       totalActualOutput,
       totalPlannedOutput,
+      totalPlannedReceipt,
+      indicator: getStockIndicator(product, balance),
     };
-  }, [monthRows, selectedRow]);
+  }, [monthRows, product, selectedRow]);
+
+  const computed = useMemo(() => {
+    const dieselPrice = parseNumber(form.dieselPrice);
+    const cbieGap = parseNumber(form.cbieGap);
+    const plannedReceipt = parseNumber(form.plannedReceipt) || 0;
+    const plannedOutput = parseNumber(form.plannedOutput) || 0;
+    const base = Number(selectedRow?.actualBalance ?? selectedRow?.saldoPlanejado ?? 0);
+    const saldoPosEntrega = round(base + plannedReceipt, 2) ?? base;
+    const saldoProjetado = round(saldoPosEntrega - plannedOutput, 2) ?? saldoPosEntrega;
+    const gapValue =
+      dieselPrice !== null && cbieGap !== null ? round((cbieGap * dieselPrice) / 100, 4) : null;
+    return {
+      dieselPrice,
+      cbieGap,
+      gapValue,
+      plannedReceipt,
+      plannedOutput,
+      saldoBase: base,
+      saldoPosEntrega,
+      saldoProjetado,
+      indicator: getStockIndicator(product, saldoProjetado),
+    };
+  }, [form.cbieGap, form.dieselPrice, form.plannedOutput, form.plannedReceipt, product, selectedRow]);
 
   useEffect(() => {
     let active = true;
@@ -338,7 +486,6 @@ export default function EstoqueDieselPlanejamentoControle() {
       try {
         setLoading(true);
         setFeedback(null);
-
         const context = await fetchMeasurementContext();
         const [measurementData, planningData] = await Promise.all([
           fetchMeasurementEntries({
@@ -381,8 +528,8 @@ export default function EstoqueDieselPlanejamentoControle() {
 
   useEffect(() => {
     if (!selectedRow) return;
-    setForm(buildForm(selectedRow.date, selectedRow));
-  }, [selectedRow]);
+    setForm(buildForm(selectedRow.date, product, selectedRow));
+  }, [product, selectedRow]);
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -390,18 +537,18 @@ export default function EstoqueDieselPlanejamentoControle() {
 
   function handleSelectRow(row) {
     setSelectedDate(row.date);
-    setForm(buildForm(row.date, row));
+    setForm(buildForm(row.date, product, row));
     setFeedback(null);
     window.requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 
-  function resetFormToToday() {
+  function handleNewDay() {
     const nextDate = getDefaultDateForMonth(year, month);
     setSelectedDate(nextDate);
     const row = monthRows.find((item) => item.date === nextDate) || null;
-    setForm(buildForm(nextDate, row));
+    setForm(buildForm(nextDate, product, row));
     setFeedback(null);
   }
 
@@ -433,19 +580,10 @@ export default function EstoqueDieselPlanejamentoControle() {
     }
   }
 
-  const projectedBalance = useMemo(() => {
-    const base = Number(selectedRow?.actualBalance ?? selectedRow?.openingBalance ?? 0);
-    const entrada = parseNumber(form.plannedReceipt) || 0;
-    const saida = parseNumber(form.plannedOutput) || 0;
-    return round(base + entrada - saida, 2) ?? base;
-  }, [form.plannedOutput, form.plannedReceipt, selectedRow]);
-
   return (
     <EstoqueDieselPageShell
       title="Programacao de Diesel"
-      description={`Saldo diario, saida realizada e saida prevista de ${PRODUCT_CONFIG[product].label} em ${getMonthLabel(
-        month
-      )} de ${year}.`}
+      description={`Modelo de suprimentos para ${PRODUCT_CONFIG[product].label} em ${getMonthLabel(month)} de ${year}, no formato da planilha de programacao.`}
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <EstoqueDieselStat
@@ -458,21 +596,21 @@ export default function EstoqueDieselPlanejamentoControle() {
         <EstoqueDieselStat
           title="Mes"
           value={getMonthLabel(month)}
-          sub={`${year} em planejamento`}
+          sub={`${year} em suprimentos`}
           icon={<FaCalendarAlt />}
           tone="slate"
         />
         <EstoqueDieselStat
           title="Saldo atual"
-          value={formatLiters(topStats.currentBalance)}
-          sub="Base diaria do tanque"
+          value={formatLiters(summary.balance)}
+          sub={summary.indicator.label}
           icon={<FaTruckLoading />}
-          tone="emerald"
+          tone={summary.indicator.tone}
         />
         <EstoqueDieselStat
           title="Saida prevista"
-          value={formatLiters(topStats.totalPlannedOutput)}
-          sub={`Realizado no mes: ${formatLiters(topStats.totalActualOutput)}`}
+          value={formatLiters(summary.totalPlannedOutput)}
+          sub={`Entrega prevista: ${formatLiters(summary.totalPlannedReceipt)}`}
           icon={<FaChevronRight />}
           tone="amber"
         />
@@ -488,9 +626,9 @@ export default function EstoqueDieselPlanejamentoControle() {
               <FaArrowLeft />
               Voltar para 2026
             </Link>
-            <h2 className="mt-4 text-lg font-black text-slate-800">Abertura do planejamento</h2>
+            <h2 className="mt-4 text-lg font-black text-slate-800">Abertura da programacao</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">
-              Use o saldo realizado do tanque como base do dia e lance a saida prevista para projetar o fechamento.
+              A medicao diaria alimenta o saldo real. Aqui entram fornecedor, preco, defasagem e a programacao de entrega/saida do periodo.
             </p>
           </div>
 
@@ -501,32 +639,31 @@ export default function EstoqueDieselPlanejamentoControle() {
         </div>
       </EstoqueDieselPanel>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <div ref={formRef}>
+      <div ref={formRef} className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <EstoqueDieselPanel className="p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h2 className="text-xl font-black text-slate-800">Programacao do dia</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                O saldo realizado ja vem da medicao diaria. Aqui voce programa a entrada prevista e a saida prevista do dia.
+                Mesmo raciocinio da planilha: fornecedor, preco diesel, defasagem, entrega prevista e saida programada.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <div className={`rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-wider ${
-                currentStatus.tone === "emerald"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : currentStatus.tone === "amber"
-                    ? "border-amber-200 bg-amber-50 text-amber-700"
-                    : currentStatus.tone === "rose"
-                      ? "border-rose-200 bg-rose-50 text-rose-700"
-                      : "border-slate-200 bg-slate-50 text-slate-600"
-              }`}>
-                {currentStatus.label}
+              <div
+                className={`rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-wider ${
+                  computed.indicator.tone === "emerald"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : computed.indicator.tone === "amber"
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-rose-200 bg-rose-50 text-rose-700"
+                }`}
+              >
+                {computed.indicator.label}
               </div>
               <button
                 type="button"
-                onClick={resetFormToToday}
+                onClick={handleNewDay}
                 className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
               >
                 Novo dia
@@ -535,88 +672,83 @@ export default function EstoqueDieselPlanejamentoControle() {
           </div>
 
           <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <FormInput label="Data" value={form.date} onChange={(value) => updateField("date", value)} type="date" required />
+            <FormInput label="Data" type="date" value={form.date} onChange={(value) => updateField("date", value)} required />
+            <FormInput label="Dia" type="text" value={getWeekdayShort(form.date)} onChange={() => {}} disabled />
+            <SelectInput label="Fornecedor" value={form.supplier} options={suppliers} onChange={(value) => updateField("supplier", value)} />
+            <FormInput label="Preço Diesel" value={form.dieselPrice} onChange={(value) => updateField("dieselPrice", value)} step="0.0001" placeholder="0,0000" />
+            <FormInput label="Defasagem (CBIE)" value={form.cbieGap} onChange={(value) => updateField("cbieGap", value)} step="0.01" placeholder="0,00" />
             <FormInput
-              label="Saldo base do dia"
-              value={formatLiters(selectedRow?.actualBalance ?? selectedRow?.openingBalance ?? 0)}
-              onChange={() => {}}
+              label="Defasagem R$"
               type="text"
+              value={formatMoney(computed.gapValue)}
+              onChange={() => {}}
               disabled
             />
-            <FormInput
-              label="Saida realizada"
-              value={formatLiters(selectedRow?.actualOutput ?? 0)}
-              onChange={() => {}}
-              type="text"
-              disabled
-            />
-            <FormInput
-              label="Recebimento realizado"
-              value={formatLiters(selectedRow?.actualReceipt ?? 0)}
-              onChange={() => {}}
-              type="text"
-              disabled
-            />
-            <FormInput
-              label="Entrada prevista (litros)"
-              value={form.plannedReceipt}
-              onChange={(value) => updateField("plannedReceipt", value)}
-              placeholder="0"
-            />
-            <FormInput
-              label="Saida prevista (litros)"
-              value={form.plannedOutput}
-              onChange={(value) => updateField("plannedOutput", value)}
-              placeholder="0"
-              required
-            />
-            <FormInput
-              label="Fornecedor previsto"
-              value={form.supplier}
-              onChange={(value) => updateField("supplier", value)}
-              type="text"
-              placeholder="Opcional para entrega prevista"
-            />
-            <label className="block md:col-span-2">
-              <span className="text-xs font-black uppercase tracking-wider text-slate-500">
-                Observacao da programacao
-              </span>
-              <textarea
-                rows={4}
-                value={form.notes}
-                onChange={(event) => updateField("notes", event.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                placeholder="Ex.: reforco de frota, demanda especial, abastecimento previsto, ajuste de consumo."
-              />
-            </label>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-4">
-            <StatBox
-              title="Saldo base"
-              value={formatLiters(selectedRow?.actualBalance ?? selectedRow?.openingBalance ?? 0)}
-              tone="slate"
-              help="Ultimo saldo realizado do dia"
-            />
-            <StatBox
-              title="Entrada prevista"
-              value={formatLiters(parseNumber(form.plannedReceipt) || 0)}
-              tone="blue"
-              help="Recebimento previsto para o dia"
-            />
-            <StatBox
-              title="Saida prevista"
-              value={formatLiters(parseNumber(form.plannedOutput) || 0)}
-              tone="amber"
-              help="Consumo esperado do dia"
-            />
-            <StatBox
-              title="Saldo projetado"
-              value={formatLiters(projectedBalance)}
-              tone={projectedBalance < 0 ? "rose" : "emerald"}
-              help={projectedBalance < 0 ? "Projecao abaixo de zero" : "Projecao apos o planejamento"}
-            />
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <SummaryBox
+                title="Saldo planejado"
+                value={formatLiters(selectedRow?.saldoPlanejado ?? 0)}
+                tone="slate"
+                helper="Base do dia para programacao"
+              />
+              <SummaryBox
+                title="Programacao de entrega"
+                value={formatLiters(computed.plannedReceipt)}
+                tone="blue"
+                helper="Entrada prevista para o dia"
+              />
+              <SummaryBox
+                title="Saldo pos entrega"
+                value={formatLiters(computed.saldoPosEntrega)}
+                tone="emerald"
+                helper="Saldo apos considerar a entrega"
+              />
+              <SummaryBox
+                title="Saida programada"
+                value={formatLiters(computed.plannedOutput)}
+                tone="amber"
+                helper="Consumo previsto do dia"
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <FormInput
+                label="Programacao de entrega (litros)"
+                value={form.plannedReceipt}
+                onChange={(value) => updateField("plannedReceipt", value)}
+                placeholder="0"
+              />
+              <FormInput
+                label="Saida programada (litros)"
+                value={form.plannedOutput}
+                onChange={(value) => updateField("plannedOutput", value)}
+                placeholder="0"
+                required
+              />
+              <SummaryBox
+                title="Saldo projetado"
+                value={formatLiters(computed.saldoProjetado)}
+                tone={computed.indicator.tone}
+                helper={computed.indicator.description}
+              />
+            </div>
           </div>
+
+          <label className="mt-5 block">
+            <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+              Observacao da programacao
+            </span>
+            <textarea
+              rows={4}
+              value={form.notes}
+              onChange={(event) => updateField("notes", event.target.value)}
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              placeholder="Ex.: manter Raizen, reforco para pico de frota, entrega prevista no pátio, ajuste de consumo."
+            />
+          </label>
 
           {feedback ? (
             <div
@@ -632,7 +764,7 @@ export default function EstoqueDieselPlanejamentoControle() {
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm font-semibold text-slate-600">
-              O saldo projetado usa o saldo realizado do tanque como base e soma a entrada prevista menos a saida prevista.
+              O planejamento usa o saldo real como base e projeta a operacao com entrega prevista, saida prevista e indicador de estoque.
             </div>
             <button
               type="button"
@@ -645,40 +777,45 @@ export default function EstoqueDieselPlanejamentoControle() {
             </button>
           </div>
         </EstoqueDieselPanel>
-        </div>
 
         <EstoqueDieselPanel className="p-5">
-          <h2 className="text-xl font-black text-slate-800">Leitura rapida do dia</h2>
+          <h2 className="text-xl font-black text-slate-800">Leitura do realizado</h2>
           <div className="mt-4 space-y-3">
-            <StatBox
-              title="Medição D-1"
-              value={formatLiters(selectedRow?.actual?.medicaoD1 ?? selectedRow?.openingBalance ?? 0)}
-              tone="slate"
-            />
-            <StatBox
+            <SummaryBox
               title="Saldo realizado"
               value={formatLiters(selectedRow?.actualBalance ?? 0)}
               tone="blue"
+              helper="Vem da medicao diaria"
             />
-            <StatBox
+            <SummaryBox
               title="Recebimento realizado"
               value={formatLiters(selectedRow?.actualReceipt ?? 0)}
               tone="emerald"
+              helper="O que entrou de verdade"
             />
-            <StatBox
-              title="Saída realizada"
+            <SummaryBox
+              title="Saida realizada"
               value={formatLiters(selectedRow?.actualOutput ?? 0)}
               tone="amber"
+              helper="Consumo real do tanque"
             />
-            <StatBox
-              title="Transnet do dia"
-              value={formatLiters(selectedRow?.actual?.saidaTransnet ?? 0)}
-              tone="slate"
-            />
-            <StatBox
-              title="Bombas do dia"
+            <SummaryBox
+              title="Bombas"
               value={formatLiters(selectedRow?.actual?.saidaTotalBombas ?? 0)}
               tone="slate"
+              helper="Base de comparacao operacional"
+            />
+            <SummaryBox
+              title="Transnet"
+              value={formatLiters(selectedRow?.actual?.saidaTransnet ?? 0)}
+              tone="slate"
+              helper="Leitura do sistema"
+            />
+            <SummaryBox
+              title="Indicador atual"
+              value={summary.indicator.label}
+              tone={summary.indicator.tone}
+              helper={summary.indicator.description}
             />
           </div>
         </EstoqueDieselPanel>
@@ -687,13 +824,15 @@ export default function EstoqueDieselPlanejamentoControle() {
       <EstoqueDieselPanel className="p-5">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-xl font-black text-slate-800">Tabela da programacao do mes</h2>
+            <h2 className="text-xl font-black text-slate-800">
+              Mercado e indicador de estoque
+            </h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">
-              Clique na linha inteira para abrir o dia em cima e ajustar a programacao.
+              Mesmo bloco da programacao: data, dia, fornecedor, preco diesel, defasagem e indicador do nivel de estoque.
             </p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-500">
-            1 linha por dia com realizado + previsto
+            clique na linha inteira para editar
           </div>
         </div>
 
@@ -703,14 +842,12 @@ export default function EstoqueDieselPlanejamentoControle() {
               <tr>
                 {[
                   "Data",
-                  "Saldo base",
-                  "Receb. realizado",
-                  "Saida realizada",
-                  "Saldo realizado",
-                  "Entrada prevista",
-                  "Saida prevista",
-                  "Saldo projetado",
-                  "Status",
+                  "Dia",
+                  "Fornecedor",
+                  "Preço Diesel",
+                  "Defasagem (CBIE)",
+                  "Defasagem R$",
+                  "Indicador Nível Estoque",
                 ].map((header, index, array) => (
                   <th
                     key={header}
@@ -728,7 +865,7 @@ export default function EstoqueDieselPlanejamentoControle() {
                 const isActive = row.date === selectedDate;
                 return (
                   <tr
-                    key={row.date}
+                    key={`market-${row.date}`}
                     onClick={() => handleSelectRow(row)}
                     className={`cursor-pointer transition hover:bg-blue-50 ${
                       isActive ? "bg-blue-50/70" : "bg-white"
@@ -737,26 +874,22 @@ export default function EstoqueDieselPlanejamentoControle() {
                     <td className="px-4 py-3 font-black text-slate-800">
                       {new Date(`${row.date}T00:00:00`).toLocaleDateString("pt-BR")}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.openingBalance)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.actualReceipt)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.actualOutput)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.actualBalance)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.plannedReceipt)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.plannedOutput)}</td>
-                    <td className="px-4 py-3 font-black text-slate-800">{formatLiters(row.projectedBalance)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{row.weekday}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{row.supplier || "--"}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{formatMoney(row.dieselPrice)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{formatPct(row.cbieGap)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{formatMoney(row.gapValue)}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${
-                          row.statusMeta.tone === "emerald"
+                          row.indicator.tone === "emerald"
                             ? "bg-emerald-50 text-emerald-700"
-                            : row.statusMeta.tone === "amber"
+                            : row.indicator.tone === "amber"
                               ? "bg-amber-50 text-amber-700"
-                              : row.statusMeta.tone === "rose"
-                                ? "bg-rose-50 text-rose-700"
-                                : "bg-slate-100 text-slate-600"
+                              : "bg-rose-50 text-rose-700"
                         }`}
                       >
-                        {row.statusMeta.label}
+                        {row.indicator.label}
                       </span>
                     </td>
                   </tr>
@@ -767,9 +900,78 @@ export default function EstoqueDieselPlanejamentoControle() {
         </div>
       </EstoqueDieselPanel>
 
+      <EstoqueDieselPanel className="p-5">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-xl font-black text-slate-800">
+              Programacao semanal {product === "S500" ? "Diesel S500" : "Diesel S10"}
+            </h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">
+              Modelo da planilha: saldo planejado, programacao de entrega, saldo pós entrega e saida programada.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-500">
+            saldo real + projecao do suprimentos
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-500">
+              <tr>
+                {[
+                  "Data",
+                  "Dia",
+                  "Saldo Planejado",
+                  "Programação de Entrega",
+                  "Saldo Pós Entrega",
+                  "Saída Programada",
+                  "Saldo Projetado",
+                  "Saída Realizada",
+                ].map((header, index, array) => (
+                  <th
+                    key={header}
+                    className={`px-4 py-3 ${index === 0 ? "rounded-l-2xl" : ""} ${
+                      index === array.length - 1 ? "rounded-r-2xl" : ""
+                    }`}
+                  >
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {monthRows.map((row) => {
+                const isActive = row.date === selectedDate;
+                return (
+                  <tr
+                    key={`weekly-${row.date}`}
+                    onClick={() => handleSelectRow(row)}
+                    className={`cursor-pointer transition hover:bg-blue-50 ${
+                      isActive ? "bg-blue-50/70" : "bg-white"
+                    }`}
+                  >
+                    <td className="px-4 py-3 font-black text-slate-800">
+                      {new Date(`${row.date}T00:00:00`).toLocaleDateString("pt-BR")}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{row.weekday}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.saldoPlanejado)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.plannedReceipt)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.saldoPosEntrega)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.plannedOutput)}</td>
+                    <td className="px-4 py-3 font-black text-slate-800">{formatLiters(row.saldoProjetado)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.actualOutput)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </EstoqueDieselPanel>
+
       {loading ? (
         <EstoqueDieselPanel className="p-5">
-          <p className="text-sm font-semibold text-slate-500">Carregando saldo e programacao do diesel...</p>
+          <p className="text-sm font-semibold text-slate-500">Carregando programacao de diesel...</p>
         </EstoqueDieselPanel>
       ) : null}
     </EstoqueDieselPageShell>

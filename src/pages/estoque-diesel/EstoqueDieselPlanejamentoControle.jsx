@@ -19,6 +19,7 @@ import {
   fetchMeasurementContext,
   fetchMeasurementEntries,
   getDefaultDateForMonth,
+  getTodayISO,
   getMonthLabel,
   parseNumber,
   round,
@@ -299,20 +300,33 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
   let runningBalance = Number(previousEntry?.saldoFinal ?? previousEntry?.medicaoAtual ?? 0);
   const monthNumber = Number(month);
   const daysInMonth = new Date(Number(year), monthNumber, 0).getDate();
+  const today = getTodayISO();
 
   return Array.from({ length: daysInMonth }, (_, index) => {
     const day = String(index + 1).padStart(2, "0");
     const date = `${year}-${month}-${day}`;
     const actual = measurementByDate[date] || null;
     const plan = planningByDate[date] || null;
-    const saldoPlanejado = actual
-      ? Number(actual.saldoFinal ?? actual.medicaoAtual ?? runningBalance)
-      : Number(runningBalance || 0);
+    const realizedDay = date <= today && !!actual;
+    const saldoInicialDia = Number(runningBalance || 0);
+    const actualReceipt = Number(
+      actual?.receiptMeasuredLiters ??
+        (Number(actual?.entradaDiesel || 0) > 0 ? actual?.entradaDiesel : 0) ??
+        0
+    );
     const plannedReceipt = Number(plan?.plannedReceipt ?? 0);
     const plannedOutput = Number(plan?.plannedOutput ?? getDefaultPlannedOutput(product, date));
-    const saldoPosEntrega = round(saldoPlanejado + plannedReceipt, 2) ?? saldoPlanejado;
-    const saldoProjetado = round(saldoPosEntrega - plannedOutput, 2) ?? saldoPosEntrega;
-    const indicator = getIndicator(product, actual ? actual.saldoFinal : saldoProjetado);
+    const receiptForView = realizedDay ? actualReceipt : plannedReceipt;
+    const outputForView = realizedDay ? Number(actual?.saidaTanque ?? 0) : plannedOutput;
+    const saldoPosEntrega = round(saldoInicialDia + receiptForView, 2) ?? saldoInicialDia;
+    const saldoProjetado =
+      round(
+        realizedDay
+          ? Number(actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoPosEntrega)
+          : saldoPosEntrega - plannedOutput,
+        2
+      ) ?? saldoPosEntrega;
+    const indicator = getIndicator(product, saldoProjetado);
     const gapValue =
       plan?.dieselPrice !== null &&
       plan?.dieselPrice !== undefined &&
@@ -321,22 +335,25 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
         ? round((Number(plan.cbieGap) * Number(plan.dieselPrice)) / 100, 4)
         : null;
 
-    runningBalance = actual ? Number(actual.saldoFinal ?? actual.medicaoAtual ?? saldoProjetado) : saldoProjetado;
+    runningBalance = realizedDay
+      ? Number(actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoProjetado)
+      : saldoProjetado;
 
     return {
       date,
+      isRealized: realizedDay,
       weekday: getWeekdayShort(date),
       actual,
       actualOutput: Number(actual?.saidaTanque ?? 0),
-      actualBalance: Number(actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoPlanejado),
-      saldoPlanejado,
+      actualBalance: Number(actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoInicialDia),
+      saldoPlanejado: saldoInicialDia,
       supplier: plan?.supplier || "",
       dieselPrice: plan?.dieselPrice ?? null,
       cbieGap: plan?.cbieGap ?? null,
       gapValue,
-      plannedReceipt,
+      plannedReceipt: receiptForView,
       saldoPosEntrega,
-      plannedOutput,
+      plannedOutput: outputForView,
       saldoProjetado,
       notes: plan?.notes || "",
       indicator,
@@ -506,12 +523,20 @@ export default function EstoqueDieselPlanejamentoControle() {
 
   const computed = useMemo(() => {
     const saldoPlanejado = Number(selectedRow?.saldoPlanejado ?? 0);
-    const plannedReceipt = parseNumber(form.plannedReceipt) || 0;
-    const plannedOutput = parseNumber(form.plannedOutput) || 0;
+    const plannedReceipt = selectedRow?.isRealized
+      ? Number(selectedRow?.plannedReceipt ?? 0)
+      : parseNumber(form.plannedReceipt) || 0;
+    const plannedOutput = selectedRow?.isRealized
+      ? Number(selectedRow?.plannedOutput ?? 0)
+      : parseNumber(form.plannedOutput) || 0;
     const saldoPosEntrega = round(saldoPlanejado + plannedReceipt, 2) ?? saldoPlanejado;
     const saldoProjetado = round(saldoPosEntrega - plannedOutput, 2) ?? saldoPosEntrega;
-    const dieselPrice = parseNumber(form.dieselPrice);
-    const cbieGap = parseNumber(form.cbieGap);
+    const dieselPrice = selectedRow?.isRealized
+      ? parseNumber(selectedRow?.dieselPrice)
+      : parseNumber(form.dieselPrice);
+    const cbieGap = selectedRow?.isRealized
+      ? parseNumber(selectedRow?.cbieGap)
+      : parseNumber(form.cbieGap);
     const gapValue =
       dieselPrice !== null && cbieGap !== null ? round((cbieGap * dieselPrice) / 100, 4) : null;
     return {
@@ -569,7 +594,7 @@ export default function EstoqueDieselPlanejamentoControle() {
             <div>
               <h2 className="text-xl font-black text-slate-800">Programação do mês</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                Clique na linha do dia para editar fornecedor, preço diesel, defasagem, entrega e saída programada.
+                Dias já realizados puxam automaticamente o que aconteceu no tanque. Dias futuros seguem como projeção de suprimentos.
               </p>
             </div>
             <div className={`rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-wider ${
@@ -701,6 +726,18 @@ export default function EstoqueDieselPlanejamentoControle() {
               <SummaryChip label="Saldo Pós Entrega" value={formatLiters(computed.saldoPosEntrega)} tone="blue" />
               <SummaryChip label="Saldo Projetado" value={formatLiters(computed.saldoProjetado)} tone={computed.indicator.tone} />
               <SummaryChip label="Defasagem R$" value={formatMoney(computed.gapValue)} tone="amber" />
+            </div>
+
+            <div
+              className={`mt-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
+                selectedRow?.isRealized
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-blue-200 bg-blue-50 text-blue-700"
+              }`}
+            >
+              {selectedRow?.isRealized
+                ? "Este dia já passou. A programação está usando automaticamente o realizado: saldo do tanque, recebimento e saída efetiva."
+                : "Este dia ainda está em projeção. Ajuste entrega, preço diesel e saída prevista para simular o saldo futuro do tanque."}
             </div>
 
             {feedback ? (

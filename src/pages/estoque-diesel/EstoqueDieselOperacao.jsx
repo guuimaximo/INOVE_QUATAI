@@ -26,6 +26,7 @@ import {
   getDailyReceipts,
   getMonthLabel,
   getPreviousEntry,
+  round,
   measurementStatus,
   saveDieselReceipt,
   saveMeasurementEntry,

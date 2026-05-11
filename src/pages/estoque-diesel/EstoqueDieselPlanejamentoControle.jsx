@@ -95,6 +95,15 @@ function safeNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function normalizeProductCode(value) {
+  const text = String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  if (text.includes("S10")) return "S10";
+  if (text.includes("S500") || text.includes("S0500") || text.includes("DIESEL500")) return "S500";
+
+  return "S500";
+}
+
 function shiftDate(date, days) {
   if (!date) return date;
 
@@ -429,7 +438,7 @@ function mapPlanningRow(row, metadata) {
     id: row.id,
     date: row.data_programacao,
     tankId: row.tanque_id,
-    product: tank?.tipo_diesel || "S500",
+    product: normalizeProductCode(tank?.tipo_diesel || row.tipo_diesel || row.produto || "S500"),
     supplier: row.fornecedor_previsto || "",
     dieselPrice: row.preco_diesel ?? null,
     cbieGap: row.defasagem_cbie ?? null,
@@ -654,24 +663,29 @@ function buildForm(date, product, row = null) {
 
 function buildAnalyticalRows(planningRows = []) {
   const products = ["S500", "S10"];
+  const today = todayISO();
 
   return products.reduce((acc, product) => {
     const purchases = [...planningRows]
+      .map((row) => ({ ...row, product: normalizeProductCode(row.product) }))
       .filter((row) => row.product === product)
-      .filter((row) => safeNumber(row.plannedReceipt, 0) > 0)
-      .filter((row) => safeNumber(row.dieselPrice, 0) > 0)
+      .filter((row) => safeNumber(row.plannedReceipt, 0) > 0 || safeNumber(row.dieselPrice, 0) > 0)
       .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
 
     const withVariation = purchases.map((row, index) => {
-      const previous = purchases[index - 1] || null;
-      const previousPrice = previous ? safeNumber(previous.dieselPrice, 0) : null;
-      const currentPrice = safeNumber(row.dieselPrice, 0);
+      const previousWithPrice = [...purchases]
+        .slice(0, index)
+        .reverse()
+        .find((item) => safeNumber(item.dieselPrice, 0) > 0);
+
+      const previousPrice = previousWithPrice ? safeNumber(previousWithPrice.dieselPrice, 0) : null;
+      const currentPrice = safeNumber(row.dieselPrice, null);
 
       const variationValue =
-        previousPrice && previousPrice > 0 ? currentPrice - previousPrice : null;
+        previousPrice && previousPrice > 0 && currentPrice !== null ? currentPrice - previousPrice : null;
 
       const variationPct =
-        previousPrice && previousPrice > 0
+        previousPrice && previousPrice > 0 && currentPrice !== null
           ? ((currentPrice - previousPrice) / previousPrice) * 100
           : null;
 
@@ -692,21 +706,197 @@ function buildAnalyticalRows(planningRows = []) {
       };
     });
 
-    const today = todayISO();
+    const realized = [...withVariation]
+      .filter((row) => row.date <= today)
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+
+    const future = [...withVariation]
+      .filter((row) => row.date > today)
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+
+    // Se não houver compras com data <= hoje, mostra as últimas compras conhecidas da janela,
+    // para não deixar a tela vazia em bases de teste ou meses futuros.
+    const fallbackLastPurchases = [...withVariation]
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      .slice(0, 10);
 
     acc[product] = {
-      lastPurchases: [...withVariation]
-        .filter((row) => row.date <= today)
-        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
-        .slice(0, 10),
-      futurePurchases: [...withVariation]
-        .filter((row) => row.date > today)
-        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))),
+      lastPurchases: realized.length ? realized.slice(0, 10) : fallbackLastPurchases,
+      futurePurchases: future,
+      allPurchases: withVariation,
     };
 
     return acc;
   }, {});
 }
+
+function canvasRoundRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function canvasText(ctx, text, x, y, maxWidth = 160) {
+  const value = String(text ?? "--");
+  if (ctx.measureText(value).width <= maxWidth) {
+    ctx.fillText(value, x, y);
+    return;
+  }
+
+  let clipped = value;
+  while (clipped.length > 3 && ctx.measureText(`${clipped}...`).width > maxWidth) {
+    clipped = clipped.slice(0, -1);
+  }
+  ctx.fillText(`${clipped}...`, x, y);
+}
+
+function drawCanvasTable(ctx, { title, x, y, columns, rows, rowHeight = 30 }) {
+  const headerHeight = 34;
+  const titleHeight = 32;
+  const tableWidth = columns.reduce((sum, column) => sum + column.width, 0);
+  const tableHeight = titleHeight + headerHeight + Math.max(rows.length, 1) * rowHeight;
+
+  ctx.strokeStyle = "#111827";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(x, y, tableWidth, tableHeight);
+  ctx.strokeRect(x, y, tableWidth, tableHeight);
+
+  ctx.fillStyle = "#5b9bd5";
+  ctx.fillRect(x, y, tableWidth, titleHeight);
+  ctx.fillStyle = "#000000";
+  ctx.font = "bold 18px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(title, x + tableWidth / 2, y + titleHeight / 2);
+
+  let currentX = x;
+  ctx.font = "bold 13px Arial";
+  ctx.textAlign = "center";
+  columns.forEach((column) => {
+    ctx.fillStyle = "#5b9bd5";
+    ctx.fillRect(currentX, y + titleHeight, column.width, headerHeight);
+    ctx.strokeStyle = "#111827";
+    ctx.strokeRect(currentX, y + titleHeight, column.width, headerHeight);
+    ctx.fillStyle = "#000000";
+    canvasText(ctx, column.label, currentX + column.width / 2 - column.width / 2 + 6, y + titleHeight + 17, column.width - 12);
+    currentX += column.width;
+  });
+
+  const tableRows = rows.length ? rows : [{ empty: true }];
+  tableRows.forEach((row, rowIndex) => {
+    const rowY = y + titleHeight + headerHeight + rowIndex * rowHeight;
+    currentX = x;
+
+    columns.forEach((column) => {
+      ctx.fillStyle = row.empty ? "#ffffff" : column.bg?.(row) || "#ffffff";
+      ctx.fillRect(currentX, rowY, column.width, rowHeight);
+      ctx.strokeStyle = "#111827";
+      ctx.strokeRect(currentX, rowY, column.width, rowHeight);
+
+      ctx.fillStyle = row.empty ? "#64748b" : column.color?.(row) || "#000000";
+      ctx.font = column.bold ? "bold 13px Arial" : "13px Arial";
+      ctx.textAlign = column.align || "center";
+      ctx.textBaseline = "middle";
+
+      const value = row.empty ? "Sem dados" : column.value(row);
+      const textX = column.align === "left" ? currentX + 8 : currentX + column.width / 2;
+      canvasText(ctx, value, textX, rowY + rowHeight / 2, column.width - 12);
+      currentX += column.width;
+    });
+  });
+
+  return tableHeight;
+}
+
+function downloadAnalyticalImage(product, data) {
+  const purchases = [...(data?.allPurchases || [])]
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .slice(-15);
+
+  const future = [...(data?.futurePurchases || [])].slice(0, 14);
+
+  const width = 1180;
+  const topRows = Math.max(purchases.length, 1);
+  const bottomRows = Math.max(future.length, 1);
+  const height = 96 + 32 + 34 + topRows * 30 + 34 + 32 + 34 + bottomRows * 30 + 50;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 24px Arial";
+  ctx.textAlign = "left";
+  ctx.fillText(`Programação Analítica Diesel ${product}`, 28, 34);
+  ctx.font = "14px Arial";
+  ctx.fillText(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 28, 58);
+
+  const indicatorByRow = (row) => {
+    const liters = safeNumber(row.plannedReceipt, 0);
+    return getIndicator(product, liters || PROGRAMMING_RULES[product]?.highReference || 0).label;
+  };
+
+  const topHeight = drawCanvasTable(ctx, {
+    title: `Compras / Defasagem Diesel ${product}`,
+    x: 28,
+    y: 80,
+    columns: [
+      { label: "Data", width: 90, value: (row) => formatDateBR(row.date) },
+      { label: "Dia", width: 70, value: (row) => getWeekdayShort(row.date) },
+      { label: "Fornecedor", width: 150, value: (row) => row.supplier || "--", align: "left" },
+      { label: "Preço Diesel", width: 145, value: (row) => formatPrice(row.dieselPrice) },
+      {
+        label: "Defasagem (CBIE)",
+        width: 150,
+        value: (row) => formatPct(row.cbieGap),
+        color: (row) => safeNumber(row.cbieGap, 0) > 0 ? "#dc2626" : "#059669",
+      },
+      {
+        label: "Defasagem R$",
+        width: 150,
+        value: (row) => formatPrice(row.cbieValue),
+        color: (row) => safeNumber(row.cbieValue, 0) > 0 ? "#dc2626" : "#059669",
+      },
+      { label: "Indicador Nível Estoque", width: 210, value: indicatorByRow },
+    ],
+    rows: purchases,
+  });
+
+  drawCanvasTable(ctx, {
+    title: `Compras Futuras Projetadas Diesel ${product}`,
+    x: 28,
+    y: 80 + topHeight + 34,
+    columns: [
+      { label: "Data", width: 90, value: (row) => formatDateBR(row.date) },
+      { label: "Dia", width: 70, value: (row) => getWeekdayShort(row.date) },
+      { label: "Fornecedor", width: 150, value: (row) => row.supplier || "--", align: "left" },
+      { label: "Litros", width: 120, value: (row) => formatLiters(row.plannedReceipt) },
+      { label: "Preço / Litro", width: 140, value: (row) => formatPrice(row.dieselPrice) },
+      { label: "Variação", width: 190, value: (row) => row.variationValue == null ? "--" : `${formatPrice(row.variationValue)} (${formatPct(row.variationPct)})` },
+      { label: "Defasagem R$", width: 150, value: (row) => formatPrice(row.cbieValue) },
+    ],
+    rows: future,
+  });
+
+  const link = document.createElement("a");
+  link.download = `programacao_analitica_${product}_${todayISO()}.png`;
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+}
+
 
 function ProductBadge({ product }) {
   const tone =
@@ -822,7 +1012,7 @@ function AnalyticalTable({ title, rows, emptyText }) {
   );
 }
 
-function AnalyticalProductSection({ product, data }) {
+function AnalyticalProductSection({ product, data, onDownload }) {
   const last = data?.lastPurchases || [];
   const future = data?.futurePurchases || [];
 
@@ -842,9 +1032,20 @@ function AnalyticalProductSection({ product, data }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <SummaryChip label="Último preço" value={formatPrice(lastPrice)} tone="blue" />
-          <SummaryChip label="Litros futuros" value={formatLiters(futureLiters)} tone="amber" />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <SummaryChip label="Último preço" value={formatPrice(lastPrice)} tone="blue" />
+            <SummaryChip label="Litros futuros" value={formatLiters(futureLiters)} tone="amber" />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onDownload?.(product, data)}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700"
+          >
+            <FaChartLine />
+            Baixar imagem
+          </button>
         </div>
       </div>
 
@@ -1580,8 +1781,8 @@ export default function EstoqueDieselPlanejamentoControle() {
           </div>
         </EstoqueDieselPanel>
 
-        <AnalyticalProductSection product="S500" data={analyticalData.S500} />
-        <AnalyticalProductSection product="S10" data={analyticalData.S10} />
+        <AnalyticalProductSection product="S500" data={analyticalData.S500} onDownload={downloadAnalyticalImage} />
+        <AnalyticalProductSection product="S10" data={analyticalData.S10} onDownload={downloadAnalyticalImage} />
       </div>
     );
   }

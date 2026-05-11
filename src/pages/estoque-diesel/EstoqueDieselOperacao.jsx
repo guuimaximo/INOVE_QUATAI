@@ -8,8 +8,8 @@ import {
   FaGasPump,
   FaInfoCircle,
   FaSave,
-  FaTrash,
   FaTint,
+  FaTrash,
 } from "react-icons/fa";
 import EstoqueDieselPageShell, {
   EstoqueDieselPanel,
@@ -26,7 +26,6 @@ import {
   getDailyReceipts,
   getMonthLabel,
   getPreviousEntry,
-  round,
   measurementStatus,
   saveDieselReceipt,
   saveMeasurementEntry,
@@ -35,6 +34,8 @@ import {
 } from "./medicaoModel";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
+
+const DIESEL_RECEIPTS_TABLE = "estoque_diesel_recebimentos";
 
 function parsePct(value) {
   if (value === null || value === undefined) return "--";
@@ -59,9 +60,6 @@ function parseCurrency(value) {
 function toFormValue(value) {
   return value === null || value === undefined ? "" : String(value);
 }
-
-const DIESEL_RECEIPTS_TABLE = "estoque_diesel_recebimentos";
-
 
 function buildFormFromEntry(entry, product, year, month) {
   const base = buildDefaultForm(product, year, month);
@@ -242,120 +240,91 @@ function getPctTone(value, warn = 0.01, critical = 0.03) {
 }
 
 function safeNumber(value, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  if (value === null || value === undefined || value === "") return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
-function buildCascadeStatus({ pctDiffNF, pctDiffTransnet, params }) {
-  const nfWarn = params?.nfDiffWarnPct ?? 0.01;
-  const nfCritical = params?.nfDiffCriticalPct ?? 0.03;
-  const transnetWarn = params?.transnetWarnPct ?? 0.02;
-  const transnetCritical = params?.transnetCriticalPct ?? 0.03;
-
-  const nfAbs = pctDiffNF === null || pctDiffNF === undefined || Number.isNaN(Number(pctDiffNF))
-    ? 0
-    : Math.abs(Number(pctDiffNF));
-  const transnetAbs = pctDiffTransnet === null || pctDiffTransnet === undefined || Number.isNaN(Number(pctDiffTransnet))
-    ? 0
-    : Math.abs(Number(pctDiffTransnet));
-
-  if (nfAbs > nfCritical || transnetAbs > transnetCritical) {
-    return { label: "Critico", tone: "rose" };
-  }
-
-  if (nfAbs > nfWarn || transnetAbs > transnetWarn) {
-    return { label: "Atencao", tone: "amber" };
-  }
-
-  return { label: "OK", tone: "emerald" };
-}
-
-function calculatePercentDiff(reference, value) {
+function calculatePctDifference(reference, compared) {
   const base = safeNumber(reference, 0);
+  const current = safeNumber(compared, 0);
+
   if (!base) return null;
-  return (safeNumber(value, 0) - base) / base;
+
+  return (current - base) / base;
 }
 
-function recalculateProductEntriesCascade({ entries, receipts, product, params, year, month }) {
-  const productEntries = [...(entries || [])]
-    .filter((entry) => entry.product === product)
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+function resolveCascadeStatus(entry, productParams) {
+  const warnTransnet = productParams?.transnetWarnPct ?? 0.02;
+  const criticalTransnet = productParams?.transnetCriticalPct ?? 0.03;
+  const warnNf = productParams?.nfDiffWarnPct ?? 0.01;
+  const criticalNf = productParams?.nfDiffCriticalPct ?? 0.03;
 
-  const recalculatedById = new Map();
+  const checks = [entry.pctDiffTransnet, entry.pctDiffTankBombas].filter(
+    (value) => value !== null && value !== undefined && !Number.isNaN(Number(value))
+  );
+
+  const nfDiff = entry.pctDiffNF;
+  if (nfDiff !== null && nfDiff !== undefined && !Number.isNaN(Number(nfDiff))) {
+    const absNf = Math.abs(Number(nfDiff));
+    if (absNf > criticalNf) return "Critico";
+    if (absNf > warnNf) return "Atencao";
+  }
+
+  const maxOperationalDiff = checks.reduce(
+    (max, value) => Math.max(max, Math.abs(Number(value))),
+    0
+  );
+
+  if (maxOperationalDiff > criticalTransnet) return "Critico";
+  if (maxOperationalDiff > warnTransnet) return "Atencao";
+  return "OK";
+}
+
+function buildCascadeMonthlyEntries(entries, productParams) {
+  const chronological = [...(entries || [])].sort(
+    (a, b) => String(a.date || "").localeCompare(String(b.date || ""))
+  );
+
   let previousSaldoFinal = null;
 
-  productEntries.forEach((entry) => {
-    const entryDate = entry?.date || "";
-    const entryMonth = entryDate.slice(5, 7) || month;
-    const form = buildFormFromEntry(entry, product, year, entryMonth);
-    const dailyReceipts = getDailyReceipts(receipts, product, form.date);
-    const computed = computeMeasurement(form, params, null, dailyReceipts);
-
-    const saldoAnteriorOriginal =
-      entry.saldoAnterior ?? entry.medicaoD1 ?? computed.medicaoD1 ?? 0;
+  const recalculated = chronological.map((entry) => {
     const saldoAnterior =
       previousSaldoFinal === null
-        ? safeNumber(saldoAnteriorOriginal, 0)
-        : safeNumber(previousSaldoFinal, 0);
+        ? safeNumber(entry.saldoAnterior, 0)
+        : previousSaldoFinal;
 
-    const entradaDiesel = safeNumber(
-      entry.entradaDiesel ?? computed.entradaDiesel ?? computed.entradaRecebimentos ?? 0,
+    // O saldo final vem da régua/medição já salva. Não converte, não multiplica e não recalcula.
+    const saldoFinal = safeNumber(
+      entry.saldoFinal ?? entry.medicaoAtual ?? entry.medicaoInicial,
       0
     );
 
-    const saidaTanqueBase = safeNumber(
-      entry.saidaTanque ?? computed.saidaTanque ?? 0,
-      0
-    );
+    const entradaDiesel = safeNumber(entry.entradaDiesel, 0);
+    const saidaTanque = saldoAnterior + entradaDiesel - saldoFinal;
+    const saidaTotalBombas = safeNumber(entry.saidaTotalBombas, 0);
+    const saidaTransnet = safeNumber(entry.saidaTransnet, 0);
 
-    const saidaTotalBombas = safeNumber(
-      entry.saidaTotalBombas ?? computed.saidaTotalBombas ?? 0,
-      0
-    );
+    const pctDiffTankBombas = calculatePctDifference(saidaTanque, saidaTotalBombas);
+    const pctDiffTransnet = calculatePctDifference(saidaTanque, saidaTransnet);
 
-    const saidaTransnet = safeNumber(
-      entry.saidaTransnet ?? entry.transnetOutput ?? computed.saidaTransnet ?? 0,
-      0
-    );
-
-    const saldoFinal = round(saldoAnterior + entradaDiesel - saidaTanqueBase, 2);
-    const medicaoAtual = saldoFinal;
-    const medicaoInicial = round(saldoFinal - entradaDiesel, 2);
-
-    const pctDiffNF =
-      entry.pctDiffNF !== null && entry.pctDiffNF !== undefined
-        ? entry.pctDiffNF
-        : computed.pctDiffNF;
-    const pctDiffTankBombas = calculatePercentDiff(saidaTanqueBase, saidaTotalBombas);
-    const pctDiffTransnet = calculatePercentDiff(saidaTanqueBase, saidaTransnet);
-    const status = buildCascadeStatus({ pctDiffNF, pctDiffTransnet, params });
-
-    const recalculatedEntry = {
+    const nextEntry = {
       ...entry,
       saldoAnterior,
-      medicaoD1: saldoAnterior,
-      medicaoInicial,
-      medicaoAtual,
-      entradaDiesel,
-      entradaRecebimentos: entry.entradaRecebimentos ?? computed.entradaRecebimentos,
       saldoFinal,
-      saidaTanque: saidaTanqueBase,
-      saidaTotalBombas,
-      saidaTransnet,
-      receiptMeasuredLiters: entry.receiptMeasuredLiters ?? computed.receiptMeasuredLiters,
-      pctDiffNF,
+      entradaDiesel,
+      saidaTanque,
       pctDiffTankBombas,
       pctDiffTransnet,
-      status: status.label,
-      statusTone: status.tone,
-      _cascadeRecalculated: true,
     };
 
-    recalculatedById.set(entry.id, recalculatedEntry);
+    nextEntry.status = resolveCascadeStatus(nextEntry, productParams);
     previousSaldoFinal = saldoFinal;
+
+    return nextEntry;
   });
 
-  return (entries || []).map((entry) => recalculatedById.get(entry.id) || entry);
+  return recalculated.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 }
 
 function MonthNavigation({ month, product }) {
@@ -425,10 +394,10 @@ export default function EstoqueDieselOperacao() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingReceipt, setSavingReceipt] = useState(false);
-  const [deletingReceipt, setDeletingReceipt] = useState(false);
   const [receiptFiles, setReceiptFiles] = useState({ before: null, after: null });
   const [customSupplierMode, setCustomSupplierMode] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState(null);
+  const [deletingReceipt, setDeletingReceipt] = useState(false);
   const launchPanelRef = useRef(null);
 
   useEffect(() => {
@@ -482,30 +451,22 @@ export default function EstoqueDieselOperacao() {
   }, [initialProduct, month, year]);
 
   const productParams = paramStore[product] || DEFAULT_PARAMS[product];
-  const recalculatedEntries = useMemo(
-    () =>
-      recalculateProductEntriesCascade({
-        entries,
-        receipts,
-        product,
-        params: productParams,
-        year,
-        month,
-      }),
-    [entries, receipts, product, productParams, year, month]
-  );
-
   const monthlyEntries = useMemo(
     () =>
-      recalculatedEntries
+      entries
         .filter((entry) => entry.product === product && entry.date?.startsWith(`${year}-${month}`))
         .sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [recalculatedEntries, month, product, year]
+    [entries, month, product, year]
+  );
+
+  const monthlyDisplayEntries = useMemo(
+    () => buildCascadeMonthlyEntries(monthlyEntries, productParams),
+    [monthlyEntries, productParams]
   );
 
   const previousEntry = useMemo(
-    () => getPreviousEntry(recalculatedEntries, product, form.date, form.id),
-    [recalculatedEntries, form.date, form.id, product]
+    () => getPreviousEntry(entries, product, form.date, form.id),
+    [entries, form.date, form.id, product]
   );
 
   const dailyReceipts = useMemo(
@@ -675,7 +636,7 @@ export default function EstoqueDieselOperacao() {
       setReceipts(nextReceipts);
       setFeedback({
         type: "success",
-        message: "Lancamento salvo no Supabase. Os saldos seguintes foram recalculados automaticamente na tela.",
+        message: "Lancamento salvo no Supabase. A tabela abaixo foi recalculada em cascata mantendo a régua original.",
       });
       resetFormForNewEntry();
     } catch (error) {
@@ -786,14 +747,28 @@ export default function EstoqueDieselOperacao() {
     }
   }
 
-  async function handleDeleteReceipt(receipt) {
-    if (!receipt?.id || !metadata) return;
+  async function handleDeleteReceipt() {
+    if (!selectedDailyReceipt?.id) {
+      setFeedback({
+        type: "error",
+        message: "Selecione um recebimento para excluir.",
+      });
+      return;
+    }
 
     const confirmDelete = window.confirm(
-      `Confirma a exclusão do recebimento${receipt.nfNumero ? ` NF ${receipt.nfNumero}` : ""}? Essa ação remove o recebimento do dia e recalcula os saldos automaticamente.`
+      `Deseja excluir o recebimento${selectedDailyReceipt.nfNumero ? ` NF ${selectedDailyReceipt.nfNumero}` : ""}? Essa ação não pode ser desfeita.`
     );
 
     if (!confirmDelete) return;
+
+    if (!metadata) {
+      setFeedback({
+        type: "error",
+        message: "Os metadados do tanque ainda nao foram carregados.",
+      });
+      return;
+    }
 
     try {
       setDeletingReceipt(true);
@@ -801,15 +776,24 @@ export default function EstoqueDieselOperacao() {
       const { error } = await supabase
         .from(DIESEL_RECEIPTS_TABLE)
         .delete()
-        .eq("id", receipt.id);
+        .eq("id", selectedDailyReceipt.id);
 
       if (error) throw error;
 
-      const nextReceipts = await fetchDieselReceipts({
-        year,
-        metadata,
-      });
+      const [nextEntries, nextReceipts] = await Promise.all([
+        fetchMeasurementEntries({
+          year,
+          metadata,
+          paramStore,
+          includePumps: true,
+        }),
+        fetchDieselReceipts({
+          year,
+          metadata,
+        }),
+      ]);
 
+      setEntries(nextEntries);
       setReceipts(nextReceipts);
       setSelectedReceiptId(null);
       setReceiptFiles({ before: null, after: null });
@@ -832,7 +816,7 @@ export default function EstoqueDieselOperacao() {
 
       setFeedback({
         type: "success",
-        message: "Recebimento excluído. O fechamento do dia e os saldos seguintes foram recalculados automaticamente na tela.",
+        message: "Recebimento excluido com sucesso. A tabela foi recarregada e os saldos anteriores foram recalculados em cascata.",
       });
     } catch (error) {
       console.error("Falha ao excluir recebimento:", error);
@@ -1153,7 +1137,7 @@ export default function EstoqueDieselOperacao() {
 
                         <button
                           type="button"
-                          onClick={() => handleDeleteReceipt(selectedDailyReceipt)}
+                          onClick={handleDeleteReceipt}
                           disabled={deletingReceipt}
                           className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
                         >
@@ -1189,7 +1173,7 @@ export default function EstoqueDieselOperacao() {
                 <button
                   type="button"
                   onClick={handleSaveReceipt}
-                  disabled={savingReceipt || deletingReceipt}
+                  disabled={savingReceipt}
                   className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
                 >
                   <FaSave />
@@ -1400,7 +1384,7 @@ export default function EstoqueDieselOperacao() {
           <div>
             <h2 className="text-lg font-black text-slate-800">Tabela do mes</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">
-              Historico consolidado de {getMonthLabel(month)} de {year} para {product}. Os saldos são recalculados em cascata a partir do primeiro dia alterado.
+              Historico consolidado de {getMonthLabel(month)} de {year} para {product}. Os saldos anteriores são recalculados em cascata, mantendo o saldo final da régua salvo em cada dia.
             </p>
           </div>
           <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
@@ -1438,14 +1422,14 @@ export default function EstoqueDieselOperacao() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {monthlyEntries.length === 0 ? (
+              {monthlyDisplayEntries.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
                     {loading ? "Carregando lançamentos..." : "Ainda nao ha lancamentos para este mes."}
                   </td>
                 </tr>
               ) : (
-                monthlyEntries.map((entry) => {
+                monthlyDisplayEntries.map((entry) => {
                   const isSelected = form.id === entry.id;
                   return (
                   <tr

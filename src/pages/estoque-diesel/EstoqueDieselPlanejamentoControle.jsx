@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { FaBolt, FaGasPump, FaSave, FaTint } from "react-icons/fa";
+import { FaBolt, FaChartLine, FaGasPump, FaSave, FaTint } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../context/AuthContext";
 import EstoqueDieselPageShell, {
@@ -59,6 +59,26 @@ function formatMoney(value) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function formatPrice(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+
+  return Number(value).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  });
+}
+
+function formatDateBR(date) {
+  if (!date) return "--";
+  return new Date(`${date}T00:00:00`).toLocaleDateString("pt-BR");
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function formatPct(value) {
@@ -419,9 +439,9 @@ function mapPlanningRow(row, metadata) {
   };
 }
 
-async function fetchPlanningRows({ year, month, product, metadata }) {
-  const from = `${year}-${month}-01`;
-  const to = shiftDate(getMonthLastDate(year, month), 1);
+async function fetchPlanningRows({ year, month, product = null, metadata, includeAllProducts = false }) {
+  const from = shiftDate(`${year}-${month}-01`, -10);
+  const to = shiftDate(getMonthLastDate(year, month), 45);
 
   let query = supabase
     .from("estoque_diesel_programacoes_diarias")
@@ -430,8 +450,10 @@ async function fetchPlanningRows({ year, month, product, metadata }) {
     .lte("data_programacao", to)
     .order("data_programacao", { ascending: true });
 
-  const tankId = metadata?.tanksByProduct?.[product]?.id;
-  if (tankId) query = query.eq("tanque_id", tankId);
+  if (!includeAllProducts && product) {
+    const tankId = metadata?.tanksByProduct?.[product]?.id;
+    if (tankId) query = query.eq("tanque_id", tankId);
+  }
 
   const { data, error } = await query;
   if (error) throw error;
@@ -536,7 +558,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
 
       const saldoPosEntrega = round(saldoPlanejado + entradaReal, 2) ?? saldoPlanejado;
       const saldoProjetado = round(saldoFinal, 2) ?? saldoFinal;
-      const indicator = getIndicator(product, saldoProjetado);
+      const indicator = getIndicator(product, saldoPosEntrega);
 
       runningBalance = saldoProjetado;
 
@@ -578,7 +600,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
 
     const saldoPosEntrega = round(saldoPlanejado + plannedReceipt, 2) ?? saldoPlanejado;
     const saldoProjetado = round(saldoPosEntrega - plannedOutput, 2) ?? saldoPosEntrega;
-    const indicator = getIndicator(product, saldoProjetado);
+    const indicator = getIndicator(product, saldoPosEntrega);
 
     const gapValue =
       plan?.dieselPrice !== null &&
@@ -629,6 +651,218 @@ function buildForm(date, product, row = null) {
   };
 }
 
+
+function buildAnalyticalRows(planningRows = []) {
+  const products = ["S500", "S10"];
+
+  return products.reduce((acc, product) => {
+    const purchases = [...planningRows]
+      .filter((row) => row.product === product)
+      .filter((row) => safeNumber(row.plannedReceipt, 0) > 0)
+      .filter((row) => safeNumber(row.dieselPrice, 0) > 0)
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+
+    const withVariation = purchases.map((row, index) => {
+      const previous = purchases[index - 1] || null;
+      const previousPrice = previous ? safeNumber(previous.dieselPrice, 0) : null;
+      const currentPrice = safeNumber(row.dieselPrice, 0);
+
+      const variationValue =
+        previousPrice && previousPrice > 0 ? currentPrice - previousPrice : null;
+
+      const variationPct =
+        previousPrice && previousPrice > 0
+          ? ((currentPrice - previousPrice) / previousPrice) * 100
+          : null;
+
+      const cbieValue =
+        row?.dieselPrice !== null &&
+        row?.dieselPrice !== undefined &&
+        row?.cbieGap !== null &&
+        row?.cbieGap !== undefined
+          ? round((Number(row.cbieGap) * Number(row.dieselPrice)) / 100, 4)
+          : null;
+
+      return {
+        ...row,
+        previousPrice,
+        variationValue,
+        variationPct,
+        cbieValue,
+      };
+    });
+
+    const today = todayISO();
+
+    acc[product] = {
+      lastPurchases: [...withVariation]
+        .filter((row) => row.date <= today)
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+        .slice(0, 10),
+      futurePurchases: [...withVariation]
+        .filter((row) => row.date > today)
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))),
+    };
+
+    return acc;
+  }, {});
+}
+
+function ProductBadge({ product }) {
+  const tone =
+    product === "S10"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : "border-blue-200 bg-blue-50 text-blue-700";
+
+  return (
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black ${tone}`}>
+      {product}
+    </span>
+  );
+}
+
+function PriceVariation({ value, pct }) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return <span className="font-semibold text-slate-400">--</span>;
+  }
+
+  const positive = Number(value) > 0;
+  const neutral = Number(value) === 0;
+
+  return (
+    <div
+      className={`font-black ${
+        neutral ? "text-slate-500" : positive ? "text-rose-600" : "text-emerald-600"
+      }`}
+    >
+      {positive ? "+" : ""}
+      {formatPrice(value)}
+      <span className="ml-2 text-xs">
+        ({positive ? "+" : ""}
+        {formatPct(pct)})
+      </span>
+    </div>
+  );
+}
+
+function AnalyticalTable({ title, rows, emptyText }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <h4 className="text-sm font-black uppercase tracking-wider text-slate-700">{title}</h4>
+
+      <div className="mt-3 overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-500">
+            <tr>
+              {[
+                "Data",
+                "Dia",
+                "Fornecedor",
+                "Produto",
+                "Litros",
+                "Preço/Litro",
+                "Variação",
+                "Defasagem CBIE",
+                "Defasagem R$",
+              ].map((header, index, array) => (
+                <th
+                  key={header}
+                  className={`px-4 py-3 ${index === 0 ? "rounded-l-2xl" : ""} ${
+                    index === array.length - 1 ? "rounded-r-2xl" : ""
+                  }`}
+                >
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-slate-100">
+            {rows.length ? (
+              rows.map((row) => (
+                <tr key={`${row.product}-${row.date}-${row.id || row.plannedReceipt}`}>
+                  <td className="px-4 py-3 font-black text-slate-800">{formatDateBR(row.date)}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-600">
+                    {getWeekdayShort(row.date)}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-600">
+                    {row.supplier || "--"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <ProductBadge product={row.product} />
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-600">
+                    {formatLiters(row.plannedReceipt)}
+                  </td>
+                  <td className="px-4 py-3 font-black text-slate-800">
+                    {formatPrice(row.dieselPrice)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <PriceVariation value={row.variationValue} pct={row.variationPct} />
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-600">
+                    {formatPct(row.cbieGap)}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-600">
+                    {formatPrice(row.cbieValue)}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="px-4 py-6 text-center text-sm font-semibold text-slate-400" colSpan={9}>
+                  {emptyText}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AnalyticalProductSection({ product, data }) {
+  const last = data?.lastPurchases || [];
+  const future = data?.futurePurchases || [];
+
+  const lastPrice = last[0]?.dieselPrice ?? null;
+  const futureLiters = future.reduce((sum, row) => sum + safeNumber(row.plannedReceipt, 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center gap-3">
+          <ProductBadge product={product} />
+          <div>
+            <h3 className="text-lg font-black text-slate-800">Análise de compras {product}</h3>
+            <p className="text-sm font-semibold text-slate-500">
+              Últimas 10 compras e compras futuras projetadas.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <SummaryChip label="Último preço" value={formatPrice(lastPrice)} tone="blue" />
+          <SummaryChip label="Litros futuros" value={formatLiters(futureLiters)} tone="amber" />
+        </div>
+      </div>
+
+      <AnalyticalTable
+        title={`Últimas 10 compras - ${product}`}
+        rows={last}
+        emptyText={`Nenhuma compra realizada encontrada para ${product}.`}
+      />
+
+      <AnalyticalTable
+        title={`Compras futuras projetadas - ${product}`}
+        rows={future}
+        emptyText={`Nenhuma compra futura projetada encontrada para ${product}.`}
+      />
+    </div>
+  );
+}
+
 export default function EstoqueDieselPlanejamentoControle() {
   const { ano = "2026", mes = "01" } = useParams();
   const [searchParams] = useSearchParams();
@@ -639,10 +873,12 @@ export default function EstoqueDieselPlanejamentoControle() {
   const productParam = searchParams.get("produto") || "S500";
   const product = productParam in PRODUCT_CONFIG ? productParam : "S500";
 
+  const [activeView, setActiveView] = useState("programacao");
   const [metadata, setMetadata] = useState(null);
   const [paramStore, setParamStore] = useState(DEFAULT_PARAMS);
   const [measurements, setMeasurements] = useState([]);
   const [planningRows, setPlanningRows] = useState([]);
+  const [analyticalRows, setAnalyticalRows] = useState([]);
   const [selectedDate, setSelectedDate] = useState(getDefaultDateForMonth(year, month));
   const [form, setForm] = useState(() =>
     buildForm(getDefaultDateForMonth(year, month), product)
@@ -676,6 +912,11 @@ export default function EstoqueDieselPlanejamentoControle() {
   const suppliers = useMemo(
     () => normalizeSuppliers(metadata, paramStore, product),
     [metadata, paramStore, product]
+  );
+
+  const analyticalData = useMemo(
+    () => buildAnalyticalRows(analyticalRows),
+    [analyticalRows]
   );
 
   const summary = useMemo(() => {
@@ -733,7 +974,7 @@ export default function EstoqueDieselPlanejamentoControle() {
       dieselPrice,
       cbieGap,
       gapValue,
-      indicator: getIndicator(product, saldoProjetado),
+      indicator: getIndicator(product, saldoPosEntrega),
     };
   }, [
     form.cbieGap,
@@ -754,7 +995,7 @@ export default function EstoqueDieselPlanejamentoControle() {
 
         const context = await fetchMeasurementContext();
 
-        const [measurementData, planningData] = await Promise.all([
+        const [measurementData, planningData, analyticalDataResponse] = await Promise.all([
           fetchMeasurementEntries({
             year,
             product,
@@ -768,6 +1009,12 @@ export default function EstoqueDieselPlanejamentoControle() {
             product,
             metadata: context.metadata,
           }),
+          fetchPlanningRows({
+            year,
+            month,
+            metadata: context.metadata,
+            includeAllProducts: true,
+          }),
         ]);
 
         if (!active) return;
@@ -776,6 +1023,7 @@ export default function EstoqueDieselPlanejamentoControle() {
         setParamStore(context.paramStore);
         setMeasurements(filterMeasurementWindow(measurementData, year, month, product));
         setPlanningRows(planningData);
+        setAnalyticalRows(analyticalDataResponse);
       } catch (error) {
         if (!active) return;
 
@@ -851,14 +1099,23 @@ export default function EstoqueDieselPlanejamentoControle() {
         userId: Number.isInteger(user?.usuario_id) ? user.usuario_id : null,
       });
 
-      const freshPlanning = await fetchPlanningRows({
-        year,
-        month,
-        product,
-        metadata,
-      });
+      const [freshPlanning, freshAnalytical] = await Promise.all([
+        fetchPlanningRows({
+          year,
+          month,
+          product,
+          metadata,
+        }),
+        fetchPlanningRows({
+          year,
+          month,
+          metadata,
+          includeAllProducts: true,
+        }),
+      ]);
 
       setPlanningRows(freshPlanning);
+      setAnalyticalRows(freshAnalytical);
 
       setFeedback({
         type: "success",
@@ -951,14 +1208,23 @@ export default function EstoqueDieselPlanejamentoControle() {
         });
       }
 
-      const freshPlanning = await fetchPlanningRows({
-        year,
-        month,
-        product,
-        metadata,
-      });
+      const [freshPlanning, freshAnalytical] = await Promise.all([
+        fetchPlanningRows({
+          year,
+          month,
+          product,
+          metadata,
+        }),
+        fetchPlanningRows({
+          year,
+          month,
+          metadata,
+          includeAllProducts: true,
+        }),
+      ]);
 
       setPlanningRows(freshPlanning);
+      setAnalyticalRows(freshAnalytical);
 
       setFeedback({
         type: "success",
@@ -1289,6 +1555,37 @@ export default function EstoqueDieselPlanejamentoControle() {
     );
   }
 
+  function renderAnalyticalView() {
+    return (
+      <div className="space-y-5">
+        <EstoqueDieselPanel className="border-2 border-rose-200 bg-rose-50/40 p-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-black text-rose-700">
+                <FaChartLine />
+                Programação Analítica
+              </h2>
+              <p className="mt-1 text-sm font-semibold text-rose-700/80">
+                Últimas compras e compras futuras projetadas separadas por S500 e S10.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setActiveView("programacao")}
+              className="rounded-xl border border-rose-200 bg-white px-4 py-3 text-sm font-black text-rose-700 transition hover:bg-rose-50"
+            >
+              Voltar para programação
+            </button>
+          </div>
+        </EstoqueDieselPanel>
+
+        <AnalyticalProductSection product="S500" data={analyticalData.S500} />
+        <AnalyticalProductSection product="S10" data={analyticalData.S10} />
+      </div>
+    );
+  }
+
   return (
     <EstoqueDieselPageShell
       title="Programacao de Diesel"
@@ -1313,6 +1610,35 @@ export default function EstoqueDieselPlanejamentoControle() {
           </div>
         </div>
 
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveView("programacao")}
+            className={`rounded-xl px-4 py-3 text-sm font-black transition ${
+              activeView === "programacao"
+                ? "bg-slate-800 text-white"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            Programação Mensal
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveView("analitica")}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-black transition ${
+              activeView === "analitica"
+                ? "bg-rose-700 text-white"
+                : "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+            }`}
+          >
+            <FaChartLine />
+            Programação Analítica
+          </button>
+        </div>
+
+        {activeView === "programacao" ? (
+          <>
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <SummaryChip label="Produto" value={product} tone="blue" />
           <SummaryChip label="Saldo Atual" value={formatLiters(summary.balance)} tone="emerald" />
@@ -1361,6 +1687,8 @@ export default function EstoqueDieselPlanejamentoControle() {
             Abrir projeção
           </button>
         </div>
+          </>
+        ) : null}
 
         {feedback ? (
           <div
@@ -1375,13 +1703,16 @@ export default function EstoqueDieselPlanejamentoControle() {
         ) : null}
       </EstoqueDieselPanel>
 
+      {activeView === "analitica" ? (
+        renderAnalyticalView()
+      ) : (
       <div className="grid grid-cols-1 gap-4">
         <EstoqueDieselPanel className="p-5">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-xl font-black text-slate-800">Programação do mês</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                Para dias realizados: dados reais são buscados do dia seguinte.
+                Indicador calculado pelo Saldo Pós Entrega. Para dias realizados, dados reais são buscados do dia seguinte.
               </p>
             </div>
 
@@ -1441,7 +1772,7 @@ export default function EstoqueDieselPlanejamentoControle() {
                       }`}
                     >
                       <td className="px-4 py-3 font-black text-slate-800">
-                        {new Date(`${row.date}T00:00:00`).toLocaleDateString("pt-BR")}
+                        {formatDateBR(row.date)}
                       </td>
                       <td className="px-4 py-3 font-semibold text-slate-600">
                         {row.weekday}
@@ -1494,6 +1825,8 @@ export default function EstoqueDieselPlanejamentoControle() {
           </div>
         </EstoqueDieselPanel>
       </div>
+
+      )}
 
       {renderProjectionModal()}
       {renderEditModal()}

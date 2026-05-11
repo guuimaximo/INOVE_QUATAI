@@ -240,45 +240,118 @@ function getPctTone(value, warn = 0.01, critical = 0.03) {
   return "emerald";
 }
 
+function safeNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function buildCascadeStatus({ pctDiffNF, pctDiffTransnet, params }) {
+  const nfWarn = params?.nfDiffWarnPct ?? 0.01;
+  const nfCritical = params?.nfDiffCriticalPct ?? 0.03;
+  const transnetWarn = params?.transnetWarnPct ?? 0.02;
+  const transnetCritical = params?.transnetCriticalPct ?? 0.03;
+
+  const nfAbs = pctDiffNF === null || pctDiffNF === undefined || Number.isNaN(Number(pctDiffNF))
+    ? 0
+    : Math.abs(Number(pctDiffNF));
+  const transnetAbs = pctDiffTransnet === null || pctDiffTransnet === undefined || Number.isNaN(Number(pctDiffTransnet))
+    ? 0
+    : Math.abs(Number(pctDiffTransnet));
+
+  if (nfAbs > nfCritical || transnetAbs > transnetCritical) {
+    return { label: "Critico", tone: "rose" };
+  }
+
+  if (nfAbs > nfWarn || transnetAbs > transnetWarn) {
+    return { label: "Atencao", tone: "amber" };
+  }
+
+  return { label: "OK", tone: "emerald" };
+}
+
+function calculatePercentDiff(reference, value) {
+  const base = safeNumber(reference, 0);
+  if (!base) return null;
+  return (safeNumber(value, 0) - base) / base;
+}
+
 function recalculateProductEntriesCascade({ entries, receipts, product, params, year, month }) {
   const productEntries = [...(entries || [])]
     .filter((entry) => entry.product === product)
     .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
 
   const recalculatedById = new Map();
-  let previousEntry = null;
+  let previousSaldoFinal = null;
 
   productEntries.forEach((entry) => {
     const entryDate = entry?.date || "";
     const entryMonth = entryDate.slice(5, 7) || month;
     const form = buildFormFromEntry(entry, product, year, entryMonth);
     const dailyReceipts = getDailyReceipts(receipts, product, form.date);
-    const computed = computeMeasurement(form, params, previousEntry, dailyReceipts);
-    const status = measurementStatus(computed, params);
+    const computed = computeMeasurement(form, params, null, dailyReceipts);
+
+    const saldoAnteriorOriginal =
+      entry.saldoAnterior ?? entry.medicaoD1 ?? computed.medicaoD1 ?? 0;
+    const saldoAnterior =
+      previousSaldoFinal === null
+        ? safeNumber(saldoAnteriorOriginal, 0)
+        : safeNumber(previousSaldoFinal, 0);
+
+    const entradaDiesel = safeNumber(
+      entry.entradaDiesel ?? computed.entradaDiesel ?? computed.entradaRecebimentos ?? 0,
+      0
+    );
+
+    const saidaTanqueBase = safeNumber(
+      entry.saidaTanque ?? computed.saidaTanque ?? 0,
+      0
+    );
+
+    const saidaTotalBombas = safeNumber(
+      entry.saidaTotalBombas ?? computed.saidaTotalBombas ?? 0,
+      0
+    );
+
+    const saidaTransnet = safeNumber(
+      entry.saidaTransnet ?? entry.transnetOutput ?? computed.saidaTransnet ?? 0,
+      0
+    );
+
+    const saldoFinal = round(saldoAnterior + entradaDiesel - saidaTanqueBase, 2);
+    const medicaoAtual = saldoFinal;
+    const medicaoInicial = round(saldoFinal - entradaDiesel, 2);
+
+    const pctDiffNF =
+      entry.pctDiffNF !== null && entry.pctDiffNF !== undefined
+        ? entry.pctDiffNF
+        : computed.pctDiffNF;
+    const pctDiffTankBombas = calculatePercentDiff(saidaTanqueBase, saidaTotalBombas);
+    const pctDiffTransnet = calculatePercentDiff(saidaTanqueBase, saidaTransnet);
+    const status = buildCascadeStatus({ pctDiffNF, pctDiffTransnet, params });
 
     const recalculatedEntry = {
       ...entry,
-      saldoAnterior: computed.medicaoD1,
-      medicaoD1: computed.medicaoD1,
-      medicaoInicial: computed.medicaoInicial,
-      medicaoAtual: computed.medicaoAtual,
-      entradaDiesel: computed.entradaDiesel,
-      entradaRecebimentos: computed.entradaRecebimentos,
-      saldoFinal: computed.saldoFinal ?? computed.medicaoAtual,
-      saidaTanque: computed.saidaTanque,
-      saidaTotalBombas: computed.saidaTotalBombas,
-      saidaTransnet: computed.saidaTransnet,
-      receiptMeasuredLiters: computed.receiptMeasuredLiters,
-      pctDiffNF: computed.pctDiffNF,
-      pctDiffTankBombas: computed.pctDiffTankBombas,
-      pctDiffTransnet: computed.pctDiffTransnet,
+      saldoAnterior,
+      medicaoD1: saldoAnterior,
+      medicaoInicial,
+      medicaoAtual,
+      entradaDiesel,
+      entradaRecebimentos: entry.entradaRecebimentos ?? computed.entradaRecebimentos,
+      saldoFinal,
+      saidaTanque: saidaTanqueBase,
+      saidaTotalBombas,
+      saidaTransnet,
+      receiptMeasuredLiters: entry.receiptMeasuredLiters ?? computed.receiptMeasuredLiters,
+      pctDiffNF,
+      pctDiffTankBombas,
+      pctDiffTransnet,
       status: status.label,
       statusTone: status.tone,
       _cascadeRecalculated: true,
     };
 
     recalculatedById.set(entry.id, recalculatedEntry);
-    previousEntry = recalculatedEntry;
+    previousSaldoFinal = saldoFinal;
   });
 
   return (entries || []).map((entry) => recalculatedById.get(entry.id) || entry);

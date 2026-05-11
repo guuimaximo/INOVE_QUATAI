@@ -33,6 +33,7 @@ import {
   validateMeasurement,
 } from "./medicaoModel";
 import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../supabase";
 
 function parsePct(value) {
   if (value === null || value === undefined) return "--";

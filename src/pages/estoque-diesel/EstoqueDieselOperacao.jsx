@@ -235,6 +235,50 @@ function getPctTone(value, warn = 0.01, critical = 0.03) {
   return "emerald";
 }
 
+function recalculateProductEntriesCascade({ entries, receipts, product, params, year, month }) {
+  const productEntries = [...(entries || [])]
+    .filter((entry) => entry.product === product)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+
+  const recalculatedById = new Map();
+  let previousEntry = null;
+
+  productEntries.forEach((entry) => {
+    const entryDate = entry?.date || "";
+    const entryMonth = entryDate.slice(5, 7) || month;
+    const form = buildFormFromEntry(entry, product, year, entryMonth);
+    const dailyReceipts = getDailyReceipts(receipts, product, form.date);
+    const computed = computeMeasurement(form, params, previousEntry, dailyReceipts);
+    const status = measurementStatus(computed, params);
+
+    const recalculatedEntry = {
+      ...entry,
+      saldoAnterior: computed.medicaoD1,
+      medicaoD1: computed.medicaoD1,
+      medicaoInicial: computed.medicaoInicial,
+      medicaoAtual: computed.medicaoAtual,
+      entradaDiesel: computed.entradaDiesel,
+      entradaRecebimentos: computed.entradaRecebimentos,
+      saldoFinal: computed.saldoFinal ?? computed.medicaoAtual,
+      saidaTanque: computed.saidaTanque,
+      saidaTotalBombas: computed.saidaTotalBombas,
+      saidaTransnet: computed.saidaTransnet,
+      receiptMeasuredLiters: computed.receiptMeasuredLiters,
+      pctDiffNF: computed.pctDiffNF,
+      pctDiffTankBombas: computed.pctDiffTankBombas,
+      pctDiffTransnet: computed.pctDiffTransnet,
+      status: status.label,
+      statusTone: status.tone,
+      _cascadeRecalculated: true,
+    };
+
+    recalculatedById.set(entry.id, recalculatedEntry);
+    previousEntry = recalculatedEntry;
+  });
+
+  return (entries || []).map((entry) => recalculatedById.get(entry.id) || entry);
+}
+
 function MonthNavigation({ month, product }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -358,17 +402,30 @@ export default function EstoqueDieselOperacao() {
   }, [initialProduct, month, year]);
 
   const productParams = paramStore[product] || DEFAULT_PARAMS[product];
+  const recalculatedEntries = useMemo(
+    () =>
+      recalculateProductEntriesCascade({
+        entries,
+        receipts,
+        product,
+        params: productParams,
+        year,
+        month,
+      }),
+    [entries, receipts, product, productParams, year, month]
+  );
+
   const monthlyEntries = useMemo(
     () =>
-      entries
+      recalculatedEntries
         .filter((entry) => entry.product === product && entry.date?.startsWith(`${year}-${month}`))
         .sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [entries, month, product, year]
+    [recalculatedEntries, month, product, year]
   );
 
   const previousEntry = useMemo(
-    () => getPreviousEntry(entries, product, form.date, form.id),
-    [entries, form.date, form.id, product]
+    () => getPreviousEntry(recalculatedEntries, product, form.date, form.id),
+    [recalculatedEntries, form.date, form.id, product]
   );
 
   const dailyReceipts = useMemo(
@@ -538,7 +595,7 @@ export default function EstoqueDieselOperacao() {
       setReceipts(nextReceipts);
       setFeedback({
         type: "success",
-        message: "Lancamento salvo no Supabase. A tabela abaixo ja foi atualizada.",
+        message: "Lancamento salvo no Supabase. Os saldos seguintes foram recalculados automaticamente na tela.",
       });
       resetFormForNewEntry();
     } catch (error) {
@@ -1192,7 +1249,7 @@ export default function EstoqueDieselOperacao() {
           <div>
             <h2 className="text-lg font-black text-slate-800">Tabela do mes</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">
-              Historico consolidado de {getMonthLabel(month)} de {year} para {product}.
+              Historico consolidado de {getMonthLabel(month)} de {year} para {product}. Os saldos são recalculados em cascata a partir do primeiro dia alterado.
             </p>
           </div>
           <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">

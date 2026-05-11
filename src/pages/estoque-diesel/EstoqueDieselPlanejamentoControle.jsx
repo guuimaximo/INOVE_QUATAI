@@ -22,18 +22,20 @@ const PROGRAMMING_RULES = {
   S500: {
     minimum: 14000,
     highReference: 29000,
-    defaultWeekdayOutput: 8500,
-    defaultSaturdayOutput: 5500,
-    defaultSundayOutput: 3500,
+    defaultWeekdayOutput: 4200,
+    defaultSaturdayOutput: 2500,
+    defaultSundayOutput: 1500,
+    defaultHolidayOutput: 1500,
     lowLabel: "Baixo - 15 mil",
     highLabel: "Alto - 29 mil",
   },
   S10: {
     minimum: 10000,
     highReference: 29000,
-    defaultWeekdayOutput: 4600,
-    defaultSaturdayOutput: 3000,
+    defaultWeekdayOutput: 4200,
+    defaultSaturdayOutput: 2500,
     defaultSundayOutput: 1500,
+    defaultHolidayOutput: 1500,
     lowLabel: "Baixo - 15 mil",
     highLabel: "Alto - 29 mil",
   },
@@ -474,14 +476,15 @@ export default function EstoqueDieselPlanejamentoControle() {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [projectionModalOpen, setProjectionModalOpen] = useState(false);
 
   const [bulkProjection, setBulkProjection] = useState({
     startDate: getDefaultDateForMonth(year, month),
     endDate: getLastDayOfMonth(year, month),
-    weekdayOutput: PROGRAMMING_RULES[product]?.defaultWeekdayOutput ?? "",
-    saturdayOutput: PROGRAMMING_RULES[product]?.defaultSaturdayOutput ?? "",
-    sundayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? "",
-    holidayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? "",
+    weekdayOutput: PROGRAMMING_RULES[product]?.defaultWeekdayOutput ?? 4200,
+    saturdayOutput: PROGRAMMING_RULES[product]?.defaultSaturdayOutput ?? 2500,
+    sundayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? 1500,
+    holidayOutput: PROGRAMMING_RULES[product]?.defaultHolidayOutput ?? 1500,
     holidayDatesText: "",
   });
 
@@ -633,10 +636,10 @@ export default function EstoqueDieselPlanejamentoControle() {
       ...current,
       startDate: getDefaultDateForMonth(year, month),
       endDate: getLastDayOfMonth(year, month),
-      weekdayOutput: PROGRAMMING_RULES[product]?.defaultWeekdayOutput ?? "",
-      saturdayOutput: PROGRAMMING_RULES[product]?.defaultSaturdayOutput ?? "",
-      sundayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? "",
-      holidayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? "",
+      weekdayOutput: PROGRAMMING_RULES[product]?.defaultWeekdayOutput ?? 4200,
+      saturdayOutput: PROGRAMMING_RULES[product]?.defaultSaturdayOutput ?? 2500,
+      sundayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? 1500,
+      holidayOutput: PROGRAMMING_RULES[product]?.defaultHolidayOutput ?? 1500,
     }));
   }, [month, product, year]);
 
@@ -651,16 +654,6 @@ export default function EstoqueDieselPlanejamentoControle() {
   function handleSelectRow(row) {
     setSelectedDate(row.date);
     setForm(buildForm(row.date, product, row));
-    setFeedback(null);
-    setEditModalOpen(true);
-  }
-
-  function handleNewDay() {
-    const nextDate = getDefaultDateForMonth(year, month);
-    const row = monthRows.find((item) => item.date === nextDate) || null;
-
-    setSelectedDate(nextDate);
-    setForm(buildForm(nextDate, product, row));
     setFeedback(null);
     setEditModalOpen(true);
   }
@@ -781,6 +774,8 @@ export default function EstoqueDieselPlanejamentoControle() {
         type: "success",
         message: `Projeção de saída aplicada em ${rowsToSave.length} dia(s). Salvamento realizado em D+1.`,
       });
+
+      setProjectionModalOpen(false);
     } catch (error) {
       console.error("Erro ao aplicar projeção em lote:", error);
 
@@ -791,6 +786,317 @@ export default function EstoqueDieselPlanejamentoControle() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function renderProjectionModal() {
+    if (!projectionModalOpen) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-blue-600 p-3 text-white">
+                <FaBolt />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-black text-slate-800">
+                  Atalho de projeção de saída
+                </h2>
+                <p className="mt-1 text-sm font-semibold text-slate-500">
+                  Aplique a saída prevista para vários dias de uma vez, separando dia útil,
+                  sábado, domingo e feriado.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setProjectionModalOpen(false)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
+            >
+              Fechar
+            </button>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <SimpleInput
+              label="Data inicial"
+              type="date"
+              value={bulkProjection.startDate}
+              onChange={(value) => updateBulkProjection("startDate", value)}
+            />
+
+            <SimpleInput
+              label="Data final"
+              type="date"
+              value={bulkProjection.endDate}
+              onChange={(value) => updateBulkProjection("endDate", value)}
+            />
+
+            <SimpleInput
+              label="Saída dia útil"
+              type="number"
+              step="1"
+              value={bulkProjection.weekdayOutput}
+              onChange={(value) => updateBulkProjection("weekdayOutput", value)}
+            />
+
+            <SimpleInput
+              label="Saída sábado"
+              type="number"
+              step="1"
+              value={bulkProjection.saturdayOutput}
+              onChange={(value) => updateBulkProjection("saturdayOutput", value)}
+            />
+
+            <SimpleInput
+              label="Saída domingo"
+              type="number"
+              step="1"
+              value={bulkProjection.sundayOutput}
+              onChange={(value) => updateBulkProjection("sundayOutput", value)}
+            />
+
+            <SimpleInput
+              label="Saída feriado"
+              type="number"
+              step="1"
+              value={bulkProjection.holidayOutput}
+              onChange={(value) => updateBulkProjection("holidayOutput", value)}
+            />
+
+            <div className="md:col-span-2">
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-blue-700">
+                  Datas de feriado
+                </span>
+
+                <textarea
+                  rows={4}
+                  value={bulkProjection.holidayDatesText}
+                  onChange={(event) =>
+                    updateBulkProjection("holidayDatesText", event.target.value)
+                  }
+                  className="mt-2 w-full rounded-xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Ex.: 2026-01-01, 2026-02-17 ou uma data por linha"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">
+            A projeção será aplicada nos dias selecionados, salvando automaticamente no D+1.
+          </div>
+
+          {feedback ? (
+            <div
+              className={`mt-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
+                feedback.type === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700"
+              }`}
+            >
+              {feedback.message}
+            </div>
+          ) : null}
+
+          <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={() => setProjectionModalOpen(false)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              onClick={handleApplyBulkProjection}
+              disabled={saving || loading}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white transition hover:bg-blue-600 disabled:opacity-60"
+            >
+              <FaBolt />
+              {saving ? "Aplicando..." : "Aplicar projeção"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderEditModal() {
+    if (!editModalOpen) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="text-xl font-black text-slate-800">
+                Editar programação do dia
+              </h2>
+
+              <p className="mt-1 text-sm font-semibold text-slate-500">
+                Dia selecionado:{" "}
+                <strong>
+                  {form.visualDate
+                    ? new Date(`${form.visualDate}T00:00:00`).toLocaleDateString("pt-BR")
+                    : "--"}
+                </strong>
+                {" "} | Data salva no sistema:{" "}
+                <strong>
+                  {form.date
+                    ? new Date(`${form.date}T00:00:00`).toLocaleDateString("pt-BR")
+                    : "--"}
+                </strong>
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setEditModalOpen(false)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
+            >
+              Fechar
+            </button>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <SimpleInput
+              label="Dia exibido"
+              type="date"
+              value={form.visualDate || selectedDate}
+              onChange={() => {}}
+              disabled
+            />
+
+            <SimpleInput
+              label="Data salva no sistema"
+              type="date"
+              value={form.date}
+              onChange={(value) => updateField("date", value)}
+            />
+
+            <SimpleInput
+              label="Dia"
+              value={getWeekdayShort(form.visualDate || selectedDate)}
+              onChange={() => {}}
+              disabled
+            />
+
+            <SimpleSelect
+              label="Fornecedor"
+              value={form.supplier}
+              options={suppliers}
+              onChange={(value) => updateField("supplier", value)}
+            />
+
+            <SimpleInput
+              label="Preço Diesel"
+              type="number"
+              step="0.0001"
+              value={form.dieselPrice}
+              onChange={(value) => updateField("dieselPrice", value)}
+            />
+
+            <SimpleInput
+              label="Defasagem (CBIE)"
+              type="number"
+              step="0.01"
+              value={form.cbieGap}
+              onChange={(value) => updateField("cbieGap", value)}
+            />
+
+            <SimpleInput
+              label="Programação de Entrega"
+              type="number"
+              step="1"
+              value={form.plannedReceipt}
+              onChange={(value) => updateField("plannedReceipt", value)}
+            />
+
+            <SimpleInput
+              label="Saída Programada"
+              type="number"
+              step="1"
+              value={form.plannedOutput}
+              onChange={(value) => updateField("plannedOutput", value)}
+            />
+          </div>
+
+          <label className="mt-4 block">
+            <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+              Observação
+            </span>
+
+            <textarea
+              rows={4}
+              value={form.notes}
+              onChange={(event) => updateField("notes", event.target.value)}
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              placeholder="Ex.: entrega confirmada, consumo acima do padrão, reforço de operação."
+            />
+          </label>
+
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <SummaryChip
+              label="Saldo Planejado"
+              value={formatLiters(computed.saldoPlanejado)}
+              tone="slate"
+            />
+            <SummaryChip
+              label="Saldo Pós Entrega"
+              value={formatLiters(computed.saldoPosEntrega)}
+              tone="blue"
+            />
+            <SummaryChip
+              label="Saldo Projetado"
+              value={formatLiters(computed.saldoProjetado)}
+              tone={computed.indicator.tone}
+            />
+            <SummaryChip
+              label="Defasagem R$"
+              value={formatMoney(computed.gapValue)}
+              tone="amber"
+            />
+          </div>
+
+          {feedback ? (
+            <div
+              className={`mt-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
+                feedback.type === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700"
+              }`}
+            >
+              {feedback.message}
+            </div>
+          ) : null}
+
+          <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={() => setEditModalOpen(false)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || loading || !form.date}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700 disabled:opacity-60"
+            >
+              <FaSave />
+              {saving ? "Salvando..." : "Salvar programação"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -838,7 +1144,7 @@ export default function EstoqueDieselPlanejamentoControle() {
           />
         </div>
 
-        <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
           <div className="flex items-start gap-3">
             <div className="rounded-xl bg-blue-600 p-3 text-white">
               <FaBolt />
@@ -846,95 +1152,25 @@ export default function EstoqueDieselPlanejamentoControle() {
 
             <div>
               <h3 className="text-sm font-black uppercase tracking-wider text-blue-800">
-                Atalho de projeção de saída
+                Projeção de saída
               </h3>
               <p className="mt-1 text-sm font-semibold text-blue-700">
-                Aplique a saída prevista para vários dias de uma vez, separando dia útil,
-                sábado, domingo e feriado.
+                Abra o atalho para programar vários dias de uma vez.
               </p>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SimpleInput
-              label="Data inicial"
-              type="date"
-              value={bulkProjection.startDate}
-              onChange={(value) => updateBulkProjection("startDate", value)}
-            />
-
-            <SimpleInput
-              label="Data final"
-              type="date"
-              value={bulkProjection.endDate}
-              onChange={(value) => updateBulkProjection("endDate", value)}
-            />
-
-            <SimpleInput
-              label="Saída dia útil"
-              type="number"
-              step="1"
-              value={bulkProjection.weekdayOutput}
-              onChange={(value) => updateBulkProjection("weekdayOutput", value)}
-            />
-
-            <SimpleInput
-              label="Saída sábado"
-              type="number"
-              step="1"
-              value={bulkProjection.saturdayOutput}
-              onChange={(value) => updateBulkProjection("saturdayOutput", value)}
-            />
-
-            <SimpleInput
-              label="Saída domingo"
-              type="number"
-              step="1"
-              value={bulkProjection.sundayOutput}
-              onChange={(value) => updateBulkProjection("sundayOutput", value)}
-            />
-
-            <SimpleInput
-              label="Saída feriado"
-              type="number"
-              step="1"
-              value={bulkProjection.holidayOutput}
-              onChange={(value) => updateBulkProjection("holidayOutput", value)}
-            />
-
-            <div className="xl:col-span-2">
-              <label className="block">
-                <span className="text-xs font-black uppercase tracking-wider text-blue-700">
-                  Datas de feriado
-                </span>
-                <textarea
-                  rows={3}
-                  value={bulkProjection.holidayDatesText}
-                  onChange={(event) =>
-                    updateBulkProjection("holidayDatesText", event.target.value)
-                  }
-                  className="mt-2 w-full rounded-xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Ex.: 2026-01-01, 2026-02-17 ou uma data por linha"
-                />
-              </label>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs font-bold text-blue-700">
-              A projeção será aplicada nos dias selecionados, salvando automaticamente no D+1.
-            </p>
-
-            <button
-              type="button"
-              onClick={handleApplyBulkProjection}
-              disabled={saving || loading}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white transition hover:bg-blue-600 disabled:opacity-60"
-            >
-              <FaBolt />
-              {saving ? "Aplicando..." : "Aplicar projeção"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setFeedback(null);
+              setProjectionModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white transition hover:bg-blue-600"
+          >
+            <FaBolt />
+            Abrir projeção
+          </button>
         </div>
 
         {feedback ? (
@@ -1071,174 +1307,8 @@ export default function EstoqueDieselPlanejamentoControle() {
         </EstoqueDieselPanel>
       </div>
 
-      {editModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h2 className="text-xl font-black text-slate-800">
-                  Editar programação do dia
-                </h2>
-
-                <p className="mt-1 text-sm font-semibold text-slate-500">
-                  Dia selecionado:{" "}
-                  <strong>
-                    {form.visualDate
-                      ? new Date(`${form.visualDate}T00:00:00`).toLocaleDateString("pt-BR")
-                      : "--"}
-                  </strong>
-                  {" "} | Data salva no sistema:{" "}
-                  <strong>
-                    {form.date
-                      ? new Date(`${form.date}T00:00:00`).toLocaleDateString("pt-BR")
-                      : "--"}
-                  </strong>
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setEditModalOpen(false)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
-              >
-                Fechar
-              </button>
-            </div>
-
-            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <SimpleInput
-                label="Dia exibido"
-                type="date"
-                value={form.visualDate || selectedDate}
-                onChange={() => {}}
-                disabled
-              />
-
-              <SimpleInput
-                label="Data salva no sistema"
-                type="date"
-                value={form.date}
-                onChange={(value) => updateField("date", value)}
-              />
-
-              <SimpleInput
-                label="Dia"
-                value={getWeekdayShort(form.visualDate || selectedDate)}
-                onChange={() => {}}
-                disabled
-              />
-
-              <SimpleSelect
-                label="Fornecedor"
-                value={form.supplier}
-                options={suppliers}
-                onChange={(value) => updateField("supplier", value)}
-              />
-
-              <SimpleInput
-                label="Preço Diesel"
-                type="number"
-                step="0.0001"
-                value={form.dieselPrice}
-                onChange={(value) => updateField("dieselPrice", value)}
-              />
-
-              <SimpleInput
-                label="Defasagem (CBIE)"
-                type="number"
-                step="0.01"
-                value={form.cbieGap}
-                onChange={(value) => updateField("cbieGap", value)}
-              />
-
-              <SimpleInput
-                label="Programação de Entrega"
-                type="number"
-                step="1"
-                value={form.plannedReceipt}
-                onChange={(value) => updateField("plannedReceipt", value)}
-              />
-
-              <SimpleInput
-                label="Saída Programada"
-                type="number"
-                step="1"
-                value={form.plannedOutput}
-                onChange={(value) => updateField("plannedOutput", value)}
-              />
-            </div>
-
-            <label className="mt-4 block">
-              <span className="text-xs font-black uppercase tracking-wider text-slate-500">
-                Observação
-              </span>
-
-              <textarea
-                rows={4}
-                value={form.notes}
-                onChange={(event) => updateField("notes", event.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                placeholder="Ex.: entrega confirmada, consumo acima do padrão, reforço de operação."
-              />
-            </label>
-
-            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-              <SummaryChip
-                label="Saldo Planejado"
-                value={formatLiters(computed.saldoPlanejado)}
-                tone="slate"
-              />
-              <SummaryChip
-                label="Saldo Pós Entrega"
-                value={formatLiters(computed.saldoPosEntrega)}
-                tone="blue"
-              />
-              <SummaryChip
-                label="Saldo Projetado"
-                value={formatLiters(computed.saldoProjetado)}
-                tone={computed.indicator.tone}
-              />
-              <SummaryChip
-                label="Defasagem R$"
-                value={formatMoney(computed.gapValue)}
-                tone="amber"
-              />
-            </div>
-
-            {feedback ? (
-              <div
-                className={`mt-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
-                  feedback.type === "success"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-rose-200 bg-rose-50 text-rose-700"
-                }`}
-              >
-                {feedback.message}
-              </div>
-            ) : null}
-
-            <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
-              <button
-                type="button"
-                onClick={() => setEditModalOpen(false)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving || loading || !form.date}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700 disabled:opacity-60"
-              >
-                <FaSave />
-                {saving ? "Salvando..." : "Salvar programação"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {renderProjectionModal()}
+      {renderEditModal()}
 
       {loading ? (
         <EstoqueDieselPanel className="p-5">

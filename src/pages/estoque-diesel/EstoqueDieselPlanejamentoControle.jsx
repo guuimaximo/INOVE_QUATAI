@@ -84,6 +84,13 @@ function shiftDate(date, days) {
   return current.toISOString().slice(0, 10);
 }
 
+function getMonthLastDate(year, month) {
+  return `${year}-${month}-${String(new Date(Number(year), Number(month), 0).getDate()).padStart(
+    2,
+    "0"
+  )}`;
+}
+
 function getPlanningSourceDateForViewDate(date) {
   return shiftDate(date, 1);
 }
@@ -153,7 +160,11 @@ function getIndicator(product, liters) {
 }
 
 function getStatusFromDiff(pctDiffTransnet, fallbackStatus = "OK") {
-  if (pctDiffTransnet === null || pctDiffTransnet === undefined || Number.isNaN(Number(pctDiffTransnet))) {
+  if (
+    pctDiffTransnet === null ||
+    pctDiffTransnet === undefined ||
+    Number.isNaN(Number(pctDiffTransnet))
+  ) {
     return fallbackStatus || "OK";
   }
 
@@ -163,6 +174,16 @@ function getStatusFromDiff(pctDiffTransnet, fallbackStatus = "OK") {
   if (absValue > 0.02) return "Atencao";
 
   return "OK";
+}
+
+function filterMeasurementWindow(entries, year, month, product) {
+  const start = shiftDate(`${year}-${month}-01`, -7);
+  const end = shiftDate(getMonthLastDate(year, month), 1);
+
+  return [...(entries || [])]
+    .filter((entry) => entry.product === product)
+    .filter((entry) => entry.date >= start && entry.date <= end)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
 }
 
 function buildMeasurementCascadeRows({ measurements, product }) {
@@ -213,15 +234,10 @@ function buildMeasurementCascadeRows({ measurements, product }) {
       0
     );
 
-    const pctDiffNF =
-      entradaDiesel > 0
-        ? safeNumber(entry?.pctDiffNF, null)
-        : null;
+    const pctDiffNF = entradaDiesel > 0 ? safeNumber(entry?.pctDiffNF, null) : null;
 
     const pctDiffTransnet =
-      saidaTransnet > 0
-        ? (saidaTanque - saidaTransnet) / saidaTransnet
-        : null;
+      saidaTransnet > 0 ? (saidaTanque - saidaTransnet) / saidaTransnet : null;
 
     const status = getStatusFromDiff(pctDiffTransnet, entry?.status);
 
@@ -403,9 +419,9 @@ function mapPlanningRow(row, metadata) {
   };
 }
 
-async function fetchPlanningRows({ year, product, metadata }) {
-  const from = `${year}-01-01`;
-  const to = shiftDate(`${year}-12-31`, 1);
+async function fetchPlanningRows({ year, month, product, metadata }) {
+  const from = `${year}-${month}-01`;
+  const to = shiftDate(getMonthLastDate(year, month), 1);
 
   let query = supabase
     .from("estoque_diesel_programacoes_diarias")
@@ -613,13 +629,6 @@ function buildForm(date, product, row = null) {
   };
 }
 
-function getLastDayOfMonth(year, month) {
-  return `${year}-${month}-${String(new Date(Number(year), Number(month), 0).getDate()).padStart(
-    2,
-    "0"
-  )}`;
-}
-
 export default function EstoqueDieselPlanejamentoControle() {
   const { ano = "2026", mes = "01" } = useParams();
   const [searchParams] = useSearchParams();
@@ -646,7 +655,7 @@ export default function EstoqueDieselPlanejamentoControle() {
 
   const [bulkProjection, setBulkProjection] = useState({
     startDate: getDefaultDateForMonth(year, month),
-    endDate: getLastDayOfMonth(year, month),
+    endDate: getMonthLastDate(year, month),
     weekdayOutput: PROGRAMMING_RULES[product]?.defaultWeekdayOutput ?? 4200,
     saturdayOutput: PROGRAMMING_RULES[product]?.defaultSaturdayOutput ?? 2500,
     sundayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? 1500,
@@ -753,14 +762,19 @@ export default function EstoqueDieselPlanejamentoControle() {
             paramStore: context.paramStore,
             includePumps: false,
           }),
-          fetchPlanningRows({ year, product, metadata: context.metadata }),
+          fetchPlanningRows({
+            year,
+            month,
+            product,
+            metadata: context.metadata,
+          }),
         ]);
 
         if (!active) return;
 
         setMetadata(context.metadata);
         setParamStore(context.paramStore);
-        setMeasurements(measurementData);
+        setMeasurements(filterMeasurementWindow(measurementData, year, month, product));
         setPlanningRows(planningData);
       } catch (error) {
         if (!active) return;
@@ -801,7 +815,7 @@ export default function EstoqueDieselPlanejamentoControle() {
     setBulkProjection((current) => ({
       ...current,
       startDate: getDefaultDateForMonth(year, month),
-      endDate: getLastDayOfMonth(year, month),
+      endDate: getMonthLastDate(year, month),
       weekdayOutput: PROGRAMMING_RULES[product]?.defaultWeekdayOutput ?? 4200,
       saturdayOutput: PROGRAMMING_RULES[product]?.defaultSaturdayOutput ?? 2500,
       sundayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? 1500,
@@ -837,7 +851,13 @@ export default function EstoqueDieselPlanejamentoControle() {
         userId: Number.isInteger(user?.usuario_id) ? user.usuario_id : null,
       });
 
-      const freshPlanning = await fetchPlanningRows({ year, product, metadata });
+      const freshPlanning = await fetchPlanningRows({
+        year,
+        month,
+        product,
+        metadata,
+      });
+
       setPlanningRows(freshPlanning);
 
       setFeedback({
@@ -892,8 +912,7 @@ export default function EstoqueDieselPlanejamentoControle() {
     if (!rowsToSave.length) {
       setFeedback({
         type: "error",
-        message:
-          "Nenhum dia encontrado no período informado para aplicar a projeção.",
+        message: "Nenhum dia encontrado no período informado para aplicar a projeção.",
       });
       return;
     }
@@ -932,7 +951,13 @@ export default function EstoqueDieselPlanejamentoControle() {
         });
       }
 
-      const freshPlanning = await fetchPlanningRows({ year, product, metadata });
+      const freshPlanning = await fetchPlanningRows({
+        year,
+        month,
+        product,
+        metadata,
+      });
+
       setPlanningRows(freshPlanning);
 
       setFeedback({

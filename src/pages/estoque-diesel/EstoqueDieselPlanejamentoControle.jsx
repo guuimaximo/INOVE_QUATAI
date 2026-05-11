@@ -371,7 +371,8 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
     const actual = measurementByDate[date] || null;
     const plan = planningByDate[planningSourceDate] || null;
     const realizedDay = !!actual;
-    const saldoInicialDia = Number(runningBalance || 0);
+
+    const saldoPlanejado = Number(runningBalance || 0);
 
     const actualReceipt = Number(
       actual?.receiptMeasuredLiters ??
@@ -379,21 +380,18 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
         0
     );
 
-    const plannedReceipt = Number(plan?.plannedReceipt ?? 0);
-    const plannedOutput = Number(plan?.plannedOutput ?? getDefaultPlannedOutput(product, date));
+    const plannedReceipt = Number(plan?.plannedReceipt ?? actualReceipt ?? 0);
+    const plannedOutput = Number(
+      plan?.plannedOutput ??
+        (realizedDay ? Number(actual?.saidaTanque ?? 0) : getDefaultPlannedOutput(product, date))
+    );
 
-    const receiptForView = realizedDay ? actualReceipt : plannedReceipt;
-    const outputForView = realizedDay ? Number(actual?.saidaTanque ?? 0) : plannedOutput;
+    const receiptForView = plannedReceipt;
+    const outputForView = plannedOutput;
 
-    const saldoPosEntrega = round(saldoInicialDia + receiptForView, 2) ?? saldoInicialDia;
+    const saldoPosEntrega = round(saldoPlanejado + receiptForView, 2) ?? saldoPlanejado;
 
-    const saldoProjetado =
-      round(
-        realizedDay
-          ? Number(actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoPosEntrega)
-          : saldoPosEntrega - plannedOutput,
-        2
-      ) ?? saldoPosEntrega;
+    const saldoProjetado = round(saldoPosEntrega - outputForView, 2) ?? saldoPosEntrega;
 
     const indicator = getIndicator(product, saldoProjetado);
 
@@ -405,9 +403,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
         ? round((Number(plan.cbieGap) * Number(plan.dieselPrice)) / 100, 4)
         : null;
 
-    runningBalance = realizedDay
-      ? Number(actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoProjetado)
-      : saldoProjetado;
+    runningBalance = saldoProjetado;
 
     return {
       date,
@@ -416,8 +412,8 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
       weekday: getWeekdayShort(date),
       actual,
       actualOutput: Number(actual?.saidaTanque ?? 0),
-      actualBalance: Number(actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoInicialDia),
-      saldoPlanejado: saldoInicialDia,
+      actualBalance: Number(actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoProjetado),
+      saldoPlanejado,
       supplier: plan?.supplier || "",
       dieselPrice: plan?.dieselPrice ?? null,
       cbieGap: plan?.cbieGap ?? null,
@@ -678,7 +674,7 @@ export default function EstoqueDieselPlanejamentoControle() {
         type: "success",
         message: `Programacao de ${new Date(`${form.date}T00:00:00`).toLocaleDateString(
           "pt-BR"
-        )} salva com sucesso.`,
+        )} salva com sucesso. Saldos seguintes recalculados automaticamente.`,
       });
 
       setEditModalOpen(false);
@@ -719,7 +715,6 @@ export default function EstoqueDieselPlanejamentoControle() {
     const holidayDates = normalizeDateList(bulkProjection.holidayDatesText);
 
     const rowsToSave = monthRows.filter((row) => {
-      if (row.isRealized) return false;
       if (row.date < startDate || row.date > endDate) return false;
       return true;
     });
@@ -728,7 +723,7 @@ export default function EstoqueDieselPlanejamentoControle() {
       setFeedback({
         type: "error",
         message:
-          "Nenhum dia futuro encontrado no período informado para aplicar a projeção.",
+          "Nenhum dia encontrado no período informado para aplicar a projeção.",
       });
       return;
     }
@@ -772,7 +767,7 @@ export default function EstoqueDieselPlanejamentoControle() {
 
       setFeedback({
         type: "success",
-        message: `Projeção de saída aplicada em ${rowsToSave.length} dia(s). Salvamento realizado em D+1.`,
+        message: `Projeção de saída aplicada em ${rowsToSave.length} dia(s). Saldos recalculados automaticamente em cascata.`,
       });
 
       setProjectionModalOpen(false);
@@ -887,7 +882,7 @@ export default function EstoqueDieselPlanejamentoControle() {
           </div>
 
           <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">
-            A projeção será aplicada nos dias selecionados, salvando automaticamente no D+1.
+            A projeção será aplicada nos dias selecionados, salvando automaticamente no D+1 e recalculando os saldos em cascata.
           </div>
 
           {feedback ? (
@@ -1192,8 +1187,7 @@ export default function EstoqueDieselPlanejamentoControle() {
             <div>
               <h2 className="text-xl font-black text-slate-800">Programação do mês</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                Dias já realizados puxam automaticamente o que aconteceu no tanque.
-                Dias futuros seguem como projeção de suprimentos.
+                A programação recalcula automaticamente os saldos seguintes em cascata.
               </p>
             </div>
 

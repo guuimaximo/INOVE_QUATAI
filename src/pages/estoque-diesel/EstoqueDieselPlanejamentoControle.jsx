@@ -88,6 +88,10 @@ function getPlanningSourceDateForViewDate(date) {
   return shiftDate(date, 1);
 }
 
+function getMeasurementSourceDateForViewDate(date) {
+  return shiftDate(date, 1);
+}
+
 function getWeekdayShort(date) {
   if (!date) return "--";
 
@@ -349,7 +353,7 @@ async function savePlanningRow({ form, product, metadata, userId = null }) {
 
 function buildMonthRows({ year, month, product, measurements, planningRows }) {
   const monthEntries = [...(measurements || [])]
-    .filter((entry) => entry.product === product && entry.date?.startsWith(`${year}-${month}`))
+    .filter((entry) => entry.product === product)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const monthPlanning = [...(planningRows || [])]
@@ -376,8 +380,9 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
     const day = String(index + 1).padStart(2, "0");
     const date = `${year}-${month}-${day}`;
     const planningSourceDate = getPlanningSourceDateForViewDate(date);
+    const measurementSourceDate = getMeasurementSourceDateForViewDate(date);
 
-    const actual = measurementByDate[date] || null;
+    const actual = measurementByDate[measurementSourceDate] || null;
     const plan = planningByDate[planningSourceDate] || null;
     const realizedDay = Boolean(actual);
 
@@ -423,6 +428,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
       return {
         date,
         planningSourceDate,
+        measurementSourceDate,
         isRealized: true,
         weekday: getWeekdayShort(date),
         actual,
@@ -472,6 +478,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
     return {
       date,
       planningSourceDate,
+      measurementSourceDate,
       isRealized: false,
       weekday: getWeekdayShort(date),
       actual: null,
@@ -1172,7 +1179,7 @@ export default function EstoqueDieselPlanejamentoControle() {
               Leitura mensal da programação
             </h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">
-              Dias realizados usam dados reais da medição. Dias futuros usam a projeção programada em D+1.
+              Dias realizados usam dados reais da medição em D+1. Dias futuros usam a projeção programada em D+1.
             </p>
           </div>
 
@@ -1250,7 +1257,7 @@ export default function EstoqueDieselPlanejamentoControle() {
             <div>
               <h2 className="text-xl font-black text-slate-800">Programação do mês</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                Para dias realizados: Saldo Planejado = Saldo Ant., Saída Prevista = Saída Tanque, Saldo Projetado = Saldo Final e Saída Real = Transnet.
+                Para dias realizados: dados reais são buscados do dia seguinte.
               </p>
             </div>
 

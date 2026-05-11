@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   FaArrowLeft,
-  FaCalendarAlt,
+  FaBolt,
   FaGasPump,
   FaSave,
   FaTint,
@@ -79,6 +79,32 @@ function getWeekdayShort(date) {
     .toLowerCase();
 }
 
+function isSaturday(date) {
+  const weekday = getWeekdayShort(date);
+  return weekday.startsWith("sáb") || weekday.startsWith("sab");
+}
+
+function isSunday(date) {
+  return getWeekdayShort(date).startsWith("dom");
+}
+
+function normalizeDateList(text) {
+  return String(text || "")
+    .split(/[\n,;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function classifyProjectionDay(date, holidayDates = []) {
+  const holidaySet = new Set(holidayDates);
+
+  if (holidaySet.has(date)) return "holiday";
+  if (isSunday(date)) return "sunday";
+  if (isSaturday(date)) return "saturday";
+
+  return "weekday";
+}
+
 function getDefaultPlannedOutput(product, date) {
   const rules = PROGRAMMING_RULES[product] || PROGRAMMING_RULES.S500;
   const weekday = getWeekdayShort(date);
@@ -113,7 +139,9 @@ function SimpleInput({
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+        {label}
+      </span>
       <input
         type={type}
         value={value ?? ""}
@@ -134,7 +162,9 @@ function SimpleInput({
 function SimpleSelect({ label, value, options, onChange }) {
   return (
     <label className="block">
-      <span className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+        {label}
+      </span>
       <select
         value={value || ""}
         onChange={(event) => onChange(event.target.value)}
@@ -159,9 +189,12 @@ function SummaryChip({ label, value, tone = "slate" }) {
     amber: "border-amber-200 bg-amber-50 text-amber-700",
     rose: "border-rose-200 bg-rose-50 text-rose-700",
   };
+
   return (
     <div className={`rounded-2xl border px-4 py-3 ${tones[tone] || tones.slate}`}>
-      <p className="text-[11px] font-black uppercase tracking-wider opacity-80">{label}</p>
+      <p className="text-[11px] font-black uppercase tracking-wider opacity-80">
+        {label}
+      </p>
       <p className="mt-1 text-lg font-black text-slate-800">{value}</p>
     </div>
   );
@@ -172,6 +205,7 @@ function MonthSelector({ activeMonth, product }) {
     <div className="flex flex-wrap items-center gap-2">
       {MONTHS_2026.map((item) => {
         const active = item.month === activeMonth;
+
         return (
           <Link
             key={item.month}
@@ -195,6 +229,7 @@ function ProductSwitcher({ activeProduct, month }) {
     <div className="flex flex-wrap items-center gap-2">
       {Object.values(PRODUCT_CONFIG).map((item) => {
         const active = item.code === activeProduct;
+
         return (
           <Link
             key={item.code}
@@ -218,12 +253,19 @@ function normalizeSuppliers(metadata, paramStore, product) {
   const metadataSuppliers = Object.values(metadata?.suppliersById || {})
     .map((supplier) => String(supplier.nome || "").trim())
     .filter(Boolean);
-  const paramSuppliers = (paramStore?.[product]?.suppliers || []).map((item) => String(item || "").trim());
-  return [...new Set([...metadataSuppliers, ...paramSuppliers])].sort((a, b) => a.localeCompare(b));
+
+  const paramSuppliers = (paramStore?.[product]?.suppliers || []).map((item) =>
+    String(item || "").trim()
+  );
+
+  return [...new Set([...metadataSuppliers, ...paramSuppliers])].sort((a, b) =>
+    a.localeCompare(b)
+  );
 }
 
 function mapPlanningRow(row, metadata) {
   const tank = metadata?.tanksById?.[row.tanque_id];
+
   return {
     id: row.id,
     date: row.data_programacao,
@@ -241,6 +283,7 @@ function mapPlanningRow(row, metadata) {
 async function fetchPlanningRows({ year, product, metadata }) {
   const from = `${year}-01-01`;
   const to = `${year}-12-31`;
+
   let query = supabase
     .from("estoque_diesel_programacoes_diarias")
     .select("*")
@@ -253,6 +296,7 @@ async function fetchPlanningRows({ year, product, metadata }) {
 
   const { data, error } = await query;
   if (error) throw error;
+
   return (data || []).map((row) => mapPlanningRow(row, metadata));
 }
 
@@ -284,6 +328,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
   const monthEntries = [...(measurements || [])]
     .filter((entry) => entry.product === product && entry.date?.startsWith(`${year}-${month}`))
     .sort((a, b) => a.date.localeCompare(b.date));
+
   const monthPlanning = [...(planningRows || [])]
     .filter((entry) => entry.product === product && entry.date?.startsWith(`${year}-${month}`))
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -307,16 +352,21 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
     const plan = planningByDate[date] || null;
     const realizedDay = !!actual;
     const saldoInicialDia = Number(runningBalance || 0);
+
     const actualReceipt = Number(
       actual?.receiptMeasuredLiters ??
         (Number(actual?.entradaDiesel || 0) > 0 ? actual?.entradaDiesel : 0) ??
         0
     );
+
     const plannedReceipt = Number(plan?.plannedReceipt ?? 0);
     const plannedOutput = Number(plan?.plannedOutput ?? getDefaultPlannedOutput(product, date));
+
     const receiptForView = realizedDay ? actualReceipt : plannedReceipt;
     const outputForView = realizedDay ? Number(actual?.saidaTanque ?? 0) : plannedOutput;
+
     const saldoPosEntrega = round(saldoInicialDia + receiptForView, 2) ?? saldoInicialDia;
+
     const saldoProjetado =
       round(
         realizedDay
@@ -324,7 +374,9 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
           : saldoPosEntrega - plannedOutput,
         2
       ) ?? saldoPosEntrega;
+
     const indicator = getIndicator(product, saldoProjetado);
+
     const gapValue =
       plan?.dieselPrice !== null &&
       plan?.dieselPrice !== undefined &&
@@ -371,6 +423,13 @@ function buildForm(date, product, row = null) {
   };
 }
 
+function getLastDayOfMonth(year, month) {
+  return `${year}-${month}-${String(new Date(Number(year), Number(month), 0).getDate()).padStart(
+    2,
+    "0"
+  )}`;
+}
+
 export default function EstoqueDieselPlanejamentoControle() {
   const { ano = "2026", mes = "01" } = useParams();
   const [searchParams] = useSearchParams();
@@ -394,6 +453,16 @@ export default function EstoqueDieselPlanejamentoControle() {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
+  const [bulkProjection, setBulkProjection] = useState({
+    startDate: getDefaultDateForMonth(year, month),
+    endDate: getLastDayOfMonth(year, month),
+    weekdayOutput: PROGRAMMING_RULES[product]?.defaultWeekdayOutput ?? "",
+    saturdayOutput: PROGRAMMING_RULES[product]?.defaultSaturdayOutput ?? "",
+    sundayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? "",
+    holidayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? "",
+    holidayDatesText: "",
+  });
+
   const monthRows = useMemo(
     () => buildMonthRows({ year, month, product, measurements, planningRows }),
     [measurements, month, planningRows, product, year]
@@ -410,12 +479,21 @@ export default function EstoqueDieselPlanejamentoControle() {
   );
 
   const summary = useMemo(() => {
-    const lastRow = [...monthRows].reverse().find((row) => row.actualBalance || row.saldoProjetado) || selectedRow;
+    const lastRow =
+      [...monthRows].reverse().find((row) => row.actualBalance || row.saldoProjetado) ||
+      selectedRow;
+
     return {
       balance: Number(lastRow?.actualBalance ?? lastRow?.saldoProjetado ?? 0),
       totalActualOutput: monthRows.reduce((sum, row) => sum + Number(row.actualOutput || 0), 0),
-      totalPlannedReceipt: monthRows.reduce((sum, row) => sum + Number(row.plannedReceipt || 0), 0),
-      totalPlannedOutput: monthRows.reduce((sum, row) => sum + Number(row.plannedOutput || 0), 0),
+      totalPlannedReceipt: monthRows.reduce(
+        (sum, row) => sum + Number(row.plannedReceipt || 0),
+        0
+      ),
+      totalPlannedOutput: monthRows.reduce(
+        (sum, row) => sum + Number(row.plannedOutput || 0),
+        0
+      ),
     };
   }, [monthRows, selectedRow]);
 
@@ -426,7 +504,9 @@ export default function EstoqueDieselPlanejamentoControle() {
       try {
         setLoading(true);
         setFeedback(null);
+
         const context = await fetchMeasurementContext();
+
         const [measurementData, planningData] = await Promise.all([
           fetchMeasurementEntries({
             year,
@@ -439,12 +519,14 @@ export default function EstoqueDieselPlanejamentoControle() {
         ]);
 
         if (!active) return;
+
         setMetadata(context.metadata);
         setParamStore(context.paramStore);
         setMeasurements(measurementData);
         setPlanningRows(planningData);
       } catch (error) {
         if (!active) return;
+
         console.error("Erro ao carregar programacao de diesel:", error);
         setFeedback({
           type: "error",
@@ -456,6 +538,7 @@ export default function EstoqueDieselPlanejamentoControle() {
     }
 
     loadData();
+
     return () => {
       active = false;
     };
@@ -463,22 +546,43 @@ export default function EstoqueDieselPlanejamentoControle() {
 
   useEffect(() => {
     const nextDate = getDefaultDateForMonth(year, month);
-    setSelectedDate((current) => (current?.startsWith(`${year}-${month}`) ? current : nextDate));
+
+    setSelectedDate((current) =>
+      current?.startsWith(`${year}-${month}`) ? current : nextDate
+    );
   }, [month, year]);
 
   useEffect(() => {
     if (!selectedRow) return;
+
     setForm(buildForm(selectedRow.date, product, selectedRow));
   }, [product, selectedRow]);
 
+  useEffect(() => {
+    setBulkProjection((current) => ({
+      ...current,
+      startDate: getDefaultDateForMonth(year, month),
+      endDate: getLastDayOfMonth(year, month),
+      weekdayOutput: PROGRAMMING_RULES[product]?.defaultWeekdayOutput ?? "",
+      saturdayOutput: PROGRAMMING_RULES[product]?.defaultSaturdayOutput ?? "",
+      sundayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? "",
+      holidayOutput: PROGRAMMING_RULES[product]?.defaultSundayOutput ?? "",
+    }));
+  }, [month, product, year]);
+
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateBulkProjection(field, value) {
+    setBulkProjection((current) => ({ ...current, [field]: value }));
   }
 
   function handleSelectRow(row) {
     setSelectedDate(row.date);
     setForm(buildForm(row.date, product, row));
     setFeedback(null);
+
     window.requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -487,6 +591,7 @@ export default function EstoqueDieselPlanejamentoControle() {
   function handleNewDay() {
     const nextDate = getDefaultDateForMonth(year, month);
     const row = monthRows.find((item) => item.date === nextDate) || null;
+
     setSelectedDate(nextDate);
     setForm(buildForm(nextDate, product, row));
     setFeedback(null);
@@ -494,22 +599,29 @@ export default function EstoqueDieselPlanejamentoControle() {
 
   async function handleSave() {
     if (!metadata) return;
+
     try {
       setSaving(true);
+
       await savePlanningRow({
         form,
         product,
         metadata,
         userId: Number.isInteger(user?.usuario_id) ? user.usuario_id : null,
       });
+
       const freshPlanning = await fetchPlanningRows({ year, product, metadata });
       setPlanningRows(freshPlanning);
+
       setFeedback({
         type: "success",
-        message: `Programacao de ${new Date(`${form.date}T00:00:00`).toLocaleDateString("pt-BR")} salva com sucesso.`,
+        message: `Programacao de ${new Date(`${form.date}T00:00:00`).toLocaleDateString(
+          "pt-BR"
+        )} salva com sucesso.`,
       });
     } catch (error) {
       console.error("Erro ao salvar programacao de diesel:", error);
+
       setFeedback({
         type: "error",
         message: error?.message || "Nao foi possivel salvar a programacao do diesel.",
@@ -519,24 +631,124 @@ export default function EstoqueDieselPlanejamentoControle() {
     }
   }
 
+  async function handleApplyBulkProjection() {
+    if (!metadata) return;
+
+    const startDate = bulkProjection.startDate;
+    const endDate = bulkProjection.endDate;
+
+    if (!startDate || !endDate) {
+      setFeedback({
+        type: "error",
+        message: "Informe a data inicial e final para aplicar a projeção.",
+      });
+      return;
+    }
+
+    if (startDate > endDate) {
+      setFeedback({
+        type: "error",
+        message: "A data inicial não pode ser maior que a data final.",
+      });
+      return;
+    }
+
+    const holidayDates = normalizeDateList(bulkProjection.holidayDatesText);
+
+    const rowsToSave = monthRows.filter((row) => {
+      if (row.isRealized) return false;
+      if (row.date < startDate || row.date > endDate) return false;
+      return true;
+    });
+
+    if (!rowsToSave.length) {
+      setFeedback({
+        type: "error",
+        message:
+          "Nenhum dia futuro encontrado no período informado para aplicar a projeção.",
+      });
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      for (const row of rowsToSave) {
+        const dayType = classifyProjectionDay(row.date, holidayDates);
+
+        const plannedOutputByType = {
+          weekday: bulkProjection.weekdayOutput,
+          saturday: bulkProjection.saturdayOutput,
+          sunday: bulkProjection.sundayOutput,
+          holiday: bulkProjection.holidayOutput,
+        };
+
+        const plannedOutput = parseNumber(plannedOutputByType[dayType]) || 0;
+
+        const nextForm = {
+          date: row.date,
+          supplier: row.supplier || "",
+          dieselPrice: row.dieselPrice ?? "",
+          cbieGap: row.cbieGap ?? "",
+          plannedReceipt: row.plannedReceipt ?? "",
+          plannedOutput,
+          notes: row.notes || "",
+        };
+
+        await savePlanningRow({
+          form: nextForm,
+          product,
+          metadata,
+          userId: Number.isInteger(user?.usuario_id) ? user.usuario_id : null,
+        });
+      }
+
+      const freshPlanning = await fetchPlanningRows({ year, product, metadata });
+      setPlanningRows(freshPlanning);
+
+      setFeedback({
+        type: "success",
+        message: `Projeção de saída aplicada em ${rowsToSave.length} dia(s). Dias realizados foram ignorados automaticamente.`,
+      });
+    } catch (error) {
+      console.error("Erro ao aplicar projeção em lote:", error);
+
+      setFeedback({
+        type: "error",
+        message: error?.message || "Não foi possível aplicar a projeção em lote.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const computed = useMemo(() => {
     const saldoPlanejado = Number(selectedRow?.saldoPlanejado ?? 0);
+
     const plannedReceipt = selectedRow?.isRealized
       ? Number(selectedRow?.plannedReceipt ?? 0)
       : parseNumber(form.plannedReceipt) || 0;
+
     const plannedOutput = selectedRow?.isRealized
       ? Number(selectedRow?.plannedOutput ?? 0)
       : parseNumber(form.plannedOutput) || 0;
+
     const saldoPosEntrega = round(saldoPlanejado + plannedReceipt, 2) ?? saldoPlanejado;
     const saldoProjetado = round(saldoPosEntrega - plannedOutput, 2) ?? saldoPosEntrega;
+
     const dieselPrice = selectedRow?.isRealized
       ? parseNumber(selectedRow?.dieselPrice)
       : parseNumber(form.dieselPrice);
+
     const cbieGap = selectedRow?.isRealized
       ? parseNumber(selectedRow?.cbieGap)
       : parseNumber(form.cbieGap);
+
     const gapValue =
-      dieselPrice !== null && cbieGap !== null ? round((cbieGap * dieselPrice) / 100, 4) : null;
+      dieselPrice !== null && cbieGap !== null
+        ? round((cbieGap * dieselPrice) / 100, 4)
+        : null;
+
     return {
       saldoPlanejado,
       plannedReceipt,
@@ -548,26 +760,31 @@ export default function EstoqueDieselPlanejamentoControle() {
       gapValue,
       indicator: getIndicator(product, saldoProjetado),
     };
-  }, [form.cbieGap, form.dieselPrice, form.plannedOutput, form.plannedReceipt, product, selectedRow]);
+  }, [
+    form.cbieGap,
+    form.dieselPrice,
+    form.plannedOutput,
+    form.plannedReceipt,
+    product,
+    selectedRow,
+  ]);
 
   return (
     <EstoqueDieselPageShell
       title="Programacao de Diesel"
-      description={`Visao mensal de suprimentos para ${PRODUCT_CONFIG[product].label} em ${getMonthLabel(month)} de ${year}.`}
+      description={`Visao mensal de suprimentos para ${
+        PRODUCT_CONFIG[product].label
+      } em ${getMonthLabel(month)} de ${year}.`}
     >
       <EstoqueDieselPanel className="p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <Link
-              to={`/estoque-diesel/programacao?produto=${product}`}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"
-            >
-              <FaArrowLeft />
-              Voltar para 2026
-            </Link>
-            <h2 className="mt-4 text-lg font-black text-slate-800">Leitura mensal da programação</h2>
+            <h2 className="text-lg font-black text-slate-800">
+              Leitura mensal da programação
+            </h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">
-              Menos card e mais visibilidade do mes inteiro, como na planilha: mercado, indicador e programação semanal em linha.
+              Menos card e mais visibilidade do mes inteiro, como na planilha:
+              mercado, indicador e programação semanal em linha.
             </p>
           </div>
 
@@ -580,9 +797,21 @@ export default function EstoqueDieselPlanejamentoControle() {
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <SummaryChip label="Produto" value={product} tone="blue" />
           <SummaryChip label="Saldo Atual" value={formatLiters(summary.balance)} tone="emerald" />
-          <SummaryChip label="Saída Realizada" value={formatLiters(summary.totalActualOutput)} tone="slate" />
-          <SummaryChip label="Entrega Prevista" value={formatLiters(summary.totalPlannedReceipt)} tone="blue" />
-          <SummaryChip label="Saída Prevista" value={formatLiters(summary.totalPlannedOutput)} tone="amber" />
+          <SummaryChip
+            label="Saída Realizada"
+            value={formatLiters(summary.totalActualOutput)}
+            tone="slate"
+          />
+          <SummaryChip
+            label="Entrega Prevista"
+            value={formatLiters(summary.totalPlannedReceipt)}
+            tone="blue"
+          />
+          <SummaryChip
+            label="Saída Prevista"
+            value={formatLiters(summary.totalPlannedOutput)}
+            tone="amber"
+          />
         </div>
       </EstoqueDieselPanel>
 
@@ -592,16 +821,20 @@ export default function EstoqueDieselPlanejamentoControle() {
             <div>
               <h2 className="text-xl font-black text-slate-800">Programação do mês</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                Dias já realizados puxam automaticamente o que aconteceu no tanque. Dias futuros seguem como projeção de suprimentos.
+                Dias já realizados puxam automaticamente o que aconteceu no tanque.
+                Dias futuros seguem como projeção de suprimentos.
               </p>
             </div>
-            <div className={`rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-wider ${
-              getIndicator(product, summary.balance).tone === "emerald"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : getIndicator(product, summary.balance).tone === "amber"
-                  ? "border-amber-200 bg-amber-50 text-amber-700"
-                  : "border-rose-200 bg-rose-50 text-rose-700"
-            }`}>
+
+            <div
+              className={`rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-wider ${
+                getIndicator(product, summary.balance).tone === "emerald"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : getIndicator(product, summary.balance).tone === "amber"
+                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                    : "border-rose-200 bg-rose-50 text-rose-700"
+              }`}
+            >
               {getIndicator(product, summary.balance).label}
             </div>
           </div>
@@ -635,9 +868,11 @@ export default function EstoqueDieselPlanejamentoControle() {
                   ))}
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-slate-100">
                 {monthRows.map((row) => {
                   const isActive = row.date === selectedDate;
+
                   return (
                     <tr
                       key={row.date}
@@ -649,16 +884,36 @@ export default function EstoqueDieselPlanejamentoControle() {
                       <td className="px-4 py-3 font-black text-slate-800">
                         {new Date(`${row.date}T00:00:00`).toLocaleDateString("pt-BR")}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{row.weekday}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{row.supplier || "--"}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{formatMoney(row.dieselPrice)}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{formatPct(row.cbieGap)}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.saldoPlanejado)}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.plannedReceipt)}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.saldoPosEntrega)}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.plannedOutput)}</td>
-                      <td className="px-4 py-3 font-black text-slate-800">{formatLiters(row.saldoProjetado)}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{formatLiters(row.actualOutput)}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-600">
+                        {row.weekday}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-600">
+                        {row.supplier || "--"}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-600">
+                        {formatMoney(row.dieselPrice)}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-600">
+                        {formatPct(row.cbieGap)}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-600">
+                        {formatLiters(row.saldoPlanejado)}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-600">
+                        {formatLiters(row.plannedReceipt)}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-600">
+                        {formatLiters(row.saldoPosEntrega)}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-600">
+                        {formatLiters(row.plannedOutput)}
+                      </td>
+                      <td className="px-4 py-3 font-black text-slate-800">
+                        {formatLiters(row.saldoProjetado)}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-600">
+                        {formatLiters(row.actualOutput)}
+                      </td>
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${
@@ -689,6 +944,7 @@ export default function EstoqueDieselPlanejamentoControle() {
                   Ajuste o dia selecionado sem perder a visão do mês inteiro.
                 </p>
               </div>
+
               <button
                 type="button"
                 onClick={handleNewDay}
@@ -698,17 +954,162 @@ export default function EstoqueDieselPlanejamentoControle() {
               </button>
             </div>
 
+            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-blue-600 p-3 text-white">
+                  <FaBolt />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-wider text-blue-800">
+                    Atalho de projeção de saída
+                  </h3>
+                  <p className="mt-1 text-sm font-semibold text-blue-700">
+                    Aplique a saída prevista para vários dias de uma vez, separando
+                    dia útil, sábado, domingo e feriado.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <SimpleInput
+                  label="Data inicial"
+                  type="date"
+                  value={bulkProjection.startDate}
+                  onChange={(value) => updateBulkProjection("startDate", value)}
+                />
+
+                <SimpleInput
+                  label="Data final"
+                  type="date"
+                  value={bulkProjection.endDate}
+                  onChange={(value) => updateBulkProjection("endDate", value)}
+                />
+
+                <SimpleInput
+                  label="Saída dia útil"
+                  type="number"
+                  step="1"
+                  value={bulkProjection.weekdayOutput}
+                  onChange={(value) => updateBulkProjection("weekdayOutput", value)}
+                />
+
+                <SimpleInput
+                  label="Saída sábado"
+                  type="number"
+                  step="1"
+                  value={bulkProjection.saturdayOutput}
+                  onChange={(value) => updateBulkProjection("saturdayOutput", value)}
+                />
+
+                <SimpleInput
+                  label="Saída domingo"
+                  type="number"
+                  step="1"
+                  value={bulkProjection.sundayOutput}
+                  onChange={(value) => updateBulkProjection("sundayOutput", value)}
+                />
+
+                <SimpleInput
+                  label="Saída feriado"
+                  type="number"
+                  step="1"
+                  value={bulkProjection.holidayOutput}
+                  onChange={(value) => updateBulkProjection("holidayOutput", value)}
+                />
+              </div>
+
+              <label className="mt-3 block">
+                <span className="text-xs font-black uppercase tracking-wider text-blue-700">
+                  Datas de feriado
+                </span>
+                <textarea
+                  rows={3}
+                  value={bulkProjection.holidayDatesText}
+                  onChange={(event) =>
+                    updateBulkProjection("holidayDatesText", event.target.value)
+                  }
+                  className="mt-2 w-full rounded-xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Ex.: 2026-01-01, 2026-02-17 ou uma data por linha"
+                />
+              </label>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs font-bold text-blue-700">
+                  A projeção será aplicada somente em dias futuros/não realizados
+                  dentro do período selecionado.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleApplyBulkProjection}
+                  disabled={saving || loading}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white transition hover:bg-blue-600 disabled:opacity-60"
+                >
+                  <FaBolt />
+                  {saving ? "Aplicando..." : "Aplicar projeção"}
+                </button>
+              </div>
+            </div>
+
             <div className="mt-5 space-y-4">
-              <SimpleInput label="Data" type="date" value={form.date} onChange={(value) => updateField("date", value)} />
-              <SimpleInput label="Dia" value={getWeekdayShort(form.date)} onChange={() => {}} disabled />
-              <SimpleSelect label="Fornecedor" value={form.supplier} options={suppliers} onChange={(value) => updateField("supplier", value)} />
-              <SimpleInput label="Preço Diesel" type="number" step="0.0001" value={form.dieselPrice} onChange={(value) => updateField("dieselPrice", value)} />
-              <SimpleInput label="Defasagem (CBIE)" type="number" step="0.01" value={form.cbieGap} onChange={(value) => updateField("cbieGap", value)} />
-              <SimpleInput label="Programação de Entrega" type="number" step="1" value={form.plannedReceipt} onChange={(value) => updateField("plannedReceipt", value)} />
-              <SimpleInput label="Saída Programada" type="number" step="1" value={form.plannedOutput} onChange={(value) => updateField("plannedOutput", value)} />
+              <SimpleInput
+                label="Data"
+                type="date"
+                value={form.date}
+                onChange={(value) => updateField("date", value)}
+              />
+
+              <SimpleInput
+                label="Dia"
+                value={getWeekdayShort(form.date)}
+                onChange={() => {}}
+                disabled
+              />
+
+              <SimpleSelect
+                label="Fornecedor"
+                value={form.supplier}
+                options={suppliers}
+                onChange={(value) => updateField("supplier", value)}
+              />
+
+              <SimpleInput
+                label="Preço Diesel"
+                type="number"
+                step="0.0001"
+                value={form.dieselPrice}
+                onChange={(value) => updateField("dieselPrice", value)}
+              />
+
+              <SimpleInput
+                label="Defasagem (CBIE)"
+                type="number"
+                step="0.01"
+                value={form.cbieGap}
+                onChange={(value) => updateField("cbieGap", value)}
+              />
+
+              <SimpleInput
+                label="Programação de Entrega"
+                type="number"
+                step="1"
+                value={form.plannedReceipt}
+                onChange={(value) => updateField("plannedReceipt", value)}
+              />
+
+              <SimpleInput
+                label="Saída Programada"
+                type="number"
+                step="1"
+                value={form.plannedOutput}
+                onChange={(value) => updateField("plannedOutput", value)}
+              />
 
               <label className="block">
-                <span className="text-xs font-black uppercase tracking-wider text-slate-500">Observação</span>
+                <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                  Observação
+                </span>
                 <textarea
                   rows={4}
                   value={form.notes}
@@ -720,10 +1121,26 @@ export default function EstoqueDieselPlanejamentoControle() {
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-3">
-              <SummaryChip label="Saldo Planejado" value={formatLiters(computed.saldoPlanejado)} tone="slate" />
-              <SummaryChip label="Saldo Pós Entrega" value={formatLiters(computed.saldoPosEntrega)} tone="blue" />
-              <SummaryChip label="Saldo Projetado" value={formatLiters(computed.saldoProjetado)} tone={computed.indicator.tone} />
-              <SummaryChip label="Defasagem R$" value={formatMoney(computed.gapValue)} tone="amber" />
+              <SummaryChip
+                label="Saldo Planejado"
+                value={formatLiters(computed.saldoPlanejado)}
+                tone="slate"
+              />
+              <SummaryChip
+                label="Saldo Pós Entrega"
+                value={formatLiters(computed.saldoPosEntrega)}
+                tone="blue"
+              />
+              <SummaryChip
+                label="Saldo Projetado"
+                value={formatLiters(computed.saldoProjetado)}
+                tone={computed.indicator.tone}
+              />
+              <SummaryChip
+                label="Defasagem R$"
+                value={formatMoney(computed.gapValue)}
+                tone="amber"
+              />
             </div>
 
             <div
@@ -752,8 +1169,10 @@ export default function EstoqueDieselPlanejamentoControle() {
 
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="text-sm font-semibold text-slate-600">
-                O saldo real da medição vira base da programação; daqui para frente o que muda é suprimentos.
+                O saldo real da medição vira base da programação; daqui para frente
+                o que muda é suprimentos.
               </div>
+
               <button
                 type="button"
                 onClick={handleSave}
@@ -770,7 +1189,9 @@ export default function EstoqueDieselPlanejamentoControle() {
 
       {loading ? (
         <EstoqueDieselPanel className="p-5">
-          <p className="text-sm font-semibold text-slate-500">Carregando programação de diesel...</p>
+          <p className="text-sm font-semibold text-slate-500">
+            Carregando programação de diesel...
+          </p>
         </EstoqueDieselPanel>
       ) : null}
     </EstoqueDieselPageShell>

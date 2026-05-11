@@ -1,11 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import {
-  FaBolt,
-  FaGasPump,
-  FaSave,
-  FaTint,
-} from "react-icons/fa";
+import { FaBolt, FaGasPump, FaSave, FaTint } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../context/AuthContext";
 import EstoqueDieselPageShell, {
@@ -46,6 +41,7 @@ const PROGRAMMING_RULES = {
 
 function formatLiters(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+
   return `${Number(value).toLocaleString("pt-BR", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
@@ -54,6 +50,7 @@ function formatLiters(value) {
 
 function formatMoney(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+
   return Number(value).toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
@@ -64,6 +61,7 @@ function formatMoney(value) {
 
 function formatPct(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+
   return `${Number(value).toLocaleString("pt-BR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -85,6 +83,7 @@ function getPlanningSourceDateForViewDate(date) {
 
 function getWeekdayShort(date) {
   if (!date) return "--";
+
   return new Date(`${date}T00:00:00`)
     .toLocaleDateString("pt-BR", { weekday: "short" })
     .replace(".", "")
@@ -156,6 +155,7 @@ function SimpleInput({
       <span className="text-xs font-black uppercase tracking-wider text-slate-500">
         {label}
       </span>
+
       <input
         type={type}
         value={value ?? ""}
@@ -179,12 +179,14 @@ function SimpleSelect({ label, value, options, onChange }) {
       <span className="text-xs font-black uppercase tracking-wider text-slate-500">
         {label}
       </span>
+
       <select
         value={value || ""}
         onChange={(event) => onChange(event.target.value)}
         className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
       >
         <option value="">Selecione</option>
+
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
@@ -429,8 +431,11 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
 }
 
 function buildForm(date, product, row = null) {
+  const sourceDate = row?.planningSourceDate || getPlanningSourceDateForViewDate(date);
+
   return {
-    date,
+    date: sourceDate,
+    visualDate: date,
     supplier: row?.supplier || "",
     dieselPrice: row?.dieselPrice ?? "",
     cbieGap: row?.cbieGap ?? "",
@@ -457,7 +462,6 @@ export default function EstoqueDieselPlanejamentoControle() {
   const productParam = searchParams.get("produto") || "S500";
   const product = productParam in PRODUCT_CONFIG ? productParam : "S500";
 
-  const formRef = useRef(null);
   const [metadata, setMetadata] = useState(null);
   const [paramStore, setParamStore] = useState(DEFAULT_PARAMS);
   const [measurements, setMeasurements] = useState([]);
@@ -469,6 +473,7 @@ export default function EstoqueDieselPlanejamentoControle() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const [bulkProjection, setBulkProjection] = useState({
     startDate: getDefaultDateForMonth(year, month),
@@ -514,6 +519,53 @@ export default function EstoqueDieselPlanejamentoControle() {
     };
   }, [monthRows, selectedRow]);
 
+  const computed = useMemo(() => {
+    const saldoPlanejado = Number(selectedRow?.saldoPlanejado ?? 0);
+
+    const plannedReceipt = selectedRow?.isRealized
+      ? Number(selectedRow?.plannedReceipt ?? 0)
+      : parseNumber(form.plannedReceipt) || 0;
+
+    const plannedOutput = selectedRow?.isRealized
+      ? Number(selectedRow?.plannedOutput ?? 0)
+      : parseNumber(form.plannedOutput) || 0;
+
+    const saldoPosEntrega = round(saldoPlanejado + plannedReceipt, 2) ?? saldoPlanejado;
+    const saldoProjetado = round(saldoPosEntrega - plannedOutput, 2) ?? saldoPosEntrega;
+
+    const dieselPrice = selectedRow?.isRealized
+      ? parseNumber(selectedRow?.dieselPrice)
+      : parseNumber(form.dieselPrice);
+
+    const cbieGap = selectedRow?.isRealized
+      ? parseNumber(selectedRow?.cbieGap)
+      : parseNumber(form.cbieGap);
+
+    const gapValue =
+      dieselPrice !== null && cbieGap !== null
+        ? round((cbieGap * dieselPrice) / 100, 4)
+        : null;
+
+    return {
+      saldoPlanejado,
+      plannedReceipt,
+      saldoPosEntrega,
+      plannedOutput,
+      saldoProjetado,
+      dieselPrice,
+      cbieGap,
+      gapValue,
+      indicator: getIndicator(product, saldoProjetado),
+    };
+  }, [
+    form.cbieGap,
+    form.dieselPrice,
+    form.plannedOutput,
+    form.plannedReceipt,
+    product,
+    selectedRow,
+  ]);
+
   useEffect(() => {
     let active = true;
 
@@ -545,6 +597,7 @@ export default function EstoqueDieselPlanejamentoControle() {
         if (!active) return;
 
         console.error("Erro ao carregar programacao de diesel:", error);
+
         setFeedback({
           type: "error",
           message: error?.message || "Nao foi possivel carregar a programacao do diesel.",
@@ -599,10 +652,7 @@ export default function EstoqueDieselPlanejamentoControle() {
     setSelectedDate(row.date);
     setForm(buildForm(row.date, product, row));
     setFeedback(null);
-
-    window.requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setEditModalOpen(true);
   }
 
   function handleNewDay() {
@@ -612,6 +662,7 @@ export default function EstoqueDieselPlanejamentoControle() {
     setSelectedDate(nextDate);
     setForm(buildForm(nextDate, product, row));
     setFeedback(null);
+    setEditModalOpen(true);
   }
 
   async function handleSave() {
@@ -636,6 +687,8 @@ export default function EstoqueDieselPlanejamentoControle() {
           "pt-BR"
         )} salva com sucesso.`,
       });
+
+      setEditModalOpen(false);
     } catch (error) {
       console.error("Erro ao salvar programacao de diesel:", error);
 
@@ -703,7 +756,8 @@ export default function EstoqueDieselPlanejamentoControle() {
         const plannedOutput = parseNumber(plannedOutputByType[dayType]) || 0;
 
         const nextForm = {
-          date: row.date,
+          date: row.planningSourceDate,
+          visualDate: row.date,
           supplier: row.supplier || "",
           dieselPrice: row.dieselPrice ?? "",
           cbieGap: row.cbieGap ?? "",
@@ -725,7 +779,7 @@ export default function EstoqueDieselPlanejamentoControle() {
 
       setFeedback({
         type: "success",
-        message: `Projeção de saída aplicada em ${rowsToSave.length} dia(s). Dias realizados foram ignorados automaticamente.`,
+        message: `Projeção de saída aplicada em ${rowsToSave.length} dia(s). Salvamento realizado em D+1.`,
       });
     } catch (error) {
       console.error("Erro ao aplicar projeção em lote:", error);
@@ -738,53 +792,6 @@ export default function EstoqueDieselPlanejamentoControle() {
       setSaving(false);
     }
   }
-
-  const computed = useMemo(() => {
-    const saldoPlanejado = Number(selectedRow?.saldoPlanejado ?? 0);
-
-    const plannedReceipt = selectedRow?.isRealized
-      ? Number(selectedRow?.plannedReceipt ?? 0)
-      : parseNumber(form.plannedReceipt) || 0;
-
-    const plannedOutput = selectedRow?.isRealized
-      ? Number(selectedRow?.plannedOutput ?? 0)
-      : parseNumber(form.plannedOutput) || 0;
-
-    const saldoPosEntrega = round(saldoPlanejado + plannedReceipt, 2) ?? saldoPlanejado;
-    const saldoProjetado = round(saldoPosEntrega - plannedOutput, 2) ?? saldoPosEntrega;
-
-    const dieselPrice = selectedRow?.isRealized
-      ? parseNumber(selectedRow?.dieselPrice)
-      : parseNumber(form.dieselPrice);
-
-    const cbieGap = selectedRow?.isRealized
-      ? parseNumber(selectedRow?.cbieGap)
-      : parseNumber(form.cbieGap);
-
-    const gapValue =
-      dieselPrice !== null && cbieGap !== null
-        ? round((cbieGap * dieselPrice) / 100, 4)
-        : null;
-
-    return {
-      saldoPlanejado,
-      plannedReceipt,
-      saldoPosEntrega,
-      plannedOutput,
-      saldoProjetado,
-      dieselPrice,
-      cbieGap,
-      gapValue,
-      indicator: getIndicator(product, saldoProjetado),
-    };
-  }, [
-    form.cbieGap,
-    form.dieselPrice,
-    form.plannedOutput,
-    form.plannedReceipt,
-    product,
-    selectedRow,
-  ]);
 
   return (
     <EstoqueDieselPageShell
@@ -830,9 +837,120 @@ export default function EstoqueDieselPlanejamentoControle() {
             tone="amber"
           />
         </div>
+
+        <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-blue-600 p-3 text-white">
+              <FaBolt />
+            </div>
+
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-blue-800">
+                Atalho de projeção de saída
+              </h3>
+              <p className="mt-1 text-sm font-semibold text-blue-700">
+                Aplique a saída prevista para vários dias de uma vez, separando dia útil,
+                sábado, domingo e feriado.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <SimpleInput
+              label="Data inicial"
+              type="date"
+              value={bulkProjection.startDate}
+              onChange={(value) => updateBulkProjection("startDate", value)}
+            />
+
+            <SimpleInput
+              label="Data final"
+              type="date"
+              value={bulkProjection.endDate}
+              onChange={(value) => updateBulkProjection("endDate", value)}
+            />
+
+            <SimpleInput
+              label="Saída dia útil"
+              type="number"
+              step="1"
+              value={bulkProjection.weekdayOutput}
+              onChange={(value) => updateBulkProjection("weekdayOutput", value)}
+            />
+
+            <SimpleInput
+              label="Saída sábado"
+              type="number"
+              step="1"
+              value={bulkProjection.saturdayOutput}
+              onChange={(value) => updateBulkProjection("saturdayOutput", value)}
+            />
+
+            <SimpleInput
+              label="Saída domingo"
+              type="number"
+              step="1"
+              value={bulkProjection.sundayOutput}
+              onChange={(value) => updateBulkProjection("sundayOutput", value)}
+            />
+
+            <SimpleInput
+              label="Saída feriado"
+              type="number"
+              step="1"
+              value={bulkProjection.holidayOutput}
+              onChange={(value) => updateBulkProjection("holidayOutput", value)}
+            />
+
+            <div className="xl:col-span-2">
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-blue-700">
+                  Datas de feriado
+                </span>
+                <textarea
+                  rows={3}
+                  value={bulkProjection.holidayDatesText}
+                  onChange={(event) =>
+                    updateBulkProjection("holidayDatesText", event.target.value)
+                  }
+                  className="mt-2 w-full rounded-xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Ex.: 2026-01-01, 2026-02-17 ou uma data por linha"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs font-bold text-blue-700">
+              A projeção será aplicada nos dias selecionados, salvando automaticamente no D+1.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleApplyBulkProjection}
+              disabled={saving || loading}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white transition hover:bg-blue-600 disabled:opacity-60"
+            >
+              <FaBolt />
+              {saving ? "Aplicando..." : "Aplicar projeção"}
+            </button>
+          </div>
+        </div>
+
+        {feedback ? (
+          <div
+            className={`mt-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
+              feedback.type === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-rose-200 bg-rose-50 text-rose-700"
+            }`}
+          >
+            {feedback.message}
+          </div>
+        ) : null}
       </EstoqueDieselPanel>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.7fr_0.8fr]">
+      <div className="grid grid-cols-1 gap-4">
         <EstoqueDieselPanel className="p-5">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -951,127 +1069,53 @@ export default function EstoqueDieselPlanejamentoControle() {
             </table>
           </div>
         </EstoqueDieselPanel>
+      </div>
 
-        <div ref={formRef}>
-          <EstoqueDieselPanel className="p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      {editModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
               <div>
-                <h2 className="text-xl font-black text-slate-800">Editar dia</h2>
+                <h2 className="text-xl font-black text-slate-800">
+                  Editar programação do dia
+                </h2>
+
                 <p className="mt-1 text-sm font-semibold text-slate-500">
-                  Ajuste o dia selecionado sem perder a visão do mês inteiro.
+                  Dia selecionado:{" "}
+                  <strong>
+                    {form.visualDate
+                      ? new Date(`${form.visualDate}T00:00:00`).toLocaleDateString("pt-BR")
+                      : "--"}
+                  </strong>
+                  {" "} | Data salva no sistema:{" "}
+                  <strong>
+                    {form.date
+                      ? new Date(`${form.date}T00:00:00`).toLocaleDateString("pt-BR")
+                      : "--"}
+                  </strong>
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={handleNewDay}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
+                onClick={() => setEditModalOpen(false)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
               >
-                Novo dia
+                Fechar
               </button>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-              <div className="flex items-start gap-3">
-                <div className="rounded-xl bg-blue-600 p-3 text-white">
-                  <FaBolt />
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-black uppercase tracking-wider text-blue-800">
-                    Atalho de projeção de saída
-                  </h3>
-                  <p className="mt-1 text-sm font-semibold text-blue-700">
-                    Aplique a saída prevista para vários dias de uma vez, separando
-                    dia útil, sábado, domingo e feriado.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <SimpleInput
-                  label="Data inicial"
-                  type="date"
-                  value={bulkProjection.startDate}
-                  onChange={(value) => updateBulkProjection("startDate", value)}
-                />
-
-                <SimpleInput
-                  label="Data final"
-                  type="date"
-                  value={bulkProjection.endDate}
-                  onChange={(value) => updateBulkProjection("endDate", value)}
-                />
-
-                <SimpleInput
-                  label="Saída dia útil"
-                  type="number"
-                  step="1"
-                  value={bulkProjection.weekdayOutput}
-                  onChange={(value) => updateBulkProjection("weekdayOutput", value)}
-                />
-
-                <SimpleInput
-                  label="Saída sábado"
-                  type="number"
-                  step="1"
-                  value={bulkProjection.saturdayOutput}
-                  onChange={(value) => updateBulkProjection("saturdayOutput", value)}
-                />
-
-                <SimpleInput
-                  label="Saída domingo"
-                  type="number"
-                  step="1"
-                  value={bulkProjection.sundayOutput}
-                  onChange={(value) => updateBulkProjection("sundayOutput", value)}
-                />
-
-                <SimpleInput
-                  label="Saída feriado"
-                  type="number"
-                  step="1"
-                  value={bulkProjection.holidayOutput}
-                  onChange={(value) => updateBulkProjection("holidayOutput", value)}
-                />
-              </div>
-
-              <label className="mt-3 block">
-                <span className="text-xs font-black uppercase tracking-wider text-blue-700">
-                  Datas de feriado
-                </span>
-                <textarea
-                  rows={3}
-                  value={bulkProjection.holidayDatesText}
-                  onChange={(event) =>
-                    updateBulkProjection("holidayDatesText", event.target.value)
-                  }
-                  className="mt-2 w-full rounded-xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Ex.: 2026-01-01, 2026-02-17 ou uma data por linha"
-                />
-              </label>
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs font-bold text-blue-700">
-                  A projeção será aplicada somente em dias futuros/não realizados
-                  dentro do período selecionado.
-                </p>
-
-                <button
-                  type="button"
-                  onClick={handleApplyBulkProjection}
-                  disabled={saving || loading}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white transition hover:bg-blue-600 disabled:opacity-60"
-                >
-                  <FaBolt />
-                  {saving ? "Aplicando..." : "Aplicar projeção"}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-5 space-y-4">
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
               <SimpleInput
-                label="Data"
+                label="Dia exibido"
+                type="date"
+                value={form.visualDate || selectedDate}
+                onChange={() => {}}
+                disabled
+              />
+
+              <SimpleInput
+                label="Data salva no sistema"
                 type="date"
                 value={form.date}
                 onChange={(value) => updateField("date", value)}
@@ -1079,7 +1123,7 @@ export default function EstoqueDieselPlanejamentoControle() {
 
               <SimpleInput
                 label="Dia"
-                value={getWeekdayShort(form.date)}
+                value={getWeekdayShort(form.visualDate || selectedDate)}
                 onChange={() => {}}
                 disabled
               />
@@ -1122,22 +1166,23 @@ export default function EstoqueDieselPlanejamentoControle() {
                 value={form.plannedOutput}
                 onChange={(value) => updateField("plannedOutput", value)}
               />
-
-              <label className="block">
-                <span className="text-xs font-black uppercase tracking-wider text-slate-500">
-                  Observação
-                </span>
-                <textarea
-                  rows={4}
-                  value={form.notes}
-                  onChange={(event) => updateField("notes", event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Ex.: entrega confirmada, consumo acima do padrão, reforço de operação."
-                />
-              </label>
             </div>
 
-            <div className="mt-5 grid grid-cols-1 gap-3">
+            <label className="mt-4 block">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                Observação
+              </span>
+
+              <textarea
+                rows={4}
+                value={form.notes}
+                onChange={(event) => updateField("notes", event.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                placeholder="Ex.: entrega confirmada, consumo acima do padrão, reforço de operação."
+              />
+            </label>
+
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
               <SummaryChip
                 label="Saldo Planejado"
                 value={formatLiters(computed.saldoPlanejado)}
@@ -1160,18 +1205,6 @@ export default function EstoqueDieselPlanejamentoControle() {
               />
             </div>
 
-            <div
-              className={`mt-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
-                selectedRow?.isRealized
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-blue-200 bg-blue-50 text-blue-700"
-              }`}
-            >
-              {selectedRow?.isRealized
-                ? "Este dia já passou. A programação está usando automaticamente o realizado: saldo do tanque, recebimento e saída efetiva."
-                : "Este dia ainda está em projeção. Ajuste entrega, preço diesel e saída prevista para simular o saldo futuro do tanque."}
-            </div>
-
             {feedback ? (
               <div
                 className={`mt-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
@@ -1184,11 +1217,14 @@ export default function EstoqueDieselPlanejamentoControle() {
               </div>
             ) : null}
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-sm font-semibold text-slate-600">
-                O saldo real da medição vira base da programação; daqui para frente
-                o que muda é suprimentos.
-              </div>
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(false)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
 
               <button
                 type="button"
@@ -1200,9 +1236,9 @@ export default function EstoqueDieselPlanejamentoControle() {
                 {saving ? "Salvando..." : "Salvar programação"}
               </button>
             </div>
-          </EstoqueDieselPanel>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {loading ? (
         <EstoqueDieselPanel className="p-5">

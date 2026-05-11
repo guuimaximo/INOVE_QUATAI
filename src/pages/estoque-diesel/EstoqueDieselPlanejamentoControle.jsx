@@ -152,6 +152,102 @@ function getIndicator(product, liters) {
   return { label: "Faixa intermediaria", tone: "amber" };
 }
 
+function getStatusFromDiff(pctDiffTransnet, fallbackStatus = "OK") {
+  if (pctDiffTransnet === null || pctDiffTransnet === undefined || Number.isNaN(Number(pctDiffTransnet))) {
+    return fallbackStatus || "OK";
+  }
+
+  const absValue = Math.abs(Number(pctDiffTransnet));
+
+  if (absValue > 0.03) return "Critico";
+  if (absValue > 0.02) return "Atencao";
+
+  return "OK";
+}
+
+function buildMeasurementCascadeRows({ measurements, product }) {
+  const productEntries = [...(measurements || [])]
+    .filter((entry) => entry.product === product)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+
+  let runningSaldoFinal = null;
+
+  return productEntries.map((entry) => {
+    const saldoAnteriorOriginal = safeNumber(
+      entry?.saldoAnterior ?? entry?.medicaoD1 ?? entry?.saldoPlanejado ?? 0,
+      0
+    );
+
+    const saldoAnterior =
+      runningSaldoFinal !== null && runningSaldoFinal !== undefined
+        ? runningSaldoFinal
+        : saldoAnteriorOriginal;
+
+    const entradaDiesel = safeNumber(
+      entry?.entradaDiesel ??
+        entry?.entradaRecebimentos ??
+        entry?.receiptMeasuredLiters ??
+        entry?.nfVolumeLitros ??
+        0,
+      0
+    );
+
+    const saldoFinal = safeNumber(
+      entry?.saldoFinal ?? entry?.medicaoAtual ?? entry?.actualBalance ?? 0,
+      0
+    );
+
+    const saidaTanqueCalculada = saldoAnterior + entradaDiesel - saldoFinal;
+
+    const saidaTanque = Number.isFinite(saidaTanqueCalculada)
+      ? saidaTanqueCalculada
+      : safeNumber(entry?.saidaTanque ?? 0, 0);
+
+    const saidaTransnet = safeNumber(
+      entry?.saidaTransnet ?? entry?.transnetOutput ?? 0,
+      0
+    );
+
+    const saidaTotalBombas = safeNumber(
+      entry?.saidaTotalBombas ?? entry?.bombas ?? 0,
+      0
+    );
+
+    const pctDiffNF =
+      entradaDiesel > 0
+        ? safeNumber(entry?.pctDiffNF, null)
+        : null;
+
+    const pctDiffTransnet =
+      saidaTransnet > 0
+        ? (saidaTanque - saidaTransnet) / saidaTransnet
+        : null;
+
+    const status = getStatusFromDiff(pctDiffTransnet, entry?.status);
+
+    const normalized = {
+      ...entry,
+      saldoAnterior,
+      medicaoD1: saldoAnterior,
+      entradaDiesel,
+      entradaRecebimentos: entradaDiesel,
+      saldoFinal,
+      medicaoAtual: saldoFinal,
+      saidaTanque,
+      saidaTransnet,
+      transnetOutput: saidaTransnet,
+      saidaTotalBombas,
+      pctDiffNF,
+      pctDiffTransnet,
+      status,
+    };
+
+    runningSaldoFinal = saldoFinal;
+
+    return normalized;
+  });
+}
+
 function SimpleInput({
   label,
   value,
@@ -352,21 +448,24 @@ async function savePlanningRow({ form, product, metadata, userId = null }) {
 }
 
 function buildMonthRows({ year, month, product, measurements, planningRows }) {
-  const monthEntries = [...(measurements || [])]
-    .filter((entry) => entry.product === product)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const cascadedMeasurements = buildMeasurementCascadeRows({ measurements, product });
 
   const monthPlanning = [...(planningRows || [])]
     .filter((entry) => entry.product === product)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
 
-  const measurementByDate = Object.fromEntries(monthEntries.map((entry) => [entry.date, entry]));
-  const planningByDate = Object.fromEntries(monthPlanning.map((entry) => [entry.date, entry]));
+  const measurementByDate = Object.fromEntries(
+    cascadedMeasurements.map((entry) => [entry.date, entry])
+  );
+
+  const planningByDate = Object.fromEntries(
+    monthPlanning.map((entry) => [entry.date, entry])
+  );
 
   const previousEntry =
-    [...(measurements || [])]
+    [...cascadedMeasurements]
       .filter((entry) => entry.product === product && entry.date < `${year}-${month}-01`)
-      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0] || null;
 
   let runningBalance = safeNumber(
     previousEntry?.saldoFinal ?? previousEntry?.medicaoAtual ?? 0,

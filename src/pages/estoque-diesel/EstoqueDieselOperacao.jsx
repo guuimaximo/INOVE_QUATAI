@@ -8,6 +8,7 @@ import {
   FaGasPump,
   FaInfoCircle,
   FaSave,
+  FaTrash,
   FaTint,
 } from "react-icons/fa";
 import EstoqueDieselPageShell, {
@@ -56,6 +57,9 @@ function parseCurrency(value) {
 function toFormValue(value) {
   return value === null || value === undefined ? "" : String(value);
 }
+
+const DIESEL_RECEIPTS_TABLE = "estoque_diesel_recebimentos";
+
 
 function buildFormFromEntry(entry, product, year, month) {
   const base = buildDefaultForm(product, year, month);
@@ -346,6 +350,7 @@ export default function EstoqueDieselOperacao() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingReceipt, setSavingReceipt] = useState(false);
+  const [deletingReceipt, setDeletingReceipt] = useState(false);
   const [receiptFiles, setReceiptFiles] = useState({ before: null, after: null });
   const [customSupplierMode, setCustomSupplierMode] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState(null);
@@ -706,6 +711,65 @@ export default function EstoqueDieselOperacao() {
     }
   }
 
+  async function handleDeleteReceipt(receipt) {
+    if (!receipt?.id || !metadata) return;
+
+    const confirmDelete = window.confirm(
+      `Confirma a exclusão do recebimento${receipt.nfNumero ? ` NF ${receipt.nfNumero}` : ""}? Essa ação remove o recebimento do dia e recalcula os saldos automaticamente.`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      setDeletingReceipt(true);
+
+      const { error } = await supabase
+        .from(DIESEL_RECEIPTS_TABLE)
+        .delete()
+        .eq("id", receipt.id);
+
+      if (error) throw error;
+
+      const nextReceipts = await fetchDieselReceipts({
+        year,
+        metadata,
+      });
+
+      setReceipts(nextReceipts);
+      setSelectedReceiptId(null);
+      setReceiptFiles({ before: null, after: null });
+      setForm((current) => ({
+        ...current,
+        hasReceipt: false,
+        nfVolumeLitros: "",
+        unitPrice: "",
+        supplier: "",
+        supplierId: null,
+        nfNumero: "",
+        receiptRuleBeforeT1: "",
+        receiptRuleBeforeT2: "",
+        receiptRuleAfterT1: "",
+        receiptRuleAfterT2: "",
+        receiptPhotoBeforeUrl: "",
+        receiptPhotoAfterUrl: "",
+      }));
+      setCustomSupplierMode(false);
+
+      setFeedback({
+        type: "success",
+        message: "Recebimento excluído. O fechamento do dia e os saldos seguintes foram recalculados automaticamente na tela.",
+      });
+    } catch (error) {
+      console.error("Falha ao excluir recebimento:", error);
+      setFeedback({
+        type: "error",
+        message: error?.message || "Nao foi possivel excluir o recebimento.",
+      });
+    } finally {
+      setDeletingReceipt(false);
+    }
+  }
+
   function handleProductChange(nextProduct) {
     navigate(`/estoque-diesel/operacao/${year}/${month}?produto=${nextProduct}`);
   }
@@ -1005,10 +1069,22 @@ export default function EstoqueDieselOperacao() {
                           {selectedDailyReceipt.supplier || "Sem fornecedor"} • NF {selectedDailyReceipt.nfNumero || "-"}
                         </p>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
-                        {selectedDailyReceipt.date
-                          ? new Date(`${selectedDailyReceipt.date}T00:00:00`).toLocaleDateString("pt-BR")
-                          : "Sem data"}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
+                          {selectedDailyReceipt.date
+                            ? new Date(`${selectedDailyReceipt.date}T00:00:00`).toLocaleDateString("pt-BR")
+                            : "Sem data"}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteReceipt(selectedDailyReceipt)}
+                          disabled={deletingReceipt}
+                          className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+                        >
+                          <FaTrash />
+                          {deletingReceipt ? "Excluindo..." : "Excluir"}
+                        </button>
                       </div>
                     </div>
                     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1038,7 +1114,7 @@ export default function EstoqueDieselOperacao() {
                 <button
                   type="button"
                   onClick={handleSaveReceipt}
-                  disabled={savingReceipt}
+                  disabled={savingReceipt || deletingReceipt}
                   className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
                 >
                   <FaSave />

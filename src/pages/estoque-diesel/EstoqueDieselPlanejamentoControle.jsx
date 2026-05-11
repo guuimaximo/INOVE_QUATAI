@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
-  FaArrowLeft,
   FaBolt,
   FaGasPump,
   FaSave,
@@ -71,6 +70,19 @@ function formatPct(value) {
   })}%`;
 }
 
+function shiftDate(date, days) {
+  if (!date) return date;
+
+  const current = new Date(`${date}T00:00:00`);
+  current.setDate(current.getDate() + days);
+
+  return current.toISOString().slice(0, 10);
+}
+
+function getPlanningSourceDateForViewDate(date) {
+  return shiftDate(date, 1);
+}
+
 function getWeekdayShort(date) {
   if (!date) return "--";
   return new Date(`${date}T00:00:00`)
@@ -108,8 +120,10 @@ function classifyProjectionDay(date, holidayDates = []) {
 function getDefaultPlannedOutput(product, date) {
   const rules = PROGRAMMING_RULES[product] || PROGRAMMING_RULES.S500;
   const weekday = getWeekdayShort(date);
+
   if (weekday.startsWith("dom")) return rules.defaultSundayOutput;
   if (weekday.startsWith("sáb") || weekday.startsWith("sab")) return rules.defaultSaturdayOutput;
+
   return rules.defaultWeekdayOutput;
 }
 
@@ -282,7 +296,7 @@ function mapPlanningRow(row, metadata) {
 
 async function fetchPlanningRows({ year, product, metadata }) {
   const from = `${year}-01-01`;
-  const to = `${year}-12-31`;
+  const to = shiftDate(`${year}-12-31`, 1);
 
   let query = supabase
     .from("estoque_diesel_programacoes_diarias")
@@ -330,7 +344,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const monthPlanning = [...(planningRows || [])]
-    .filter((entry) => entry.product === product && entry.date?.startsWith(`${year}-${month}`))
+    .filter((entry) => entry.product === product)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const measurementByDate = Object.fromEntries(monthEntries.map((entry) => [entry.date, entry]));
@@ -348,8 +362,10 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
   return Array.from({ length: daysInMonth }, (_, index) => {
     const day = String(index + 1).padStart(2, "0");
     const date = `${year}-${month}-${day}`;
+    const planningSourceDate = getPlanningSourceDateForViewDate(date);
+
     const actual = measurementByDate[date] || null;
-    const plan = planningByDate[date] || null;
+    const plan = planningByDate[planningSourceDate] || null;
     const realizedDay = !!actual;
     const saldoInicialDia = Number(runningBalance || 0);
 
@@ -391,6 +407,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
 
     return {
       date,
+      planningSourceDate,
       isRealized: realizedDay,
       weekday: getWeekdayShort(date),
       actual,

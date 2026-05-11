@@ -70,6 +70,11 @@ function formatPct(value) {
   })}%`;
 }
 
+function safeNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function shiftDate(date, days) {
   if (!date) return date;
 
@@ -359,7 +364,11 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
       .filter((entry) => entry.product === product && entry.date < `${year}-${month}-01`)
       .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
 
-  let runningBalance = Number(previousEntry?.saldoFinal ?? previousEntry?.medicaoAtual ?? 0);
+  let runningBalance = safeNumber(
+    previousEntry?.saldoFinal ?? previousEntry?.medicaoAtual ?? 0,
+    0
+  );
+
   const monthNumber = Number(month);
   const daysInMonth = new Date(Number(year), monthNumber, 0).getDate();
 
@@ -370,29 +379,84 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
 
     const actual = measurementByDate[date] || null;
     const plan = planningByDate[planningSourceDate] || null;
-    const realizedDay = !!actual;
+    const realizedDay = Boolean(actual);
 
-    const saldoPlanejado = Number(runningBalance || 0);
+    if (realizedDay) {
+      const saldoPlanejado = safeNumber(
+        actual?.saldoAnterior ?? actual?.medicaoD1 ?? runningBalance,
+        runningBalance
+      );
 
-    const actualReceipt = Number(
-      actual?.receiptMeasuredLiters ??
-        (Number(actual?.entradaDiesel || 0) > 0 ? actual?.entradaDiesel : 0) ??
+      const entradaReal = safeNumber(
+        actual?.entradaDiesel ??
+          actual?.entradaRecebimentos ??
+          actual?.receiptMeasuredLiters ??
+          0,
         0
+      );
+
+      const saidaTanque = safeNumber(
+        actual?.saidaTanque ??
+          Math.max(
+            0,
+            saldoPlanejado + entradaReal - safeNumber(actual?.saldoFinal ?? actual?.medicaoAtual, 0)
+          ),
+        0
+      );
+
+      const saldoFinal = safeNumber(
+        actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoPlanejado + entradaReal - saidaTanque,
+        saldoPlanejado + entradaReal - saidaTanque
+      );
+
+      const saidaTransnet = safeNumber(
+        actual?.saidaTransnet ?? actual?.transnetOutput ?? 0,
+        0
+      );
+
+      const saldoPosEntrega = round(saldoPlanejado + entradaReal, 2) ?? saldoPlanejado;
+      const saldoProjetado = round(saldoFinal, 2) ?? saldoFinal;
+      const indicator = getIndicator(product, saldoProjetado);
+
+      runningBalance = saldoProjetado;
+
+      return {
+        date,
+        planningSourceDate,
+        isRealized: true,
+        weekday: getWeekdayShort(date),
+        actual,
+        actualOutput: saidaTransnet,
+        actualBalance: saldoFinal,
+        saldoPlanejado,
+        supplier: plan?.supplier || "",
+        dieselPrice: plan?.dieselPrice ?? null,
+        cbieGap: plan?.cbieGap ?? null,
+        gapValue:
+          plan?.dieselPrice !== null &&
+          plan?.dieselPrice !== undefined &&
+          plan?.cbieGap !== null &&
+          plan?.cbieGap !== undefined
+            ? round((Number(plan.cbieGap) * Number(plan.dieselPrice)) / 100, 4)
+            : null,
+        plannedReceipt: entradaReal,
+        saldoPosEntrega,
+        plannedOutput: saidaTanque,
+        saldoProjetado,
+        notes: plan?.notes || "",
+        indicator,
+      };
+    }
+
+    const saldoPlanejado = safeNumber(runningBalance, 0);
+    const plannedReceipt = safeNumber(plan?.plannedReceipt ?? 0, 0);
+    const plannedOutput = safeNumber(
+      plan?.plannedOutput ?? getDefaultPlannedOutput(product, date),
+      0
     );
 
-    const plannedReceipt = Number(plan?.plannedReceipt ?? actualReceipt ?? 0);
-    const plannedOutput = Number(
-      plan?.plannedOutput ??
-        (realizedDay ? Number(actual?.saidaTanque ?? 0) : getDefaultPlannedOutput(product, date))
-    );
-
-    const receiptForView = plannedReceipt;
-    const outputForView = plannedOutput;
-
-    const saldoPosEntrega = round(saldoPlanejado + receiptForView, 2) ?? saldoPlanejado;
-
-    const saldoProjetado = round(saldoPosEntrega - outputForView, 2) ?? saldoPosEntrega;
-
+    const saldoPosEntrega = round(saldoPlanejado + plannedReceipt, 2) ?? saldoPlanejado;
+    const saldoProjetado = round(saldoPosEntrega - plannedOutput, 2) ?? saldoPosEntrega;
     const indicator = getIndicator(product, saldoProjetado);
 
     const gapValue =
@@ -408,19 +472,19 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
     return {
       date,
       planningSourceDate,
-      isRealized: realizedDay,
+      isRealized: false,
       weekday: getWeekdayShort(date),
-      actual,
-      actualOutput: Number(actual?.saidaTanque ?? 0),
-      actualBalance: Number(actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoProjetado),
+      actual: null,
+      actualOutput: 0,
+      actualBalance: saldoProjetado,
       saldoPlanejado,
       supplier: plan?.supplier || "",
       dieselPrice: plan?.dieselPrice ?? null,
       cbieGap: plan?.cbieGap ?? null,
       gapValue,
-      plannedReceipt: receiptForView,
+      plannedReceipt,
       saldoPosEntrega,
-      plannedOutput: outputForView,
+      plannedOutput,
       saldoProjetado,
       notes: plan?.notes || "",
       indicator,
@@ -1108,8 +1172,7 @@ export default function EstoqueDieselPlanejamentoControle() {
               Leitura mensal da programação
             </h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">
-              Menos card e mais visibilidade do mes inteiro, como na planilha:
-              mercado, indicador e programação semanal em linha.
+              Dias realizados usam dados reais da medição. Dias futuros usam a projeção programada em D+1.
             </p>
           </div>
 
@@ -1187,7 +1250,7 @@ export default function EstoqueDieselPlanejamentoControle() {
             <div>
               <h2 className="text-xl font-black text-slate-800">Programação do mês</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                A programação recalcula automaticamente os saldos seguintes em cascata.
+                Para dias realizados: Saldo Planejado = Saldo Ant., Saída Prevista = Saída Tanque, Saldo Projetado = Saldo Final e Saída Real = Transnet.
               </p>
             </div>
 

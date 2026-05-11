@@ -19,7 +19,6 @@ import {
   fetchMeasurementContext,
   fetchMeasurementEntries,
   getDefaultDateForMonth,
-  getTodayISO,
   getMonthLabel,
   parseNumber,
   round,
@@ -300,14 +299,13 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
   let runningBalance = Number(previousEntry?.saldoFinal ?? previousEntry?.medicaoAtual ?? 0);
   const monthNumber = Number(month);
   const daysInMonth = new Date(Number(year), monthNumber, 0).getDate();
-  const today = getTodayISO();
 
   return Array.from({ length: daysInMonth }, (_, index) => {
     const day = String(index + 1).padStart(2, "0");
     const date = `${year}-${month}-${day}`;
     const actual = measurementByDate[date] || null;
     const plan = planningByDate[date] || null;
-    const realizedDay = date <= today && !!actual;
+    const realizedDay = !!actual;
     const saldoInicialDia = Number(runningBalance || 0);
     const actualReceipt = Number(
       actual?.receiptMeasuredLiters ??

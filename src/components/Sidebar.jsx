@@ -33,6 +33,7 @@ import {
   FaShieldAlt,
   FaWarehouse,
   FaCalendarAlt,
+  FaSitemap,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -227,6 +228,7 @@ export default function Sidebar() {
       configuracoes: [
         { path: "/usuarios", label: "Usuários", icon: <FaUserCog /> },
         { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
+        { path: "/organograma-manutencao", label: "Organograma", icon: <FaSitemap /> },
         { path: "/niveis-acesso", label: "Níveis de acesso", icon: <FaShieldAlt /> },
       ],
     }),
@@ -251,7 +253,7 @@ export default function Sidebar() {
     if (path.startsWith("/sos") || path.startsWith("/km-rodado")) setIntervencoesOpen(true);
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
-    if (path.startsWith("/usuarios") || path.startsWith("/funcionarios") || path.startsWith("/niveis-acesso")) setConfigOpen(true);
+    if (path.startsWith("/usuarios") || path.startsWith("/funcionarios") || path.startsWith("/niveis-acesso") || path.startsWith("/organograma-manutencao")) setConfigOpen(true);
   }, [location.pathname]);
 
   const navLinkClass = ({ isActive }) =>

@@ -61,6 +61,7 @@ export const APP_ACCESS_PAGES = [
 
   { key: "config_usuarios", label: "Configuracoes Usuarios", category: "Configuracoes", path: "/usuarios", patterns: ["/usuarios"] },
   { key: "config_funcionarios", label: "Configuracoes Funcionarios", category: "Configuracoes", path: "/funcionarios", patterns: ["/funcionarios"] },
+  { key: "config_organograma_manutencao", label: "Configuracoes Organograma Manutencao", category: "Configuracoes", path: "/organograma-manutencao", patterns: ["/organograma-manutencao"] },
   { key: "config_niveis", label: "Configuracoes Niveis", category: "Configuracoes", path: "/niveis-acesso", patterns: ["/niveis-acesso"] },
 ];
 
@@ -140,6 +141,7 @@ export const DEFAULT_LEVEL_PROFILES = [
       "embarcados_reparo_detalhe",
       "embarcados_reparo_execucao",
       "embarcados_envio_manutencao",
+      "config_organograma_manutencao",
     ],
     farol_liberado: false,
   },
@@ -197,7 +199,7 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "RH",
     descricao: "Tratativas RH e visao resumida.",
     ativo: true,
-    paginas: ["home", "tratativas_resumo", "tratativas_central", "tratativas_consultar", "tratativas_rh", "avarias_resumo", "avarias_cobrancas", "diesel_tratativas_central", "estrutura_fisica_solicitacao", "estrutura_fisica_central"],
+    paginas: ["home", "tratativas_resumo", "tratativas_central", "tratativas_consultar", "tratativas_rh", "avarias_resumo", "avarias_cobrancas", "diesel_tratativas_central", "estrutura_fisica_solicitacao", "estrutura_fisica_central", "config_organograma_manutencao"],
     farol_liberado: true,
   },
   {

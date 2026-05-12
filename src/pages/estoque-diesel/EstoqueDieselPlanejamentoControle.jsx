@@ -78,7 +78,7 @@ function formatDateBR(date) {
 }
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toISOString().slice(0, 7);
 }
 
 function formatPct(value) {
@@ -110,7 +110,7 @@ function shiftDate(date, days) {
   const current = new Date(`${date}T00:00:00`);
   current.setDate(current.getDate() + days);
 
-  return current.toISOString().slice(0, 10);
+  return current.toISOString().slice(0, 7);
 }
 
 function getMonthLastDate(year, month) {
@@ -758,136 +758,251 @@ function canvasText(ctx, text, x, y, maxWidth = 160) {
   ctx.fillText(`${clipped}...`, x, y);
 }
 
-function drawCanvasTable(ctx, { title, x, y, columns, rows, rowHeight = 30 }) {
-  const headerHeight = 34;
-  const titleHeight = 32;
-  const tableWidth = columns.reduce((sum, column) => sum + column.width, 0);
-  const tableHeight = titleHeight + headerHeight + Math.max(rows.length, 1) * rowHeight;
 
-  ctx.strokeStyle = "#111827";
+function drawInfoChip(ctx, { x, y, width, height, label, value, borderColor, bgColor, labelColor, valueColor }) {
+  canvasRoundRect(ctx, x, y, width, height, 16);
+  ctx.fillStyle = bgColor;
+  ctx.fill();
+  ctx.strokeStyle = borderColor;
   ctx.lineWidth = 1;
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(x, y, tableWidth, tableHeight);
-  ctx.strokeRect(x, y, tableWidth, tableHeight);
+  ctx.stroke();
 
-  ctx.fillStyle = "#5b9bd5";
-  ctx.fillRect(x, y, tableWidth, titleHeight);
-  ctx.fillStyle = "#000000";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = labelColor;
+  ctx.font = "bold 12px Arial";
+  ctx.fillText(label.toUpperCase(), x + 14, y + 12);
+
+  ctx.fillStyle = valueColor;
   ctx.font = "bold 18px Arial";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(title, x + tableWidth / 2, y + titleHeight / 2);
+  ctx.fillText(value, x + 14, y + 34);
+}
 
-  let currentX = x;
-  ctx.font = "bold 13px Arial";
-  ctx.textAlign = "center";
-  columns.forEach((column) => {
-    ctx.fillStyle = "#5b9bd5";
-    ctx.fillRect(currentX, y + titleHeight, column.width, headerHeight);
-    ctx.strokeStyle = "#111827";
-    ctx.strokeRect(currentX, y + titleHeight, column.width, headerHeight);
-    ctx.fillStyle = "#000000";
-    canvasText(ctx, column.label, currentX + column.width / 2 - column.width / 2 + 6, y + titleHeight + 17, column.width - 12);
+function drawModernTableCard(ctx, { title, x, y, width, columns, rows, rowHeight = 34 }) {
+  const padding = 16;
+  const titleHeight = 26;
+  const headerHeight = 34;
+  const tableTop = y + padding + titleHeight + 12;
+  const bodyRows = rows.length ? rows : [{ empty: true }];
+  const bodyHeight = bodyRows.length * rowHeight;
+  const cardHeight = padding + titleHeight + 12 + headerHeight + bodyHeight + 14;
+
+  canvasRoundRect(ctx, x, y, width, cardHeight, 18);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = "#dbe2ea";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = "#1e293b";
+  ctx.font = "bold 14px Arial";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText(title.toUpperCase(), x + padding, y + padding);
+
+  canvasRoundRect(ctx, x + padding, tableTop, width - padding * 2, headerHeight, 14);
+  ctx.fillStyle = "#f3f6fa";
+  ctx.fill();
+
+  let currentX = x + padding;
+  columns.forEach((column, index) => {
+    const innerX = currentX + (index === 0 ? 12 : 10);
+    ctx.fillStyle = "#64748b";
+    ctx.font = "bold 11px Arial";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    canvasText(ctx, column.label.toUpperCase(), innerX, tableTop + headerHeight / 2, column.width - 16);
     currentX += column.width;
   });
 
-  const tableRows = rows.length ? rows : [{ empty: true }];
-  tableRows.forEach((row, rowIndex) => {
-    const rowY = y + titleHeight + headerHeight + rowIndex * rowHeight;
-    currentX = x;
+  bodyRows.forEach((row, rowIndex) => {
+    const rowY = tableTop + headerHeight + rowIndex * rowHeight;
 
+    if (rowIndex > 0) {
+      ctx.strokeStyle = "#edf2f7";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + padding, rowY);
+      ctx.lineTo(x + width - padding, rowY);
+      ctx.stroke();
+    }
+
+    currentX = x + padding;
     columns.forEach((column) => {
-      ctx.fillStyle = row.empty ? "#ffffff" : column.bg?.(row) || "#ffffff";
-      ctx.fillRect(currentX, rowY, column.width, rowHeight);
-      ctx.strokeStyle = "#111827";
-      ctx.strokeRect(currentX, rowY, column.width, rowHeight);
+      const textX = currentX + 10;
+      const textY = rowY + rowHeight / 2;
 
-      ctx.fillStyle = row.empty ? "#64748b" : column.color?.(row) || "#000000";
-      ctx.font = column.bold ? "bold 13px Arial" : "13px Arial";
-      ctx.textAlign = column.align || "center";
+      ctx.textAlign = "left";
       ctx.textBaseline = "middle";
+      ctx.font = column.bold ? "bold 13px Arial" : "13px Arial";
+      ctx.fillStyle = row.empty ? "#94a3b8" : column.color?.(row) || "#334155";
 
-      const value = row.empty ? "Sem dados" : column.value(row);
-      const textX = column.align === "left" ? currentX + 8 : currentX + column.width / 2;
-      canvasText(ctx, value, textX, rowY + rowHeight / 2, column.width - 12);
+      let value = row.empty ? "Nenhum dado encontrado" : column.value(row);
+      if (column.renderBadge && !row.empty) {
+        const badge = column.renderBadge(row);
+        canvasRoundRect(ctx, currentX + 6, rowY + 7, badge.width, rowHeight - 14, 12);
+        ctx.fillStyle = badge.bg;
+        ctx.fill();
+        ctx.strokeStyle = badge.border;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = badge.color;
+        ctx.font = "bold 12px Arial";
+        ctx.fillText(badge.text, currentX + 16, textY);
+      } else {
+        canvasText(ctx, value, textX, textY, column.width - 16);
+      }
+
       currentX += column.width;
     });
   });
 
-  return tableHeight;
+  return cardHeight;
 }
 
 function downloadAnalyticalImage(product, data) {
-  const purchases = [...(data?.allPurchases || [])]
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
-    .slice(-15);
+  const last = [...(data?.lastPurchases || [])].slice(0, 7);
+  const future = [...(data?.futurePurchases || [])].slice(0, 12);
+  const lastPrice = last[0]?.dieselPrice ?? null;
+  const futureLiters = future.reduce((sum, row) => sum + safeNumber(row.plannedReceipt, 0), 0);
 
-  const future = [...(data?.futurePurchases || [])].slice(0, 14);
+  const width = 1600;
+  const headerHeight = 92;
+  const topCardHeight = 92;
+  const gap = 16;
 
-  const width = 1180;
-  const topRows = Math.max(purchases.length, 1);
-  const bottomRows = Math.max(future.length, 1);
-  const height = 96 + 32 + 34 + topRows * 30 + 34 + 32 + 34 + bottomRows * 30 + 50;
+  const tableColumns = [
+    { label: "Data", width: 110, value: (row) => formatDateBR(row.date), bold: true, color: () => "#0f172a" },
+    { label: "Dia", width: 70, value: (row) => getWeekdayShort(row.date) },
+    { label: "Fornecedor", width: 160, value: (row) => row.supplier || "--" },
+    {
+      label: "Produto",
+      width: 86,
+      value: (row) => row.product || product,
+      renderBadge: (row) => ({
+        text: row.product || product,
+        width: 42,
+        bg: product === "S10" ? "#ecfdf5" : "#eff6ff",
+        border: product === "S10" ? "#86efac" : "#93c5fd",
+        color: product === "S10" ? "#047857" : "#1d4ed8",
+      }),
+    },
+    { label: "Litros", width: 110, value: (row) => formatLiters(row.plannedReceipt) },
+    { label: "Preço/Litro", width: 110, value: (row) => formatPrice(row.dieselPrice) },
+    {
+      label: "Variação",
+      width: 140,
+      value: (row) =>
+        row.variationValue == null ? "--" : `${Number(row.variationValue) > 0 ? "+" : ""}${formatPrice(row.variationValue)}`,
+      color: (row) =>
+        row.variationValue == null ? "#94a3b8" : Number(row.variationValue) > 0 ? "#dc2626" : "#059669",
+      bold: true,
+    },
+    {
+      label: "Defasagem CBIE",
+      width: 140,
+      value: (row) => formatPct(row.cbieGap),
+      color: (row) => safeNumber(row.cbieGap, 0) > 0 ? "#dc2626" : "#059669",
+    },
+    {
+      label: "Defasagem R$",
+      width: 130,
+      value: (row) => formatPrice(row.cbieValue),
+      color: (row) => safeNumber(row.cbieValue, 0) > 0 ? "#dc2626" : "#059669",
+    },
+  ];
+
+  const estimateCardHeight = (rowsCount) => 16 + 26 + 12 + 34 + Math.max(rowsCount, 1) * 34 + 14;
+  const topTableHeight = estimateCardHeight(last.length);
+  const bottomTableHeight = estimateCardHeight(future.length);
+
+  const height = headerHeight + gap + topCardHeight + gap + topTableHeight + gap + bottomTableHeight + 28;
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#ffffff";
+
+  ctx.fillStyle = "#f8fafc";
   ctx.fillRect(0, 0, width, height);
 
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "bold 24px Arial";
+  // Header section
+  canvasRoundRect(ctx, 16, 16, width - 32, headerHeight, 20);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = "#dbe2ea";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  canvasRoundRect(ctx, 32, 32, 74, 28, 14);
+  ctx.fillStyle = product === "S10" ? "#ecfdf5" : "#eff6ff";
+  ctx.fill();
+  ctx.strokeStyle = product === "S10" ? "#86efac" : "#93c5fd";
+  ctx.stroke();
+  ctx.fillStyle = product === "S10" ? "#047857" : "#1d4ed8";
+  ctx.font = "bold 14px Arial";
   ctx.textAlign = "left";
-  ctx.fillText(`Programação Analítica Diesel ${product}`, 28, 34);
-  ctx.font = "14px Arial";
-  ctx.fillText(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 28, 58);
+  ctx.textBaseline = "middle";
+  ctx.fillText(product, 44, 46);
 
-  const indicatorByRow = (row) => {
-    const liters = safeNumber(row.plannedReceipt, 0);
-    return getIndicator(product, liters || PROGRAMMING_RULES[product]?.highReference || 0).label;
-  };
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 18px Arial";
+  ctx.fillText(`Análise de compras ${product}`, 122, 42);
+  ctx.fillStyle = "#64748b";
+  ctx.font = "13px Arial";
+  ctx.fillText("Últimas 7 compras e compras futuras projetadas.", 122, 66);
 
-  const topHeight = drawCanvasTable(ctx, {
-    title: `Compras / Defasagem Diesel ${product}`,
-    x: 28,
-    y: 80,
-    columns: [
-      { label: "Data", width: 90, value: (row) => formatDateBR(row.date) },
-      { label: "Dia", width: 70, value: (row) => getWeekdayShort(row.date) },
-      { label: "Fornecedor", width: 150, value: (row) => row.supplier || "--", align: "left" },
-      { label: "Preço Diesel", width: 145, value: (row) => formatPrice(row.dieselPrice) },
-      {
-        label: "Defasagem (CBIE)",
-        width: 150,
-        value: (row) => formatPct(row.cbieGap),
-        color: (row) => safeNumber(row.cbieGap, 0) > 0 ? "#dc2626" : "#059669",
-      },
-      {
-        label: "Defasagem R$",
-        width: 150,
-        value: (row) => formatPrice(row.cbieValue),
-        color: (row) => safeNumber(row.cbieValue, 0) > 0 ? "#dc2626" : "#059669",
-      },
-      { label: "Indicador Nível Estoque", width: 210, value: indicatorByRow },
-    ],
-    rows: purchases,
+  drawInfoChip(ctx, {
+    x: width - 370,
+    y: 28,
+    width: 110,
+    height: 58,
+    label: "Último Preço",
+    value: formatPrice(lastPrice),
+    borderColor: "#bfdbfe",
+    bgColor: "#eff6ff",
+    labelColor: "#3b82f6",
+    valueColor: "#0f172a",
   });
 
-  drawCanvasTable(ctx, {
-    title: `Compras Futuras Projetadas Diesel ${product}`,
-    x: 28,
-    y: 80 + topHeight + 34,
-    columns: [
-      { label: "Data", width: 90, value: (row) => formatDateBR(row.date) },
-      { label: "Dia", width: 70, value: (row) => getWeekdayShort(row.date) },
-      { label: "Fornecedor", width: 150, value: (row) => row.supplier || "--", align: "left" },
-      { label: "Litros", width: 120, value: (row) => formatLiters(row.plannedReceipt) },
-      { label: "Preço / Litro", width: 140, value: (row) => formatPrice(row.dieselPrice) },
-      { label: "Variação", width: 190, value: (row) => row.variationValue == null ? "--" : `${formatPrice(row.variationValue)} (${formatPct(row.variationPct)})` },
-      { label: "Defasagem R$", width: 150, value: (row) => formatPrice(row.cbieValue) },
-    ],
+  drawInfoChip(ctx, {
+    x: width - 244,
+    y: 28,
+    width: 140,
+    height: 58,
+    label: "Litros Futuros",
+    value: formatLiters(futureLiters),
+    borderColor: "#fde68a",
+    bgColor: "#fff7ed",
+    labelColor: "#d97706",
+    valueColor: "#0f172a",
+  });
+
+  // top compact info card matching screen style
+  const contentX = 16;
+  const contentWidth = width - 32;
+  let currentY = 16 + headerHeight + gap;
+
+  const topTableTitle = `Últimas 7 compras - ${product}`;
+  const bottomTableTitle = `Compras futuras projetadas - ${product}`;
+
+  const firstTableHeight = drawModernTableCard(ctx, {
+    title: topTableTitle,
+    x: contentX,
+    y: currentY,
+    width: contentWidth,
+    columns: tableColumns,
+    rows: last,
+  });
+
+  currentY += firstTableHeight + gap;
+
+  drawModernTableCard(ctx, {
+    title: bottomTableTitle,
+    x: contentX,
+    y: currentY,
+    width: contentWidth,
+    columns: tableColumns,
     rows: future,
   });
 
@@ -896,7 +1011,6 @@ function downloadAnalyticalImage(product, data) {
   link.href = canvas.toDataURL("image/png");
   link.click();
 }
-
 
 function ProductBadge({ product }) {
   const tone =
@@ -1027,7 +1141,7 @@ function AnalyticalProductSection({ product, data, onDownload }) {
           <div>
             <h3 className="text-lg font-black text-slate-800">Análise de compras {product}</h3>
             <p className="text-sm font-semibold text-slate-500">
-              Últimas 10 compras e compras futuras projetadas.
+              Últimas 7 compras e compras futuras projetadas.
             </p>
           </div>
         </div>
@@ -1050,7 +1164,7 @@ function AnalyticalProductSection({ product, data, onDownload }) {
       </div>
 
       <AnalyticalTable
-        title={`Últimas 10 compras - ${product}`}
+        title={`Últimas 7 compras - ${product}`}
         rows={last}
         emptyText={`Nenhuma compra realizada encontrada para ${product}.`}
       />

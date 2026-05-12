@@ -98,6 +98,7 @@ export default function Sidebar() {
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
   const [embarcadosOpen, setEmbarcadosOpen] = useState(false);
   const [estruturaFisicaOpen, setEstruturaFisicaOpen] = useState(false);
+  const [pessoasOpen, setPessoasOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
   const { user, logout } = useContext(AuthContext);
@@ -136,7 +137,14 @@ export default function Sidebar() {
     () => ({
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
       inicioBasico: { path: "/inicio-rapido", label: "Início", icon: <FaHome /> },
-      pessoas: { path: "/funcionarios", label: "Pessoas", icon: <FaUsers /> },
+      pessoas: {
+        label: "Pessoas",
+        icon: <FaUsers />,
+        tabs: [
+          { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
+          { path: "/organograma-manutencao", label: "Organograma", icon: <FaUsers /> },
+        ],
+      },
 
       pcm: {
         label: "PCM",
@@ -252,6 +260,7 @@ export default function Sidebar() {
     if (path.startsWith("/sos") || path.startsWith("/km-rodado")) setIntervencoesOpen(true);
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
+    if (path.startsWith("/funcionarios") || path.startsWith("/organograma-manutencao")) setPessoasOpen(true);
     if (path.startsWith("/usuarios") || path.startsWith("/niveis-acesso")) setConfigOpen(true);
   }, [location.pathname]);
 
@@ -270,7 +279,7 @@ export default function Sidebar() {
   const showDesempenhoDiesel = links.desempenhoDiesel.tabs.some((t) => canSee(t.path));
   const showEstoqueDiesel = links.estoqueDiesel.tabs.some((t) => canSee(t.path));
   const showEstruturaFisica = links.estruturaFisica.tabs.some((t) => canSee(t.path));
-  const showPessoas = canSee("/funcionarios") || canSee("/organograma-manutencao");
+  const showPessoas = links.pessoas.tabs.some((t) => canSee(t.path));
   const showTratativas = links.tratativas.some((l) => canSee(l.path));
   const showAvarias = links.avarias.some((l) => canSee(l.path));
   const showChecklists = links.checklists.some((l) => canSee(l.path));
@@ -317,10 +326,32 @@ export default function Sidebar() {
         )}
 
         {showPessoas && (
-          <NavLink to={links.pessoas.path} className={navLinkClass}>
-            {links.pessoas.icon}
-            <span className="whitespace-nowrap">{links.pessoas.label}</span>
-          </NavLink>
+          <>
+            <button
+              onClick={() => setPessoasOpen(!pessoasOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {links.pessoas.icon}
+                <span className="whitespace-nowrap truncate">{links.pessoas.label}</span>
+              </div>
+              {pessoasOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {pessoasOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.pessoas.tabs.map((t) =>
+                  canSee(t.path) ? (
+                    <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
+                      {t.icon}
+                      <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {showPCM && (

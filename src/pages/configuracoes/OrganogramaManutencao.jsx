@@ -16,8 +16,8 @@ import {
 } from "./organogramaManutencaoModel";
 
 const ORGANOGRAMA_PAGINAS = [
-  { value: "MANUTENCAO", label: "Manutenção" },
-  { value: "OPERACAO", label: "Operação" },
+  { value: "MANUTENCAO", label: "Manutencao" },
+  { value: "OPERACAO", label: "Operacao" },
   { value: "ADM", label: "Adm" },
 ];
 
@@ -31,8 +31,43 @@ function fmtInt(value) {
   return Math.round(Number(value || 0)).toLocaleString("pt-BR");
 }
 
+function clampZoom(value) {
+  return Math.min(1.5, Math.max(0.65, Number(value || 1)));
+}
+
+function getAreaWidthClass(sizeMode = "standard") {
+  if (sizeMode === "compact") return "w-48";
+  if (sizeMode === "expanded") return "w-64";
+  return "w-56";
+}
+
+function getTreeGapClass(sizeMode = "standard") {
+  if (sizeMode === "compact") return "gap-2";
+  if (sizeMode === "expanded") return "gap-5";
+  return "gap-3";
+}
+
+function getRootGapClass(sizeMode = "standard") {
+  if (sizeMode === "compact") return "gap-8";
+  if (sizeMode === "expanded") return "gap-16";
+  return "gap-12";
+}
+
+function getCanvasPreset(sizeMode = "standard") {
+  if (sizeMode === "compact") {
+    return { width: 1480, height: 760 };
+  }
+
+  if (sizeMode === "expanded") {
+    return { width: 2100, height: 980 };
+  }
+
+  return { width: 1780, height: 860 };
+}
+
 function inferPaginaOrganograma(area) {
   const blob = normalizeText(`${area?.titulo || ""} ${area?.subtitulo || ""} ${area?.grupo || ""}`);
+
   if (
     blob.includes("planejamento") ||
     blob.includes("suprimentos") ||
@@ -43,6 +78,7 @@ function inferPaginaOrganograma(area) {
   ) {
     return "ADM";
   }
+
   if (
     blob.includes("entrada/saida") ||
     blob.includes("entrada") ||
@@ -51,11 +87,13 @@ function inferPaginaOrganograma(area) {
   ) {
     return "OPERACAO";
   }
+
   return "MANUTENCAO";
 }
 
 function readStoredOrganogramaConfig() {
   if (typeof window === "undefined") return {};
+
   try {
     const raw = window.localStorage.getItem(ORGANOGRAMA_CONFIG_STORAGE_KEY);
     if (!raw) return {};
@@ -141,14 +179,17 @@ function normalizePessoa(row) {
 
 function buildChildrenMap(areas) {
   const map = new Map();
+
   areas.forEach((area) => {
     const key = area.parentCodigo || "__ROOT__";
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(area);
   });
+
   for (const entries of map.values()) {
     entries.sort((a, b) => a.ordem - b.ordem || a.titulo.localeCompare(b.titulo, "pt-BR"));
   }
+
   return map;
 }
 
@@ -159,6 +200,7 @@ function collectDescendantCodes(areaCode, childrenMap) {
   while (stack.length) {
     const current = stack.pop();
     const children = childrenMap.get(current) || [];
+
     children.forEach((child) => {
       if (!result.has(child.codigo)) {
         result.add(child.codigo);
@@ -256,14 +298,14 @@ function KpiCard({ title, value, sub, icon, tone = "slate" }) {
   );
 }
 
-function AreaCard({ area, metrics, onOpen, paginaOrganograma }) {
+function AreaCard({ area, metrics, onOpen, paginaOrganograma, sizeMode = "standard" }) {
   const tone = buildAreaTone(area.cor);
 
   return (
     <button
       type="button"
       onClick={() => onOpen(area)}
-      className={`w-56 rounded-2xl border px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${tone.card}`}
+      className={`${getAreaWidthClass(sizeMode)} rounded-2xl border px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${tone.card}`}
     >
       <div className="flex items-start justify-between gap-2">
         <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider ${tone.badge}`}>
@@ -274,7 +316,7 @@ function AreaCard({ area, metrics, onOpen, paginaOrganograma }) {
             {area.turno || "GERAL"}
           </span>
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${buildPageBadgeClasses(paginaOrganograma)}`}>
-            {ORGANOGRAMA_PAGINAS.find((item) => item.value === paginaOrganograma)?.label || "Manutenção"}
+            {ORGANOGRAMA_PAGINAS.find((item) => item.value === paginaOrganograma)?.label || "Manutencao"}
           </span>
         </div>
       </div>
@@ -296,7 +338,15 @@ function AreaCard({ area, metrics, onOpen, paginaOrganograma }) {
   );
 }
 
-function TreeNode({ area, childrenMap, metricsMap, onOpen, configAreaMap, isRoot = false }) {
+function TreeNode({
+  area,
+  childrenMap,
+  metricsMap,
+  onOpen,
+  configAreaMap,
+  sizeMode = "standard",
+  isRoot = false,
+}) {
   const children = childrenMap.get(area.codigo) || [];
 
   return (
@@ -304,11 +354,13 @@ function TreeNode({ area, childrenMap, metricsMap, onOpen, configAreaMap, isRoot
       {!isRoot ? (
         <span className="absolute left-1/2 top-0 h-6 -translate-x-1/2 border-l border-slate-300" />
       ) : null}
+
       <AreaCard
         area={area}
         metrics={resolveAreaMetrics(area, metricsMap, configAreaMap)}
         onOpen={onOpen}
         paginaOrganograma={configAreaMap?.[area.codigo]?.paginaOrganograma || inferPaginaOrganograma(area)}
+        sizeMode={sizeMode}
       />
 
       {children.length ? (
@@ -317,7 +369,8 @@ function TreeNode({ area, childrenMap, metricsMap, onOpen, configAreaMap, isRoot
           {children.length > 1 ? (
             <span className="absolute left-10 right-10 top-0 border-t border-slate-300" />
           ) : null}
-          <ul className="flex items-start justify-center gap-3 pt-6">
+
+          <ul className={`flex items-start justify-center ${getTreeGapClass(sizeMode)} pt-6`}>
             {children.map((child) => (
               <TreeNode
                 key={child.codigo}
@@ -326,6 +379,7 @@ function TreeNode({ area, childrenMap, metricsMap, onOpen, configAreaMap, isRoot
                 metricsMap={metricsMap}
                 onOpen={onOpen}
                 configAreaMap={configAreaMap}
+                sizeMode={sizeMode}
               />
             ))}
           </ul>
@@ -395,6 +449,7 @@ function PessoasModal({
 
   const registros = useMemo(() => {
     const term = normalizeText(busca);
+
     return pessoas
       .filter((pessoa) => descendantCodes.has(pessoa.areaCodigo))
       .filter((pessoa) => {
@@ -452,7 +507,7 @@ function PessoasModal({
         <div className="grid grid-cols-1 gap-4 border-b bg-slate-50 px-5 py-4 xl:grid-cols-[1.4fr_0.8fr]">
           <div>
             <label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-slate-500">
-              Página Organograma
+              Pagina Organograma
             </label>
             <div className="flex flex-wrap gap-2">
               {ORGANOGRAMA_PAGINAS.map((item) => {
@@ -477,7 +532,7 @@ function PessoasModal({
 
           <div>
             <label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-slate-500">
-              Campo Orçado
+              Campo Orcado
             </label>
             <input
               type="number"
@@ -490,11 +545,11 @@ function PessoasModal({
                     event.target.value === "" ? "" : Math.max(0, Number(event.target.value)),
                 })
               }
-              placeholder="Inserir orçado"
+              placeholder="Inserir orcado"
               className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
             />
             <p className="mt-2 text-xs font-semibold text-slate-500">
-              Se preencher aqui, esse valor passa a ser o orçado exibido para esta equipe no organograma.
+              Se preencher aqui, esse valor passa a ser o orcado exibido para esta equipe no organograma.
             </p>
           </div>
         </div>
@@ -549,6 +604,7 @@ function PessoasModal({
                 {registros.map((pessoa) => {
                   const areaPessoa = areasByCode.get(pessoa.areaCodigo);
                   const isOrcado = pessoa.tipoHeadcount === "ORCADO";
+
                   return (
                     <tr key={`${pessoa.id}-${pessoa.nome}-${pessoa.areaCodigo}`} className="hover:bg-slate-50">
                       <td className="p-3">
@@ -606,7 +662,7 @@ function PessoasModal({
   );
 }
 
-export default function OrganogramaManutencao() {
+export default function OrganogramaManutencao({ embedded = false }) {
   const [areas, setAreas] = useState([]);
   const [pessoas, setPessoas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -614,6 +670,8 @@ export default function OrganogramaManutencao() {
   const [feedback, setFeedback] = useState(null);
   const [selecionada, setSelecionada] = useState(null);
   const [configAreaMap, setConfigAreaMap] = useState(() => readStoredOrganogramaConfig());
+  const [zoom, setZoom] = useState(1);
+  const [sizeMode, setSizeMode] = useState("standard");
 
   useEffect(() => {
     try {
@@ -652,6 +710,7 @@ export default function OrganogramaManutencao() {
         setAreas(areasDb);
         setPessoas(pessoasDb.length ? pessoasDb : ORGANOGRAMA_FALLBACK_PESSOAS);
         setFonte(pessoasDb.length ? "supabase" : "mista");
+
         if (!pessoasDb.length) {
           setFeedback({
             type: "warning",
@@ -720,29 +779,72 @@ export default function OrganogramaManutencao() {
     [peopleAtivos]
   );
 
-  const equipesDiurnas = useMemo(() => {
-    return areasAtivas.filter((area) => area.tipo === "SQUAD" && area.turno === "DIURNA");
-  }, [areasAtivas]);
+  const equipesDiurnas = useMemo(
+    () => areasAtivas.filter((area) => area.tipo === "SQUAD" && area.turno === "DIURNA"),
+    [areasAtivas]
+  );
 
-  const equipesNoturnas = useMemo(() => {
-    return areasAtivas.filter((area) => area.tipo === "SQUAD" && area.turno === "NOTURNA");
-  }, [areasAtivas]);
+  const equipesNoturnas = useMemo(
+    () => areasAtivas.filter((area) => area.tipo === "SQUAD" && area.turno === "NOTURNA"),
+    [areasAtivas]
+  );
+
+  const canvasPreset = useMemo(() => getCanvasPreset(sizeMode), [sizeMode]);
+  const canvasWidth = Math.round(canvasPreset.width * zoom);
+  const canvasHeight = Math.round(canvasPreset.height * zoom);
+  const wrapperClass = embedded ? "space-y-5" : "min-h-screen bg-slate-100 p-4 space-y-5";
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 space-y-5">
+    <div className={wrapperClass}>
       <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
-              <FaSitemap /> Estrutura de Manutencao
+              <FaSitemap /> Estrutura de Pessoas
             </div>
-            <h1 className="mt-3 text-2xl font-black text-slate-800">Organograma Manutencao</h1>
+            <h1 className="mt-3 text-2xl font-black text-slate-800">
+              {embedded ? "Organograma dentro do Modal de Pessoas" : "Organograma Manutencao"}
+            </h1>
             <p className="mt-1 text-sm font-semibold text-slate-500">
-              Tela preparada para espelhar o modelo do Miro, com consulta de orcado x realizado no modal de pessoas.
+              Estrutura preparada para o gestor navegar, aumentar, reduzir e abrir cada equipe com orcado x realizado.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setZoom((current) => clampZoom(current - 0.1))}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:border-slate-400"
+            >
+              - Zoom
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom((current) => clampZoom(current + 0.1))}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:border-slate-400"
+            >
+              + Zoom
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setZoom(1);
+                setSizeMode("standard");
+              }}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:border-slate-400"
+            >
+              100%
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setZoom(0.85);
+                setSizeMode("compact");
+              }}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:border-slate-400"
+            >
+              Ajustar tela
+            </button>
             <button
               type="button"
               onClick={carregarBase}
@@ -752,6 +854,57 @@ export default function OrganogramaManutencao() {
               <FaSync className={loading ? "animate-spin" : ""} />
               {loading ? "Atualizando..." : "Atualizar"}
             </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_auto] xl:items-end">
+          <div>
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Zoom do organograma
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0.65"
+                max="1.5"
+                step="0.05"
+                value={zoom}
+                onChange={(event) => setZoom(clampZoom(event.target.value))}
+                className="w-full accent-blue-600"
+              />
+              <span className="min-w-[68px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-black text-slate-700">
+                {Math.round(zoom * 100)}%
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Tamanho visual
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: "compact", label: "Compacto" },
+                { value: "standard", label: "Padrao" },
+                { value: "expanded", label: "Amplo" },
+              ].map((item) => {
+                const active = sizeMode === item.value;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setSizeMode(item.value)}
+                    className={`rounded-2xl border px-4 py-2 text-sm font-black transition ${
+                      active
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -781,63 +934,76 @@ export default function OrganogramaManutencao() {
         <div className="border-b bg-slate-50 px-5 py-4">
           <h2 className="text-lg font-black text-slate-800">Organograma visual</h2>
           <p className="mt-1 text-sm font-semibold text-slate-500">
-            Clique em qualquer caixa para abrir o modal de pessoas, ver o orcado, o realizado e os registros associados.
+            Clique nas caixas para abrir o modal de pessoas. Use zoom, tamanho visual e rolagem para navegar como um quadro vivo.
           </p>
         </div>
 
         <div className="bg-[linear-gradient(0deg,rgba(226,232,240,0.7)_1px,transparent_1px),linear-gradient(90deg,rgba(226,232,240,0.7)_1px,transparent_1px)] bg-[size:48px_48px] p-4 md:p-6">
-          <div className="hidden lg:block overflow-x-auto">
-            <div className="min-w-[1700px] rounded-[36px] border border-white/80 bg-white/90 p-6 shadow-inner">
-              <div className="mb-6">
-                <h3 className="text-3xl font-light tracking-tight text-slate-600">Organograma Manutencao</h3>
-                <p className="mt-2 text-sm font-semibold text-slate-500">
-                  Estrutura inspirada no quadro operacional do Miro, preparada para evoluir com dados reais de tabela.
-                </p>
-              </div>
-
-              <ul className="flex items-start justify-center gap-12 pb-6">
-                {roots.map((root) => (
-                  <TreeNode
-                    key={root.codigo}
-                    area={root}
-                    childrenMap={childrenMap}
-                    metricsMap={metricsMap}
-                    onOpen={setSelecionada}
-                    configAreaMap={configAreaMap}
-                    isRoot
-                  />
-                ))}
-              </ul>
-
-              <div className="mt-8 space-y-4">
-                <div className="grid grid-cols-5 gap-3">
-                  {areasAtivas
-                    .filter((area) => area.tipo === "SQUAD")
-                    .map((area) => {
-                      const tone = buildAreaTone(area.cor);
-                      const metrics = metricsMap.get(area.codigo) || { orcado: 0, realizado: 0 };
-                      return (
-                        <button
-                          key={area.codigo}
-                          type="button"
-                          onClick={() => setSelecionada(area)}
-                          className={`rounded-full border bg-gradient-to-r px-5 py-3 text-center text-sm font-black shadow-sm ${tone.ribbon}`}
-                        >
-                          <span>{area.titulo}</span>
-                          <span className="ml-2 text-xs font-semibold opacity-80">
-                            {fmtInt(resolveAreaMetrics(area, metricsMap, configAreaMap).realizado)}/{fmtInt(resolveAreaMetrics(area, metricsMap, configAreaMap).orcado)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-full border border-emerald-300 bg-emerald-200/90 px-6 py-4 text-center text-[34px] font-black tracking-tight text-emerald-950 shadow-sm">
-                    EQUIPE DIURNA
+          <div className="hidden lg:block">
+            <div className="overflow-auto rounded-[36px] border border-white/80 bg-white/40 p-3 shadow-inner">
+              <div className="mx-auto" style={{ width: `${canvasWidth}px`, minHeight: `${canvasHeight}px` }}>
+                <div
+                  className="origin-top-left rounded-[36px] border border-white/80 bg-white/90 p-6 shadow-inner"
+                  style={{
+                    width: `${canvasPreset.width}px`,
+                    minHeight: `${canvasPreset.height}px`,
+                    transform: `scale(${zoom})`,
+                  }}
+                >
+                  <div className="mb-6">
+                    <h3 className="text-3xl font-light tracking-tight text-slate-600">Organograma Manutencao</h3>
+                    <p className="mt-2 text-sm font-semibold text-slate-500">
+                      Estrutura inspirada no quadro operacional do Miro, agora dentro do fluxo de Pessoas e com ajuste dinamico de tela.
+                    </p>
                   </div>
-                  <div className="rounded-full border border-blue-300 bg-blue-200/90 px-6 py-4 text-center text-[34px] font-black tracking-tight text-blue-950 shadow-sm">
-                    EQUIPE NOTURNA
+
+                  <ul className={`flex items-start justify-center ${getRootGapClass(sizeMode)} pb-6`}>
+                    {roots.map((root) => (
+                      <TreeNode
+                        key={root.codigo}
+                        area={root}
+                        childrenMap={childrenMap}
+                        metricsMap={metricsMap}
+                        onOpen={setSelecionada}
+                        configAreaMap={configAreaMap}
+                        sizeMode={sizeMode}
+                        isRoot
+                      />
+                    ))}
+                  </ul>
+
+                  <div className="mt-8 space-y-4">
+                    <div className="grid grid-cols-5 gap-3">
+                      {areasAtivas
+                        .filter((area) => area.tipo === "SQUAD")
+                        .map((area) => {
+                          const tone = buildAreaTone(area.cor);
+                          const metrics = resolveAreaMetrics(area, metricsMap, configAreaMap);
+
+                          return (
+                            <button
+                              key={area.codigo}
+                              type="button"
+                              onClick={() => setSelecionada(area)}
+                              className={`rounded-full border bg-gradient-to-r px-5 py-3 text-center text-sm font-black shadow-sm transition hover:-translate-y-0.5 ${tone.ribbon}`}
+                            >
+                              <span>{area.titulo}</span>
+                              <span className="ml-2 text-xs font-semibold opacity-80">
+                                {fmtInt(metrics.realizado)}/{fmtInt(metrics.orcado)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="rounded-full border border-emerald-300 bg-emerald-200/90 px-6 py-4 text-center text-[34px] font-black tracking-tight text-emerald-950 shadow-sm">
+                        EQUIPE DIURNA
+                      </div>
+                      <div className="rounded-full border border-blue-300 bg-blue-200/90 px-6 py-4 text-center text-[34px] font-black tracking-tight text-blue-950 shadow-sm">
+                        EQUIPE NOTURNA
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -845,6 +1011,10 @@ export default function OrganogramaManutencao() {
           </div>
 
           <div className="space-y-4 lg:hidden">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+              No mobile, o organograma abre em blocos responsivos. O modal de pessoas continua igual, com orcado, realizado e busca.
+            </div>
+
             {roots.map((root) => (
               <MobileAreaSection
                 key={root.codigo}
@@ -868,7 +1038,10 @@ export default function OrganogramaManutencao() {
             </div>
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
               {fmtInt(
-                equipesDiurnas.reduce((acc, area) => acc + (metricsMap.get(area.codigo)?.realizado || 0), 0)
+                equipesDiurnas.reduce(
+                  (acc, area) => acc + resolveAreaMetrics(area, metricsMap, configAreaMap).realizado,
+                  0
+                )
               )} pessoas
             </span>
           </div>
@@ -894,7 +1067,10 @@ export default function OrganogramaManutencao() {
             </div>
             <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
               {fmtInt(
-                equipesNoturnas.reduce((acc, area) => acc + (metricsMap.get(area.codigo)?.realizado || 0), 0)
+                equipesNoturnas.reduce(
+                  (acc, area) => acc + resolveAreaMetrics(area, metricsMap, configAreaMap).realizado,
+                  0
+                )
               )} pessoas
             </span>
           </div>

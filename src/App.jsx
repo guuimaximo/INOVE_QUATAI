@@ -51,7 +51,6 @@ import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
 import Usuarios from "./pages/configuracoes/Usuarios";
 import Funcionarios from "./pages/configuracoes/Funcionarios";
 import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
-import OrganogramaManutencao from "./pages/configuracoes/OrganogramaManutencao";
 
 import DesempenhoLancamento from "./pages/desempenho-diesel/DesempenhoLancamento";
 import DesempenhoDieselResumo from "./pages/desempenho-diesel/DesempenhoDieselResumo";
@@ -256,7 +255,7 @@ export default function App() {
               {/* Configurações */}
               <Route path="/usuarios" element={<Usuarios />} />
               <Route path="/funcionarios" element={<Funcionarios />} />
-              <Route path="/organograma-manutencao" element={<OrganogramaManutencao />} />
+              <Route path="/organograma-manutencao" element={<Navigate to="/funcionarios?modal=pessoas" replace />} />
               <Route path="/niveis-acesso" element={<NiveisAcesso />} />
             </Route>
 

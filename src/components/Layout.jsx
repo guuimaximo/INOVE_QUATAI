@@ -34,7 +34,8 @@ function getPageTitle(pathname) {
   if (pathname.startsWith("/sos") || pathname.startsWith("/km-rodado")) return "Intervencoes";
   if (pathname.startsWith("/checklists")) return "Checklists";
   if (pathname.startsWith("/avarias") || pathname.startsWith("/cobrancas")) return "Avarias";
-  if (pathname.startsWith("/usuarios") || pathname.startsWith("/funcionarios")) return "Configuracoes";
+  if (pathname.startsWith("/funcionarios") || pathname.startsWith("/organograma-manutencao")) return "Pessoas";
+  if (pathname.startsWith("/usuarios") || pathname.startsWith("/niveis-acesso")) return "Configuracoes";
   return "Inove";
 }
 

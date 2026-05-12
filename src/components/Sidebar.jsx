@@ -31,9 +31,9 @@ import {
   FaBuilding,
   FaIdBadge,
   FaShieldAlt,
+  FaUsers,
   FaWarehouse,
   FaCalendarAlt,
-  FaSitemap,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -136,6 +136,7 @@ export default function Sidebar() {
     () => ({
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
       inicioBasico: { path: "/inicio-rapido", label: "Início", icon: <FaHome /> },
+      pessoas: { path: "/funcionarios", label: "Pessoas", icon: <FaUsers /> },
 
       pcm: {
         label: "PCM",
@@ -227,8 +228,6 @@ export default function Sidebar() {
 
       configuracoes: [
         { path: "/usuarios", label: "Usuários", icon: <FaUserCog /> },
-        { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
-        { path: "/organograma-manutencao", label: "Organograma", icon: <FaSitemap /> },
         { path: "/niveis-acesso", label: "Níveis de acesso", icon: <FaShieldAlt /> },
       ],
     }),
@@ -253,7 +252,7 @@ export default function Sidebar() {
     if (path.startsWith("/sos") || path.startsWith("/km-rodado")) setIntervencoesOpen(true);
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
-    if (path.startsWith("/usuarios") || path.startsWith("/funcionarios") || path.startsWith("/niveis-acesso") || path.startsWith("/organograma-manutencao")) setConfigOpen(true);
+    if (path.startsWith("/usuarios") || path.startsWith("/niveis-acesso")) setConfigOpen(true);
   }, [location.pathname]);
 
   const navLinkClass = ({ isActive }) =>
@@ -271,6 +270,7 @@ export default function Sidebar() {
   const showDesempenhoDiesel = links.desempenhoDiesel.tabs.some((t) => canSee(t.path));
   const showEstoqueDiesel = links.estoqueDiesel.tabs.some((t) => canSee(t.path));
   const showEstruturaFisica = links.estruturaFisica.tabs.some((t) => canSee(t.path));
+  const showPessoas = canSee("/funcionarios") || canSee("/organograma-manutencao");
   const showTratativas = links.tratativas.some((l) => canSee(l.path));
   const showAvarias = links.avarias.some((l) => canSee(l.path));
   const showChecklists = links.checklists.some((l) => canSee(l.path));
@@ -313,6 +313,13 @@ export default function Sidebar() {
           <NavLink to={links.inicioBasico.path} className={navLinkClass}>
             {links.inicioBasico.icon}
             <span className="whitespace-nowrap">{links.inicioBasico.label}</span>
+          </NavLink>
+        )}
+
+        {showPessoas && (
+          <NavLink to={links.pessoas.path} className={navLinkClass}>
+            {links.pessoas.icon}
+            <span className="whitespace-nowrap">{links.pessoas.label}</span>
           </NavLink>
         )}
 

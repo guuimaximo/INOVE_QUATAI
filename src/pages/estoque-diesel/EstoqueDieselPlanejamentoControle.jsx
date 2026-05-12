@@ -78,7 +78,7 @@ function formatDateBR(date) {
 }
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 7);
+  return new Date().toISOString().slice(0, 10);
 }
 
 function formatPct(value) {
@@ -110,7 +110,7 @@ function shiftDate(date, days) {
   const current = new Date(`${date}T00:00:00`);
   current.setDate(current.getDate() + days);
 
-  return current.toISOString().slice(0, 7);
+  return current.toISOString().slice(0, 10);
 }
 
 function getMonthLastDate(year, month) {
@@ -718,10 +718,10 @@ function buildAnalyticalRows(planningRows = []) {
     // para não deixar a tela vazia em bases de teste ou meses futuros.
     const fallbackLastPurchases = [...withVariation]
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
-      .slice(0, 10);
+      .slice(0, 7);
 
     acc[product] = {
-      lastPurchases: realized.length ? realized.slice(0, 10) : fallbackLastPurchases,
+      lastPurchases: realized.length ? realized.slice(0, 7) : fallbackLastPurchases,
       futurePurchases: future,
       allPurchases: withVariation,
     };

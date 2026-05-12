@@ -3636,13 +3636,25 @@ export default function PCMTrocaPneus() {
       : activeTab === TAB_AUDITORIA
         ? "Lancar auditoria de pneus"
         : activeTab === TAB_ESTOQUE
-          ? "Lancar estoque de pneus"
-          : activeTab === TAB_CONSERTOS
-            ? "Enviar pneu para conserto"
-            : "Lancar pneu riscado";
+        ? "Lancar estoque de pneus"
+        : activeTab === TAB_CONSERTOS
+          ? "Enviar pneu para conserto"
+          : "Lancar pneu riscado";
+  const nativePageStyle = isNativeShell
+    ? {
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 7rem)",
+      }
+    : undefined;
+  const nativeFooterStyle = isNativeShell
+    ? { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }
+    : undefined;
 
   return (
-    <div className={`mx-auto min-h-screen max-w-7xl space-y-6 bg-slate-50 p-4 md:p-6 ${isNativeShell ? "pb-28" : ""}`}>
+    <div
+      className="mx-auto min-h-screen max-w-7xl space-y-6 bg-slate-50 p-4 md:p-6"
+      style={nativePageStyle}
+    >
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
@@ -4563,7 +4575,10 @@ export default function PCMTrocaPneus() {
       />
 
       {isNativeShell ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-3 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur"
+          style={nativeFooterStyle}
+        >
           <div className="mx-auto grid max-w-7xl grid-cols-5 gap-1">
             <BottomTabButton
               active={activeTab === TAB_TROCA}

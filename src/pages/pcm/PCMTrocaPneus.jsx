@@ -465,6 +465,47 @@ function getRiscadoStatusCounts(rows) {
   return [...counts.entries()].map(([label, value]) => ({ label, value }));
 }
 
+function buildAuditoriaAtrasadaList(prefixos, auditorias) {
+  const ultimaPorPrefixo = new Map();
+
+  for (const row of auditorias || []) {
+    const prefixo = norm(row?.prefixo);
+    if (!prefixo) continue;
+    const atual = parseDateValue(row.created_at);
+    if (!atual) continue;
+
+    const existente = ultimaPorPrefixo.get(prefixo);
+    if (!existente || atual.getTime() > existente.getTime()) {
+      ultimaPorPrefixo.set(prefixo, atual);
+    }
+  }
+
+  return (prefixos || [])
+    .map((item) => {
+      const prefixo = norm(item?.codigo);
+      if (!prefixo) return null;
+      const ultima = ultimaPorPrefixo.get(prefixo) || null;
+      const diasSemAuditoria = ultima ? diffDaysFromToday(ultima.toISOString()) : 9999;
+
+      if (ultima && diasSemAuditoria <= 30) return null;
+
+      return {
+        id: item?.id || prefixo,
+        prefixo,
+        cluster: norm(item?.cluster),
+        ultimaAuditoria: ultima ? ultima.toISOString() : "",
+        diasSemAuditoria: ultima ? diasSemAuditoria : null,
+        semAuditoria: !ultima,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (a.semAuditoria && !b.semAuditoria) return -1;
+      if (!a.semAuditoria && b.semAuditoria) return 1;
+      return (b.diasSemAuditoria || 0) - (a.diasSemAuditoria || 0);
+    });
+}
+
 function BadgeList({ items, emptyText = "-" }) {
   if (!items?.length) return <span className="text-slate-400">{emptyText}</span>;
 
@@ -1454,6 +1495,71 @@ function RiscadoModal({
   );
 }
 
+function AuditoriaPendenciasModal({
+  open,
+  rows,
+  onClose,
+  onLancar,
+}) {
+  if (!open) return null;
+
+  return (
+    <ModalShell
+      title="Carros sem auditoria recente"
+      subtitle="PCM · Auditoria"
+      onClose={onClose}
+      maxWidth="max-w-4xl"
+      footer={
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
+          >
+            Fechar
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          Existem {rows.length} carro(s) sem auditoria há mais de 30 dias ou ainda sem auditoria registrada.
+        </div>
+
+        <div className="space-y-3">
+          {rows.map((row) => (
+            <div key={row.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-4">
+                  <DetailRow label="Prefixo" value={row.prefixo} />
+                  <DetailRow label="Cluster" value={row.cluster || "-"} />
+                  <DetailRow
+                    label="Ultima auditoria"
+                    value={row.semAuditoria ? "Sem auditoria" : formatDate(row.ultimaAuditoria)}
+                  />
+                  <DetailRow
+                    label="Dias sem auditoria"
+                    value={row.semAuditoria ? "Nunca auditado" : String(row.diasSemAuditoria || 0)}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => onLancar(row.prefixo)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  <FaClipboardCheck />
+                  Lançar auditoria
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 function ConsultaModal({
   open,
   tab,
@@ -1866,7 +1972,10 @@ export default function PCMTrocaPneus() {
   const [estoqueRows, setEstoqueRows] = useState([]);
   const [consertos, setConsertos] = useState([]);
   const [riscados, setRiscados] = useState([]);
+  const [prefixos, setPrefixos] = useState([]);
   const [alertasAbertos, setAlertasAbertos] = useState([]);
+  const [auditoriaPendenciasOpen, setAuditoriaPendenciasOpen] = useState(false);
+  const [auditoriaPendenciasAck, setAuditoriaPendenciasAck] = useState("");
 
   const [trocaForm, setTrocaForm] = useState(() => createTrocaForm("", userName));
   const [auditoriaForm, setAuditoriaForm] = useState(() => createAuditoriaForm("", userName));
@@ -1948,6 +2057,17 @@ export default function PCMTrocaPneus() {
     return data || [];
   }
 
+  async function carregarPrefixos() {
+    const { data, error } = await supabase
+      .from("prefixos")
+      .select("id, codigo, cluster")
+      .order("codigo", { ascending: true });
+
+    if (error) throw error;
+    setPrefixos(data || []);
+    return data || [];
+  }
+
   async function carregarEstoque() {
     const { data, error } = await supabase
       .from("pcm_estoque_pneus")
@@ -1993,6 +2113,7 @@ export default function PCMTrocaPneus() {
         carregarEstoque(),
         carregarConsertos(),
         carregarRiscados(),
+        carregarPrefixos(),
       ]);
     } catch (error) {
       console.error("Erro ao carregar central de pneus:", error);
@@ -2156,6 +2277,11 @@ export default function PCMTrocaPneus() {
       vencidos10Dias: riscados.filter((item) => diffDaysFromToday(item.data_riscado) >= 10).length,
     }),
     [riscados]
+  );
+
+  const auditoriasAtrasadas = useMemo(
+    () => buildAuditoriaAtrasadaList(prefixos, auditorias),
+    [auditorias, prefixos]
   );
 
   const trocasFiltradas = useMemo(() => {
@@ -2355,6 +2481,23 @@ export default function PCMTrocaPneus() {
       void processarAlertas();
     }
   }, [consertos, riscados]);
+
+  useEffect(() => {
+    if (!auditoriasAtrasadas.length) {
+      setAuditoriaPendenciasOpen(false);
+      setAuditoriaPendenciasAck("");
+      return;
+    }
+
+    const assinatura = auditoriasAtrasadas
+      .map((item) => `${item.prefixo}:${item.ultimaAuditoria || "sem-auditoria"}`)
+      .join("|");
+
+    if (assinatura !== auditoriaPendenciasAck) {
+      setAuditoriaPendenciasOpen(true);
+      setAuditoriaPendenciasAck(assinatura);
+    }
+  }, [auditoriaPendenciasAck, auditoriasAtrasadas]);
 
   function openConsulta(tab, row) {
     setConsulta({ open: true, tab, row });
@@ -2581,6 +2724,21 @@ export default function PCMTrocaPneus() {
       itens: itensCopiados.length ? itensCopiados : [createEstoqueItem()],
       observacoes: current.observacoes || `Copiado da ficha ${ultimaFicha.ficha_estoque || "anterior"}`,
     }));
+  }
+
+  async function lancarAuditoriaParaPrefixo(prefixo) {
+    const prefixoNormalizado = safeText(prefixo);
+    if (!prefixoNormalizado) return;
+
+    const rowsRef = auditorias.length ? auditorias : await carregarAuditorias();
+    setAuditoriaForm({
+      ...createAuditoriaForm(buildNextFicha(rowsRef, "ficha_auditoria", "AP"), userName),
+      prefixo: prefixoNormalizado,
+    });
+    setActiveTab(TAB_AUDITORIA);
+    setSearchParams({ aba: TAB_AUDITORIA });
+    setAuditoriaPendenciasOpen(false);
+    setAuditoriaOpen(true);
   }
 
   async function submitTrocaPayload(payload) {
@@ -3574,11 +3732,30 @@ export default function PCMTrocaPneus() {
       ) : null}
 
       {activeTab === TAB_AUDITORIA ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <CardResumo label="Total" value={cardsAuditoria.total} color="text-slate-900" />
-          <CardResumo label="Pendentes" value={cardsAuditoria.pendentes} color="text-amber-600" />
-          <CardResumo label="Concluídas" value={cardsAuditoria.concluidas} color="text-emerald-600" />
-          <CardResumo label="Com incorreto" value={cardsAuditoria.incorretas} color="text-rose-600" />
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+            <CardResumo label="Total" value={cardsAuditoria.total} color="text-slate-900" />
+            <CardResumo label="Pendentes" value={cardsAuditoria.pendentes} color="text-amber-600" />
+            <CardResumo label="Concluídas" value={cardsAuditoria.concluidas} color="text-emerald-600" />
+            <CardResumo label="Com incorreto" value={cardsAuditoria.incorretas} color="text-rose-600" />
+            <CardResumo label="30+ dias sem auditoria" value={auditoriasAtrasadas.length} color="text-rose-600" />
+          </div>
+
+          {auditoriasAtrasadas.length ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-900 md:flex-row md:items-center md:justify-between">
+              <div>
+                Existem <strong>{auditoriasAtrasadas.length}</strong> carro(s) sem auditoria há mais de 30 dias.
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuditoriaPendenciasOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 font-semibold text-white hover:bg-rose-700"
+              >
+                <FaClipboardCheck />
+                Ver carros sem auditoria
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -4316,6 +4493,13 @@ export default function PCMTrocaPneus() {
         onCapturePhoto={captureRiscadoPhoto}
         onSalvar={salvarRiscado}
         isNativeShell={isNativeShell}
+      />
+
+      <AuditoriaPendenciasModal
+        open={auditoriaPendenciasOpen}
+        rows={auditoriasAtrasadas}
+        onClose={() => setAuditoriaPendenciasOpen(false)}
+        onLancar={lancarAuditoriaParaPrefixo}
       />
 
       <ConsultaModal

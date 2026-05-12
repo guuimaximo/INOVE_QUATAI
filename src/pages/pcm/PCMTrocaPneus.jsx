@@ -3,19 +3,25 @@ import * as XLSX from "xlsx";
 import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { App as CapacitorApp } from "@capacitor/app";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { useSearchParams } from "react-router-dom";
 import {
+  FaBell,
   FaCamera,
   FaCheckCircle,
   FaClipboardCheck,
   FaClipboardList,
   FaDownload,
   FaEye,
+  FaExclamationTriangle,
+  FaHistory,
   FaPlus,
   FaSave,
   FaSearch,
   FaTimes,
+  FaTools,
   FaWarehouse,
+  FaWrench,
 } from "react-icons/fa";
 
 import { AuthContext } from "../../context/AuthContext";
@@ -32,9 +38,12 @@ import {
 const TAB_TROCA = "troca";
 const TAB_AUDITORIA = "auditoria";
 const TAB_ESTOQUE = "estoque";
+const TAB_CONSERTOS = "consertos";
+const TAB_RISCADOS = "riscados";
 
 const BUCKET_TROCA = "pcm_troca_pneus";
 const BUCKET_AUDITORIA = "pcm_auditoria_pneus";
+const BUCKET_RISCADOS = "pcm_riscados_pneus";
 
 const TIPO_TROCA_ESTOQUE = "ESTOQUE -> CARRO";
 const TIPO_TROCA_CARRO = "CARRO -> CARRO";
@@ -55,6 +64,9 @@ const SITUACOES_ESTOQUE = [
   "ENVIAR PARA RECAPAGEM",
   "RECAPADO",
 ];
+
+const SITUACOES_CONSERTO = ["PENDENTE", "EM CONSERTO", "CONCLUIDO"];
+const SITUACOES_RISCADO = ["ABERTO", "ACOMPANHANDO", "RESOLVIDO"];
 
 const MARCAS_PNEU = ["Michelin", "Goodyear", "Pirelli", "Outra"];
 
@@ -91,7 +103,13 @@ function formatDateOnly(value) {
 }
 
 function isTabValue(value) {
-  return value === TAB_TROCA || value === TAB_AUDITORIA || value === TAB_ESTOQUE;
+  return (
+    value === TAB_TROCA ||
+    value === TAB_AUDITORIA ||
+    value === TAB_ESTOQUE ||
+    value === TAB_CONSERTOS ||
+    value === TAB_RISCADOS
+  );
 }
 
 function base64ToUint8Array(base64) {
@@ -107,6 +125,77 @@ function base64ToUint8Array(base64) {
 
 function nowDisplay() {
   return formatDate(new Date().toISOString());
+}
+
+function todayValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const next = new Date(value);
+  return Number.isNaN(next.getTime()) ? null : next;
+}
+
+function diffDaysFromToday(value) {
+  const start = parseDateValue(value);
+  if (!start) return 0;
+  const now = new Date();
+  const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const nowUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(0, Math.floor((nowUtc - startUtc) / 86400000));
+}
+
+function buildAlertCycle(days) {
+  if (days < 10) return 0;
+  return Math.floor(days / 10);
+}
+
+function buildNotificationId(seed = "") {
+  let hash = 0;
+  const text = String(seed || Date.now());
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) % 2147483647;
+  }
+  return Math.max(1, hash);
+}
+
+async function notifyDevice({ title, body, seed }) {
+  if (!title || !body) return;
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const permissions = await LocalNotifications.requestPermissions();
+      if (permissions.display !== "granted") return;
+
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: buildNotificationId(seed),
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 1000) },
+          },
+        ],
+      });
+      return;
+    } catch (error) {
+      console.error("Erro ao agendar notificacao local:", error);
+    }
+  }
+
+  if (typeof window !== "undefined" && "Notification" in window) {
+    try {
+      if (Notification.permission === "default") {
+        await Notification.requestPermission();
+      }
+      if (Notification.permission === "granted") {
+        new Notification(title, { body });
+      }
+    } catch (error) {
+      console.error("Erro ao emitir notificacao web:", error);
+    }
+  }
 }
 
 function extractDateOnly(value) {
@@ -199,6 +288,7 @@ function createAuditoriaForm(nextFicha, userName) {
 function createEstoqueItem() {
   return {
     numeroPneu: "",
+    numeroFogo: "",
     marca: MARCAS_PNEU[0],
     marcaOutra: "",
     situacao: SITUACOES_ESTOQUE[0],
@@ -212,6 +302,37 @@ function createEstoqueForm(nextFicha, userName) {
     quemLancou: userName,
     itens: [createEstoqueItem()],
     observacoes: "",
+  };
+}
+
+function createConsertoForm(nextFicha, userName) {
+  return {
+    ficha: nextFicha,
+    dataLancamento: nowDisplay(),
+    quemLancou: userName,
+    origemTab: TAB_AUDITORIA,
+    origemItemId: "",
+    prefixo: "",
+    numeroFogo: "",
+    situacaoOrigem: "",
+    observacoes: "",
+  };
+}
+
+function createRiscadoForm(nextFicha, userName) {
+  return {
+    ficha: nextFicha,
+    dataLancamento: nowDisplay(),
+    quemLancou: userName,
+    dataRiscado: todayValue(),
+    prefixo: "",
+    numeroFogo: "",
+    marca: MARCAS_PNEU[0],
+    marcaOutra: "",
+    mmAntes: "",
+    mmDepois: "",
+    observacoes: "",
+    foto: null,
   };
 }
 
@@ -322,6 +443,28 @@ function getEstoqueConferenciaCounts(row) {
   return [...counts.entries()].map(([label, value]) => ({ label, value }));
 }
 
+function getConsertoStatusCounts(rows) {
+  const counts = new Map();
+
+  for (const row of rows || []) {
+    const key = norm(row.status) || "PENDENTE";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  return [...counts.entries()].map(([label, value]) => ({ label, value }));
+}
+
+function getRiscadoStatusCounts(rows) {
+  const counts = new Map();
+
+  for (const row of rows || []) {
+    const key = norm(row.status) || "ABERTO";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  return [...counts.entries()].map(([label, value]) => ({ label, value }));
+}
+
 function BadgeList({ items, emptyText = "-" }) {
   if (!items?.length) return <span className="text-slate-400">{emptyText}</span>;
 
@@ -340,7 +483,9 @@ function BadgeList({ items, emptyText = "-" }) {
 }
 
 function EstoqueNumerosPreview({ row, max = 8 }) {
-  const numeros = (row?.itens || []).map((item) => norm(item.numero_pneu)).filter(Boolean);
+  const numeros = (row?.itens || [])
+    .map((item) => norm(item.numero_fogo || item.numero_pneu))
+    .filter(Boolean);
   const visible = numeros.slice(0, max);
   const restante = Math.max(numeros.length - visible.length, 0);
 
@@ -394,6 +539,7 @@ function groupEstoqueRows(rows) {
         itens: [
           {
             id: row.id,
+            numero_fogo: row.numero_fogo,
             numero_pneu: row.numero_pneu,
             marca: row.marca,
             situacao: row.situacao,
@@ -409,6 +555,7 @@ function groupEstoqueRows(rows) {
 
     current.itens.push({
       id: row.id,
+      numero_fogo: row.numero_fogo,
       numero_pneu: row.numero_pneu,
       marca: row.marca,
       situacao: row.situacao,
@@ -489,12 +636,12 @@ function ReadOnlyField({ label, value }) {
   );
 }
 
-function InputField({ label, value, onChange, placeholder = "", inputMode = "text", pattern }) {
+function InputField({ label, value, onChange, placeholder = "", inputMode = "text", pattern, type = "text" }) {
   return (
     <label className="flex flex-col gap-2">
       <span className="text-sm text-gray-600">{label}</span>
       <input
-        type="text"
+        type={type}
         value={value}
         placeholder={placeholder}
         inputMode={inputMode}
@@ -738,14 +885,14 @@ function TrocaModal({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-4">
                 <InputField
-                  label="Numero do pneu (retirado)"
+                  label="Numero de fogo (retirado)"
                   value={form.numeroFogoRetirado}
                   onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
                 />
                 <PhotoField
-                  title="Foto do numero do pneu retirado"
+                  title="Foto do numero de fogo retirado"
                   file={form.fotoRetirado}
                   inputId="troca-retirado"
                   onChange={(event) => onFotoChange("fotoRetirado", event.target.files?.[0] || null)}
@@ -756,14 +903,14 @@ function TrocaModal({
 
               <div className="space-y-4">
                 <InputField
-                  label="Numero do pneu (colocado)"
+                  label="Numero de fogo (colocado)"
                   value={form.numeroFogoColocado}
                   onChange={(value) => onFieldChange("numeroFogoColocado", value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
                 />
                 <PhotoField
-                  title="Foto do numero do pneu colocado"
+                  title="Foto do numero de fogo colocado"
                   file={form.fotoColocado}
                   inputId="troca-colocado"
                   onChange={(event) => onFotoChange("fotoColocado", event.target.files?.[0] || null)}
@@ -791,14 +938,14 @@ function TrocaModal({
                   options={POSICOES}
                 />
                 <InputField
-                  label="Numero do pneu (retirado)"
+                  label="Numero de fogo (retirado)"
                   value={form.numeroFogoRetirado}
                   onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
                 />
                 <PhotoField
-                  title="Foto do numero do pneu retirado"
+                  title="Foto do numero de fogo retirado"
                   file={form.fotoRetirado}
                   inputId="troca-retirado"
                   onChange={(event) => onFotoChange("fotoRetirado", event.target.files?.[0] || null)}
@@ -824,14 +971,14 @@ function TrocaModal({
                   options={POSICOES}
                 />
                 <InputField
-                  label="Numero do pneu (colocado)"
+                  label="Numero de fogo (colocado)"
                   value={form.numeroFogoColocado}
                   onChange={(value) => onFieldChange("numeroFogoColocado", value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
                 />
                 <PhotoField
-                  title="Foto do numero do pneu colocado"
+                  title="Foto do numero de fogo colocado"
                   file={form.fotoColocado}
                   inputId="troca-colocado"
                   onChange={(event) => onFotoChange("fotoColocado", event.target.files?.[0] || null)}
@@ -1048,7 +1195,14 @@ function EstoqueModal({
             <SectionBlock key={`estoque-item-${index}`} title={`Pneu ${index + 1}`}>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <InputField
-                  label="Numero do pneu"
+                  label="Numero de fogo"
+                  value={item.numeroFogo}
+                  onChange={(value) => onItemChange(index, "numeroFogo", value)}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                />
+                <InputField
+                  label="Numero interno / cadastro"
                   value={item.numeroPneu}
                   onChange={(value) => onItemChange(index, "numeroPneu", value)}
                   inputMode="numeric"
@@ -1103,6 +1257,203 @@ function EstoqueModal({
   );
 }
 
+function ConsertoModal({
+  open,
+  form,
+  saving,
+  onClose,
+  onFieldChange,
+  onSalvar,
+}) {
+  if (!open) return null;
+
+  return (
+    <ModalShell
+      title="Lancar conserto de pneu"
+      subtitle="PCM · Consertos"
+      onClose={onClose}
+      footer={
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onSalvar}
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            <FaSave />
+            {saving ? "Salvando..." : "Enviar para conserto"}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <ReadOnlyField label="Numero da ficha" value={form.ficha} />
+          <ReadOnlyField label="Data" value={form.dataLancamento} />
+          <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <SelectField
+            label="Origem"
+            value={form.origemTab}
+            onChange={(value) => onFieldChange("origemTab", value)}
+            options={[TAB_AUDITORIA, TAB_ESTOQUE, TAB_TROCA]}
+          />
+          <CampoPrefixo
+            value={form.prefixo}
+            onChange={(value) => onFieldChange("prefixo", value)}
+            label="Prefixo"
+            inputMode="numeric"
+            pattern="[0-9]*"
+          />
+          <InputField
+            label="Numero de fogo"
+            value={form.numeroFogo}
+            onChange={(value) => onFieldChange("numeroFogo", value)}
+            inputMode="numeric"
+            pattern="[0-9]*"
+          />
+          <InputField
+            label="Situacao de origem"
+            value={form.situacaoOrigem}
+            onChange={(value) => onFieldChange("situacaoOrigem", value)}
+            placeholder="Ex.: INCORRETO"
+          />
+        </div>
+
+        <InputField
+          label="Observacoes"
+          value={form.observacoes}
+          onChange={(value) => onFieldChange("observacoes", value)}
+          placeholder="Descreva o que o borracheiro precisa ajustar"
+        />
+      </div>
+    </ModalShell>
+  );
+}
+
+function RiscadoModal({
+  open,
+  form,
+  saving,
+  onClose,
+  onFieldChange,
+  onFotoChange,
+  onCapturePhoto,
+  onSalvar,
+  isNativeShell,
+}) {
+  if (!open) return null;
+
+  return (
+    <ModalShell
+      title="Lancar pneu riscado"
+      subtitle="PCM · Riscados"
+      onClose={onClose}
+      footer={
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onSalvar}
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            <FaSave />
+            {saving ? "Salvando..." : "Salvar riscado"}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <ReadOnlyField label="Numero da ficha" value={form.ficha} />
+          <ReadOnlyField label="Data" value={form.dataLancamento} />
+          <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <InputField
+            label="Dia do risco"
+            value={form.dataRiscado}
+            onChange={(value) => onFieldChange("dataRiscado", value)}
+            type="date"
+          />
+          <CampoPrefixo
+            value={form.prefixo}
+            onChange={(value) => onFieldChange("prefixo", value)}
+            label="Carro / Prefixo"
+            inputMode="numeric"
+            pattern="[0-9]*"
+          />
+          <InputField
+            label="Numero de fogo"
+            value={form.numeroFogo}
+            onChange={(value) => onFieldChange("numeroFogo", value)}
+            inputMode="numeric"
+            pattern="[0-9]*"
+          />
+          <SelectField
+            label="Marca"
+            value={form.marca}
+            onChange={(value) => onFieldChange("marca", value)}
+            options={MARCAS_PNEU}
+          />
+          {form.marca === "Outra" ? (
+            <InputField
+              label="Qual marca?"
+              value={form.marcaOutra}
+              onChange={(value) => onFieldChange("marcaOutra", value)}
+            />
+          ) : null}
+          <InputField
+            label="MM antes"
+            value={form.mmAntes}
+            onChange={(value) => onFieldChange("mmAntes", value)}
+            inputMode="decimal"
+          />
+          <InputField
+            label="MM depois"
+            value={form.mmDepois}
+            onChange={(value) => onFieldChange("mmDepois", value)}
+            inputMode="decimal"
+          />
+        </div>
+
+        <PhotoField
+          title="Foto do pneu riscado"
+          file={form.foto}
+          inputId="riscado-foto"
+          onChange={(event) => onFotoChange(event.target.files?.[0] || null)}
+          onNativeCapture={onCapturePhoto}
+          isNativeShell={isNativeShell}
+        />
+
+        <InputField
+          label="Observacoes"
+          value={form.observacoes}
+          onChange={(value) => onFieldChange("observacoes", value)}
+          placeholder="Descreva o ocorrido"
+        />
+      </div>
+    </ModalShell>
+  );
+}
+
 function ConsultaModal({
   open,
   tab,
@@ -1114,6 +1465,8 @@ function ConsultaModal({
   onMarcarTransnet,
   onMarcarAuditoriaStatus,
   onMarcarEstoqueStatus,
+  onEnviarConserto,
+  onAbrirRiscado,
 }) {
   const [auditoriaEditando, setAuditoriaEditando] = useState({});
   const [estoqueEditando, setEstoqueEditando] = useState({});
@@ -1145,11 +1498,11 @@ function ConsultaModal({
             <div className="grid grid-cols-1 gap-4">
               <DetailRow label="Prefixo" value={row.prefixo_retirada || row.prefixo} />
               <DetailRow label="Posicao" value={row.posicao_retirada || row.posicao} />
-              <DetailRow label="Numero do pneu" value={row.numero_fogo_retirado} />
+              <DetailRow label="Numero de fogo" value={row.numero_fogo_retirado} />
               {row.foto_numero_fogo_retirado_url ? (
                 <ZoomableImage
                   src={row.foto_numero_fogo_retirado_url}
-                  alt="Numero do pneu retirado"
+                  alt="Numero de fogo retirado"
                   isNativeShell={isNativeShell}
                 />
               ) : null}
@@ -1160,11 +1513,11 @@ function ConsultaModal({
             <div className="grid grid-cols-1 gap-4">
               <DetailRow label="Prefixo" value={row.prefixo_instalacao || row.prefixo} />
               <DetailRow label="Posicao" value={row.posicao_instalacao || row.posicao} />
-              <DetailRow label="Numero do pneu" value={row.numero_fogo_colocado || row.numero_fogo_pneu} />
+              <DetailRow label="Numero de fogo" value={row.numero_fogo_colocado || row.numero_fogo_pneu} />
               {row.foto_numero_fogo_colocado_url || row.foto_numero_fogo_url ? (
                 <ZoomableImage
                   src={row.foto_numero_fogo_colocado_url || row.foto_numero_fogo_url}
-                  alt="Numero do pneu colocado"
+                  alt="Numero de fogo colocado"
                   isNativeShell={isNativeShell}
                 />
               ) : null}
@@ -1282,6 +1635,40 @@ function ConsultaModal({
                   )}
                 </div>
 
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onEnviarConserto({
+                        origemTab: TAB_AUDITORIA,
+                        origemItemId: `${row.id}:${item.posicao}`,
+                        prefixo: row.prefixo,
+                        numeroFogo: item.numero_fogo,
+                        situacaoOrigem: item.conferencia_status || "PENDENTE",
+                        observacoes: `Enviado a partir da auditoria ${row.ficha_auditoria} · ${item.posicao}.`,
+                      })
+                    }
+                    className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
+                  >
+                    <FaWrench className="inline mr-2" />
+                    Enviar para conserto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onAbrirRiscado({
+                        prefixo: row.prefixo,
+                        numeroFogo: item.numero_fogo,
+                        observacoes: `Registrado a partir da auditoria ${row.ficha_auditoria} · ${item.posicao}.`,
+                      })
+                    }
+                    className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700"
+                  >
+                    <FaExclamationTriangle className="inline mr-2" />
+                    Lançar riscado
+                  </button>
+                </div>
+
                 {item.conferencia_por_nome || item.conferencia_por_login ? (
                   <DetailRow
                     label="Conferido por"
@@ -1339,7 +1726,7 @@ function ConsultaModal({
             return (
               <SectionBlock key={item.id || `${item.numero_pneu}-${index}`} title={`Pneu ${index + 1} · ${item.numero_pneu || "Sem numero"}`}>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <DetailRow label="Numero do pneu" value={item.numero_pneu} />
+              <DetailRow label="Numero de fogo" value={item.numero_fogo || item.numero_pneu} />
                   <DetailRow label="Marca" value={item.marca} />
                   <DetailRow label="Situacao" value={item.situacao} />
                 </div>
@@ -1381,6 +1768,42 @@ function ConsultaModal({
                     </button>
                   )}
                 </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onEnviarConserto({
+                        origemTab: TAB_ESTOQUE,
+                        origemItemId: item.id,
+                        prefixo: "",
+                        numeroFogo: item.numero_fogo || item.numero_pneu,
+                        situacaoOrigem: item.transnet_status || item.situacao || "PENDENTE",
+                        observacoes: `Enviado a partir do estoque ${row.ficha_estoque}.`,
+                      })
+                    }
+                    className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
+                  >
+                    <FaWrench className="inline mr-2" />
+                    Enviar para conserto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onAbrirRiscado({
+                        prefixo: "",
+                        numeroFogo: item.numero_fogo || item.numero_pneu,
+                        marca: item.marca,
+                        observacoes: `Registrado a partir do estoque ${row.ficha_estoque}.`,
+                      })
+                    }
+                    className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700"
+                  >
+                    <FaExclamationTriangle className="inline mr-2" />
+                    Lançar riscado
+                  </button>
+                </div>
+
                 {item.transnet_conferido_por_nome || item.transnet_conferido_por_login ? (
                   <DetailRow
                     label="Conferido por"
@@ -1441,14 +1864,21 @@ export default function PCMTrocaPneus() {
   const [trocas, setTrocas] = useState([]);
   const [auditorias, setAuditorias] = useState([]);
   const [estoqueRows, setEstoqueRows] = useState([]);
+  const [consertos, setConsertos] = useState([]);
+  const [riscados, setRiscados] = useState([]);
+  const [alertasAbertos, setAlertasAbertos] = useState([]);
 
   const [trocaForm, setTrocaForm] = useState(() => createTrocaForm("", userName));
   const [auditoriaForm, setAuditoriaForm] = useState(() => createAuditoriaForm("", userName));
   const [estoqueForm, setEstoqueForm] = useState(() => createEstoqueForm("", userName));
+  const [consertoForm, setConsertoForm] = useState(() => createConsertoForm("", userName));
+  const [riscadoForm, setRiscadoForm] = useState(() => createRiscadoForm("", userName));
 
   const [trocaOpen, setTrocaOpen] = useState(false);
   const [auditoriaOpen, setAuditoriaOpen] = useState(false);
   const [estoqueOpen, setEstoqueOpen] = useState(false);
+  const [consertoOpen, setConsertoOpen] = useState(false);
+  const [riscadoOpen, setRiscadoOpen] = useState(false);
 
   const [consulta, setConsulta] = useState({ open: false, tab: TAB_TROCA, row: null });
 
@@ -1467,6 +1897,18 @@ export default function PCMTrocaPneus() {
   const [estoqueFiltros, setEstoqueFiltros] = useState({
     busca: "",
     situacao: "",
+    dataInicio: "",
+    dataFim: "",
+  });
+  const [consertoFiltros, setConsertoFiltros] = useState({
+    busca: "",
+    status: "",
+    dataInicio: "",
+    dataFim: "",
+  });
+  const [riscadoFiltros, setRiscadoFiltros] = useState({
+    busca: "",
+    status: "",
     dataInicio: "",
     dataFim: "",
   });
@@ -1518,10 +1960,40 @@ export default function PCMTrocaPneus() {
     return data || [];
   }
 
+  async function carregarConsertos() {
+    const { data, error } = await supabase
+      .from("pcm_consertos_pneus")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(300);
+
+    if (error) throw error;
+    setConsertos(data || []);
+    return data || [];
+  }
+
+  async function carregarRiscados() {
+    const { data, error } = await supabase
+      .from("pcm_riscados_pneus")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(300);
+
+    if (error) throw error;
+    setRiscados(data || []);
+    return data || [];
+  }
+
   async function aplicar() {
     setLoading(true);
     try {
-      await Promise.all([carregarTrocas(), carregarAuditorias(), carregarEstoque()]);
+      await Promise.all([
+        carregarTrocas(),
+        carregarAuditorias(),
+        carregarEstoque(),
+        carregarConsertos(),
+        carregarRiscados(),
+      ]);
     } catch (error) {
       console.error("Erro ao carregar central de pneus:", error);
       alert(error?.message || "Nao foi possivel carregar a central de pneus.");
@@ -1580,6 +2052,10 @@ export default function PCMTrocaPneus() {
         setAuditoriaOpen(false);
       } else if (estoqueOpen) {
         setEstoqueOpen(false);
+      } else if (consertoOpen) {
+        setConsertoOpen(false);
+      } else if (riscadoOpen) {
+        setRiscadoOpen(false);
       } else if (activeTab !== TAB_TROCA) {
         handleTabChange(TAB_TROCA);
       }
@@ -1591,7 +2067,7 @@ export default function PCMTrocaPneus() {
     window.addEventListener("popstate", handlePopState);
 
     const backListener = CapacitorApp.addListener("backButton", ({ canGoBack }) => {
-      if (consulta.open || trocaOpen || auditoriaOpen || estoqueOpen || activeTab !== TAB_TROCA) {
+      if (consulta.open || trocaOpen || auditoriaOpen || estoqueOpen || consertoOpen || riscadoOpen || activeTab !== TAB_TROCA) {
         handlePopState();
         return;
       }
@@ -1608,12 +2084,14 @@ export default function PCMTrocaPneus() {
       window.removeEventListener("popstate", handlePopState);
       backListener.then((listener) => listener.remove());
     };
-  }, [activeTab, auditoriaOpen, consulta.open, estoqueOpen, isNativeShell, trocaOpen]);
+  }, [activeTab, auditoriaOpen, consertoOpen, consulta.open, estoqueOpen, isNativeShell, riscadoOpen, trocaOpen]);
 
   useEffect(() => {
     setTrocaForm((current) => ({ ...current, dataLancamento: nowDisplay(), quemLancou: userName }));
     setAuditoriaForm((current) => ({ ...current, dataLancamento: nowDisplay(), quemLancou: userName }));
     setEstoqueForm((current) => ({ ...current, dataLancamento: nowDisplay(), quemLancou: userName }));
+    setConsertoForm((current) => ({ ...current, dataLancamento: nowDisplay(), quemLancou: userName }));
+    setRiscadoForm((current) => ({ ...current, dataLancamento: nowDisplay(), quemLancou: userName }));
   }, [userName]);
 
   const estoqueAgrupado = useMemo(() => groupEstoqueRows(estoqueRows), [estoqueRows]);
@@ -1652,13 +2130,33 @@ export default function PCMTrocaPneus() {
       ok: itens.filter((item) => norm(item.transnet_status) === "OK").length,
       incorretos: itens.filter((item) => norm(item.transnet_status) === "INCORRETO").length,
       pendentes: itens.filter((item) => !norm(item.transnet_status)).length,
-      novo: estoqueRows.filter((item) => norm(item.situacao) === "NOVO").length,
-      uso: estoqueRows.filter((item) => norm(item.situacao) === "USADO ( PARA USO )").length,
-      recapagem: estoqueRows.filter((item) => norm(item.situacao) === "ENVIAR PARA RECAPAGEM").length,
-      recapado: estoqueRows.filter((item) => norm(item.situacao) === "RECAPADO").length,
-      sucata: estoqueRows.filter((item) => norm(item.situacao) === "SUCATA").length,
+      novo: itens.filter((item) => norm(item.situacao) === "NOVO").length,
+      uso: itens.filter((item) => norm(item.situacao) === "USADO ( PARA USO )").length,
+      recapagem: itens.filter((item) => norm(item.situacao) === "ENVIAR PARA RECAPAGEM").length,
+      recapado: itens.filter((item) => norm(item.situacao) === "RECAPADO").length,
+      sucata: itens.filter((item) => norm(item.situacao) === "SUCATA").length,
     };
-  }, [estoqueAgrupado, estoqueRows]);
+  }, [estoqueAgrupado]);
+
+  const cardsConsertos = useMemo(
+    () => ({
+      total: consertos.length,
+      pendentes: consertos.filter((item) => norm(item.status) === "PENDENTE").length,
+      emConserto: consertos.filter((item) => norm(item.status) === "EM CONSERTO").length,
+      concluidos: consertos.filter((item) => norm(item.status) === "CONCLUIDO").length,
+    }),
+    [consertos]
+  );
+
+  const cardsRiscados = useMemo(
+    () => ({
+      total: riscados.length,
+      abertos: riscados.filter((item) => norm(item.status) === "ABERTO").length,
+      acompanhando: riscados.filter((item) => norm(item.status) === "ACOMPANHANDO").length,
+      vencidos10Dias: riscados.filter((item) => diffDaysFromToday(item.data_riscado) >= 10).length,
+    }),
+    [riscados]
+  );
 
   const trocasFiltradas = useMemo(() => {
     const busca = norm(trocaFiltros.busca).toLowerCase();
@@ -1718,7 +2216,7 @@ export default function PCMTrocaPneus() {
         row.ficha_estoque,
         row.criado_por_nome,
         row.criado_por_login,
-        ...row.itens.flatMap((item) => [item.numero_pneu, item.marca, item.situacao]),
+        ...row.itens.flatMap((item) => [item.numero_fogo, item.numero_pneu, item.marca, item.situacao]),
       ]
         .map((item) => norm(item).toLowerCase())
         .join(" ");
@@ -1726,6 +2224,137 @@ export default function PCMTrocaPneus() {
       return alvo.includes(busca);
     });
   }, [estoqueAgrupado, estoqueFiltros]);
+
+  const consertosFiltrados = useMemo(() => {
+    const busca = norm(consertoFiltros.busca).toLowerCase();
+    return consertos.filter((row) => {
+      if (!inDateRange(row.created_at, consertoFiltros.dataInicio, consertoFiltros.dataFim)) return false;
+      if (consertoFiltros.status && row.status !== consertoFiltros.status) return false;
+      if (!busca) return true;
+
+      const alvo = [
+        row.ficha_conserto,
+        row.numero_fogo,
+        row.prefixo,
+        row.status,
+        row.criado_por_nome,
+        row.criado_por_login,
+      ]
+        .map((item) => norm(item).toLowerCase())
+        .join(" ");
+
+      return alvo.includes(busca);
+    });
+  }, [consertoFiltros, consertos]);
+
+  const riscadosFiltrados = useMemo(() => {
+    const busca = norm(riscadoFiltros.busca).toLowerCase();
+    return riscados.filter((row) => {
+      if (!inDateRange(row.created_at, riscadoFiltros.dataInicio, riscadoFiltros.dataFim)) return false;
+      if (riscadoFiltros.status && row.status !== riscadoFiltros.status) return false;
+      if (!busca) return true;
+
+      const alvo = [
+        row.ficha_riscado,
+        row.numero_fogo,
+        row.prefixo,
+        row.status,
+        row.criado_por_nome,
+        row.criado_por_login,
+      ]
+        .map((item) => norm(item).toLowerCase())
+        .join(" ");
+
+      return alvo.includes(busca);
+    });
+  }, [riscadoFiltros, riscados]);
+
+  useEffect(() => {
+    async function processarAlertas() {
+      const nextAlertas = [];
+
+      const riscadosVencidos = riscados.filter((item) => {
+        if (norm(item.status) === "RESOLVIDO") return false;
+        const cicloAtual = buildAlertCycle(diffDaysFromToday(item.data_riscado));
+        return cicloAtual > Number(item.ultimo_alerta_ciclo || 0);
+      });
+
+      if (riscadosVencidos.length) {
+        nextAlertas.push(
+          ...riscadosVencidos.map((item) => ({
+            id: `riscado-${item.id}`,
+            type: "riscado",
+            title: "Pneu riscado sem retorno",
+            message: `${item.numero_fogo || "-"} do prefixo ${item.prefixo || "-"} passou ${diffDaysFromToday(item.data_riscado)} dia(s) desde o risco.`,
+          }))
+        );
+
+        for (const item of riscadosVencidos) {
+          const cicloAtual = buildAlertCycle(diffDaysFromToday(item.data_riscado));
+          await supabase
+            .from("pcm_riscados_pneus")
+            .update({ ultimo_alerta_ciclo: cicloAtual })
+            .eq("id", item.id);
+
+          await notifyDevice({
+            title: "Alerta de pneu riscado",
+            body: `${item.numero_fogo || "-"} do prefixo ${item.prefixo || "-"} está aberto há ${diffDaysFromToday(item.data_riscado)} dia(s).`,
+            seed: `riscado-${item.id}-${cicloAtual}`,
+          });
+        }
+
+        if (riscadosVencidos.length) {
+          await carregarRiscados();
+        }
+      }
+
+      const consertosPendentes = consertos.filter(
+        (item) => item.notificacao_pendente && norm(item.status) !== "CONCLUIDO"
+      );
+
+      if (consertosPendentes.length) {
+        nextAlertas.push(
+          ...consertosPendentes.map((item) => ({
+            id: `conserto-${item.id}`,
+            type: "conserto",
+            title: "Pneu aguardando conserto",
+            message: `${item.numero_fogo || "-"} ${item.prefixo ? `· prefixo ${item.prefixo}` : ""} foi enviado para o borracheiro.`,
+          }))
+        );
+
+        for (const item of consertosPendentes) {
+          await notifyDevice({
+            title: "Novo pneu para conserto",
+            body: `${item.numero_fogo || "-"} ${item.prefixo ? `do prefixo ${item.prefixo}` : ""} foi enviado para conserto.`,
+            seed: `conserto-${item.id}`,
+          });
+        }
+
+        await supabase
+          .from("pcm_consertos_pneus")
+          .update({
+            notificacao_pendente: false,
+            notificacao_enviada_em: new Date().toISOString(),
+          })
+          .in(
+            "id",
+            consertosPendentes.map((item) => item.id)
+          );
+
+        if (consertosPendentes.length) {
+          await carregarConsertos();
+        }
+      }
+
+      if (nextAlertas.length) {
+        setAlertasAbertos(nextAlertas);
+      }
+    }
+
+    if (riscados.length || consertos.length) {
+      void processarAlertas();
+    }
+  }, [consertos, riscados]);
 
   function openConsulta(tab, row) {
     setConsulta({ open: true, tab, row });
@@ -1761,6 +2390,26 @@ export default function PCMTrocaPneus() {
       return;
     }
 
+    if (activeTab === TAB_CONSERTOS) {
+      setConsertoFiltros({
+        busca: "",
+        status: "",
+        dataInicio: "",
+        dataFim: "",
+      });
+      return;
+    }
+
+    if (activeTab === TAB_RISCADOS) {
+      setRiscadoFiltros({
+        busca: "",
+        status: "",
+        dataInicio: "",
+        dataFim: "",
+      });
+      return;
+    }
+
     setEstoqueFiltros({
       busca: "",
       situacao: "",
@@ -1784,9 +2433,23 @@ export default function PCMTrocaPneus() {
       return;
     }
 
-    const rowsRef = estoqueRows.length ? estoqueRows : await carregarEstoque();
-    setEstoqueForm(createEstoqueForm(buildNextFicha(rowsRef, "ficha_estoque", "EP"), userName));
-    setEstoqueOpen(true);
+    if (activeTab === TAB_ESTOQUE) {
+      const rowsRef = estoqueRows.length ? estoqueRows : await carregarEstoque();
+      setEstoqueForm(createEstoqueForm(buildNextFicha(rowsRef, "ficha_estoque", "EP"), userName));
+      setEstoqueOpen(true);
+      return;
+    }
+
+    if (activeTab === TAB_CONSERTOS) {
+      const rowsRef = consertos.length ? consertos : await carregarConsertos();
+      setConsertoForm(createConsertoForm(buildNextFicha(rowsRef, "ficha_conserto", "CP"), userName));
+      setConsertoOpen(true);
+      return;
+    }
+
+    const rowsRef = riscados.length ? riscados : await carregarRiscados();
+    setRiscadoForm(createRiscadoForm(buildNextFicha(rowsRef, "ficha_riscado", "RP"), userName));
+    setRiscadoOpen(true);
   }
 
   function updateTrocaField(field, value) {
@@ -1860,6 +2523,26 @@ export default function PCMTrocaPneus() {
     }));
   }
 
+  function updateConsertoField(field, value) {
+    setConsertoForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateRiscadoField(field, value) {
+    setRiscadoForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function captureRiscadoPhoto() {
+    try {
+      const file = await captureNativePhoto("riscado");
+      if (file) {
+        setRiscadoForm((current) => ({ ...current, foto: file }));
+      }
+    } catch (error) {
+      console.error("Erro ao capturar foto do riscado:", error);
+      alert("Nao foi possivel abrir a camera agora.");
+    }
+  }
+
   function addEstoqueItem() {
     setEstoqueForm((current) => ({
       ...current,
@@ -1887,6 +2570,7 @@ export default function PCMTrocaPneus() {
 
     const itensCopiados = ultimaFicha.itens.map((item) => ({
       numeroPneu: norm(item.numero_pneu),
+      numeroFogo: norm(item.numero_fogo || item.numero_pneu),
       marca: MARCAS_PNEU.includes(norm(item.marca)) ? norm(item.marca) : "Outra",
       marcaOutra: MARCAS_PNEU.includes(norm(item.marca)) ? "" : norm(item.marca),
       situacao: SITUACOES_ESTOQUE.includes(norm(item.situacao)) ? norm(item.situacao) : SITUACOES_ESTOQUE[0],
@@ -1992,6 +2676,7 @@ export default function PCMTrocaPneus() {
       id: createClientUuid(),
       ficha_estoque: payload.ficha,
       numero_pneu: item.numero_pneu,
+      numero_fogo: item.numero_fogo || item.numero_pneu,
       marca: item.marca,
       situacao: item.situacao,
       observacoes: payload.observacoes,
@@ -2002,6 +2687,62 @@ export default function PCMTrocaPneus() {
     }));
 
     const { error } = await supabase.from("pcm_estoque_pneus").insert(rows);
+    if (error) throw error;
+  }
+
+  async function submitConsertoPayload(payload) {
+    const { error } = await supabase.from("pcm_consertos_pneus").insert([
+      {
+        id: payload.id || createClientUuid(),
+        ficha_conserto: payload.ficha,
+        origem_tab: payload.origemTab,
+        origem_item_id: payload.origemItemId,
+        prefixo: payload.prefixo,
+        numero_fogo: payload.numeroFogo,
+        situacao_origem: payload.situacaoOrigem,
+        status: "PENDENTE",
+        observacoes: payload.observacoes,
+        criado_por_login: payload.criadoPorLogin,
+        criado_por_nome: payload.criadoPorNome,
+        criado_por_id: payload.criadoPorId,
+        notificacao_pendente: true,
+        origem: "INOVE_WEB_APP",
+      },
+    ]);
+    if (error) throw error;
+  }
+
+  async function submitRiscadoPayload(payload) {
+    const riscadoId = payload.id || createClientUuid();
+    let fotoPath = "";
+    let fotoUrl = "";
+
+    if (payload.fotoFile) {
+      const uploaded = await uploadFoto(BUCKET_RISCADOS, "riscados", riscadoId, "foto", payload.fotoFile);
+      fotoPath = uploaded.path;
+      fotoUrl = uploaded.url;
+    }
+
+    const { error } = await supabase.from("pcm_riscados_pneus").insert([
+      {
+        id: riscadoId,
+        ficha_riscado: payload.ficha,
+        data_riscado: payload.dataRiscado,
+        prefixo: payload.prefixo,
+        numero_fogo: payload.numeroFogo,
+        marca: payload.marca,
+        status: "ABERTO",
+        mm_antes: payload.mmAntes ? Number(payload.mmAntes) : null,
+        mm_depois: payload.mmDepois ? Number(payload.mmDepois) : null,
+        foto_path: fotoPath || null,
+        foto_url: fotoUrl || null,
+        observacoes: payload.observacoes,
+        criado_por_login: payload.criadoPorLogin,
+        criado_por_nome: payload.criadoPorNome,
+        criado_por_id: payload.criadoPorId,
+        origem: "INOVE_WEB_APP",
+      },
+    ]);
     if (error) throw error;
   }
 
@@ -2118,7 +2859,7 @@ export default function PCMTrocaPneus() {
     }
 
     if (!trocaForm.fotoRetirado || !trocaForm.fotoColocado) {
-      alert("As duas fotos do numero do pneu sao obrigatorias.");
+      alert("As duas fotos do numero de fogo sao obrigatorias.");
       return;
     }
 
@@ -2252,13 +2993,14 @@ export default function PCMTrocaPneus() {
     }
 
     const itens = estoqueForm.itens.map((item) => ({
-      numero_pneu: safeText(item.numeroPneu),
+      numero_pneu: safeText(item.numeroPneu) || safeText(item.numeroFogo),
+      numero_fogo: safeText(item.numeroFogo) || safeText(item.numeroPneu),
       marca: item.marca === "Outra" ? safeText(item.marcaOutra) : safeText(item.marca),
       situacao: safeText(item.situacao),
     }));
 
-    if (itens.some((item) => !item.numero_pneu || !item.marca || !item.situacao)) {
-      alert("Preencha numero, marca e situacao de todos os pneus do estoque.");
+    if (itens.some((item) => !item.numero_fogo || !item.marca || !item.situacao)) {
+      alert("Preencha numero de fogo, marca e situacao de todos os pneus do estoque.");
       return;
     }
 
@@ -2299,6 +3041,114 @@ export default function PCMTrocaPneus() {
         return;
       }
       alert(error?.message || "Nao foi possivel salvar o estoque.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function abrirConsertoPreenchido(seed = {}) {
+    const nextFicha = buildNextFicha(consertos, "ficha_conserto", "CP");
+    setConsertoForm({
+      ...createConsertoForm(nextFicha, userName),
+      origemTab: seed.origemTab || TAB_AUDITORIA,
+      origemItemId: seed.origemItemId || "",
+      prefixo: seed.prefixo || "",
+      numeroFogo: seed.numeroFogo || "",
+      situacaoOrigem: seed.situacaoOrigem || "",
+      observacoes: seed.observacoes || "",
+    });
+    setConsertoOpen(true);
+  }
+
+  function abrirRiscadoPreenchido(seed = {}) {
+    const nextFicha = buildNextFicha(riscados, "ficha_riscado", "RP");
+    setRiscadoForm({
+      ...createRiscadoForm(nextFicha, userName),
+      prefixo: seed.prefixo || "",
+      numeroFogo: seed.numeroFogo || "",
+      marca: seed.marca || MARCAS_PNEU[0],
+      observacoes: seed.observacoes || "",
+    });
+    setRiscadoOpen(true);
+  }
+
+  async function salvarConserto() {
+    const ficha = safeText(consertoForm.ficha);
+    const numeroFogo = safeText(consertoForm.numeroFogo);
+
+    if (!ficha || !numeroFogo) {
+      alert("Preencha a ficha e o numero de fogo do conserto.");
+      return;
+    }
+
+    const payload = {
+      ficha,
+      origemTab: safeText(consertoForm.origemTab),
+      origemItemId: safeText(consertoForm.origemItemId),
+      prefixo: safeText(consertoForm.prefixo),
+      numeroFogo,
+      situacaoOrigem: safeText(consertoForm.situacaoOrigem),
+      observacoes: safeText(consertoForm.observacoes),
+      criadoPorLogin: safeText(user?.login || user?.email),
+      criadoPorNome: safeText(user?.nome),
+      criadoPorId: safeText(user?.auth_user_id || user?.id),
+    };
+
+    try {
+      setSaving(true);
+      await submitConsertoPayload(payload);
+      setConsertoOpen(false);
+      const data = await carregarConsertos();
+      setConsertoForm(createConsertoForm(buildNextFicha(data, "ficha_conserto", "CP"), userName));
+      await notifyDevice({
+        title: "Pneu enviado para conserto",
+        body: `${numeroFogo} foi enviado para o borracheiro.`,
+        seed: `novo-conserto-${ficha}`,
+      });
+      alert("Pneu enviado para conserto com sucesso.");
+    } catch (error) {
+      console.error("Erro ao salvar conserto:", error);
+      alert(error?.message || "Nao foi possivel salvar o conserto.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function salvarRiscado() {
+    const ficha = safeText(riscadoForm.ficha);
+    const prefixo = safeText(riscadoForm.prefixo);
+    const numeroFogo = safeText(riscadoForm.numeroFogo);
+
+    if (!ficha || !prefixo || !numeroFogo || !riscadoForm.foto) {
+      alert("Preencha ficha, prefixo, numero de fogo e foto do pneu riscado.");
+      return;
+    }
+
+    const payload = {
+      ficha,
+      dataRiscado: riscadoForm.dataRiscado || todayValue(),
+      prefixo,
+      numeroFogo,
+      marca: riscadoForm.marca === "Outra" ? safeText(riscadoForm.marcaOutra) : safeText(riscadoForm.marca),
+      mmAntes: safeText(riscadoForm.mmAntes),
+      mmDepois: safeText(riscadoForm.mmDepois),
+      observacoes: safeText(riscadoForm.observacoes),
+      fotoFile: riscadoForm.foto,
+      criadoPorLogin: safeText(user?.login || user?.email),
+      criadoPorNome: safeText(user?.nome),
+      criadoPorId: safeText(user?.auth_user_id || user?.id),
+    };
+
+    try {
+      setSaving(true);
+      await submitRiscadoPayload(payload);
+      setRiscadoOpen(false);
+      const data = await carregarRiscados();
+      setRiscadoForm(createRiscadoForm(buildNextFicha(data, "ficha_riscado", "RP"), userName));
+      alert("Pneu riscado salvo com sucesso.");
+    } catch (error) {
+      console.error("Erro ao salvar riscado:", error);
+      alert(error?.message || "Nao foi possivel salvar o riscado.");
     } finally {
       setSaving(false);
     }
@@ -2406,6 +3256,84 @@ export default function PCMTrocaPneus() {
     }
   }
 
+  async function marcarConsertoStatus(itemId, status) {
+    if (!itemId) return;
+
+    const nowIso = new Date().toISOString();
+    const key = `conserto:${itemId}:${status}`;
+    const payload = {
+      status,
+      ...(status === "EM CONSERTO"
+        ? {
+            borracheiro_recebido_em: nowIso,
+            borracheiro_nome: safeText(user?.nome),
+            borracheiro_login: safeText(user?.login || user?.email),
+            borracheiro_id: safeText(user?.auth_user_id || user?.id),
+          }
+        : {}),
+      ...(status === "CONCLUIDO"
+        ? {
+            borracheiro_recebido_em: consulta.row?.borracheiro_recebido_em || nowIso,
+            borracheiro_nome: consulta.row?.borracheiro_nome || safeText(user?.nome),
+            borracheiro_login: consulta.row?.borracheiro_login || safeText(user?.login || user?.email),
+            borracheiro_id: consulta.row?.borracheiro_id || safeText(user?.auth_user_id || user?.id),
+            baixa_em: nowIso,
+            baixa_por_nome: safeText(user?.nome),
+            baixa_por_login: safeText(user?.login || user?.email),
+            baixa_por_id: safeText(user?.auth_user_id || user?.id),
+          }
+        : {}),
+    };
+
+    try {
+      setCheckingStatusKey(key);
+      const { error } = await supabase.from("pcm_consertos_pneus").update(payload).eq("id", itemId);
+      if (error) throw error;
+
+      setConsertos((current) =>
+        current.map((item) => (item.id === itemId ? { ...item, ...payload } : item))
+      );
+      if (consulta.row?.id === itemId) {
+        setConsulta((current) => ({ ...current, row: { ...current.row, ...payload } }));
+      }
+      alert(status === "CONCLUIDO" ? "Conserto baixado com sucesso." : "Conserto atualizado com sucesso.");
+    } catch (error) {
+      console.error("Erro ao atualizar conserto:", error);
+      alert(error?.message || "Nao foi possivel atualizar o conserto.");
+    } finally {
+      setCheckingStatusKey("");
+    }
+  }
+
+  async function marcarRiscadoStatus(itemId, status) {
+    if (!itemId) return;
+
+    const key = `riscado:${itemId}:${status}`;
+    const payload = {
+      status,
+      ...(status === "RESOLVIDO" ? { ultimo_alerta_ciclo: buildAlertCycle(diffDaysFromToday(consulta.row?.data_riscado)) } : {}),
+    };
+
+    try {
+      setCheckingStatusKey(key);
+      const { error } = await supabase.from("pcm_riscados_pneus").update(payload).eq("id", itemId);
+      if (error) throw error;
+
+      setRiscados((current) =>
+        current.map((item) => (item.id === itemId ? { ...item, ...payload } : item))
+      );
+      if (consulta.row?.id === itemId) {
+        setConsulta((current) => ({ ...current, row: { ...current.row, ...payload } }));
+      }
+      alert("Status do riscado atualizado com sucesso.");
+    } catch (error) {
+      console.error("Erro ao atualizar riscado:", error);
+      alert(error?.message || "Nao foi possivel atualizar o riscado.");
+    } finally {
+      setCheckingStatusKey("");
+    }
+  }
+
   function exportarExcel() {
     const wb = XLSX.utils.book_new();
 
@@ -2463,7 +3391,8 @@ export default function PCMTrocaPneus() {
         ficha: row.ficha_estoque,
         data: formatDate(row.created_at),
         quem_lancou: row.criado_por_nome || row.criado_por_login,
-        numero_fogo: item.numero_pneu,
+        numero_fogo: item.numero_fogo || item.numero_pneu,
+        numero_interno: item.numero_pneu || "",
         marca: item.marca,
         situacao: item.situacao,
         conferencia: item.transnet_status || "Pendente",
@@ -2473,8 +3402,50 @@ export default function PCMTrocaPneus() {
       }))
     );
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet), "Estoque");
-    XLSX.writeFile(wb, "pcm_estoque_pneus.xlsx");
+    if (activeTab === TAB_ESTOQUE) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet), "Estoque");
+      XLSX.writeFile(wb, "pcm_estoque_pneus.xlsx");
+      return;
+    }
+
+    if (activeTab === TAB_CONSERTOS) {
+      const consertosSheet = consertosFiltrados.map((row) => ({
+        ficha: row.ficha_conserto,
+        data: formatDate(row.created_at),
+        origem: row.origem_tab,
+        prefixo: row.prefixo || "",
+        numero_fogo: row.numero_fogo || "",
+        situacao_origem: row.situacao_origem || "",
+        status: row.status || "",
+        borracheiro_recebido_em: row.borracheiro_recebido_em ? formatDate(row.borracheiro_recebido_em) : "",
+        borracheiro: row.borracheiro_nome || row.borracheiro_login || "",
+        baixa_em: row.baixa_em ? formatDate(row.baixa_em) : "",
+        baixa_por: row.baixa_por_nome || row.baixa_por_login || "",
+        observacoes: row.observacoes || "",
+      }));
+
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(consertosSheet), "Consertos");
+      XLSX.writeFile(wb, "pcm_consertos_pneus.xlsx");
+      return;
+    }
+
+    const riscadosSheet = riscadosFiltrados.map((row) => ({
+      ficha: row.ficha_riscado,
+      data_lancamento: formatDate(row.created_at),
+      dia_riscado: formatDateOnly(row.data_riscado),
+      prefixo: row.prefixo || "",
+      numero_fogo: row.numero_fogo || "",
+      marca: row.marca || "",
+      mm_antes: row.mm_antes ?? "",
+      mm_depois: row.mm_depois ?? "",
+      status: row.status || "",
+      dias_aberto: diffDaysFromToday(row.data_riscado),
+      foto: row.foto_url || "",
+      observacoes: row.observacoes || "",
+    }));
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(riscadosSheet), "Riscados");
+    XLSX.writeFile(wb, "pcm_riscados_pneus.xlsx");
   }
 
   const actionLabel =
@@ -2482,7 +3453,11 @@ export default function PCMTrocaPneus() {
       ? "Lancar troca de pneus"
       : activeTab === TAB_AUDITORIA
         ? "Lancar auditoria de pneus"
-        : "Lancar estoque de pneus";
+        : activeTab === TAB_ESTOQUE
+          ? "Lancar estoque de pneus"
+          : activeTab === TAB_CONSERTOS
+            ? "Enviar pneu para conserto"
+            : "Lancar pneu riscado";
 
   return (
     <div className="mx-auto min-h-screen max-w-7xl space-y-6 bg-slate-50 p-4 md:p-6">
@@ -2524,8 +3499,7 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
-      {!isNativeShell ? (
-        <div className="flex flex-col gap-3 overflow-x-auto pb-1 sm:flex-row">
+      <div className="flex gap-3 overflow-x-auto pb-1">
           <TabButton
             active={activeTab === TAB_TROCA}
             onClick={() => handleTabChange(TAB_TROCA)}
@@ -2547,20 +3521,59 @@ export default function PCMTrocaPneus() {
             title="Estoque de pneus"
             count={estoqueRows.length}
           />
+          <TabButton
+            active={activeTab === TAB_CONSERTOS}
+            onClick={() => handleTabChange(TAB_CONSERTOS)}
+            icon={<FaTools className="text-orange-600" />}
+            title="Consertos"
+            count={consertos.length}
+          />
+          <TabButton
+            active={activeTab === TAB_RISCADOS}
+            onClick={() => handleTabChange(TAB_RISCADOS)}
+            icon={<FaExclamationTriangle className="text-rose-600" />}
+            title="Riscados"
+            count={riscados.length}
+          />
+      </div>
+
+      {alertasAbertos.length ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-amber-900">
+              <FaBell />
+              Alertas ativos
+            </div>
+            <button
+              type="button"
+              onClick={() => setAlertasAbertos([])}
+              className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+            >
+              Fechar alertas
+            </button>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {alertasAbertos.map((alerta) => (
+              <div key={alerta.id} className="rounded-xl border border-amber-200 bg-white px-4 py-3">
+                <div className="text-sm font-bold text-slate-800">{alerta.title}</div>
+                <div className="mt-1 text-sm text-slate-600">{alerta.message}</div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 
-      {!isNativeShell && activeTab === TAB_TROCA ? (
+      {activeTab === TAB_TROCA ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <CardResumo label="Total" value={cardsTroca.total} color="text-slate-900" />
           <CardResumo label="Lançadas Transnet" value={cardsTroca.transnetLancadas} color="text-emerald-600" />
           <CardResumo label="Pendentes Transnet" value={cardsTroca.transnetPendentes} color="text-rose-600" />
-          <CardResumo label="Estoque -> Carro" value={cardsTroca.estoqueCarro} color="text-blue-600" />
-          <CardResumo label="Carro -> Carro" value={cardsTroca.carroCarro} color="text-orange-600" />
+          <CardResumo label="Estoque para carro" value={cardsTroca.estoqueCarro} color="text-blue-600" />
+          <CardResumo label="Carro para carro" value={cardsTroca.carroCarro} color="text-orange-600" />
         </div>
       ) : null}
 
-      {!isNativeShell && activeTab === TAB_AUDITORIA ? (
+      {activeTab === TAB_AUDITORIA ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <CardResumo label="Total" value={cardsAuditoria.total} color="text-slate-900" />
           <CardResumo label="Pendentes" value={cardsAuditoria.pendentes} color="text-amber-600" />
@@ -2569,7 +3582,7 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
-      {!isNativeShell && activeTab === TAB_ESTOQUE ? (
+      {activeTab === TAB_ESTOQUE ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <CardResumo label="Última ficha" value={cardsEstoque.ficha} color="text-slate-900" />
@@ -2588,6 +3601,24 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
+      {activeTab === TAB_CONSERTOS ? (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <CardResumo label="Total" value={cardsConsertos.total} color="text-slate-900" />
+          <CardResumo label="Pendentes" value={cardsConsertos.pendentes} color="text-amber-600" />
+          <CardResumo label="Em conserto" value={cardsConsertos.emConserto} color="text-blue-600" />
+          <CardResumo label="Concluídos" value={cardsConsertos.concluidos} color="text-emerald-600" />
+        </div>
+      ) : null}
+
+      {activeTab === TAB_RISCADOS ? (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <CardResumo label="Total" value={cardsRiscados.total} color="text-slate-900" />
+          <CardResumo label="Abertos" value={cardsRiscados.abertos} color="text-rose-600" />
+          <CardResumo label="Acompanhando" value={cardsRiscados.acompanhando} color="text-blue-600" />
+          <CardResumo label="Com 10+ dias" value={cardsRiscados.vencidos10Dias} color="text-amber-600" />
+        </div>
+      ) : null}
+
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-800">Filtros</h2>
 
@@ -2597,7 +3628,7 @@ export default function PCMTrocaPneus() {
               <FaSearch className="absolute left-3 top-3 text-slate-400" />
               <input
                 type="text"
-                placeholder="Buscar ficha, prefixo ou numero do pneu..."
+                placeholder="Buscar ficha, prefixo ou numero de fogo..."
                 value={trocaFiltros.busca}
                 onChange={(event) => setTrocaFiltros((current) => ({ ...current, busca: event.target.value }))}
                 className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -2663,7 +3694,7 @@ export default function PCMTrocaPneus() {
               <FaSearch className="absolute left-3 top-3 text-slate-400" />
               <input
                 type="text"
-                placeholder="Buscar ficha, numero do pneu ou marca..."
+                placeholder="Buscar ficha, numero de fogo ou marca..."
                 value={estoqueFiltros.busca}
                 onChange={(event) => setEstoqueFiltros((current) => ({ ...current, busca: event.target.value }))}
                 className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -2686,6 +3717,72 @@ export default function PCMTrocaPneus() {
               value={estoqueFiltros.situacao}
               onChange={(value) => setEstoqueFiltros((current) => ({ ...current, situacao: value }))}
               options={["", ...SITUACOES_ESTOQUE]}
+            />
+          </div>
+        ) : null}
+
+        {activeTab === TAB_CONSERTOS ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+            <div className="relative md:col-span-2">
+              <FaSearch className="absolute left-3 top-3 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar ficha, numero de fogo ou prefixo..."
+                value={consertoFiltros.busca}
+                onChange={(event) => setConsertoFiltros((current) => ({ ...current, busca: event.target.value }))}
+                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+            <input
+              type="date"
+              value={consertoFiltros.dataInicio}
+              onChange={(event) => setConsertoFiltros((current) => ({ ...current, dataInicio: event.target.value }))}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+            <input
+              type="date"
+              value={consertoFiltros.dataFim}
+              onChange={(event) => setConsertoFiltros((current) => ({ ...current, dataFim: event.target.value }))}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+            <SelectField
+              label="Status"
+              value={consertoFiltros.status}
+              onChange={(value) => setConsertoFiltros((current) => ({ ...current, status: value }))}
+              options={["", ...SITUACOES_CONSERTO]}
+            />
+          </div>
+        ) : null}
+
+        {activeTab === TAB_RISCADOS ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+            <div className="relative md:col-span-2">
+              <FaSearch className="absolute left-3 top-3 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar ficha, numero de fogo ou prefixo..."
+                value={riscadoFiltros.busca}
+                onChange={(event) => setRiscadoFiltros((current) => ({ ...current, busca: event.target.value }))}
+                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+            <input
+              type="date"
+              value={riscadoFiltros.dataInicio}
+              onChange={(event) => setRiscadoFiltros((current) => ({ ...current, dataInicio: event.target.value }))}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+            <input
+              type="date"
+              value={riscadoFiltros.dataFim}
+              onChange={(event) => setRiscadoFiltros((current) => ({ ...current, dataFim: event.target.value }))}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+            <SelectField
+              label="Status"
+              value={riscadoFiltros.status}
+              onChange={(value) => setRiscadoFiltros((current) => ({ ...current, status: value }))}
+              options={["", ...SITUACOES_RISCADO]}
             />
           </div>
         ) : null}
@@ -2944,6 +4041,222 @@ export default function PCMTrocaPneus() {
         )
       ) : null}
 
+      {activeTab === TAB_CONSERTOS ? (
+        isNativeShell ? (
+          <div className="space-y-3">
+            {!loading && consertosFiltrados.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-slate-500 shadow-sm">
+                Nenhum conserto encontrado com os filtros atuais.
+              </div>
+            ) : (
+              consertosFiltrados.map((row) => (
+                <div key={row.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">{row.numero_fogo || "-"}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {row.prefixo ? `Prefixo ${row.prefixo} · ` : ""}{row.status || "PENDENTE"}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs text-slate-500">{formatDate(row.created_at)}</div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => marcarConsertoStatus(row.id, "EM CONSERTO")}
+                      disabled={checkingStatusKey === `conserto:${row.id}:EM CONSERTO` || norm(row.status) === "EM CONSERTO"}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      Receber
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => marcarConsertoStatus(row.id, "CONCLUIDO")}
+                      disabled={checkingStatusKey === `conserto:${row.id}:CONCLUIDO` || norm(row.status) === "CONCLUIDO"}
+                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      Dar baixa
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Ficha</th>
+                    <th className="px-4 py-3">Data</th>
+                    <th className="px-4 py-3">Numero de fogo</th>
+                    <th className="px-4 py-3">Prefixo</th>
+                    <th className="px-4 py-3">Origem</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Borracheiro</th>
+                    <th className="px-4 py-3 text-right">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {!loading && consertosFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
+                        Nenhum conserto encontrado com os filtros atuais.
+                      </td>
+                    </tr>
+                  ) : (
+                    consertosFiltrados.map((row) => (
+                      <tr key={row.id} className="transition-colors hover:bg-slate-50/80">
+                        <td className="px-4 py-3 font-bold text-slate-700">{row.ficha_conserto}</td>
+                        <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
+                        <td className="px-4 py-3 font-medium text-slate-700">{row.numero_fogo || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.prefixo || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.origem_tab || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.status || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.borracheiro_nome || row.borracheiro_login || "-"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => marcarConsertoStatus(row.id, "EM CONSERTO")}
+                              disabled={checkingStatusKey === `conserto:${row.id}:EM CONSERTO` || norm(row.status) === "EM CONSERTO"}
+                              className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                            >
+                              Receber
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => marcarConsertoStatus(row.id, "CONCLUIDO")}
+                              disabled={checkingStatusKey === `conserto:${row.id}:CONCLUIDO` || norm(row.status) === "CONCLUIDO"}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                              Dar baixa
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      ) : null}
+
+      {activeTab === TAB_RISCADOS ? (
+        isNativeShell ? (
+          <div className="space-y-3">
+            {!loading && riscadosFiltrados.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-slate-500 shadow-sm">
+                Nenhum pneu riscado encontrado com os filtros atuais.
+              </div>
+            ) : (
+              riscadosFiltrados.map((row) => (
+                <div key={row.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">{row.numero_fogo || "-"}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {row.prefixo ? `Prefixo ${row.prefixo} · ` : ""}{row.status || "ABERTO"}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs text-slate-500">{diffDaysFromToday(row.data_riscado)} dia(s)</div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => marcarRiscadoStatus(row.id, "ACOMPANHANDO")}
+                      disabled={checkingStatusKey === `riscado:${row.id}:ACOMPANHANDO` || norm(row.status) === "ACOMPANHANDO"}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      Acompanhar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => marcarRiscadoStatus(row.id, "RESOLVIDO")}
+                      disabled={checkingStatusKey === `riscado:${row.id}:RESOLVIDO` || norm(row.status) === "RESOLVIDO"}
+                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      Resolver
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Ficha</th>
+                    <th className="px-4 py-3">Dia</th>
+                    <th className="px-4 py-3">Prefixo</th>
+                    <th className="px-4 py-3">Numero de fogo</th>
+                    <th className="px-4 py-3">MM antes</th>
+                    <th className="px-4 py-3">MM depois</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Foto</th>
+                    <th className="px-4 py-3 text-right">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {!loading && riscadosFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-6 py-8 text-center text-slate-500">
+                        Nenhum pneu riscado encontrado com os filtros atuais.
+                      </td>
+                    </tr>
+                  ) : (
+                    riscadosFiltrados.map((row) => (
+                      <tr key={row.id} className="transition-colors hover:bg-slate-50/80">
+                        <td className="px-4 py-3 font-bold text-slate-700">{row.ficha_riscado}</td>
+                        <td className="px-4 py-3 text-slate-600">{formatDateOnly(row.data_riscado)}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.prefixo || "-"}</td>
+                        <td className="px-4 py-3 font-medium text-slate-700">{row.numero_fogo || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.mm_antes ?? "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.mm_depois ?? "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.status || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {row.foto_url ? (
+                            <a href={row.foto_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                              Ver foto
+                            </a>
+                          ) : "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => marcarRiscadoStatus(row.id, "ACOMPANHANDO")}
+                              disabled={checkingStatusKey === `riscado:${row.id}:ACOMPANHANDO` || norm(row.status) === "ACOMPANHANDO"}
+                              className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                            >
+                              Acompanhar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => marcarRiscadoStatus(row.id, "RESOLVIDO")}
+                              disabled={checkingStatusKey === `riscado:${row.id}:RESOLVIDO` || norm(row.status) === "RESOLVIDO"}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                              Resolver
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      ) : null}
+
       <TrocaModal
         open={trocaOpen}
         form={trocaForm}
@@ -2984,6 +4297,27 @@ export default function PCMTrocaPneus() {
         onSalvar={salvarEstoque}
       />
 
+      <ConsertoModal
+        open={consertoOpen}
+        form={consertoForm}
+        saving={saving}
+        onClose={() => setConsertoOpen(false)}
+        onFieldChange={updateConsertoField}
+        onSalvar={salvarConserto}
+      />
+
+      <RiscadoModal
+        open={riscadoOpen}
+        form={riscadoForm}
+        saving={saving}
+        onClose={() => setRiscadoOpen(false)}
+        onFieldChange={updateRiscadoField}
+        onFotoChange={(file) => setRiscadoForm((current) => ({ ...current, foto: file }))}
+        onCapturePhoto={captureRiscadoPhoto}
+        onSalvar={salvarRiscado}
+        isNativeShell={isNativeShell}
+      />
+
       <ConsultaModal
         open={consulta.open}
         tab={consulta.tab}
@@ -2995,6 +4329,8 @@ export default function PCMTrocaPneus() {
         onMarcarTransnet={marcarTransnet}
         onMarcarAuditoriaStatus={marcarAuditoriaStatus}
         onMarcarEstoqueStatus={marcarEstoqueStatus}
+        onEnviarConserto={abrirConsertoPreenchido}
+        onAbrirRiscado={abrirRiscadoPreenchido}
       />
     </div>
   );

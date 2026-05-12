@@ -142,7 +142,7 @@ export default function Sidebar() {
         icon: <FaUsers />,
         tabs: [
           { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
-          { path: "/organograma-manutencao", label: "Organograma", icon: <FaUsers /> },
+          { path: "/organograma", label: "Organograma", icon: <FaUsers /> },
         ],
       },
 
@@ -260,7 +260,7 @@ export default function Sidebar() {
     if (path.startsWith("/sos") || path.startsWith("/km-rodado")) setIntervencoesOpen(true);
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
-    if (path.startsWith("/funcionarios") || path.startsWith("/organograma-manutencao")) setPessoasOpen(true);
+    if (path.startsWith("/funcionarios") || path.startsWith("/organograma")) setPessoasOpen(true);
     if (path.startsWith("/usuarios") || path.startsWith("/niveis-acesso")) setConfigOpen(true);
   }, [location.pathname]);
 

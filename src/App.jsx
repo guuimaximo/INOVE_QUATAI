@@ -49,9 +49,9 @@ import PCM_Preventivas from "./pages/pcm/PCM_Preventivas";
 import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
 
 import Usuarios from "./pages/configuracoes/Usuarios";
-import Funcionarios from "./pages/configuracoes/Funcionarios";
 import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
-import OrganogramaManutencao from "./pages/configuracoes/OrganogramaManutencao";
+import Funcionarios from "./pages/pessoas/Funcionarios";
+import Organograma from "./pages/pessoas/Organograma";
 
 import DesempenhoLancamento from "./pages/desempenho-diesel/DesempenhoLancamento";
 import DesempenhoDieselResumo from "./pages/desempenho-diesel/DesempenhoDieselResumo";
@@ -256,7 +256,8 @@ export default function App() {
               {/* Configurações */}
               <Route path="/usuarios" element={<Usuarios />} />
               <Route path="/funcionarios" element={<Funcionarios />} />
-              <Route path="/organograma-manutencao" element={<OrganogramaManutencao />} />
+              <Route path="/organograma" element={<Organograma />} />
+              <Route path="/organograma-manutencao" element={<Navigate to="/organograma" replace />} />
               <Route path="/niveis-acesso" element={<NiveisAcesso />} />
             </Route>
 

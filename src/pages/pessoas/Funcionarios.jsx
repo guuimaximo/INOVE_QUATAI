@@ -279,7 +279,7 @@ export default function Funcionarios() {
 
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => navigate("/organograma-manutencao")}
+              onClick={() => navigate("/organograma")}
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 font-bold text-white shadow-sm transition hover:bg-blue-500"
               type="button"
             >
@@ -378,7 +378,7 @@ export default function Funcionarios() {
 
           <button
             type="button"
-            onClick={() => navigate("/organograma-manutencao")}
+            onClick={() => navigate("/organograma")}
             className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-900 transition hover:bg-blue-50"
           >
             Abrir página do organograma

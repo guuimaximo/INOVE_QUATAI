@@ -60,8 +60,8 @@ export const APP_ACCESS_PAGES = [
   { key: "estrutura_fisica_tratar", label: "Estrutura Fisica Tratar", category: "Estrutura Fisica", path: "/estrutura-fisica/tratar/:id", patterns: ["/estrutura-fisica/tratar/:id"] },
 
   { key: "config_usuarios", label: "Configuracoes Usuarios", category: "Configuracoes", path: "/usuarios", patterns: ["/usuarios"] },
-  { key: "config_funcionarios", label: "Pessoas", category: "Pessoas", path: "/funcionarios", patterns: ["/funcionarios"] },
-  { key: "config_organograma_manutencao", label: "Pessoas Organograma", category: "Pessoas", path: "/organograma-manutencao", patterns: ["/organograma-manutencao"] },
+  { key: "pessoas_funcionarios", label: "Funcionarios", category: "Pessoas", path: "/funcionarios", patterns: ["/funcionarios"] },
+  { key: "pessoas_organograma", label: "Organograma", category: "Pessoas", path: "/organograma", patterns: ["/organograma", "/organograma-manutencao"] },
   { key: "config_niveis", label: "Configuracoes Niveis", category: "Configuracoes", path: "/niveis-acesso", patterns: ["/niveis-acesso"] },
 ];
 
@@ -141,8 +141,8 @@ export const DEFAULT_LEVEL_PROFILES = [
       "embarcados_reparo_detalhe",
       "embarcados_reparo_execucao",
       "embarcados_envio_manutencao",
-      "config_funcionarios",
-      "config_organograma_manutencao",
+      "pessoas_funcionarios",
+      "pessoas_organograma",
     ],
     farol_liberado: false,
   },
@@ -200,7 +200,7 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "RH",
     descricao: "Tratativas RH e visao resumida.",
     ativo: true,
-    paginas: ["home", "tratativas_resumo", "tratativas_central", "tratativas_consultar", "tratativas_rh", "avarias_resumo", "avarias_cobrancas", "diesel_tratativas_central", "estrutura_fisica_solicitacao", "estrutura_fisica_central", "config_funcionarios", "config_organograma_manutencao"],
+    paginas: ["home", "tratativas_resumo", "tratativas_central", "tratativas_consultar", "tratativas_rh", "avarias_resumo", "avarias_cobrancas", "diesel_tratativas_central", "estrutura_fisica_solicitacao", "estrutura_fisica_central", "pessoas_funcionarios", "pessoas_organograma"],
     farol_liberado: true,
   },
   {

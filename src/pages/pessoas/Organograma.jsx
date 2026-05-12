@@ -15,7 +15,7 @@ import { supabase } from "../../supabase";
 import {
   ORGANOGRAMA_FALLBACK_AREAS,
   ORGANOGRAMA_FALLBACK_PESSOAS,
-} from "./organogramaManutencaoModel";
+} from "./organogramaModel";
 
 const PAGINAS = [
   { value: "MANUTENCAO", label: "Manutenção", tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
@@ -995,7 +995,7 @@ function buildEmptyAreaDraft(activePage, parentArea, pageAreas) {
   };
 }
 
-export default function OrganogramaManutencao() {
+export default function Organograma() {
   const [areas, setAreas] = useState([]);
   const [pessoas, setPessoas] = useState([]);
   const [activePage, setActivePage] = useState("MANUTENCAO");
@@ -1421,7 +1421,7 @@ export default function OrganogramaManutencao() {
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
               <FaSitemap /> Builder do Organograma
             </div>
-            <h1 className="mt-3 text-2xl font-black text-slate-800">Organograma por áreas</h1>
+            <h1 className="mt-3 text-2xl font-black text-slate-800">Organograma</h1>
             <p className="mt-1 text-sm font-semibold text-slate-500">
               Agora a montagem é separada em Manutenção, Operação e Adm, com possibilidade real de construir do zero.
             </p>

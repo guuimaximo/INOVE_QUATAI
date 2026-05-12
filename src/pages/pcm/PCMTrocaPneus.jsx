@@ -610,11 +610,13 @@ function groupEstoqueRows(rows) {
   return [...groups.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
-function CardResumo({ label, value, color }) {
+function CardResumo({ label, value, color, compact = false }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">{label}</div>
-      <div className={`mt-2 text-3xl font-black ${color}`}>{value}</div>
+    <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${compact ? "p-3.5" : "p-5"}`}>
+      <div className={`${compact ? "text-[10px] tracking-[0.16em]" : "text-[11px] tracking-[0.22em]"} font-bold uppercase text-slate-400`}>
+        {label}
+      </div>
+      <div className={`mt-2 font-black ${compact ? "text-2xl" : "text-3xl"} ${color}`}>{value}</div>
     </div>
   );
 }
@@ -1295,6 +1297,28 @@ function EstoqueModal({
         </div>
       </div>
     </ModalShell>
+  );
+}
+
+function BottomTabButton({ active, onClick, icon, title, badge = 0 }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-center transition ${
+        active ? "bg-blue-50 text-blue-700" : "text-slate-500"
+      }`}
+    >
+      <div className="relative">
+        <div className="text-lg">{icon}</div>
+        {badge > 0 ? (
+          <span className="absolute -right-2 -top-2 inline-flex min-w-[18px] items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        ) : null}
+      </div>
+      <span className="text-[10px] font-semibold uppercase tracking-wide">{title}</span>
+    </button>
   );
 }
 
@@ -3618,7 +3642,7 @@ export default function PCMTrocaPneus() {
             : "Lancar pneu riscado";
 
   return (
-    <div className="mx-auto min-h-screen max-w-7xl space-y-6 bg-slate-50 p-4 md:p-6">
+    <div className={`mx-auto min-h-screen max-w-7xl space-y-6 bg-slate-50 p-4 md:p-6 ${isNativeShell ? "pb-28" : ""}`}>
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
@@ -3631,14 +3655,16 @@ export default function PCMTrocaPneus() {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={exportarExcel}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-          >
-            <FaDownload />
-            Baixar Excel
-          </button>
+          {!isNativeShell ? (
+            <button
+              type="button"
+              onClick={exportarExcel}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+            >
+              <FaDownload />
+              Baixar Excel
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={abrirNovoFormulario}
@@ -3657,6 +3683,7 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
+      {!isNativeShell ? (
       <div className="flex gap-3 overflow-x-auto pb-1">
           <TabButton
             active={activeTab === TAB_TROCA}
@@ -3694,6 +3721,7 @@ export default function PCMTrocaPneus() {
             count={riscados.length}
           />
       </div>
+      ) : null}
 
       {alertasAbertos.length ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
@@ -3723,22 +3751,22 @@ export default function PCMTrocaPneus() {
 
       {activeTab === TAB_TROCA ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          <CardResumo label="Total" value={cardsTroca.total} color="text-slate-900" />
-          <CardResumo label="Lançadas Transnet" value={cardsTroca.transnetLancadas} color="text-emerald-600" />
-          <CardResumo label="Pendentes Transnet" value={cardsTroca.transnetPendentes} color="text-rose-600" />
-          <CardResumo label="Estoque para carro" value={cardsTroca.estoqueCarro} color="text-blue-600" />
-          <CardResumo label="Carro para carro" value={cardsTroca.carroCarro} color="text-orange-600" />
+          <CardResumo label="Total" value={cardsTroca.total} color="text-slate-900" compact={isNativeShell} />
+          <CardResumo label="Lançadas Transnet" value={cardsTroca.transnetLancadas} color="text-emerald-600" compact={isNativeShell} />
+          <CardResumo label="Pendentes Transnet" value={cardsTroca.transnetPendentes} color="text-rose-600" compact={isNativeShell} />
+          <CardResumo label="Estoque para carro" value={cardsTroca.estoqueCarro} color="text-blue-600" compact={isNativeShell} />
+          <CardResumo label="Carro para carro" value={cardsTroca.carroCarro} color="text-orange-600" compact={isNativeShell} />
         </div>
       ) : null}
 
       {activeTab === TAB_AUDITORIA ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-            <CardResumo label="Total" value={cardsAuditoria.total} color="text-slate-900" />
-            <CardResumo label="Pendentes" value={cardsAuditoria.pendentes} color="text-amber-600" />
-            <CardResumo label="Concluídas" value={cardsAuditoria.concluidas} color="text-emerald-600" />
-            <CardResumo label="Com incorreto" value={cardsAuditoria.incorretas} color="text-rose-600" />
-            <CardResumo label="30+ dias sem auditoria" value={auditoriasAtrasadas.length} color="text-rose-600" />
+            <CardResumo label="Total" value={cardsAuditoria.total} color="text-slate-900" compact={isNativeShell} />
+            <CardResumo label="Pendentes" value={cardsAuditoria.pendentes} color="text-amber-600" compact={isNativeShell} />
+            <CardResumo label="Concluídas" value={cardsAuditoria.concluidas} color="text-emerald-600" compact={isNativeShell} />
+            <CardResumo label="Com incorreto" value={cardsAuditoria.incorretas} color="text-rose-600" compact={isNativeShell} />
+            <CardResumo label="30+ dias sem auditoria" value={auditoriasAtrasadas.length} color="text-rose-600" compact={isNativeShell} />
           </div>
 
           {auditoriasAtrasadas.length ? (
@@ -3762,37 +3790,37 @@ export default function PCMTrocaPneus() {
       {activeTab === TAB_ESTOQUE ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          <CardResumo label="Última ficha" value={cardsEstoque.ficha} color="text-slate-900" />
-          <CardResumo label="Pneus na última" value={cardsEstoque.total} color="text-blue-600" />
-          <CardResumo label="OK" value={cardsEstoque.ok} color="text-emerald-600" />
-          <CardResumo label="Incorretos" value={cardsEstoque.incorretos} color="text-rose-600" />
-          <CardResumo label="Pendentes" value={cardsEstoque.pendentes} color="text-amber-600" />
+          <CardResumo label="Última ficha" value={cardsEstoque.ficha} color="text-slate-900" compact={isNativeShell} />
+          <CardResumo label="Pneus na última" value={cardsEstoque.total} color="text-blue-600" compact={isNativeShell} />
+          <CardResumo label="OK" value={cardsEstoque.ok} color="text-emerald-600" compact={isNativeShell} />
+          <CardResumo label="Incorretos" value={cardsEstoque.incorretos} color="text-rose-600" compact={isNativeShell} />
+          <CardResumo label="Pendentes" value={cardsEstoque.pendentes} color="text-amber-600" compact={isNativeShell} />
           </div>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-            <CardResumo label="Novo" value={cardsEstoque.novo} color="text-blue-600" />
-            <CardResumo label="Para uso" value={cardsEstoque.uso} color="text-emerald-600" />
-            <CardResumo label="Recapagem" value={cardsEstoque.recapagem} color="text-amber-600" />
-            <CardResumo label="Recapado" value={cardsEstoque.recapado} color="text-violet-600" />
-            <CardResumo label="Sucata" value={cardsEstoque.sucata} color="text-rose-600" />
+            <CardResumo label="Novo" value={cardsEstoque.novo} color="text-blue-600" compact={isNativeShell} />
+            <CardResumo label="Para uso" value={cardsEstoque.uso} color="text-emerald-600" compact={isNativeShell} />
+            <CardResumo label="Recapagem" value={cardsEstoque.recapagem} color="text-amber-600" compact={isNativeShell} />
+            <CardResumo label="Recapado" value={cardsEstoque.recapado} color="text-violet-600" compact={isNativeShell} />
+            <CardResumo label="Sucata" value={cardsEstoque.sucata} color="text-rose-600" compact={isNativeShell} />
           </div>
         </div>
       ) : null}
 
       {activeTab === TAB_CONSERTOS ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <CardResumo label="Total" value={cardsConsertos.total} color="text-slate-900" />
-          <CardResumo label="Pendentes" value={cardsConsertos.pendentes} color="text-amber-600" />
-          <CardResumo label="Em conserto" value={cardsConsertos.emConserto} color="text-blue-600" />
-          <CardResumo label="Concluídos" value={cardsConsertos.concluidos} color="text-emerald-600" />
+          <CardResumo label="Total" value={cardsConsertos.total} color="text-slate-900" compact={isNativeShell} />
+          <CardResumo label="Pendentes" value={cardsConsertos.pendentes} color="text-amber-600" compact={isNativeShell} />
+          <CardResumo label="Em conserto" value={cardsConsertos.emConserto} color="text-blue-600" compact={isNativeShell} />
+          <CardResumo label="Concluídos" value={cardsConsertos.concluidos} color="text-emerald-600" compact={isNativeShell} />
         </div>
       ) : null}
 
       {activeTab === TAB_RISCADOS ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <CardResumo label="Total" value={cardsRiscados.total} color="text-slate-900" />
-          <CardResumo label="Abertos" value={cardsRiscados.abertos} color="text-rose-600" />
-          <CardResumo label="Acompanhando" value={cardsRiscados.acompanhando} color="text-blue-600" />
-          <CardResumo label="Com 10+ dias" value={cardsRiscados.vencidos10Dias} color="text-amber-600" />
+          <CardResumo label="Total" value={cardsRiscados.total} color="text-slate-900" compact={isNativeShell} />
+          <CardResumo label="Abertos" value={cardsRiscados.abertos} color="text-rose-600" compact={isNativeShell} />
+          <CardResumo label="Acompanhando" value={cardsRiscados.acompanhando} color="text-blue-600" compact={isNativeShell} />
+          <CardResumo label="Com 10+ dias" value={cardsRiscados.vencidos10Dias} color="text-amber-600" compact={isNativeShell} />
         </div>
       ) : null}
 
@@ -4065,6 +4093,23 @@ export default function PCMTrocaPneus() {
       {activeTab === TAB_AUDITORIA ? (
         isNativeShell ? (
           <div className="space-y-3">
+            {auditoriasAtrasadas.length ? (
+              <button
+                type="button"
+                onClick={() => setAuditoriaPendenciasOpen(true)}
+                className="w-full rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-left shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-black uppercase tracking-wide text-rose-700">Sem auditoria 30+ dias</div>
+                    <div className="mt-1 text-sm text-rose-900">
+                      {auditoriasAtrasadas.length} carro(s) aguardando auditoria. Toque para abrir a lista.
+                    </div>
+                  </div>
+                  <FaClipboardCheck className="shrink-0 text-xl text-rose-600" />
+                </div>
+              </button>
+            ) : null}
             {!loading && auditoriasFiltradas.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-slate-500 shadow-sm">
                 Nenhuma auditoria encontrada com os filtros atuais.
@@ -4516,6 +4561,48 @@ export default function PCMTrocaPneus() {
         onEnviarConserto={abrirConsertoPreenchido}
         onAbrirRiscado={abrirRiscadoPreenchido}
       />
+
+      {isNativeShell ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-3 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center gap-2">
+            <BottomTabButton
+              active={activeTab === TAB_TROCA}
+              onClick={() => handleTabChange(TAB_TROCA)}
+              icon={<FaClipboardList />}
+              title="Troca"
+              badge={0}
+            />
+            <BottomTabButton
+              active={activeTab === TAB_AUDITORIA}
+              onClick={() => handleTabChange(TAB_AUDITORIA)}
+              icon={<FaClipboardCheck />}
+              title="Auditoria"
+              badge={auditoriasAtrasadas.length}
+            />
+            <BottomTabButton
+              active={activeTab === TAB_ESTOQUE}
+              onClick={() => handleTabChange(TAB_ESTOQUE)}
+              icon={<FaWarehouse />}
+              title="Estoque"
+              badge={0}
+            />
+            <BottomTabButton
+              active={activeTab === TAB_CONSERTOS}
+              onClick={() => handleTabChange(TAB_CONSERTOS)}
+              icon={<FaTools />}
+              title="Consertos"
+              badge={cardsConsertos.pendentes}
+            />
+            <BottomTabButton
+              active={activeTab === TAB_RISCADOS}
+              onClick={() => handleTabChange(TAB_RISCADOS)}
+              icon={<FaExclamationTriangle />}
+              title="Riscados"
+              badge={cardsRiscados.vencidos10Dias}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

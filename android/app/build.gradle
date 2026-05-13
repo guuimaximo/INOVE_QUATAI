@@ -39,6 +39,11 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach { output ->
+            outputFileName = "INOVE_MOBILE.apk"
+        }
+    }
 }
 
 repositories {

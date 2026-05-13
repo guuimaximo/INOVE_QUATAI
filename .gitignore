@@ -8,6 +8,8 @@ android/.gradle/
 android/local.properties
 android/app/build/
 app-debug.apk
+INOVE_MOBILE.apk
+inoveMobile.apk
 
 ios/App/Pods/
 ios/App/build/

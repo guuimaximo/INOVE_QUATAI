@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import ReactFlow, {
@@ -26,6 +27,7 @@ import {
   FaQuestionCircle,
   FaFileImage,
   FaFilePdf,
+  FaFileExcel,
   FaFileImport,
 } from "react-icons/fa";
 
@@ -1230,6 +1232,116 @@ export default function OrganogramaCanvas() {
     }
   }
 
+  function exportarExcel() {
+    if (!areasFiltradas.length) {
+      alert("Nenhuma area para exportar.");
+      return;
+    }
+    const linhas = [];
+    for (const a of areasFiltradas) {
+      const m = computeMetrics(a, pessoas, childrenMap);
+      const pessoasArea = pessoas.filter((p) => p.area_codigo === a.codigo);
+      const realizadas = pessoasArea.filter((p) => p.tipo_headcount === "REALIZADO");
+      const orcadasCadastradas = pessoasArea.filter((p) => p.tipo_headcount === "ORCADO");
+      const freelancers = pessoasArea.filter((p) => p.tipo_headcount === "FREELANCER");
+
+      // Constroi as vagas (espelha logica do painel)
+      const orcadoQtd = m.directOrcado;
+      const slots = orcadasCadastradas.map((p) => ({
+        cargoOrcado: p.cargo || "Vaga planejada",
+        nomeOrcado: p.nome || "",
+        preenchida: false,
+        nomeRealizado: "",
+        cargoRealizado: "",
+      }));
+      while (slots.length < orcadoQtd) {
+        slots.push({ cargoOrcado: "Vaga planejada", nomeOrcado: "", preenchida: false, nomeRealizado: "", cargoRealizado: "" });
+      }
+      realizadas.forEach((p, idx) => {
+        if (idx >= slots.length) {
+          slots.push({ cargoOrcado: p.cargo || "", nomeOrcado: "", preenchida: true, nomeRealizado: p.nome || "", cargoRealizado: p.cargo || "" });
+        } else {
+          slots[idx].preenchida = true;
+          slots[idx].nomeRealizado = p.nome || "";
+          slots[idx].cargoRealizado = p.cargo || "";
+          if (!slots[idx].cargoOrcado || slots[idx].cargoOrcado === "Vaga planejada") {
+            slots[idx].cargoOrcado = p.cargo || slots[idx].cargoOrcado;
+          }
+        }
+      });
+
+      const setorLabel = SETOR_LABELS[a.setor] || "";
+      const nivelLabel = NIVEL_BY_VALUE.get(a.nivel)?.label || a.nivel || "";
+      const pai = areasByCode.get(a.parent_codigo)?.titulo || "";
+
+      if (!slots.length && !freelancers.length) {
+        linhas.push({
+          Setor: setorLabel,
+          Area: a.titulo,
+          "Area pai": pai,
+          Nivel: nivelLabel,
+          Tipo: a.tipo || "",
+          "Funcao Orcada": "",
+          "Nome Orcado": "",
+          Status: "Sem vagas",
+          "Funcao Realizada": "",
+          "Nome Realizado": "",
+          "Data Admissao": "",
+          "Tempo Empresa": "",
+        });
+        continue;
+      }
+
+      for (const s of slots) {
+        const func = s.preenchida ? funcByNome.get(normalizeNome(s.nomeRealizado)) : null;
+        linhas.push({
+          Setor: setorLabel,
+          Area: a.titulo,
+          "Area pai": pai,
+          Nivel: nivelLabel,
+          Tipo: a.tipo || "",
+          "Funcao Orcada": s.cargoOrcado || "",
+          "Nome Orcado": s.nomeOrcado || "",
+          Status: s.preenchida ? "Preenchida" : "Em aberto",
+          "Funcao Realizada": s.cargoRealizado || "",
+          "Nome Realizado": s.nomeRealizado || "",
+          "Data Admissao": func?.dt_inicio_atividade ? new Date(func.dt_inicio_atividade).toLocaleDateString("pt-BR") : "",
+          "Tempo Empresa": func ? calcTempoEmpresa(func.dt_inicio_atividade) : "",
+        });
+      }
+
+      for (const fl of freelancers) {
+        const func = funcByNome.get(normalizeNome(fl.nome));
+        linhas.push({
+          Setor: setorLabel,
+          Area: a.titulo,
+          "Area pai": pai,
+          Nivel: nivelLabel,
+          Tipo: a.tipo || "",
+          "Funcao Orcada": fl.cargo || "Freelancer",
+          "Nome Orcado": "",
+          Status: "Freelancer",
+          "Funcao Realizada": fl.cargo || "",
+          "Nome Realizado": fl.nome || "",
+          "Data Admissao": func?.dt_inicio_atividade ? new Date(func.dt_inicio_atividade).toLocaleDateString("pt-BR") : "",
+          "Tempo Empresa": func ? calcTempoEmpresa(func.dt_inicio_atividade) : "",
+        });
+      }
+    }
+
+    const ws = XLSX.utils.json_to_sheet(linhas);
+    // ajusta largura das colunas
+    ws["!cols"] = [
+      { wch: 22 }, { wch: 28 }, { wch: 22 }, { wch: 14 }, { wch: 12 },
+      { wch: 28 }, { wch: 22 }, { wch: 12 }, { wch: 28 }, { wch: 28 },
+      { wch: 14 }, { wch: 18 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Organograma");
+    const nome = `organograma_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, nome);
+  }
+
   const selecionada = selecionadoId ? areasByCode.get(selecionadoId) : null;
   const stats = useMemo(() => ({ areas: areas.length, pessoas: pessoas.length }), [areas, pessoas]);
 
@@ -1263,8 +1375,11 @@ export default function OrganogramaCanvas() {
             <button type="button" onClick={exportarPNG} disabled={exportando} className="inline-flex items-center gap-2 border-r border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
               <FaFileImage /> PNG
             </button>
-            <button type="button" onClick={exportarPDF} disabled={exportando} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+            <button type="button" onClick={exportarPDF} disabled={exportando} className="inline-flex items-center gap-2 border-r border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
               <FaFilePdf /> PDF
+            </button>
+            <button type="button" onClick={exportarExcel} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">
+              <FaFileExcel /> Excel
             </button>
           </div>
         </div>

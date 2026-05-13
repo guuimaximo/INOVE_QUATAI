@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaBriefcase,
-  FaCalendarAlt,
   FaDownload,
-  FaFilter,
   FaIdBadge,
   FaPhoneAlt,
   FaSearch,
@@ -13,12 +11,13 @@ import {
   FaTimes,
   FaUsers,
 } from "react-icons/fa";
+import { supabase } from "../../supabase";
 import { supabaseBCNT } from "../../supabaseBCNT";
 
 function normalizeText(value = "") {
   return String(value || "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .trim();
 }
@@ -26,16 +25,29 @@ function normalizeText(value = "") {
 function formatDateBR(value) {
   if (!value) return "-";
   const raw = String(value);
-
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     const [year, month, day] = raw.split("-");
     return `${day}/${month}/${year}`;
   }
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return raw;
-
   return date.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+function calcTempoEmpresa(dataInicio) {
+  if (!dataInicio) return "";
+  const inicio = new Date(dataInicio);
+  if (Number.isNaN(inicio.getTime())) return "";
+  const agora = new Date();
+  let anos = agora.getFullYear() - inicio.getFullYear();
+  let meses = agora.getMonth() - inicio.getMonth();
+  if (agora.getDate() < inicio.getDate()) meses -= 1;
+  if (meses < 0) { anos -= 1; meses += 12; }
+  if (anos <= 0 && meses <= 0) return "< 1 mes";
+  const parts = [];
+  if (anos > 0) parts.push(`${anos}a`);
+  if (meses > 0) parts.push(`${meses}m`);
+  return parts.join(" ");
 }
 
 function fmtInt(v) {
@@ -47,120 +59,82 @@ function exportarCSV(dados, nomeArquivo) {
     alert("Nao ha dados para exportar.");
     return;
   }
-
-  const cabecalho = [
-    "ID Funcionario",
-    "Cracha",
-    "Nome",
-    "Funcao",
-    "Telefone",
-    "Inicio Atividade",
-    "Status",
-  ];
-
-  const linhas = dados.map((row) =>
-    [
-      row.id_funcionario || "",
-      row.nr_cracha || "",
-      row.nm_funcionario || "",
-      row.nm_funcao || "",
-      row.nr_telefone_celular || "",
-      formatDateBR(row.dt_inicio_atividade),
-      row.status || "",
-    ]
-      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-      .join(";")
-  );
-
-  const csv = [cabecalho.join(";"), ...linhas].join("\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const cabecalho = ["ID", "Cracha", "Nome", "Funcao", "Telefone", "Admissao", "Tempo", "Alocacao", "Area"];
+  const linhas = dados.map((d) => [
+    d.id_funcionario || "",
+    d.nr_cracha || "",
+    d.nm_funcionario || "",
+    d.nm_funcao || "",
+    d.nr_telefone_celular || "",
+    formatDateBR(d.dt_inicio_atividade),
+    calcTempoEmpresa(d.dt_inicio_atividade),
+    d._alocacao || "Sobrando",
+    d._area_titulo || "",
+  ]);
+  const csv = [cabecalho, ...linhas].map((row) =>
+    row.map((cell) => `"${String(cell || "").replace(/"/g, '""')}"`).join(";")
+  ).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${nomeArquivo}.csv`;
-  document.body.appendChild(a);
+  a.download = `${nomeArquivo}_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
-  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-function buildSearchBlob(funcionario) {
-  return [
-    funcionario?.nm_funcionario,
-    funcionario?.nr_cracha,
-    funcionario?.nm_funcao,
-    funcionario?.nr_telefone_celular,
-    funcionario?.status,
-  ]
-    .map((item) => normalizeText(item))
-    .join(" ");
-}
-
-function CardKPI({ title, value, sub, icon, tone = "blue" }) {
-  const tones = {
-    blue: "from-blue-50 to-cyan-50 border-blue-200 text-blue-700",
-    emerald: "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700",
-    amber: "from-amber-50 to-orange-50 border-amber-200 text-amber-700",
-    rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
-    violet: "from-violet-50 to-fuchsia-50 border-violet-200 text-violet-700",
-    slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
-  };
-
+function CardKPI({ titulo, valor, cor = "slate", icon, sub }) {
+  const cls = {
+    slate: "border-slate-200 bg-slate-50 text-slate-900",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    rose: "border-rose-200 bg-rose-50 text-rose-900",
+    amber: "border-amber-200 bg-amber-50 text-amber-900",
+    blue: "border-blue-200 bg-blue-50 text-blue-900",
+    purple: "border-purple-200 bg-purple-50 text-purple-900",
+  }[cor];
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br ${tones[tone]} p-3.5 shadow-sm`}>
-      <div className="flex h-full items-start justify-between gap-3">
-        <div className="flex h-full flex-col justify-between">
-          <p className="text-xs font-black uppercase tracking-wider opacity-80">{title}</p>
-          <div>
-            <p className="mt-2 text-xl font-black text-slate-800 md:text-3xl">{value}</p>
-            {sub ? <p className="mt-1 text-[11px] font-bold opacity-80">{sub}</p> : null}
-          </div>
-        </div>
-        <div className="mt-1 text-xl opacity-80">{icon}</div>
+    <div className={`rounded-2xl border ${cls} px-4 py-3`}>
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">{titulo}</div>
+        {icon ? <span className="text-base opacity-60">{icon}</span> : null}
       </div>
+      <div className="mt-1 text-2xl font-black">{valor}</div>
+      {sub ? <div className="mt-0.5 text-[11px] opacity-70">{sub}</div> : null}
     </div>
   );
 }
 
 function FuncionarioModal({ funcionario, onClose }) {
   if (!funcionario) return null;
-
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b bg-slate-50 px-5 py-4">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4">
+      <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
           <div>
-            <h2 className="text-lg font-black text-slate-800">Detalhes do funcionario</h2>
-            <p className="text-xs font-semibold text-slate-500">Consulta rapida da base BCNT</p>
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-600">Funcionario</div>
+            <div className="mt-0.5 text-xl font-black text-slate-900">{funcionario.nm_funcionario || "-"}</div>
+            <div className="text-sm text-slate-500">{funcionario.nm_funcao || "-"}</div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-            type="button"
-          >
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
             <FaTimes />
           </button>
         </div>
-
-        <div className="grid grid-cols-1 gap-4 p-5 text-sm md:grid-cols-2">
-          <div className="rounded-xl border bg-slate-50 p-4 md:col-span-2">
-            <p className="text-[10px] font-black uppercase text-slate-500">Nome</p>
-            <p className="text-lg font-black text-slate-800">{funcionario.nm_funcionario || "-"}</p>
-          </div>
+        <div className="grid grid-cols-1 gap-3 px-6 py-5 md:grid-cols-2">
           <Info label="ID" value={funcionario.id_funcionario} />
-          <Info label="Cracha" value={funcionario.nr_cracha} />
-          <Info label="Funcao" value={funcionario.nm_funcao} />
+          <Info label="Chapa" value={funcionario.nr_cracha} />
           <Info label="Telefone" value={funcionario.nr_telefone_celular} />
-          <Info label="Inicio atividade" value={formatDateBR(funcionario.dt_inicio_atividade)} />
           <Info label="Status" value={funcionario.status || "Ativo"} />
+          <Info label="Admissao" value={formatDateBR(funcionario.dt_inicio_atividade)} />
+          <Info label="Tempo de empresa" value={calcTempoEmpresa(funcionario.dt_inicio_atividade) || "-"} />
+          <div className="md:col-span-2">
+            <Info
+              label="Alocacao no organograma"
+              value={funcionario._alocacao === "Alocado" ? `Alocado em ${funcionario._area_titulo || "-"}` : "Sobrando"}
+            />
+          </div>
         </div>
-
-        <div className="flex justify-end border-t bg-white px-5 py-3">
-          <button
-            onClick={onClose}
-            className="rounded-xl bg-slate-800 px-5 py-2.5 font-bold text-white transition hover:bg-slate-700"
-            type="button"
-          >
+        <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-6 py-3">
+          <button onClick={onClose} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200" type="button">
             Fechar
           </button>
         </div>
@@ -171,305 +145,235 @@ function FuncionarioModal({ funcionario, onClose }) {
 
 function Info({ label, value }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 font-bold text-slate-800">{value || "-"}</p>
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
+      <div className="mt-0.5 font-bold text-slate-800">{value || "-"}</div>
     </div>
   );
 }
 
 export default function Funcionarios() {
   const [funcionarios, setFuncionarios] = useState([]);
+  const [pessoasOrg, setPessoasOrg] = useState([]);
+  const [areasOrg, setAreasOrg] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState("");
   const [funcaoFiltro, setFuncaoFiltro] = useState("");
-  const [feedback, setFeedback] = useState(null);
+  const [tab, setTab] = useState("todos");
   const [selecionado, setSelecionado] = useState(null);
   const navigate = useNavigate();
 
-  async function carregarFuncionarios() {
+  async function carregar() {
     setLoading(true);
-    setFeedback(null);
-
     const pageSize = 1000;
     let start = 0;
     let all = [];
-
     try {
       while (true) {
-        const end = start + pageSize - 1;
         const { data, error } = await supabaseBCNT
           .from("funcionarios_atualizada")
-          .select(
-            "id_funcionario, nr_cracha, nm_funcionario, nm_funcao, nr_telefone_celular, dt_inicio_atividade, status"
-          )
+          .select("id_funcionario, nr_cracha, nm_funcionario, nm_funcao, nr_telefone_celular, dt_inicio_atividade, status")
           .eq("status", "ativo")
           .order("nm_funcionario", { ascending: true })
-          .range(start, end);
-
+          .range(start, start + pageSize - 1);
         if (error) throw error;
-
         const chunk = data || [];
         all = all.concat(chunk);
-
         if (chunk.length < pageSize) break;
         start += pageSize;
         if (all.length >= 30000) break;
       }
-
       setFuncionarios(all);
     } catch (error) {
       console.error(error);
-      setFeedback({
-        type: "error",
-        text: "Nao foi possivel carregar a central de funcionarios ativos.",
-      });
       setFuncionarios([]);
-    } finally {
-      setLoading(false);
     }
+
+    // Carrega alocacao
+    const [pessoasResp, areasResp] = await Promise.all([
+      supabase.from("organograma_manutencao_pessoas").select("funcionario_id, funcionario_cracha, nome, area_codigo, tipo_headcount, ativo").eq("ativo", true).eq("tipo_headcount", "REALIZADO"),
+      supabase.from("organograma_manutencao_areas").select("codigo, titulo").eq("ativo", true),
+    ]);
+    setPessoasOrg(pessoasResp.error ? [] : (pessoasResp.data || []));
+    setAreasOrg(areasResp.error ? [] : (areasResp.data || []));
+    setLoading(false);
   }
 
-  useEffect(() => {
-    carregarFuncionarios();
-  }, []);
+  useEffect(() => { carregar(); }, []);
+
+  const areasByCodigo = useMemo(() => new Map(areasOrg.map((a) => [a.codigo, a])), [areasOrg]);
+  const alocPorChave = useMemo(() => {
+    const m = new Map();
+    for (const p of pessoasOrg) {
+      const k = String(p.funcionario_id || p.funcionario_cracha || normalizeText(p.nome) || "");
+      if (k) m.set(k, p);
+    }
+    return m;
+  }, [pessoasOrg]);
+
+  const enriquecidos = useMemo(() => {
+    return funcionarios.map((f) => {
+      const key = String(f.id_funcionario || f.nr_cracha || normalizeText(f.nm_funcionario));
+      const aloc = alocPorChave.get(key);
+      const areaTitulo = aloc ? areasByCodigo.get(aloc.area_codigo)?.titulo : "";
+      return {
+        ...f,
+        _alocacao: aloc ? "Alocado" : "Sobrando",
+        _area_codigo: aloc?.area_codigo || "",
+        _area_titulo: areaTitulo || "",
+      };
+    });
+  }, [funcionarios, alocPorChave, areasByCodigo]);
 
   const funcoesOptions = useMemo(() => {
-    return [
-      ...new Set(
-        funcionarios
-          .map((funcionario) => String(funcionario?.nm_funcao || "").trim())
-          .filter(Boolean)
-      ),
-    ].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const set = new Set();
+    for (const f of funcionarios) {
+      const v = String(f.nm_funcao || "").trim();
+      if (v) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [funcionarios]);
 
   const filtrados = useMemo(() => {
-    const term = normalizeText(busca);
-
-    return funcionarios.filter((funcionario) => {
-      if (term && !buildSearchBlob(funcionario).includes(term)) return false;
-      if (funcaoFiltro && funcionario?.nm_funcao !== funcaoFiltro) return false;
-      return true;
+    const q = normalizeText(busca);
+    return enriquecidos.filter((f) => {
+      if (funcaoFiltro && f.nm_funcao !== funcaoFiltro) return false;
+      if (tab === "alocados" && f._alocacao !== "Alocado") return false;
+      if (tab === "sobra" && f._alocacao !== "Sobrando") return false;
+      if (!q) return true;
+      const blob = normalizeText(`${f.nm_funcionario} ${f.nr_cracha} ${f.nm_funcao} ${f.nr_telefone_celular} ${f._area_titulo}`);
+      return blob.includes(q);
     });
-  }, [funcionarios, busca, funcaoFiltro]);
+  }, [enriquecidos, busca, funcaoFiltro, tab]);
 
-  const metricas = useMemo(() => {
-    const total = funcionarios.length;
-    const comCracha = funcionarios.filter((funcionario) => String(funcionario?.nr_cracha || "").trim()).length;
-    const comTelefone = funcionarios.filter((funcionario) => String(funcionario?.nr_telefone_celular || "").trim()).length;
-    const funcoes = funcoesOptions.length;
-
-    return { total, comCracha, comTelefone, funcoes };
-  }, [funcionarios, funcoesOptions]);
+  const stats = useMemo(() => {
+    const total = enriquecidos.length;
+    const alocados = enriquecidos.filter((f) => f._alocacao === "Alocado").length;
+    const sobra = total - alocados;
+    const comCracha = funcionarios.filter((f) => String(f.nr_cracha || "").trim()).length;
+    return { total, alocados, sobra, comCracha };
+  }, [enriquecidos, funcionarios]);
 
   return (
-    <div className="min-h-screen space-y-5 bg-slate-50 p-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
-              <FaUsers /> Base BCNT
-            </div>
-            <h1 className="mt-3 text-2xl font-black text-slate-800">Funcionários</h1>
-            <p className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-500">
-              <FaBriefcase /> Consulta da base ativa de funcionarios consumida do Supabase BCNT.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => navigate("/organograma")}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 font-bold text-white shadow-sm transition hover:bg-blue-500"
-              type="button"
-            >
-              <FaSitemap /> Ir para Organograma
-            </button>
-            <button
-              onClick={() => exportarCSV(filtrados, "Funcionarios_ativos")}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white shadow-sm transition hover:bg-emerald-500"
-              type="button"
-            >
-              <FaDownload /> Exportar Dados
-            </button>
-            <button
-              onClick={carregarFuncionarios}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-800 px-4 py-2 font-black text-white transition hover:bg-slate-700 disabled:opacity-70"
-              type="button"
-            >
-              <FaSync className={loading ? "animate-spin" : ""} /> {loading ? "Atualizando..." : "Atualizar"}
-            </button>
-          </div>
+    <div className="space-y-6 p-4 md:p-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Pessoas · Quadro</div>
+          <h1 className="text-2xl font-black text-slate-900 md:text-3xl">Funcionarios</h1>
+          <p className="text-sm text-slate-500">
+            Base ativa cruzada com o organograma. Quem nao esta alocado em nenhuma area aparece como "Sobrando".
+          </p>
         </div>
-
-        <div className="mt-5 grid grid-cols-1 items-end gap-4 border-t pt-5 md:grid-cols-3">
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-[10px] font-black uppercase text-slate-500">Busca</label>
-            <div className="relative">
-              <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Buscar por nome, cracha, funcao ou telefone..."
-                value={busca}
-                onChange={(event) => setBusca(event.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[10px] font-black uppercase text-slate-500">Funcao</label>
-            <select
-              value={funcaoFiltro}
-              onChange={(event) => setFuncaoFiltro(event.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-            >
-              <option value="">Todas as funcoes</option>
-              {funcoesOptions.map((funcao) => (
-                <option key={funcao} value={funcao}>
-                  {funcao}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => {
-              setBusca("");
-              setFuncaoFiltro("");
-            }}
-            className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-200"
-            type="button"
-          >
-            Limpar filtros
-          </button>
-          <span className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700">
-            <FaFilter /> {fmtInt(filtrados.length)} registro(s)
-          </span>
-        </div>
-
-        {feedback ? (
-          <div
-            className={`mt-4 rounded-xl px-4 py-3 text-sm font-bold ${
-              feedback.type === "success"
-                ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border border-rose-200 bg-rose-50 text-rose-700"
-            }`}
-          >
-            {feedback.text}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="rounded-3xl bg-gradient-to-r from-slate-900 via-blue-900 to-slate-800 p-5 text-white shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-blue-100">
-              <FaSitemap /> Cluster Pessoas
-            </div>
-            <h2 className="mt-3 text-2xl font-black">Funcionários e Organograma em páginas separadas</h2>
-            <p className="mt-2 text-sm font-semibold text-blue-100/90">
-              A central de funcionários segue independente, e o organograma fica em sua própria página dentro do cluster Pessoas.
-            </p>
-          </div>
-
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("/organograma")}
-            className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-900 transition hover:bg-blue-50"
+            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-50"
           >
-            Abrir página do organograma
+            <FaSitemap /> Organograma
+          </button>
+          <button
+            type="button"
+            onClick={() => exportarCSV(filtrados, "funcionarios")}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700"
+          >
+            <FaDownload /> Exportar CSV
+          </button>
+          <button
+            type="button"
+            onClick={carregar}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white shadow hover:bg-slate-800 disabled:opacity-60"
+          >
+            <FaSync className={loading ? "animate-spin" : ""} /> {loading ? "Atualizando..." : "Atualizar"}
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <CardKPI title="Ativos" value={fmtInt(metricas.total)} sub="Funcionarios ativos encontrados" icon={<FaUsers />} tone="slate" />
-        <CardKPI title="Com cracha" value={fmtInt(metricas.comCracha)} sub="Registros com identificacao" icon={<FaIdBadge />} tone="blue" />
-        <CardKPI title="Com telefone" value={fmtInt(metricas.comTelefone)} sub="Contatos disponiveis" icon={<FaPhoneAlt />} tone="emerald" />
-        <CardKPI title="Funcoes" value={fmtInt(metricas.funcoes)} sub="Cargos ativos distintos" icon={<FaBriefcase />} tone="amber" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <CardKPI titulo="Funcionarios" valor={fmtInt(stats.total)} cor="slate" icon={<FaUsers />} sub="Ativos na base BCNT" />
+        <CardKPI titulo="Alocados" valor={fmtInt(stats.alocados)} cor="emerald" icon={<FaSitemap />} sub="Dentro do organograma" />
+        <CardKPI titulo="Sobrando" valor={fmtInt(stats.sobra)} cor="rose" icon={<FaUsers />} sub="Fora do organograma" />
+        <CardKPI titulo="Com chapa" valor={fmtInt(stats.comCracha)} cor="blue" icon={<FaIdBadge />} sub="Possuem identificacao" />
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-black text-slate-800">Base de funcionarios</h3>
-            <p className="text-xs font-semibold text-slate-500">Clique em uma linha para consultar os detalhes.</p>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-[1000px] w-full border-collapse text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="p-3 font-black">Funcionario</th>
-                <th className="p-3 font-black">Cracha</th>
-                <th className="p-3 font-black">Funcao</th>
-                <th className="p-3 font-black">Telefone</th>
-                <th className="p-3 font-black">Inicio atividade</th>
-                <th className="p-3 font-black">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center font-bold text-slate-400">
-                    Atualizando base de funcionarios...
-                  </td>
-                </tr>
-              ) : filtrados.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center font-bold text-slate-400">
-                    Nenhum funcionario encontrado para o filtro aplicado.
-                  </td>
-                </tr>
-              ) : (
-                filtrados.map((funcionario) => (
-                  <tr
-                    key={`${funcionario.id_funcionario}-${funcionario.nr_cracha || funcionario.nm_funcionario}`}
-                    onClick={() => setSelecionado(funcionario)}
-                    className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/50 last:border-0"
-                  >
-                    <td className="p-3">
-                      <p className="font-black text-slate-800">{funcionario?.nm_funcionario || "Sem nome"}</p>
-                      <p className="text-xs font-semibold text-slate-500">ID {funcionario?.id_funcionario || "-"}</p>
-                    </td>
-                    <td className="p-3">
-                      <span className="rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600">
-                        {funcionario?.nr_cracha || "-"}
-                      </span>
-                    </td>
-                    <td className="p-3 font-bold text-slate-700">{funcionario?.nm_funcao || "-"}</td>
-                    <td className="p-3 font-bold text-slate-700">{funcionario?.nr_telefone_celular || "-"}</td>
-                    <td className="p-3 font-bold text-slate-700">
-                      <FaCalendarAlt className="mr-1 inline text-slate-400" />
-                      {formatDateBR(funcionario?.dt_inicio_atividade)}
-                    </td>
-                    <td className="p-3">
-                      <span className="inline-flex rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700">
-                        Ativo
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => setTab("todos")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+          tab === "todos" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        }`}>Todos ({stats.total})</button>
+        <button type="button" onClick={() => setTab("alocados")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+          tab === "alocados" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        }`}>Alocados ({stats.alocados})</button>
+        <button type="button" onClick={() => setTab("sobra")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+          tab === "sobra" ? "border-rose-600 bg-rose-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        }`}>Sobrando ({stats.sobra})</button>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <select
+            value={funcaoFiltro}
+            onChange={(e) => setFuncaoFiltro(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none"
+          >
+            <option value="">Todas as funcoes</option>
+            {funcoesOptions.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
         </div>
       </div>
 
-      {loading ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-[1px]">
-          <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 font-black text-slate-800 shadow-xl">
-            Carregando funcionarios...
-          </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="relative">
+          <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome, chapa, funcao, telefone ou area..."
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-blue-400 focus:outline-none"
+          />
         </div>
-      ) : null}
+      </div>
 
-      {selecionado ? <FuncionarioModal funcionario={selecionado} onClose={() => setSelecionado(null)} /> : null}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {loading ? (
+          <div className="px-6 py-12 text-center text-slate-500">Carregando funcionarios...</div>
+        ) : filtrados.length === 0 ? (
+          <div className="px-6 py-12 text-center text-slate-500">Nenhum funcionario encontrado.</div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {filtrados.map((f) => (
+              <button
+                key={`${f.id_funcionario || f.nr_cracha || f.nm_funcionario}`}
+                type="button"
+                onClick={() => setSelecionado(f)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold text-slate-900">{f.nm_funcionario}</div>
+                  <div className="truncate text-[11px] text-slate-500">
+                    {f.nm_funcao || "—"}
+                    {f.nr_cracha ? ` · Chapa ${f.nr_cracha}` : ""}
+                    {f.nr_telefone_celular ? ` · ${f.nr_telefone_celular}` : ""}
+                  </div>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <span className="hidden text-[11px] text-slate-500 md:inline">
+                    {calcTempoEmpresa(f.dt_inicio_atividade)}
+                  </span>
+                  {f._alocacao === "Alocado" ? (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                      {f._area_titulo || "Alocado"}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
+                      Sobrando
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <FuncionarioModal funcionario={selecionado} onClose={() => setSelecionado(null)} />
     </div>
   );
 }

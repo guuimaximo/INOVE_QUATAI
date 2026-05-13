@@ -54,7 +54,6 @@ import { MobileTabBadgesProvider } from "./context/MobileTabBadgesContext";
 import Usuarios from "./pages/configuracoes/Usuarios";
 import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
 import Funcionarios from "./pages/pessoas/Funcionarios";
-import Organograma from "./pages/pessoas/Organograma";
 import OrganogramaCanvas from "./pages/pessoas/OrganogramaCanvas";
 
 import DesempenhoLancamento from "./pages/desempenho-diesel/DesempenhoLancamento";
@@ -262,8 +261,8 @@ export default function App() {
               {/* Configurações */}
               <Route path="/usuarios" element={<Usuarios />} />
               <Route path="/funcionarios" element={<Funcionarios />} />
-              <Route path="/organograma" element={<Organograma />} />
-              <Route path="/organograma-canvas" element={<OrganogramaCanvas />} />
+              <Route path="/organograma" element={<OrganogramaCanvas />} />
+              <Route path="/organograma-canvas" element={<Navigate to="/organograma" replace />} />
               <Route path="/organograma-manutencao" element={<Navigate to="/organograma" replace />} />
               <Route path="/niveis-acesso" element={<NiveisAcesso />} />
             </Route>

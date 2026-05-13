@@ -144,8 +144,7 @@ export default function Sidebar() {
         icon: <FaUsers />,
         tabs: [
           { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
-          { path: "/organograma", label: "Organograma", icon: <FaUsers /> },
-          { path: "/organograma-canvas", label: "Organograma Canvas", icon: <FaSitemap /> },
+          { path: "/organograma", label: "Organograma", icon: <FaSitemap /> },
         ],
       },
 

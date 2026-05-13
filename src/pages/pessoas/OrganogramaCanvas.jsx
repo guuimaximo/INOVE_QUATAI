@@ -21,17 +21,18 @@ import {
   FaUserPlus,
   FaChevronDown,
   FaChevronRight,
+  FaQuestionCircle,
 } from "react-icons/fa";
 
 import { supabase } from "../../supabase";
 
 const CORES = {
-  stone: { border: "border-slate-300", bg: "bg-white", chip: "bg-slate-100 text-slate-700", hex: "#94a3b8" },
-  emerald: { border: "border-emerald-300", bg: "bg-emerald-50", chip: "bg-emerald-100 text-emerald-700", hex: "#10b981" },
-  blue: { border: "border-blue-300", bg: "bg-blue-50", chip: "bg-blue-100 text-blue-700", hex: "#3b82f6" },
-  amber: { border: "border-amber-300", bg: "bg-amber-50", chip: "bg-amber-100 text-amber-700", hex: "#f59e0b" },
-  sky: { border: "border-sky-300", bg: "bg-sky-50", chip: "bg-sky-100 text-sky-700", hex: "#0ea5e9" },
-  orange: { border: "border-orange-300", bg: "bg-orange-50", chip: "bg-orange-100 text-orange-700", hex: "#f97316" },
+  stone: { label: "Neutro", border: "border-slate-300", bg: "bg-white", chip: "bg-slate-100 text-slate-700", hex: "#94a3b8" },
+  emerald: { label: "Verde", border: "border-emerald-300", bg: "bg-emerald-50", chip: "bg-emerald-100 text-emerald-700", hex: "#10b981" },
+  blue: { label: "Azul", border: "border-blue-300", bg: "bg-blue-50", chip: "bg-blue-100 text-blue-700", hex: "#3b82f6" },
+  amber: { label: "Amarelo", border: "border-amber-300", bg: "bg-amber-50", chip: "bg-amber-100 text-amber-700", hex: "#f59e0b" },
+  sky: { label: "Ceu", border: "border-sky-300", bg: "bg-sky-50", chip: "bg-sky-100 text-sky-700", hex: "#0ea5e9" },
+  orange: { label: "Laranja", border: "border-orange-300", bg: "bg-orange-50", chip: "bg-orange-100 text-orange-700", hex: "#f97316" },
 };
 const COR_OPTIONS = Object.keys(CORES);
 
@@ -191,6 +192,102 @@ function computeMetrics(area, pessoas, childrenMap) {
   return { directRealizado, directOrcado, totalRealizado, totalOrcado, descendentes: desc.size };
 }
 
+function EntenderModal({ open, onClose, areas, childrenMap }) {
+  if (!open) return null;
+
+  // Encontra um exemplo natural de avo->pai->filho->neto nas areas existentes
+  const exemplo = (function () {
+    for (const avo of areas) {
+      const pais = childrenMap.get(avo.codigo) || [];
+      for (const pai of pais) {
+        const filhos = childrenMap.get(pai.codigo) || [];
+        for (const filho of filhos) {
+          return { avo, pai, filho };
+        }
+      }
+    }
+    return null;
+  })();
+
+  const Card = ({ titulo, papel, descricao, cor }) => (
+    <div className={`relative rounded-2xl border-2 ${cor} bg-white p-4 shadow-sm`}>
+      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{papel}</div>
+      <div className="mt-1 text-base font-black text-slate-900">{titulo}</div>
+      <div className="mt-1 text-xs text-slate-500">{descricao}</div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4">
+      <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-600">Como ler o organograma</div>
+            <div className="text-lg font-black text-slate-900">Entender pai · filho · neto</div>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="space-y-5 px-6 py-5">
+          <p className="text-sm text-slate-600">
+            Cada caixa do canvas e uma area. A seta que sai de uma caixa para outra mostra a hierarquia: quem esta acima e o "pai" da caixa de baixo.
+          </p>
+
+          <div className="space-y-3">
+            <Card titulo="Diretoria de Manutencao" papel="Avo / Lideranca topo" descricao="Topo da estrutura. Manda no pai." cor="border-slate-400" />
+            <div className="flex justify-center"><div className="h-6 w-0.5 bg-slate-300" /></div>
+            <Card titulo="Gerencia de Planejamento" papel="Pai" descricao="Esta abaixo do avo e tem filhos." cor="border-blue-400" />
+            <div className="flex justify-center"><div className="h-6 w-0.5 bg-slate-300" /></div>
+            <Card titulo="Equipe PCM" papel="Filho" descricao="Responde para o pai. Pode ter netos." cor="border-emerald-400" />
+            <div className="flex justify-center"><div className="h-6 w-0.5 bg-slate-300" /></div>
+            <Card titulo="Celula Pneus" papel="Neto" descricao="Mais profundo da arvore. Responde ao filho." cor="border-amber-400" />
+          </div>
+
+          {exemplo ? (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-700">Exemplo do seu organograma</div>
+              <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-blue-900">
+                <div>
+                  <span className="font-bold">Avo:</span> {exemplo.avo.titulo}
+                </div>
+                <div>
+                  <span className="font-bold">Pai:</span> {exemplo.pai.titulo}{" "}
+                  <span className="text-blue-600">(esta abaixo de {exemplo.avo.titulo})</span>
+                </div>
+                <div>
+                  <span className="font-bold">Filho:</span> {exemplo.filho.titulo}{" "}
+                  <span className="text-blue-600">(esta abaixo de {exemplo.pai.titulo}, ou seja, neto de {exemplo.avo.titulo})</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              Crie pelo menos 3 niveis de areas (uma sob a outra) para ver um exemplo real aqui.
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            <div className="font-bold text-slate-800">Dica</div>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-slate-600">
+              <li>Quando clicar em uma caixa, o numero <strong>"+N abaixo"</strong> mostra quantas caixas existem na sub-arvore inteira (filhos + netos + bisnetos).</li>
+              <li>O painel lateral mostra Orcado (vagas planejadas) e Realizado (quem esta nessas vagas).</li>
+              <li>O total em cascata soma todas as pessoas abaixo daquele gestor.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <button type="button" onClick={onClose} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+            Entendi
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FormField({ label, children }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -248,7 +345,7 @@ function NovaAreaModal({ open, areas, onClose, onCreate, saving }) {
             </FormField>
             <FormField label="Cor">
               <select className={inputCls()} value={cor} onChange={(e) => setCor(e.target.value)}>
-                {COR_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                {COR_OPTIONS.map((c) => <option key={c} value={c}>{CORES[c].label}</option>)}
               </select>
             </FormField>
           </div>
@@ -303,6 +400,36 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
 
   const metrics = computeMetrics(area, pessoas, childrenMap);
   const pessoasArea = pessoas.filter((p) => p.area_codigo === area.codigo);
+  const pessoasRealizadas = pessoasArea.filter((p) => p.tipo_headcount === "REALIZADO");
+  const pessoasOrcadasCadastradas = pessoasArea.filter((p) => p.tipo_headcount === "ORCADO");
+  const orcadoQtd = metrics.directOrcado;
+  const vagasOrcadas = (function () {
+    // Comeca com as vagas orcadas cadastradas explicitamente (com nome/cargo)
+    const lista = pessoasOrcadasCadastradas.map((p, idx) => ({
+      id: p.id,
+      label: p.nome || `Vaga ${idx + 1}`,
+      cargo: p.cargo,
+      preenchida: false,
+    }));
+    // Marca como preenchida na ordem em que pessoas REALIZADO existem
+    for (let i = 0; i < Math.min(lista.length, pessoasRealizadas.length); i += 1) {
+      lista[i].preenchida = true;
+      lista[i].label = pessoasRealizadas[i].nome || lista[i].label;
+      lista[i].cargo = pessoasRealizadas[i].cargo || lista[i].cargo;
+    }
+    // Completa ate atingir orcadoQtd com vagas em aberto
+    while (lista.length < orcadoQtd) {
+      const idx = lista.length;
+      const real = pessoasRealizadas[idx];
+      lista.push({
+        id: real?.id || `vaga-aberta-${idx}`,
+        label: real?.nome || `Vaga em aberto ${idx + 1}`,
+        cargo: real?.cargo,
+        preenchida: !!real,
+      });
+    }
+    return lista;
+  })();
   const subAreas = childrenMap.get(area.codigo) || [];
   const desc = collectDescendantCodes(area.codigo, childrenMap);
 
@@ -390,7 +517,7 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
               </FormField>
               <FormField label="Cor">
                 <select className={inputCls()} value={draft.cor} onChange={(e) => setDraftField("cor", e.target.value)}>
-                  {COR_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {COR_OPTIONS.map((c) => <option key={c} value={c}>{CORES[c].label}</option>)}
                 </select>
               </FormField>
             </div>
@@ -465,33 +592,73 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
           ) : null}
         </div>
 
-        {/* Pessoas */}
-        <div className="rounded-2xl border border-slate-200 p-3">
-          <button type="button" onClick={() => setPessoasAbertas((v) => !v)} className="flex w-full items-center justify-between text-left">
-            <div className="text-sm font-black uppercase tracking-wide text-slate-700">Pessoas direto ({pessoasArea.length})</div>
-            {pessoasAbertas ? <FaChevronDown className="text-slate-400" /> : <FaChevronRight className="text-slate-400" />}
-          </button>
-          {pessoasAbertas ? (
-            pessoasArea.length ? (
+        {/* Orcado x Realizado */}
+        <div className="grid grid-cols-1 gap-3">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-black uppercase tracking-wide text-amber-800">
+                Orcado · vagas planejadas ({vagasOrcadas.length})
+              </div>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                {pessoasArea.filter((p) => p.tipo_headcount === "REALIZADO").length}/{vagasOrcadas.length} preenchidas
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-amber-700">
+              Quantidade de vagas que o organograma reserva para esta area.
+            </p>
+            {vagasOrcadas.length ? (
               <div className="mt-2 space-y-1.5">
-                {pessoasArea.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                {vagasOrcadas.map((vaga, idx) => (
+                  <div key={vaga.id || `vaga-${idx}`} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-sm">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-slate-800">{p.nome || "(sem nome)"}</div>
-                      <div className="text-[11px] text-slate-500">{p.cargo || "-"}</div>
+                      <div className="truncate text-sm font-bold text-slate-800">
+                        {vaga.label}
+                      </div>
+                      {vaga.cargo ? <div className="text-[11px] text-slate-500">{vaga.cargo}</div> : null}
                     </div>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                      p.tipo_headcount === "REALIZADO" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                      vaga.preenchida ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
                     }`}>
-                      {p.tipo_headcount}
+                      {vaga.preenchida ? "Preenchida" : "Em aberto"}
                     </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="mt-2 text-xs text-slate-500">Nenhuma pessoa cadastrada diretamente nesta area.</div>
-            )
-          ) : null}
+              <div className="mt-2 text-xs text-amber-700">Nenhuma vaga orcada definida.</div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
+            <button type="button" onClick={() => setPessoasAbertas((v) => !v)} className="flex w-full items-center justify-between text-left">
+              <div className="text-sm font-black uppercase tracking-wide text-emerald-800">
+                Realizado · quem esta nessas vagas ({pessoasRealizadas.length})
+              </div>
+              {pessoasAbertas ? <FaChevronDown className="text-emerald-500" /> : <FaChevronRight className="text-emerald-500" />}
+            </button>
+            <p className="mt-1 text-[11px] text-emerald-700">
+              Pessoas alocadas hoje cobrindo as vagas orcadas desta area.
+            </p>
+            {pessoasAbertas ? (
+              pessoasRealizadas.length ? (
+                <div className="mt-2 space-y-1.5">
+                  {pessoasRealizadas.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-sm">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-bold text-slate-800">{p.nome || "(sem nome)"}</div>
+                        <div className="text-[11px] text-slate-500">{p.cargo || "-"}</div>
+                      </div>
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                        Ativo
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-emerald-700">Nenhuma pessoa alocada nesta area ainda.</div>
+              )
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -504,6 +671,7 @@ export default function OrganogramaCanvas() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [novaOpen, setNovaOpen] = useState(false);
+  const [entenderOpen, setEntenderOpen] = useState(false);
   const [selecionadoId, setSelecionadoId] = useState(null);
   const [statusMsg, setStatusMsg] = useState("");
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -714,6 +882,9 @@ export default function OrganogramaCanvas() {
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
             {stats.areas} area(s) · {stats.pessoas} pessoa(s)
           </div>
+          <button type="button" onClick={() => setEntenderOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-50">
+            <FaQuestionCircle /> Entender
+          </button>
           <button type="button" onClick={() => setNovaOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700">
             <FaPlus /> Nova caixa
           </button>
@@ -772,6 +943,13 @@ export default function OrganogramaCanvas() {
         onClose={() => setNovaOpen(false)}
         onCreate={criarArea}
         saving={saving}
+      />
+
+      <EntenderModal
+        open={entenderOpen}
+        onClose={() => setEntenderOpen(false)}
+        areas={areas}
+        childrenMap={childrenMap}
       />
     </div>
   );

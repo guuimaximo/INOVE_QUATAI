@@ -69,6 +69,7 @@ const PCM_ROUTES = {
   diario: "/pcm-diario",
   preventivas: "/pcm-preventivas",
   trocaPneus: "/pcm-troca-pneus",
+  controleFichas: "/pcm-controle-fichas",
 };
 
 const EMBARCADOS_ROUTES = {
@@ -154,6 +155,7 @@ export default function Sidebar() {
           { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
           { path: PCM_ROUTES.preventivas, label: "Preventivas", icon: <FaWrench /> },
           { path: PCM_ROUTES.trocaPneus, label: "Troca de pneus", icon: <FaTools /> },
+          { path: PCM_ROUTES.controleFichas, label: "Controle de fichas", icon: <FaClipboardList /> },
         ],
       },
 

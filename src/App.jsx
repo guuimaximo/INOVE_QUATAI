@@ -47,6 +47,7 @@ import PCMDiario from "./pages/pcm/PCMDiario";
 import PCMResumo from "./pages/pcm/PCMResumo";
 import PCM_Preventivas from "./pages/pcm/PCM_Preventivas";
 import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
+import PCMControleFichas from "./pages/pcm/PCMControleFichas";
 
 import Usuarios from "./pages/configuracoes/Usuarios";
 import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
@@ -197,6 +198,7 @@ export default function App() {
               <Route path="/pcm-diario/:id" element={<PCMDiario />} />
               <Route path="/pcm-preventivas" element={<PCM_Preventivas />} />
               <Route path="/pcm-troca-pneus" element={<PCMTrocaPneus />} />
+              <Route path="/pcm-controle-fichas" element={<PCMControleFichas />} />
 
               {/* Checklists */}
               <Route path="/checklists" element={<ChecklistCentral />} />

@@ -56,6 +56,15 @@ const TROCA_CONSERTO_OPTIONS = [
   TROCA_CONSERTO_COLOCADO,
 ];
 
+const ORIGEM_RECEBEU_SEM_PNEU = "FICOU SEM PNEU";
+const ORIGEM_RECEBEU_DO_DESTINO = "RECEBEU O PNEU DO CARRO DE DESTINO";
+const ORIGEM_RECEBEU_OUTRO = "RECEBEU OUTRO PNEU";
+const ORIGEM_RECEBEU_OPTIONS = [
+  ORIGEM_RECEBEU_SEM_PNEU,
+  ORIGEM_RECEBEU_DO_DESTINO,
+  ORIGEM_RECEBEU_OUTRO,
+];
+
 const POSICOES = [
   "DIANTEIRO DIREITO",
   "DIANTEIRO ESQUERDO",
@@ -279,6 +288,9 @@ function createTrocaForm(nextFicha, userName) {
     numeroFogoColocado: "",
     fotoColocado: null,
     pneuConserto: TROCA_CONSERTO_NENHUM,
+    origemRecebeu: ORIGEM_RECEBEU_SEM_PNEU,
+    numeroFogoOrigemRecebido: "",
+    fotoOrigemRecebido: null,
     observacoes: "",
   };
 }
@@ -1128,6 +1140,39 @@ function TrocaModal({
                 />
               </div>
             </SectionBlock>
+
+            <div className="xl:col-span-2">
+              <SectionBlock title="O que ficou no carro de origem">
+                <div className="grid grid-cols-1 gap-4">
+                  <SelectField
+                    label="Posicao do pneu retirado no carro de origem"
+                    value={form.origemRecebeu}
+                    onChange={(value) => onFieldChange("origemRecebeu", value)}
+                    options={ORIGEM_RECEBEU_OPTIONS}
+                  />
+
+                  {form.origemRecebeu === ORIGEM_RECEBEU_OUTRO ? (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <InputField
+                        label="Numero de fogo do pneu que entrou no carro de origem"
+                        value={form.numeroFogoOrigemRecebido}
+                        onChange={(value) => onFieldChange("numeroFogoOrigemRecebido", value)}
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                      />
+                      <PhotoField
+                        title="Foto do numero de fogo do pneu que entrou no carro de origem"
+                        file={form.fotoOrigemRecebido}
+                        inputId="troca-origem-recebido"
+                        onChange={(event) => onFotoChange("fotoOrigemRecebido", event.target.files?.[0] || null)}
+                        onNativeCapture={() => onCapturePhoto("fotoOrigemRecebido", "numero_origem_recebido")}
+                        isNativeShell={isNativeShell}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </SectionBlock>
+            </div>
           </div>
         )}
       </div>
@@ -1714,6 +1759,25 @@ function ConsultaModal({
                   isNativeShell={isNativeShell}
                 />
               ) : null}
+              {row.numero_fogo_retirado ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onEnviarConserto({
+                      origemTab: TAB_TROCA,
+                      origemItemId: row.id,
+                      prefixo: row.prefixo_retirada || row.prefixo,
+                      numeroFogo: row.numero_fogo_retirado,
+                      situacaoOrigem: "Pneu retirado",
+                      observacoes: `Enviado a partir da troca ${row.ficha_troca || ""} · Pneu retirado.`,
+                    })
+                  }
+                  className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
+                >
+                  <FaWrench className="inline mr-2" />
+                  Enviar para conserto
+                </button>
+              ) : null}
             </div>
           </SectionBlock>
 
@@ -1729,9 +1793,46 @@ function ConsultaModal({
                   isNativeShell={isNativeShell}
                 />
               ) : null}
+              {(row.numero_fogo_colocado || row.numero_fogo_pneu) ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onEnviarConserto({
+                      origemTab: TAB_TROCA,
+                      origemItemId: row.id,
+                      prefixo: row.prefixo_instalacao || row.prefixo,
+                      numeroFogo: row.numero_fogo_colocado || row.numero_fogo_pneu,
+                      situacaoOrigem: "Pneu colocado",
+                      observacoes: `Enviado a partir da troca ${row.ficha_troca || ""} · Pneu colocado.`,
+                    })
+                  }
+                  className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
+                >
+                  <FaWrench className="inline mr-2" />
+                  Enviar para conserto
+                </button>
+              ) : null}
             </div>
           </SectionBlock>
         </div>
+
+        {row.origem_recebeu ? (
+          <SectionBlock title="O que ficou no carro de origem">
+            <div className="grid grid-cols-1 gap-4">
+              <DetailRow label="Destino do pneu retirado" value={row.origem_recebeu} />
+              {row.numero_fogo_origem_recebido ? (
+                <DetailRow label="Numero de fogo recebido" value={row.numero_fogo_origem_recebido} />
+              ) : null}
+              {row.foto_numero_fogo_origem_recebido_url ? (
+                <ZoomableImage
+                  src={row.foto_numero_fogo_origem_recebido_url}
+                  alt="Numero de fogo recebido no carro de origem"
+                  isNativeShell={isNativeShell}
+                />
+              ) : null}
+            </div>
+          </SectionBlock>
+        ) : null}
 
         {row.consertoRelacionado ? (
           <DetailRow
@@ -2948,6 +3049,9 @@ export default function PCMTrocaPneus() {
       "numero_colocado",
       payload.fotoColocadoFile
     );
+    const fotoOrigemRecebido = payload.fotoOrigemRecebidoFile
+      ? await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_origem_recebido", payload.fotoOrigemRecebidoFile)
+      : { path: null, url: null };
 
     const insertPayload = {
       id: trocaId,
@@ -2968,6 +3072,10 @@ export default function PCMTrocaPneus() {
       numero_fogo_pneu: payload.numeroFogoColocado,
       foto_numero_fogo_path: fotoColocada.path,
       foto_numero_fogo_url: fotoColocada.url,
+      origem_recebeu: payload.origemRecebeu || null,
+      numero_fogo_origem_recebido: payload.numeroFogoOrigemRecebido || null,
+      foto_numero_fogo_origem_recebido_path: fotoOrigemRecebido.path,
+      foto_numero_fogo_origem_recebido_url: fotoOrigemRecebido.url,
       observacoes: payload.observacoes,
       criado_por_login: payload.criadoPorLogin,
       criado_por_nome: payload.criadoPorNome,
@@ -3109,6 +3217,7 @@ export default function PCMTrocaPneus() {
         ...payload,
         fotoRetiradoFile: await serializeFile(payload.fotoRetiradoFile),
         fotoColocadoFile: await serializeFile(payload.fotoColocadoFile),
+        fotoOrigemRecebidoFile: await serializeFile(payload.fotoOrigemRecebidoFile),
       },
     });
     await refreshOfflineCount();
@@ -3160,6 +3269,7 @@ export default function PCMTrocaPneus() {
             ...item.payload,
             fotoRetiradoFile: base64ToFile(item.payload.fotoRetiradoFile),
             fotoColocadoFile: base64ToFile(item.payload.fotoColocadoFile),
+            fotoOrigemRecebidoFile: base64ToFile(item.payload.fotoOrigemRecebidoFile),
           });
         }
 
@@ -3218,6 +3328,18 @@ export default function PCMTrocaPneus() {
       return;
     }
 
+    const origemRecebeu = isEstoqueCarro
+      ? ""
+      : (safeText(trocaForm.origemRecebeu) || ORIGEM_RECEBEU_SEM_PNEU);
+    const numeroFogoOrigemRecebido = safeText(trocaForm.numeroFogoOrigemRecebido);
+
+    if (!isEstoqueCarro && origemRecebeu === ORIGEM_RECEBEU_OUTRO) {
+      if (!numeroFogoOrigemRecebido || !trocaForm.fotoOrigemRecebido) {
+        alert("Informe o numero de fogo e a foto do pneu que entrou no carro de origem.");
+        return;
+      }
+    }
+
     const payload = {
       id: createClientUuid(),
       ficha,
@@ -3233,6 +3355,9 @@ export default function PCMTrocaPneus() {
       pneuConserto,
       consertoId: pneuConserto !== TROCA_CONSERTO_NENHUM ? createClientUuid() : null,
       consertoFicha: pneuConserto !== TROCA_CONSERTO_NENHUM ? `CP-${ficha}` : null,
+      origemRecebeu,
+      numeroFogoOrigemRecebido: origemRecebeu === ORIGEM_RECEBEU_OUTRO ? numeroFogoOrigemRecebido : "",
+      fotoOrigemRecebidoFile: origemRecebeu === ORIGEM_RECEBEU_OUTRO ? trocaForm.fotoOrigemRecebido : null,
       observacoes,
       criadoPorLogin: safeText(user?.login || user?.email),
       criadoPorNome: safeText(user?.nome),
@@ -4484,16 +4609,19 @@ export default function PCMTrocaPneus() {
               </div>
             ) : (
               consertosFiltrados.map((row) => (
-                <div key={row.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                <div
+                  key={row.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openConsulta(TAB_CONSERTOS, row)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openConsulta(TAB_CONSERTOS, row); } }}
+                  className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm hover:bg-slate-50"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <button
-                        type="button"
-                        onClick={() => openConsulta(TAB_CONSERTOS, row)}
-                        className="text-left text-xs font-black uppercase tracking-wide text-blue-700 hover:text-blue-800"
-                      >
+                      <div className="text-left text-xs font-black uppercase tracking-wide text-blue-700">
                         {row.ficha_conserto || "Ficha de conserto"}
-                      </button>
+                      </div>
                       <div className="text-sm font-bold text-slate-900">{row.numero_fogo || "-"}</div>
                       <div className="mt-1 text-xs text-slate-500">
                         {row.prefixo ? `Prefixo ${row.prefixo} · ` : ""}{row.status || "PENDENTE"}
@@ -4504,7 +4632,7 @@ export default function PCMTrocaPneus() {
                   {row.situacao_origem ? (
                     <div className="mt-2 text-xs font-semibold text-amber-700">{row.situacao_origem}</div>
                   ) : null}
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="mt-3 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => marcarConsertoStatus(row.id, "EM CONSERTO")}
@@ -4551,15 +4679,15 @@ export default function PCMTrocaPneus() {
                     </tr>
                   ) : (
                     consertosFiltrados.map((row) => (
-                      <tr key={row.id} className="transition-colors hover:bg-slate-50/80">
+                      <tr
+                        key={row.id}
+                        onClick={() => openConsulta(TAB_CONSERTOS, row)}
+                        className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                      >
                         <td className="px-4 py-3 font-bold text-slate-700">
-                          <button
-                            type="button"
-                            onClick={() => openConsulta(TAB_CONSERTOS, row)}
-                            className="text-blue-700 hover:text-blue-800 hover:underline"
-                          >
+                          <span className="text-blue-700 hover:underline">
                             {row.ficha_conserto}
-                          </button>
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
                         <td className="px-4 py-3 font-medium text-slate-700">{row.numero_fogo || "-"}</td>
@@ -4567,7 +4695,7 @@ export default function PCMTrocaPneus() {
                         <td className="px-4 py-3 text-slate-600">{row.situacao_origem || row.origem_tab || "-"}</td>
                         <td className="px-4 py-3 text-slate-600">{row.status || "-"}</td>
                         <td className="px-4 py-3 text-slate-600">{row.borracheiro_nome || row.borracheiro_login || "-"}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"

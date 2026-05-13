@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import ReactFlow, {
   Background,
   Controls,
@@ -22,6 +24,9 @@ import {
   FaChevronDown,
   FaChevronRight,
   FaQuestionCircle,
+  FaFileImage,
+  FaFilePdf,
+  FaFileImport,
 } from "react-icons/fa";
 
 import { supabase } from "../../supabase";
@@ -258,6 +263,119 @@ function computeMetrics(area, pessoas, childrenMap) {
   return { directRealizado, directOrcado, totalRealizado, totalOrcado, descendentes: desc.size };
 }
 
+function PuxarFuncoesModal({ open, area, funcionarios, onClose, onImport, saving }) {
+  const [selecionadas, setSelecionadas] = useState(new Set());
+  const [busca, setBusca] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setSelecionadas(new Set());
+      setBusca("");
+    }
+  }, [open]);
+
+  const funcoes = useMemo(() => {
+    const map = new Map();
+    for (const f of funcionarios) {
+      const key = (f.nm_funcao || "").trim();
+      if (!key) continue;
+      if (!map.has(key)) map.set(key, { funcao: key, total: 0 });
+      map.get(key).total += 1;
+    }
+    const list = Array.from(map.values()).sort((a, b) => a.funcao.localeCompare(b.funcao, "pt-BR"));
+    if (!busca) return list;
+    const q = busca.toLowerCase();
+    return list.filter((f) => f.funcao.toLowerCase().includes(q));
+  }, [funcionarios, busca]);
+
+  function toggle(funcao) {
+    setSelecionadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(funcao)) next.delete(funcao);
+      else next.add(funcao);
+      return next;
+    });
+  }
+
+  if (!open || !area) return null;
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4">
+      <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" style={{ maxHeight: "85vh" }}>
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-600">Importar orcados</div>
+            <div className="text-lg font-black text-slate-900">Puxar funcoes para "{area.titulo}"</div>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="px-6 py-3">
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar funcao..."
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+          />
+          <div className="mt-2 text-xs text-slate-500">
+            {funcoes.length} funcao(oes) encontradas. Cada uma selecionada vira uma vaga orcada com o cargo igual ao nome da funcao.
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-2">
+          {funcoes.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              Nenhuma funcao encontrada na tabela de funcionarios.
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {funcoes.map((f) => {
+                const ativa = selecionadas.has(f.funcao);
+                return (
+                  <button
+                    key={f.funcao}
+                    type="button"
+                    onClick={() => toggle(f.funcao)}
+                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition ${
+                      ativa ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-slate-800">{f.funcao}</div>
+                      <div className="text-[11px] text-slate-500">{f.total} funcionario(s) com essa funcao</div>
+                    </div>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ativa ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+                      {ativa ? "Selecionada" : "Adicionar"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="text-xs text-slate-500">{selecionadas.size} selecionada(s)</div>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={saving || !selecionadas.size}
+              onClick={() => onImport(Array.from(selecionadas))}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              <FaFileImport /> {saving ? "Importando..." : "Importar como orcados"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EntenderModal({ open, onClose, areas, childrenMap }) {
   if (!open) return null;
 
@@ -458,7 +576,7 @@ function NovaAreaModal({ open, areas, onClose, onCreate, saving, defaultSetor })
   );
 }
 
-function SidePanel({ area, areas, pessoas, childrenMap, funcByNome, onClose, onSave, onDelete, saving }) {
+function SidePanel({ area, areas, pessoas, childrenMap, funcByNome, onPuxarFuncoes, onClose, onSave, onDelete, saving }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [pessoasAbertas, setPessoasAbertas] = useState(true);
@@ -650,6 +768,13 @@ function SidePanel({ area, areas, pessoas, childrenMap, funcByNome, onClose, onS
             </button>
             <button
               type="button"
+              onClick={() => onPuxarFuncoes(area)}
+              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+            >
+              <FaFileImport /> Puxar funcoes
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 if (confirm(`Remover a area "${area.titulo}"? Sub-areas continuarao mas perdem o pai.`)) {
                   onDelete(area.codigo);
@@ -764,6 +889,8 @@ export default function OrganogramaCanvas() {
   const [saving, setSaving] = useState(false);
   const [novaOpen, setNovaOpen] = useState(false);
   const [entenderOpen, setEntenderOpen] = useState(false);
+  const [puxarFuncoesArea, setPuxarFuncoesArea] = useState(null);
+  const [exportando, setExportando] = useState(false);
   const [selecionadoId, setSelecionadoId] = useState(null);
   const [statusMsg, setStatusMsg] = useState("");
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -983,6 +1110,125 @@ export default function OrganogramaCanvas() {
     }
   }
 
+  async function importarFuncoesComoOrcado(funcoesList) {
+    if (!puxarFuncoesArea || !funcoesList?.length) return;
+    setSaving(true);
+    try {
+      const rows = funcoesList.map((funcao) => ({
+        area_codigo: puxarFuncoesArea.codigo,
+        nome: "",
+        cargo: funcao,
+        tipo_headcount: "ORCADO",
+        ativo: true,
+      }));
+      const { error } = await supabase.from("organograma_manutencao_pessoas").insert(rows);
+      if (error) throw error;
+      setPuxarFuncoesArea(null);
+      await carregar();
+      setStatusMsg(`${rows.length} vaga(s) importada(s) como orcado.`);
+    } catch (error) {
+      console.error(error);
+      alert(error?.message || "Nao foi possivel importar as funcoes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onNodeDragStop(_, node) {
+    // Salva posicao do node arrastado
+    dirtyRef.current.set(node.id, { x: node.position.x, y: node.position.y });
+
+    // Detecta reparent: se o node soltado esta dentro do bbox de outro node, vira filho dele
+    const draggedId = node.id;
+    const dragged = node;
+    // tamanho aproximado do card 260x150
+    const cx = dragged.position.x + 130;
+    const cy = dragged.position.y + 75;
+    let novoPaiId = null;
+    for (const n of nodes) {
+      if (n.id === draggedId) continue;
+      const w = (n.width || 260);
+      const h = (n.height || 150);
+      const x1 = n.position.x;
+      const y1 = n.position.y;
+      const x2 = x1 + w;
+      const y2 = y1 + h;
+      if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2) {
+        novoPaiId = n.id;
+        break;
+      }
+    }
+    if (!novoPaiId) return;
+    if (novoPaiId === draggedId) return;
+    const atual = areasByCode.get(draggedId);
+    if (!atual) return;
+    if (atual.parent_codigo === novoPaiId) return;
+    // Evita ciclo: o novo pai nao pode estar entre os descendentes do dragged
+    const desc = collectDescendantCodes(draggedId, childrenMap);
+    if (desc.has(novoPaiId)) {
+      alert("Nao da pra colocar uma area sob um descendente dela.");
+      return;
+    }
+    const titulo = areasByCode.get(novoPaiId)?.titulo || novoPaiId;
+    if (!confirm(`Mover "${atual.titulo}" para ficar sob "${titulo}"?`)) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("organograma_manutencao_areas")
+        .update({ parent_codigo: novoPaiId })
+        .eq("codigo", draggedId);
+      if (error) throw error;
+      await carregar();
+      setStatusMsg("Hierarquia atualizada.");
+    } catch (error) {
+      console.error(error);
+      alert(error?.message || "Nao foi possivel reparentar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function exportarPNG() {
+    const alvo = document.querySelector(".react-flow");
+    if (!alvo) return;
+    setExportando(true);
+    try {
+      const canvas = await html2canvas(alvo, { backgroundColor: "#f8fafc", scale: 2, useCORS: true, logging: false });
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = `organograma_${new Date().toISOString().slice(0, 10)}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (error) {
+      console.error(error);
+      alert("Nao foi possivel exportar a imagem.");
+    } finally {
+      setExportando(false);
+    }
+  }
+
+  async function exportarPDF() {
+    const alvo = document.querySelector(".react-flow");
+    if (!alvo) return;
+    setExportando(true);
+    try {
+      const canvas = await html2canvas(alvo, { backgroundColor: "#f8fafc", scale: 2, useCORS: true, logging: false });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: canvas.width >= canvas.height ? "landscape" : "portrait",
+        unit: "pt",
+        format: [canvas.width, canvas.height],
+      });
+      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
+      pdf.save(`organograma_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (error) {
+      console.error(error);
+      alert("Nao foi possivel exportar o PDF.");
+    } finally {
+      setExportando(false);
+    }
+  }
+
   const selecionada = selecionadoId ? areasByCode.get(selecionadoId) : null;
   const stats = useMemo(() => ({ areas: areas.length, pessoas: pessoas.length }), [areas, pessoas]);
 
@@ -1012,6 +1258,14 @@ export default function OrganogramaCanvas() {
           <button type="button" onClick={salvarPosicoes} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-700 disabled:opacity-60">
             <FaSave /> {saving ? "Salvando..." : "Salvar layout"}
           </button>
+          <div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <button type="button" onClick={exportarPNG} disabled={exportando} className="inline-flex items-center gap-2 border-r border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+              <FaFileImage /> PNG
+            </button>
+            <button type="button" onClick={exportarPDF} disabled={exportando} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+              <FaFilePdf /> PDF
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1066,6 +1320,7 @@ export default function OrganogramaCanvas() {
           onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDragStop={onNodeDragStop}
           onNodeClick={(_, n) => setSelecionadoId(n.id)}
           onPaneClick={() => setSelecionadoId(null)}
           onInit={(instance) => (reactFlowInstance.current = instance)}
@@ -1087,6 +1342,7 @@ export default function OrganogramaCanvas() {
             pessoas={pessoas}
             childrenMap={childrenMap}
             funcByNome={funcByNome}
+            onPuxarFuncoes={(a) => setPuxarFuncoesArea(a)}
             onClose={() => setSelecionadoId(null)}
             onSave={atualizarArea}
             onDelete={excluirArea}
@@ -1109,6 +1365,15 @@ export default function OrganogramaCanvas() {
         onClose={() => setEntenderOpen(false)}
         areas={areas}
         childrenMap={childrenMap}
+      />
+
+      <PuxarFuncoesModal
+        open={!!puxarFuncoesArea}
+        area={puxarFuncoesArea}
+        funcionarios={funcionarios}
+        onClose={() => setPuxarFuncoesArea(null)}
+        onImport={importarFuncoesComoOrcado}
+        saving={saving}
       />
     </div>
   );

@@ -29,6 +29,8 @@ import {
   FaFilePdf,
   FaFileExcel,
   FaFileImport,
+  FaUserFriends,
+  FaChartPie,
 } from "react-icons/fa";
 
 import { supabase } from "../../supabase";
@@ -264,6 +266,259 @@ function computeMetrics(area, pessoas, childrenMap) {
     return sum;
   })();
   return { directRealizado, directOrcado, totalRealizado, totalOrcado, descendentes: desc.size };
+}
+
+function PessoaPickerModal({ open, contexto, funcionarios, alocacoesPorFuncId, areasByCode, onClose, onPick, saving }) {
+  const [busca, setBusca] = useState("");
+  useEffect(() => { if (open) setBusca(""); }, [open]);
+
+  const lista = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const arr = funcionarios.filter((f) => {
+      if (!q) return true;
+      return (
+        (f.nm_funcionario || "").toLowerCase().includes(q) ||
+        (f.nm_funcao || "").toLowerCase().includes(q) ||
+        String(f.nr_cracha || "").toLowerCase().includes(q)
+      );
+    });
+    return arr.slice(0, 200);
+  }, [funcionarios, busca]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4">
+      <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" style={{ maxHeight: "85vh" }}>
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-600">Alocar pessoa</div>
+            <div className="text-lg font-black text-slate-900">{contexto?.titulo || "Selecionar funcionario"}</div>
+            {contexto?.subtitulo ? <div className="text-xs text-slate-500">{contexto.subtitulo}</div> : null}
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="px-6 py-3">
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome, cargo ou chapa..."
+            autoFocus
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-2">
+          {lista.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              Nenhum funcionario encontrado.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {lista.map((f) => {
+                const key = String(f.id_funcionario || f.nr_cracha || f.nm_funcionario);
+                const aloc = alocacoesPorFuncId.get(key);
+                const jaAlocado = !!aloc && aloc.pessoaId !== contexto?.pessoaIdAtual;
+                const areaAloc = aloc ? (areasByCode.get(aloc.area_codigo)?.titulo || aloc.area_codigo) : "";
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={jaAlocado || saving}
+                    onClick={() => onPick(f)}
+                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition ${
+                      jaAlocado
+                        ? "cursor-not-allowed border-slate-200 bg-slate-100 opacity-70"
+                        : "border-slate-200 bg-white hover:border-blue-400 hover:bg-blue-50"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-slate-800">{f.nm_funcionario || "(sem nome)"}</div>
+                      <div className="truncate text-[11px] text-slate-500">
+                        {f.nm_funcao || "—"}{f.nr_cracha ? ` · Chapa ${f.nr_cracha}` : ""}
+                      </div>
+                    </div>
+                    {jaAlocado ? (
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-700">
+                        Alocado em {areaAloc}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                        Disponivel
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-slate-200 bg-slate-50 px-6 py-3 text-[11px] text-slate-500">
+          Pessoas ja alocadas em outra vaga aparecem em cinza. Para mover, remova da vaga antiga primeiro ou — se o cargo realmente reporta a dois lideres — desenhe uma seta adicional entre as caixas no canvas (sem duplicar a pessoa).
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuadroDrawer({ open, onClose, funcionarios, pessoas, areas, alocacoesPorFuncId, areasByCode, onAlocar }) {
+  const [tab, setTab] = useState("todos");
+  const [busca, setBusca] = useState("");
+
+  const enriched = useMemo(() => {
+    return funcionarios.map((f) => {
+      const key = String(f.id_funcionario || f.nr_cracha || f.nm_funcionario);
+      const aloc = alocacoesPorFuncId.get(key);
+      const areaTitulo = aloc ? areasByCode.get(aloc.area_codigo)?.titulo : "";
+      return {
+        key,
+        funcionario: f,
+        alocado: !!aloc,
+        area_codigo: aloc?.area_codigo,
+        area_titulo: areaTitulo,
+      };
+    });
+  }, [funcionarios, alocacoesPorFuncId, areasByCode]);
+
+  const filtered = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return enriched.filter((row) => {
+      if (tab === "alocados" && !row.alocado) return false;
+      if (tab === "sobra" && row.alocado) return false;
+      if (!q) return true;
+      const f = row.funcionario;
+      return (
+        (f.nm_funcionario || "").toLowerCase().includes(q) ||
+        (f.nm_funcao || "").toLowerCase().includes(q) ||
+        String(f.nr_cracha || "").toLowerCase().includes(q) ||
+        (row.area_titulo || "").toLowerCase().includes(q)
+      );
+    });
+  }, [enriched, busca, tab]);
+
+  const stats = useMemo(() => {
+    const total = enriched.length;
+    const alocados = enriched.filter((r) => r.alocado).length;
+    const sobra = total - alocados;
+    const orcadoAreas = areas.reduce((acc, a) => acc + Number(a.orcado_qtd || 0), 0);
+    const vagasOrcadasPessoas = pessoas.filter((p) => p.tipo_headcount === "ORCADO").length;
+    const totalOrcado = Math.max(orcadoAreas, vagasOrcadasPessoas);
+    const realizadoTotal = pessoas.filter((p) => p.tipo_headcount === "REALIZADO").length;
+    const vagasAbertas = Math.max(0, totalOrcado - realizadoTotal);
+    return { total, alocados, sobra, totalOrcado, realizadoTotal, vagasAbertas };
+  }, [enriched, areas, pessoas]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[75] flex justify-end bg-slate-900/40">
+      <div className="flex h-full w-full max-w-2xl flex-col overflow-hidden bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-600">Quadro de pessoal</div>
+            <div className="text-xl font-black text-slate-900">Funcionarios</div>
+            <div className="text-xs text-slate-500">Quem esta no organograma e quem esta sobrando.</div>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 border-b border-slate-200 px-6 py-4 md:grid-cols-4">
+          <CardStat titulo="Funcionarios" valor={stats.total} cor="slate" />
+          <CardStat titulo="Alocados" valor={stats.alocados} cor="emerald" />
+          <CardStat titulo="Sobrando" valor={stats.sobra} cor="rose" />
+          <CardStat titulo="Vagas abertas" valor={stats.vagasAbertas} cor="amber" />
+          <CardStat titulo="Orcado total" valor={stats.totalOrcado} cor="blue" pequeno />
+          <CardStat titulo="Realizado total" valor={stats.realizadoTotal} cor="emerald" pequeno />
+          <CardStat
+            titulo="Cobertura"
+            valor={stats.totalOrcado > 0 ? `${Math.round((stats.realizadoTotal / stats.totalOrcado) * 100)}%` : "—"}
+            cor="purple"
+            pequeno
+          />
+          <CardStat
+            titulo="% sobrando"
+            valor={stats.total > 0 ? `${Math.round((stats.sobra / stats.total) * 100)}%` : "—"}
+            cor="rose"
+            pequeno
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-6 py-3">
+          <button type="button" onClick={() => setTab("todos")} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${tab === "todos" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>Todos ({enriched.length})</button>
+          <button type="button" onClick={() => setTab("alocados")} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${tab === "alocados" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>Alocados ({stats.alocados})</button>
+          <button type="button" onClick={() => setTab("sobra")} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${tab === "sobra" ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>Sobrando ({stats.sobra})</button>
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome, cargo, chapa ou area..."
+            className="ml-auto w-full min-w-[200px] flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs focus:border-blue-400 focus:outline-none md:w-auto"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-3">
+          {filtered.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              Nenhum funcionario nesta lista.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {filtered.map((row) => (
+                <div key={row.key} className={`flex items-center justify-between rounded-xl border px-3 py-2 ${row.alocado ? "border-emerald-200 bg-emerald-50/40" : "border-rose-200 bg-rose-50/30"}`}>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-slate-800">{row.funcionario.nm_funcionario}</div>
+                    <div className="truncate text-[11px] text-slate-500">
+                      {row.funcionario.nm_funcao || "—"}{row.funcionario.nr_cracha ? ` · Chapa ${row.funcionario.nr_cracha}` : ""}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {row.alocado ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                        {row.area_titulo}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-700">
+                          Sobrando
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onAlocar(row.funcionario)}
+                          className="rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-blue-700"
+                        >
+                          Alocar
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardStat({ titulo, valor, cor = "slate", pequeno }) {
+  const cls = {
+    slate: "border-slate-200 bg-slate-50 text-slate-900",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    rose: "border-rose-200 bg-rose-50 text-rose-900",
+    amber: "border-amber-200 bg-amber-50 text-amber-900",
+    blue: "border-blue-200 bg-blue-50 text-blue-900",
+    purple: "border-purple-200 bg-purple-50 text-purple-900",
+  }[cor];
+  return (
+    <div className={`rounded-2xl border ${cls} px-3 py-2`}>
+      <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">{titulo}</div>
+      <div className={`mt-0.5 font-black ${pequeno ? "text-base" : "text-2xl"}`}>{valor}</div>
+    </div>
+  );
 }
 
 function PuxarFuncoesModal({ open, area, funcionarios, onClose, onImport, saving }) {
@@ -596,7 +851,7 @@ function NovaAreaModal({ open, areas, onClose, onCreate, saving, defaultSetor })
 
 function SidePanel({
   area, areas, pessoas, childrenMap, funcByNome,
-  onPuxarFuncoes, onAddVaga, onAddRealizado, onEditarPessoa, onRemoverPessoa,
+  onPuxarFuncoes, onAddVaga, onAbrirPicker, onEditarPessoa, onRemoverPessoa,
   onClose, onSave, onDelete, saving,
 }) {
   const [editing, setEditing] = useState(false);
@@ -863,12 +1118,7 @@ function SidePanel({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  const nome = prompt("Nome da pessoa que esta realizando:", "");
-                  if (!nome || !nome.trim()) return;
-                  const cargo = prompt("Cargo / funcao dela:", "") || "";
-                  onAddRealizado(area, nome.trim(), cargo.trim());
-                }}
+                onClick={() => onAbrirPicker({ areaAlvo: area })}
                 className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700"
               >
                 + Pessoa
@@ -942,17 +1192,11 @@ function SidePanel({
                           <div className="flex gap-1 opacity-60 group-hover:opacity-100">
                             <button
                               type="button"
-                              title="Editar pessoa"
-                              onClick={() => {
-                                const nome = prompt("Nome:", realizadoPessoa.nome || "");
-                                if (nome == null) return;
-                                const cargo = prompt("Cargo:", realizadoPessoa.cargo || "");
-                                if (cargo == null) return;
-                                onEditarPessoa(realizadoPessoa.id, { nome: nome.trim(), cargo: cargo.trim() });
-                              }}
+                              title="Trocar pessoa"
+                              onClick={() => onAbrirPicker({ areaAlvo: area, pessoaIdAtual: realizadoPessoa.id })}
                               className="rounded bg-emerald-200 px-1 text-[10px] font-bold text-emerald-800 hover:bg-emerald-300"
                             >
-                              edit
+                              trocar
                             </button>
                             <button
                               type="button"
@@ -965,7 +1209,15 @@ function SidePanel({
                               ×
                             </button>
                           </div>
-                        ) : null}
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onAbrirPicker({ areaAlvo: area })}
+                            className="rounded bg-blue-100 px-1.5 text-[10px] font-bold text-blue-700 opacity-60 hover:bg-blue-200 group-hover:opacity-100"
+                          >
+                            alocar
+                          </button>
+                        )}
                       </div>
                       <div className="mt-0.5 truncate text-sm font-bold text-slate-900">
                         {vaga.preenchida ? vaga.nomeRealizado : "—"}
@@ -1004,6 +1256,8 @@ export default function OrganogramaCanvas() {
   const [entenderOpen, setEntenderOpen] = useState(false);
   const [puxarFuncoesArea, setPuxarFuncoesArea] = useState(null);
   const [exportando, setExportando] = useState(false);
+  const [quadroOpen, setQuadroOpen] = useState(false);
+  const [pickerContext, setPickerContext] = useState(null);
   const [selecionadoId, setSelecionadoId] = useState(null);
   const [statusMsg, setStatusMsg] = useState("");
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -1052,6 +1306,20 @@ export default function OrganogramaCanvas() {
     for (const f of funcionarios) m.set(normalizeNome(f.nm_funcionario), f);
     return m;
   }, [funcionarios]);
+
+  const allAreasByCode = useMemo(() => new Map(areas.map((a) => [a.codigo, a])), [areas]);
+
+  // Indice: funcionario_id -> { pessoaId, area_codigo }
+  const alocacoesPorFuncId = useMemo(() => {
+    const m = new Map();
+    for (const p of pessoas) {
+      if (p.tipo_headcount !== "REALIZADO") continue;
+      const key = String(p.funcionario_id || p.funcionario_cracha || normalizeNome(p.nome) || "");
+      if (!key) continue;
+      m.set(key, { pessoaId: p.id, area_codigo: p.area_codigo });
+    }
+    return m;
+  }, [pessoas]);
 
   useEffect(() => {
     // Expose por window pra computeMetrics conseguir ler orcado por area
@@ -1245,23 +1513,48 @@ export default function OrganogramaCanvas() {
     }
   }
 
-  async function addRealizado(areaAlvo, nome, cargo) {
-    if (!areaAlvo || !nome) return;
+  async function addRealizado(areaAlvo, funcionario, vagaPessoaIdParaSubstituir) {
+    if (!areaAlvo || !funcionario) return;
+    const key = String(funcionario.id_funcionario || funcionario.nr_cracha || funcionario.nm_funcionario);
+    const aloc = alocacoesPorFuncId.get(key);
+    if (aloc && aloc.pessoaId !== vagaPessoaIdParaSubstituir) {
+      const titulo = allAreasByCode.get(aloc.area_codigo)?.titulo || aloc.area_codigo;
+      alert(`Esse funcionario ja esta alocado em "${titulo}". Remova de la primeiro.`);
+      return;
+    }
     setSaving(true);
     try {
-      const { error } = await supabase.from("organograma_manutencao_pessoas").insert([{
-        area_codigo: areaAlvo.codigo,
-        nome,
-        cargo: cargo || "",
-        tipo_headcount: "REALIZADO",
-        ativo: true,
-      }]);
-      if (error) throw error;
+      if (vagaPessoaIdParaSubstituir) {
+        const { error } = await supabase
+          .from("organograma_manutencao_pessoas")
+          .update({
+            area_codigo: areaAlvo.codigo,
+            nome: funcionario.nm_funcionario || "",
+            cargo: funcionario.nm_funcao || "",
+            funcionario_id: String(funcionario.id_funcionario || ""),
+            funcionario_cracha: String(funcionario.nr_cracha || ""),
+            tipo_headcount: "REALIZADO",
+            ativo: true,
+          })
+          .eq("id", vagaPessoaIdParaSubstituir);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("organograma_manutencao_pessoas").insert([{
+          area_codigo: areaAlvo.codigo,
+          nome: funcionario.nm_funcionario || "",
+          cargo: funcionario.nm_funcao || "",
+          funcionario_id: String(funcionario.id_funcionario || ""),
+          funcionario_cracha: String(funcionario.nr_cracha || ""),
+          tipo_headcount: "REALIZADO",
+          ativo: true,
+        }]);
+        if (error) throw error;
+      }
       await carregar();
-      setStatusMsg("Pessoa adicionada.");
+      setStatusMsg("Pessoa alocada.");
     } catch (error) {
       console.error(error);
-      alert(error?.message || "Nao foi possivel adicionar a pessoa.");
+      alert(error?.message || "Nao foi possivel alocar.");
     } finally {
       setSaving(false);
     }
@@ -1544,6 +1837,9 @@ export default function OrganogramaCanvas() {
           <button type="button" onClick={() => setEntenderOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-50">
             <FaQuestionCircle /> Entender
           </button>
+          <button type="button" onClick={() => setQuadroOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white shadow hover:bg-slate-800">
+            <FaUserFriends /> Quadro
+          </button>
           <button type="button" onClick={() => setNovaOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700">
             <FaPlus /> Nova caixa
           </button>
@@ -1642,7 +1938,7 @@ export default function OrganogramaCanvas() {
             funcByNome={funcByNome}
             onPuxarFuncoes={(a) => setPuxarFuncoesArea(a)}
             onAddVaga={addVagaOrcada}
-            onAddRealizado={addRealizado}
+            onAbrirPicker={(ctx) => setPickerContext(ctx)}
             onEditarPessoa={editarPessoa}
             onRemoverPessoa={removerPessoa}
             onClose={() => setSelecionadoId(null)}
@@ -1676,6 +1972,48 @@ export default function OrganogramaCanvas() {
         onClose={() => setPuxarFuncoesArea(null)}
         onImport={importarFuncoesComoOrcado}
         saving={saving}
+      />
+
+      <PessoaPickerModal
+        open={!!pickerContext}
+        contexto={pickerContext ? {
+          titulo: pickerContext.areaAlvo ? `Alocar em "${pickerContext.areaAlvo.titulo}"` : "Alocar pessoa",
+          subtitulo: pickerContext.areaAlvo?.subtitulo,
+          pessoaIdAtual: pickerContext.pessoaIdAtual,
+        } : null}
+        funcionarios={funcionarios}
+        alocacoesPorFuncId={alocacoesPorFuncId}
+        areasByCode={allAreasByCode}
+        onClose={() => setPickerContext(null)}
+        onPick={async (f) => {
+          if (!pickerContext) return;
+          await addRealizado(pickerContext.areaAlvo, f, pickerContext.pessoaIdAtual);
+          setPickerContext(null);
+        }}
+        saving={saving}
+      />
+
+      <QuadroDrawer
+        open={quadroOpen}
+        onClose={() => setQuadroOpen(false)}
+        funcionarios={funcionarios}
+        pessoas={pessoas}
+        areas={areas}
+        alocacoesPorFuncId={alocacoesPorFuncId}
+        areasByCode={allAreasByCode}
+        onAlocar={(f) => {
+          // Abre escolha de area
+          const titulos = areas.map((a) => `${a.codigo}: ${a.titulo}`).join("\n");
+          const escolha = prompt(`Em qual area alocar "${f.nm_funcionario}"?\n\nDigite o codigo da area exatamente como esta na lista:\n\n${titulos}`, "");
+          if (!escolha) return;
+          const area = areas.find((a) => a.codigo === escolha.trim());
+          if (!area) {
+            alert("Codigo de area nao encontrado.");
+            return;
+          }
+          setQuadroOpen(false);
+          addRealizado(area, f);
+        }}
       />
     </div>
   );

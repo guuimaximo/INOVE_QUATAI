@@ -9,7 +9,12 @@ export default function RequireAuth({ children }) {
   const { profileMap } = useAccessGovernance();
   const location = useLocation();
   const isNativeShell = Capacitor.isNativePlatform();
-  const allowedNativePaths = new Set(["/pcm-troca-pneus", "/atualizar-perfil"]);
+  const allowedNativePaths = new Set([
+    "/",
+    "/pcm-troca-pneus",
+    "/pcm-controle-fichas",
+    "/atualizar-perfil",
+  ]);
 
   if (loading) {
     return (
@@ -28,7 +33,7 @@ export default function RequireAuth({ children }) {
   }
 
   if (isNativeShell && !allowedNativePaths.has(location.pathname)) {
-    return <Navigate to="/pcm-troca-pneus" replace state={{ from: location }} />;
+    return <Navigate to="/" replace state={{ from: location }} />;
   }
 
   if (!canUserAccessPath(user, location.pathname, profileMap)) {

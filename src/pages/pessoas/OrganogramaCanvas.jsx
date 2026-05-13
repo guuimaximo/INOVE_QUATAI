@@ -1439,9 +1439,19 @@ export default function OrganogramaCanvas() {
   async function criarArea(payload) {
     setSaving(true);
     try {
-      let codigo = slugify(payload.titulo);
-      if (!codigo) codigo = `area_${Date.now()}`;
-      if (areasByCode.has(codigo)) codigo = `${codigo}_${Date.now().toString(36).slice(-4)}`;
+      const baseSlug = slugify(payload.titulo) || "area";
+      // Sempre adiciona um sufixo unico para nao colidir com areas soft-deletadas
+      // (a constraint unique vale para a tabela toda, nao so as ativas).
+      const suffix = Date.now().toString(36).slice(-5);
+      let codigo = `${baseSlug}_${suffix}`;
+      // Confere se ja existe (qualquer ativo/inativo) e adiciona random extra se precisar
+      const { data: existentes } = await supabase
+        .from("organograma_manutencao_areas")
+        .select("codigo")
+        .eq("codigo", codigo);
+      if (existentes && existentes.length) {
+        codigo = `${codigo}_${Math.random().toString(36).slice(2, 6)}`;
+      }
       // Posicao: centro do viewport atual
       let pos = { x: 0, y: 0 };
       if (reactFlowInstance.current) {

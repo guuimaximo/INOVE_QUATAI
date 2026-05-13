@@ -1,4 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import {
   FaCamera,
   FaCheckCircle,
@@ -7,6 +9,8 @@ import {
   FaSave,
   FaSearch,
   FaTimes,
+  FaTimesCircle,
+  FaTrashAlt,
   FaUserCheck,
   FaUserTie,
 } from "react-icons/fa";
@@ -22,12 +26,16 @@ const STATUS_AGUARDANDO_SUPERVISOR = "AGUARDANDO_SUPERVISOR";
 const STATUS_AGUARDANDO_PCM = "AGUARDANDO_PCM";
 const STATUS_AGUARDANDO_TRANSNET = "AGUARDANDO_TRANSNET";
 const STATUS_CONCLUIDO = "CONCLUIDO";
+const STATUS_RECUSADO_SUPERVISOR = "RECUSADO_SUPERVISOR";
+const STATUS_RECUSADO_PCM = "RECUSADO_PCM";
 
 const STATUS_LABELS = {
   [STATUS_AGUARDANDO_SUPERVISOR]: "Aguardando supervisor",
   [STATUS_AGUARDANDO_PCM]: "Aguardando PCM",
   [STATUS_AGUARDANDO_TRANSNET]: "Aguardando lancamento no Transnet",
   [STATUS_CONCLUIDO]: "Concluido",
+  [STATUS_RECUSADO_SUPERVISOR]: "Recusado pelo supervisor",
+  [STATUS_RECUSADO_PCM]: "Recusado pelo PCM",
 };
 
 const STATUS_COLORS = {
@@ -35,9 +43,19 @@ const STATUS_COLORS = {
   [STATUS_AGUARDANDO_PCM]: "bg-blue-100 text-blue-800 border-blue-200",
   [STATUS_AGUARDANDO_TRANSNET]: "bg-purple-100 text-purple-800 border-purple-200",
   [STATUS_CONCLUIDO]: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  [STATUS_RECUSADO_SUPERVISOR]: "bg-rose-100 text-rose-800 border-rose-200",
+  [STATUS_RECUSADO_PCM]: "bg-rose-100 text-rose-800 border-rose-200",
 };
 
 const BUCKET = "pcm_controle_fichas";
+
+const isNativeShell = (() => {
+  try {
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+})();
 
 function createUuid() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -80,9 +98,40 @@ function buildNextFicha(rows) {
   return `${prefix}-${String(maxNumber + 1).padStart(4, "0")}`;
 }
 
-async function uploadFoto(recordId, file) {
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function captureNativePhoto(fileNamePrefix) {
+  const permissions = await Camera.checkPermissions();
+  const has = permissions.camera === "granted" || permissions.camera === "limited";
+  if (!has) {
+    const req = await Camera.requestPermissions({ permissions: ["camera"] });
+    const granted = req.camera === "granted" || req.camera === "limited";
+    if (!granted) throw new Error("Permissao da camera negada.");
+  }
+  const photo = await Camera.getPhoto({
+    source: CameraSource.Camera,
+    resultType: CameraResultType.Base64,
+    quality: 80,
+    promptLabelHeader: "Foto da ficha",
+    promptLabelPhoto: "Galeria",
+    promptLabelPicture: "Camera",
+  });
+  if (!photo?.base64String) return null;
+  const ext = photo.format || "jpg";
+  const mime = photo.format ? `image/${photo.format}` : "image/jpeg";
+  const bytes = base64ToUint8Array(photo.base64String);
+  return new File([bytes], `${fileNamePrefix}.${ext}`, { type: mime });
+}
+
+async function uploadFoto(loteId, itemId, file) {
   if (!file) return { path: null, url: null };
-  const path = `controle/${recordId}/foto_${Date.now()}_${sanitizeFileName(file.name)}`;
+  const path = `controle/${loteId}/ficha_${itemId}_${Date.now()}_${sanitizeFileName(file.name)}`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
     upsert: false,
     contentType: file.type || undefined,
@@ -105,10 +154,10 @@ function StatusBadge({ status }) {
   );
 }
 
-function ModalShell({ title, subtitle, onClose, footer, children }) {
+function ModalShell({ title, subtitle, onClose, footer, children, maxWidth = "max-w-3xl" }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className={`flex max-h-[92vh] w-full ${maxWidth} flex-col overflow-hidden rounded-2xl bg-white shadow-2xl`}>
         <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
           <div>
             {subtitle ? (
@@ -175,39 +224,64 @@ function TabButton({ active, onClick, icon, children, count }) {
   );
 }
 
-function PhotoField({ file, onChange, inputId }) {
-  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+function PhotoField({ title, file, imageUrl = "", inputId, onChange, onNativeCapture }) {
+  const [previewUrl, setPreviewUrl] = useState(imageUrl || "");
   useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
+    if (!file) {
+      setPreviewUrl(imageUrl || "");
+      return undefined;
+    }
+    const next = URL.createObjectURL(file);
+    setPreviewUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file, imageUrl]);
 
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
-      <div className="flex items-center gap-3">
-        <label
-          htmlFor={inputId}
-          className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
-        >
-          <FaCamera />
-          {file ? "Trocar foto" : "Tirar / escolher foto"}
-        </label>
-        <input
-          id={inputId}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => onChange(e.target.files?.[0] || null)}
-        />
-        {file ? <span className="truncate text-xs text-slate-600">{file.name}</span> : null}
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      {title ? <div className="text-sm font-semibold text-slate-900">{title}</div> : null}
+      <div className="mt-1 text-xs text-slate-500">Ao tocar em inserir foto, a camera abre no celular.</div>
+      <div className="mt-3 overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white">
+        {previewUrl ? (
+          <img src={previewUrl} alt={title || "Foto"} className="h-40 w-full object-cover" />
+        ) : (
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-slate-400">
+            <FaCamera className="text-xl" />
+            <span className="text-sm font-medium">Nenhuma foto adicionada</span>
+          </div>
+        )}
       </div>
-      {previewUrl ? (
-        <img src={previewUrl} alt="Pre-visualizacao" className="mt-3 max-h-48 rounded-lg object-contain" />
-      ) : null}
+      <input
+        id={inputId}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={onChange}
+      />
+      <button
+        type="button"
+        onClick={() => {
+          if (isNativeShell && onNativeCapture) {
+            void onNativeCapture();
+            return;
+          }
+          document.getElementById(inputId)?.click();
+        }}
+        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
+      >
+        <FaCamera />
+        Inserir foto
+      </button>
     </div>
   );
+}
+
+function createItem() {
+  return {
+    id: createUuid(),
+    numeroFicha: "",
+    foto: null,
+  };
 }
 
 export default function PCMControleFichas() {
@@ -225,14 +299,14 @@ export default function PCMControleFichas() {
     dataEntrega: nowDisplay(),
     quemEntregou: userName,
     numeroOS: "",
-    quantidadeFichas: "",
-    foto: null,
     observacoes: "",
+    itens: [createItem()],
   }));
   const [saving, setSaving] = useState(false);
 
   const [acaoModal, setAcaoModal] = useState(null);
   const [acaoNome, setAcaoNome] = useState("");
+  const [acaoMotivo, setAcaoMotivo] = useState("");
   const [acaoSaving, setAcaoSaving] = useState(false);
 
   const [consultaOpen, setConsultaOpen] = useState(false);
@@ -276,9 +350,8 @@ export default function PCMControleFichas() {
       dataEntrega: nowDisplay(),
       quemEntregou: userName,
       numeroOS: "",
-      quantidadeFichas: "",
-      foto: null,
       observacoes: "",
+      itens: [createItem()],
     });
     setLancamentoOpen(true);
   }
@@ -287,20 +360,63 @@ export default function PCMControleFichas() {
     setLancamentoForm((current) => ({ ...current, [field]: value }));
   }
 
+  function setItem(itemId, patch) {
+    setLancamentoForm((current) => ({
+      ...current,
+      itens: current.itens.map((it) => (it.id === itemId ? { ...it, ...patch } : it)),
+    }));
+  }
+
+  function addItem() {
+    setLancamentoForm((current) => ({ ...current, itens: [...current.itens, createItem()] }));
+  }
+
+  function removeItem(itemId) {
+    setLancamentoForm((current) => {
+      const filtered = current.itens.filter((it) => it.id !== itemId);
+      return { ...current, itens: filtered.length ? filtered : [createItem()] };
+    });
+  }
+
+  async function capturarItemFoto(itemId) {
+    try {
+      const file = await captureNativePhoto(`ficha_${itemId}`);
+      if (file) setItem(itemId, { foto: file });
+    } catch (error) {
+      alert(error?.message || "Nao foi possivel abrir a camera.");
+    }
+  }
+
   async function salvarLancamento() {
     const numeroOS = safeText(lancamentoForm.numeroOS);
     if (!numeroOS) {
       alert("Informe o numero da OS.");
       return;
     }
-    if (!lancamentoForm.foto) {
-      alert("A foto das fichas e obrigatoria.");
+    const itens = lancamentoForm.itens.filter((it) => it.foto || safeText(it.numeroFicha));
+    if (!itens.length) {
+      alert("Adicione pelo menos uma ficha com foto.");
       return;
     }
+    const semFoto = itens.findIndex((it) => !it.foto);
+    if (semFoto >= 0) {
+      alert(`A foto da ficha ${semFoto + 1} e obrigatoria.`);
+      return;
+    }
+
     const id = createUuid();
     setSaving(true);
     try {
-      const foto = await uploadFoto(id, lancamentoForm.foto);
+      const itensSalvos = [];
+      for (const it of itens) {
+        const uploaded = await uploadFoto(id, it.id, it.foto);
+        itensSalvos.push({
+          id: it.id,
+          numero_ficha: safeText(it.numeroFicha) || null,
+          foto_path: uploaded.path,
+          foto_url: uploaded.url,
+        });
+      }
       const ficha = lancamentoForm.ficha || buildNextFicha(rows);
       const { error } = await supabase.from("pcm_controle_fichas").insert([
         {
@@ -308,23 +424,20 @@ export default function PCMControleFichas() {
           ficha_controle: ficha,
           numero_os: numeroOS,
           data_entrega: new Date().toISOString(),
-          quantidade_fichas: lancamentoForm.quantidadeFichas
-            ? Number(lancamentoForm.quantidadeFichas)
-            : null,
-          foto_path: foto.path,
-          foto_url: foto.url,
+          quantidade_fichas: itensSalvos.length,
+          itens: itensSalvos,
           observacoes: safeText(lancamentoForm.observacoes) || null,
           status: STATUS_AGUARDANDO_SUPERVISOR,
           criado_por_login: safeText(user?.login || user?.email),
           criado_por_nome: safeText(user?.nome),
           criado_por_id: safeText(user?.auth_user_id || user?.id),
-          origem: "INOVE_WEB_APP",
+          origem: isNativeShell ? "INOVE_MOBILE_APP" : "INOVE_WEB_APP",
         },
       ]);
       if (error) throw error;
       setLancamentoOpen(false);
       await carregar();
-      alert("Lancamento registrado e entregue ao supervisor.");
+      alert("Lote registrado e entregue ao supervisor.");
     } catch (error) {
       console.error(error);
       alert(error?.message || "Nao foi possivel salvar o lancamento.");
@@ -333,19 +446,10 @@ export default function PCMControleFichas() {
     }
   }
 
-  function abrirAcaoSupervisor(row) {
-    setAcaoModal({ row, tipo: "supervisor" });
-    setAcaoNome("");
-  }
-
-  function abrirAcaoPCM(row) {
-    setAcaoModal({ row, tipo: "pcm" });
-    setAcaoNome("");
-  }
-
-  function abrirAcaoTransnet(row) {
-    setAcaoModal({ row, tipo: "transnet" });
-    setAcaoNome(userName);
+  function abrirAcao(row, tipo) {
+    setAcaoModal({ row, tipo });
+    setAcaoNome(tipo === "transnet" ? userName : "");
+    setAcaoMotivo("");
   }
 
   async function confirmarAcao() {
@@ -356,19 +460,39 @@ export default function PCMControleFichas() {
       return;
     }
     const { row, tipo } = acaoModal;
+    const ehRecusa = tipo.endsWith("_recusar");
+    const motivo = safeText(acaoMotivo);
+    if (ehRecusa && !motivo) {
+      alert("Informe o motivo da recusa.");
+      return;
+    }
     const agora = new Date().toISOString();
     let update = null;
-    if (tipo === "supervisor") {
+    if (tipo === "supervisor_receber") {
       update = {
         supervisor_nome: nome,
         supervisor_recebido_em: agora,
         status: STATUS_AGUARDANDO_PCM,
       };
-    } else if (tipo === "pcm") {
+    } else if (tipo === "supervisor_recusar") {
+      update = {
+        supervisor_nome: nome,
+        supervisor_recusado_em: agora,
+        supervisor_recusa_motivo: motivo,
+        status: STATUS_RECUSADO_SUPERVISOR,
+      };
+    } else if (tipo === "pcm_receber") {
       update = {
         pcm_nome: nome,
         pcm_recebido_em: agora,
         status: STATUS_AGUARDANDO_TRANSNET,
+      };
+    } else if (tipo === "pcm_recusar") {
+      update = {
+        pcm_nome: nome,
+        pcm_recusado_em: agora,
+        pcm_recusa_motivo: motivo,
+        status: STATUS_RECUSADO_PCM,
       };
     } else if (tipo === "transnet") {
       update = {
@@ -414,6 +538,14 @@ export default function PCMControleFichas() {
     );
   }, [activeTab, rows, supervisorPendentes, pcmPendentes, filtro]);
 
+  const acaoLabels = {
+    supervisor_receber: { title: "Supervisor recebeu as fichas", nome: "Nome do supervisor", cor: "bg-emerald-600 hover:bg-emerald-700" },
+    supervisor_recusar: { title: "Supervisor recusou o lote", nome: "Nome do supervisor", cor: "bg-rose-600 hover:bg-rose-700" },
+    pcm_receber: { title: "PCM recebeu as fichas", nome: "Nome do PCM", cor: "bg-emerald-600 hover:bg-emerald-700" },
+    pcm_recusar: { title: "PCM recusou o lote", nome: "Nome do PCM", cor: "bg-rose-600 hover:bg-rose-700" },
+    transnet: { title: "Lancamento no Transnet", nome: "Quem lancou no Transnet", cor: "bg-emerald-600 hover:bg-emerald-700" },
+  };
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -421,7 +553,7 @@ export default function PCMControleFichas() {
           <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">PCM · Controle</div>
           <h1 className="text-2xl font-black text-slate-900 md:text-3xl">Controle de fichas</h1>
           <p className="text-sm text-slate-500">
-            Acompanhe a entrega das fichas: do operador para o supervisor, do supervisor para o PCM e o lancamento no Transnet.
+            Cada lote tem uma OS e varias fichas, cada ficha com sua foto. O supervisor recebe (ou recusa) e o PCM faz o mesmo antes de lancar no Transnet.
           </p>
         </div>
         <button
@@ -477,11 +609,11 @@ export default function PCMControleFichas() {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-4 py-3">Ficha</th>
+                <th className="px-4 py-3">Lote</th>
                 <th className="px-4 py-3">OS</th>
                 <th className="px-4 py-3">Data</th>
                 <th className="px-4 py-3">Quem entregou</th>
-                <th className="px-4 py-3">Qtd</th>
+                <th className="px-4 py-3">Fichas</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Acoes</th>
               </tr>
@@ -500,51 +632,72 @@ export default function PCMControleFichas() {
                   </td>
                 </tr>
               ) : (
-                linhasFiltradas.map((row) => (
-                  <tr
-                    key={row.id}
-                    onClick={() => abrirConsulta(row)}
-                    className="cursor-pointer transition-colors hover:bg-slate-50/80"
-                  >
-                    <td className="px-4 py-3 font-bold text-blue-700">{row.ficha_controle}</td>
-                    <td className="px-4 py-3 text-slate-700">{row.numero_os}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDate(row.data_entrega || row.created_at)}</td>
-                    <td className="px-4 py-3 text-slate-600">{row.criado_por_nome || row.criado_por_login || "-"}</td>
-                    <td className="px-4 py-3 text-slate-600">{row.quantidade_fichas ?? "-"}</td>
-                    <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-2">
-                        {activeTab === TAB_SUPERVISOR && row.status === STATUS_AGUARDANDO_SUPERVISOR ? (
-                          <button
-                            type="button"
-                            onClick={() => abrirAcaoSupervisor(row)}
-                            className="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600"
-                          >
-                            Supervisor recebeu
-                          </button>
-                        ) : null}
-                        {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_PCM ? (
-                          <button
-                            type="button"
-                            onClick={() => abrirAcaoPCM(row)}
-                            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
-                          >
-                            PCM recebeu
-                          </button>
-                        ) : null}
-                        {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_TRANSNET ? (
-                          <button
-                            type="button"
-                            onClick={() => abrirAcaoTransnet(row)}
-                            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
-                          >
-                            Lancado no Transnet
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                linhasFiltradas.map((row) => {
+                  const totalFichas = Array.isArray(row.itens) ? row.itens.length : (row.quantidade_fichas || 0);
+                  return (
+                    <tr
+                      key={row.id}
+                      onClick={() => abrirConsulta(row)}
+                      className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                    >
+                      <td className="px-4 py-3 font-bold text-blue-700">{row.ficha_controle}</td>
+                      <td className="px-4 py-3 text-slate-700">{row.numero_os}</td>
+                      <td className="px-4 py-3 text-slate-600">{formatDate(row.data_entrega || row.created_at)}</td>
+                      <td className="px-4 py-3 text-slate-600">{row.criado_por_nome || row.criado_por_login || "-"}</td>
+                      <td className="px-4 py-3 text-slate-600">{totalFichas}</td>
+                      <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-2">
+                          {activeTab === TAB_SUPERVISOR && row.status === STATUS_AGUARDANDO_SUPERVISOR ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => abrirAcao(row, "supervisor_receber")}
+                                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                              >
+                                Recebeu
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => abrirAcao(row, "supervisor_recusar")}
+                                className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700"
+                              >
+                                Recusar
+                              </button>
+                            </>
+                          ) : null}
+                          {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_PCM ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => abrirAcao(row, "pcm_receber")}
+                                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                              >
+                                Recebeu
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => abrirAcao(row, "pcm_recusar")}
+                                className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700"
+                              >
+                                Recusar
+                              </button>
+                            </>
+                          ) : null}
+                          {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_TRANSNET ? (
+                            <button
+                              type="button"
+                              onClick={() => abrirAcao(row, "transnet")}
+                              className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-700"
+                            >
+                              Lancado no Transnet
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -555,6 +708,7 @@ export default function PCMControleFichas() {
         <ModalShell
           title="Lancar entrega de fichas"
           subtitle="PCM · Controle"
+          maxWidth="max-w-4xl"
           onClose={() => setLancamentoOpen(false)}
           footer={
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -579,7 +733,7 @@ export default function PCMControleFichas() {
         >
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <ReadOnly label="Numero da ficha" value={lancamentoForm.ficha} />
+              <ReadOnly label="Numero do lote" value={lancamentoForm.ficha} />
               <ReadOnly label="Data" value={lancamentoForm.dataEntrega} />
               <ReadOnly label="Quem esta entregando" value={lancamentoForm.quemEntregou} />
             </div>
@@ -593,47 +747,74 @@ export default function PCMControleFichas() {
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
                 />
               </Field>
-              <Field label="Quantidade de fichas (opcional)">
+              <Field label="Observacoes (opcional)">
                 <input
-                  type="number"
-                  min="1"
-                  value={lancamentoForm.quantidadeFichas}
-                  onChange={(e) => setField("quantidadeFichas", e.target.value)}
+                  type="text"
+                  value={lancamentoForm.observacoes}
+                  onChange={(e) => setField("observacoes", e.target.value)}
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
                 />
               </Field>
             </div>
 
-            <Field label="Foto das fichas">
-              <PhotoField
-                file={lancamentoForm.foto}
-                onChange={(file) => setField("foto", file)}
-                inputId="controle-fichas-foto"
-              />
-            </Field>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-black uppercase tracking-wide text-slate-700">
+                  Fichas do lote ({lancamentoForm.itens.length})
+                </div>
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800"
+                >
+                  <FaPlus /> Adicionar ficha
+                </button>
+              </div>
 
-            <Field label="Observacoes (opcional)">
-              <textarea
-                rows={3}
-                value={lancamentoForm.observacoes}
-                onChange={(e) => setField("observacoes", e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
-              />
-            </Field>
+              <div className="mt-4 space-y-4">
+                {lancamentoForm.itens.map((it, idx) => (
+                  <div key={it.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm font-bold text-slate-800">Ficha {idx + 1}</div>
+                      {lancamentoForm.itens.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => removeItem(it.id)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-rose-100 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-200"
+                        >
+                          <FaTrashAlt /> Remover
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <Field label="Numero da ficha (opcional)">
+                        <input
+                          type="text"
+                          value={it.numeroFicha}
+                          onChange={(e) => setItem(it.id, { numeroFicha: e.target.value })}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
+                        />
+                      </Field>
+                      <PhotoField
+                        title="Foto da ficha"
+                        file={it.foto}
+                        inputId={`controle-ficha-foto-${it.id}`}
+                        onChange={(event) => setItem(it.id, { foto: event.target.files?.[0] || null })}
+                        onNativeCapture={() => capturarItemFoto(it.id)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </ModalShell>
       ) : null}
 
       {acaoModal ? (
         <ModalShell
-          title={
-            acaoModal.tipo === "supervisor"
-              ? "Supervisor recebeu as fichas"
-              : acaoModal.tipo === "pcm"
-              ? "PCM recebeu as fichas"
-              : "Lancamento no Transnet"
-          }
-          subtitle={`Ficha ${acaoModal.row.ficha_controle} · OS ${acaoModal.row.numero_os}`}
+          title={acaoLabels[acaoModal.tipo].title}
+          subtitle={`Lote ${acaoModal.row.ficha_controle} · OS ${acaoModal.row.numero_os}`}
           onClose={() => setAcaoModal(null)}
           footer={
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -648,31 +829,16 @@ export default function PCMControleFichas() {
                 type="button"
                 onClick={confirmarAcao}
                 disabled={acaoSaving}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 ${acaoLabels[acaoModal.tipo].cor}`}
               >
-                <FaCheckCircle />
+                {acaoModal.tipo.endsWith("_recusar") ? <FaTimesCircle /> : <FaCheckCircle />}
                 {acaoSaving ? "Gravando..." : "Confirmar"}
               </button>
             </div>
           }
         >
           <div className="space-y-4">
-            <p className="text-sm text-slate-600">
-              {acaoModal.tipo === "supervisor"
-                ? "Peca para o supervisor digitar o nome dele aqui para confirmar o recebimento das fichas."
-                : acaoModal.tipo === "pcm"
-                ? "Peca para o responsavel do PCM digitar o nome para confirmar o recebimento."
-                : "Confirme o lancamento no Transnet informando o nome do responsavel."}
-            </p>
-            <Field
-              label={
-                acaoModal.tipo === "supervisor"
-                  ? "Nome do supervisor"
-                  : acaoModal.tipo === "pcm"
-                  ? "Nome do PCM"
-                  : "Quem lancou no Transnet"
-              }
-            >
+            <Field label={acaoLabels[acaoModal.tipo].nome}>
               <input
                 type="text"
                 value={acaoNome}
@@ -681,14 +847,25 @@ export default function PCMControleFichas() {
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
               />
             </Field>
+            {acaoModal.tipo.endsWith("_recusar") ? (
+              <Field label="Motivo da recusa">
+                <textarea
+                  rows={3}
+                  value={acaoMotivo}
+                  onChange={(e) => setAcaoMotivo(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
+                />
+              </Field>
+            ) : null}
           </div>
         </ModalShell>
       ) : null}
 
       {consultaOpen && consultaRow ? (
         <ModalShell
-          title={`Ficha ${consultaRow.ficha_controle}`}
+          title={`Lote ${consultaRow.ficha_controle}`}
           subtitle="PCM · Controle"
+          maxWidth="max-w-4xl"
           onClose={() => setConsultaOpen(false)}
           footer={
             <div className="flex justify-end">
@@ -706,7 +883,10 @@ export default function PCMControleFichas() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               <ReadOnly label="Numero da OS" value={consultaRow.numero_os} />
               <ReadOnly label="Data entrega" value={formatDate(consultaRow.data_entrega || consultaRow.created_at)} />
-              <ReadOnly label="Quantidade" value={consultaRow.quantidade_fichas ?? "-"} />
+              <ReadOnly
+                label="Fichas no lote"
+                value={Array.isArray(consultaRow.itens) ? consultaRow.itens.length : (consultaRow.quantidade_fichas ?? "-")}
+              />
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Status</div>
                 <div className="mt-2"><StatusBadge status={consultaRow.status} /></div>
@@ -716,22 +896,33 @@ export default function PCMControleFichas() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <ReadOnly label="Quem entregou" value={consultaRow.criado_por_nome || consultaRow.criado_por_login} />
               <ReadOnly
-                label="Supervisor recebeu"
+                label="Supervisor"
                 value={
-                  consultaRow.supervisor_nome
+                  consultaRow.supervisor_recusado_em
+                    ? `${consultaRow.supervisor_nome || "-"} recusou em ${formatDate(consultaRow.supervisor_recusado_em)}`
+                    : consultaRow.supervisor_nome
                     ? `${consultaRow.supervisor_nome} · ${formatDate(consultaRow.supervisor_recebido_em)}`
                     : "Pendente"
                 }
               />
               <ReadOnly
-                label="PCM recebeu"
+                label="PCM"
                 value={
-                  consultaRow.pcm_nome
+                  consultaRow.pcm_recusado_em
+                    ? `${consultaRow.pcm_nome || "-"} recusou em ${formatDate(consultaRow.pcm_recusado_em)}`
+                    : consultaRow.pcm_nome
                     ? `${consultaRow.pcm_nome} · ${formatDate(consultaRow.pcm_recebido_em)}`
                     : "Pendente"
                 }
               />
             </div>
+
+            {consultaRow.supervisor_recusa_motivo ? (
+              <ReadOnly label="Motivo da recusa (supervisor)" value={consultaRow.supervisor_recusa_motivo} />
+            ) : null}
+            {consultaRow.pcm_recusa_motivo ? (
+              <ReadOnly label="Motivo da recusa (PCM)" value={consultaRow.pcm_recusa_motivo} />
+            ) : null}
 
             <ReadOnly
               label="Lancamento no Transnet"
@@ -742,16 +933,31 @@ export default function PCMControleFichas() {
               }
             />
 
-            {consultaRow.foto_url ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  Foto das fichas
+            {Array.isArray(consultaRow.itens) && consultaRow.itens.length ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="mb-3 text-sm font-black uppercase tracking-wide text-slate-700">
+                  Fichas
                 </div>
-                <img
-                  src={consultaRow.foto_url}
-                  alt="Foto das fichas"
-                  className="max-h-96 w-full rounded-lg object-contain"
-                />
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {consultaRow.itens.map((it, idx) => (
+                    <div key={it.id || idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Ficha {idx + 1}{it.numero_ficha ? ` · ${it.numero_ficha}` : ""}
+                      </div>
+                      {it.foto_url ? (
+                        <img
+                          src={it.foto_url}
+                          alt={`Ficha ${idx + 1}`}
+                          className="mt-2 h-56 w-full rounded-lg object-contain"
+                        />
+                      ) : (
+                        <div className="mt-2 rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
+                          Sem foto
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
 

@@ -178,6 +178,8 @@ function AreaNode({ data, selected }) {
 
 const nodeTypes = { area: AreaNode };
 
+const NIVEL_ROW = { DIRETOR: 0, GERENTE: 1, COORDENADOR: 2, SUPERVISOR: 3, LIDER: 4, COLABORADOR: 5, FREELANCER: 6 };
+
 function autoLayout(areas) {
   const children = new Map();
   for (const a of areas) {
@@ -187,34 +189,51 @@ function autoLayout(areas) {
   }
   for (const [, list] of children) list.sort((x, y) => (x.ordem || 0) - (y.ordem || 0));
 
-  const positions = new Map();
-  const wLeaf = 260;
+  const wLeaf = 280;
   const hLevel = 200;
 
-  function place(codigo, level, leftLeafOffset) {
+  // 1. X via tree (centro entre filhos / espaco proporcional a folhas)
+  const xLeafByCodigo = new Map();
+
+  function placeX(codigo, leftLeafOffset) {
     const kids = children.get(codigo) || [];
     if (!kids.length) {
-      positions.set(codigo, { x: leftLeafOffset * wLeaf, y: level * hLevel });
+      xLeafByCodigo.set(codigo, leftLeafOffset);
       return 1;
     }
     let consumed = 0;
     const ranges = [];
     for (const k of kids) {
-      const w = place(k.codigo, level + 1, leftLeafOffset + consumed);
+      const w = placeX(k.codigo, leftLeafOffset + consumed);
       ranges.push({ start: leftLeafOffset + consumed, width: w });
       consumed += w;
     }
     const start = ranges[0].start;
     const end = ranges[ranges.length - 1].start + ranges[ranges.length - 1].width - 1;
-    positions.set(codigo, { x: ((start + end) / 2) * wLeaf, y: level * hLevel });
+    xLeafByCodigo.set(codigo, (start + end) / 2);
     return consumed;
+  }
+
+  // 2. Depth como fallback quando area nao tem nivel
+  const depths = new Map();
+  function computeDepth(codigo, d = 0) {
+    depths.set(codigo, d);
+    for (const k of children.get(codigo) || []) computeDepth(k.codigo, d + 1);
   }
 
   let offset = 0;
   for (const r of (children.get(null) || [])) {
-    const w = countLeaves(r.codigo, children);
-    place(r.codigo, 0, offset);
-    offset += w;
+    placeX(r.codigo, offset);
+    offset += countLeaves(r.codigo, children);
+    computeDepth(r.codigo, 0);
+  }
+
+  // 3. Y por nivel hierarquico; mesmo nivel = mesma linha
+  const positions = new Map();
+  for (const a of areas) {
+    const xLeaf = xLeafByCodigo.get(a.codigo) ?? 0;
+    const row = a.nivel && NIVEL_ROW[a.nivel] != null ? NIVEL_ROW[a.nivel] : (depths.get(a.codigo) || 0);
+    positions.set(a.codigo, { x: xLeaf * wLeaf, y: row * hLevel });
   }
   return positions;
 }
@@ -1427,6 +1446,41 @@ export default function OrganogramaCanvas() {
     }
   }
 
+  async function organizarOrganograma() {
+    if (!areasFiltradas.length) {
+      setStatusMsg("Sem areas para organizar.");
+      return;
+    }
+    setSaving(true);
+    setStatusMsg("");
+    try {
+      const novas = autoLayout(areasFiltradas);
+      const updates = [];
+      for (const [codigo, pos] of novas.entries()) {
+        updates.push(
+          supabase.from("organograma_manutencao_areas")
+            .update({ canvas_x: pos.x, canvas_y: pos.y })
+            .eq("codigo", codigo)
+        );
+      }
+      const results = await Promise.all(updates);
+      const err = results.find((r) => r.error)?.error;
+      if (err) throw err;
+      dirtyRef.current.clear();
+      await carregar();
+      // Reseta o fitView do reactflow
+      if (reactFlowInstance.current) {
+        setTimeout(() => reactFlowInstance.current?.fitView({ padding: 0.2 }), 100);
+      }
+      setStatusMsg("Organograma reorganizado.");
+    } catch (error) {
+      console.error(error);
+      alert(error?.message || "Nao foi possivel organizar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function salvarPosicoes() {
     if (!dirtyRef.current.size) {
       setStatusMsg("Nada para salvar.");
@@ -1898,6 +1952,9 @@ export default function OrganogramaCanvas() {
           </button>
           <button type="button" onClick={carregar} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60">
             <FaSync /> Recarregar
+          </button>
+          <button type="button" onClick={organizarOrganograma} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-3 py-2 text-sm font-bold text-white shadow hover:bg-purple-700 disabled:opacity-60">
+            <FaSitemap /> Organizar
           </button>
           <button type="button" onClick={salvarPosicoes} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-700 disabled:opacity-60">
             <FaSave /> {saving ? "Salvando..." : "Salvar layout"}

@@ -1300,28 +1300,6 @@ function EstoqueModal({
   );
 }
 
-function BottomTabButton({ active, onClick, icon, title, badge = 0 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex min-w-0 w-full flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-center transition ${
-        active ? "bg-blue-50 text-blue-700" : "text-slate-500"
-      }`}
-    >
-      <div className="relative">
-        <div className="text-lg">{icon}</div>
-        {badge > 0 ? (
-          <span className="absolute -right-2 -top-2 inline-flex min-w-[18px] items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-            {badge > 99 ? "99+" : badge}
-          </span>
-        ) : null}
-      </div>
-      <span className="text-[9px] font-semibold uppercase tracking-[0.08em] leading-tight">{title}</span>
-    </button>
-  );
-}
-
 function ConsertoModal({
   open,
   form,
@@ -3643,11 +3621,8 @@ export default function PCMTrocaPneus() {
   const nativePageStyle = isNativeShell
     ? {
         paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
-        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 7rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.75rem)",
       }
-    : undefined;
-  const nativeFooterStyle = isNativeShell
-    ? { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }
     : undefined;
 
   return (
@@ -4574,50 +4549,6 @@ export default function PCMTrocaPneus() {
         onAbrirRiscado={abrirRiscadoPreenchido}
       />
 
-      {isNativeShell ? (
-        <div
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur"
-          style={nativeFooterStyle}
-        >
-          <div className="mx-auto grid max-w-7xl grid-cols-5 gap-1">
-            <BottomTabButton
-              active={activeTab === TAB_TROCA}
-              onClick={() => handleTabChange(TAB_TROCA)}
-              icon={<FaClipboardList />}
-              title="Troca"
-              badge={0}
-            />
-            <BottomTabButton
-              active={activeTab === TAB_AUDITORIA}
-              onClick={() => handleTabChange(TAB_AUDITORIA)}
-              icon={<FaClipboardCheck />}
-              title="Auditoria"
-              badge={auditoriasAtrasadas.length}
-            />
-            <BottomTabButton
-              active={activeTab === TAB_ESTOQUE}
-              onClick={() => handleTabChange(TAB_ESTOQUE)}
-              icon={<FaWarehouse />}
-              title="Estoque"
-              badge={0}
-            />
-            <BottomTabButton
-              active={activeTab === TAB_CONSERTOS}
-              onClick={() => handleTabChange(TAB_CONSERTOS)}
-              icon={<FaTools />}
-              title="Conserto"
-              badge={cardsConsertos.pendentes}
-            />
-            <BottomTabButton
-              active={activeTab === TAB_RISCADOS}
-              onClick={() => handleTabChange(TAB_RISCADOS)}
-              icon={<FaExclamationTriangle />}
-              title="Riscado"
-              badge={cardsRiscados.vencidos10Dias}
-            />
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

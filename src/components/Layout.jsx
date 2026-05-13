@@ -7,6 +7,7 @@ import {
   FaClipboardCheck,
   FaClipboardList,
   FaCog,
+  FaExclamationTriangle,
   FaGasPump,
   FaHome,
   FaMapMarkedAlt,
@@ -54,6 +55,10 @@ function getIconForNav(key) {
       return FaClipboardCheck;
     case "estoque":
       return FaWarehouse;
+    case "conserto":
+      return FaTools;
+    case "riscado":
+      return FaExclamationTriangle;
     case "tratativas":
       return FaClipboardList;
     case "avarias":
@@ -129,6 +134,8 @@ export default function Layout() {
             { key: "troca", label: "Troca", path: "/pcm-troca-pneus?aba=troca" },
             { key: "auditoria", label: "Auditoria", path: "/pcm-troca-pneus?aba=auditoria" },
             { key: "estoque", label: "Estoque", path: "/pcm-troca-pneus?aba=estoque" },
+            { key: "conserto", label: "Conserto", path: "/pcm-troca-pneus?aba=consertos" },
+            { key: "riscado", label: "Riscado", path: "/pcm-troca-pneus?aba=riscados" },
           ]
         : getMobileNavItems(user, profileMap).slice(0, 3),
     [isLockedMobileModule, profileMap, user]

@@ -47,6 +47,14 @@ const BUCKET_RISCADOS = "pcm_riscados_pneus";
 
 const TIPO_TROCA_ESTOQUE = "ESTOQUE -> CARRO";
 const TIPO_TROCA_CARRO = "CARRO -> CARRO";
+const TROCA_CONSERTO_NENHUM = "NAO ENVIAR";
+const TROCA_CONSERTO_RETIRADO = "PNEU RETIRADO";
+const TROCA_CONSERTO_COLOCADO = "PNEU COLOCADO";
+const TROCA_CONSERTO_OPTIONS = [
+  TROCA_CONSERTO_NENHUM,
+  TROCA_CONSERTO_RETIRADO,
+  TROCA_CONSERTO_COLOCADO,
+];
 
 const POSICOES = [
   "DIANTEIRO DIREITO",
@@ -270,8 +278,51 @@ function createTrocaForm(nextFicha, userName) {
     posicaoInstalacao: POSICOES[0],
     numeroFogoColocado: "",
     fotoColocado: null,
+    pneuConserto: TROCA_CONSERTO_NENHUM,
     observacoes: "",
   };
+}
+
+function buildTrocaConsertoResumo(value) {
+  if (value === TROCA_CONSERTO_RETIRADO) return "Pneu retirado";
+  if (value === TROCA_CONSERTO_COLOCADO) return "Pneu colocado";
+  return "";
+}
+
+function resolveTrocaConsertoPayload(payload) {
+  if (payload.pneuConserto === TROCA_CONSERTO_RETIRADO) {
+    return {
+      id: payload.consertoId || createClientUuid(),
+      ficha: payload.consertoFicha || `CP-${payload.ficha}`,
+      origemTab: TAB_TROCA,
+      origemItemId: payload.id,
+      prefixo: payload.prefixoRetirada,
+      numeroFogo: payload.numeroFogoRetirado,
+      situacaoOrigem: "Troca - pneu retirado",
+      observacoes: payload.observacoes,
+      criadoPorLogin: payload.criadoPorLogin,
+      criadoPorNome: payload.criadoPorNome,
+      criadoPorId: payload.criadoPorId,
+    };
+  }
+
+  if (payload.pneuConserto === TROCA_CONSERTO_COLOCADO) {
+    return {
+      id: payload.consertoId || createClientUuid(),
+      ficha: payload.consertoFicha || `CP-${payload.ficha}`,
+      origemTab: TAB_TROCA,
+      origemItemId: payload.id,
+      prefixo: payload.prefixoInstalacao,
+      numeroFogo: payload.numeroFogoColocado,
+      situacaoOrigem: "Troca - pneu colocado",
+      observacoes: payload.observacoes,
+      criadoPorLogin: payload.criadoPorLogin,
+      criadoPorNome: payload.criadoPorNome,
+      criadoPorId: payload.criadoPorId,
+    };
+  }
+
+  return null;
 }
 
 function createAuditoriaForm(nextFicha, userName) {
@@ -898,11 +949,24 @@ function TrocaModal({
             options={[TIPO_TROCA_ESTOQUE, TIPO_TROCA_CARRO]}
           />
 
+          <SelectField
+            label="Enviar para conserto"
+            value={form.pneuConserto}
+            onChange={(value) => onFieldChange("pneuConserto", value)}
+            options={TROCA_CONSERTO_OPTIONS}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <InputField
             label="Observacoes"
             value={form.observacoes}
             onChange={(value) => onFieldChange("observacoes", value)}
-            placeholder="Opcional"
+            placeholder={
+              form.pneuConserto === TROCA_CONSERTO_NENHUM
+                ? "Opcional"
+                : "Descreva o que precisa ser ajustado no pneu enviado ao conserto"
+            }
           />
         </div>
 
@@ -1633,6 +1697,13 @@ function ConsultaModal({
           </SectionBlock>
         </div>
 
+        {row.consertoRelacionado ? (
+          <DetailRow
+            label="Conserto vinculado"
+            value={`${row.consertoRelacionado.situacao_origem || row.consertoRelacionado.origem_tab || "Troca"} · ${row.consertoRelacionado.numero_fogo || "-"}`}
+          />
+        ) : null}
+
         {row.transnet_lancado_por_nome || row.transnet_lancado_por_login ? (
           <DetailRow
             label="Lancado no Transnet por"
@@ -2308,8 +2379,12 @@ export default function PCMTrocaPneus() {
         .join(" ");
 
       return alvo.includes(busca);
-    });
-  }, [trocas, trocaFiltros]);
+    }).map((row) => ({
+      ...row,
+      consertoRelacionado:
+        consertos.find((item) => item.origem_tab === TAB_TROCA && String(item.origem_item_id || "") === String(row.id)) || null,
+    }));
+  }, [consertos, trocas, trocaFiltros]);
 
   const auditoriasFiltradas = useMemo(() => {
     const busca = norm(auditoriaFiltros.busca).toLowerCase();
@@ -2364,6 +2439,7 @@ export default function PCMTrocaPneus() {
         row.ficha_conserto,
         row.numero_fogo,
         row.prefixo,
+        row.situacao_origem,
         row.status,
         row.criado_por_nome,
         row.criado_por_login,
@@ -2786,8 +2862,13 @@ export default function PCMTrocaPneus() {
       origem: "INOVE_WEB_APP",
     };
 
-    const { error } = await supabase.from("pcm_troca_pneus").insert([insertPayload]);
+    const { error } = await supabase.from("pcm_troca_pneus").upsert([insertPayload], { onConflict: "id" });
     if (error) throw error;
+
+    const consertoPayload = resolveTrocaConsertoPayload({ ...payload, id: trocaId });
+    if (consertoPayload) {
+      await submitConsertoPayload(consertoPayload);
+    }
   }
 
   async function submitAuditoriaPayload(payload) {
@@ -2851,7 +2932,7 @@ export default function PCMTrocaPneus() {
   }
 
   async function submitConsertoPayload(payload) {
-    const { error } = await supabase.from("pcm_consertos_pneus").insert([
+    const { error } = await supabase.from("pcm_consertos_pneus").upsert([
       {
         id: payload.id || createClientUuid(),
         ficha_conserto: payload.ficha,
@@ -2868,7 +2949,7 @@ export default function PCMTrocaPneus() {
         notificacao_pendente: true,
         origem: "INOVE_WEB_APP",
       },
-    ]);
+    ], { onConflict: "id" });
     if (error) throw error;
   }
 
@@ -2986,7 +3067,7 @@ export default function PCMTrocaPneus() {
         await removeSubmission(item.id);
       }
 
-      await Promise.all([carregarTrocas(), carregarAuditorias(), carregarEstoque()]);
+      await Promise.all([carregarTrocas(), carregarAuditorias(), carregarEstoque(), carregarConsertos()]);
       await refreshOfflineCount();
     } catch (error) {
       console.error("Erro ao sincronizar fila offline:", error);
@@ -3002,6 +3083,7 @@ export default function PCMTrocaPneus() {
     const posicaoInstalacao = safeText(trocaForm.posicaoInstalacao);
     const numeroFogoRetirado = safeText(trocaForm.numeroFogoRetirado);
     const numeroFogoColocado = safeText(trocaForm.numeroFogoColocado);
+    const pneuConserto = safeText(trocaForm.pneuConserto) || TROCA_CONSERTO_NENHUM;
     const observacoes = safeText(trocaForm.observacoes);
 
     const isEstoqueCarro = tipoTroca === TIPO_TROCA_ESTOQUE;
@@ -3035,6 +3117,9 @@ export default function PCMTrocaPneus() {
       posicaoInstalacao,
       numeroFogoColocado,
       fotoColocadoFile: trocaForm.fotoColocado,
+      pneuConserto,
+      consertoId: pneuConserto !== TROCA_CONSERTO_NENHUM ? createClientUuid() : null,
+      consertoFicha: pneuConserto !== TROCA_CONSERTO_NENHUM ? `CP-${ficha}` : null,
       observacoes,
       criadoPorLogin: safeText(user?.login || user?.email),
       criadoPorNome: safeText(user?.nome),
@@ -3056,6 +3141,9 @@ export default function PCMTrocaPneus() {
         alert("Ficha salva offline. Ela sera enviada quando a internet voltar.");
       } else {
         const data = await carregarTrocas();
+        if (pneuConserto !== TROCA_CONSERTO_NENHUM) {
+          await carregarConsertos();
+        }
         setTrocaForm(createTrocaForm(buildNextFicha(data, "ficha_troca", "TP"), userName));
         alert("Ficha de troca salva com sucesso.");
       }
@@ -3503,6 +3591,7 @@ export default function PCMTrocaPneus() {
         data: formatDate(row.created_at),
         quem_lancou: row.criado_por_nome || row.criado_por_login,
         tipo_troca: row.tipo_troca,
+        conserto_vinculado: row.consertoRelacionado?.situacao_origem || "",
         prefixo_retirada: row.prefixo_retirada,
         posicao_retirada: row.posicao_retirada,
         numero_retirado: row.numero_fogo_retirado,
@@ -3573,6 +3662,7 @@ export default function PCMTrocaPneus() {
         ficha: row.ficha_conserto,
         data: formatDate(row.created_at),
         origem: row.origem_tab,
+        detalhe_origem: row.situacao_origem || "",
         prefixo: row.prefixo || "",
         numero_fogo: row.numero_fogo || "",
         situacao_origem: row.situacao_origem || "",
@@ -4017,6 +4107,11 @@ export default function PCMTrocaPneus() {
                     <div>
                       <div className="text-sm font-bold text-slate-900">Prefixo {row.prefixo_instalacao || row.prefixo || "-"}</div>
                       <div className="mt-1 text-xs text-slate-500">{row.transnet_lancado_em ? "Lancado no Transnet" : "Pendente Transnet"}</div>
+                      {row.consertoRelacionado ? (
+                        <div className="mt-1 text-xs font-semibold text-amber-700">
+                          Conserto: {row.consertoRelacionado.situacao_origem || buildTrocaConsertoResumo(row.pneu_conserto)}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="text-right text-xs text-slate-500">{formatDate(row.created_at)}</div>
                   </div>
@@ -4053,7 +4148,14 @@ export default function PCMTrocaPneus() {
                         <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
                         <td className="px-4 py-3 font-medium text-slate-700">{row.criado_por_nome || row.criado_por_login || "-"}</td>
                         <td className="px-4 py-3 text-slate-600">{row.tipo_troca || "-"}</td>
-                        <td className="px-4 py-3 text-slate-600">{buildTrocaResumo(row)}</td>
+                        <td className="px-4 py-3 text-slate-600">
+                          <div>{buildTrocaResumo(row)}</div>
+                          {row.consertoRelacionado ? (
+                            <div className="mt-1 text-xs font-semibold text-amber-700">
+                              Conserto: {row.consertoRelacionado.situacao_origem || buildTrocaConsertoResumo(row.pneu_conserto)}
+                            </div>
+                          ) : null}
+                        </td>
                         <td className="px-4 py-3 text-slate-600">
                           {row.transnet_lancado_em ? formatDate(row.transnet_lancado_em) : "Pendente"}
                         </td>
@@ -4269,6 +4371,9 @@ export default function PCMTrocaPneus() {
                     </div>
                     <div className="text-right text-xs text-slate-500">{formatDate(row.created_at)}</div>
                   </div>
+                  {row.situacao_origem ? (
+                    <div className="mt-2 text-xs font-semibold text-amber-700">{row.situacao_origem}</div>
+                  ) : null}
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -4321,7 +4426,7 @@ export default function PCMTrocaPneus() {
                         <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
                         <td className="px-4 py-3 font-medium text-slate-700">{row.numero_fogo || "-"}</td>
                         <td className="px-4 py-3 text-slate-600">{row.prefixo || "-"}</td>
-                        <td className="px-4 py-3 text-slate-600">{row.origem_tab || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.situacao_origem || row.origem_tab || "-"}</td>
                         <td className="px-4 py-3 text-slate-600">{row.status || "-"}</td>
                         <td className="px-4 py-3 text-slate-600">{row.borracheiro_nome || row.borracheiro_login || "-"}</td>
                         <td className="px-4 py-3">

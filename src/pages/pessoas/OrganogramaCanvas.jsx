@@ -34,6 +34,7 @@ import {
 } from "react-icons/fa";
 
 import { supabase } from "../../supabase";
+import { supabaseBCNT } from "../../supabaseBCNT";
 
 const CORES = {
   stone: { label: "Neutro", border: "border-slate-300", bg: "bg-white", chip: "bg-slate-100 text-slate-700", hex: "#94a3b8" },
@@ -1265,12 +1266,38 @@ export default function OrganogramaCanvas() {
   const dirtyRef = useRef(new Map());
   const reactFlowInstance = useRef(null);
 
+  async function carregarFuncionariosBCNT() {
+    const pageSize = 1000;
+    let start = 0;
+    let all = [];
+    try {
+      while (true) {
+        const { data, error } = await supabaseBCNT
+          .from("funcionarios_atualizada")
+          .select("id_funcionario, nr_cracha, nm_funcionario, nm_funcao, dt_inicio_atividade, status")
+          .eq("status", "ativo")
+          .order("nm_funcionario", { ascending: true })
+          .range(start, start + pageSize - 1);
+        if (error) throw error;
+        const chunk = data || [];
+        all = all.concat(chunk);
+        if (chunk.length < pageSize) break;
+        start += pageSize;
+        if (all.length >= 30000) break;
+      }
+      return all;
+    } catch (error) {
+      console.error("Erro ao carregar funcionarios:", error);
+      return [];
+    }
+  }
+
   async function carregar() {
     setLoading(true);
-    const [areasResp, pessoasResp, funcResp] = await Promise.all([
+    const [areasResp, pessoasResp, funcList] = await Promise.all([
       supabase.from("organograma_manutencao_areas").select("*").eq("ativo", true),
       supabase.from("organograma_manutencao_pessoas").select("*").eq("ativo", true),
-      supabase.from("funcionarios_atualizada").select("nm_funcionario, nm_funcao, dt_inicio_atividade, status"),
+      carregarFuncionariosBCNT(),
     ]);
     setLoading(false);
     if (areasResp.error || pessoasResp.error) {
@@ -1280,7 +1307,7 @@ export default function OrganogramaCanvas() {
     }
     setAreas(areasResp.data || []);
     setPessoas(pessoasResp.data || []);
-    setFuncionarios(funcResp.error ? [] : (funcResp.data || []));
+    setFuncionarios(funcList);
   }
 
   useEffect(() => { carregar(); }, []);

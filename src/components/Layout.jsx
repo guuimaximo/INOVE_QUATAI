@@ -18,6 +18,7 @@ import {
 } from "react-icons/fa";
 
 import Sidebar from "./Sidebar";
+import { useMobileTabBadges } from "../context/MobileTabBadgesContext";
 import { AuthContext } from "../context/AuthContext";
 import { useAccessGovernance } from "../context/AccessContext";
 import { getMobileNavItems } from "../utils/mobileNavigation";
@@ -91,6 +92,7 @@ function MobileBottomNav({ items, onOpenMenu, currentPath }) {
         {items.map((item) => {
           const Icon = getIconForNav(item.key);
           const isActive = currentPath === item.path;
+          const badge = Number(item.badge || 0);
 
           return (
             <NavLink
@@ -102,7 +104,14 @@ function MobileBottomNav({ items, onOpenMenu, currentPath }) {
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
-              <Icon className="mb-1 text-base" />
+              <span className="relative mb-1 inline-flex">
+                <Icon className="text-base" />
+                {badge > 0 ? (
+                  <span className="absolute -right-2.5 -top-2 inline-flex min-w-[18px] items-center justify-center rounded-full bg-rose-600 px-1 py-0.5 text-[9px] font-bold leading-none text-white">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                ) : null}
+              </span>
               <span className="text-center leading-tight">{item.label}</span>
             </NavLink>
           );
@@ -128,6 +137,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const { user, logout } = useContext(AuthContext);
   const { profileMap } = useAccessGovernance();
+  const { badges } = useMobileTabBadges();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isNativeShell = Capacitor.isNativePlatform();
   const isInTrocaPneus = location.pathname === "/pcm-troca-pneus";
@@ -139,24 +149,24 @@ export default function Layout() {
     if (isNativeShell) {
       if (isInTrocaPneus) {
         return [
-          { key: "troca", label: "Troca", path: "/pcm-troca-pneus?aba=troca" },
-          { key: "auditoria", label: "Auditoria", path: "/pcm-troca-pneus?aba=auditoria" },
-          { key: "estoque", label: "Estoque", path: "/pcm-troca-pneus?aba=estoque" },
-          { key: "conserto", label: "Conserto", path: "/pcm-troca-pneus?aba=consertos" },
-          { key: "riscado", label: "Riscado", path: "/pcm-troca-pneus?aba=riscados" },
+          { key: "troca", label: "Troca", path: "/pcm-troca-pneus?aba=troca", badge: badges.troca },
+          { key: "auditoria", label: "Auditoria", path: "/pcm-troca-pneus?aba=auditoria", badge: badges.auditoria },
+          { key: "estoque", label: "Estoque", path: "/pcm-troca-pneus?aba=estoque", badge: badges.estoque },
+          { key: "conserto", label: "Conserto", path: "/pcm-troca-pneus?aba=consertos", badge: badges.consertos },
+          { key: "riscado", label: "Riscado", path: "/pcm-troca-pneus?aba=riscados", badge: badges.riscados },
         ];
       }
       if (isInControleFichas) {
         return [
-          { key: "lancamento", label: "Lancamento", path: "/pcm-controle-fichas?aba=lancamento" },
-          { key: "supervisor", label: "Supervisor", path: "/pcm-controle-fichas?aba=supervisor" },
-          { key: "pcm", label: "PCM", path: "/pcm-controle-fichas?aba=pcm" },
+          { key: "lancamento", label: "Lancamento", path: "/pcm-controle-fichas?aba=lancamento", badge: badges.lancamento },
+          { key: "supervisor", label: "Supervisor", path: "/pcm-controle-fichas?aba=supervisor", badge: badges.supervisor },
+          { key: "pcm", label: "PCM", path: "/pcm-controle-fichas?aba=pcm", badge: badges.pcm },
         ];
       }
       return [];
     }
     return getMobileNavItems(user, profileMap).slice(0, 3);
-  }, [isNativeShell, isInTrocaPneus, isInControleFichas, profileMap, user]);
+  }, [isNativeShell, isInTrocaPneus, isInControleFichas, profileMap, user, badges]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -210,21 +220,25 @@ export default function Layout() {
       </div>
 
       <div className="flex min-h-[calc(100vh-73px)] lg:min-h-screen">
-        <div
-          className={`fixed inset-0 z-40 bg-slate-950/40 transition-opacity duration-200 lg:hidden ${
-            mobileSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-          }`}
-          onClick={() => setMobileSidebarOpen(false)}
-          aria-hidden="true"
-        />
+        {isNativeShell ? null : (
+          <>
+            <div
+              className={`fixed inset-0 z-40 bg-slate-950/40 transition-opacity duration-200 lg:hidden ${
+                mobileSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+              }`}
+              onClick={() => setMobileSidebarOpen(false)}
+              aria-hidden="true"
+            />
 
-        <div
-          className={`fixed inset-y-0 left-0 z-50 w-[84vw] max-w-[320px] transform overflow-hidden rounded-r-[28px] bg-blue-700 transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:rounded-none ${
-            mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <Sidebar />
-        </div>
+            <div
+              className={`fixed inset-y-0 left-0 z-50 w-[84vw] max-w-[320px] transform overflow-hidden rounded-r-[28px] bg-blue-700 transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:rounded-none ${
+                mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+              }`}
+            >
+              <Sidebar />
+            </div>
+          </>
+        )}
 
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 pb-20 md:px-6 md:py-6 lg:pb-6">

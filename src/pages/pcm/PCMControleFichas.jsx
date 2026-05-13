@@ -17,6 +17,7 @@ import {
 } from "react-icons/fa";
 
 import { AuthContext } from "../../context/AuthContext";
+import { useMobileTabBadges } from "../../context/MobileTabBadgesContext";
 import { supabase } from "../../supabase";
 
 const TAB_LANCAMENTO = "lancamento";
@@ -288,6 +289,25 @@ function createItem() {
 
 const VALID_TABS = new Set([TAB_LANCAMENTO, TAB_SUPERVISOR, TAB_PCM]);
 
+function computeLoteStatus(itens) {
+  if (!Array.isArray(itens) || !itens.length) return STATUS_CONCLUIDO;
+  const has = (s) => itens.some((it) => it.status === s);
+  if (has(STATUS_AGUARDANDO_SUPERVISOR)) return STATUS_AGUARDANDO_SUPERVISOR;
+  if (has(STATUS_AGUARDANDO_PCM)) return STATUS_AGUARDANDO_PCM;
+  if (has(STATUS_AGUARDANDO_TRANSNET)) return STATUS_AGUARDANDO_TRANSNET;
+  return STATUS_CONCLUIDO;
+}
+
+function itemStatusLabel(it) {
+  if (it.status === STATUS_AGUARDANDO_SUPERVISOR) return "Aguardando supervisor";
+  if (it.status === STATUS_RECUSADO_SUPERVISOR) return "Recusada pelo supervisor";
+  if (it.status === STATUS_AGUARDANDO_PCM) return "Aguardando PCM";
+  if (it.status === STATUS_RECUSADO_PCM) return "Recusada pelo PCM";
+  if (it.status === STATUS_AGUARDANDO_TRANSNET) return "Aguardando Transnet";
+  if (it.status === STATUS_CONCLUIDO) return "Lancada no Transnet";
+  return "-";
+}
+
 export default function PCMControleFichas() {
   const { user } = useContext(AuthContext) || {};
   const userName = safeText(user?.nome) || safeText(user?.login) || "Usuario";
@@ -351,16 +371,46 @@ export default function PCMControleFichas() {
   }, []);
 
   const supervisorPendentes = useMemo(
-    () => rows.filter((r) => r.status === STATUS_AGUARDANDO_SUPERVISOR),
+    () => rows.filter((r) =>
+      (Array.isArray(r.itens) ? r.itens : []).some((it) => it.status === STATUS_AGUARDANDO_SUPERVISOR)
+      || r.status === STATUS_AGUARDANDO_SUPERVISOR
+    ),
     [rows]
   );
   const pcmPendentes = useMemo(
     () =>
-      rows.filter(
-        (r) => r.status === STATUS_AGUARDANDO_PCM || r.status === STATUS_AGUARDANDO_TRANSNET
+      rows.filter((r) =>
+        (Array.isArray(r.itens) ? r.itens : []).some((it) =>
+          it.status === STATUS_AGUARDANDO_PCM || it.status === STATUS_AGUARDANDO_TRANSNET
+        )
+        || r.status === STATUS_AGUARDANDO_PCM
+        || r.status === STATUS_AGUARDANDO_TRANSNET
       ),
     [rows]
   );
+
+  const supervisorFichasPendentes = useMemo(
+    () => rows.reduce((acc, r) =>
+      acc + (Array.isArray(r.itens) ? r.itens.filter((it) => it.status === STATUS_AGUARDANDO_SUPERVISOR).length : 0),
+    0),
+    [rows]
+  );
+  const pcmFichasPendentes = useMemo(
+    () => rows.reduce((acc, r) =>
+      acc + (Array.isArray(r.itens) ? r.itens.filter((it) => it.status === STATUS_AGUARDANDO_PCM || it.status === STATUS_AGUARDANDO_TRANSNET).length : 0),
+    0),
+    [rows]
+  );
+
+  const { setBadges: setMobileBadges } = useMobileTabBadges();
+  useEffect(() => {
+    setMobileBadges({
+      lancamento: 0,
+      supervisor: supervisorFichasPendentes,
+      pcm: pcmFichasPendentes,
+    });
+    return () => setMobileBadges({});
+  }, [supervisorFichasPendentes, pcmFichasPendentes, setMobileBadges]);
 
   function abrirLancamento() {
     setLancamentoForm({
@@ -432,6 +482,7 @@ export default function PCMControleFichas() {
           foto_path: uploaded.path,
           foto_url: uploaded.url,
           observacoes: safeText(it.observacoes) || null,
+          status: STATUS_AGUARDANDO_SUPERVISOR,
         });
       }
       const ficha = lancamentoForm.ficha || buildNextFicha(rows);
@@ -463,8 +514,8 @@ export default function PCMControleFichas() {
     }
   }
 
-  function abrirAcao(row, tipo) {
-    setAcaoModal({ row, tipo });
+  function abrirAcao(row, tipo, item) {
+    setAcaoModal({ row, tipo, item });
     setAcaoNome(userName);
     setAcaoMotivo("");
   }
@@ -472,56 +523,63 @@ export default function PCMControleFichas() {
   async function confirmarAcao() {
     if (!acaoModal) return;
     const nome = userName;
-    const { row, tipo } = acaoModal;
+    const { row, tipo, item } = acaoModal;
     const ehRecusa = tipo.endsWith("_recusar");
     const motivo = safeText(acaoMotivo);
     if (ehRecusa && !motivo) {
       alert("Informe o motivo da recusa.");
       return;
     }
-    const agora = new Date().toISOString();
-    let update = null;
-    if (tipo === "supervisor_receber") {
-      update = {
-        supervisor_nome: nome,
-        supervisor_recebido_em: agora,
-        status: STATUS_AGUARDANDO_PCM,
-      };
-    } else if (tipo === "supervisor_recusar") {
-      update = {
-        supervisor_nome: nome,
-        supervisor_recusado_em: agora,
-        supervisor_recusa_motivo: motivo,
-        status: STATUS_RECUSADO_SUPERVISOR,
-      };
-    } else if (tipo === "pcm_receber") {
-      update = {
-        pcm_nome: nome,
-        pcm_recebido_em: agora,
-        status: STATUS_AGUARDANDO_TRANSNET,
-      };
-    } else if (tipo === "pcm_recusar") {
-      update = {
-        pcm_nome: nome,
-        pcm_recusado_em: agora,
-        pcm_recusa_motivo: motivo,
-        status: STATUS_RECUSADO_PCM,
-      };
-    } else if (tipo === "transnet") {
-      update = {
-        transnet_lancado_em: agora,
-        transnet_lancado_por_nome: nome,
-        status: STATUS_CONCLUIDO,
-      };
+    if (!item?.id) {
+      alert("Acao precisa de uma ficha.");
+      return;
     }
-    if (!update) return;
+    const agora = new Date().toISOString();
     setAcaoSaving(true);
     try {
+      const itensAtuais = Array.isArray(row.itens) ? row.itens : [];
+      const novosItens = itensAtuais.map((it) => {
+        if (it.id !== item.id) return it;
+        if (tipo === "supervisor_receber") {
+          return { ...it, status: STATUS_AGUARDANDO_PCM, supervisor_nome: nome, supervisor_em: agora };
+        }
+        if (tipo === "supervisor_recusar") {
+          return {
+            ...it,
+            status: STATUS_RECUSADO_SUPERVISOR,
+            supervisor_nome: nome,
+            supervisor_em: agora,
+            supervisor_recusa_motivo: motivo,
+          };
+        }
+        if (tipo === "pcm_receber") {
+          return { ...it, status: STATUS_AGUARDANDO_TRANSNET, pcm_nome: nome, pcm_em: agora };
+        }
+        if (tipo === "pcm_recusar") {
+          return {
+            ...it,
+            status: STATUS_RECUSADO_PCM,
+            pcm_nome: nome,
+            pcm_em: agora,
+            pcm_recusa_motivo: motivo,
+          };
+        }
+        if (tipo === "transnet") {
+          return { ...it, status: STATUS_CONCLUIDO, transnet_em: agora, transnet_por: nome };
+        }
+        return it;
+      });
+      const novoStatus = computeLoteStatus(novosItens);
       const { error } = await supabase
         .from("pcm_controle_fichas")
-        .update({ ...update, updated_at: agora })
+        .update({ itens: novosItens, status: novoStatus, updated_at: agora })
         .eq("id", row.id);
       if (error) throw error;
+
+      // sincroniza consultaRow para o popup continuar aberto com dados frescos
+      setConsultaRow((current) =>
+        current && current.id === row.id ? { ...current, itens: novosItens, status: novoStatus } : current
+      );
       setAcaoModal(null);
       await carregar();
     } catch (error) {
@@ -693,25 +751,7 @@ export default function PCMControleFichas() {
                         <td className="px-4 py-3 text-slate-600">{row.criado_por_nome || row.criado_por_login || "-"}</td>
                         <td className="px-4 py-3 text-slate-600">{totalFichas}</td>
                         <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex justify-end gap-2">
-                            {activeTab === TAB_SUPERVISOR && row.status === STATUS_AGUARDANDO_SUPERVISOR ? (
-                              <>
-                                <button type="button" onClick={() => abrirAcao(row, "supervisor_receber")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Recebeu</button>
-                                <button type="button" onClick={() => abrirAcao(row, "supervisor_recusar")} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700">Recusar</button>
-                              </>
-                            ) : null}
-                            {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_PCM ? (
-                              <>
-                                <button type="button" onClick={() => abrirAcao(row, "pcm_receber")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Recebeu</button>
-                                <button type="button" onClick={() => abrirAcao(row, "pcm_recusar")} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700">Recusar</button>
-                              </>
-                            ) : null}
-                            {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_TRANSNET ? (
-                              <button type="button" onClick={() => abrirAcao(row, "transnet")} className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-700">Lancado no Transnet</button>
-                            ) : null}
-                          </div>
-                        </td>
+                        <td className="px-4 py-3 text-right text-xs text-slate-500">Clique para abrir</td>
                       </tr>
                     );
                   })
@@ -757,20 +797,20 @@ export default function PCMControleFichas() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="flex items-center justify-between">
+              <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 flex items-center justify-between rounded-t-2xl border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
                 <div className="text-sm font-black uppercase tracking-wide text-slate-700">
                   Fichas do lote ({lancamentoForm.itens.length})
                 </div>
                 <button
                   type="button"
                   onClick={addItem}
-                  className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800"
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow hover:bg-blue-700"
                 >
                   <FaPlus /> Adicionar ficha
                 </button>
               </div>
 
-              <div className="mt-4 space-y-4">
+              <div className="space-y-4">
                 {lancamentoForm.itens.map((it, idx) => (
                   <div key={it.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="mb-3 flex items-center justify-between">
@@ -876,52 +916,7 @@ export default function PCMControleFichas() {
           maxWidth="max-w-4xl"
           onClose={() => setConsultaOpen(false)}
           footer={
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {activeTab === TAB_SUPERVISOR && consultaRow.status === STATUS_AGUARDANDO_SUPERVISOR ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "supervisor_recusar"); }}
-                    className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700"
-                  >
-                    Recusar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "supervisor_receber"); }}
-                    className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"
-                  >
-                    Recebeu
-                  </button>
-                </>
-              ) : null}
-              {activeTab === TAB_PCM && consultaRow.status === STATUS_AGUARDANDO_PCM ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "pcm_recusar"); }}
-                    className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700"
-                  >
-                    Recusar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "pcm_receber"); }}
-                    className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"
-                  >
-                    Recebeu
-                  </button>
-                </>
-              ) : null}
-              {activeTab === TAB_PCM && consultaRow.status === STATUS_AGUARDANDO_TRANSNET ? (
-                <button
-                  type="button"
-                  onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "transnet"); }}
-                  className="rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-purple-700"
-                >
-                  Lancado no Transnet
-                </button>
-              ) : null}
+            <div className="flex justify-end">
               <button
                 type="button"
                 onClick={() => setConsultaOpen(false)}
@@ -991,29 +986,107 @@ export default function PCMControleFichas() {
                   Fichas
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {consultaRow.itens.map((it, idx) => (
-                    <div key={it.id || idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                        Ficha {idx + 1}{it.numero_ficha ? ` · OS ${it.numero_ficha}` : ""}
+                  {consultaRow.itens.map((it, idx) => {
+                    const itemStatus = it.status || STATUS_AGUARDANDO_SUPERVISOR;
+                    const podeSupervisor = activeTab === TAB_SUPERVISOR && itemStatus === STATUS_AGUARDANDO_SUPERVISOR;
+                    const podePCM = activeTab === TAB_PCM && itemStatus === STATUS_AGUARDANDO_PCM;
+                    const podeTransnet = activeTab === TAB_PCM && itemStatus === STATUS_AGUARDANDO_TRANSNET;
+                    return (
+                      <div key={it.id || idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Ficha {idx + 1}{it.numero_ficha ? ` · OS ${it.numero_ficha}` : ""}
+                          </div>
+                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                            {itemStatusLabel(it)}
+                          </span>
+                        </div>
+                        {it.foto_url ? (
+                          <img
+                            src={it.foto_url}
+                            alt={`Ficha ${idx + 1}`}
+                            className="mt-2 h-56 w-full rounded-lg object-contain"
+                          />
+                        ) : (
+                          <div className="mt-2 rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
+                            Sem foto
+                          </div>
+                        )}
+                        {it.observacoes ? (
+                          <div className="mt-2 rounded-lg bg-white px-2.5 py-1.5 text-xs text-slate-600">
+                            <span className="font-bold text-slate-500">Obs:</span> {it.observacoes}
+                          </div>
+                        ) : null}
+                        {it.supervisor_nome ? (
+                          <div className="mt-2 text-[11px] text-slate-500">
+                            Supervisor: <strong>{it.supervisor_nome}</strong> · {formatDate(it.supervisor_em)}
+                            {it.supervisor_recusa_motivo ? ` · Motivo: ${it.supervisor_recusa_motivo}` : ""}
+                          </div>
+                        ) : null}
+                        {it.pcm_nome ? (
+                          <div className="text-[11px] text-slate-500">
+                            PCM: <strong>{it.pcm_nome}</strong> · {formatDate(it.pcm_em)}
+                            {it.pcm_recusa_motivo ? ` · Motivo: ${it.pcm_recusa_motivo}` : ""}
+                          </div>
+                        ) : null}
+                        {it.transnet_em ? (
+                          <div className="text-[11px] text-emerald-600">
+                            Transnet: <strong>{it.transnet_por || "-"}</strong> · {formatDate(it.transnet_em)}
+                          </div>
+                        ) : null}
+
+                        {podeSupervisor || podePCM || podeTransnet ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {podeSupervisor ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => abrirAcao(consultaRow, "supervisor_receber", it)}
+                                  className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                                >
+                                  Recebi
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => abrirAcao(consultaRow, "supervisor_recusar", it)}
+                                  className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700"
+                                >
+                                  Recusar
+                                </button>
+                              </>
+                            ) : null}
+                            {podePCM ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => abrirAcao(consultaRow, "pcm_receber", it)}
+                                  className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                                >
+                                  Recebi
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => abrirAcao(consultaRow, "pcm_recusar", it)}
+                                  className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700"
+                                >
+                                  Recusar
+                                </button>
+                              </>
+                            ) : null}
+                            {podeTransnet ? (
+                              <button
+                                type="button"
+                                onClick={() => abrirAcao(consultaRow, "transnet", it)}
+                                className="flex-1 rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-700"
+                              >
+                                Lancado no Transnet
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
-                      {it.foto_url ? (
-                        <img
-                          src={it.foto_url}
-                          alt={`Ficha ${idx + 1}`}
-                          className="mt-2 h-56 w-full rounded-lg object-contain"
-                        />
-                      ) : (
-                        <div className="mt-2 rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
-                          Sem foto
-                        </div>
-                      )}
-                      {it.observacoes ? (
-                        <div className="mt-2 rounded-lg bg-white px-2.5 py-1.5 text-xs text-slate-600">
-                          <span className="font-bold text-slate-500">Obs:</span> {it.observacoes}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : null}

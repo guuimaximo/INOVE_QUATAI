@@ -25,6 +25,7 @@ import {
 } from "react-icons/fa";
 
 import { AuthContext } from "../../context/AuthContext";
+import { useMobileTabBadges } from "../../context/MobileTabBadgesContext";
 import CampoPrefixo from "../../components/CampoPrefixo";
 import { supabase } from "../../supabase";
 import {
@@ -2566,6 +2567,18 @@ export default function PCMTrocaPneus() {
     () => buildAuditoriaAtrasadaList(prefixos, auditorias),
     [auditorias, prefixos]
   );
+
+  const { setBadges: setMobileBadges } = useMobileTabBadges();
+  useEffect(() => {
+    setMobileBadges({
+      troca: 0,
+      auditoria: auditoriasAtrasadas.length,
+      estoque: 0,
+      consertos: cardsConsertos.pendentes,
+      riscados: cardsRiscados.vencidos10Dias,
+    });
+    return () => setMobileBadges({});
+  }, [auditoriasAtrasadas.length, cardsConsertos.pendentes, cardsRiscados.vencidos10Dias, setMobileBadges]);
 
   const trocasFiltradas = useMemo(() => {
     const busca = norm(trocaFiltros.busca).toLowerCase();

@@ -49,6 +49,7 @@ import PCM_Preventivas from "./pages/pcm/PCM_Preventivas";
 import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
 import PCMControleFichas from "./pages/pcm/PCMControleFichas";
 import MobileHome from "./pages/home/MobileHome";
+import { MobileTabBadgesProvider } from "./context/MobileTabBadgesContext";
 
 import Usuarios from "./pages/configuracoes/Usuarios";
 import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
@@ -125,6 +126,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AccessProvider>
+        <MobileTabBadgesProvider>
         <>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -270,6 +272,7 @@ export default function App() {
           <InstallAppPrompt />
           <UpdateAppPrompt />
         </>
+        </MobileTabBadgesProvider>
       </AccessProvider>
     </AuthProvider>
   );

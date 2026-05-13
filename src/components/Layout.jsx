@@ -79,9 +79,14 @@ function getIconForNav(key) {
 }
 
 function MobileBottomNav({ items, onOpenMenu, currentPath }) {
+  const totalColumns = items.length + (onOpenMenu ? 1 : 0);
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-2 pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden">
-      <div className={`grid gap-1 pb-[calc(env(safe-area-inset-bottom,0px)+0.35rem)] ${onOpenMenu ? "grid-cols-4" : items.length === 3 ? "grid-cols-3" : "grid-cols-1"}`}>
+      <div
+        className="grid gap-1 pb-[calc(env(safe-area-inset-bottom,0px)+0.35rem)]"
+        style={{ gridTemplateColumns: `repeat(${Math.max(totalColumns, 1)}, minmax(0, 1fr))` }}
+      >
         {items.map((item) => {
           const Icon = getIconForNav(item.key);
           const isActive = currentPath === item.path;

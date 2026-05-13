@@ -404,31 +404,47 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
   const pessoasOrcadasCadastradas = pessoasArea.filter((p) => p.tipo_headcount === "ORCADO");
   const orcadoQtd = metrics.directOrcado;
   const vagasOrcadas = (function () {
-    // Comeca com as vagas orcadas cadastradas explicitamente (com nome/cargo)
-    const lista = pessoasOrcadasCadastradas.map((p, idx) => ({
+    // Cria slots a partir dos ORCADO cadastrados (cargo planejado)
+    const slots = pessoasOrcadasCadastradas.map((p) => ({
       id: p.id,
-      label: p.nome || `Vaga ${idx + 1}`,
-      cargo: p.cargo,
+      cargoOrcado: p.cargo || "Vaga planejada",
+      nomeOrcado: p.nome || "",
       preenchida: false,
+      nomeRealizado: "",
+      cargoRealizado: "",
     }));
-    // Marca como preenchida na ordem em que pessoas REALIZADO existem
-    for (let i = 0; i < Math.min(lista.length, pessoasRealizadas.length); i += 1) {
-      lista[i].preenchida = true;
-      lista[i].label = pessoasRealizadas[i].nome || lista[i].label;
-      lista[i].cargo = pessoasRealizadas[i].cargo || lista[i].cargo;
-    }
-    // Completa ate atingir orcadoQtd com vagas em aberto
-    while (lista.length < orcadoQtd) {
-      const idx = lista.length;
-      const real = pessoasRealizadas[idx];
-      lista.push({
-        id: real?.id || `vaga-aberta-${idx}`,
-        label: real?.nome || `Vaga em aberto ${idx + 1}`,
-        cargo: real?.cargo,
-        preenchida: !!real,
+    // Garante o total de slots == orcadoQtd quando este e maior que os ORCADOs cadastrados
+    while (slots.length < orcadoQtd) {
+      slots.push({
+        id: `vaga-${slots.length}`,
+        cargoOrcado: "Vaga planejada",
+        nomeOrcado: "",
+        preenchida: false,
+        nomeRealizado: "",
+        cargoRealizado: "",
       });
     }
-    return lista;
+    // Encaixa pessoas REALIZADO em ordem nos slots disponiveis
+    pessoasRealizadas.forEach((p, idx) => {
+      if (idx >= slots.length) {
+        slots.push({
+          id: `vaga-extra-${idx}`,
+          cargoOrcado: p.cargo || "Sem cargo orcado",
+          nomeOrcado: "",
+          preenchida: true,
+          nomeRealizado: p.nome || "(sem nome)",
+          cargoRealizado: p.cargo || "",
+        });
+      } else {
+        slots[idx].preenchida = true;
+        slots[idx].nomeRealizado = p.nome || "(sem nome)";
+        slots[idx].cargoRealizado = p.cargo || "";
+        if (!slots[idx].cargoOrcado || slots[idx].cargoOrcado === "Vaga planejada") {
+          slots[idx].cargoOrcado = p.cargo || slots[idx].cargoOrcado;
+        }
+      }
+    });
+    return slots;
   })();
   const subAreas = childrenMap.get(area.codigo) || [];
   const desc = collectDescendantCodes(area.codigo, childrenMap);
@@ -592,73 +608,55 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
           ) : null}
         </div>
 
-        {/* Orcado x Realizado */}
-        <div className="grid grid-cols-1 gap-3">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-black uppercase tracking-wide text-amber-800">
-                Orcado · vagas planejadas ({vagasOrcadas.length})
-              </div>
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-                {pessoasArea.filter((p) => p.tipo_headcount === "REALIZADO").length}/{vagasOrcadas.length} preenchidas
-              </span>
+        {/* Orcado x Realizado lado a lado por vaga */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-black uppercase tracking-wide text-slate-700">
+              Vagas ({vagasOrcadas.length})
             </div>
-            <p className="mt-1 text-[11px] text-amber-700">
-              Quantidade de vagas que o organograma reserva para esta area.
-            </p>
-            {vagasOrcadas.length ? (
-              <div className="mt-2 space-y-1.5">
-                {vagasOrcadas.map((vaga, idx) => (
-                  <div key={vaga.id || `vaga-${idx}`} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-sm">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-slate-800">
-                        {vaga.label}
-                      </div>
-                      {vaga.cargo ? <div className="text-[11px] text-slate-500">{vaga.cargo}</div> : null}
-                    </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                      vaga.preenchida ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                    }`}>
-                      {vaga.preenchida ? "Preenchida" : "Em aberto"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-2 text-xs text-amber-700">Nenhuma vaga orcada definida.</div>
-            )}
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+              {pessoasRealizadas.length}/{vagasOrcadas.length} preenchida(s)
+            </span>
           </div>
 
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
-            <button type="button" onClick={() => setPessoasAbertas((v) => !v)} className="flex w-full items-center justify-between text-left">
-              <div className="text-sm font-black uppercase tracking-wide text-emerald-800">
-                Realizado · quem esta nessas vagas ({pessoasRealizadas.length})
+          {vagasOrcadas.length ? (
+            <div className="mt-3 space-y-2">
+              <div className="grid grid-cols-2 gap-2 text-[10px] font-black uppercase tracking-[0.18em]">
+                <div className="rounded-lg bg-amber-100 px-2 py-1 text-amber-800">Vaga orcada</div>
+                <div className="rounded-lg bg-emerald-100 px-2 py-1 text-emerald-800">Vaga realizado</div>
               </div>
-              {pessoasAbertas ? <FaChevronDown className="text-emerald-500" /> : <FaChevronRight className="text-emerald-500" />}
-            </button>
-            <p className="mt-1 text-[11px] text-emerald-700">
-              Pessoas alocadas hoje cobrindo as vagas orcadas desta area.
-            </p>
-            {pessoasAbertas ? (
-              pessoasRealizadas.length ? (
-                <div className="mt-2 space-y-1.5">
-                  {pessoasRealizadas.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-sm">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-bold text-slate-800">{p.nome || "(sem nome)"}</div>
-                        <div className="text-[11px] text-slate-500">{p.cargo || "-"}</div>
-                      </div>
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                        Ativo
-                      </span>
+              {vagasOrcadas.map((vaga, idx) => (
+                <div key={vaga.id || `vaga-${idx}`} className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Orcado</div>
+                    <div className="mt-0.5 truncate text-sm font-bold text-slate-900">
+                      {vaga.cargoOrcado || vaga.cargo || "Vaga planejada"}
                     </div>
-                  ))}
+                    {vaga.nomeOrcado ? (
+                      <div className="truncate text-[11px] text-slate-500">{vaga.nomeOrcado}</div>
+                    ) : null}
+                  </div>
+                  <div className={`rounded-xl border px-3 py-2 ${
+                    vaga.preenchida ? "border-emerald-200 bg-emerald-50/60" : "border-dashed border-slate-300 bg-slate-50"
+                  }`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-wide ${
+                      vaga.preenchida ? "text-emerald-700" : "text-slate-500"
+                    }`}>
+                      {vaga.preenchida ? "Realizado" : "Em aberto"}
+                    </div>
+                    <div className="mt-0.5 truncate text-sm font-bold text-slate-900">
+                      {vaga.preenchida ? vaga.nomeRealizado : "—"}
+                    </div>
+                    {vaga.preenchida && vaga.cargoRealizado ? (
+                      <div className="truncate text-[11px] text-slate-500">{vaga.cargoRealizado}</div>
+                    ) : null}
+                  </div>
                 </div>
-              ) : (
-                <div className="mt-2 text-xs text-emerald-700">Nenhuma pessoa alocada nesta area ainda.</div>
-              )
-            ) : null}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-2 text-xs text-slate-500">Nenhuma vaga orcada definida para esta area.</div>
+          )}
         </div>
       </div>
     </div>

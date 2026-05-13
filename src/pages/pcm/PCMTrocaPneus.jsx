@@ -325,6 +325,40 @@ function resolveTrocaConsertoPayload(payload) {
   return null;
 }
 
+function resolveConsertoSourceMeta(row, trocas, auditorias) {
+  if (!row) return null;
+
+  if (row.origem_tab === TAB_AUDITORIA) {
+    const [auditoriaId, posicao] = String(row.origem_item_id || "").split(":");
+    const auditoria = (auditorias || []).find((item) => String(item.id) === String(auditoriaId));
+    const posicaoAuditoria = getAuditoriaPosicoes(auditoria).find((item) => String(item.posicao) === String(posicao));
+    return {
+      fichaOrigem: auditoria?.ficha_auditoria || "",
+      origemResumo: auditoria ? `Auditoria ${auditoria.ficha_auditoria || "-"} · ${posicao || "-"}` : "",
+      fotoUrl: posicaoAuditoria?.foto_url || "",
+      fotoAlt: posicao ? `Auditoria ${posicao}` : "Foto da auditoria",
+    };
+  }
+
+  if (row.origem_tab === TAB_TROCA) {
+    const troca = (trocas || []).find((item) => String(item.id) === String(row.origem_item_id));
+    const situacao = norm(row.situacao_origem).toLowerCase();
+    const isRetirado =
+      situacao.includes("retirado") || norm(row.numero_fogo) === norm(troca?.numero_fogo_retirado);
+    const fotoUrl = isRetirado
+      ? troca?.foto_numero_fogo_retirado_url || ""
+      : troca?.foto_numero_fogo_colocado_url || troca?.foto_numero_fogo_url || "";
+    return {
+      fichaOrigem: troca?.ficha_troca || "",
+      origemResumo: troca ? `Troca ${troca.ficha_troca || "-"} · ${isRetirado ? "Pneu retirado" : "Pneu colocado"}` : "",
+      fotoUrl,
+      fotoAlt: isRetirado ? "Numero de fogo retirado" : "Numero de fogo colocado",
+    };
+  }
+
+  return null;
+}
+
 function createAuditoriaForm(nextFicha, userName) {
   return {
     ficha: nextFicha,
@@ -1637,8 +1671,10 @@ function ConsultaModal({
   onMarcarTransnet,
   onMarcarAuditoriaStatus,
   onMarcarEstoqueStatus,
+  onMarcarConsertoStatus,
   onEnviarConserto,
   onAbrirRiscado,
+  getConsertoSourceMeta,
 }) {
   const [auditoriaEditando, setAuditoriaEditando] = useState({});
   const [estoqueEditando, setEstoqueEditando] = useState({});
@@ -2007,6 +2043,79 @@ function ConsultaModal({
         >
           Fechar
         </button>
+      </div>
+    );
+  }
+
+  if (tab === TAB_CONSERTOS) {
+    const sourceMeta = getConsertoSourceMeta?.(row) || null;
+
+    title = row.ficha_conserto || "Conserto de pneu";
+    content = (
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <DetailRow label="Data" value={formatDate(row.created_at)} />
+          <DetailRow label="Quem lancou" value={row.criado_por_nome || row.criado_por_login} />
+          <DetailRow label="Numero de fogo" value={row.numero_fogo || "-"} />
+          <DetailRow label="Status" value={row.status || "PENDENTE"} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <DetailRow label="Prefixo" value={row.prefixo || "-"} />
+          <DetailRow label="Origem" value={row.situacao_origem || row.origem_tab || "-"} />
+          <DetailRow label="Ficha de origem" value={sourceMeta?.fichaOrigem || "-"} />
+        </div>
+
+        {sourceMeta?.origemResumo ? <DetailRow label="Detalhe da origem" value={sourceMeta.origemResumo} /> : null}
+
+        {sourceMeta?.fotoUrl ? (
+          <SectionBlock title="Foto vinculada ao conserto">
+            <ZoomableImage
+              src={sourceMeta.fotoUrl}
+              alt={sourceMeta.fotoAlt || "Foto do pneu em conserto"}
+              isNativeShell={isNativeShell}
+            />
+          </SectionBlock>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+            Esse conserto nao possui foto de origem disponivel para exibicao.
+          </div>
+        )}
+
+        {row.observacoes ? <DetailRow label="Observacoes" value={row.observacoes} /> : null}
+      </div>
+    );
+
+    footer = (
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-xs text-slate-500">
+          Atualize quando o borracheiro receber ou concluir esse conserto.
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            onClick={() => onMarcarConsertoStatus?.(row.id, "EM CONSERTO")}
+            disabled={checkingStatusKey === `conserto:${row.id}:EM CONSERTO` || norm(row.status) === "EM CONSERTO"}
+            className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            Receber
+          </button>
+          <button
+            type="button"
+            onClick={() => onMarcarConsertoStatus?.(row.id, "CONCLUIDO")}
+            disabled={checkingStatusKey === `conserto:${row.id}:CONCLUIDO` || norm(row.status) === "CONCLUIDO"}
+            className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          >
+            Dar baixa
+          </button>
+        </div>
       </div>
     );
   }
@@ -2472,6 +2581,10 @@ export default function PCMTrocaPneus() {
       return alvo.includes(busca);
     });
   }, [riscadoFiltros, riscados]);
+
+  function getConsertoSourceMeta(row) {
+    return resolveConsertoSourceMeta(row, trocas, auditorias);
+  }
 
   useEffect(() => {
     async function processarAlertas() {
@@ -3295,6 +3408,11 @@ export default function PCMTrocaPneus() {
   }
 
   function abrirConsertoPreenchido(seed = {}) {
+    setConsulta({ open: false, tab: activeTab, row: null });
+    setTrocaOpen(false);
+    setAuditoriaOpen(false);
+    setEstoqueOpen(false);
+    setRiscadoOpen(false);
     const nextFicha = buildNextFicha(consertos, "ficha_conserto", "CP");
     setConsertoForm({
       ...createConsertoForm(nextFicha, userName),
@@ -3309,6 +3427,11 @@ export default function PCMTrocaPneus() {
   }
 
   function abrirRiscadoPreenchido(seed = {}) {
+    setConsulta({ open: false, tab: activeTab, row: null });
+    setTrocaOpen(false);
+    setAuditoriaOpen(false);
+    setEstoqueOpen(false);
+    setConsertoOpen(false);
     const nextFicha = buildNextFicha(riscados, "ficha_riscado", "RP");
     setRiscadoForm({
       ...createRiscadoForm(nextFicha, userName),
@@ -4364,6 +4487,13 @@ export default function PCMTrocaPneus() {
                 <div key={row.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div>
+                      <button
+                        type="button"
+                        onClick={() => openConsulta(TAB_CONSERTOS, row)}
+                        className="text-left text-xs font-black uppercase tracking-wide text-blue-700 hover:text-blue-800"
+                      >
+                        {row.ficha_conserto || "Ficha de conserto"}
+                      </button>
                       <div className="text-sm font-bold text-slate-900">{row.numero_fogo || "-"}</div>
                       <div className="mt-1 text-xs text-slate-500">
                         {row.prefixo ? `Prefixo ${row.prefixo} · ` : ""}{row.status || "PENDENTE"}
@@ -4422,7 +4552,15 @@ export default function PCMTrocaPneus() {
                   ) : (
                     consertosFiltrados.map((row) => (
                       <tr key={row.id} className="transition-colors hover:bg-slate-50/80">
-                        <td className="px-4 py-3 font-bold text-slate-700">{row.ficha_conserto}</td>
+                        <td className="px-4 py-3 font-bold text-slate-700">
+                          <button
+                            type="button"
+                            onClick={() => openConsulta(TAB_CONSERTOS, row)}
+                            className="text-blue-700 hover:text-blue-800 hover:underline"
+                          >
+                            {row.ficha_conserto}
+                          </button>
+                        </td>
                         <td className="px-4 py-3 text-slate-600">{formatDate(row.created_at)}</td>
                         <td className="px-4 py-3 font-medium text-slate-700">{row.numero_fogo || "-"}</td>
                         <td className="px-4 py-3 text-slate-600">{row.prefixo || "-"}</td>
@@ -4650,8 +4788,10 @@ export default function PCMTrocaPneus() {
         onMarcarTransnet={marcarTransnet}
         onMarcarAuditoriaStatus={marcarAuditoriaStatus}
         onMarcarEstoqueStatus={marcarEstoqueStatus}
+        onMarcarConsertoStatus={marcarConsertoStatus}
         onEnviarConserto={abrirConsertoPreenchido}
         onAbrirRiscado={abrirRiscadoPreenchido}
+        getConsertoSourceMeta={getConsertoSourceMeta}
       />
 
     </div>

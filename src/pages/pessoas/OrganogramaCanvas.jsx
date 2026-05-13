@@ -77,6 +77,7 @@ const SETORES = [
   { value: "PLANEJAMENTO_CONTROLE", label: "Planejamento e Controle" },
   { value: "ADMINISTRATIVO", label: "Administrativo" },
   { value: "MANUTENCAO", label: "Manutencao" },
+  { value: "OPERACAO", label: "Operacao" },
 ];
 const SETOR_LABELS = Object.fromEntries(SETORES.map((s) => [s.value, s.label]));
 

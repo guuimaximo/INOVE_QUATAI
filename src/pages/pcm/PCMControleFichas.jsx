@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import {
@@ -281,8 +282,11 @@ function createItem() {
     id: createUuid(),
     numeroFicha: "",
     foto: null,
+    observacoes: "",
   };
 }
+
+const VALID_TABS = new Set([TAB_LANCAMENTO, TAB_SUPERVISOR, TAB_PCM]);
 
 export default function PCMControleFichas() {
   const { user } = useContext(AuthContext) || {};
@@ -290,16 +294,30 @@ export default function PCMControleFichas() {
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState(TAB_LANCAMENTO);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = VALID_TABS.has(searchParams.get("aba")) ? searchParams.get("aba") : TAB_LANCAMENTO;
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [filtro, setFiltro] = useState("");
+
+  useEffect(() => {
+    const next = searchParams.get("aba");
+    if (VALID_TABS.has(next) && next !== activeTab) {
+      setActiveTab(next);
+    } else if (!VALID_TABS.has(next)) {
+      setSearchParams({ aba: activeTab }, { replace: true });
+    }
+  }, [activeTab, searchParams, setSearchParams]);
+
+  function handleTabChange(tab) {
+    setActiveTab(tab);
+    setSearchParams({ aba: tab }, { replace: true });
+  }
 
   const [lancamentoOpen, setLancamentoOpen] = useState(false);
   const [lancamentoForm, setLancamentoForm] = useState(() => ({
     ficha: "",
     dataEntrega: nowDisplay(),
     quemEntregou: userName,
-    numeroOS: "",
-    observacoes: "",
     itens: [createItem()],
   }));
   const [saving, setSaving] = useState(false);
@@ -349,8 +367,6 @@ export default function PCMControleFichas() {
       ficha: buildNextFicha(rows),
       dataEntrega: nowDisplay(),
       quemEntregou: userName,
-      numeroOS: "",
-      observacoes: "",
       itens: [createItem()],
     });
     setLancamentoOpen(true);
@@ -388,14 +404,14 @@ export default function PCMControleFichas() {
   }
 
   async function salvarLancamento() {
-    const numeroOS = safeText(lancamentoForm.numeroOS);
-    if (!numeroOS) {
-      alert("Informe o numero da OS.");
-      return;
-    }
     const itens = lancamentoForm.itens.filter((it) => it.foto || safeText(it.numeroFicha));
     if (!itens.length) {
-      alert("Adicione pelo menos uma ficha com foto.");
+      alert("Adicione pelo menos uma ficha.");
+      return;
+    }
+    const semNumero = itens.findIndex((it) => !safeText(it.numeroFicha));
+    if (semNumero >= 0) {
+      alert(`Informe o numero da ficha ${semNumero + 1}.`);
       return;
     }
     const semFoto = itens.findIndex((it) => !it.foto);
@@ -412,9 +428,10 @@ export default function PCMControleFichas() {
         const uploaded = await uploadFoto(id, it.id, it.foto);
         itensSalvos.push({
           id: it.id,
-          numero_ficha: safeText(it.numeroFicha) || null,
+          numero_ficha: safeText(it.numeroFicha),
           foto_path: uploaded.path,
           foto_url: uploaded.url,
+          observacoes: safeText(it.observacoes) || null,
         });
       }
       const ficha = lancamentoForm.ficha || buildNextFicha(rows);
@@ -422,11 +439,11 @@ export default function PCMControleFichas() {
         {
           id,
           ficha_controle: ficha,
-          numero_os: numeroOS,
+          numero_os: itensSalvos.map((it) => it.numero_ficha).join(", ").slice(0, 200),
           data_entrega: new Date().toISOString(),
           quantidade_fichas: itensSalvos.length,
           itens: itensSalvos,
-          observacoes: safeText(lancamentoForm.observacoes) || null,
+          observacoes: null,
           status: STATUS_AGUARDANDO_SUPERVISOR,
           criado_por_login: safeText(user?.login || user?.email),
           criado_por_nome: safeText(user?.nome),
@@ -527,11 +544,11 @@ export default function PCMControleFichas() {
     else if (activeTab === TAB_SUPERVISOR) base = supervisorPendentes;
     else base = pcmPendentes;
     if (!termo) return base;
-    return base.filter((r) =>
-      [r.ficha_controle, r.numero_os, r.criado_por_nome, r.supervisor_nome, r.pcm_nome]
-        .filter(Boolean)
-        .some((v) => v.toLowerCase().includes(termo))
-    );
+    return base.filter((r) => {
+      const ns = Array.isArray(r.itens) ? r.itens.map((it) => it.numero_ficha).filter(Boolean) : [];
+      const todos = [r.ficha_controle, r.criado_por_nome, r.supervisor_nome, r.pcm_nome, ...ns].filter(Boolean);
+      return todos.some((v) => v.toLowerCase().includes(termo));
+    });
   }, [activeTab, rows, supervisorPendentes, pcmPendentes, filtro]);
 
   const acaoLabels = {
@@ -565,14 +582,14 @@ export default function PCMControleFichas() {
       <div className="flex flex-wrap gap-2">
         <TabButton
           active={activeTab === TAB_LANCAMENTO}
-          onClick={() => setActiveTab(TAB_LANCAMENTO)}
+          onClick={() => handleTabChange(TAB_LANCAMENTO)}
           icon={<FaClipboardList />}
         >
           Lancamento
         </TabButton>
         <TabButton
           active={activeTab === TAB_SUPERVISOR}
-          onClick={() => setActiveTab(TAB_SUPERVISOR)}
+          onClick={() => handleTabChange(TAB_SUPERVISOR)}
           icon={<FaUserTie />}
           count={supervisorPendentes.length}
         >
@@ -580,7 +597,7 @@ export default function PCMControleFichas() {
         </TabButton>
         <TabButton
           active={activeTab === TAB_PCM}
-          onClick={() => setActiveTab(TAB_PCM)}
+          onClick={() => handleTabChange(TAB_PCM)}
           icon={<FaUserCheck />}
           count={pcmPendentes.length}
         >
@@ -600,105 +617,110 @@ export default function PCMControleFichas() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Lote</th>
-                <th className="px-4 py-3">OS</th>
-                <th className="px-4 py-3">Data</th>
-                <th className="px-4 py-3">Quem entregou</th>
-                <th className="px-4 py-3">Fichas</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Acoes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
-                    Carregando...
-                  </td>
-                </tr>
-              ) : linhasFiltradas.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
-                    Nenhum lancamento encontrado.
-                  </td>
-                </tr>
-              ) : (
-                linhasFiltradas.map((row) => {
-                  const totalFichas = Array.isArray(row.itens) ? row.itens.length : (row.quantidade_fichas || 0);
-                  return (
-                    <tr
-                      key={row.id}
-                      onClick={() => abrirConsulta(row)}
-                      className="cursor-pointer transition-colors hover:bg-slate-50/80"
-                    >
-                      <td className="px-4 py-3 font-bold text-blue-700">{row.ficha_controle}</td>
-                      <td className="px-4 py-3 text-slate-700">{row.numero_os}</td>
-                      <td className="px-4 py-3 text-slate-600">{formatDate(row.data_entrega || row.created_at)}</td>
-                      <td className="px-4 py-3 text-slate-600">{row.criado_por_nome || row.criado_por_login || "-"}</td>
-                      <td className="px-4 py-3 text-slate-600">{totalFichas}</td>
-                      <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-2">
-                          {activeTab === TAB_SUPERVISOR && row.status === STATUS_AGUARDANDO_SUPERVISOR ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => abrirAcao(row, "supervisor_receber")}
-                                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
-                              >
-                                Recebeu
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => abrirAcao(row, "supervisor_recusar")}
-                                className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700"
-                              >
-                                Recusar
-                              </button>
-                            </>
-                          ) : null}
-                          {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_PCM ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => abrirAcao(row, "pcm_receber")}
-                                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
-                              >
-                                Recebeu
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => abrirAcao(row, "pcm_recusar")}
-                                className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700"
-                              >
-                                Recusar
-                              </button>
-                            </>
-                          ) : null}
-                          {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_TRANSNET ? (
-                            <button
-                              type="button"
-                              onClick={() => abrirAcao(row, "transnet")}
-                              className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-700"
-                            >
-                              Lancado no Transnet
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+      {isNativeShell ? (
+        <div className="space-y-2">
+          {loading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-slate-500 shadow-sm">
+              Carregando...
+            </div>
+          ) : linhasFiltradas.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-slate-500 shadow-sm">
+              Nenhum lancamento encontrado.
+            </div>
+          ) : (
+            linhasFiltradas.map((row) => {
+              const totalFichas = Array.isArray(row.itens) ? row.itens.length : (row.quantidade_fichas || 0);
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => abrirConsulta(row)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm active:bg-slate-50"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold uppercase tracking-wide text-blue-700">{row.ficha_controle}</div>
+                      <div className="truncate text-sm font-semibold text-slate-900">
+                        {totalFichas} ficha{totalFichas !== 1 ? "s" : ""}
+                      </div>
+                      <div className="text-[11px] text-slate-500">{formatDate(row.data_entrega || row.created_at)}</div>
+                    </div>
+                    <StatusBadge status={row.status} />
+                  </div>
+                </button>
+              );
+            })
+          )}
         </div>
-      </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Lote</th>
+                  <th className="px-4 py-3">Data</th>
+                  <th className="px-4 py-3">Quem entregou</th>
+                  <th className="px-4 py-3">Fichas</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Acoes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                      Carregando...
+                    </td>
+                  </tr>
+                ) : linhasFiltradas.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                      Nenhum lancamento encontrado.
+                    </td>
+                  </tr>
+                ) : (
+                  linhasFiltradas.map((row) => {
+                    const totalFichas = Array.isArray(row.itens) ? row.itens.length : (row.quantidade_fichas || 0);
+                    return (
+                      <tr
+                        key={row.id}
+                        onClick={() => abrirConsulta(row)}
+                        className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                      >
+                        <td className="px-4 py-3 font-bold text-blue-700">{row.ficha_controle}</td>
+                        <td className="px-4 py-3 text-slate-600">{formatDate(row.data_entrega || row.created_at)}</td>
+                        <td className="px-4 py-3 text-slate-600">{row.criado_por_nome || row.criado_por_login || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600">{totalFichas}</td>
+                        <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-2">
+                            {activeTab === TAB_SUPERVISOR && row.status === STATUS_AGUARDANDO_SUPERVISOR ? (
+                              <>
+                                <button type="button" onClick={() => abrirAcao(row, "supervisor_receber")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Recebeu</button>
+                                <button type="button" onClick={() => abrirAcao(row, "supervisor_recusar")} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700">Recusar</button>
+                              </>
+                            ) : null}
+                            {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_PCM ? (
+                              <>
+                                <button type="button" onClick={() => abrirAcao(row, "pcm_receber")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Recebeu</button>
+                                <button type="button" onClick={() => abrirAcao(row, "pcm_recusar")} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700">Recusar</button>
+                              </>
+                            ) : null}
+                            {activeTab === TAB_PCM && row.status === STATUS_AGUARDANDO_TRANSNET ? (
+                              <button type="button" onClick={() => abrirAcao(row, "transnet")} className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-700">Lancado no Transnet</button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {lancamentoOpen ? (
         <ModalShell
@@ -734,25 +756,6 @@ export default function PCMControleFichas() {
               <ReadOnly label="Quem esta entregando" value={lancamentoForm.quemEntregou} />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="Numero da OS">
-                <input
-                  type="text"
-                  value={lancamentoForm.numeroOS}
-                  onChange={(e) => setField("numeroOS", e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
-                />
-              </Field>
-              <Field label="Observacoes (opcional)">
-                <input
-                  type="text"
-                  value={lancamentoForm.observacoes}
-                  onChange={(e) => setField("observacoes", e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
-                />
-              </Field>
-            </div>
-
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-black uppercase tracking-wide text-slate-700">
@@ -783,14 +786,24 @@ export default function PCMControleFichas() {
                       ) : null}
                     </div>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <Field label="Numero da ficha (opcional)">
-                        <input
-                          type="text"
-                          value={it.numeroFicha}
-                          onChange={(e) => setItem(it.id, { numeroFicha: e.target.value })}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
-                        />
-                      </Field>
+                      <div className="space-y-4">
+                        <Field label="Numero da ficha (OS)">
+                          <input
+                            type="text"
+                            value={it.numeroFicha}
+                            onChange={(e) => setItem(it.id, { numeroFicha: e.target.value })}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
+                          />
+                        </Field>
+                        <Field label="Observacoes (opcional)">
+                          <textarea
+                            rows={2}
+                            value={it.observacoes}
+                            onChange={(e) => setItem(it.id, { observacoes: e.target.value })}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
+                          />
+                        </Field>
+                      </div>
                       <PhotoField
                         title="Foto da ficha"
                         file={it.foto}
@@ -810,7 +823,7 @@ export default function PCMControleFichas() {
       {acaoModal ? (
         <ModalShell
           title={acaoLabels[acaoModal.tipo].title}
-          subtitle={`Lote ${acaoModal.row.ficha_controle} · OS ${acaoModal.row.numero_os}`}
+          subtitle={`Lote ${acaoModal.row.ficha_controle}`}
           onClose={() => setAcaoModal(null)}
           footer={
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -863,7 +876,52 @@ export default function PCMControleFichas() {
           maxWidth="max-w-4xl"
           onClose={() => setConsultaOpen(false)}
           footer={
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {activeTab === TAB_SUPERVISOR && consultaRow.status === STATUS_AGUARDANDO_SUPERVISOR ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "supervisor_recusar"); }}
+                    className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700"
+                  >
+                    Recusar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "supervisor_receber"); }}
+                    className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"
+                  >
+                    Recebeu
+                  </button>
+                </>
+              ) : null}
+              {activeTab === TAB_PCM && consultaRow.status === STATUS_AGUARDANDO_PCM ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "pcm_recusar"); }}
+                    className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700"
+                  >
+                    Recusar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "pcm_receber"); }}
+                    className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"
+                  >
+                    Recebeu
+                  </button>
+                </>
+              ) : null}
+              {activeTab === TAB_PCM && consultaRow.status === STATUS_AGUARDANDO_TRANSNET ? (
+                <button
+                  type="button"
+                  onClick={() => { setConsultaOpen(false); abrirAcao(consultaRow, "transnet"); }}
+                  className="rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-purple-700"
+                >
+                  Lancado no Transnet
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setConsultaOpen(false)}
@@ -875,8 +933,7 @@ export default function PCMControleFichas() {
           }
         >
           <div className="space-y-5">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <ReadOnly label="Numero da OS" value={consultaRow.numero_os} />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <ReadOnly label="Data entrega" value={formatDate(consultaRow.data_entrega || consultaRow.created_at)} />
               <ReadOnly
                 label="Fichas no lote"
@@ -937,7 +994,7 @@ export default function PCMControleFichas() {
                   {consultaRow.itens.map((it, idx) => (
                     <div key={it.id || idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                       <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                        Ficha {idx + 1}{it.numero_ficha ? ` · ${it.numero_ficha}` : ""}
+                        Ficha {idx + 1}{it.numero_ficha ? ` · OS ${it.numero_ficha}` : ""}
                       </div>
                       {it.foto_url ? (
                         <img
@@ -950,6 +1007,11 @@ export default function PCMControleFichas() {
                           Sem foto
                         </div>
                       )}
+                      {it.observacoes ? (
+                        <div className="mt-2 rounded-lg bg-white px-2.5 py-1.5 text-xs text-slate-600">
+                          <span className="font-bold text-slate-500">Obs:</span> {it.observacoes}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>

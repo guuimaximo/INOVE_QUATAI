@@ -448,17 +448,13 @@ export default function PCMControleFichas() {
 
   function abrirAcao(row, tipo) {
     setAcaoModal({ row, tipo });
-    setAcaoNome(tipo === "transnet" ? userName : "");
+    setAcaoNome(userName);
     setAcaoMotivo("");
   }
 
   async function confirmarAcao() {
     if (!acaoModal) return;
-    const nome = safeText(acaoNome);
-    if (!nome) {
-      alert("Informe o nome.");
-      return;
-    }
+    const nome = userName;
     const { row, tipo } = acaoModal;
     const ehRecusa = tipo.endsWith("_recusar");
     const motivo = safeText(acaoMotivo);
@@ -838,21 +834,20 @@ export default function PCMControleFichas() {
           }
         >
           <div className="space-y-4">
-            <Field label={acaoLabels[acaoModal.tipo].nome}>
-              <input
-                type="text"
-                value={acaoNome}
-                onChange={(e) => setAcaoNome(e.target.value)}
-                autoFocus
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
-              />
-            </Field>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                {acaoLabels[acaoModal.tipo].nome}
+              </div>
+              <div className="mt-1 text-base font-bold text-slate-900">{userName}</div>
+              <div className="text-xs text-slate-500">Registrado em {nowDisplay()}</div>
+            </div>
             {acaoModal.tipo.endsWith("_recusar") ? (
               <Field label="Motivo da recusa">
                 <textarea
                   rows={3}
                   value={acaoMotivo}
                   onChange={(e) => setAcaoMotivo(e.target.value)}
+                  autoFocus
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
                 />
               </Field>

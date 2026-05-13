@@ -80,6 +80,7 @@ function getIconForNav(key) {
 
 function MobileBottomNav({ items, onOpenMenu, currentPath }) {
   const totalColumns = items.length + (onOpenMenu ? 1 : 0);
+  if (totalColumns === 0) return null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-2 pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden">
@@ -129,22 +130,33 @@ export default function Layout() {
   const { profileMap } = useAccessGovernance();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isNativeShell = Capacitor.isNativePlatform();
-  const isLockedMobileModule = isNativeShell;
+  const isInTrocaPneus = location.pathname === "/pcm-troca-pneus";
+  const isInControleFichas = location.pathname === "/pcm-controle-fichas";
+  const isLockedMobileModule = isNativeShell && (isInTrocaPneus || isInControleFichas);
 
   const pageTitle = getPageTitle(location.pathname);
-  const mobileNavItems = useMemo(
-    () =>
-      isLockedMobileModule
-        ? [
-            { key: "troca", label: "Troca", path: "/pcm-troca-pneus?aba=troca" },
-            { key: "auditoria", label: "Auditoria", path: "/pcm-troca-pneus?aba=auditoria" },
-            { key: "estoque", label: "Estoque", path: "/pcm-troca-pneus?aba=estoque" },
-            { key: "conserto", label: "Conserto", path: "/pcm-troca-pneus?aba=consertos" },
-            { key: "riscado", label: "Riscado", path: "/pcm-troca-pneus?aba=riscados" },
-          ]
-        : getMobileNavItems(user, profileMap).slice(0, 3),
-    [isLockedMobileModule, profileMap, user]
-  );
+  const mobileNavItems = useMemo(() => {
+    if (isNativeShell) {
+      if (isInTrocaPneus) {
+        return [
+          { key: "troca", label: "Troca", path: "/pcm-troca-pneus?aba=troca" },
+          { key: "auditoria", label: "Auditoria", path: "/pcm-troca-pneus?aba=auditoria" },
+          { key: "estoque", label: "Estoque", path: "/pcm-troca-pneus?aba=estoque" },
+          { key: "conserto", label: "Conserto", path: "/pcm-troca-pneus?aba=consertos" },
+          { key: "riscado", label: "Riscado", path: "/pcm-troca-pneus?aba=riscados" },
+        ];
+      }
+      if (isInControleFichas) {
+        return [
+          { key: "lancamento", label: "Lancamento", path: "/pcm-controle-fichas?aba=lancamento" },
+          { key: "supervisor", label: "Supervisor", path: "/pcm-controle-fichas?aba=supervisor" },
+          { key: "pcm", label: "PCM", path: "/pcm-controle-fichas?aba=pcm" },
+        ];
+      }
+      return [];
+    }
+    return getMobileNavItems(user, profileMap).slice(0, 3);
+  }, [isNativeShell, isInTrocaPneus, isInControleFichas, profileMap, user]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -157,34 +169,32 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:hidden">
+      <div
+        className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:hidden"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
         <div className="flex items-center justify-between px-4 py-2.5">
-          <div className="min-w-0">
+          <button
+            type="button"
+            onClick={() => navigate(isNativeShell ? "/" : "/inove")}
+            className="min-w-0 text-left"
+            aria-label="Menu inicial"
+          >
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-600">
               Inove mobile
             </p>
             <p className="truncate text-base font-semibold text-slate-900">{pageTitle}</p>
-          </div>
+          </button>
 
-          {isLockedMobileModule ? (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => navigate("/atualizar-perfil")}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
-                aria-label="Configuracoes"
-              >
-                <FaCog className="text-base" />
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
-                aria-label="Sair"
-              >
-                <FaSignOutAlt className="text-base" />
-              </button>
-            </div>
+          {isNativeShell ? (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+              aria-label="Sair"
+            >
+              <FaSignOutAlt className="text-base" />
+            </button>
           ) : (
             <button
               type="button"

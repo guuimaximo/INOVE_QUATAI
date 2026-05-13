@@ -33,8 +33,73 @@ const CORES = {
   amber: { label: "Amarelo", border: "border-amber-300", bg: "bg-amber-50", chip: "bg-amber-100 text-amber-700", hex: "#f59e0b" },
   sky: { label: "Ceu", border: "border-sky-300", bg: "bg-sky-50", chip: "bg-sky-100 text-sky-700", hex: "#0ea5e9" },
   orange: { label: "Laranja", border: "border-orange-300", bg: "bg-orange-50", chip: "bg-orange-100 text-orange-700", hex: "#f97316" },
+  purple: { label: "Roxo", border: "border-purple-300", bg: "bg-purple-50", chip: "bg-purple-100 text-purple-700", hex: "#9333ea" },
+  rose: { label: "Rosa", border: "border-rose-300", bg: "bg-rose-50", chip: "bg-rose-100 text-rose-700", hex: "#e11d48" },
 };
 const COR_OPTIONS = Object.keys(CORES);
+
+// Paleta padronizada por nivel hierarquico
+const NIVEIS = [
+  { value: "DIRETOR", label: "Diretor", cor: "purple" },
+  { value: "GERENTE", label: "Gerente", cor: "blue" },
+  { value: "COORDENADOR", label: "Coordenador", cor: "sky" },
+  { value: "SUPERVISOR", label: "Supervisor", cor: "amber" },
+  { value: "LIDER", label: "Lider", cor: "emerald" },
+  { value: "COLABORADOR", label: "Colaborador", cor: "stone" },
+  { value: "FREELANCER", label: "Freelancer", cor: "orange" },
+];
+const NIVEL_BY_VALUE = new Map(NIVEIS.map((n) => [n.value, n]));
+
+function corDaArea(area) {
+  if (area.nivel && NIVEL_BY_VALUE.has(area.nivel)) {
+    return NIVEL_BY_VALUE.get(area.nivel).cor;
+  }
+  return area.cor || "stone";
+}
+
+function inferirNivelPorTexto(texto = "") {
+  const t = String(texto).toLowerCase();
+  if (t.includes("diretor")) return "DIRETOR";
+  if (t.includes("gerente")) return "GERENTE";
+  if (t.includes("coordenador") || t.includes("coordenadora")) return "COORDENADOR";
+  if (t.includes("supervisor") || t.includes("supervisora")) return "SUPERVISOR";
+  if (t.includes("lider") || t.includes("líder")) return "LIDER";
+  if (t.includes("freelancer") || t.includes("freela")) return "FREELANCER";
+  return "COLABORADOR";
+}
+
+const SETORES = [
+  { value: "PLANEJAMENTO_CONTROLE", label: "Planejamento e Controle" },
+  { value: "ADMINISTRATIVO", label: "Administrativo" },
+  { value: "MANUTENCAO", label: "Manutencao" },
+];
+const SETOR_LABELS = Object.fromEntries(SETORES.map((s) => [s.value, s.label]));
+
+const TIPOS_HEADCOUNT = [
+  { value: "REALIZADO", label: "Realizado" },
+  { value: "ORCADO", label: "Orcado" },
+  { value: "FREELANCER", label: "Freelancer" },
+];
+
+function calcTempoEmpresa(dataInicio) {
+  if (!dataInicio) return "";
+  const inicio = new Date(dataInicio);
+  if (Number.isNaN(inicio.getTime())) return "";
+  const agora = new Date();
+  let anos = agora.getFullYear() - inicio.getFullYear();
+  let meses = agora.getMonth() - inicio.getMonth();
+  if (agora.getDate() < inicio.getDate()) meses -= 1;
+  if (meses < 0) { anos -= 1; meses += 12; }
+  if (anos <= 0 && meses <= 0) return "menos de 1 mes";
+  const parts = [];
+  if (anos > 0) parts.push(`${anos} ano${anos > 1 ? "s" : ""}`);
+  if (meses > 0) parts.push(`${meses} m${meses > 1 ? "eses" : "es"}`);
+  return parts.join(" e ");
+}
+
+function normalizeNome(s) {
+  return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
 
 const TIPO_OPTIONS = [
   { value: "GESTAO", label: "Lideranca" },
@@ -56,10 +121,11 @@ function slugify(value = "") {
 }
 
 function AreaNode({ data, selected }) {
-  const cor = pickCor(data.cor);
+  const cor = pickCor(data.corKey);
   const orcado = Number(data.orcado_total || 0);
   const realizado = Number(data.realizado_total || 0);
   const cobertura = orcado > 0 ? Math.min(100, Math.round((realizado / orcado) * 100)) : 0;
+  const nivel = NIVEL_BY_VALUE.get(data.nivel);
   return (
     <div
       className={`min-w-[220px] max-w-[280px] rounded-2xl border-2 ${cor.border} ${cor.bg} p-3 shadow-sm transition ${
@@ -69,7 +135,7 @@ function AreaNode({ data, selected }) {
       <Handle type="target" position={Position.Top} className="!h-2 !w-2 !bg-slate-400" />
       <div className="flex items-center justify-between gap-2">
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${cor.chip}`}>
-          {data.tipo || "AREA"}
+          {nivel ? nivel.label : (data.tipo || "AREA")}
         </span>
         <span className="text-[10px] font-semibold text-slate-500">
           {data.descendentes ? `+${data.descendentes} abaixo` : "0 abaixo"}
@@ -301,12 +367,13 @@ function inputCls() {
   return "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none";
 }
 
-function NovaAreaModal({ open, areas, onClose, onCreate, saving }) {
+function NovaAreaModal({ open, areas, onClose, onCreate, saving, defaultSetor }) {
   const [titulo, setTitulo] = useState("");
   const [subtitulo, setSubtitulo] = useState("");
   const [parentCodigo, setParentCodigo] = useState("");
   const [tipo, setTipo] = useState("SQUAD");
-  const [cor, setCor] = useState("blue");
+  const [nivel, setNivel] = useState("COLABORADOR");
+  const [setor, setSetor] = useState(defaultSetor || "");
   const [orcadoQtd, setOrcadoQtd] = useState("");
 
   useEffect(() => {
@@ -315,10 +382,16 @@ function NovaAreaModal({ open, areas, onClose, onCreate, saving }) {
       setSubtitulo("");
       setParentCodigo("");
       setTipo("SQUAD");
-      setCor("blue");
+      setNivel("COLABORADOR");
+      setSetor(defaultSetor || "");
       setOrcadoQtd("");
     }
-  }, [open]);
+  }, [open, defaultSetor]);
+
+  // Sugere nivel a partir do subtitulo
+  useEffect(() => {
+    if (subtitulo) setNivel(inferirNivelPorTexto(subtitulo));
+  }, [subtitulo]);
 
   if (!open) return null;
   return (
@@ -338,34 +411,34 @@ function NovaAreaModal({ open, areas, onClose, onCreate, saving }) {
             <input className={inputCls()} value={subtitulo} onChange={(e) => setSubtitulo(e.target.value)} />
           </FormField>
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Tipo">
-              <select className={inputCls()} value={tipo} onChange={(e) => setTipo(e.target.value)}>
-                {TIPO_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            <FormField label="Nivel hierarquico">
+              <select className={inputCls()} value={nivel} onChange={(e) => setNivel(e.target.value)}>
+                {NIVEIS.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
               </select>
             </FormField>
-            <FormField label="Cor">
-              <select className={inputCls()} value={cor} onChange={(e) => setCor(e.target.value)}>
-                {COR_OPTIONS.map((c) => <option key={c} value={c}>{CORES[c].label}</option>)}
+            <FormField label="Setor">
+              <select className={inputCls()} value={setor} onChange={(e) => setSetor(e.target.value)}>
+                <option value="">(sem setor)</option>
+                {SETORES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </FormField>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Area pai (opcional)">
-              <select className={inputCls()} value={parentCodigo} onChange={(e) => setParentCodigo(e.target.value)}>
-                <option value="">Sem pai (raiz)</option>
-                {areas.map((a) => <option key={a.codigo} value={a.codigo}>{a.titulo}</option>)}
+            <FormField label="Tipo (visual)">
+              <select className={inputCls()} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+                {TIPO_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </FormField>
             <FormField label="Orcado de pessoas">
-              <input
-                type="number"
-                min="0"
-                className={inputCls()}
-                value={orcadoQtd}
-                onChange={(e) => setOrcadoQtd(e.target.value)}
-              />
+              <input type="number" min="0" className={inputCls()} value={orcadoQtd} onChange={(e) => setOrcadoQtd(e.target.value)} />
             </FormField>
           </div>
+          <FormField label="Area pai (opcional)">
+            <select className={inputCls()} value={parentCodigo} onChange={(e) => setParentCodigo(e.target.value)}>
+              <option value="">Sem pai (raiz)</option>
+              {areas.map((a) => <option key={a.codigo} value={a.codigo}>{a.titulo}</option>)}
+            </select>
+          </FormField>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
           <button type="button" onClick={onClose} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200">
@@ -374,7 +447,7 @@ function NovaAreaModal({ open, areas, onClose, onCreate, saving }) {
           <button
             type="button"
             disabled={saving || !titulo.trim()}
-            onClick={() => onCreate({ titulo: titulo.trim(), subtitulo: subtitulo.trim(), parent_codigo: parentCodigo || null, tipo, cor, orcado_qtd: orcadoQtd === "" ? null : Number(orcadoQtd) })}
+            onClick={() => onCreate({ titulo: titulo.trim(), subtitulo: subtitulo.trim(), parent_codigo: parentCodigo || null, tipo, nivel, setor: setor || null, cor: NIVEL_BY_VALUE.get(nivel)?.cor || "stone", orcado_qtd: orcadoQtd === "" ? null : Number(orcadoQtd) })}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
           >
             <FaPlus /> {saving ? "Criando..." : "Criar caixa"}
@@ -385,7 +458,7 @@ function NovaAreaModal({ open, areas, onClose, onCreate, saving }) {
   );
 }
 
-function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelete, saving }) {
+function SidePanel({ area, areas, pessoas, childrenMap, funcByNome, onClose, onSave, onDelete, saving }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [pessoasAbertas, setPessoasAbertas] = useState(true);
@@ -454,7 +527,8 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
       titulo: area.titulo || "",
       subtitulo: area.subtitulo || "",
       tipo: area.tipo || "SQUAD",
-      cor: area.cor || "stone",
+      nivel: area.nivel || inferirNivelPorTexto(area.subtitulo),
+      setor: area.setor || "",
       parent_codigo: area.parent_codigo || "",
       orcado_qtd: area.orcado_qtd ?? "",
     });
@@ -471,7 +545,9 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
       titulo: draft.titulo,
       subtitulo: draft.subtitulo,
       tipo: draft.tipo,
-      cor: draft.cor,
+      nivel: draft.nivel,
+      setor: draft.setor || null,
+      cor: NIVEL_BY_VALUE.get(draft.nivel)?.cor || "stone",
       parent_codigo: draft.parent_codigo || null,
       orcado_qtd: draft.orcado_qtd === "" || draft.orcado_qtd == null ? null : Number(draft.orcado_qtd),
     });
@@ -526,17 +602,23 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
               <input className={inputCls()} value={draft.subtitulo} onChange={(e) => setDraftField("subtitulo", e.target.value)} />
             </FormField>
             <div className="grid grid-cols-2 gap-3">
-              <FormField label="Tipo">
-                <select className={inputCls()} value={draft.tipo} onChange={(e) => setDraftField("tipo", e.target.value)}>
-                  {TIPO_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              <FormField label="Nivel">
+                <select className={inputCls()} value={draft.nivel} onChange={(e) => setDraftField("nivel", e.target.value)}>
+                  {NIVEIS.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
                 </select>
               </FormField>
-              <FormField label="Cor">
-                <select className={inputCls()} value={draft.cor} onChange={(e) => setDraftField("cor", e.target.value)}>
-                  {COR_OPTIONS.map((c) => <option key={c} value={c}>{CORES[c].label}</option>)}
+              <FormField label="Setor">
+                <select className={inputCls()} value={draft.setor} onChange={(e) => setDraftField("setor", e.target.value)}>
+                  <option value="">(sem setor)</option>
+                  {SETORES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </FormField>
             </div>
+            <FormField label="Tipo (visual)">
+              <select className={inputCls()} value={draft.tipo} onChange={(e) => setDraftField("tipo", e.target.value)}>
+                {TIPO_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </FormField>
             <div className="grid grid-cols-2 gap-3">
               <FormField label="Area pai">
                 <select className={inputCls()} value={draft.parent_codigo} onChange={(e) => setDraftField("parent_codigo", e.target.value)}>
@@ -625,34 +707,44 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
                 <div className="rounded-lg bg-amber-100 px-2 py-1 text-amber-800">Vaga orcada</div>
                 <div className="rounded-lg bg-emerald-100 px-2 py-1 text-emerald-800">Vaga realizado</div>
               </div>
-              {vagasOrcadas.map((vaga, idx) => (
-                <div key={vaga.id || `vaga-${idx}`} className="grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Orcado</div>
-                    <div className="mt-0.5 truncate text-sm font-bold text-slate-900">
-                      {vaga.cargoOrcado || vaga.cargo || "Vaga planejada"}
+              {vagasOrcadas.map((vaga, idx) => {
+                const func = vaga.preenchida ? funcByNome?.get(normalizeNome(vaga.nomeRealizado)) : null;
+                const tempo = func ? calcTempoEmpresa(func.dt_inicio_atividade) : "";
+                return (
+                  <div key={vaga.id || `vaga-${idx}`} className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Orcado</div>
+                      <div className="mt-0.5 truncate text-sm font-bold text-slate-900">
+                        {vaga.cargoOrcado || vaga.cargo || "Vaga planejada"}
+                      </div>
+                      {vaga.nomeOrcado ? (
+                        <div className="truncate text-[11px] text-slate-500">{vaga.nomeOrcado}</div>
+                      ) : null}
                     </div>
-                    {vaga.nomeOrcado ? (
-                      <div className="truncate text-[11px] text-slate-500">{vaga.nomeOrcado}</div>
-                    ) : null}
-                  </div>
-                  <div className={`rounded-xl border px-3 py-2 ${
-                    vaga.preenchida ? "border-emerald-200 bg-emerald-50/60" : "border-dashed border-slate-300 bg-slate-50"
-                  }`}>
-                    <div className={`text-[10px] font-bold uppercase tracking-wide ${
-                      vaga.preenchida ? "text-emerald-700" : "text-slate-500"
+                    <div className={`rounded-xl border px-3 py-2 ${
+                      vaga.preenchida ? "border-emerald-200 bg-emerald-50/60" : "border-dashed border-slate-300 bg-slate-50"
                     }`}>
-                      {vaga.preenchida ? "Realizado" : "Em aberto"}
+                      <div className={`text-[10px] font-bold uppercase tracking-wide ${
+                        vaga.preenchida ? "text-emerald-700" : "text-slate-500"
+                      }`}>
+                        {vaga.preenchida ? "Realizado" : "Em aberto"}
+                      </div>
+                      <div className="mt-0.5 truncate text-sm font-bold text-slate-900">
+                        {vaga.preenchida ? vaga.nomeRealizado : "—"}
+                      </div>
+                      {vaga.preenchida && vaga.cargoRealizado ? (
+                        <div className="truncate text-[11px] text-slate-500">{vaga.cargoRealizado}</div>
+                      ) : null}
+                      {func ? (
+                        <div className="mt-1 rounded-lg bg-white/70 px-1.5 py-1 text-[10px] text-slate-600">
+                          <div>Admissao: <strong>{new Date(func.dt_inicio_atividade).toLocaleDateString("pt-BR")}</strong></div>
+                          {tempo ? <div>Empresa: <strong>{tempo}</strong></div> : null}
+                        </div>
+                      ) : null}
                     </div>
-                    <div className="mt-0.5 truncate text-sm font-bold text-slate-900">
-                      {vaga.preenchida ? vaga.nomeRealizado : "—"}
-                    </div>
-                    {vaga.preenchida && vaga.cargoRealizado ? (
-                      <div className="truncate text-[11px] text-slate-500">{vaga.cargoRealizado}</div>
-                    ) : null}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="mt-2 text-xs text-slate-500">Nenhuma vaga orcada definida para esta area.</div>
@@ -666,6 +758,8 @@ function SidePanel({ area, areas, pessoas, childrenMap, onClose, onSave, onDelet
 export default function OrganogramaCanvas() {
   const [areas, setAreas] = useState([]);
   const [pessoas, setPessoas] = useState([]);
+  const [funcionarios, setFuncionarios] = useState([]);
+  const [setorFiltro, setSetorFiltro] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [novaOpen, setNovaOpen] = useState(false);
@@ -679,9 +773,10 @@ export default function OrganogramaCanvas() {
 
   async function carregar() {
     setLoading(true);
-    const [areasResp, pessoasResp] = await Promise.all([
+    const [areasResp, pessoasResp, funcResp] = await Promise.all([
       supabase.from("organograma_manutencao_areas").select("*").eq("ativo", true),
       supabase.from("organograma_manutencao_pessoas").select("*").eq("ativo", true),
+      supabase.from("funcionarios_atualizada").select("nm_funcionario, nm_funcao, dt_inicio_atividade, status"),
     ]);
     setLoading(false);
     if (areasResp.error || pessoasResp.error) {
@@ -691,12 +786,32 @@ export default function OrganogramaCanvas() {
     }
     setAreas(areasResp.data || []);
     setPessoas(pessoasResp.data || []);
+    setFuncionarios(funcResp.error ? [] : (funcResp.data || []));
   }
 
   useEffect(() => { carregar(); }, []);
 
-  const childrenMap = useMemo(() => buildChildrenMap(areas), [areas]);
-  const areasByCode = useMemo(() => new Map(areas.map((a) => [a.codigo, a])), [areas]);
+  const areasFiltradas = useMemo(() => {
+    if (!setorFiltro) return areas;
+    // mantem area se ela ou qualquer descendente pertence ao setor
+    const byCode = new Map(areas.map((a) => [a.codigo, a]));
+    const children = buildChildrenMap(areas);
+    function temSetorRec(codigo) {
+      const a = byCode.get(codigo);
+      if (a?.setor === setorFiltro) return true;
+      const filhos = children.get(codigo) || [];
+      return filhos.some((f) => temSetorRec(f.codigo));
+    }
+    return areas.filter((a) => a.setor === setorFiltro || temSetorRec(a.codigo));
+  }, [areas, setorFiltro]);
+
+  const childrenMap = useMemo(() => buildChildrenMap(areasFiltradas), [areasFiltradas]);
+  const areasByCode = useMemo(() => new Map(areasFiltradas.map((a) => [a.codigo, a])), [areasFiltradas]);
+  const funcByNome = useMemo(() => {
+    const m = new Map();
+    for (const f of funcionarios) m.set(normalizeNome(f.nm_funcionario), f);
+    return m;
+  }, [funcionarios]);
 
   useEffect(() => {
     // Expose por window pra computeMetrics conseguir ler orcado por area
@@ -704,13 +819,13 @@ export default function OrganogramaCanvas() {
   }, [areasByCode]);
 
   useEffect(() => {
-    if (!areas.length) {
+    if (!areasFiltradas.length) {
       setNodes([]);
       setEdges([]);
       return;
     }
-    const auto = autoLayout(areas);
-    const newNodes = areas.map((a) => {
+    const auto = autoLayout(areasFiltradas);
+    const newNodes = areasFiltradas.map((a) => {
       const auto1 = auto.get(a.codigo) || { x: 0, y: 0 };
       const x = a.canvas_x != null ? Number(a.canvas_x) : auto1.x;
       const y = a.canvas_y != null ? Number(a.canvas_y) : auto1.y;
@@ -724,7 +839,9 @@ export default function OrganogramaCanvas() {
           titulo: a.titulo,
           subtitulo: a.subtitulo,
           tipo: a.tipo,
-          cor: a.cor,
+          nivel: a.nivel,
+          setor: a.setor,
+          corKey: corDaArea(a),
           orcado_direto: m.directOrcado,
           realizado_direto: m.directRealizado,
           orcado_total: m.totalOrcado,
@@ -733,8 +850,9 @@ export default function OrganogramaCanvas() {
         },
       };
     });
-    const newEdges = areas
-      .filter((a) => a.parent_codigo)
+    const filtradosCodigos = new Set(areasFiltradas.map((a) => a.codigo));
+    const newEdges = areasFiltradas
+      .filter((a) => a.parent_codigo && filtradosCodigos.has(a.parent_codigo))
       .map((a) => ({
         id: `e-${a.parent_codigo}-${a.codigo}`,
         source: a.parent_codigo,
@@ -745,7 +863,7 @@ export default function OrganogramaCanvas() {
       }));
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [areas, pessoas, childrenMap, setEdges, setNodes]);
+  }, [areasFiltradas, pessoas, childrenMap, setEdges, setNodes]);
 
   const onConnect = useCallback((params) => setEdges((eds) => addEdge({ ...params, type: "smoothstep" }, eds)), [setEdges]);
 
@@ -803,6 +921,8 @@ export default function OrganogramaCanvas() {
         titulo: payload.titulo,
         subtitulo: payload.subtitulo,
         tipo: payload.tipo,
+        nivel: payload.nivel,
+        setor: payload.setor,
         cor: payload.cor,
         ordem: (areas.reduce((acc, a) => Math.max(acc, a.ordem || 0), 0) || 0) + 10,
         ativo: true,
@@ -899,6 +1019,45 @@ export default function OrganogramaCanvas() {
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{statusMsg}</div>
       ) : null}
 
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSetorFiltro("")}
+          className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+            !setorFiltro ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          Visao geral
+        </button>
+        {SETORES.map((s) => (
+          <button
+            key={s.value}
+            type="button"
+            onClick={() => setSetorFiltro(s.value)}
+            className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+              setorFiltro === s.value ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-[11px]">
+        <div className="font-black uppercase tracking-[0.18em] text-slate-500">Legenda de niveis</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {NIVEIS.map((n) => {
+            const cor = pickCor(n.cor);
+            return (
+              <span key={n.value} className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 ${cor.chip}`}>
+                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: cor.hex }} />
+                {n.label}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="relative flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
         <ReactFlow
           nodes={nodes}
@@ -918,7 +1077,7 @@ export default function OrganogramaCanvas() {
         >
           <Background gap={20} size={1} color="#cbd5e1" />
           <Controls position="bottom-right" showInteractive={false} />
-          <MiniMap pannable zoomable nodeColor={(n) => pickCor(n.data?.cor).hex} />
+          <MiniMap pannable zoomable nodeColor={(n) => pickCor(n.data?.corKey).hex} />
         </ReactFlow>
 
         {selecionada ? (
@@ -927,6 +1086,7 @@ export default function OrganogramaCanvas() {
             areas={areas}
             pessoas={pessoas}
             childrenMap={childrenMap}
+            funcByNome={funcByNome}
             onClose={() => setSelecionadoId(null)}
             onSave={atualizarArea}
             onDelete={excluirArea}
@@ -938,6 +1098,7 @@ export default function OrganogramaCanvas() {
       <NovaAreaModal
         open={novaOpen}
         areas={areas}
+        defaultSetor={setorFiltro || ""}
         onClose={() => setNovaOpen(false)}
         onCreate={criarArea}
         saving={saving}

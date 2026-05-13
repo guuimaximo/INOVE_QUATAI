@@ -525,11 +525,26 @@ function NovaAreaModal({ open, areas, onClose, onCreate, saving, defaultSetor })
           </button>
         </div>
         <div className="space-y-4 px-6 py-5">
-          <FormField label="Titulo">
-            <input className={inputCls()} value={titulo} onChange={(e) => setTitulo(e.target.value)} autoFocus />
+          <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-blue-800">
+            <strong>Titulo</strong> = nome da area ou da pessoa que ocupa o cargo. Ex: <em>"Guilherme Maximo"</em> ou <em>"Equipe PCM"</em>.<br />
+            <strong>Subtitulo</strong> = cargo ou descricao curta. Ex: <em>"Gerente de Planejamento"</em> ou <em>"Backoffice de manutencao"</em>.
+          </div>
+          <FormField label="Titulo (nome da area ou da pessoa)">
+            <input
+              className={inputCls()}
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Ex: Guilherme Maximo / Equipe PCM"
+              autoFocus
+            />
           </FormField>
-          <FormField label="Subtitulo">
-            <input className={inputCls()} value={subtitulo} onChange={(e) => setSubtitulo(e.target.value)} />
+          <FormField label="Subtitulo (cargo ou descricao)">
+            <input
+              className={inputCls()}
+              value={subtitulo}
+              onChange={(e) => setSubtitulo(e.target.value)}
+              placeholder="Ex: Gerente de Planejamento"
+            />
           </FormField>
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Nivel hierarquico">

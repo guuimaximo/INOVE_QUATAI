@@ -81,6 +81,7 @@ export const MOBILE_NAV_PRIORITY = [
   "embarcados_reparos",
   "pcm_resumo",
   "pcm_troca_pneus",
+  "pcm_controle_fichas",
 ];
 
 export const MOBILE_QUICK_LINK_PRIORITY = [
@@ -98,6 +99,7 @@ export const MOBILE_QUICK_LINK_PRIORITY = [
   "embarcados_reparos",
   "pcm_resumo",
   "pcm_troca_pneus",
+  "pcm_controle_fichas",
 ];
 
 export const DEFAULT_LEVEL_PROFILES = [
@@ -136,6 +138,7 @@ export const DEFAULT_LEVEL_PROFILES = [
       "pcm_diario",
       "pcm_preventivas",
       "pcm_troca_pneus",
+      "pcm_controle_fichas",
       "embarcados_central",
       "embarcados_movimentacoes",
       "embarcados_reparos",

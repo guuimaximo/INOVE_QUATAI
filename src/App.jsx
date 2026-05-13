@@ -48,6 +48,7 @@ import PCMResumo from "./pages/pcm/PCMResumo";
 import PCM_Preventivas from "./pages/pcm/PCM_Preventivas";
 import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
 import PCMControleFichas from "./pages/pcm/PCMControleFichas";
+import MobileHome from "./pages/home/MobileHome";
 
 import Usuarios from "./pages/configuracoes/Usuarios";
 import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
@@ -90,7 +91,7 @@ function HomeDecider() {
   const isNativeShell = Capacitor.isNativePlatform();
 
   if (isNativeShell) {
-    return <Navigate to="/pcm-troca-pneus" replace />;
+    return <MobileHome />;
   }
 
   const destination = getDefaultAccessiblePath(user, profileMap);

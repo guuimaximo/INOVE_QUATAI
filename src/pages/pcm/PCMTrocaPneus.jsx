@@ -1388,13 +1388,6 @@ function EstoqueModal({
                   inputMode="numeric"
                   pattern="[0-9]*"
                 />
-                <InputField
-                  label="Numero interno / cadastro"
-                  value={item.numeroPneu}
-                  onChange={(value) => onItemChange(index, "numeroPneu", value)}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                />
                 <SelectField
                   label="Marca"
                   value={item.marca}

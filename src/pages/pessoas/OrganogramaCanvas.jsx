@@ -135,11 +135,16 @@ function AreaNode({ data, selected }) {
   const cor = pickCor(data.corKey);
   const orcado = Number(data.orcado_total || 0);
   const realizado = Number(data.realizado_total || 0);
+  const orcadoDireto = Number(data.orcado_direto || 0);
+  const realizadoDireto = Number(data.realizado_direto || 0);
+  const hasOpenDirectVacancy = orcadoDireto > realizadoDireto;
   const cobertura = orcado > 0 ? Math.min(100, Math.round((realizado / orcado) * 100)) : 0;
   const nivel = NIVEL_BY_VALUE.get(data.nivel);
   return (
     <div
       className={`min-w-[220px] max-w-[280px] rounded-2xl border-2 ${cor.border} ${cor.bg} p-3 shadow-sm transition ${
+        hasOpenDirectVacancy ? "ring-2 ring-rose-300 ring-offset-2 ring-offset-white shadow-rose-100/80" : ""
+      } ${
         selected ? "ring-2 ring-blue-500 ring-offset-2" : ""
       }`}
     >

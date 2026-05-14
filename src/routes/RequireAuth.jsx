@@ -6,7 +6,7 @@ import { canUserAccessPath, getDefaultAccessiblePath } from "../utils/access";
 
 export default function RequireAuth({ children }) {
   const { user, loading } = useAuth();
-  const { profileMap } = useAccessGovernance();
+  const { profileMap, loading: accessLoading } = useAccessGovernance();
   const location = useLocation();
   const isNativeShell = Capacitor.isNativePlatform();
   const allowedNativePaths = new Set([
@@ -16,7 +16,7 @@ export default function RequireAuth({ children }) {
     "/atualizar-perfil",
   ]);
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">
         Carregando sessao...
@@ -36,7 +36,9 @@ export default function RequireAuth({ children }) {
     return <Navigate to="/" replace state={{ from: location }} />;
   }
 
-  if (!canUserAccessPath(user, location.pathname, profileMap)) {
+  // No native shell, qualquer path liberado eh sempre permitido (a MobileHome controla a UI).
+  // Isso evita loops de redirect quando as permissoes do DB nao incluem os novos modulos.
+  if (!isNativeShell && !canUserAccessPath(user, location.pathname, profileMap)) {
     return <Navigate to={getDefaultAccessiblePath(user, profileMap)} replace state={{ from: location }} />;
   }
 

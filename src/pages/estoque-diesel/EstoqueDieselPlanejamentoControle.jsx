@@ -645,6 +645,93 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
   });
 }
 
+function decorateReceiptHighlightRows(rows = []) {
+  const forwardedReceiptsByDate = new Map();
+  const forwardedSourceDates = new Map();
+
+  for (const row of rows) {
+    const receiptQuantity = safeNumber(
+      row?.actual?.entradaDiesel ??
+        row?.actual?.entradaRecebimentos ??
+        row?.actual?.receiptMeasuredLiters ??
+        0,
+      0
+    );
+
+    const receiptDate = row?.actual?.date || row?.measurementSourceDate || null;
+
+    if (receiptQuantity > 0 && receiptDate && receiptDate !== row.date) {
+      forwardedReceiptsByDate.set(receiptDate, {
+        quantity: receiptQuantity,
+        sourceDate: row.date,
+      });
+      forwardedSourceDates.set(row.date, receiptDate);
+    }
+  }
+
+  return rows.map((row) => {
+    const forwardedReceipt = forwardedReceiptsByDate.get(row.date) || null;
+    const scheduledQuantity = safeNumber(row.plannedReceipt ?? 0, 0);
+    const forwardedToDate = forwardedSourceDates.get(row.date) || null;
+
+    let receiptStatus = null;
+    let receiptNoticeQuantity = null;
+    let receiptNoticeLabel = "";
+
+    if (forwardedReceipt) {
+      receiptStatus = "received";
+      receiptNoticeQuantity = forwardedReceipt.quantity;
+      receiptNoticeLabel = "Ja recebido";
+    } else if (!row.isRealized && scheduledQuantity > 0) {
+      receiptStatus = "scheduled";
+      receiptNoticeQuantity = scheduledQuantity;
+      receiptNoticeLabel = "Programado";
+    }
+
+    return {
+      ...row,
+      receiptStatus,
+      receiptNoticeQuantity,
+      receiptNoticeLabel,
+      receiptForwardedToDate: forwardedToDate,
+    };
+  });
+}
+
+function getReceiptRowClasses(status, isActive) {
+  if (status === "received") {
+    return [
+      "bg-emerald-50/85 font-black text-slate-900",
+      isActive ? "ring-1 ring-inset ring-emerald-200" : "",
+      "hover:bg-emerald-100/80",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  if (status === "scheduled") {
+    return [
+      "bg-amber-50/90 font-black text-slate-900",
+      isActive ? "ring-1 ring-inset ring-amber-200" : "",
+      "hover:bg-amber-100/80",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return `${isActive ? "bg-blue-50/70" : "bg-white"} hover:bg-blue-50`;
+}
+
+function getReceiptValueText(row) {
+  if (row.receiptForwardedToDate) return "--";
+
+  if (row.receiptNoticeQuantity !== null && row.receiptNoticeQuantity !== undefined) {
+    return formatLiters(row.receiptNoticeQuantity);
+  }
+
+  return formatLiters(row.plannedReceipt);
+}
+
 function buildForm(date, product, row = null) {
   const sourceDate = row?.planningSourceDate || getPlanningSourceDateForViewDate(date);
 
@@ -1215,7 +1302,10 @@ export default function EstoqueDieselPlanejamentoControle() {
   });
 
   const monthRows = useMemo(
-    () => buildMonthRows({ year, month, product, measurements, planningRows }),
+    () =>
+      decorateReceiptHighlightRows(
+        buildMonthRows({ year, month, product, measurements, planningRows })
+      ),
     [measurements, month, planningRows, product, year]
   );
 
@@ -2029,6 +2119,9 @@ export default function EstoqueDieselPlanejamentoControle() {
               <p className="mt-1 text-sm font-semibold text-slate-500">
                 Indicador calculado pelo Saldo Pós Entrega. Para dias realizados, dados reais são buscados do dia seguinte.
               </p>
+              <p className="mt-2 text-xs font-black uppercase tracking-wider text-slate-400">
+                Linha verde: recebimento ja confirmado. Linha amarela: entrega programada para chegar.
+              </p>
             </div>
 
             <div
@@ -2077,46 +2170,64 @@ export default function EstoqueDieselPlanejamentoControle() {
               <tbody className="divide-y divide-slate-100">
                 {monthRows.map((row) => {
                   const isActive = row.date === selectedDate;
+                  const rowClasses = getReceiptRowClasses(row.receiptStatus, isActive);
+                  const emphasizedCellClass = row.receiptStatus
+                    ? "font-black text-slate-900"
+                    : "font-semibold text-slate-600";
 
                   return (
                     <tr
                       key={row.date}
                       onClick={() => handleSelectRow(row)}
-                      className={`cursor-pointer transition hover:bg-blue-50 ${
-                        isActive ? "bg-blue-50/70" : "bg-white"
-                      }`}
+                      className={`cursor-pointer transition ${rowClasses}`}
                     >
                       <td className="px-4 py-3 font-black text-slate-800">
                         {formatDateBR(row.date)}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">
+                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         {row.weekday}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">
-                        {row.supplier || "--"}
+                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
+                        <div>{row.supplier || "--"}</div>
+                        {row.receiptStatus ? (
+                          <div
+                            className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wider ${
+                              row.receiptStatus === "received"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {row.receiptNoticeLabel}
+                          </div>
+                        ) : null}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">
+                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         {formatMoney(row.dieselPrice)}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">
+                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         {formatPct(row.cbieGap)}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">
+                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         {formatLiters(row.saldoPlanejado)}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">
-                        {formatLiters(row.plannedReceipt)}
+                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
+                        <div>{getReceiptValueText(row)}</div>
+                        {row.receiptForwardedToDate ? (
+                          <div className="mt-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                            Recebido em {formatDateBR(row.receiptForwardedToDate)}
+                          </div>
+                        ) : null}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">
+                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         {formatLiters(row.saldoPosEntrega)}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">
+                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         {formatLiters(row.plannedOutput)}
                       </td>
                       <td className="px-4 py-3 font-black text-slate-800">
                         {formatLiters(row.saldoProjetado)}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">
+                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         {formatLiters(row.actualOutput)}
                       </td>
                       <td className="px-4 py-3">

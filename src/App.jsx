@@ -55,6 +55,7 @@ import Usuarios from "./pages/configuracoes/Usuarios";
 import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
 import Funcionarios from "./pages/pessoas/Funcionarios";
 import OrganogramaCanvas from "./pages/pessoas/OrganogramaCanvas";
+import VagasCentral from "./pages/pessoas/VagasCentral";
 
 import DesempenhoLancamento from "./pages/desempenho-diesel/DesempenhoLancamento";
 import DesempenhoDieselResumo from "./pages/desempenho-diesel/DesempenhoDieselResumo";
@@ -262,6 +263,7 @@ export default function App() {
               <Route path="/usuarios" element={<Usuarios />} />
               <Route path="/funcionarios" element={<Funcionarios />} />
               <Route path="/organograma" element={<OrganogramaCanvas />} />
+              <Route path="/vagas" element={<VagasCentral />} />
               <Route path="/organograma-canvas" element={<Navigate to="/organograma" replace />} />
               <Route path="/organograma-manutencao" element={<Navigate to="/organograma" replace />} />
               <Route path="/niveis-acesso" element={<NiveisAcesso />} />

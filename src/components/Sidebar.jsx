@@ -35,6 +35,7 @@ import {
   FaWarehouse,
   FaCalendarAlt,
   FaSitemap,
+  FaBriefcase,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -145,6 +146,7 @@ export default function Sidebar() {
         tabs: [
           { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
           { path: "/organograma", label: "Organograma", icon: <FaSitemap /> },
+          { path: "/vagas", label: "Vagas", icon: <FaBriefcase /> },
         ],
       },
 

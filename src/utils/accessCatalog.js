@@ -63,6 +63,7 @@ export const APP_ACCESS_PAGES = [
   { key: "config_usuarios", label: "Configuracoes Usuarios", category: "Configuracoes", path: "/usuarios", patterns: ["/usuarios"] },
   { key: "pessoas_funcionarios", label: "Funcionarios", category: "Pessoas", path: "/funcionarios", patterns: ["/funcionarios"] },
   { key: "pessoas_organograma", label: "Organograma", category: "Pessoas", path: "/organograma", patterns: ["/organograma", "/organograma-canvas", "/organograma-manutencao"] },
+  { key: "pessoas_vagas", label: "Vagas", category: "Pessoas", path: "/vagas", patterns: ["/vagas"] },
   { key: "config_niveis", label: "Configuracoes Niveis", category: "Configuracoes", path: "/niveis-acesso", patterns: ["/niveis-acesso"] },
 ];
 

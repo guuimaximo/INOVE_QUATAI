@@ -54,6 +54,7 @@ import { MobileTabBadgesProvider } from "./context/MobileTabBadgesContext";
 import Usuarios from "./pages/configuracoes/Usuarios";
 import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
 import Funcionarios from "./pages/pessoas/Funcionarios";
+import Ferias from "./pages/pessoas/Ferias";
 import OrganogramaCanvas from "./pages/pessoas/OrganogramaCanvas";
 import VagasCentral from "./pages/pessoas/VagasCentral";
 
@@ -262,6 +263,7 @@ export default function App() {
               {/* Configurações */}
               <Route path="/usuarios" element={<Usuarios />} />
               <Route path="/funcionarios" element={<Funcionarios />} />
+              <Route path="/ferias" element={<Ferias />} />
               <Route path="/organograma" element={<OrganogramaCanvas />} />
               <Route path="/vagas" element={<VagasCentral />} />
               <Route path="/organograma-canvas" element={<Navigate to="/organograma" replace />} />

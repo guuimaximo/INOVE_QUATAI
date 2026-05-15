@@ -112,6 +112,17 @@ function normalizeNome(s) {
   return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
+function buildFuncionarioKey(value) {
+  return String(
+    value?.id_funcionario ||
+    value?.funcionario_id ||
+    value?.nr_cracha ||
+    value?.funcionario_cracha ||
+    normalizeNome(value?.nm_funcionario || value?.nome) ||
+    ""
+  );
+}
+
 const TIPO_OPTIONS = [
   { value: "GESTAO", label: "Lideranca" },
   { value: "SQUAD", label: "Equipe" },
@@ -343,7 +354,7 @@ function PessoaPickerModal({ open, contexto, funcionarios, alocacoesPorFuncId, a
           ) : (
             <div className="space-y-1.5">
               {lista.map((f) => {
-                const key = String(f.id_funcionario || f.nr_cracha || f.nm_funcionario);
+                const key = buildFuncionarioKey(f);
                 const aloc = alocacoesPorFuncId.get(key);
                 const jaAlocado = !!aloc && aloc.pessoaId !== contexto?.pessoaIdAtual;
                 const areaAloc = aloc ? (areasByCode.get(aloc.area_codigo)?.titulo || aloc.area_codigo) : "";
@@ -395,7 +406,7 @@ function QuadroDrawer({ open, onClose, funcionarios, pessoas, areas, alocacoesPo
 
   const enriched = useMemo(() => {
     return funcionarios.map((f) => {
-      const key = String(f.id_funcionario || f.nr_cracha || f.nm_funcionario);
+      const key = buildFuncionarioKey(f);
       const aloc = alocacoesPorFuncId.get(key);
       const areaTitulo = aloc ? areasByCode.get(aloc.area_codigo)?.titulo : "";
       return {
@@ -546,7 +557,17 @@ function CardStat({ titulo, valor, cor = "slate", pequeno }) {
   );
 }
 
-function PuxarFuncoesModal({ open, area, funcionarios, onClose, onImport, saving }) {
+function PuxarFuncoesModal({
+  open,
+  area,
+  funcionarios,
+  alocacoesPorFuncId,
+  areasByCode,
+  onClose,
+  onImportOrcado,
+  onImportRealizado,
+  saving,
+}) {
   const [selecionadas, setSelecionadas] = useState(new Set());
   const [busca, setBusca] = useState("");
 
@@ -562,14 +583,22 @@ function PuxarFuncoesModal({ open, area, funcionarios, onClose, onImport, saving
     for (const f of funcionarios) {
       const key = (f.nm_funcao || "").trim();
       if (!key) continue;
-      if (!map.has(key)) map.set(key, { funcao: key, total: 0 });
-      map.get(key).total += 1;
+      if (!map.has(key)) map.set(key, { funcao: key, total: 0, disponiveis: 0, alocados: 0, areaExemplo: "" });
+      const row = map.get(key);
+      row.total += 1;
+      const aloc = alocacoesPorFuncId.get(buildFuncionarioKey(f));
+      if (aloc) {
+        row.alocados += 1;
+        row.areaExemplo = row.areaExemplo || (areasByCode.get(aloc.area_codigo)?.titulo || aloc.area_codigo || "");
+      } else {
+        row.disponiveis += 1;
+      }
     }
     const list = Array.from(map.values()).sort((a, b) => a.funcao.localeCompare(b.funcao, "pt-BR"));
     if (!busca) return list;
     const q = busca.toLowerCase();
     return list.filter((f) => f.funcao.toLowerCase().includes(q));
-  }, [funcionarios, busca]);
+  }, [funcionarios, busca, alocacoesPorFuncId, areasByCode]);
 
   function toggle(funcao) {
     setSelecionadas((prev) => {
@@ -586,7 +615,7 @@ function PuxarFuncoesModal({ open, area, funcionarios, onClose, onImport, saving
       <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" style={{ maxHeight: "85vh" }}>
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-600">Importar orcados</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-600">Importacao em massa</div>
             <div className="text-lg font-black text-slate-900">Puxar funcoes para "{area.titulo}"</div>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
@@ -602,7 +631,7 @@ function PuxarFuncoesModal({ open, area, funcionarios, onClose, onImport, saving
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
           />
           <div className="mt-2 text-xs text-slate-500">
-            {funcoes.length} funcao(oes) encontradas. Cada uma selecionada vira uma vaga orcada com o cargo igual ao nome da funcao.
+            {funcoes.length} funcao(oes) encontradas. Selecione e escolha se quer criar vagas orcadas ou puxar todas as pessoas reais dessa funcao.
           </div>
         </div>
 
@@ -626,7 +655,12 @@ function PuxarFuncoesModal({ open, area, funcionarios, onClose, onImport, saving
                   >
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold text-slate-800">{f.funcao}</div>
-                      <div className="text-[11px] text-slate-500">{f.total} funcionario(s) com essa funcao</div>
+                      <div className="text-[11px] text-slate-500">
+                        {f.total} funcionario(s) · {f.disponiveis} disponivel(is) · {f.alocados} ja alocado(s)
+                      </div>
+                      {f.areaExemplo ? (
+                        <div className="text-[10px] text-slate-400">Ja existe gente dessa funcao em {f.areaExemplo}</div>
+                      ) : null}
                     </div>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ativa ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>
                       {ativa ? "Selecionada" : "Adicionar"}
@@ -647,10 +681,18 @@ function PuxarFuncoesModal({ open, area, funcionarios, onClose, onImport, saving
             <button
               type="button"
               disabled={saving || !selecionadas.size}
-              onClick={() => onImport(Array.from(selecionadas))}
+              onClick={() => onImportOrcado(Array.from(selecionadas))}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
             >
               <FaFileImport /> {saving ? "Importando..." : "Importar como orcados"}
+            </button>
+            <button
+              type="button"
+              disabled={saving || !selecionadas.size}
+              onClick={() => onImportRealizado(Array.from(selecionadas))}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              <FaFileImport /> {saving ? "Puxando..." : "Puxar pessoas reais"}
             </button>
           </div>
         </div>
@@ -1381,7 +1423,7 @@ export default function OrganogramaCanvas() {
     const m = new Map();
     for (const p of pessoas) {
       if (p.tipo_headcount !== "REALIZADO") continue;
-      const key = String(p.funcionario_id || p.funcionario_cracha || normalizeNome(p.nome) || "");
+      const key = buildFuncionarioKey(p);
       if (!key) continue;
       m.set(key, { pessoaId: p.id, area_codigo: p.area_codigo });
     }
@@ -1627,7 +1669,7 @@ export default function OrganogramaCanvas() {
 
   async function addRealizado(areaAlvo, funcionario, vagaPessoaIdParaSubstituir) {
     if (!areaAlvo || !funcionario) return;
-    const key = String(funcionario.id_funcionario || funcionario.nr_cracha || funcionario.nm_funcionario);
+    const key = buildFuncionarioKey(funcionario);
     const aloc = alocacoesPorFuncId.get(key);
     if (aloc && aloc.pessoaId !== vagaPessoaIdParaSubstituir) {
       const titulo = allAreasByCode.get(aloc.area_codigo)?.titulo || aloc.area_codigo;
@@ -1719,6 +1761,54 @@ export default function OrganogramaCanvas() {
     } catch (error) {
       console.error(error);
       alert(error?.message || "Nao foi possivel importar as funcoes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function importarFuncionariosComoRealizado(funcoesList) {
+    if (!puxarFuncoesArea || !funcoesList?.length) return;
+    setSaving(true);
+    try {
+      const selecionadas = new Set(funcoesList.map((item) => String(item || "").trim()).filter(Boolean));
+      const candidatos = funcionarios.filter((f) => selecionadas.has(String(f.nm_funcao || "").trim()));
+      const rows = [];
+      let ignorados = 0;
+
+      for (const funcionario of candidatos) {
+        const key = buildFuncionarioKey(funcionario);
+        if (!key) {
+          ignorados += 1;
+          continue;
+        }
+        if (alocacoesPorFuncId.get(key)) {
+          ignorados += 1;
+          continue;
+        }
+        rows.push({
+          area_codigo: puxarFuncoesArea.codigo,
+          nome: funcionario.nm_funcionario || "",
+          cargo: funcionario.nm_funcao || "",
+          funcionario_id: String(funcionario.id_funcionario || ""),
+          funcionario_cracha: String(funcionario.nr_cracha || ""),
+          tipo_headcount: "REALIZADO",
+          ativo: true,
+        });
+      }
+
+      if (!rows.length) {
+        alert("Nenhum funcionario disponivel para puxar. Os selecionados ja podem estar alocados em outras areas.");
+        return;
+      }
+
+      const { error } = await supabase.from("organograma_manutencao_pessoas").insert(rows);
+      if (error) throw error;
+      setPuxarFuncoesArea(null);
+      await carregar();
+      setStatusMsg(`${rows.length} pessoa(s) puxada(s) para a area.${ignorados ? ` ${ignorados} ja estavam alocada(s) e foram ignorada(s).` : ""}`);
+    } catch (error) {
+      console.error(error);
+      alert(error?.message || "Nao foi possivel puxar as pessoas.");
     } finally {
       setSaving(false);
     }
@@ -2084,8 +2174,11 @@ export default function OrganogramaCanvas() {
         open={!!puxarFuncoesArea}
         area={puxarFuncoesArea}
         funcionarios={funcionarios}
+        alocacoesPorFuncId={alocacoesPorFuncId}
+        areasByCode={allAreasByCode}
         onClose={() => setPuxarFuncoesArea(null)}
-        onImport={importarFuncoesComoOrcado}
+        onImportOrcado={importarFuncoesComoOrcado}
+        onImportRealizado={importarFuncionariosComoRealizado}
         saving={saving}
       />
 

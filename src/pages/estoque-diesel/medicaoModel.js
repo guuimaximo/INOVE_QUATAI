@@ -1214,6 +1214,7 @@ export async function deletePumpInitialAdjustment({
 }
 
 export async function saveDieselReceipt({
+  receiptId = null,
   form,
   computed,
   product,
@@ -1263,11 +1264,20 @@ export async function saveDieselReceipt({
     atualizado_em: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
-    .from("estoque_diesel_recebimentos")
-    .insert(payload)
-    .select("id")
-    .single();
+  const query = receiptId
+    ? supabase
+        .from("estoque_diesel_recebimentos")
+        .update(payload)
+        .eq("id", receiptId)
+        .select("id")
+        .single()
+    : supabase
+        .from("estoque_diesel_recebimentos")
+        .insert(payload)
+        .select("id")
+        .single();
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return data.id;

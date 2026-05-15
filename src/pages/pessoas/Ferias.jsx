@@ -3,6 +3,8 @@ import * as XLSX from "xlsx";
 import {
   FaCalendarAlt,
   FaCheckCircle,
+  FaChevronLeft,
+  FaChevronRight,
   FaClock,
   FaDownload,
   FaExclamationTriangle,
@@ -19,9 +21,6 @@ import {
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
 
-const CACHE_PERIODOS_KEY = "inove_ferias_periodos_cache_v1";
-const CACHE_PLANOS_KEY = "inove_ferias_planos_cache_v1";
-
 const STATUS_VIEW = [
   { value: "todos", label: "Todos" },
   { value: "criticos", label: "Criticos" },
@@ -29,6 +28,12 @@ const STATUS_VIEW = [
   { value: "programado", label: "Programados" },
   { value: "saldo", label: "Saldo pendente" },
   { value: "quitado", label: "Quitados" },
+];
+
+const VIEW_MODES = [
+  { value: "gestores", label: "Gestores" },
+  { value: "calendario", label: "Calendario" },
+  { value: "rh", label: "RH mensal" },
 ];
 
 const STATUS_PLANEJAMENTO = [
@@ -46,6 +51,7 @@ const PRIORIDADES = [
   { value: "BAIXA", label: "Baixa" },
 ];
 
+const LEADERSHIP_LEVELS = new Set(["GERENTE", "COORDENADOR", "SUPERVISOR", "LIDER", "DIRETOR"]);
 const FIELD_INPUT =
   "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
 
@@ -71,10 +77,22 @@ function parseSimNao(value) {
   return normalizeText(value) === "sim";
 }
 
+function excelSerialToIso(value) {
+  const serial = Number(value);
+  if (!Number.isFinite(serial)) return null;
+  const excelEpoch = Date.UTC(1899, 11, 30);
+  const millis = excelEpoch + Math.floor(serial) * 86400000;
+  const date = new Date(millis);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
 function parseDateInput(value) {
-  if (!value) return null;
+  if (value === null || value === undefined || value === "") return null;
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return excelSerialToIso(value);
   }
   const text = safeText(value);
   if (!text) return null;
@@ -82,6 +100,9 @@ function parseDateInput(value) {
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) {
     const [day, month, year] = text.split("/");
     return `${year}-${month}-${day}`;
+  }
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    return excelSerialToIso(Number(text));
   }
   const date = new Date(text);
   if (Number.isNaN(date.getTime())) return null;
@@ -106,6 +127,18 @@ function formatInt(value) {
   return Number(value || 0).toLocaleString("pt-BR");
 }
 
+function formatMonthLabel(monthKey) {
+  if (!monthKey) return "Sem mes";
+  const [year, month] = monthKey.split("-");
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
+function monthKeyFromDate(dateValue) {
+  const date = parseDateInput(dateValue);
+  return date ? date.slice(0, 7) : "";
+}
+
 function buildFuncionarioKey(value) {
   return String(
     value?.funcionario_id ||
@@ -127,13 +160,24 @@ function diffDaysInclusive(start, end) {
   return Math.floor((endMs - startMs) / 86400000) + 1;
 }
 
+function dateRangeOverlapsMonth(start, end, monthKey) {
+  const startDate = parseDateInput(start);
+  const endDate = parseDateInput(end);
+  if (!startDate || !endDate || !monthKey) return false;
+  const monthStart = `${monthKey}-01`;
+  const monthDate = new Date(`${monthStart}T00:00:00`);
+  const nextMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+  const monthEnd = new Date(nextMonth.getTime() - 86400000).toISOString().slice(0, 10);
+  return startDate <= monthEnd && endDate >= monthStart;
+}
+
 function buildCsvRowPayload(row, meta) {
   return {
-    ferias_id: safeText(row.id_ferias),
-    funcionario_id: safeText(row.id_funcionario),
-    nr_cracha: safeText(row.nr_cracha),
-    nm_funcionario: safeText(row.nm_funcionario),
-    nm_funcao: safeText(row.nm_funcao),
+    ferias_id: safeText(row.id_ferias || row.ferias_id),
+    funcionario_id: safeText(row.id_funcionario || row.funcionario_id),
+    nr_cracha: safeText(row.nr_cracha || row.funcionario_cracha),
+    nm_funcionario: safeText(row.nm_funcionario || row.nome),
+    nm_funcao: safeText(row.nm_funcao || row.funcao),
     dt_inicio_aquisitivo: parseDateInput(row.dt_inicio_aquisitivo),
     dt_fim_aquisitivo: parseDateInput(row.dt_fim_aquisitivo),
     dt_alerta_11_meses: parseDateInput(row.dt_alerta_11_meses),
@@ -223,7 +267,7 @@ function deriveResumoStatus(item) {
   if (alerta) {
     return {
       key: "alerta",
-      label: "Atenção 11 meses",
+      label: "Alerta 11 meses",
       chip: "bg-amber-100 text-amber-800 border-amber-200",
       order: 4,
     };
@@ -244,6 +288,38 @@ function deriveResumoStatus(item) {
   };
 }
 
+function getManagerForArea(areaCodigo, areasByCodigo, gestorByArea) {
+  let cursor = areaCodigo;
+  while (cursor) {
+    const area = areasByCodigo.get(cursor);
+    if (!area) break;
+    if (LEADERSHIP_LEVELS.has(String(area.nivel || "").toUpperCase())) {
+      const gestor = gestorByArea.get(cursor);
+      return {
+        manager_codigo: cursor,
+        manager_nome: gestor?.nome || area.titulo || "Sem gestor",
+        manager_cargo: gestor?.cargo || area.subtitulo || area.nivel || "",
+        manager_nivel: area.nivel || "",
+      };
+    }
+    cursor = area.parent_codigo || null;
+  }
+  return {
+    manager_codigo: "",
+    manager_nome: "Sem gestor vinculado",
+    manager_cargo: "",
+    manager_nivel: "",
+  };
+}
+
+function getDisplayStart(item) {
+  return item.programado_inicio || item.proximo_inicio_gozo || null;
+}
+
+function getDisplayEnd(item) {
+  return item.programado_fim || item.proximo_fim_gozo || null;
+}
+
 function exportarCSV(rows) {
   if (!rows.length) {
     window.alert("Nao ha dados para exportar.");
@@ -253,13 +329,14 @@ function exportarCSV(rows) {
     "Colaborador",
     "Cracha",
     "Funcao",
+    "Gestor",
     "Area",
     "Periodo aquisitivo",
     "Limite legal",
     "Dias pendentes",
     "Status",
     "Quando pode tirar",
-    "Quando vai tirar",
+    "Vai tirar",
     "Planejamento",
     "Prioridade",
   ];
@@ -267,6 +344,7 @@ function exportarCSV(rows) {
     row.nm_funcionario || "",
     row.nr_cracha || "",
     row.nm_funcao || "",
+    row.manager_nome || "",
     row.area_titulo || "",
     `${formatDateBR(row.dt_inicio_aquisitivo)} a ${formatDateBR(row.dt_fim_aquisitivo)}`,
     formatDateBR(row.dt_limite_legal),
@@ -275,8 +353,8 @@ function exportarCSV(rows) {
     row.janela_sugerida_inicio || row.janela_sugerida_fim
       ? `${formatDateBR(row.janela_sugerida_inicio)} a ${formatDateBR(row.janela_sugerida_fim)}`
       : "",
-    row.programado_inicio || row.programado_fim
-      ? `${formatDateBR(row.programado_inicio)} a ${formatDateBR(row.programado_fim)}`
+    getDisplayStart(row)
+      ? `${formatDateBR(getDisplayStart(row))} a ${formatDateBR(getDisplayEnd(row))}`
       : "",
     row.status_planejamento || "",
     row.prioridade || "",
@@ -372,10 +450,11 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
       <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-blue-600">Planejamento de ferias</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-blue-600">Card do colaborador</div>
             <div className="mt-1 text-xl font-black text-slate-900">{item.nm_funcionario}</div>
             <div className="text-sm text-slate-500">
-              {item.nm_funcao || "Sem funcao"}{item.area_titulo ? ` • ${item.area_titulo}` : ""}
+              {item.nm_funcao || "Sem funcao"}
+              {item.manager_nome ? ` • Gestor: ${item.manager_nome}` : ""}
             </div>
           </div>
           <button
@@ -392,13 +471,15 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <InfoBox label="Cracha" value={item.nr_cracha} />
               <InfoBox label="Status atual" value={item.resumo_status_label} />
+              <InfoBox label="Gestor" value={item.manager_nome} />
+              <InfoBox label="Area" value={item.area_titulo} />
               <InfoBox
                 label="Periodo aquisitivo"
                 value={`${formatDateBR(item.dt_inicio_aquisitivo)} a ${formatDateBR(item.dt_fim_aquisitivo)}`}
               />
               <InfoBox label="Limite legal" value={formatDateBR(item.dt_limite_legal)} />
               <InfoBox label="Dias pendentes" value={formatInt(item.dias_pendentes_total)} />
-              <InfoBox label="Em andamento" value={formatInt(item.dias_em_andamento)} />
+              <InfoBox label="Dias em andamento" value={formatInt(item.dias_em_andamento)} />
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -415,7 +496,7 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                     : "Sem registro"}
                 </p>
                 <p>
-                  <span className="font-semibold text-slate-800">Proximo gozo no arquivo:</span>{" "}
+                  <span className="font-semibold text-slate-800">Agendado na base:</span>{" "}
                   {item.proximo_inicio_gozo
                     ? `${formatDateBR(item.proximo_inicio_gozo)} a ${formatDateBR(item.proximo_fim_gozo)}`
                     : "Nao agendado"}
@@ -432,7 +513,7 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
             <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
               <div className="text-sm font-black uppercase tracking-wide text-blue-900">Decisao do gestor</div>
               <div className="mt-2 text-sm text-blue-900/80">
-                Primeiro registre quando a equipe consegue liberar. Depois defina o periodo real e o status da combinacao.
+                Registre quando a equipe consegue liberar e, em seguida, a data real de ferias.
               </div>
             </div>
 
@@ -510,13 +591,13 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                 className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
               >
                 <FaCalendarAlt />
-                Usar agenda que veio no arquivo
+                Usar agenda vinda da base
               </button>
             ) : null}
 
             <Field
               label="Observacoes do gestor"
-              hint="Ex.: aguardar cobertura da equipe, ferias alinhadas com esposa, janela melhor em julho."
+              hint="Ex.: nao pode sair junto com fulano, equipe reduzida, cobertura do turno confirmada."
             >
               <textarea
                 className={`${FIELD_INPUT} min-h-[120px] resize-y`}
@@ -564,69 +645,244 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
   );
 }
 
+function ManagerSummary({ groups, selectedManager, onSelectManager }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {groups.map((group) => (
+        <button
+          key={group.manager_codigo || group.manager_nome}
+          type="button"
+          onClick={() => onSelectManager(group.manager_nome === selectedManager ? "" : group.manager_nome)}
+          className={`rounded-2xl border p-4 text-left transition ${
+            group.manager_nome === selectedManager
+              ? "border-blue-400 bg-blue-50 shadow-sm"
+              : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-black uppercase tracking-wide text-slate-900">{group.manager_nome}</div>
+              <div className="mt-1 text-xs text-slate-500">{group.manager_cargo || "Gestor vinculado pelo organograma"}</div>
+            </div>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+              {group.total} pessoa(s)
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded-xl bg-rose-50 px-2 py-2 text-rose-800">
+              <div className="font-black">{group.vencidos}</div>
+              <div>Vencidos</div>
+            </div>
+            <div className="rounded-xl bg-purple-50 px-2 py-2 text-purple-800">
+              <div className="font-black">{group.emGozo}</div>
+              <div>Em ferias</div>
+            </div>
+            <div className="rounded-xl bg-emerald-50 px-2 py-2 text-emerald-800">
+              <div className="font-black">{group.programados}</div>
+              <div>Planejados</div>
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CalendarView({ registros, monthKey, onPrevMonth, onNextMonth, onOpenItem }) {
+  const monthStart = new Date(`${monthKey}-01T00:00:00`);
+  const firstDayIndex = monthStart.getDay();
+  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+  const cells = [];
+  const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
+
+  for (let index = 0; index < firstDayIndex; index += 1) {
+    cells.push({ key: `blank-start-${index}`, empty: true });
+  }
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const iso = `${monthKey}-${String(day).padStart(2, "0")}`;
+    const items = registros.filter((item) => {
+      const start = parseDateInput(getDisplayStart(item));
+      const end = parseDateInput(getDisplayEnd(item));
+      return start && end && start <= iso && end >= iso;
+    });
+    cells.push({ key: iso, iso, day, items });
+  }
+  while (cells.length % 7 !== 0) {
+    cells.push({ key: `blank-end-${cells.length}`, empty: true });
+  }
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="text-sm font-black uppercase tracking-wide text-slate-800">Calendario de ferias</div>
+          <div className="mt-1 text-sm text-slate-500">Veja por dia quem esta programado ou ja entrou em gozo.</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={onPrevMonth} className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50">
+            <FaChevronLeft />
+          </button>
+          <div className="min-w-[180px] text-center text-sm font-black uppercase tracking-wide text-slate-800">
+            {formatMonthLabel(monthKey)}
+          </div>
+          <button type="button" onClick={onNextMonth} className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50">
+            <FaChevronRight />
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-7 gap-2 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
+        {weekDays.map((label) => (
+          <div key={label}>{label}</div>
+        ))}
+      </div>
+
+      <div className="mt-2 grid grid-cols-7 gap-2">
+        {cells.map((cell) => (
+          <div
+            key={cell.key}
+            className={`min-h-[112px] rounded-2xl border p-2 ${
+              cell.empty ? "border-transparent bg-transparent" : "border-slate-200 bg-slate-50"
+            }`}
+          >
+            {!cell.empty ? (
+              <>
+                <div className="text-sm font-black text-slate-800">{cell.day}</div>
+                <div className="mt-2 space-y-1">
+                  {cell.items.slice(0, 3).map((item) => (
+                    <button
+                      key={`${cell.iso}-${item.ferias_id}`}
+                      type="button"
+                      onClick={() => onOpenItem(item)}
+                      className="block w-full truncate rounded-lg bg-blue-50 px-2 py-1 text-left text-[11px] font-semibold text-blue-800 hover:bg-blue-100"
+                      title={`${item.nm_funcionario} - ${item.manager_nome}`}
+                    >
+                      {item.nm_funcionario}
+                    </button>
+                  ))}
+                  {cell.items.length > 3 ? (
+                    <div className="text-[11px] font-semibold text-slate-500">+{cell.items.length - 3} mais</div>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RHMonthlyView({ groups, onOpenItem }) {
+  return (
+    <div className="space-y-4">
+      {groups.map((group) => (
+        <div key={group.monthKey} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-black uppercase tracking-wide text-slate-800">{formatMonthLabel(group.monthKey)}</div>
+              <div className="mt-1 text-sm text-slate-500">{group.items.length} colaborador(es) com ferias planejadas neste mes.</div>
+            </div>
+            <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-800">
+              RH
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead>
+                <tr className="text-left text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                  <th className="px-3 py-3">Colaborador</th>
+                  <th className="px-3 py-3">Gestor</th>
+                  <th className="px-3 py-3">Area</th>
+                  <th className="px-3 py-3">Periodo</th>
+                  <th className="px-3 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {group.items.map((item) => (
+                  <tr
+                    key={item.ferias_id}
+                    className="cursor-pointer hover:bg-slate-50/70"
+                    onClick={() => onOpenItem(item)}
+                  >
+                    <td className="px-3 py-3">
+                      <div className="font-bold text-slate-900">{item.nm_funcionario}</div>
+                      <div className="text-xs text-slate-500">{item.nm_funcao || "Sem funcao"}</div>
+                    </td>
+                    <td className="px-3 py-3 text-slate-700">{item.manager_nome}</td>
+                    <td className="px-3 py-3 text-slate-600">{item.area_titulo || "-"}</td>
+                    <td className="px-3 py-3 text-slate-700">
+                      {formatDateBR(getDisplayStart(item))} a {formatDateBR(getDisplayEnd(item))}
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${item.resumo_status_chip}`}>
+                        {item.resumo_status_label}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Ferias() {
   const { user } = useContext(AuthContext);
   const fileInputRef = useRef(null);
 
   const [registros, setRegistros] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fallbackMode, setFallbackMode] = useState(false);
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busca, setBusca] = useState("");
   const [statusView, setStatusView] = useState("criticos");
-  const [areaFiltro, setAreaFiltro] = useState("");
+  const [viewMode, setViewMode] = useState("gestores");
+  const [managerFilter, setManagerFilter] = useState("");
   const [funcaoFiltro, setFuncaoFiltro] = useState("");
   const [selecionado, setSelecionado] = useState(null);
+  const [calendarMonth, setCalendarMonth] = useState(new Date().toISOString().slice(0, 7));
 
   async function carregarDados() {
     setLoading(true);
 
     const [periodosResp, planosResp, pessoasResp, areasResp] = await Promise.all([
-      supabase.from("ferias_periodos_importados").select("*").eq("ativo", true).order("dias_para_limite_legal", { ascending: true }),
+      supabase.from("ferias_periodos_importados").select("*").eq("ativo", true).order("nm_funcionario", { ascending: true }),
       supabase.from("ferias_planejamento").select("*").order("atualizado_em", { ascending: false }),
       supabase
         .from("organograma_manutencao_pessoas")
-        .select("funcionario_id, funcionario_cracha, nome, area_codigo, ativo, tipo_headcount")
+        .select("funcionario_id, funcionario_cracha, nome, cargo, area_codigo, ativo, tipo_headcount")
         .eq("ativo", true)
         .eq("tipo_headcount", "REALIZADO"),
-      supabase.from("organograma_manutencao_areas").select("codigo, titulo").eq("ativo", true),
+      supabase
+        .from("organograma_manutencao_areas")
+        .select("codigo, parent_codigo, titulo, subtitulo, nivel, ativo")
+        .eq("ativo", true),
     ]);
-
-    const relationMissing =
-      [periodosResp.error, planosResp.error].some(
-        (error) => error?.code === "42P01" || String(error?.message || "").toLowerCase().includes("does not exist")
-      );
-
-    if (relationMissing) {
-      const cachedPeriodos = JSON.parse(localStorage.getItem(CACHE_PERIODOS_KEY) || "[]");
-      const cachedPlanos = JSON.parse(localStorage.getItem(CACHE_PLANOS_KEY) || "[]");
-      const areaByCodigo = new Map((areasResp.data || []).map((area) => [area.codigo, area]));
-      const allocByKey = new Map();
-      for (const pessoa of pessoasResp.data || []) {
-        const key = buildFuncionarioKey(pessoa);
-        if (key) allocByKey.set(key, pessoa);
-      }
-      setFallbackMode(true);
-      setRegistros(mergeFeriasData(cachedPeriodos, cachedPlanos, allocByKey, areaByCodigo));
-      setLoading(false);
-      return;
-    }
 
     if (periodosResp.error) console.error(periodosResp.error);
     if (planosResp.error) console.error(planosResp.error);
     if (pessoasResp.error) console.error(pessoasResp.error);
     if (areasResp.error) console.error(areasResp.error);
 
-    const areaByCodigo = new Map((areasResp.data || []).map((area) => [area.codigo, area]));
+    const areasByCodigo = new Map((areasResp.data || []).map((area) => [area.codigo, area]));
     const allocByKey = new Map();
+    const gestorByArea = new Map();
+
     for (const pessoa of pessoasResp.data || []) {
       const key = buildFuncionarioKey(pessoa);
       if (key) allocByKey.set(key, pessoa);
+      if (!gestorByArea.has(pessoa.area_codigo) && LEADERSHIP_LEVELS.has(String(areasByCodigo.get(pessoa.area_codigo)?.nivel || "").toUpperCase())) {
+        gestorByArea.set(pessoa.area_codigo, pessoa);
+      }
     }
 
-    setFallbackMode(false);
-    setRegistros(mergeFeriasData(periodosResp.data || [], planosResp.data || [], allocByKey, areaByCodigo));
+    const merged = mergeFeriasData(periodosResp.data || [], planosResp.data || [], allocByKey, areasByCodigo, gestorByArea);
+    setRegistros(merged);
     setLoading(false);
   }
 
@@ -660,13 +916,6 @@ export default function Ferias() {
 
       if (!mappedRows.length) {
         window.alert("Nao encontrei linhas validas no arquivo enviado.");
-        return;
-      }
-
-      if (fallbackMode) {
-        localStorage.setItem(CACHE_PERIODOS_KEY, JSON.stringify(mappedRows));
-        await carregarDados();
-        window.alert("Base de ferias atualizada em cache local. Assim que a tabela existir no banco, essa base pode ser publicada para todos.");
         return;
       }
 
@@ -723,19 +972,6 @@ export default function Ferias() {
 
     setSaving(true);
     try {
-      if (fallbackMode) {
-        const current = JSON.parse(localStorage.getItem(CACHE_PLANOS_KEY) || "[]");
-        const next = [...current.filter((item) => String(item.ferias_id) !== String(payload.ferias_id))];
-        next.unshift({
-          ...current.find((item) => String(item.ferias_id) === String(payload.ferias_id)),
-          ...payload,
-        });
-        localStorage.setItem(CACHE_PLANOS_KEY, JSON.stringify(next));
-        await carregarDados();
-        setSelecionado(null);
-        return;
-      }
-
       const existing = registros.find((row) => String(row.ferias_id) === String(payload.ferias_id));
       const { error } = await supabase.from("ferias_planejamento").upsert(
         {
@@ -757,10 +993,10 @@ export default function Ferias() {
     }
   }
 
-  const areasOptions = useMemo(() => {
+  const gestoresOptions = useMemo(() => {
     const unique = new Set();
     for (const registro of registros) {
-      if (registro.area_titulo) unique.add(registro.area_titulo);
+      if (registro.manager_nome) unique.add(registro.manager_nome);
     }
     return Array.from(unique).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [registros]);
@@ -773,11 +1009,11 @@ export default function Ferias() {
     return Array.from(unique).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [registros]);
 
-  const filtrados = useMemo(() => {
+  const filteredRecords = useMemo(() => {
     const query = normalizeText(busca);
     return registros
       .filter((registro) => {
-        if (areaFiltro && registro.area_titulo !== areaFiltro) return false;
+        if (managerFilter && registro.manager_nome !== managerFilter) return false;
         if (funcaoFiltro && registro.nm_funcao !== funcaoFiltro) return false;
         if (statusView === "criticos" && !["vencido", "alerta", "bloqueado"].includes(registro.resumo_status_key)) return false;
         if (statusView === "em_gozo" && registro.resumo_status_key !== "em_gozo") return false;
@@ -786,7 +1022,7 @@ export default function Ferias() {
         if (statusView === "quitado" && registro.resumo_status_key !== "quitado") return false;
         if (!query) return true;
         const blob = normalizeText(
-          `${registro.nm_funcionario} ${registro.nr_cracha} ${registro.nm_funcao} ${registro.area_titulo} ${registro.historico_gozos}`
+          `${registro.nm_funcionario} ${registro.nr_cracha} ${registro.nm_funcao} ${registro.area_titulo} ${registro.manager_nome} ${registro.historico_gozos}`
         );
         return blob.includes(query);
       })
@@ -796,7 +1032,61 @@ export default function Ferias() {
         }
         return Number(left.dias_para_limite_legal || 99999) - Number(right.dias_para_limite_legal || 99999);
       });
-  }, [areaFiltro, busca, funcaoFiltro, registros, statusView]);
+  }, [busca, funcaoFiltro, managerFilter, registros, statusView]);
+
+  const managerGroups = useMemo(() => {
+    const groups = new Map();
+    for (const registro of registros) {
+      const key = registro.manager_codigo || registro.manager_nome || "sem-gestor";
+      if (!groups.has(key)) {
+        groups.set(key, {
+          manager_codigo: registro.manager_codigo,
+          manager_nome: registro.manager_nome,
+          manager_cargo: registro.manager_cargo,
+          total: 0,
+          vencidos: 0,
+          emGozo: 0,
+          programados: 0,
+        });
+      }
+      const group = groups.get(key);
+      group.total += 1;
+      if (registro.resumo_status_key === "vencido") group.vencidos += 1;
+      if (registro.resumo_status_key === "em_gozo") group.emGozo += 1;
+      if (registro.resumo_status_key === "programado") group.programados += 1;
+    }
+    return Array.from(groups.values()).sort((a, b) => {
+      if (b.vencidos !== a.vencidos) return b.vencidos - a.vencidos;
+      if (b.total !== a.total) return b.total - a.total;
+      return String(a.manager_nome || "").localeCompare(String(b.manager_nome || ""), "pt-BR");
+    });
+  }, [registros]);
+
+  const monthlyPlannedGroups = useMemo(() => {
+    const groups = new Map();
+    for (const item of filteredRecords) {
+      const monthKey = monthKeyFromDate(getDisplayStart(item));
+      if (!monthKey) continue;
+      if (!groups.has(monthKey)) groups.set(monthKey, []);
+      groups.get(monthKey).push(item);
+    }
+    return Array.from(groups.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([monthKey, items]) => ({
+        monthKey,
+        items: items.sort((left, right) => String(left.manager_nome || "").localeCompare(String(right.manager_nome || ""), "pt-BR")),
+      }));
+  }, [filteredRecords]);
+
+  const calendarRecords = useMemo(
+    () =>
+      filteredRecords.filter((item) => {
+        const start = getDisplayStart(item);
+        const end = getDisplayEnd(item);
+        return dateRangeOverlapsMonth(start, end, calendarMonth);
+      }),
+    [calendarMonth, filteredRecords]
+  );
 
   const stats = useMemo(() => {
     const colaboradores = new Set(registros.map((registro) => `${registro.funcionario_id || registro.nr_cracha || registro.nm_funcionario}`));
@@ -825,9 +1115,21 @@ export default function Ferias() {
   }, [registros]);
 
   const criticos = useMemo(
-    () => registros.filter((registro) => ["vencido", "alerta", "bloqueado"].includes(registro.resumo_status_key)).slice(0, 8),
-    [registros]
+    () => filteredRecords.filter((registro) => ["vencido", "alerta", "bloqueado"].includes(registro.resumo_status_key)).slice(0, 8),
+    [filteredRecords]
   );
+
+  function goPrevMonth() {
+    const date = new Date(`${calendarMonth}-01T00:00:00`);
+    const prev = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+    setCalendarMonth(prev.toISOString().slice(0, 7));
+  }
+
+  function goNextMonth() {
+    const date = new Date(`${calendarMonth}-01T00:00:00`);
+    const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    setCalendarMonth(next.toISOString().slice(0, 7));
+  }
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -836,7 +1138,7 @@ export default function Ferias() {
           <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-blue-600">Pessoas</div>
           <h1 className="mt-1 text-3xl font-black text-slate-900">Ferias</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Central para o gestor enxergar quem esta em ferias, quem esta com periodo vencido e onde a equipe consegue liberar cada colaborador.
+            Central para o gestor enxergar a equipe por gerente, abrir o card do colaborador e para o RH acompanhar o planejado por mes.
           </p>
         </div>
 
@@ -847,10 +1149,10 @@ export default function Ferias() {
               Fluxo do gestor
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-blue-900/90">
-              <div>1. Analisa equipe e ve criticos.</div>
-              <div>2. Confere quem esta em ferias agora.</div>
-              <div>3. Define quando pode liberar.</div>
-              <div>4. Programa a data real e acompanha.</div>
+              <div>1. Filtra por gestor e ve os criticos.</div>
+              <div>2. Abre a linha e consulta o card do colaborador.</div>
+              <div>3. Registra quando pode liberar.</div>
+              <div>4. Define quando vai tirar e RH acompanha por mes.</div>
             </div>
           </div>
 
@@ -861,11 +1163,9 @@ export default function Ferias() {
                 <div className="mt-1 text-xs text-slate-500">
                   {stats.baseAtualizadaEm
                     ? `Atualizada em ${formatDateTimeBR(stats.baseAtualizadaEm)}`
-                    : "Nenhuma base de ferias publicada ainda"}
+                    : "Nenhuma base publicada ainda"}
                 </div>
-                {stats.fonteArquivo ? (
-                  <div className="mt-1 text-xs text-slate-400">{stats.fonteArquivo}</div>
-                ) : null}
+                {stats.fonteArquivo ? <div className="mt-1 text-xs text-slate-400">{stats.fonteArquivo}</div> : null}
               </div>
               <button
                 type="button"
@@ -880,7 +1180,7 @@ export default function Ferias() {
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => exportarCSV(filtrados)}
+                onClick={() => exportarCSV(filteredRecords)}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               >
                 <FaDownload />
@@ -895,11 +1195,6 @@ export default function Ferias() {
                 Recarregar
               </button>
             </div>
-            {fallbackMode ? (
-              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-                A tela esta operando em cache local porque as tabelas de ferias ainda nao existem no banco.
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
@@ -921,231 +1216,270 @@ export default function Ferias() {
         <CardKPI titulo="Com saldo" valor={formatInt(stats.saldo)} cor="amber" icon={<FaClock />} sub={`${formatInt(stats.alerta11)} em alerta 11 meses`} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_0.9fr]">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <div className="text-sm font-black uppercase tracking-wide text-slate-800">Gestao da equipe</div>
-              <div className="mt-1 text-sm text-slate-500">
-                Abra cada linha para registrar quando a equipe consegue liberar e quando o colaborador realmente vai sair.
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {STATUS_VIEW.map((tab) => (
-                <button
-                  key={tab.value}
-                  type="button"
-                  onClick={() => setStatusView(tab.value)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition ${
-                    statusView === tab.value
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-sm font-black uppercase tracking-wide text-slate-800">Visao da central</div>
+            <div className="mt-1 text-sm text-slate-500">Gestores para a operacao, calendario para leitura rapida e RH mensal para acompanhamento do planejado.</div>
           </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="Buscar">
-              <div className="relative">
-                <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  className={`${FIELD_INPUT} pl-10`}
-                  value={busca}
-                  onChange={(event) => setBusca(event.target.value)}
-                  placeholder="Nome, cracha, funcao, area..."
-                />
-              </div>
-            </Field>
-            <Field label="Area">
-              <select className={FIELD_INPUT} value={areaFiltro} onChange={(event) => setAreaFiltro(event.target.value)}>
-                <option value="">Todas</option>
-                {areasOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Funcao">
-              <select className={FIELD_INPUT} value={funcaoFiltro} onChange={(event) => setFuncaoFiltro(event.target.value)}>
-                <option value="">Todas</option>
-                {funcoesOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Filtro rapido">
+          <div className="flex flex-wrap gap-2">
+            {VIEW_MODES.map((mode) => (
               <button
+                key={mode.value}
                 type="button"
-                onClick={() => {
-                  setBusca("");
-                  setAreaFiltro("");
-                  setFuncaoFiltro("");
-                  setStatusView("criticos");
-                }}
-                className="inline-flex h-[42px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                onClick={() => setViewMode(mode.value)}
+                className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition ${
+                  viewMode === mode.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
               >
-                <FaFilter />
-                Limpar filtros
+                {mode.label}
               </button>
-            </Field>
-          </div>
-
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead>
-                <tr className="text-left text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  <th className="px-3 py-3">Colaborador</th>
-                  <th className="px-3 py-3">Periodo</th>
-                  <th className="px-3 py-3">Limite</th>
-                  <th className="px-3 py-3">Saldo</th>
-                  <th className="px-3 py-3">Status</th>
-                  <th className="px-3 py-3">Quando pode</th>
-                  <th className="px-3 py-3">Vai tirar</th>
-                  <th className="px-3 py-3 text-right">Acao</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td className="px-3 py-8 text-center text-slate-500" colSpan={8}>
-                      Carregando base de ferias...
-                    </td>
-                  </tr>
-                ) : !filtrados.length ? (
-                  <tr>
-                    <td className="px-3 py-8 text-center text-slate-500" colSpan={8}>
-                      Nenhum periodo encontrado com os filtros atuais.
-                    </td>
-                  </tr>
-                ) : (
-                  filtrados.map((registro) => (
-                    <tr key={registro.ferias_id} className="hover:bg-slate-50/70">
-                      <td className="px-3 py-3">
-                        <div className="font-bold text-slate-900">{registro.nm_funcionario || "-"}</div>
-                        <div className="text-xs text-slate-500">
-                          {registro.nm_funcao || "Sem funcao"}{registro.area_titulo ? ` • ${registro.area_titulo}` : ""}
-                        </div>
-                        <div className="text-xs text-slate-400">Cracha {registro.nr_cracha || "-"}</div>
-                      </td>
-                      <td className="px-3 py-3 text-slate-600">
-                        {formatDateBR(registro.dt_inicio_aquisitivo)} a {formatDateBR(registro.dt_fim_aquisitivo)}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="font-semibold text-slate-800">{formatDateBR(registro.dt_limite_legal)}</div>
-                        <div className="text-xs text-slate-400">
-                          {registro.dias_para_limite_legal !== null && registro.dias_para_limite_legal !== undefined
-                            ? `${registro.dias_para_limite_legal} dia(s)`
-                            : "Sem contador"}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 font-bold text-slate-800">{formatInt(registro.dias_pendentes_total)}</td>
-                      <td className="px-3 py-3">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${registro.resumo_status_chip}`}>
-                          {registro.resumo_status_label}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-xs text-slate-600">
-                        {registro.janela_sugerida_inicio
-                          ? `${formatDateBR(registro.janela_sugerida_inicio)} a ${formatDateBR(registro.janela_sugerida_fim)}`
-                          : "Nao definido"}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-slate-600">
-                        {registro.programado_inicio
-                          ? `${formatDateBR(registro.programado_inicio)} a ${formatDateBR(registro.programado_fim)}`
-                          : registro.proximo_inicio_gozo
-                            ? `${formatDateBR(registro.proximo_inicio_gozo)} a ${formatDateBR(registro.proximo_fim_gozo)}`
-                            : "Nao programado"}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setSelecionado(registro)}
-                          className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition hover:bg-blue-700"
-                        >
-                          Planejar
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            ))}
           </div>
         </div>
 
-        <div className="space-y-5">
-          <div className="rounded-3xl border border-rose-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-rose-700">
-              <FaExclamationTriangle />
-              Gestao imediata
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Buscar">
+            <div className="relative">
+              <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                className={`${FIELD_INPUT} pl-10`}
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+                placeholder="Nome, cracha, funcao, gestor..."
+              />
             </div>
-            <div className="mt-2 text-sm text-slate-600">
-              Priorize quem ja venceu, quem bateu 11 meses e quem a operacao pediu para segurar.
-            </div>
-            <div className="mt-4 space-y-3">
-              {!criticos.length ? (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-                  Nenhum periodo critico no momento.
-                </div>
-              ) : (
-                criticos.map((registro) => (
-                  <button
-                    key={registro.ferias_id}
-                    type="button"
-                    onClick={() => setSelecionado(registro)}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-bold text-slate-900">{registro.nm_funcionario}</div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {registro.nm_funcao || "Sem funcao"}{registro.area_titulo ? ` • ${registro.area_titulo}` : ""}
-                        </div>
-                      </div>
-                      <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${registro.resumo_status_chip}`}>
-                        {registro.resumo_status_label}
-                      </span>
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                      <div>Limite legal: {formatDateBR(registro.dt_limite_legal)}</div>
-                      <div>Saldo: {formatInt(registro.dias_pendentes_total)} dia(s)</div>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
+          </Field>
+          <Field label="Gestor">
+            <select className={FIELD_INPUT} value={managerFilter} onChange={(event) => setManagerFilter(event.target.value)}>
+              <option value="">Todos</option>
+              {gestoresOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Funcao">
+            <select className={FIELD_INPUT} value={funcaoFiltro} onChange={(event) => setFuncaoFiltro(event.target.value)}>
+              <option value="">Todas</option>
+              {funcoesOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Filtro rapido">
+            <button
+              type="button"
+              onClick={() => {
+                setBusca("");
+                setManagerFilter("");
+                setFuncaoFiltro("");
+                setStatusView("criticos");
+              }}
+              className="inline-flex h-[42px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
+              <FaFilter />
+              Limpar filtros
+            </button>
+          </Field>
+        </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-sm font-black uppercase tracking-wide text-slate-800">Leitura rapida</div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="font-semibold text-slate-900">Quem esta de ferias</div>
-                <div className="mt-1">{stats.emGozo} periodo(s) com colaborador em gozo neste momento.</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="font-semibold text-slate-900">Quem precisa tirar</div>
-                <div className="mt-1">
-                  {stats.saldo} periodo(s) com saldo pendente e {stats.vencidos} ja estao vencidos.
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="font-semibold text-slate-900">Quando pode tirar</div>
-                <div className="mt-1">
-                  Use o modal para registrar a janela que a operacao consegue liberar e a data confirmada do gozo.
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {STATUS_VIEW.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setStatusView(tab.value)}
+              className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition ${
+                statusView === tab.value
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
+
+      {viewMode === "gestores" ? (
+        <div className="space-y-5">
+          <ManagerSummary groups={managerGroups} selectedManager={managerFilter} onSelectManager={setManagerFilter} />
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_0.9fr]">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-2 border-b border-slate-100 pb-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="text-sm font-black uppercase tracking-wide text-slate-800">Visao por gestor</div>
+                  <div className="mt-1 text-sm text-slate-500">Clique na linha para abrir o card do colaborador.</div>
+                </div>
+                <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-slate-700">
+                  {filteredRecords.length} registro(s)
+                </div>
+              </div>
+
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead>
+                    <tr className="text-left text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                      <th className="px-3 py-3">Colaborador</th>
+                      <th className="px-3 py-3">Gestor</th>
+                      <th className="px-3 py-3">Periodo</th>
+                      <th className="px-3 py-3">Limite</th>
+                      <th className="px-3 py-3">Saldo</th>
+                      <th className="px-3 py-3">Status</th>
+                      <th className="px-3 py-3">Vai tirar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {loading ? (
+                      <tr>
+                        <td className="px-3 py-8 text-center text-slate-500" colSpan={7}>
+                          Carregando base de ferias...
+                        </td>
+                      </tr>
+                    ) : !filteredRecords.length ? (
+                      <tr>
+                        <td className="px-3 py-8 text-center text-slate-500" colSpan={7}>
+                          Nenhum periodo encontrado com os filtros atuais.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredRecords.map((registro) => (
+                        <tr
+                          key={registro.ferias_id}
+                          className="cursor-pointer hover:bg-slate-50/70"
+                          onClick={() => setSelecionado(registro)}
+                        >
+                          <td className="px-3 py-3">
+                            <div className="font-bold text-slate-900">{registro.nm_funcionario || "-"}</div>
+                            <div className="text-xs text-slate-500">
+                              {registro.nm_funcao || "Sem funcao"}
+                              {registro.area_titulo ? ` • ${registro.area_titulo}` : ""}
+                            </div>
+                            <div className="text-xs text-slate-400">Cracha {registro.nr_cracha || "-"}</div>
+                          </td>
+                          <td className="px-3 py-3 text-slate-700">
+                            <div className="font-semibold">{registro.manager_nome}</div>
+                            <div className="text-xs text-slate-400">{registro.manager_cargo || "-"}</div>
+                          </td>
+                          <td className="px-3 py-3 text-slate-600">
+                            {formatDateBR(registro.dt_inicio_aquisitivo)} a {formatDateBR(registro.dt_fim_aquisitivo)}
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="font-semibold text-slate-800">{formatDateBR(registro.dt_limite_legal)}</div>
+                            <div className="text-xs text-slate-400">
+                              {registro.dias_para_limite_legal !== null && registro.dias_para_limite_legal !== undefined
+                                ? `${registro.dias_para_limite_legal} dia(s)`
+                                : "Sem contador"}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 font-bold text-slate-800">{formatInt(registro.dias_pendentes_total)}</td>
+                          <td className="px-3 py-3">
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${registro.resumo_status_chip}`}>
+                              {registro.resumo_status_label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-600">
+                            {getDisplayStart(registro)
+                              ? `${formatDateBR(getDisplayStart(registro))} a ${formatDateBR(getDisplayEnd(registro))}`
+                              : "Nao programado"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              <div className="rounded-3xl border border-rose-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-rose-700">
+                  <FaExclamationTriangle />
+                  Gestao imediata
+                </div>
+                <div className="mt-2 text-sm text-slate-600">
+                  Priorize quem venceu, quem bateu 11 meses e quem a operacao pediu para segurar.
+                </div>
+                <div className="mt-4 space-y-3">
+                  {!criticos.length ? (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                      Nenhum periodo critico no momento.
+                    </div>
+                  ) : (
+                    criticos.map((registro) => (
+                      <button
+                        key={registro.ferias_id}
+                        type="button"
+                        onClick={() => setSelecionado(registro)}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-bold text-slate-900">{registro.nm_funcionario}</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {registro.manager_nome}
+                            </div>
+                          </div>
+                          <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${registro.resumo_status_chip}`}>
+                            {registro.resumo_status_label}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                          <div>Limite legal: {formatDateBR(registro.dt_limite_legal)}</div>
+                          <div>Saldo: {formatInt(registro.dias_pendentes_total)} dia(s)</div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="text-sm font-black uppercase tracking-wide text-slate-800">Leitura rapida</div>
+                <div className="mt-4 space-y-3 text-sm text-slate-600">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="font-semibold text-slate-900">Quem esta de ferias</div>
+                    <div className="mt-1">{stats.emGozo} periodo(s) com colaborador em gozo neste momento.</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="font-semibold text-slate-900">Quem precisa tirar</div>
+                    <div className="mt-1">
+                      {stats.saldo} periodo(s) com saldo pendente e {stats.vencidos} ja estao vencidos.
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="font-semibold text-slate-900">Visao por gerente</div>
+                    <div className="mt-1">
+                      O filtro principal agora segue o gestor vinculado pelo organograma, e nao mais a area isolada.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {viewMode === "calendario" ? (
+        <CalendarView
+          registros={calendarRecords}
+          monthKey={calendarMonth}
+          onPrevMonth={goPrevMonth}
+          onNextMonth={goNextMonth}
+          onOpenItem={setSelecionado}
+        />
+      ) : null}
+
+      {viewMode === "rh" ? (
+        <RHMonthlyView groups={monthlyPlannedGroups} onOpenItem={setSelecionado} />
+      ) : null}
 
       <PlanejamentoModal
         item={selecionado}
@@ -1158,7 +1492,7 @@ export default function Ferias() {
   );
 }
 
-function mergeFeriasData(periodos, planos, allocByKey, areaByCodigo) {
+function mergeFeriasData(periodos, planos, allocByKey, areasByCodigo, gestorByArea) {
   const planByFeriasId = new Map((planos || []).map((item) => [String(item.ferias_id), item]));
   return (periodos || []).map((registro) => {
     const planejamento = planByFeriasId.get(String(registro.ferias_id)) || {};
@@ -1167,7 +1501,8 @@ function mergeFeriasData(periodos, planos, allocByKey, areaByCodigo) {
       allocByKey.get(buildFuncionarioKey({ funcionario_cracha: registro.nr_cracha })) ||
       allocByKey.get(buildFuncionarioKey({ nome: registro.nm_funcionario }));
     const areaCodigo = planejamento.area_codigo || allocation?.area_codigo || "";
-    const areaTitulo = planejamento.area_titulo || areaByCodigo.get(areaCodigo)?.titulo || "";
+    const areaTitulo = planejamento.area_titulo || areasByCodigo.get(areaCodigo)?.titulo || "";
+    const manager = getManagerForArea(areaCodigo, areasByCodigo, gestorByArea);
     const resumo = deriveResumoStatus({
       ...registro,
       ...planejamento,
@@ -1177,6 +1512,7 @@ function mergeFeriasData(periodos, planos, allocByKey, areaByCodigo) {
       ...planejamento,
       area_codigo: areaCodigo,
       area_titulo: areaTitulo,
+      ...manager,
       resumo_status_key: resumo.key,
       resumo_status_label: resumo.label,
       resumo_status_chip: resumo.chip,

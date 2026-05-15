@@ -405,16 +405,16 @@ function CardEquipamento({ item, tipo, onNovo, onEditar }) {
 
   return (
     <div className={`rounded-2xl border shadow-sm overflow-hidden ${statusMeta.card}`}>
-      <div className="px-4 py-4 border-b bg-white/70 flex items-center justify-between gap-3">
+      <div className="px-4 py-4 border-b border-slate-200 bg-white/70 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-gray-900 text-white flex items-center justify-center shadow">
+          <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow">
             <IconeTipo size={18} />
           </div>
           <div>
-            <div className="text-[10px] font-black text-gray-500 uppercase">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
               Tipo
             </div>
-            <div className="text-base font-black text-gray-900">{tipo.label}</div>
+            <div className="text-base font-black text-slate-900">{tipo.label}</div>
           </div>
         </div>
 
@@ -447,20 +447,20 @@ function CardEquipamento({ item, tipo, onNovo, onEditar }) {
         </div>
 
         <div className="grid grid-cols-1 gap-3">
-          <div className="bg-white/80 rounded-xl border p-3">
-            <div className="text-[10px] font-black text-gray-500 uppercase">
+          <div className="rounded-xl border border-slate-200 bg-white/80 p-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
               Número do equipamento
             </div>
-            <div className="text-lg font-black text-gray-900 mt-1 break-all">
+            <div className="mt-1 break-all text-lg font-black text-slate-900">
               {item?.numero_equipamento || "-"}
             </div>
           </div>
 
-          <div className="bg-white/80 rounded-xl border p-3">
-            <div className="text-[10px] font-black text-gray-500 uppercase">
+          <div className="rounded-xl border border-slate-200 bg-white/80 p-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
               Observação
             </div>
-            <div className="text-sm font-semibold text-gray-800 mt-1 min-h-[42px]">
+            <div className="mt-1 min-h-[42px] text-sm font-semibold text-slate-700">
               {item?.observacao || "Sem observações."}
             </div>
           </div>
@@ -470,14 +470,14 @@ function CardEquipamento({ item, tipo, onNovo, onEditar }) {
           {!item ? (
             <button
               onClick={() => onNovo(tipo.value)}
-              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-black flex items-center gap-2"
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700"
             >
               <FaPlus /> Cadastrar
             </button>
           ) : (
             <button
               onClick={() => onEditar(item)}
-              className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-black text-white text-sm font-black flex items-center gap-2"
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white shadow hover:bg-slate-800"
             >
               <FaEdit /> Editar
             </button>
@@ -630,125 +630,113 @@ export default function Embarcados() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="bg-white rounded-2xl shadow-sm border p-5">
-        <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
-          <div>
-            <div className="text-xs font-black text-gray-500 uppercase">
-              Controle
-            </div>
-            <h1 className="text-2xl font-black uppercase tracking-tight text-gray-900">
-              Embarcados
-            </h1>
-            <p className="text-sm text-gray-500 font-semibold mt-1">
-              Selecione um veículo para visualizar os equipamentos embarcados.
-            </p>
-          </div>
+    <div className="space-y-6 p-4 md:p-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Embarcados · Controle</div>
+          <h1 className="text-2xl font-black text-slate-900 md:text-3xl">Embarcados por veículo</h1>
+          <p className="text-sm text-slate-500">
+            Selecione um veículo para visualizar os equipamentos embarcados.
+          </p>
+        </div>
 
-          <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
-            <div className="flex flex-col">
-              <label className="text-[10px] font-black text-gray-500 uppercase mb-1">
-                Buscar veículo
-              </label>
-              <div className="flex items-center gap-2 border rounded-xl px-3 py-2 bg-white min-w-[250px]">
-                <FaSearch className="text-gray-400" />
-                <input
-                  className="w-full outline-none text-sm font-semibold"
-                  placeholder="Ex: W541"
-                  value={buscaVeiculo}
-                  onChange={(e) => setBuscaVeiculo(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-[10px] font-black text-gray-500 uppercase mb-1">
-                Veículo
-              </label>
-              <select
-                className="border rounded-xl px-3 py-2 text-sm font-bold min-w-[280px] bg-white"
-                value={veiculoSelecionado}
-                onChange={(e) => setVeiculoSelecionado(e.target.value)}
-                disabled={loadingPrefixos}
-              >
-                <option value="">
-                  {loadingPrefixos ? "Carregando veículos..." : "Selecione..."}
-                </option>
-                {prefixosFiltrados.map((p) => (
-                  <option key={p.codigo} value={p.codigo}>
-                    {p.codigo} {p.cluster ? `- ${p.cluster}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              onClick={() => carregarEmbarcados(veiculoSelecionado)}
-              disabled={!veiculoSelecionado || loadingEmbarcados}
-              className="h-[42px] px-4 rounded-xl bg-gray-900 text-white font-black text-sm hover:bg-black disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              <FaSync className={loadingEmbarcados ? "animate-spin" : ""} />
-              Atualizar
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => carregarEmbarcados(veiculoSelecionado)}
+            disabled={!veiculoSelecionado || loadingEmbarcados}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white shadow hover:bg-slate-800 disabled:opacity-60"
+          >
+            <FaSync className={loadingEmbarcados ? "animate-spin" : ""} />
+            {loadingEmbarcados ? "Atualizando..." : "Atualizar"}
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-gray-500 uppercase">
-            Veículo
-          </div>
-          <div className="text-2xl font-black mt-1 text-gray-900">
-            {veiculoSelecionado || "-"}
-          </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Veículo</div>
+          <div className="mt-1 text-2xl font-black">{veiculoSelecionado || "-"}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Selecionado</div>
         </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-gray-500 uppercase">
-            Itens cadastrados
-          </div>
-          <div className="text-2xl font-black mt-1 text-gray-900">
-            {resumo.total}
-          </div>
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Itens</div>
+          <div className="mt-1 text-2xl font-black">{resumo.total}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Cadastrados</div>
         </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-gray-500 uppercase">
-            OK
-          </div>
-          <div className="text-2xl font-black mt-1 text-green-600">
-            {resumo.ok}
-          </div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">OK</div>
+          <div className="mt-1 text-2xl font-black">{resumo.ok}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Sem pendência</div>
         </div>
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Pendências</div>
+          <div className="mt-1 text-2xl font-black">{resumo.pendencias}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Fora do OK</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Tipos</div>
+          <div className="mt-1 text-2xl font-black">{TIPOS_FIXOS.length}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Slots por veículo</div>
+        </div>
+      </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-gray-500 uppercase">
-            Pendências
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              Buscar veículo
+            </label>
+            <div className="relative">
+              <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-blue-400 focus:outline-none"
+                placeholder="Ex: W541"
+                value={buscaVeiculo}
+                onChange={(e) => setBuscaVeiculo(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="text-2xl font-black mt-1 text-red-600">
-            {resumo.pendencias}
+
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              Veículo
+            </label>
+            <select
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none"
+              value={veiculoSelecionado}
+              onChange={(e) => setVeiculoSelecionado(e.target.value)}
+              disabled={loadingPrefixos}
+            >
+              <option value="">
+                {loadingPrefixos ? "Carregando veículos..." : "Selecione..."}
+              </option>
+              {prefixosFiltrados.map((p) => (
+                <option key={p.codigo} value={p.codigo}>
+                  {p.codigo} {p.cluster ? `- ${p.cluster}` : ""}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
 
       {!veiculoSelecionado ? (
-        <div className="mt-4 bg-white rounded-2xl border shadow-sm p-10 text-center">
-          <div className="text-lg font-black text-gray-800">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <div className="text-lg font-black text-slate-900">
             Selecione um veículo para visualizar os embarcados
           </div>
-          <div className="text-sm text-gray-500 font-semibold mt-2">
+          <div className="mt-2 text-sm text-slate-500">
             O filtro de veículo usa a tabela de prefixos.
           </div>
         </div>
       ) : loadingEmbarcados ? (
-        <div className="mt-4 bg-white rounded-2xl border shadow-sm p-10 text-center">
-          <div className="text-lg font-black text-gray-800">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <div className="text-lg font-black text-slate-900">
             Carregando embarcados...
           </div>
         </div>
       ) : (
-        <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {TIPOS_FIXOS.map((tipo) => (
             <CardEquipamento
               key={tipo.value}

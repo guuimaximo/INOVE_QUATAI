@@ -473,68 +473,77 @@ export default function EmbarcadosEnvioManutencao() {
   }, [modalEnvioId, envios]);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-900">
-      <div className="bg-white rounded-2xl shadow-sm border p-5">
-        <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
-          <div>
-            <div className="text-xs font-black text-indigo-600 uppercase tracking-widest">Módulo</div>
-            <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900">
-              Envio para Manutenção
-            </h1>
-            <p className="text-sm text-slate-500 font-semibold mt-1">
-              Controle de envios, retorno do prestador, valores cobrados e liberação do embarcado.
-            </p>
-          </div>
+    <div className="space-y-6 p-4 font-sans text-slate-900 md:p-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Embarcados · Manutenção</div>
+          <h1 className="text-2xl font-black text-slate-900 md:text-3xl">Envio para manutenção</h1>
+          <p className="text-sm text-slate-500">
+            Controle de envios, retorno do prestador, valores cobrados e liberação do embarcado.
+          </p>
+        </div>
 
-          <button
-            onClick={carregar}
-            className="h-[42px] px-4 rounded-xl bg-white border border-slate-200 text-slate-800 font-black text-sm hover:bg-slate-50 flex items-center gap-2 transition-colors"
-          >
-            <FaSync className="text-indigo-600" /> Atualizar
-          </button>
+        <button
+          onClick={carregar}
+          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white shadow hover:bg-slate-800"
+        >
+          <FaSync /> Atualizar
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Total</div>
+          <div className="mt-1 text-2xl font-black">{resumo.total}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Envios registrados</div>
+        </div>
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Enviados</div>
+          <div className="mt-1 text-2xl font-black">{resumo.enviados}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Em manutenção</div>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Retorno parcial</div>
+          <div className="mt-1 text-2xl font-black">{resumo.parcial}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Aguardando itens</div>
+        </div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Finalizados</div>
+          <div className="mt-1 text-2xl font-black">{resumo.finalizados}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Concluídos</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Abertos</div>
+          <div className="mt-1 text-2xl font-black">{resumo.total - resumo.finalizados}</div>
+          <div className="mt-0.5 text-[11px] opacity-70">Pendentes</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total</div>
-          <div className="text-2xl font-black mt-1 text-slate-800">{resumo.total}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Enviados</div>
-          <div className="text-2xl font-black mt-1 text-blue-600">{resumo.enviados}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Retorno parcial</div>
-          <div className="text-2xl font-black mt-1 text-amber-600">{resumo.parcial}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Finalizados</div>
-          <div className="text-2xl font-black mt-1 text-emerald-600">{resumo.finalizados}</div>
-        </div>
-      </div>
-
-      <div className="mt-4 bg-white rounded-2xl shadow-sm border p-2">
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setAba("NOVO")}
-            className={`px-4 py-2 rounded-xl text-sm font-black transition-colors ${aba === "NOVO" ? "bg-indigo-600 text-white shadow-md" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
-          >
-            Novo envio
-          </button>
-          <button
-            onClick={() => setAba("CONTROLE")}
-            className={`px-4 py-2 rounded-xl text-sm font-black transition-colors ${aba === "CONTROLE" ? "bg-indigo-600 text-white shadow-md" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
-          >
-            Controle / retorno
-          </button>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setAba("NOVO")}
+          className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+            aba === "NOVO" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          Novo envio
+        </button>
+        <button
+          type="button"
+          onClick={() => setAba("CONTROLE")}
+          className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+            aba === "CONTROLE" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          Controle / retorno
+        </button>
       </div>
 
       {aba === "NOVO" ? (
         <form onSubmit={salvarNovoEnvio} className="mt-4 grid grid-cols-1 2xl:grid-cols-[520px_1fr] gap-4">
           <div className="bg-white rounded-2xl border shadow-sm p-5 space-y-4">
-            <div className="text-sm font-black uppercase text-indigo-800 flex items-center gap-2">
+            <div className="text-sm font-black uppercase text-blue-700 flex items-center gap-2">
               <FaFileInvoice /> Cabeçalho do envio
             </div>
 
@@ -552,7 +561,7 @@ export default function EmbarcadosEnvioManutencao() {
                 Tipo de embarcado do serviço
               </label>
               <select
-                className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                 value={form.tipo_embarcado_servico}
                 onChange={(e) =>
                   setForm((prev) => ({
@@ -574,7 +583,7 @@ export default function EmbarcadosEnvioManutencao() {
             <div>
               <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Prestador de serviço</label>
               <input
-                className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                 value={form.prestador_servico}
                 onChange={(e) => setForm({ ...form, prestador_servico: e.target.value })}
                 placeholder="Nome do prestador"
@@ -585,7 +594,7 @@ export default function EmbarcadosEnvioManutencao() {
               <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Data enviada para reparo</label>
               <input
                 type="date"
-                className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                 value={form.data_envio}
                 onChange={(e) => setForm({ ...form, data_envio: e.target.value })}
               />
@@ -594,7 +603,7 @@ export default function EmbarcadosEnvioManutencao() {
             <div>
               <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Observação geral</label>
               <textarea
-                className="w-full border rounded-xl px-3 py-2 text-sm font-bold min-h-[90px] outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full border rounded-xl px-3 py-2 text-sm font-bold min-h-[90px] outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                 value={form.observacao_geral}
                 onChange={(e) => setForm({ ...form, observacao_geral: e.target.value })}
               />
@@ -624,7 +633,7 @@ export default function EmbarcadosEnvioManutencao() {
                     type="button"
                     onClick={() => fileOrcamentoRef.current?.click()}
                     disabled={fileUploading}
-                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60 transition-colors"
+                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60 transition-colors"
                   >
                     <FaUpload />
                     {fileUploading ? "Enviando..." : "Anexar orçamento"}
@@ -654,7 +663,7 @@ export default function EmbarcadosEnvioManutencao() {
             <button
               type="submit"
               disabled={saving}
-              className="w-full px-4 py-3 mt-4 rounded-xl bg-indigo-600 text-white font-black hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors shadow-md"
+              className="w-full px-4 py-3 mt-4 rounded-xl bg-blue-600 text-white font-black hover:bg-blue-700 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors shadow-md"
             >
               <FaSave /> {saving ? "Salvando..." : "Salvar envio"}
             </button>
@@ -662,12 +671,12 @@ export default function EmbarcadosEnvioManutencao() {
 
           <div className="bg-white rounded-2xl border shadow-sm p-5">
             <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between mb-4">
-              <div className="text-sm font-black uppercase text-indigo-800 flex items-center gap-2">
+              <div className="text-sm font-black uppercase text-blue-700 flex items-center gap-2">
                 <FaTools /> Equipamentos enviados
               </div>
 
               <select
-                className="border rounded-xl px-3 py-2 text-sm font-bold bg-white min-w-[320px] outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="border rounded-xl px-3 py-2 text-sm font-bold bg-white min-w-[320px] outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                 defaultValue=""
                 onChange={(e) => {
                   if (!e.target.value) return;
@@ -700,7 +709,7 @@ export default function EmbarcadosEnvioManutencao() {
                     <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2">
                       <div>
                         <div className="text-sm font-black text-slate-900">
-                          {item.numero_equipamento} <span className="text-slate-400 mx-1">•</span> <span className="text-indigo-600">{item.tipo}</span>
+                          {item.numero_equipamento} <span className="text-slate-400 mx-1">•</span> <span className="text-blue-600">{item.tipo}</span>
                         </div>
                         <div className="text-xs font-semibold text-slate-500 mt-1">
                           Status item: {item.status_item || "ENVIADO"}
@@ -721,7 +730,7 @@ export default function EmbarcadosEnvioManutencao() {
                         Observação do envio
                       </label>
                       <textarea
-                        className="w-full border rounded-lg px-3 py-2 text-sm font-bold min-h-[80px] bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                        className="w-full border rounded-lg px-3 py-2 text-sm font-bold min-h-[80px] bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                         value={item.observacao_envio || ""}
                         onChange={(e) => updateItem(index, { observacao_envio: e.target.value })}
                         placeholder="Defeito percebido / motivo do envio"
@@ -736,7 +745,7 @@ export default function EmbarcadosEnvioManutencao() {
       ) : (
         <div className="mt-4">
           <div className="bg-white rounded-2xl shadow-sm border p-4 mb-4">
-            <div className="flex items-center gap-2 border rounded-xl px-3 py-2 bg-white max-w-[380px] focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500">
+            <div className="flex items-center gap-2 border rounded-xl px-3 py-2 bg-white max-w-[380px] focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400">
               <FaSearch className="text-slate-400" />
               <input
                 className="w-full outline-none text-sm font-semibold bg-transparent"
@@ -779,7 +788,7 @@ export default function EmbarcadosEnvioManutencao() {
                       </div>
 
                       <div className="flex-1">
-                        <div className="text-base font-black text-indigo-900 leading-tight">
+                        <div className="text-base font-black text-blue-900 leading-tight">
                           {envio.prestador_servico}
                         </div>
                         <div className="text-xs text-slate-500 font-semibold mt-1 flex gap-2 items-center">
@@ -802,7 +811,7 @@ export default function EmbarcadosEnvioManutencao() {
                       
                       <button
                         onClick={() => setModalEnvioId(envio.id)}
-                        className="w-full md:w-auto px-4 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm font-black flex items-center justify-center gap-2 transition-colors"
+                        className="w-full md:w-auto px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-sm font-black flex items-center justify-center gap-2 transition-colors"
                       >
                         <FaEdit /> Detalhes / Edição
                       </button>
@@ -824,7 +833,7 @@ export default function EmbarcadosEnvioManutencao() {
             <div className="bg-white border-b px-6 py-4 flex items-center justify-between sticky top-0 z-10">
               <div>
                 <h2 className="text-lg font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight">
-                  <FaTools className="text-indigo-600" /> Detalhes da Ordem de Serviço
+                  <FaTools className="text-blue-600" /> Detalhes da Ordem de Serviço
                 </h2>
                 <div className="text-xs font-bold text-slate-500 mt-1">
                   Registro nº {envioModal.numero_registro} | OS: {envioModal.ordem_servico}
@@ -843,7 +852,7 @@ export default function EmbarcadosEnvioManutencao() {
               
               {/* SESSÃO 1: CABEÇALHO / ORÇAMENTO */}
               <div className="bg-white rounded-xl border p-5 shadow-sm">
-                <div className="text-xs font-black uppercase text-indigo-800 tracking-widest mb-4 border-b pb-2">
+                <div className="text-xs font-black uppercase text-blue-700 tracking-widest mb-4 border-b pb-2">
                   1. Informações e Orçamento
                 </div>
                 
@@ -887,7 +896,7 @@ export default function EmbarcadosEnvioManutencao() {
 
               {/* SESSÃO 2: FINALIZAÇÃO DO SERVIÇO / ITENS */}
               <div className="bg-white rounded-xl border p-5 shadow-sm">
-                <div className="text-xs font-black uppercase text-indigo-800 tracking-widest mb-4 border-b pb-2">
+                <div className="text-xs font-black uppercase text-blue-700 tracking-widest mb-4 border-b pb-2">
                   2. Finalização do Serviço por Equipamento
                 </div>
 
@@ -899,7 +908,7 @@ export default function EmbarcadosEnvioManutencao() {
                         <div>
                           <span className="text-sm font-black text-slate-900">{item.numero_equipamento}</span>
                           <span className="text-slate-400 mx-2">•</span>
-                          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">{item.tipo}</span>
+                          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">{item.tipo}</span>
                         </div>
                         {item.status_item === "RETORNADO" || item.status_item === "FINALIZADO" ? (
                           <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
@@ -930,7 +939,7 @@ export default function EmbarcadosEnvioManutencao() {
                               O que foi feito (Retorno do Prestador)
                             </label>
                             <textarea
-                              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium min-h-[80px] bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium min-h-[80px] bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors"
                               value={item.retorno_prestador || ""}
                               onChange={(e) => updateEnvioItem(envioModal.id, index, { retorno_prestador: e.target.value })}
                               placeholder="Descreva o serviço executado..."
@@ -943,7 +952,7 @@ export default function EmbarcadosEnvioManutencao() {
                                 Custo / Valor
                               </label>
                               <input
-                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 text-slate-800"
                                 value={item.valor_cobrado || ""}
                                 onChange={(e) => updateEnvioItem(envioModal.id, index, { valor_cobrado: e.target.value })}
                                 placeholder="0.00"
@@ -956,7 +965,7 @@ export default function EmbarcadosEnvioManutencao() {
                               </label>
                               <input
                                 type="date"
-                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 text-slate-800"
                                 value={item.data_retorno || ""}
                                 onChange={(e) => updateEnvioItem(envioModal.id, index, { 
                                   data_retorno: e.target.value,
@@ -970,7 +979,7 @@ export default function EmbarcadosEnvioManutencao() {
                                 Destino Final
                               </label>
                               <select
-                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 text-slate-800"
                                 value={item.destino_final || ""}
                                 onChange={(e) => updateEnvioItem(envioModal.id, index, { 
                                   destino_final: e.target.value,
@@ -995,7 +1004,7 @@ export default function EmbarcadosEnvioManutencao() {
             {/* Footer Fixo */}
             <div className="bg-white border-t px-6 py-4 flex flex-col sm:flex-row items-center justify-between sticky bottom-0 z-10 gap-4">
               <div className="text-sm font-black text-slate-700 bg-slate-100 px-4 py-2 rounded-lg border">
-                Custo Total da OS: <span className="text-indigo-700 ml-1">
+                Custo Total da OS: <span className="text-blue-700 ml-1">
                   {formatMoney((envioModal.itens_json || []).reduce((acc, i) => acc + Number(i.valor_cobrado || 0), 0))}
                 </span>
               </div>
@@ -1011,7 +1020,7 @@ export default function EmbarcadosEnvioManutencao() {
                   type="button"
                   onClick={() => salvarRetornoEnvio(envioModal)}
                   disabled={saving}
-                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60 transition-colors shadow-md"
+                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60 transition-colors shadow-md"
                 >
                   <FaSave /> {saving ? "Salvando..." : "Finalizar OS"}
                 </button>

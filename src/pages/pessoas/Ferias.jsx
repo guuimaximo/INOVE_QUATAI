@@ -694,9 +694,6 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                 <div className="mt-1 text-lg font-black text-slate-900">
                   {formatDateBR(currentGozoPeriod.inicio)} a {formatDateBR(currentGozoPeriod.fim)}
                 </div>
-                <div className="mt-1 text-sm text-slate-600">
-                  Periodo atual detectado {currentGozoPeriod.origem === "historico" ? "pelo historico da base" : "pela programacao atual"}.
-                </div>
               </div>
             ) : null}
 
@@ -712,99 +709,66 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
               <InfoBox label="Limite legal" value={formatDateBR(item.dt_limite_legal)} />
               <InfoBox label="Dias pendentes" value={formatInt(item.dias_pendentes_total)} />
               <InfoBox label="Dias em andamento" value={formatInt(item.dias_em_andamento)} />
-              <InfoBox label="Gozo realizado" value={`${formatInt(item.dias_gozo_realizados || 0)} dia(s)`} />
-              <InfoBox label="Abono realizado" value={`${formatInt(item.dias_abono_realizados || 0)} dia(s)`} />
+              <InfoBox label="Gozo" value={`${formatInt(item.dias_gozo_realizados || 0)} dia(s)`} />
+              <InfoBox label="Abono" value={`${formatInt(item.dias_abono_realizados || 0)} dia(s)`} />
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Resumo do colaborador</div>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <InfoBox label="Periodos no arquivo" value={formatInt(item._periodos_total_colaborador || 1)} />
-                <InfoBox label="Periodos pendentes" value={formatInt(item._periodos_pendentes_colaborador || 0)} />
-                <InfoBox label="Saldo total" value={`${formatInt(item._saldo_total_colaborador || item.dias_pendentes_total || 0)} dia(s)`} />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Resumo rapido</div>
+                <div className="mt-2 space-y-1 text-sm text-slate-600">
+                  <div><span className="font-semibold text-slate-800">Saldo total:</span> {formatInt(item._saldo_total_colaborador || item.dias_pendentes_total || 0)} dia(s)</div>
+                  <div><span className="font-semibold text-slate-800">Periodos pendentes:</span> {formatInt(item._periodos_pendentes_colaborador || 0)}</div>
+                  <div><span className="font-semibold text-slate-800">Ultimo gozo:</span> {getDisplayGozoForHistory(item)}</div>
+                </div>
               </div>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <InfoBox label="Abonos no historico" value={formatInt(item._qtd_abonos_total_colaborador || 0)} />
-                <InfoBox label="Dias de abono" value={`${formatInt(item._dias_abono_total_colaborador || 0)} dia(s)`} />
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-              <div className="text-sm font-black uppercase tracking-wide text-slate-700">Leitura do periodo</div>
-              <div className="mt-3 space-y-2 text-sm text-slate-600">
-                <p>
-                  <span className="font-semibold text-slate-800">Periodo em ferias agora:</span>{" "}
-                  {currentGozoPeriod
-                    ? `${formatDateBR(currentGozoPeriod.inicio)} a ${formatDateBR(currentGozoPeriod.fim)}`
-                    : "Nao identificado na base atual"}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-800">Alerta 11 meses:</span>{" "}
-                  {formatDateBR(item.dt_alerta_11_meses)}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-800">Ultimo gozo realizado:</span>{" "}
-                  {getDisplayGozoForHistory(item)}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-800">Agendado na base:</span>{" "}
-                  {item.proximo_inicio_gozo
-                    ? `${formatDateBR(item.proximo_inicio_gozo)} a ${formatDateBR(item.proximo_fim_gozo)}`
-                    : "Nao agendado"}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-800">Abono na base:</span>{" "}
-                  {item.proximo_inicio_abono
-                    ? `${formatDateBR(item.proximo_inicio_abono)} a ${formatDateBR(item.proximo_fim_abono)}`
-                    : item.ultimo_inicio_abono_realizado
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Abono</div>
+                <div className="mt-2 space-y-1 text-sm text-slate-600">
+                  <div><span className="font-semibold text-slate-800">Dias:</span> {formatInt(item._dias_abono_total_colaborador || 0)} dia(s)</div>
+                  <div><span className="font-semibold text-slate-800">Ocorrencias:</span> {formatInt(item._qtd_abonos_total_colaborador || 0)}</div>
+                  <div>
+                    <span className="font-semibold text-slate-800">Ultimo abono:</span>{" "}
+                    {item.ultimo_inicio_abono_realizado
                       ? `${formatDateBR(item.ultimo_inicio_abono_realizado)} a ${formatDateBR(item.ultimo_fim_abono_realizado)}`
-                      : "Sem abono informado"}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-800">Historico:</span>{" "}
-                  {item.historico_gozos || "Sem historico no arquivo"}
-                </p>
+                      : "Sem registro"}
+                  </div>
+                </div>
               </div>
             </div>
 
             {showHistorico ? (
-              <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4">
+              <div className="rounded-2xl border border-blue-200 bg-white p-4">
                 <div className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-blue-900">
                   <FaHistory />
-                  Historico de ferias
+                  Historico
                 </div>
-                <div className="mt-3 space-y-3">
+                <div className="mt-3 space-y-2">
                   {historicoPeriodos.map((periodo) => {
                     const ultimoHistorico = periodo._historico_extraido?.[0];
+                    const gozoTexto = ultimoHistorico?.gozoInicio
+                      ? `${formatDateBR(ultimoHistorico.gozoInicio)} a ${formatDateBR(ultimoHistorico.gozoFim)}`
+                      : getDisplayGozoForHistory(periodo);
+                    const diasTexto = formatInt(ultimoHistorico?.diasGozo ?? periodo.dias_gozo_realizados ?? 0);
+                    const abonoTexto = ultimoHistorico?.abonoInicio
+                      ? `${formatDateBR(ultimoHistorico.abonoInicio)} a ${formatDateBR(ultimoHistorico.abonoFim)}`
+                      : hasAbonoData(periodo)
+                        ? `${formatInt(periodo.dias_abono_realizados || 0)} dia(s)`
+                        : "Sem abono";
                     return (
-                      <div key={periodo.ferias_id} className="rounded-2xl border border-blue-100 bg-white px-4 py-3">
-                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div key={periodo.ferias_id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-[1.3fr_0.7fr_1fr] md:items-center">
                           <div>
-                            <div className="text-sm font-bold text-slate-900">
-                              {formatDateBR(periodo.dt_inicio_aquisitivo)} a {formatDateBR(periodo.dt_fim_aquisitivo)}
-                            </div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              Status: {periodo.status_periodo || "-"} - Limite legal: {formatDateBR(periodo.dt_limite_legal)}
-                            </div>
-                          </div>
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${periodo.resumo_status_chip || "border-slate-200 bg-slate-100 text-slate-700"}`}>
-                            {periodo.resumo_status_label || periodo.status_periodo || "Periodo"}
-                          </span>
-                        </div>
-                        <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-600 md:grid-cols-2">
-                          <div>
-                            <span className="font-semibold text-slate-800">Gozo:</span>{" "}
-                            {ultimoHistorico?.gozoInicio
-                              ? `${formatDateBR(ultimoHistorico.gozoInicio)} a ${formatDateBR(ultimoHistorico.gozoFim)} (${formatInt(ultimoHistorico.diasGozo || 0)} dia(s))`
-                              : getDisplayGozoForHistory(periodo)}
+                            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Quando foi</div>
+                            <div className="mt-1 text-sm font-bold text-slate-900">{gozoTexto}</div>
                           </div>
                           <div>
-                            <span className="font-semibold text-slate-800">Abono:</span>{" "}
-                            {ultimoHistorico?.abonoInicio
-                              ? `${formatDateBR(ultimoHistorico.abonoInicio)} a ${formatDateBR(ultimoHistorico.abonoFim)} (${formatInt(ultimoHistorico.diasAbono || 0)} dia(s))`
-                              : hasAbonoData(periodo)
-                                ? `${formatInt(periodo.dias_abono_realizados || 0)} dia(s)`
-                                : "Sem abono"}
+                            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Quantos dias</div>
+                            <div className="mt-1 text-sm font-bold text-slate-900">{diasTexto} dia(s)</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Abono</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-700">{abonoTexto}</div>
                           </div>
                         </div>
                       </div>
@@ -816,21 +780,12 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-4">
-              <div className="text-sm font-black uppercase tracking-wide text-blue-900">Como preencher</div>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="rounded-xl border border-blue-100 bg-white/80 px-3 py-3 text-sm text-slate-700">
-                  <div className="font-bold text-blue-900">Pode liberar</div>
-                  <div className="mt-1">Janela em que a operacao consegue soltar essa pessoa sem prejudicar a equipe.</div>
-                </div>
-                <div className="rounded-xl border border-emerald-100 bg-white/80 px-3 py-3 text-sm text-slate-700">
-                  <div className="font-bold text-emerald-900">Vai tirar</div>
-                  <div className="mt-1">Periodo confirmado que realmente sera executado.</div>
-                </div>
-                <div className="rounded-xl border border-amber-100 bg-white/80 px-3 py-3 text-sm text-slate-700">
-                  <div className="font-bold text-amber-900">Abono</div>
-                  <div className="mt-1">Use quando o colaborador vai vender parte das ferias junto com o gozo.</div>
-                </div>
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/50 px-4 py-3">
+              <div className="text-sm font-black uppercase tracking-wide text-blue-900">Preenchimento rapido</div>
+              <div className="mt-2 text-sm text-slate-700">
+                <span className="font-semibold text-blue-900">Pode liberar:</span> janela que a equipe suporta.
+                {" "} <span className="font-semibold text-emerald-900">Vai tirar:</span> periodo confirmado.
+                {" "} <span className="font-semibold text-amber-900">Abono:</span> quando houver venda de dias.
               </div>
             </div>
 

@@ -9,6 +9,7 @@ import {
   FaDownload,
   FaExclamationTriangle,
   FaFilter,
+  FaHistory,
   FaSave,
   FaSearch,
   FaSync,
@@ -353,11 +354,93 @@ function getManagerForArea(areaCodigo, areasByCodigo, gestorByArea) {
 }
 
 function getDisplayStart(item) {
-  return item.programado_inicio || item.proximo_inicio_gozo || null;
+  const direct = item.programado_inicio || item.proximo_inicio_gozo || null;
+  if (direct) return direct;
+  const current = getCurrentGozoPeriod(item);
+  return current?.inicio || null;
 }
 
 function getDisplayEnd(item) {
-  return item.programado_fim || item.proximo_fim_gozo || null;
+  const direct = item.programado_fim || item.proximo_fim_gozo || null;
+  if (direct) return direct;
+  const current = getCurrentGozoPeriod(item);
+  return current?.fim || null;
+}
+
+function parseHistoricoGozos(historico) {
+  const text = safeText(historico);
+  if (!text) return [];
+
+  return text
+    .split(/(?=Periodo \d+:)/g)
+    .map((chunk) => {
+      const periodo = chunk.match(/Periodo\s+(\d+)/i)?.[1] || "";
+      const gozo = chunk.match(/Gozo\s+(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})/i);
+      const diasGozo = parseNullableInt(chunk.match(/Dias Gozo:\s*([0-9]+)/i)?.[1]);
+      const abono = chunk.match(/Abono\s+(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})/i);
+      const diasAbono = parseNullableInt(chunk.match(/Dias Abono:\s*([0-9]+)/i)?.[1]);
+      const situacao = safeText(chunk.match(/Situacao:\s*([0-9]+)/i)?.[1]);
+
+      return {
+        periodo,
+        gozoInicio: parseDateInput(gozo?.[1]),
+        gozoFim: parseDateInput(gozo?.[2]),
+        diasGozo,
+        abonoInicio: parseDateInput(abono?.[1]),
+        abonoFim: parseDateInput(abono?.[2]),
+        diasAbono,
+        situacao,
+      };
+    })
+    .filter((item) => item.gozoInicio || item.abonoInicio)
+    .sort((left, right) => String(right.gozoInicio || right.abonoInicio || "").localeCompare(String(left.gozoInicio || left.abonoInicio || "")));
+}
+
+function getCurrentGozoPeriod(item) {
+  const hoje = parseDateInput(new Date());
+  if (!hoje) return null;
+
+  const start = parseDateInput(item.programado_inicio || item.proximo_inicio_gozo);
+  const end = parseDateInput(item.programado_fim || item.proximo_fim_gozo);
+  if (start && end && start <= hoje && end >= hoje) {
+    return { inicio: start, fim: end, origem: "planejamento" };
+  }
+
+  if (item.resumo_status_key !== "em_gozo" && Number(item.dias_em_andamento || 0) <= 0) {
+    return null;
+  }
+
+  const historico = parseHistoricoGozos(item.historico_gozos);
+  const atual = historico.find((periodo) => periodo.gozoInicio && periodo.gozoFim && periodo.gozoInicio <= hoje && periodo.gozoFim >= hoje);
+  if (atual) {
+    return { inicio: atual.gozoInicio, fim: atual.gozoFim, origem: "historico" };
+  }
+
+  const ultimo = historico[0];
+  if (ultimo?.gozoInicio && ultimo?.gozoFim) {
+    return { inicio: ultimo.gozoInicio, fim: ultimo.gozoFim, origem: "historico" };
+  }
+
+  return null;
+}
+
+function getDisplayGozoForHistory(item) {
+  const historico = parseHistoricoGozos(item.historico_gozos);
+  const ultimo = historico[0];
+
+  if (ultimo?.gozoInicio && ultimo?.gozoFim) {
+    return `${formatDateBR(ultimo.gozoInicio)} a ${formatDateBR(ultimo.gozoFim)}`;
+  }
+
+  if (item.ultimo_inicio_gozo_realizado) {
+    return `${formatDateBR(item.ultimo_inicio_gozo_realizado)} a ${formatDateBR(item.ultimo_fim_gozo_realizado)}`;
+  }
+
+  if (item.proximo_inicio_gozo) {
+    return `${formatDateBR(item.proximo_inicio_gozo)} a ${formatDateBR(item.proximo_fim_gozo)}`;
+  }
+
+  return "Sem registro";
 }
 
 function compareFeriasPriority(left, right) {
@@ -517,6 +600,7 @@ function InfoBox({ label, value }) {
 }
 
 function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
+  const [showHistorico, setShowHistorico] = useState(false);
   const [form, setForm] = useState({
     janela_sugerida_inicio: "",
     janela_sugerida_fim: "",
@@ -532,6 +616,7 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
 
   useEffect(() => {
     if (!open || !item) return;
+    setShowHistorico(false);
     setForm({
       janela_sugerida_inicio: item.janela_sugerida_inicio || "",
       janela_sugerida_fim: item.janela_sugerida_fim || "",
@@ -548,6 +633,14 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
 
   if (!open || !item) return null;
 
+  const currentGozoPeriod = getCurrentGozoPeriod(item);
+  const historicoPeriodos = (item._periodos_relacionados?.length ? item._periodos_relacionados : [item])
+    .map((periodo) => ({
+      ...periodo,
+      _historico_extraido: parseHistoricoGozos(periodo.historico_gozos),
+    }))
+    .sort((left, right) => String(right.dt_inicio_aquisitivo || "").localeCompare(String(left.dt_inicio_aquisitivo || "")));
+
   const diasPlanejados = diffDaysInclusive(form.programado_inicio, form.programado_fim);
   const diasAbonoPlanejados = form.usar_abono ? diffDaysInclusive(form.programado_abono_inicio, form.programado_abono_fim) : 0;
   const totalPlanejado = Number(diasPlanejados || 0) + Number(diasAbonoPlanejados || 0);
@@ -559,9 +652,9 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-[2px]">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-blue-50 shadow-2xl">
+        <div className="flex items-start justify-between border-b border-slate-200 bg-white/80 px-6 py-4 backdrop-blur">
           <div>
             <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-blue-600">Card do colaborador</div>
             <div className="mt-1 text-xl font-black text-slate-900">{item.nm_funcionario}</div>
@@ -570,17 +663,43 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
               {item.manager_nome ? ` • Gestor: ${item.manager_nome}` : ""}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-          >
-            <FaTimes />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowHistorico((current) => !current)}
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                showHistorico
+                  ? "border-blue-200 bg-blue-50 text-blue-800"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <FaHistory />
+              Historico
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            >
+              <FaTimes />
+            </button>
+          </div>
         </div>
 
         <div className="grid flex-1 grid-cols-1 gap-5 overflow-y-auto px-6 py-5 lg:grid-cols-[1.1fr_1.3fr]">
           <div className="space-y-4">
+            {currentGozoPeriod ? (
+              <div className="rounded-2xl border border-purple-200 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-blue-50 p-4">
+                <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-purple-700">Em ferias agora</div>
+                <div className="mt-1 text-lg font-black text-slate-900">
+                  {formatDateBR(currentGozoPeriod.inicio)} a {formatDateBR(currentGozoPeriod.fim)}
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  Periodo atual detectado {currentGozoPeriod.origem === "historico" ? "pelo historico da base" : "pela programacao atual"}.
+                </div>
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <InfoBox label="Cracha" value={item.nr_cracha} />
               <InfoBox label="Status atual" value={item.resumo_status_label} />
@@ -610,18 +729,22 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
               <div className="text-sm font-black uppercase tracking-wide text-slate-700">Leitura do periodo</div>
               <div className="mt-3 space-y-2 text-sm text-slate-600">
+                <p>
+                  <span className="font-semibold text-slate-800">Periodo em ferias agora:</span>{" "}
+                  {currentGozoPeriod
+                    ? `${formatDateBR(currentGozoPeriod.inicio)} a ${formatDateBR(currentGozoPeriod.fim)}`
+                    : "Nao identificado na base atual"}
+                </p>
                 <p>
                   <span className="font-semibold text-slate-800">Alerta 11 meses:</span>{" "}
                   {formatDateBR(item.dt_alerta_11_meses)}
                 </p>
                 <p>
                   <span className="font-semibold text-slate-800">Ultimo gozo realizado:</span>{" "}
-                  {item.ultimo_inicio_gozo_realizado
-                    ? `${formatDateBR(item.ultimo_inicio_gozo_realizado)} a ${formatDateBR(item.ultimo_fim_gozo_realizado)}`
-                    : "Sem registro"}
+                  {getDisplayGozoForHistory(item)}
                 </p>
                 <p>
                   <span className="font-semibold text-slate-800">Agendado na base:</span>{" "}
@@ -643,18 +766,79 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                 </p>
               </div>
             </div>
+
+            {showHistorico ? (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4">
+                <div className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-blue-900">
+                  <FaHistory />
+                  Historico de ferias
+                </div>
+                <div className="mt-3 space-y-3">
+                  {historicoPeriodos.map((periodo) => {
+                    const ultimoHistorico = periodo._historico_extraido?.[0];
+                    return (
+                      <div key={periodo.ferias_id} className="rounded-2xl border border-blue-100 bg-white px-4 py-3">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <div className="text-sm font-bold text-slate-900">
+                              {formatDateBR(periodo.dt_inicio_aquisitivo)} a {formatDateBR(periodo.dt_fim_aquisitivo)}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              Status: {periodo.status_periodo || "-"} - Limite legal: {formatDateBR(periodo.dt_limite_legal)}
+                            </div>
+                          </div>
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${periodo.resumo_status_chip || "border-slate-200 bg-slate-100 text-slate-700"}`}>
+                            {periodo.resumo_status_label || periodo.status_periodo || "Periodo"}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-600 md:grid-cols-2">
+                          <div>
+                            <span className="font-semibold text-slate-800">Gozo:</span>{" "}
+                            {ultimoHistorico?.gozoInicio
+                              ? `${formatDateBR(ultimoHistorico.gozoInicio)} a ${formatDateBR(ultimoHistorico.gozoFim)} (${formatInt(ultimoHistorico.diasGozo || 0)} dia(s))`
+                              : getDisplayGozoForHistory(periodo)}
+                          </div>
+                          <div>
+                            <span className="font-semibold text-slate-800">Abono:</span>{" "}
+                            {ultimoHistorico?.abonoInicio
+                              ? `${formatDateBR(ultimoHistorico.abonoInicio)} a ${formatDateBR(ultimoHistorico.abonoFim)} (${formatInt(ultimoHistorico.diasAbono || 0)} dia(s))`
+                              : hasAbonoData(periodo)
+                                ? `${formatInt(periodo.dias_abono_realizados || 0)} dia(s)`
+                                : "Sem abono"}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-              <div className="text-sm font-black uppercase tracking-wide text-blue-900">Decisao do gestor</div>
-              <div className="mt-2 text-sm text-blue-900/80">
-                Registre quando a equipe consegue liberar e, em seguida, a data real de ferias.
+            <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-4">
+              <div className="text-sm font-black uppercase tracking-wide text-blue-900">Como preencher</div>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-blue-100 bg-white/80 px-3 py-3 text-sm text-slate-700">
+                  <div className="font-bold text-blue-900">Pode liberar</div>
+                  <div className="mt-1">Janela em que a operacao consegue soltar essa pessoa sem prejudicar a equipe.</div>
+                </div>
+                <div className="rounded-xl border border-emerald-100 bg-white/80 px-3 py-3 text-sm text-slate-700">
+                  <div className="font-bold text-emerald-900">Vai tirar</div>
+                  <div className="mt-1">Periodo confirmado que realmente sera executado.</div>
+                </div>
+                <div className="rounded-xl border border-amber-100 bg-white/80 px-3 py-3 text-sm text-slate-700">
+                  <div className="font-bold text-amber-900">Abono</div>
+                  <div className="mt-1">Use quando o colaborador vai vender parte das ferias junto com o gozo.</div>
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="Quando pode tirar - inicio">
+              <Field
+                label="Pode liberar - inicio"
+                hint="Primeiro dia em que a equipe consegue liberar esse colaborador."
+              >
                 <input
                   className={FIELD_INPUT}
                   type="date"
@@ -662,7 +846,10 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                   onChange={(event) => updateField("janela_sugerida_inicio", event.target.value)}
                 />
               </Field>
-              <Field label="Quando pode tirar - fim">
+              <Field
+                label="Pode liberar - fim"
+                hint="Ultimo dia dessa janela possivel."
+              >
                 <input
                   className={FIELD_INPUT}
                   type="date"
@@ -670,7 +857,10 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                   onChange={(event) => updateField("janela_sugerida_fim", event.target.value)}
                 />
               </Field>
-              <Field label="Vai tirar - inicio">
+              <Field
+                label="Ferias confirmadas - inicio"
+                hint="Data real que ficou combinada."
+              >
                 <input
                   className={FIELD_INPUT}
                   type="date"
@@ -678,7 +868,10 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                   onChange={(event) => updateField("programado_inicio", event.target.value)}
                 />
               </Field>
-              <Field label="Vai tirar - fim">
+              <Field
+                label="Ferias confirmadas - fim"
+                hint="Ultimo dia confirmado de gozo."
+              >
                 <input
                   className={FIELD_INPUT}
                   type="date"

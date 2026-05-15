@@ -148,9 +148,15 @@ function AreaNode({ data, selected }) {
   const realizado = Number(data.realizado_total || 0);
   const orcadoDireto = Number(data.orcado_direto || 0);
   const realizadoDireto = Number(data.realizado_direto || 0);
+  const saldoDireto = realizadoDireto - orcadoDireto;
   const hasOpenDirectVacancy = orcadoDireto > realizadoDireto;
   const cobertura = orcado > 0 ? Math.min(100, Math.round((realizado / orcado) * 100)) : 0;
   const nivel = NIVEL_BY_VALUE.get(data.nivel);
+  const statusDireto = saldoDireto > 0
+    ? `${saldoDireto} acima do orcado`
+    : saldoDireto < 0
+      ? `${Math.abs(saldoDireto)} abaixo do orcado`
+      : "orcado em linha";
   return (
     <div
       className={`min-w-[220px] max-w-[280px] rounded-2xl border-2 ${cor.border} ${cor.bg} p-3 shadow-sm transition ${
@@ -164,9 +170,14 @@ function AreaNode({ data, selected }) {
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${cor.chip}`}>
           {nivel ? nivel.label : (data.tipo || "AREA")}
         </span>
-        <span className="text-[10px] font-semibold text-slate-500">
-          {data.descendentes ? `+${data.descendentes} abaixo` : "0 abaixo"}
-        </span>
+        <div className="text-right">
+          <div className={`text-[10px] font-bold ${saldoDireto === 0 ? "text-slate-500" : "text-rose-600"}`}>
+            {statusDireto}
+          </div>
+          <div className="text-[10px] font-semibold text-slate-400">
+            {data.descendentes ? `+${data.descendentes} abaixo` : "0 abaixo"}
+          </div>
+        </div>
       </div>
       <div className="mt-2 text-sm font-black text-slate-900">{data.titulo}</div>
       {data.subtitulo ? <div className="text-xs text-slate-600">{data.subtitulo}</div> : null}

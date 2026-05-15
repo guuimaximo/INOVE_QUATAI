@@ -156,9 +156,9 @@ function StatusBadge({ status }) {
   );
 }
 
-function ModalShell({ title, subtitle, onClose, footer, children, maxWidth = "max-w-3xl" }) {
+function ModalShell({ title, subtitle, onClose, footer, children, maxWidth = "max-w-3xl", zIndex = 50 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/50 p-4" style={{ zIndex }}>
       <div className={`flex max-h-[92vh] w-full ${maxWidth} flex-col overflow-hidden rounded-2xl bg-white shadow-2xl`}>
         <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
           <div>
@@ -295,10 +295,13 @@ function computeLoteStatus(itens) {
   if (has(STATUS_AGUARDANDO_SUPERVISOR)) return STATUS_AGUARDANDO_SUPERVISOR;
   if (has(STATUS_AGUARDANDO_PCM)) return STATUS_AGUARDANDO_PCM;
   if (has(STATUS_AGUARDANDO_TRANSNET)) return STATUS_AGUARDANDO_TRANSNET;
+  if (has(STATUS_RECUSADO_PCM)) return STATUS_RECUSADO_PCM;
+  if (has(STATUS_RECUSADO_SUPERVISOR)) return STATUS_RECUSADO_SUPERVISOR;
   return STATUS_CONCLUIDO;
 }
 
 function itemStatusLabel(it) {
+  if (it.status === STATUS_AGUARDANDO_SUPERVISOR && it.pcm_recusa_motivo) return "Devolvida pelo PCM";
   if (it.status === STATUS_AGUARDANDO_SUPERVISOR) return "Aguardando supervisor";
   if (it.status === STATUS_RECUSADO_SUPERVISOR) return "Recusada pelo supervisor";
   if (it.status === STATUS_AGUARDANDO_PCM) return "Aguardando PCM";
@@ -541,7 +544,13 @@ export default function PCMControleFichas() {
       const novosItens = itensAtuais.map((it) => {
         if (it.id !== item.id) return it;
         if (tipo === "supervisor_receber") {
-          return { ...it, status: STATUS_AGUARDANDO_PCM, supervisor_nome: nome, supervisor_em: agora };
+          return {
+            ...it,
+            status: STATUS_AGUARDANDO_PCM,
+            supervisor_nome: nome,
+            supervisor_em: agora,
+            supervisor_recusa_motivo: null,
+          };
         }
         if (tipo === "supervisor_recusar") {
           return {
@@ -553,12 +562,18 @@ export default function PCMControleFichas() {
           };
         }
         if (tipo === "pcm_receber") {
-          return { ...it, status: STATUS_AGUARDANDO_TRANSNET, pcm_nome: nome, pcm_em: agora };
+          return {
+            ...it,
+            status: STATUS_AGUARDANDO_TRANSNET,
+            pcm_nome: nome,
+            pcm_em: agora,
+            pcm_recusa_motivo: null,
+          };
         }
         if (tipo === "pcm_recusar") {
           return {
             ...it,
-            status: STATUS_RECUSADO_PCM,
+            status: STATUS_AGUARDANDO_SUPERVISOR,
             pcm_nome: nome,
             pcm_em: agora,
             pcm_recusa_motivo: motivo,
@@ -582,6 +597,11 @@ export default function PCMControleFichas() {
       );
       setAcaoModal(null);
       await carregar();
+      if (tipo === "supervisor_recusar") {
+        handleTabChange(TAB_LANCAMENTO);
+      } else if (tipo === "pcm_recusar") {
+        handleTabChange(TAB_SUPERVISOR);
+      }
     } catch (error) {
       console.error(error);
       alert(error?.message || "Nao foi possivel confirmar a acao.");
@@ -865,6 +885,7 @@ export default function PCMControleFichas() {
           title={acaoLabels[acaoModal.tipo].title}
           subtitle={`Lote ${acaoModal.row.ficha_controle}`}
           onClose={() => setAcaoModal(null)}
+          zIndex={70}
           footer={
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button

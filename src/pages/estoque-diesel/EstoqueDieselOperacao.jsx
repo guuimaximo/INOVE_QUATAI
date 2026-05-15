@@ -310,10 +310,26 @@ function resolveCascadeStatus(entry, productParams) {
   return "OK";
 }
 
-function buildCascadeMonthlyEntries(entries, productParams) {
+function buildCascadeMonthlyEntries(entries, receipts, productParams) {
   const chronological = [...(entries || [])].sort(
     (a, b) => String(a.date || "").localeCompare(String(b.date || ""))
   );
+  const receiptTotalsByDate = (receipts || []).reduce((acc, receipt) => {
+    if (!receipt?.date) return acc;
+    if (!acc[receipt.date]) {
+      acc[receipt.date] = {
+        nfVolumeLitros: 0,
+        volumeRecebidoLitros: 0,
+      };
+    }
+
+    acc[receipt.date].nfVolumeLitros += safeNumber(receipt.nfVolumeLitros, 0);
+    acc[receipt.date].volumeRecebidoLitros += safeNumber(
+      receipt.volumeRecebidoLitros ?? receipt.nfVolumeLitros,
+      0
+    );
+    return acc;
+  }, {});
 
   let previousSaldoFinal = null;
 
@@ -333,6 +349,13 @@ function buildCascadeMonthlyEntries(entries, productParams) {
     const saidaTanque = saldoAnterior + entradaDiesel - saldoFinal;
     const saidaTotalBombas = safeNumber(entry.saidaTotalBombas, 0);
     const saidaTransnet = safeNumber(entry.saidaTransnet, 0);
+    const receiptTotals = receiptTotalsByDate[entry.date] || null;
+    const inlineNf = safeNumber(entry.nfVolumeLitros, 0);
+    const inlineReceived = safeNumber(entry.receiptMeasuredLiters ?? entry.entradaRecebimentos, 0);
+    const totalNf = safeNumber(receiptTotals?.nfVolumeLitros, 0) + inlineNf;
+    const totalReceived = safeNumber(receiptTotals?.volumeRecebidoLitros, 0) + inlineReceived;
+    const pctDiffNF =
+      totalNf > 0 ? calculatePctDifference(totalNf, totalReceived) : entry.pctDiffNF ?? null;
 
     const pctDiffTankBombas = calculatePctDifference(saidaTanque, saidaTotalBombas);
     const pctDiffTransnet = calculatePctDifference(saidaTanque, saidaTransnet);
@@ -341,8 +364,10 @@ function buildCascadeMonthlyEntries(entries, productParams) {
       ...entry,
       saldoAnterior,
       saldoFinal,
+      nfVolumeLitros: totalNf,
       entradaDiesel,
       saidaTanque,
+      pctDiffNF,
       pctDiffTankBombas,
       pctDiffTransnet,
     };
@@ -426,6 +451,7 @@ export default function EstoqueDieselOperacao() {
   const [receiptFiles, setReceiptFiles] = useState({ before: null, after: null });
   const [customSupplierMode, setCustomSupplierMode] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState(null);
+  const [editingReceiptId, setEditingReceiptId] = useState(null);
   const [deletingReceipt, setDeletingReceipt] = useState(false);
   const [showPumpConfig, setShowPumpConfig] = useState(false);
   const [pumpConfigDrafts, setPumpConfigDrafts] = useState({});
@@ -551,8 +577,17 @@ export default function EstoqueDieselOperacao() {
   );
 
   const monthlyDisplayEntries = useMemo(
-    () => buildCascadeMonthlyEntries(monthlyEntries, productParams),
-    [monthlyEntries, productParams]
+    () =>
+      buildCascadeMonthlyEntries(
+        monthlyEntries,
+        receipts.filter(
+          (receipt) =>
+            (receipt.product === product || receipt.tipoDiesel === product) &&
+            receipt.date?.startsWith(`${year}-${month}`)
+        ),
+        productParams
+      ),
+    [monthlyEntries, month, product, productParams, receipts, year]
   );
 
   const previousEntry = useMemo(
@@ -615,6 +650,7 @@ export default function EstoqueDieselOperacao() {
     [productParams.suppliers]
   );
   const showCustomSupplierInput = customSupplierMode || (form.supplier && !supplierOptions.includes(form.supplier));
+  const isEditingReceipt = Boolean(editingReceiptId);
 
   function updatePump(index, field, value) {
     setForm((current) => ({
@@ -629,11 +665,62 @@ export default function EstoqueDieselOperacao() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  function clearReceiptFields() {
+    setReceiptFiles({ before: null, after: null });
+    setEditingReceiptId(null);
+    setForm((current) => ({
+      ...current,
+      hasReceipt: false,
+      nfVolumeLitros: "",
+      unitPrice: "",
+      supplier: "",
+      supplierId: null,
+      nfNumero: "",
+      receiptRuleBeforeT1: "",
+      receiptRuleBeforeT2: "",
+      receiptRuleAfterT1: "",
+      receiptRuleAfterT2: "",
+      receiptPhotoBeforeUrl: "",
+      receiptPhotoAfterUrl: "",
+    }));
+    setCustomSupplierMode(false);
+  }
+
+  function handleEditReceipt(receipt) {
+    if (!receipt) return;
+
+    setEditingReceiptId(receipt.id);
+    setSelectedReceiptId(receipt.id);
+    setReceiptFiles({ before: null, after: null });
+    setCustomSupplierMode(Boolean(receipt?.supplier && !supplierOptions.includes(receipt.supplier)));
+    setForm((current) => ({
+      ...current,
+      hasReceipt: true,
+      date: receipt.date || current.date,
+      nfVolumeLitros: toFormValue(receipt.nfVolumeLitros),
+      unitPrice: toFormValue(receipt.unitPrice),
+      supplier: receipt.supplier || "",
+      supplierId: receipt.supplierId || null,
+      nfNumero: receipt.nfNumero || "",
+      receiptRuleBeforeT1: isS10 ? toFormValue(receipt.reguaAntesCm) : "",
+      receiptRuleBeforeT2: isS500 ? toFormValue(receipt.reguaAntesCm) : "",
+      receiptRuleAfterT1: isS10 ? toFormValue(receipt.reguaDepoisCm) : "",
+      receiptRuleAfterT2: isS500 ? toFormValue(receipt.reguaDepoisCm) : "",
+      receiptPhotoBeforeUrl: receipt.fotoAntesUrl || "",
+      receiptPhotoAfterUrl: receipt.fotoDepoisUrl || "",
+    }));
+    setFeedback({
+      type: "success",
+      message: `Recebimento ${receipt.nfNumero ? `NF ${receipt.nfNumero}` : ""} carregado para edicao.`,
+    });
+  }
+
   function resetFormForNewEntry() {
     setForm(buildPreparedForm(buildDefaultForm(product, year, month), entries, metadata, { forcePumpInitials: true }));
     setReceiptFiles({ before: null, after: null });
     setCustomSupplierMode(false);
     setSelectedReceiptId(null);
+    setEditingReceiptId(null);
     setFeedback(null);
   }
 
@@ -810,7 +897,8 @@ export default function EstoqueDieselOperacao() {
 
     try {
       setSavingReceipt(true);
-      await saveDieselReceipt({
+      const savedReceiptId = await saveDieselReceipt({
+        receiptId: editingReceiptId,
         form,
         computed,
         product,
@@ -825,27 +913,13 @@ export default function EstoqueDieselOperacao() {
         metadata,
       });
       setReceipts(nextReceipts);
-      setReceiptFiles({ before: null, after: null });
-      setSelectedReceiptId(null);
-      setForm((current) => ({
-        ...current,
-        hasReceipt: false,
-        nfVolumeLitros: "",
-        unitPrice: "",
-        supplier: "",
-        supplierId: null,
-        nfNumero: "",
-        receiptRuleBeforeT1: "",
-        receiptRuleBeforeT2: "",
-        receiptRuleAfterT1: "",
-        receiptRuleAfterT2: "",
-        receiptPhotoBeforeUrl: "",
-        receiptPhotoAfterUrl: "",
-      }));
-      setCustomSupplierMode(false);
+      clearReceiptFields();
+      setSelectedReceiptId(savedReceiptId || null);
       setFeedback({
         type: "success",
-        message: "Recebimento salvo e somado automaticamente no dia.",
+        message: editingReceiptId
+          ? "Recebimento atualizado e somado automaticamente no dia."
+          : "Recebimento salvo e somado automaticamente no dia.",
       });
     } catch (error) {
       console.error("Falha ao salvar recebimento:", error);
@@ -907,23 +981,7 @@ export default function EstoqueDieselOperacao() {
       setEntries(nextEntries);
       setReceipts(nextReceipts);
       setSelectedReceiptId(null);
-      setReceiptFiles({ before: null, after: null });
-      setForm((current) => ({
-        ...current,
-        hasReceipt: false,
-        nfVolumeLitros: "",
-        unitPrice: "",
-        supplier: "",
-        supplierId: null,
-        nfNumero: "",
-        receiptRuleBeforeT1: "",
-        receiptRuleBeforeT2: "",
-        receiptRuleAfterT1: "",
-        receiptRuleAfterT2: "",
-        receiptPhotoBeforeUrl: "",
-        receiptPhotoAfterUrl: "",
-      }));
-      setCustomSupplierMode(false);
+      clearReceiptFields();
 
       setFeedback({
         type: "success",
@@ -1073,6 +1131,7 @@ export default function EstoqueDieselOperacao() {
 
   function prepareNewReceipt() {
     setSelectedReceiptId(null);
+    setEditingReceiptId(null);
     setReceiptFiles({ before: null, after: null });
     setCustomSupplierMode(false);
     setForm((current) => ({
@@ -1475,6 +1534,13 @@ export default function EstoqueDieselOperacao() {
                             ? new Date(`${selectedDailyReceipt.date}T00:00:00`).toLocaleDateString("pt-BR")
                             : "Sem data"}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => handleEditReceipt(selectedDailyReceipt)}
+                          className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-blue-700 transition hover:bg-blue-100"
+                        >
+                          Editar recebimento
+                        </button>
 
                         <button
                           type="button"
@@ -1505,12 +1571,35 @@ export default function EstoqueDieselOperacao() {
                         <div className="mt-2 text-lg font-black text-slate-800">{parseCurrency(selectedDailyReceipt.totalValue)}</div>
                       </div>
                     </div>
+                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Inicio do tanque</div>
+                        <div className="mt-2 text-lg font-black text-slate-800">{parseLiters(selectedDailyReceipt.litrosAntes)}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Fim do tanque</div>
+                        <div className="mt-2 text-lg font-black text-slate-800">{parseLiters(selectedDailyReceipt.litrosDepois)}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Regua antes</div>
+                        <div className="mt-2 text-lg font-black text-slate-800">{selectedDailyReceipt.reguaAntesCm ?? "--"} cm</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Regua depois</div>
+                        <div className="mt-2 text-lg font-black text-slate-800">{selectedDailyReceipt.reguaDepoisCm ?? "--"} cm</div>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
               </div>
             ) : null}
             {form.hasReceipt ? (
               <div className="mt-4 flex flex-wrap justify-end gap-3">
+                {isEditingReceipt ? (
+                  <div className="inline-flex items-center rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700">
+                    Editando recebimento selecionado
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   onClick={handleSaveReceipt}
@@ -1518,7 +1607,13 @@ export default function EstoqueDieselOperacao() {
                   className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
                 >
                   <FaSave />
-                  {savingReceipt ? "Salvando recebimento..." : "Salvar recebimento"}
+                  {savingReceipt
+                    ? isEditingReceipt
+                      ? "Atualizando recebimento..."
+                      : "Salvando recebimento..."
+                    : isEditingReceipt
+                    ? "Atualizar recebimento"
+                    : "Salvar recebimento"}
                 </button>
               </div>
             ) : null}

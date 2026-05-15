@@ -5,6 +5,7 @@ import {
   FaCheckCircle,
   FaExclamationTriangle,
   FaCamera,
+  FaCog,
   FaGasPump,
   FaInfoCircle,
   FaSave,
@@ -20,15 +21,18 @@ import {
   PRODUCT_CONFIG,
   buildDefaultForm,
   computeMeasurement,
+  deletePumpInitialAdjustment,
   fetchDieselReceipts,
   fetchMeasurementContext,
   fetchMeasurementEntries,
+  getPumpInitialAdjustment,
   getDailyReceipts,
   getMonthLabel,
   getPreviousEntry,
   measurementStatus,
   saveDieselReceipt,
   saveMeasurementEntry,
+  savePumpInitialAdjustment,
   todayISO,
   validateMeasurement,
 } from "./medicaoModel";
@@ -45,6 +49,14 @@ function parsePct(value) {
 function parseLiters(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "--";
   return `${Number(value).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} L`;
+}
+
+function parseHodometro(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "--";
+  return Number(value).toLocaleString("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 function parseCurrency(value) {
@@ -98,6 +110,23 @@ function buildFormFromEntry(entry, product, year, month) {
       };
     }),
   };
+}
+
+function buildPumpAdjustmentLookup(metadata, product, dateValue) {
+  const lookup = {};
+  const requiredPumpNumbers = PRODUCT_CONFIG[product]?.requiredPumpNumbers || [];
+  const dbPumps = (metadata?.pumpsByProduct?.[product] || []).filter((pump) =>
+    requiredPumpNumbers.includes(Number(pump.numero))
+  );
+
+  dbPumps.forEach((pump) => {
+    const adjustment = getPumpInitialAdjustment(metadata, pump.id, dateValue);
+    if (adjustment) {
+      lookup[Number(pump.numero)] = adjustment;
+    }
+  });
+
+  return lookup;
 }
 
 function FormInput({ label, value, onChange, type = "number", min, step = "0.1", placeholder, required = false, readOnly = false }) {
@@ -398,7 +427,62 @@ export default function EstoqueDieselOperacao() {
   const [customSupplierMode, setCustomSupplierMode] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState(null);
   const [deletingReceipt, setDeletingReceipt] = useState(false);
+  const [showPumpConfig, setShowPumpConfig] = useState(false);
+  const [pumpConfigDrafts, setPumpConfigDrafts] = useState({});
+  const [savingPumpConfigId, setSavingPumpConfigId] = useState(null);
   const launchPanelRef = useRef(null);
+
+  function buildPreparedForm(baseForm, sourceEntries = entries, sourceMetadata = metadata, options = {}) {
+    const { forcePumpInitials = false } = options;
+    const preparedForm = {
+      ...baseForm,
+      pumps: Array.isArray(baseForm?.pumps) ? baseForm.pumps.map((pump) => ({ ...pump })) : [],
+    };
+    const sourcePreviousEntry = getPreviousEntry(
+      sourceEntries,
+      preparedForm.product,
+      preparedForm.date,
+      preparedForm.id
+    );
+    const adjustmentLookup = buildPumpAdjustmentLookup(
+      sourceMetadata,
+      preparedForm.product,
+      preparedForm.date
+    );
+
+    const hasExistingPreviousRule =
+      preparedForm.reguaAnteriorT1 !== "" || preparedForm.reguaAnteriorT2 !== "";
+
+    if (!hasExistingPreviousRule && sourcePreviousEntry) {
+      preparedForm.reguaAnteriorT1 = sourcePreviousEntry.reguaFinalT1 ?? "";
+      preparedForm.reguaAnteriorT2 = sourcePreviousEntry.reguaFinalT2 ?? "";
+    }
+
+    preparedForm.pumps = preparedForm.pumps.map((pump) => {
+      const adjustment = adjustmentLookup[Number(pump.number)] || null;
+      const previousPump = (sourcePreviousEntry?.pumps || []).find(
+        (entryPump) => Number(entryPump.number) === Number(pump.number)
+      );
+
+      if (adjustment) {
+        return {
+          ...pump,
+          initial: toFormValue(adjustment.hodometro_inicial),
+        };
+      }
+
+      if (previousPump && (forcePumpInitials || pump.initial === "" || pump.initial === null || pump.initial === undefined)) {
+        return {
+          ...pump,
+          initial: toFormValue(previousPump.final),
+        };
+      }
+
+      return pump;
+    });
+
+    return preparedForm;
+  }
 
   useEffect(() => {
     let active = true;
@@ -426,7 +510,14 @@ export default function EstoqueDieselOperacao() {
         setEntries(nextEntries);
         setReceipts(nextReceipts);
         setProduct(nextProduct);
-        setForm(buildDefaultForm(nextProduct, year, month));
+        setForm(
+          buildPreparedForm(
+            buildDefaultForm(nextProduct, year, month),
+            nextEntries,
+            context.metadata,
+            { forcePumpInitials: true }
+          )
+        );
         setReceiptFiles({ before: null, after: null });
         setCustomSupplierMode(false);
         setSelectedReceiptId(null);
@@ -468,6 +559,17 @@ export default function EstoqueDieselOperacao() {
     () => getPreviousEntry(entries, product, form.date, form.id),
     [entries, form.date, form.id, product]
   );
+  const currentProductPumps = useMemo(
+    () =>
+      (metadata?.pumpsByProduct?.[product] || [])
+        .filter((pump) => PRODUCT_CONFIG[product]?.requiredPumpNumbers?.includes(Number(pump.numero)))
+        .sort((a, b) => Number(a.numero || 0) - Number(b.numero || 0)),
+    [metadata, product]
+  );
+  const currentPumpAdjustments = useMemo(
+    () => buildPumpAdjustmentLookup(metadata, product, form.date),
+    [form.date, metadata, product]
+  );
 
   const dailyReceipts = useMemo(
     () => getDailyReceipts(receipts, product, form.date),
@@ -479,8 +581,20 @@ export default function EstoqueDieselOperacao() {
   );
 
   const computed = useMemo(
-    () => computeMeasurement(form, productParams, previousEntry, dailyReceipts),
-    [dailyReceipts, form, previousEntry, productParams]
+    () =>
+      computeMeasurement(
+        {
+          ...form,
+          pumps: (form.pumps || []).map((pump) => ({
+            ...pump,
+            adjustment: currentPumpAdjustments[Number(pump.number)] || null,
+          })),
+        },
+        productParams,
+        previousEntry,
+        dailyReceipts
+      ),
+    [currentPumpAdjustments, dailyReceipts, form, previousEntry, productParams]
   );
 
   const validation = useMemo(
@@ -516,7 +630,7 @@ export default function EstoqueDieselOperacao() {
   }
 
   function resetFormForNewEntry() {
-    setForm(buildDefaultForm(product, year, month));
+    setForm(buildPreparedForm(buildDefaultForm(product, year, month), entries, metadata, { forcePumpInitials: true }));
     setReceiptFiles({ before: null, after: null });
     setCustomSupplierMode(false);
     setSelectedReceiptId(null);
@@ -539,28 +653,25 @@ export default function EstoqueDieselOperacao() {
 
   useEffect(() => {
     setForm((current) => {
-      const next = { ...current };
-      const hasExistingPreviousRule =
-        current.reguaAnteriorT1 !== "" || current.reguaAnteriorT2 !== "";
-
-      if (!hasExistingPreviousRule && previousEntry) {
-        next.reguaAnteriorT1 = previousEntry.reguaFinalT1 ?? "";
-        next.reguaAnteriorT2 = previousEntry.reguaFinalT2 ?? "";
+      const next = buildPreparedForm(current);
+      if (JSON.stringify(next) === JSON.stringify(current)) {
+        return current;
       }
-
-      next.pumps = current.pumps.map((pump) => {
-        const previousPump = (previousEntry?.pumps || []).find(
-          (entryPump) => Number(entryPump.number) === Number(pump.number)
-        );
-        if (previousPump && (pump.initial === "" || pump.initial === null || pump.initial === undefined)) {
-          return { ...pump, initial: previousPump.final ?? "" };
-        }
-        return pump;
-      });
-
       return next;
     });
-  }, [previousEntry]);
+  }, [currentPumpAdjustments, previousEntry]);
+
+  useEffect(() => {
+    const nextDrafts = {};
+    currentProductPumps.forEach((pump) => {
+      const adjustment = currentPumpAdjustments[Number(pump.numero)] || null;
+      nextDrafts[pump.id] = {
+        initial: adjustment ? toFormValue(adjustment.hodometro_inicial) : "",
+        observation: adjustment?.observacao || "",
+      };
+    });
+    setPumpConfigDrafts(nextDrafts);
+  }, [currentProductPumps, currentPumpAdjustments]);
 
   useEffect(() => {
     if (!form.supplier) {
@@ -833,6 +944,133 @@ export default function EstoqueDieselOperacao() {
     navigate(`/estoque-diesel/operacao/${year}/${month}?produto=${nextProduct}`);
   }
 
+  function updatePumpConfigDraft(pumpId, field, value) {
+    setPumpConfigDrafts((current) => ({
+      ...current,
+      [pumpId]: {
+        ...(current[pumpId] || { initial: "", observation: "" }),
+        [field]: value,
+      },
+    }));
+  }
+
+  async function reloadMeasurementData(nextForm = null, options = {}) {
+    const { forcePumpInitials = false } = options;
+    const context = await fetchMeasurementContext();
+    const [nextEntries, nextReceipts] = await Promise.all([
+      fetchMeasurementEntries({
+        year,
+        metadata: context.metadata,
+        paramStore: context.paramStore,
+        includePumps: true,
+      }),
+      fetchDieselReceipts({
+        year,
+        metadata: context.metadata,
+      }),
+    ]);
+
+    setMetadata(context.metadata);
+    setParamStore(context.paramStore);
+    setEntries(nextEntries);
+    setReceipts(nextReceipts);
+
+    if (nextForm) {
+      setForm(buildPreparedForm(nextForm, nextEntries, context.metadata, { forcePumpInitials }));
+    }
+  }
+
+  async function handleSavePumpConfig(pump) {
+    const draft = pumpConfigDrafts[pump.id] || { initial: "", observation: "" };
+
+    if (draft.initial === "" || draft.initial === null || draft.initial === undefined) {
+      setFeedback({
+        type: "error",
+        message: `Informe o hodometro inicial ajustado da bomba ${pump.numero}.`,
+      });
+      return;
+    }
+
+    try {
+      setSavingPumpConfigId(`save-${pump.id}`);
+      await savePumpInitialAdjustment({
+        metadata,
+        product,
+        pumpNumber: pump.numero,
+        date: form.date,
+        initial: draft.initial,
+        observation: draft.observation,
+        userId: Number.isInteger(user?.usuario_id) ? user.usuario_id : null,
+      });
+
+      await reloadMeasurementData(
+        {
+          ...form,
+          pumps: (form.pumps || []).map((item) =>
+            Number(item.number) === Number(pump.numero)
+              ? { ...item, initial: toFormValue(draft.initial) }
+              : item
+          ),
+        },
+        { forcePumpInitials: true }
+      );
+
+      setFeedback({
+        type: "success",
+        message: `Configuracao da bomba ${pump.numero} salva para ${new Date(`${form.date}T00:00:00`).toLocaleDateString("pt-BR")}.`,
+      });
+    } catch (error) {
+      console.error("Falha ao salvar ajuste de hodometro:", error);
+      setFeedback({
+        type: "error",
+        message: error?.message || "Nao foi possivel salvar o ajuste do hodometro inicial.",
+      });
+    } finally {
+      setSavingPumpConfigId(null);
+    }
+  }
+
+  async function handleDeletePumpConfig(pump) {
+    try {
+      setSavingPumpConfigId(`delete-${pump.id}`);
+      await deletePumpInitialAdjustment({
+        metadata,
+        product,
+        pumpNumber: pump.numero,
+        date: form.date,
+      });
+
+      const previousPump = (previousEntry?.pumps || []).find(
+        (item) => Number(item.number) === Number(pump.numero)
+      );
+
+      await reloadMeasurementData(
+        {
+          ...form,
+          pumps: (form.pumps || []).map((item) =>
+            Number(item.number) === Number(pump.numero)
+              ? { ...item, initial: toFormValue(previousPump?.final ?? "") }
+              : item
+          ),
+        },
+        { forcePumpInitials: true }
+      );
+
+      setFeedback({
+        type: "success",
+        message: `Configuracao da bomba ${pump.numero} removida para ${new Date(`${form.date}T00:00:00`).toLocaleDateString("pt-BR")}.`,
+      });
+    } catch (error) {
+      console.error("Falha ao remover ajuste de hodometro:", error);
+      setFeedback({
+        type: "error",
+        message: error?.message || "Nao foi possivel remover o ajuste do hodometro inicial.",
+      });
+    } finally {
+      setSavingPumpConfigId(null);
+    }
+  }
+
   function prepareNewReceipt() {
     setSelectedReceiptId(null);
     setReceiptFiles({ before: null, after: null });
@@ -903,7 +1141,110 @@ export default function EstoqueDieselOperacao() {
                 O operador informa a medicao atual, a saida do Transnet e, se houver, o recebimento do diesel. O restante vem do D-1 e dos calculos automaticos.
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowPumpConfig((current) => !current)}
+              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-black transition ${
+                showPumpConfig
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <FaCog />
+              Configuracao
+            </button>
           </div>
+
+          {showPumpConfig ? (
+            <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/70 p-4">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-wider text-blue-700">
+                    Ajuste de hodometro inicial do dia
+                  </h3>
+                  <p className="mt-1 max-w-3xl text-sm font-semibold text-slate-600">
+                    Use esta configuracao quando o relogio da bomba for trocado ou o encerrante reiniciar. O ajuste vale so para a data do lancamento e substitui o D-1 naquela bomba.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-blue-700">
+                  Data ativa {new Date(`${form.date}T00:00:00`).toLocaleDateString("pt-BR")}
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {currentProductPumps.map((pump) => {
+                  const draft = pumpConfigDrafts[pump.id] || { initial: "", observation: "" };
+                  const activeAdjustment = currentPumpAdjustments[Number(pump.numero)] || null;
+                  const previousPump = (previousEntry?.pumps || []).find(
+                    (item) => Number(item.number) === Number(pump.numero)
+                  );
+
+                  return (
+                    <div key={pump.id} className="rounded-2xl border border-blue-200 bg-white p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-800">Bomba {pump.numero}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">
+                            D-1 desta bomba: {previousPump?.final !== undefined && previousPump?.final !== null && previousPump?.final !== "" ? parseHodometro(previousPump.final) : "Sem historico"}
+                          </p>
+                        </div>
+                        <div className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-wider ${
+                          activeAdjustment
+                            ? "border-amber-300 bg-amber-50 text-amber-700"
+                            : "border-slate-200 bg-slate-50 text-slate-500"
+                        }`}>
+                          {activeAdjustment ? "Ajuste ativo no dia" : "Sem ajuste manual"}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <FormInput
+                          label="Hodometro inicial do dia"
+                          value={draft.initial}
+                          onChange={(value) => updatePumpConfigDraft(pump.id, "initial", value)}
+                        />
+                        <label className="block">
+                          <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                            Observacao do ajuste
+                          </span>
+                          <input
+                            type="text"
+                            value={draft.observation}
+                            onChange={(event) => updatePumpConfigDraft(pump.id, "observation", event.target.value)}
+                            placeholder="Ex.: troca de relogio da bomba"
+                            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSavePumpConfig(pump)}
+                          disabled={savingPumpConfigId !== null}
+                          className="inline-flex items-center gap-2 rounded-xl border border-blue-300 bg-blue-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <FaSave />
+                          {savingPumpConfigId === `save-${pump.id}` ? "Salvando..." : "Salvar ajuste"}
+                        </button>
+                        {activeAdjustment ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePumpConfig(pump)}
+                            disabled={savingPumpConfigId !== null}
+                            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-black text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <FaTrash />
+                            {savingPumpConfigId === `delete-${pump.id}` ? "Removendo..." : "Remover ajuste"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
@@ -1192,19 +1533,32 @@ export default function EstoqueDieselOperacao() {
                   const previousPump = (previousEntry?.pumps || []).find(
                     (entryPump) => Number(entryPump.number) === Number(pump.number)
                   );
+                  const pumpAdjustment = currentPumpAdjustments[Number(pump.number)] || null;
                   const hasPreviousPump = Boolean(
                     previousPump &&
                       previousPump.final !== null &&
                       previousPump.final !== undefined &&
                       previousPump.final !== ""
                   );
+                  const helperSource = pumpAdjustment
+                    ? "config"
+                    : hasPreviousPump
+                    ? "previous"
+                    : "manual";
 
                   return (
                     <div key={pump.number} className="rounded-xl border border-slate-200 bg-white p-4">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-black text-slate-800">Bomba {pump.number}</p>
-                        <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                          Saida {parseLiters(computed.pumpDetails[index]?.output)}
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {pumpAdjustment ? (
+                            <div className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-amber-700">
+                              Ajustado no dia
+                            </div>
+                          ) : null}
+                          <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                            Saida {parseLiters(computed.pumpDetails[index]?.output)}
+                          </div>
                         </div>
                       </div>
                       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1212,7 +1566,7 @@ export default function EstoqueDieselOperacao() {
                           label="Hodometro inicial"
                           value={pump.initial}
                           onChange={(value) => updatePump(index, "initial", value)}
-                          readOnly={hasPreviousPump}
+                          readOnly={helperSource !== "manual"}
                         />
                         <FormInput
                           label="Hodometro final"
@@ -1221,7 +1575,9 @@ export default function EstoqueDieselOperacao() {
                         />
                       </div>
                       <p className="mt-2 text-xs font-semibold text-slate-500">
-                        {hasPreviousPump
+                        {helperSource === "config"
+                          ? "O hodometro inicial desta bomba foi ajustado na configuracao do dia."
+                          : helperSource === "previous"
                           ? "O hodometro inicial veio automaticamente do encerrante do dia anterior."
                           : "Sem historico anterior para esta bomba. Informe o hodometro inicial manualmente no primeiro lancamento."}
                       </p>

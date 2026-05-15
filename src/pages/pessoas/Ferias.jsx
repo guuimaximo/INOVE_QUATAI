@@ -26,6 +26,7 @@ const STATUS_VIEW = [
   { value: "criticos", label: "Criticos" },
   { value: "em_gozo", label: "Em ferias" },
   { value: "programado", label: "Programados" },
+  { value: "com_abono", label: "Com abono" },
   { value: "saldo", label: "Saldo pendente" },
   { value: "quitado", label: "Quitados" },
 ];
@@ -171,6 +172,32 @@ function dateRangeOverlapsMonth(start, end, monthKey) {
   return startDate <= monthEnd && endDate >= monthStart;
 }
 
+function getAbonoDisplayStart(item) {
+  return item.programado_abono_inicio || item.proximo_inicio_abono || null;
+}
+
+function getAbonoDisplayEnd(item) {
+  return item.programado_abono_fim || item.proximo_fim_abono || null;
+}
+
+function hasAbonoData(item) {
+  return (
+    Number(item?.dias_abono_realizados || 0) > 0 ||
+    Number(item?.dias_abono_em_andamento || 0) > 0 ||
+    Number(item?.dias_abono_agendados || 0) > 0 ||
+    Number(item?.qtd_abonos_realizados || 0) > 0 ||
+    Number(item?.qtd_abonos_em_andamento || 0) > 0 ||
+    Number(item?.qtd_abonos_agendados || 0) > 0 ||
+    !!parseDateInput(item?.ultimo_inicio_abono_realizado) ||
+    !!parseDateInput(item?.ultimo_fim_abono_realizado) ||
+    !!parseDateInput(item?.proximo_inicio_abono) ||
+    !!parseDateInput(item?.proximo_fim_abono) ||
+    !!parseDateInput(item?.programado_abono_inicio) ||
+    !!parseDateInput(item?.programado_abono_fim) ||
+    !!item?.usar_abono
+  );
+}
+
 function buildCsvRowPayload(row, meta) {
   return {
     ferias_id: safeText(row.id_ferias || row.ferias_id),
@@ -184,6 +211,12 @@ function buildCsvRowPayload(row, meta) {
     dt_limite_legal: parseDateInput(row.dt_limite_legal),
     dias_para_limite_legal: parseNullableInt(row.dias_para_limite_legal),
     qt_dias_ferias: parseNullableInt(row.qt_dias_ferias),
+    dias_gozo_realizados: parseNullableInt(row.dias_gozo_realizados),
+    dias_gozo_em_andamento: parseNullableInt(row.dias_gozo_em_andamento),
+    dias_gozo_agendados: parseNullableInt(row.dias_gozo_agendados),
+    dias_abono_realizados: parseNullableInt(row.dias_abono_realizados),
+    dias_abono_em_andamento: parseNullableInt(row.dias_abono_em_andamento),
+    dias_abono_agendados: parseNullableInt(row.dias_abono_agendados),
     dias_realizados: parseNullableInt(row.dias_realizados),
     dias_em_andamento: parseNullableInt(row.dias_em_andamento),
     dias_agendados: parseNullableInt(row.dias_agendados),
@@ -198,10 +231,17 @@ function buildCsvRowPayload(row, meta) {
     qtd_gozos_realizados: parseNullableInt(row.qtd_gozos_realizados),
     qtd_gozos_em_andamento: parseNullableInt(row.qtd_gozos_em_andamento),
     qtd_gozos_agendados: parseNullableInt(row.qtd_gozos_agendados),
+    qtd_abonos_realizados: parseNullableInt(row.qtd_abonos_realizados),
+    qtd_abonos_em_andamento: parseNullableInt(row.qtd_abonos_em_andamento),
+    qtd_abonos_agendados: parseNullableInt(row.qtd_abonos_agendados),
     ultimo_inicio_gozo_realizado: parseDateInput(row.ultimo_inicio_gozo_realizado),
     ultimo_fim_gozo_realizado: parseDateInput(row.ultimo_fim_gozo_realizado),
     proximo_inicio_gozo: parseDateInput(row.proximo_inicio_gozo),
     proximo_fim_gozo: parseDateInput(row.proximo_fim_gozo),
+    ultimo_inicio_abono_realizado: parseDateInput(row.ultimo_inicio_abono_realizado),
+    ultimo_fim_abono_realizado: parseDateInput(row.ultimo_fim_abono_realizado),
+    proximo_inicio_abono: parseDateInput(row.proximo_inicio_abono),
+    proximo_fim_abono: parseDateInput(row.proximo_fim_abono),
     cs_situacao_ferias: safeText(row.cs_situacao_ferias),
     nr_faltas: parseNullableInt(row.nr_faltas),
     historico_gozos: safeText(row.historico_gozos),
@@ -353,6 +393,23 @@ function summarizeByCollaborator(records) {
         _periodos_pendentes_colaborador: periodosPendentes.length,
         _periodos_criticos_colaborador: periodosCriticos.length,
         _saldo_total_colaborador: sorted.reduce((sum, item) => sum + Number(item.dias_pendentes_total || 0), 0),
+        _dias_abono_total_colaborador: sorted.reduce(
+          (sum, item) =>
+            sum +
+            Number(item.dias_abono_realizados || 0) +
+            Number(item.dias_abono_em_andamento || 0) +
+            Number(item.dias_abono_agendados || 0),
+          0
+        ),
+        _qtd_abonos_total_colaborador: sorted.reduce(
+          (sum, item) =>
+            sum +
+            Number(item.qtd_abonos_realizados || 0) +
+            Number(item.qtd_abonos_em_andamento || 0) +
+            Number(item.qtd_abonos_agendados || 0),
+          0
+        ),
+        _colaborador_tem_abono: sorted.some((item) => hasAbonoData(item)),
       };
     })
     .sort(compareFeriasPriority);
@@ -372,9 +429,12 @@ function exportarCSV(rows) {
     "Periodo aquisitivo",
     "Limite legal",
     "Dias pendentes",
+    "Dias gozo",
+    "Dias abono",
     "Status",
     "Quando pode tirar",
     "Vai tirar",
+    "Abono planejado",
     "Planejamento",
     "Prioridade",
   ];
@@ -387,6 +447,8 @@ function exportarCSV(rows) {
     `${formatDateBR(row.dt_inicio_aquisitivo)} a ${formatDateBR(row.dt_fim_aquisitivo)}`,
     formatDateBR(row.dt_limite_legal),
     row.dias_pendentes_total || 0,
+    `${Number(row.dias_gozo_realizados || 0)}/${Number(row.qt_dias_ferias || 0)}`,
+    `${Number(row.dias_abono_realizados || 0)}${hasAbonoData(row) ? " dia(s)" : ""}`,
     row.resumo_status_label,
     row.janela_sugerida_inicio || row.janela_sugerida_fim
       ? `${formatDateBR(row.janela_sugerida_inicio)} a ${formatDateBR(row.janela_sugerida_fim)}`
@@ -394,6 +456,11 @@ function exportarCSV(rows) {
     getDisplayStart(row)
       ? `${formatDateBR(getDisplayStart(row))} a ${formatDateBR(getDisplayEnd(row))}`
       : "",
+    getAbonoDisplayStart(row)
+      ? `${formatDateBR(getAbonoDisplayStart(row))} a ${formatDateBR(getAbonoDisplayEnd(row))}`
+      : row.usar_abono
+        ? "Sim"
+        : "",
     row.status_planejamento || "",
     row.prioridade || "",
   ]);
@@ -455,6 +522,9 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
     janela_sugerida_fim: "",
     programado_inicio: "",
     programado_fim: "",
+    usar_abono: false,
+    programado_abono_inicio: "",
+    programado_abono_fim: "",
     status_planejamento: "ANALISAR",
     prioridade: "MEDIA",
     observacoes: "",
@@ -467,6 +537,9 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
       janela_sugerida_fim: item.janela_sugerida_fim || "",
       programado_inicio: item.programado_inicio || item.proximo_inicio_gozo || "",
       programado_fim: item.programado_fim || item.proximo_fim_gozo || "",
+      usar_abono: Boolean(item.usar_abono || hasAbonoData(item)),
+      programado_abono_inicio: item.programado_abono_inicio || item.proximo_inicio_abono || "",
+      programado_abono_fim: item.programado_abono_fim || item.proximo_fim_abono || "",
       status_planejamento: item.status_planejamento || (item.resumo_status_key === "vencido" ? "PODE_PROGRAMAR" : "ANALISAR"),
       prioridade: item.prioridade || (item.resumo_status_key === "vencido" ? "ALTA" : "MEDIA"),
       observacoes: item.observacoes || "",
@@ -476,8 +549,10 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
   if (!open || !item) return null;
 
   const diasPlanejados = diffDaysInclusive(form.programado_inicio, form.programado_fim);
+  const diasAbonoPlanejados = form.usar_abono ? diffDaysInclusive(form.programado_abono_inicio, form.programado_abono_fim) : 0;
+  const totalPlanejado = Number(diasPlanejados || 0) + Number(diasAbonoPlanejados || 0);
   const saldoPendente = Number(item.dias_pendentes_total || 0);
-  const mismatchDias = diasPlanejados !== null && saldoPendente > 0 && diasPlanejados !== saldoPendente;
+  const mismatchDias = totalPlanejado > 0 && saldoPendente > 0 && totalPlanejado !== saldoPendente;
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -518,6 +593,8 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
               <InfoBox label="Limite legal" value={formatDateBR(item.dt_limite_legal)} />
               <InfoBox label="Dias pendentes" value={formatInt(item.dias_pendentes_total)} />
               <InfoBox label="Dias em andamento" value={formatInt(item.dias_em_andamento)} />
+              <InfoBox label="Gozo realizado" value={`${formatInt(item.dias_gozo_realizados || 0)} dia(s)`} />
+              <InfoBox label="Abono realizado" value={`${formatInt(item.dias_abono_realizados || 0)} dia(s)`} />
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -526,6 +603,10 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                 <InfoBox label="Periodos no arquivo" value={formatInt(item._periodos_total_colaborador || 1)} />
                 <InfoBox label="Periodos pendentes" value={formatInt(item._periodos_pendentes_colaborador || 0)} />
                 <InfoBox label="Saldo total" value={`${formatInt(item._saldo_total_colaborador || item.dias_pendentes_total || 0)} dia(s)`} />
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <InfoBox label="Abonos no historico" value={formatInt(item._qtd_abonos_total_colaborador || 0)} />
+                <InfoBox label="Dias de abono" value={`${formatInt(item._dias_abono_total_colaborador || 0)} dia(s)`} />
               </div>
             </div>
 
@@ -547,6 +628,14 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                   {item.proximo_inicio_gozo
                     ? `${formatDateBR(item.proximo_inicio_gozo)} a ${formatDateBR(item.proximo_fim_gozo)}`
                     : "Nao agendado"}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-800">Abono na base:</span>{" "}
+                  {item.proximo_inicio_abono
+                    ? `${formatDateBR(item.proximo_inicio_abono)} a ${formatDateBR(item.proximo_fim_abono)}`
+                    : item.ultimo_inicio_abono_realizado
+                      ? `${formatDateBR(item.ultimo_inicio_abono_realizado)} a ${formatDateBR(item.ultimo_fim_abono_realizado)}`
+                      : "Sem abono informado"}
                 </p>
                 <p>
                   <span className="font-semibold text-slate-800">Historico:</span>{" "}
@@ -597,6 +686,16 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                   onChange={(event) => updateField("programado_fim", event.target.value)}
                 />
               </Field>
+              <Field label="Planejar com abono">
+                <select
+                  className={FIELD_INPUT}
+                  value={form.usar_abono ? "SIM" : "NAO"}
+                  onChange={(event) => updateField("usar_abono", event.target.value === "SIM")}
+                >
+                  <option value="NAO">Nao</option>
+                  <option value="SIM">Sim</option>
+                </select>
+              </Field>
               <Field label="Status do planejamento">
                 <select
                   className={FIELD_INPUT}
@@ -625,7 +724,28 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
               </Field>
             </div>
 
-            {item.proximo_inicio_gozo ? (
+            {form.usar_abono ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field label="Abono - inicio">
+                  <input
+                    className={FIELD_INPUT}
+                    type="date"
+                    value={form.programado_abono_inicio}
+                    onChange={(event) => updateField("programado_abono_inicio", event.target.value)}
+                  />
+                </Field>
+                <Field label="Abono - fim">
+                  <input
+                    className={FIELD_INPUT}
+                    type="date"
+                    value={form.programado_abono_fim}
+                    onChange={(event) => updateField("programado_abono_fim", event.target.value)}
+                  />
+                </Field>
+              </div>
+            ) : null}
+
+            {item.proximo_inicio_gozo || item.proximo_inicio_abono ? (
               <button
                 type="button"
                 onClick={() =>
@@ -633,6 +753,9 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                     ...current,
                     programado_inicio: item.proximo_inicio_gozo || "",
                     programado_fim: item.proximo_fim_gozo || "",
+                    usar_abono: Boolean(item.proximo_inicio_abono || item.proximo_fim_abono || current.usar_abono),
+                    programado_abono_inicio: item.proximo_inicio_abono || "",
+                    programado_abono_fim: item.proximo_fim_abono || "",
                   }))
                 }
                 className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
@@ -657,7 +780,7 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
               <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Checagem rapida</div>
               <div className="mt-2 text-sm text-slate-700">
                 {diasPlanejados !== null
-                  ? `O periodo escolhido soma ${diasPlanejados} dia(s).`
+                  ? `Gozo planejado: ${diasPlanejados} dia(s)${form.usar_abono ? ` | Abono planejado: ${Number(diasAbonoPlanejados || 0)} dia(s) | Total: ${totalPlanejado} dia(s)` : ""}.`
                   : "Preencha inicio e fim para validar o periodo real de ferias."}
               </div>
               {mismatchDias ? (
@@ -715,7 +838,7 @@ function ManagerSummary({ groups, selectedManager, onSelectManager }) {
               {group.total} pessoa(s)
             </span>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="mt-4 grid grid-cols-4 gap-2 text-center text-xs">
             <div className="rounded-xl bg-rose-50 px-2 py-2 text-rose-800">
               <div className="font-black">{group.vencidos}</div>
               <div>Vencidos</div>
@@ -727,6 +850,10 @@ function ManagerSummary({ groups, selectedManager, onSelectManager }) {
             <div className="rounded-xl bg-emerald-50 px-2 py-2 text-emerald-800">
               <div className="font-black">{group.programados}</div>
               <div>Planejados</div>
+            </div>
+            <div className="rounded-xl bg-amber-50 px-2 py-2 text-amber-800">
+              <div className="font-black">{group.comAbono}</div>
+              <div>Abono</div>
             </div>
           </div>
         </button>
@@ -805,6 +932,7 @@ function CalendarView({ registros, monthKey, onPrevMonth, onNextMonth, onOpenIte
                       title={`${item.nm_funcionario} - ${item.manager_nome}`}
                     >
                       {item.nm_funcionario}
+                      {hasAbonoData(item) ? " • A" : ""}
                     </button>
                   ))}
                   {cell.items.length > 3 ? (
@@ -843,6 +971,7 @@ function RHMonthlyView({ groups, onOpenItem }) {
                   <th className="px-3 py-3">Gestor</th>
                   <th className="px-3 py-3">Area</th>
                   <th className="px-3 py-3">Periodo</th>
+                  <th className="px-3 py-3">Abono</th>
                   <th className="px-3 py-3">Status</th>
                 </tr>
               </thead>
@@ -861,6 +990,13 @@ function RHMonthlyView({ groups, onOpenItem }) {
                     <td className="px-3 py-3 text-slate-600">{item.area_titulo || "-"}</td>
                     <td className="px-3 py-3 text-slate-700">
                       {formatDateBR(getDisplayStart(item))} a {formatDateBR(getDisplayEnd(item))}
+                    </td>
+                    <td className="px-3 py-3 text-slate-700">
+                      {hasAbonoData(item)
+                        ? getAbonoDisplayStart(item)
+                          ? `${formatDateBR(getAbonoDisplayStart(item))} a ${formatDateBR(getAbonoDisplayEnd(item))}`
+                          : `${formatInt(item.dias_abono_realizados || 0)} dia(s)`
+                        : "-"}
                     </td>
                     <td className="px-3 py-3">
                       <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${item.resumo_status_chip}`}>
@@ -1008,6 +1144,9 @@ export default function Ferias() {
       janela_sugerida_fim: form.janela_sugerida_fim || null,
       programado_inicio: form.programado_inicio || null,
       programado_fim: form.programado_fim || null,
+      usar_abono: Boolean(form.usar_abono),
+      programado_abono_inicio: form.usar_abono ? form.programado_abono_inicio || null : null,
+      programado_abono_fim: form.usar_abono ? form.programado_abono_fim || null : null,
       status_planejamento: form.status_planejamento || "ANALISAR",
       prioridade: form.prioridade || "MEDIA",
       observacoes: safeText(form.observacoes) || null,
@@ -1065,11 +1204,12 @@ export default function Ferias() {
         if (statusView === "criticos" && !["vencido", "alerta", "bloqueado"].includes(registro.resumo_status_key)) return false;
         if (statusView === "em_gozo" && registro.resumo_status_key !== "em_gozo") return false;
         if (statusView === "programado" && registro.resumo_status_key !== "programado") return false;
+        if (statusView === "com_abono" && !hasAbonoData(registro)) return false;
         if (statusView === "saldo" && !["saldo", "alerta", "vencido", "bloqueado"].includes(registro.resumo_status_key)) return false;
         if (statusView === "quitado" && registro.resumo_status_key !== "quitado") return false;
         if (!query) return true;
         const blob = normalizeText(
-          `${registro.nm_funcionario} ${registro.nr_cracha} ${registro.nm_funcao} ${registro.area_titulo} ${registro.manager_nome} ${registro.historico_gozos}`
+          `${registro.nm_funcionario} ${registro.nr_cracha} ${registro.nm_funcao} ${registro.area_titulo} ${registro.manager_nome} ${registro.historico_gozos} ${registro.status_periodo} ${registro.status_realizacao} ${registro.status_agendamento}`
         );
         return blob.includes(query);
       })
@@ -1088,21 +1228,23 @@ export default function Ferias() {
     for (const registro of filteredRecords) {
       const key = registro.manager_codigo || registro.manager_nome || "sem-gestor";
       if (!groups.has(key)) {
-        groups.set(key, {
-          manager_codigo: registro.manager_codigo,
-          manager_nome: registro.manager_nome,
-          manager_cargo: registro.manager_cargo,
-          total: 0,
-          vencidos: 0,
-          emGozo: 0,
-          programados: 0,
-        });
-      }
+          groups.set(key, {
+            manager_codigo: registro.manager_codigo,
+            manager_nome: registro.manager_nome,
+            manager_cargo: registro.manager_cargo,
+            total: 0,
+            vencidos: 0,
+            emGozo: 0,
+            programados: 0,
+            comAbono: 0,
+          });
+        }
       const group = groups.get(key);
       group.total += 1;
       if (registro._periodos_criticos_colaborador > 0 || registro.resumo_status_key === "vencido") group.vencidos += 1;
       if (registro.resumo_status_key === "em_gozo") group.emGozo += 1;
       if (registro.resumo_status_key === "programado") group.programados += 1;
+      if (registro._colaborador_tem_abono) group.comAbono = Number(group.comAbono || 0) + 1;
     }
     return Array.from(groups.values()).sort((a, b) => {
       if (b.vencidos !== a.vencidos) return b.vencidos - a.vencidos;
@@ -1144,6 +1286,7 @@ export default function Ferias() {
     const vencidos = filteredRecords.filter((registro) => registro.resumo_status_key === "vencido").length;
     const alerta11 = filteredRecords.filter((registro) => registro.resumo_status_key === "alerta").length;
     const saldo = filteredRecords.filter((registro) => ["saldo", "alerta", "vencido", "bloqueado"].includes(registro.resumo_status_key)).length;
+    const comAbono = filteredRecords.filter((registro) => registro._colaborador_tem_abono).length;
     const baseAtualizadaEm = registros.reduce((latest, registro) => {
       if (!registro.importado_em) return latest;
       if (!latest) return registro.importado_em;
@@ -1158,6 +1301,7 @@ export default function Ferias() {
       vencidos,
       alerta11,
       saldo,
+      comAbono,
       baseAtualizadaEm,
       fonteArquivo,
     };
@@ -1256,13 +1400,14 @@ export default function Ferias() {
         className="hidden"
       />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
         <CardKPI titulo="Colaboradores" valor={formatInt(stats.colaboradores)} cor="slate" icon={<FaUsers />} />
         <CardKPI titulo="Periodos ativos" valor={formatInt(stats.periodos)} cor="blue" icon={<FaCalendarAlt />} />
         <CardKPI titulo="Em ferias" valor={formatInt(stats.emGozo)} cor="purple" icon={<FaUserClock />} />
         <CardKPI titulo="Programados" valor={formatInt(stats.programados)} cor="emerald" icon={<FaCheckCircle />} />
         <CardKPI titulo="Vencidos" valor={formatInt(stats.vencidos)} cor="rose" icon={<FaExclamationTriangle />} />
         <CardKPI titulo="Com saldo" valor={formatInt(stats.saldo)} cor="amber" icon={<FaClock />} sub={`${formatInt(stats.alerta11)} em alerta 11 meses`} />
+        <CardKPI titulo="Com abono" valor={formatInt(stats.comAbono)} cor="blue" icon={<FaCalendarAlt />} sub="Historico ou planejamento com abono" />
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1381,6 +1526,7 @@ export default function Ferias() {
                       <th className="px-3 py-3">Periodo</th>
                       <th className="px-3 py-3">Limite</th>
                       <th className="px-3 py-3">Saldo</th>
+                      <th className="px-3 py-3">Gozo / abono</th>
                       <th className="px-3 py-3">Status</th>
                       <th className="px-3 py-3">Vai tirar</th>
                     </tr>
@@ -1388,13 +1534,13 @@ export default function Ferias() {
                   <tbody className="divide-y divide-slate-100">
                     {loading ? (
                       <tr>
-                        <td className="px-3 py-8 text-center text-slate-500" colSpan={7}>
+                        <td className="px-3 py-8 text-center text-slate-500" colSpan={8}>
                           Carregando base de ferias...
                         </td>
                       </tr>
                     ) : !filteredRecords.length ? (
                       <tr>
-                        <td className="px-3 py-8 text-center text-slate-500" colSpan={7}>
+                        <td className="px-3 py-8 text-center text-slate-500" colSpan={8}>
                           Nenhum periodo encontrado com os filtros atuais.
                         </td>
                       </tr>
@@ -1442,6 +1588,12 @@ export default function Ferias() {
                                 total colaborador: {formatInt(registro._saldo_total_colaborador)}
                               </div>
                             ) : null}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-600">
+                            <div>Gozo: {formatInt(registro.dias_gozo_realizados || 0)} real. / {formatInt(registro.dias_gozo_agendados || 0)} ag.</div>
+                            <div>
+                              Abono: {hasAbonoData(registro) ? `${formatInt(registro.dias_abono_realizados || 0)} real. / ${formatInt(registro.dias_abono_agendados || 0)} ag.` : "Nao"}
+                            </div>
                           </td>
                           <td className="px-3 py-3">
                             <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${registro.resumo_status_chip}`}>
@@ -1515,6 +1667,12 @@ export default function Ferias() {
                     <div className="font-semibold text-slate-900">Quem precisa tirar</div>
                     <div className="mt-1">
                       {stats.saldo} periodo(s) com saldo pendente e {stats.vencidos} ja estao vencidos.
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="font-semibold text-slate-900">Abono no radar</div>
+                    <div className="mt-1">
+                      {stats.comAbono} colaborador(es) aparecem com historico ou planejamento de abono nesta base.
                     </div>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">

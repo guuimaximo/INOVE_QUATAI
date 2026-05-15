@@ -221,6 +221,17 @@ export function getRequiredPumpNumbers(product) {
   return PRODUCT_CONFIG[product]?.requiredPumpNumbers || [];
 }
 
+export function buildPumpAdjustmentKey(dateValue, pumpId) {
+  if (!dateValue || !pumpId) return null;
+  return `${dateValue}::${pumpId}`;
+}
+
+export function getPumpInitialAdjustment(metadata, pumpId, dateValue) {
+  const key = buildPumpAdjustmentKey(dateValue, pumpId);
+  if (!key) return null;
+  return metadata?.pumpInitialAdjustmentsByKey?.[key] || null;
+}
+
 function getTankByProduct(metadata, product) {
   return metadata?.tanksByProduct?.[product] || null;
 }
@@ -366,7 +377,7 @@ export function saveParams(params) {
 }
 
 export async function fetchMeasurementContext() {
-  const [tanksResponse, paramsResponse, tolerancesResponse, suppliersResponse, pumpsResponse] =
+  const [tanksResponse, paramsResponse, tolerancesResponse, suppliersResponse, pumpsResponse, pumpAdjustmentsResponse] =
     await Promise.all([
       supabase
         .from("estoque_diesel_tanques")
@@ -394,9 +405,13 @@ export async function fetchMeasurementContext() {
         .select("id, tanque_id, numero, descricao")
         .eq("ativo", true)
         .order("numero"),
+      supabase
+        .from("estoque_diesel_ajustes_hodometro_inicial")
+        .select("id, bomba_id, data_referencia, hodometro_inicial, observacao, atualizado_em, usuario_id")
+        .eq("ativo", true),
     ]);
 
-  for (const response of [tanksResponse, paramsResponse, tolerancesResponse, suppliersResponse, pumpsResponse]) {
+  for (const response of [tanksResponse, paramsResponse, tolerancesResponse, suppliersResponse, pumpsResponse, pumpAdjustmentsResponse]) {
     if (response.error) throw response.error;
   }
 
@@ -406,6 +421,7 @@ export async function fetchMeasurementContext() {
     tanksById: {},
     pumpsByProduct: {},
     pumpsById: {},
+    pumpInitialAdjustmentsByKey: {},
     suppliersById: {},
   };
 
@@ -476,6 +492,12 @@ export async function fetchMeasurementContext() {
   Object.keys(metadata.pumpsByProduct).forEach((product) => {
     metadata.pumpsByProduct[product].sort((a, b) => Number(a.numero || 0) - Number(b.numero || 0));
   });
+
+  for (const adjustment of pumpAdjustmentsResponse.data || []) {
+    const key = buildPumpAdjustmentKey(adjustment.data_referencia, adjustment.bomba_id);
+    if (!key) continue;
+    metadata.pumpInitialAdjustmentsByKey[key] = adjustment;
+  }
 
   return { metadata, paramStore };
 }
@@ -763,13 +785,19 @@ export function computeMeasurement(form, params, previousEntry, receipts = []) {
     const previousPump = (previousEntry?.pumps || []).find(
       (item) => Number(item.number) === Number(pump.number)
     );
+    const pumpAdjustment = pump.adjustment || null;
 
-    const initial = parseNumber(pump.initial) ?? parseNumber(previousPump?.final) ?? 0;
+    const initial =
+      parseNumber(pump.initial) ??
+      parseNumber(pumpAdjustment?.hodometro_inicial) ??
+      parseNumber(previousPump?.final) ??
+      0;
     const final = parseNumber(pump.final) || 0;
 
     return {
       ...pump,
       number: pump.number,
+      adjustment: pumpAdjustment,
       initial,
       final,
       output: round(final - initial, 2),
@@ -898,7 +926,7 @@ export function validateMeasurement(form, computed, params) {
     }
 
     if (initial !== null && final !== null && final < initial) {
-      errors[`pump_${pump.number}`] = `Bomba ${pump.number}: encerrante atual nao pode ser menor que o D-1.`;
+      errors[`pump_${pump.number}`] = `Bomba ${pump.number}: encerrante atual nao pode ser menor que o hodometro inicial configurado.`;
     }
   });
 
@@ -1102,13 +1130,15 @@ export async function saveMeasurementEntry({
     .sort((a, b) => Number(a.numero || 0) - Number(b.numero || 0));
 
   const pumpPayload = dbPumps.map((pump) => {
-    const formPump = (form.pumps || []).find((item) => Number(item.number) === Number(pump.numero));
+    const computedPump = (computed?.pumpDetails || []).find(
+      (item) => Number(item.number) === Number(pump.numero)
+    );
 
     return {
       medicao_id: savedMeasurement.id,
       bomba_id: pump.id,
-      hodometro_inicial: parseNumber(formPump?.initial) || 0,
-      hodometro_final: parseNumber(formPump?.final) || 0,
+      hodometro_inicial: parseNumber(computedPump?.initial) || 0,
+      hodometro_final: parseNumber(computedPump?.final) || 0,
     };
   });
 
@@ -1121,6 +1151,66 @@ export async function saveMeasurementEntry({
   }
 
   return savedMeasurement.id;
+}
+
+export async function savePumpInitialAdjustment({
+  metadata,
+  product,
+  pumpNumber,
+  date,
+  initial,
+  observation = "",
+  userId = null,
+}) {
+  const dbPump = (metadata?.pumpsByProduct?.[product] || []).find(
+    (pump) => Number(pump.numero) === Number(pumpNumber)
+  );
+
+  if (!dbPump?.id) {
+    throw new Error(`Bomba ${pumpNumber} de ${product} nao encontrada no Supabase.`);
+  }
+
+  const payload = {
+    bomba_id: dbPump.id,
+    data_referencia: date,
+    hodometro_inicial: parseNumber(initial) || 0,
+    observacao: String(observation || "").trim() || null,
+    ativo: true,
+    atualizado_em: new Date().toISOString(),
+    usuario_id: Number.isInteger(userId) ? userId : null,
+  };
+
+  const { data, error } = await supabase
+    .from("estoque_diesel_ajustes_hodometro_inicial")
+    .upsert(payload, { onConflict: "bomba_id,data_referencia" })
+    .select("id, bomba_id, data_referencia, hodometro_inicial, observacao, atualizado_em, usuario_id")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deletePumpInitialAdjustment({
+  metadata,
+  product,
+  pumpNumber,
+  date,
+}) {
+  const dbPump = (metadata?.pumpsByProduct?.[product] || []).find(
+    (pump) => Number(pump.numero) === Number(pumpNumber)
+  );
+
+  if (!dbPump?.id) {
+    throw new Error(`Bomba ${pumpNumber} de ${product} nao encontrada no Supabase.`);
+  }
+
+  const { error } = await supabase
+    .from("estoque_diesel_ajustes_hodometro_inicial")
+    .delete()
+    .eq("bomba_id", dbPump.id)
+    .eq("data_referencia", date);
+
+  if (error) throw error;
 }
 
 export async function saveDieselReceipt({

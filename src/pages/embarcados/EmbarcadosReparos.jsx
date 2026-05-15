@@ -166,102 +166,72 @@ export default function EmbarcadosReparos() {
   }, [filtrados]);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-[1700px] space-y-4">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-          <div className="flex flex-col 2xl:flex-row 2xl:items-end 2xl:justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-black tracking-[0.18em] text-slate-500 uppercase">
-                Gestão de embarcados
-              </div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-900">
-                Solicitação de Reparo - Embarcados
-              </h1>
-              <p className="text-sm text-slate-500 font-semibold mt-1">
-                Acompanhe, filtre e abra novas solicitações de reparo dos embarcados.
-              </p>
-            </div>
+    <div className="space-y-6 p-4 md:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Embarcados · Reparos</div>
+            <h1 className="text-2xl font-black text-slate-900 md:text-3xl">Solicitações de reparo</h1>
+            <p className="text-sm text-slate-500">
+              Acompanhe, filtre e abra novas solicitações de reparo dos embarcados.
+            </p>
+          </div>
 
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={carregar}
-                className="h-[44px] px-4 rounded-2xl bg-white border border-slate-300 text-slate-800 font-black text-sm hover:bg-slate-50 flex items-center gap-2"
-              >
-                <FaSync />
-                Atualizar
-              </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={carregar}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white shadow hover:bg-slate-800 disabled:opacity-60"
+            >
+              <FaSync className={loading ? "animate-spin" : ""} /> {loading ? "Atualizando..." : "Atualizar"}
+            </button>
 
-              <button
-                onClick={() => setShowNovaSolicitacao(true)}
-                className="h-[44px] px-4 rounded-2xl bg-emerald-600 text-white font-black text-sm hover:bg-emerald-500 flex items-center gap-2"
-              >
-                <FaPlus />
-                Nova solicitação
-              </button>
-            </div>
+            <button
+              onClick={() => setShowNovaSolicitacao(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700"
+            >
+              <FaPlus /> Nova solicitação
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[10px] font-black uppercase text-slate-500">Total</div>
-                <div className="text-2xl font-black text-slate-900 mt-1">{resumo.total}</div>
-              </div>
-              <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
-                <FaTools />
-              </div>
-            </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Total</div>
+            <div className="mt-1 text-2xl font-black">{resumo.total}</div>
+            <div className="mt-0.5 text-[11px] opacity-70">Após filtros</div>
           </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[10px] font-black uppercase text-slate-500">Abertas</div>
-                <div className="text-2xl font-black text-blue-700 mt-1">{resumo.abertas}</div>
-              </div>
-              <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
-                <FaClock />
-              </div>
-            </div>
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-900">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Abertas</div>
+            <div className="mt-1 text-2xl font-black">{resumo.abertas}</div>
+            <div className="mt-0.5 text-[11px] opacity-70">Em andamento</div>
           </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[10px] font-black uppercase text-slate-500">Concluídas</div>
-                <div className="text-2xl font-black text-green-700 mt-1">{resumo.concluidas}</div>
-              </div>
-              <div className="w-11 h-11 rounded-2xl bg-green-50 text-green-700 flex items-center justify-center">
-                <FaCheckCircle />
-              </div>
-            </div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Concluídas</div>
+            <div className="mt-1 text-2xl font-black">{resumo.concluidas}</div>
+            <div className="mt-0.5 text-[11px] opacity-70">Finalizadas</div>
           </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[10px] font-black uppercase text-slate-500">Críticas</div>
-                <div className="text-2xl font-black text-red-700 mt-1">{resumo.criticas}</div>
-              </div>
-              <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center">
-                <FaExclamationTriangle />
-              </div>
-            </div>
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-900">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Críticas</div>
+            <div className="mt-1 text-2xl font-black">{resumo.criticas}</div>
+            <div className="mt-0.5 text-[11px] opacity-70">Prioridade alta</div>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Pendentes</div>
+            <div className="mt-1 text-2xl font-black">{Math.max(resumo.total - resumo.concluidas, 0)}</div>
+            <div className="mt-0.5 text-[11px] opacity-70">Não concluídas</div>
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div>
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
                 Buscar
               </label>
-              <div className="flex items-center gap-2 border border-slate-300 rounded-2xl px-3 py-2.5 bg-white">
-                <FaSearch className="text-slate-400" />
+              <div className="relative">
+                <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
-                  className="w-full outline-none text-sm font-semibold"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-blue-400 focus:outline-none"
                   placeholder="Veículo, problema, solicitante..."
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
@@ -270,37 +240,33 @@ export default function EmbarcadosReparos() {
             </div>
 
             <div>
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
                 Status
               </label>
               <select
-                className="w-full border border-slate-300 rounded-2xl px-3 py-2.5 text-sm font-bold bg-white"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none"
                 value={filtroStatus}
                 onChange={(e) => setFiltroStatus(e.target.value)}
               >
                 <option value="">Todos</option>
                 {STATUS.map((s) => (
-                  <option key={s} value={s}>
-                    {statusLabel(s)}
-                  </option>
+                  <option key={s} value={s}>{statusLabel(s)}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
                 Prioridade
               </label>
               <select
-                className="w-full border border-slate-300 rounded-2xl px-3 py-2.5 text-sm font-bold bg-white"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none"
                 value={filtroPrioridade}
                 onChange={(e) => setFiltroPrioridade(e.target.value)}
               >
                 <option value="">Todas</option>
                 {PRIORIDADES.map((p) => (
-                  <option key={p} value={p}>
-                    {prioridadeLabel(p)}
-                  </option>
+                  <option key={p} value={p}>{prioridadeLabel(p)}</option>
                 ))}
               </select>
             </div>
@@ -446,7 +412,6 @@ export default function EmbarcadosReparos() {
           onClose={() => setShowNovaSolicitacao(false)}
           onSuccess={carregar}
         />
-      </div>
     </div>
   );
 }

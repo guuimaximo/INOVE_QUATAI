@@ -445,85 +445,71 @@ export default function EmbarcadosMovimentacoes() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
-      <div className="mx-auto max-w-[1700px] space-y-4">
-        {/* RESUMO GLOBAL */}
-        <div className="bg-indigo-900 border border-indigo-800 rounded-3xl p-4 flex flex-nowrap overflow-x-auto hide-scrollbar items-center lg:justify-center gap-4 text-sm md:text-base font-black text-white uppercase tracking-widest shadow-md whitespace-nowrap">
-          <span className="text-indigo-200 mr-2 flex-shrink-0">Total Instalados Frota:</span>
+    <div className="space-y-6 p-4 md:p-6 font-sans text-slate-900">
+        {/* HEADER */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Embarcados · Movimentações</div>
+            <h1 className="text-2xl font-black text-slate-900 md:text-3xl">Painel de equipamentos do veículo</h1>
+            <p className="text-sm text-slate-500">
+              Selecione um carro para ver, instalar, remover ou acompanhar a visão analítica da frota.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => {
+                carregarIniciais();
+                carregarDadosVeiculo(veiculoSelecionado);
+                carregarAnalitico();
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white shadow hover:bg-slate-800"
+            >
+              <FaSync /> Atualizar
+            </button>
+          </div>
+        </div>
+
+        {/* RESUMO GLOBAL — KPI grid no padrão Pessoas */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Total instalados</div>
+            <div className="mt-1 text-2xl font-black">{instaladosGlobais.length}</div>
+            <div className="mt-0.5 text-[11px] opacity-70">Na frota</div>
+          </div>
           {TIPOS_EMBARCADOS.map((tipo) => {
             const qtd = instaladosGlobais.filter((e) => e.tipo === tipo).length;
             return (
-              <span
-                key={tipo}
-                className="flex items-center gap-2 bg-indigo-800/50 px-4 py-2 rounded-xl border border-indigo-700/50 shadow-sm flex-shrink-0"
-              >
-                {tipo}:{" "}
-                <span className={qtd > 0 ? "text-emerald-400 text-lg" : "text-indigo-300 text-lg"}>
-                  {qtd}
-                </span>
-              </span>
+              <div key={tipo} className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-900">
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">{tipo}</div>
+                <div className="mt-1 text-2xl font-black">{qtd}</div>
+                <div className="mt-0.5 text-[11px] opacity-70">Instalados</div>
+              </div>
             );
           })}
         </div>
 
-        {/* HEADER */}
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-          <div className="flex flex-col 2xl:flex-row 2xl:items-end 2xl:justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-black tracking-[0.18em] text-indigo-600 uppercase">
-                Módulo Veicular
-              </div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-900">
-                Painel de Equipamentos do Veículo
-              </h1>
-              <p className="text-sm text-slate-500 font-semibold mt-1">
-                Selecione um carro para ver, instalar, remover ou acompanhar a visão analítica da frota.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => {
-                  carregarIniciais();
-                  carregarDadosVeiculo(veiculoSelecionado);
-                  carregarAnalitico();
-                }}
-                className="h-[44px] px-4 rounded-2xl bg-white border border-slate-300 text-slate-800 font-black text-sm hover:bg-slate-50 flex items-center justify-center gap-2 transition-colors"
-              >
-                <FaSync className="text-indigo-600" />
-                Atualizar Dados
-              </button>
-            </div>
-          </div>
-        </div>
-
         {/* ABAS */}
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-3">
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setActiveTab("PAINEL")}
-              className={`px-5 py-3 rounded-2xl font-black text-sm flex items-center gap-2 transition-colors ${
-                activeTab === "PAINEL"
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              <FaTools />
-              Painel do Veículo
-            </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setActiveTab("PAINEL")}
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition ${
+              activeTab === "PAINEL" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <FaTools />
+            Painel do veículo
+          </button>
 
-            <button
-              onClick={() => setActiveTab("ANALITICO")}
-              className={`px-5 py-3 rounded-2xl font-black text-sm flex items-center gap-2 transition-colors ${
-                activeTab === "ANALITICO"
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              <FaTable />
-              Analítico
-            </button>
-          </div>
+          <button
+            onClick={() => setActiveTab("ANALITICO")}
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition ${
+              activeTab === "ANALITICO" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <FaTable />
+            Analítico
+          </button>
         </div>
 
         {/* ===================== ABA PAINEL ===================== */}
@@ -540,7 +526,7 @@ export default function EmbarcadosMovimentacoes() {
                   </div>
                   <input
                     type="text"
-                    className="w-full border border-slate-300 rounded-2xl pl-10 pr-4 py-3 text-lg font-black bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-slate-800"
+                    className="w-full border border-slate-300 rounded-2xl pl-10 pr-4 py-3 text-lg font-black bg-slate-50 focus:bg-white outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all text-slate-800"
                     placeholder="Ex: 1234, 5090..."
                     value={veiculoSelecionado ? veiculoSelecionado : buscaVeiculo}
                     onChange={(e) => {
@@ -557,7 +543,7 @@ export default function EmbarcadosMovimentacoes() {
                             setVeiculoSelecionado(p.codigo);
                             setBuscaVeiculo("");
                           }}
-                          className="px-4 py-3 hover:bg-indigo-50 cursor-pointer font-bold text-slate-700 border-b last:border-0 flex justify-between items-center"
+                          className="px-4 py-3 hover:bg-blue-50 cursor-pointer font-bold text-slate-700 border-b last:border-0 flex justify-between items-center"
                         >
                           <span>{p.codigo}</span>
                           <span className="text-xs text-slate-400 font-semibold">{p.cluster || "S/N"}</span>
@@ -571,7 +557,7 @@ export default function EmbarcadosMovimentacoes() {
               {veiculoSelecionado && (
                 <button
                   onClick={() => setModalAcao("HISTORICO")}
-                  className="h-[52px] px-6 rounded-2xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-black text-sm hover:bg-indigo-100 flex items-center justify-center gap-2 transition-colors w-full lg:w-auto mt-6 lg:mt-0"
+                  className="h-[52px] px-6 rounded-2xl bg-blue-50 text-blue-700 border border-blue-200 font-black text-sm hover:bg-blue-100 flex items-center justify-center gap-2 transition-colors w-full lg:w-auto mt-6 lg:mt-0"
                 >
                   <FaHistory />
                   Ver Histórico do Veículo
@@ -583,7 +569,7 @@ export default function EmbarcadosMovimentacoes() {
               <div className="space-y-4 animate-in slide-in-from-bottom-4">
                 <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 px-2 mt-4">
                   <FaTools className="text-slate-400" /> Status do Veículo:{" "}
-                  <span className="text-indigo-600">{veiculoSelecionado}</span>
+                  <span className="text-blue-600">{veiculoSelecionado}</span>
                 </h2>
 
                 {loading ? (
@@ -710,7 +696,7 @@ export default function EmbarcadosMovimentacoes() {
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
               <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
                 <div>
-                  <div className="text-[11px] font-black tracking-[0.18em] text-indigo-600 uppercase">
+                  <div className="text-[11px] font-black tracking-[0.18em] text-blue-600 uppercase">
                     Visão Geral
                   </div>
                   <h2 className="text-2xl font-black text-slate-900 mt-1">
@@ -727,7 +713,7 @@ export default function EmbarcadosMovimentacoes() {
                     value={buscaAnalitico}
                     onChange={(e) => setBuscaAnalitico(e.target.value)}
                     placeholder="Buscar carro ou cluster..."
-                    className="h-[44px] min-w-[260px] px-4 rounded-2xl border border-slate-300 bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm font-bold"
+                    className="h-[44px] min-w-[260px] px-4 rounded-2xl border border-slate-300 bg-slate-50 focus:bg-white outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 text-sm font-bold"
                   />
 
                   <button
@@ -752,7 +738,7 @@ export default function EmbarcadosMovimentacoes() {
                 return (
                   <div key={tipo} className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
                     <div className="text-xs font-black uppercase tracking-widest text-slate-400">{tipo}</div>
-                    <div className="text-3xl font-black text-indigo-700 mt-2">{qtd}</div>
+                    <div className="text-3xl font-black text-blue-700 mt-2">{qtd}</div>
                   </div>
                 );
               })}
@@ -809,7 +795,7 @@ export default function EmbarcadosMovimentacoes() {
                           <td className="px-4 py-4 text-center">{renderIconStatus(row.GPS, row.GPS_NUMERO)}</td>
 
                           <td className="px-4 py-4 text-center">
-                            <span className="inline-flex items-center justify-center min-w-[36px] px-2 py-1 rounded-xl bg-indigo-100 text-indigo-700 font-black">
+                            <span className="inline-flex items-center justify-center min-w-[36px] px-2 py-1 rounded-xl bg-blue-100 text-blue-700 font-black">
                               {row.totalInstalados}
                             </span>
                           </td>
@@ -838,7 +824,7 @@ export default function EmbarcadosMovimentacoes() {
         {modalAcao === "INSTALAR" && (
           <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95">
-              <div className="bg-indigo-600 px-6 py-4 flex items-center justify-between">
+              <div className="bg-blue-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-lg font-black text-white flex items-center gap-2">
                   <FaPlus /> Instalar {tipoSelecionado}
                 </h2>
@@ -853,7 +839,7 @@ export default function EmbarcadosMovimentacoes() {
                     Equipamento Disponível
                   </label>
                   <select
-                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                     value={formInstalar.embarcado_id}
                     onChange={(e) =>
                       setFormInstalar({ ...formInstalar, embarcado_id: e.target.value })
@@ -893,7 +879,7 @@ export default function EmbarcadosMovimentacoes() {
                     Observação (Opcional)
                   </label>
                   <textarea
-                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-h-[80px]"
+                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 min-h-[80px]"
                     value={formInstalar.observacao}
                     onChange={(e) =>
                       setFormInstalar({ ...formInstalar, observacao: e.target.value })
@@ -913,7 +899,7 @@ export default function EmbarcadosMovimentacoes() {
                   <button
                     type="submit"
                     disabled={saving || !formInstalar.embarcado_id}
-                    className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-black hover:bg-indigo-700 transition-colors disabled:opacity-50 flex justify-center items-center gap-2 shadow-md"
+                    className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-black hover:bg-blue-700 transition-colors disabled:opacity-50 flex justify-center items-center gap-2 shadow-md"
                   >
                     <FaSave /> {saving ? "Salvando..." : "Confirmar Instalação"}
                   </button>
@@ -950,7 +936,7 @@ export default function EmbarcadosMovimentacoes() {
                       Destino (Tipo)
                     </label>
                     <select
-                      className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                       value={formMovimentar.destino_tipo}
                       onChange={(e) =>
                         setFormMovimentar({
@@ -974,7 +960,7 @@ export default function EmbarcadosMovimentacoes() {
                     </label>
                     {formMovimentar.destino_tipo === "VEICULO" ? (
                       <select
-                        className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                        className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                         value={formMovimentar.destino_valor}
                         onChange={(e) =>
                           setFormMovimentar({ ...formMovimentar, destino_valor: e.target.value })
@@ -1018,7 +1004,7 @@ export default function EmbarcadosMovimentacoes() {
                     Motivo / Observação
                   </label>
                   <textarea
-                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-h-[80px]"
+                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 min-h-[80px]"
                     value={formMovimentar.observacao}
                     onChange={(e) =>
                       setFormMovimentar({ ...formMovimentar, observacao: e.target.value })
@@ -1055,7 +1041,7 @@ export default function EmbarcadosMovimentacoes() {
               <div className="border-b border-slate-200 px-6 py-5 flex items-center justify-between bg-slate-50 rounded-t-3xl">
                 <div>
                   <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                    <FaHistory className="text-indigo-600" /> Histórico do Veículo: {veiculoSelecionado}
+                    <FaHistory className="text-blue-600" /> Histórico do Veículo: {veiculoSelecionado}
                   </h2>
                   <p className="text-xs font-bold text-slate-500 mt-1 uppercase tracking-widest">
                     Últimas 50 movimentações
@@ -1105,7 +1091,7 @@ export default function EmbarcadosMovimentacoes() {
                           </div>
                           <div className="text-base font-black text-slate-900 mt-2">
                             {h.embarcados?.numero_equipamento || "Equipamento Desconhecido"}{" "}
-                            <span className="text-indigo-600 font-bold ml-1">• {h.embarcados?.tipo}</span>
+                            <span className="text-blue-600 font-bold ml-1">• {h.embarcados?.tipo}</span>
                           </div>
 
                           <div className="grid grid-cols-2 gap-4 mt-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -1146,7 +1132,6 @@ export default function EmbarcadosMovimentacoes() {
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 }

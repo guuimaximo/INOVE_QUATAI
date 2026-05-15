@@ -320,6 +320,44 @@ function getDisplayEnd(item) {
   return item.programado_fim || item.proximo_fim_gozo || null;
 }
 
+function compareFeriasPriority(left, right) {
+  if (left.resumo_status_order !== right.resumo_status_order) {
+    return left.resumo_status_order - right.resumo_status_order;
+  }
+  const leftLimite = parseDateInput(left.dt_limite_legal) || "9999-12-31";
+  const rightLimite = parseDateInput(right.dt_limite_legal) || "9999-12-31";
+  if (leftLimite !== rightLimite) return leftLimite.localeCompare(rightLimite);
+  const leftInicio = parseDateInput(left.dt_inicio_aquisitivo) || "9999-12-31";
+  const rightInicio = parseDateInput(right.dt_inicio_aquisitivo) || "9999-12-31";
+  return leftInicio.localeCompare(rightInicio);
+}
+
+function summarizeByCollaborator(records) {
+  const groups = new Map();
+  for (const record of records) {
+    const key = buildFuncionarioKey(record);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(record);
+  }
+
+  return Array.from(groups.values())
+    .map((items) => {
+      const sorted = [...items].sort(compareFeriasPriority);
+      const principal = sorted[0];
+      const periodosPendentes = sorted.filter((item) => Number(item.dias_pendentes_total || 0) > 0);
+      const periodosCriticos = sorted.filter((item) => ["vencido", "alerta", "bloqueado"].includes(item.resumo_status_key));
+      return {
+        ...principal,
+        _periodos_relacionados: sorted,
+        _periodos_total_colaborador: sorted.length,
+        _periodos_pendentes_colaborador: periodosPendentes.length,
+        _periodos_criticos_colaborador: periodosCriticos.length,
+        _saldo_total_colaborador: sorted.reduce((sum, item) => sum + Number(item.dias_pendentes_total || 0), 0),
+      };
+    })
+    .sort(compareFeriasPriority);
+}
+
 function exportarCSV(rows) {
   if (!rows.length) {
     window.alert("Nao ha dados para exportar.");
@@ -480,6 +518,15 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
               <InfoBox label="Limite legal" value={formatDateBR(item.dt_limite_legal)} />
               <InfoBox label="Dias pendentes" value={formatInt(item.dias_pendentes_total)} />
               <InfoBox label="Dias em andamento" value={formatInt(item.dias_em_andamento)} />
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Resumo do colaborador</div>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <InfoBox label="Periodos no arquivo" value={formatInt(item._periodos_total_colaborador || 1)} />
+                <InfoBox label="Periodos pendentes" value={formatInt(item._periodos_pendentes_colaborador || 0)} />
+                <InfoBox label="Saldo total" value={`${formatInt(item._saldo_total_colaborador || item.dias_pendentes_total || 0)} dia(s)`} />
+              </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1009,7 +1056,7 @@ export default function Ferias() {
     return Array.from(unique).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [registros]);
 
-  const filteredRecords = useMemo(() => {
+  const filteredPeriods = useMemo(() => {
     const query = normalizeText(busca);
     return registros
       .filter((registro) => {
@@ -1034,9 +1081,11 @@ export default function Ferias() {
       });
   }, [busca, funcaoFiltro, managerFilter, registros, statusView]);
 
+  const filteredRecords = useMemo(() => summarizeByCollaborator(filteredPeriods), [filteredPeriods]);
+
   const managerGroups = useMemo(() => {
     const groups = new Map();
-    for (const registro of registros) {
+    for (const registro of filteredRecords) {
       const key = registro.manager_codigo || registro.manager_nome || "sem-gestor";
       if (!groups.has(key)) {
         groups.set(key, {
@@ -1051,7 +1100,7 @@ export default function Ferias() {
       }
       const group = groups.get(key);
       group.total += 1;
-      if (registro.resumo_status_key === "vencido") group.vencidos += 1;
+      if (registro._periodos_criticos_colaborador > 0 || registro.resumo_status_key === "vencido") group.vencidos += 1;
       if (registro.resumo_status_key === "em_gozo") group.emGozo += 1;
       if (registro.resumo_status_key === "programado") group.programados += 1;
     }
@@ -1060,7 +1109,7 @@ export default function Ferias() {
       if (b.total !== a.total) return b.total - a.total;
       return String(a.manager_nome || "").localeCompare(String(b.manager_nome || ""), "pt-BR");
     });
-  }, [registros]);
+  }, [filteredRecords]);
 
   const monthlyPlannedGroups = useMemo(() => {
     const groups = new Map();
@@ -1080,21 +1129,21 @@ export default function Ferias() {
 
   const calendarRecords = useMemo(
     () =>
-      filteredRecords.filter((item) => {
+      filteredPeriods.filter((item) => {
         const start = getDisplayStart(item);
         const end = getDisplayEnd(item);
         return dateRangeOverlapsMonth(start, end, calendarMonth);
       }),
-    [calendarMonth, filteredRecords]
+    [calendarMonth, filteredPeriods]
   );
 
   const stats = useMemo(() => {
-    const colaboradores = new Set(registros.map((registro) => `${registro.funcionario_id || registro.nr_cracha || registro.nm_funcionario}`));
-    const emGozo = registros.filter((registro) => registro.resumo_status_key === "em_gozo").length;
-    const programados = registros.filter((registro) => registro.resumo_status_key === "programado").length;
-    const vencidos = registros.filter((registro) => registro.resumo_status_key === "vencido").length;
-    const alerta11 = registros.filter((registro) => registro.resumo_status_key === "alerta").length;
-    const saldo = registros.filter((registro) => ["saldo", "alerta", "vencido", "bloqueado"].includes(registro.resumo_status_key)).length;
+    const colaboradores = new Set(filteredRecords.map((registro) => `${registro.funcionario_id || registro.nr_cracha || registro.nm_funcionario}`));
+    const emGozo = filteredRecords.filter((registro) => registro.resumo_status_key === "em_gozo").length;
+    const programados = filteredRecords.filter((registro) => registro.resumo_status_key === "programado").length;
+    const vencidos = filteredRecords.filter((registro) => registro.resumo_status_key === "vencido").length;
+    const alerta11 = filteredRecords.filter((registro) => registro.resumo_status_key === "alerta").length;
+    const saldo = filteredRecords.filter((registro) => ["saldo", "alerta", "vencido", "bloqueado"].includes(registro.resumo_status_key)).length;
     const baseAtualizadaEm = registros.reduce((latest, registro) => {
       if (!registro.importado_em) return latest;
       if (!latest) return registro.importado_em;
@@ -1112,7 +1161,7 @@ export default function Ferias() {
       baseAtualizadaEm,
       fonteArquivo,
     };
-  }, [registros]);
+  }, [filteredRecords, registros]);
 
   const criticos = useMemo(
     () => filteredRecords.filter((registro) => ["vencido", "alerta", "bloqueado"].includes(registro.resumo_status_key)).slice(0, 8),
@@ -1319,7 +1368,7 @@ export default function Ferias() {
                   <div className="mt-1 text-sm text-slate-500">Clique na linha para abrir o card do colaborador.</div>
                 </div>
                 <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-slate-700">
-                  {filteredRecords.length} registro(s)
+                  {filteredRecords.length} colaborador(es)
                 </div>
               </div>
 
@@ -1362,7 +1411,14 @@ export default function Ferias() {
                               {registro.nm_funcao || "Sem funcao"}
                               {registro.area_titulo ? ` • ${registro.area_titulo}` : ""}
                             </div>
-                            <div className="text-xs text-slate-400">Cracha {registro.nr_cracha || "-"}</div>
+                            <div className="text-xs text-slate-400">
+                              Cracha {registro.nr_cracha || "-"}
+                              {registro._periodos_pendentes_colaborador > 1
+                                ? ` • ${registro._periodos_pendentes_colaborador} periodos pendentes`
+                                : registro._periodos_total_colaborador > 1
+                                  ? ` • ${registro._periodos_total_colaborador} periodos no historico`
+                                  : ""}
+                            </div>
                           </td>
                           <td className="px-3 py-3 text-slate-700">
                             <div className="font-semibold">{registro.manager_nome}</div>
@@ -1379,7 +1435,14 @@ export default function Ferias() {
                                 : "Sem contador"}
                             </div>
                           </td>
-                          <td className="px-3 py-3 font-bold text-slate-800">{formatInt(registro.dias_pendentes_total)}</td>
+                          <td className="px-3 py-3 font-bold text-slate-800">
+                            {formatInt(registro.dias_pendentes_total)}
+                            {registro._saldo_total_colaborador > Number(registro.dias_pendentes_total || 0) ? (
+                              <div className="text-[11px] font-medium text-slate-400">
+                                total colaborador: {formatInt(registro._saldo_total_colaborador)}
+                              </div>
+                            ) : null}
+                          </td>
                           <td className="px-3 py-3">
                             <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${registro.resumo_status_chip}`}>
                               {registro.resumo_status_label}

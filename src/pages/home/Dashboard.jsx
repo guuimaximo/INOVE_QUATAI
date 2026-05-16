@@ -1,16 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  FaBriefcaseMedical,
   FaBus,
+  FaCalendarAlt,
   FaChartLine,
   FaClipboardCheck,
   FaExclamationTriangle,
   FaGasPump,
   FaRoad,
-  FaSyncAlt,
+  FaToolbox,
   FaTools,
   FaUserCheck,
   FaUsers,
+  FaWrench,
 } from "react-icons/fa";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
@@ -23,9 +37,19 @@ const supabaseA =
     ? createClient(SUPABASE_A_URL, SUPABASE_A_ANON_KEY)
     : null;
 
+const EMBARCADOS_ABERTOS = new Set(["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS"]);
+
 function n(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeText(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 function safeDateStr(value) {
@@ -41,6 +65,19 @@ function safeDateStr(value) {
     }
   }
   return raw;
+}
+
+function parseDateInput(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const text = safeDateStr(value);
+  if (!text) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
 }
 
 function todayYMD_SP() {
@@ -74,6 +111,43 @@ function monthRange(ym) {
   return { start: toYMD(first), end: toYMD(last) };
 }
 
+function monthKeyFromDate(value) {
+  const date = parseDateInput(value);
+  return date ? date.slice(0, 7) : "";
+}
+
+function buildLastMonthKeys(referenceYm, count = 6) {
+  if (!referenceYm) return [];
+  const [year, month] = referenceYm.split("-").map(Number);
+  const keys = [];
+
+  for (let index = count - 1; index >= 0; index -= 1) {
+    const date = new Date(Date.UTC(year, month - 1 - index, 1));
+    keys.push(
+      `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`
+    );
+  }
+
+  return keys;
+}
+
+function enumerateDates(start, end) {
+  const startDate = parseDateInput(start);
+  const endDate = parseDateInput(end);
+  if (!startDate || !endDate || startDate > endDate) return [];
+
+  const days = [];
+  let cursor = new Date(`${startDate}T00:00:00`);
+  const limit = new Date(`${endDate}T00:00:00`);
+
+  while (cursor.getTime() <= limit.getTime()) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
+}
+
 function formatMonthLabel(ym) {
   if (!ym) return "-";
   const [year, month] = ym.split("-").map(Number);
@@ -83,6 +157,25 @@ function formatMonthLabel(ym) {
     year: "numeric",
     timeZone: "America/Sao_Paulo",
   }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+function formatShortMonthLabel(ym) {
+  if (!ym) return "-";
+  const [year, month] = ym.split("-").map(Number);
+  if (!year || !month) return ym;
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: "short",
+    timeZone: "America/Sao_Paulo",
+  })
+    .format(new Date(Date.UTC(year, month - 1, 1)))
+    .replace(".", "");
+}
+
+function formatDayLabel(iso) {
+  if (!iso) return "-";
+  const [year, month, day] = iso.split("-");
+  if (!year || !month || !day) return iso;
+  return `${day}/${month}`;
 }
 
 function fmtNum(value, decimals = 2) {
@@ -107,6 +200,17 @@ function fmtPercent(value) {
   return `${fmtNum(value, 1)}%`;
 }
 
+function buildFuncionarioKey(value) {
+  return String(
+    value?.funcionario_id ||
+      value?.id_funcionario ||
+      value?.funcionario_cracha ||
+      value?.nr_cracha ||
+      normalizeText(value?.nm_funcionario || value?.nome) ||
+      ""
+  );
+}
+
 function normalizeTipo(ocorrencia) {
   const value = String(ocorrencia || "").toUpperCase().trim();
   if (!value) return "";
@@ -124,6 +228,114 @@ function isOcorrenciaValidaParaMKBF(ocorrencia) {
   const tipo = normalizeTipo(ocorrencia);
   if (!tipo) return false;
   return tipo !== "SEGUIU VIAGEM";
+}
+
+function isTratativaConcluida(status) {
+  const text = normalizeText(status);
+  return text.includes("conclu") || text.includes("resolvid");
+}
+
+function isTratativaPendente(status) {
+  const text = normalizeText(status);
+  return text.includes("pendente") || text.includes("aberto");
+}
+
+function parseHistoricoGozos(historico) {
+  const text = String(historico || "").trim();
+  if (!text) return [];
+
+  return text
+    .split(/(?=Periodo \d+:)/g)
+    .map((chunk) => {
+      const gozo = chunk.match(
+        /Gozo\s+(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})/i
+      );
+
+      return {
+        gozoInicio: parseDateInput(gozo?.[1]),
+        gozoFim: parseDateInput(gozo?.[2]),
+      };
+    })
+    .filter((item) => item.gozoInicio || item.gozoFim)
+    .sort((left, right) =>
+      String(right.gozoInicio || "").localeCompare(String(left.gozoInicio || ""))
+    );
+}
+
+function deriveResumoStatus(item) {
+  const hoje = parseDateInput(new Date());
+  const saldo = Number(item.dias_pendentes_total || 0);
+  const emGozo =
+    Number(item.dias_em_andamento || 0) > 0 ||
+    normalizeText(item.status_periodo).includes("em_gozo") ||
+    item.status_planejamento === "EM_GOZO";
+  const programado =
+    (!!item.programado_inicio && !!item.programado_fim) ||
+    (!!item.proximo_inicio_gozo && !!item.proximo_fim_gozo) ||
+    Number(item.dias_agendados || 0) > 0 ||
+    item.status_planejamento === "PROGRAMADO";
+  const limiteLegal = parseDateInput(item.dt_limite_legal);
+  const alerta11Meses = parseDateInput(item.dt_alerta_11_meses);
+  const vencido = !!saldo && !!limiteLegal && !!hoje && limiteLegal < hoje;
+  const alerta = !!saldo && !!alerta11Meses && !!hoje && alerta11Meses <= hoje && !vencido;
+
+  if (item.status_planejamento === "BLOQUEADO_OPERACAO") {
+    return { key: "bloqueado", label: "Segurar operacao", order: 2 };
+  }
+  if (vencido) {
+    return { key: "vencido", label: "Ferias vencidas", order: 0 };
+  }
+  if (emGozo) {
+    return { key: "em_gozo", label: "Em ferias", order: 1 };
+  }
+  if (programado) {
+    return { key: "programado", label: "Programado", order: 3 };
+  }
+  if (alerta) {
+    return { key: "alerta", label: "Alerta 11 meses", order: 4 };
+  }
+  if (saldo > 0) {
+    return { key: "saldo", label: "Saldo pendente", order: 5 };
+  }
+  return { key: "quitado", label: "Quitado", order: 6 };
+}
+
+function getCurrentGozoPeriod(item) {
+  const hoje = parseDateInput(new Date());
+  if (!hoje) return null;
+
+  const start = parseDateInput(item.programado_inicio || item.proximo_inicio_gozo);
+  const end = parseDateInput(item.programado_fim || item.proximo_fim_gozo);
+  if (start && end && start <= hoje && end >= hoje) {
+    return { inicio: start, fim: end };
+  }
+
+  if (item.resumo_status_key !== "em_gozo" && Number(item.dias_em_andamento || 0) <= 0) {
+    return null;
+  }
+
+  const historico = parseHistoricoGozos(item.historico_gozos);
+  const atual = historico.find(
+    (periodo) =>
+      periodo.gozoInicio &&
+      periodo.gozoFim &&
+      periodo.gozoInicio <= hoje &&
+      periodo.gozoFim >= hoje
+  );
+
+  return atual ? { inicio: atual.gozoInicio, fim: atual.gozoFim } : null;
+}
+
+function getDisplayStart(item) {
+  const direct = item.programado_inicio || item.proximo_inicio_gozo || null;
+  if (direct) return direct;
+  return getCurrentGozoPeriod(item)?.inicio || null;
+}
+
+function getDisplayEnd(item) {
+  const direct = item.programado_fim || item.proximo_fim_gozo || null;
+  if (direct) return direct;
+  return getCurrentGozoPeriod(item)?.fim || null;
 }
 
 function statusNorm(status) {
@@ -210,48 +422,140 @@ async function fetchAllRows(queryBuilder, orderColumn) {
   return rows;
 }
 
-function KpiCard({ title, value, sub, meta, icon, tone = "blue" }) {
+function TrendTooltip({ active, payload, label, labelFormatter, valueFormatter }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-lg">
+      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+        {labelFormatter ? labelFormatter(label) : label}
+      </div>
+      <div className="mt-1 text-sm font-bold text-slate-900">
+        {valueFormatter ? valueFormatter(payload[0].value) : payload[0].value}
+      </div>
+    </div>
+  );
+}
+
+function HoverKpiCard({
+  title,
+  value,
+  sub,
+  meta,
+  icon,
+  tone = "blue",
+  chartColor = "#2563EB",
+  chartData = [],
+  labelFormatter,
+  valueFormatter,
+  hoverTitle,
+}) {
   const tones = {
     blue: "from-blue-50 via-cyan-50 to-white border-blue-200 text-blue-700",
     emerald: "from-emerald-50 via-teal-50 to-white border-emerald-200 text-emerald-700",
     amber: "from-amber-50 via-orange-50 to-white border-amber-200 text-amber-700",
     rose: "from-rose-50 via-pink-50 to-white border-rose-200 text-rose-700",
+    violet: "from-violet-50 via-fuchsia-50 to-white border-violet-200 text-violet-700",
+    slate: "from-slate-50 via-gray-50 to-white border-slate-200 text-slate-700",
   };
 
   return (
-    <article className={`rounded-3xl border bg-gradient-to-br ${tones[tone]} p-5 shadow-sm`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.22em] opacity-80">{title}</p>
-          <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
-          <p className="mt-2 text-sm font-semibold text-slate-700">{sub}</p>
-          {meta ? <p className="mt-1 text-xs font-semibold text-slate-500">{meta}</p> : null}
+    <article className="group relative">
+      <div
+        className={`rounded-3xl border bg-gradient-to-br ${tones[tone]} p-5 shadow-sm transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-lg`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] opacity-80">{title}</p>
+            <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-700">{sub}</p>
+            {meta ? <p className="mt-1 text-xs font-semibold text-slate-500">{meta}</p> : null}
+          </div>
+          <div className="rounded-2xl bg-white/85 p-3 text-xl shadow-sm">{icon}</div>
         </div>
-        <div className="rounded-2xl bg-white/80 p-3 text-xl shadow-sm">{icon}</div>
+
+        <div className="mt-4 h-14 rounded-2xl bg-white/70 p-2 shadow-inner">
+          {chartData.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id={`grad-${title}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={chartColor} stopOpacity={0.35} />
+                    <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Area
+                  type="monotone"
+                  dataKey="valor"
+                  stroke={chartColor}
+                  fill={`url(#grad-${title})`}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-[11px] font-semibold text-slate-400">
+              Sem serie para este periodo
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute left-0 right-0 top-full z-20 mt-3 opacity-0 transition duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+                Evolucao
+              </div>
+              <div className="mt-1 text-sm font-bold text-slate-900">
+                {hoverTitle || title}
+              </div>
+            </div>
+            <div className="text-xs font-semibold text-slate-500">
+              Passe o mouse para ler a curva
+            </div>
+          </div>
+          <div className="h-40">
+            {chartData.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id={`hover-grad-${title}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={chartColor} stopOpacity={0.28} />
+                      <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                  <YAxis hide />
+                  <Tooltip
+                    content={
+                      <TrendTooltip
+                        labelFormatter={labelFormatter}
+                        valueFormatter={valueFormatter}
+                      />
+                    }
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="valor"
+                    stroke={chartColor}
+                    fill={`url(#hover-grad-${title})`}
+                    strokeWidth={2.5}
+                    dot={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-2xl bg-slate-50 text-sm font-semibold text-slate-400">
+                Sem base para mostrar a evolucao agora.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </article>
-  );
-}
-
-function MiniStatCard({ title, value, detail, icon, tone = "slate" }) {
-  const tones = {
-    slate: "border-slate-200 bg-slate-50 text-slate-700",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-  };
-
-  return (
-    <div className={`rounded-2xl border p-4 ${tones[tone]}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{title}</p>
-          <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{detail}</p>
-        </div>
-        <div className="mt-1 text-lg opacity-80">{icon}</div>
-      </div>
-    </div>
   );
 }
 
@@ -270,13 +574,14 @@ function SectionCard({ title, subtitle, children, action = null }) {
   );
 }
 
-function ProgressRow({ label, value, total, tone = "blue", detail }) {
+function ProgressRow({ label, value, total, detail, tone = "blue" }) {
   const percent = total > 0 ? (value / total) * 100 : 0;
   const tones = {
     blue: "bg-blue-500",
     emerald: "bg-emerald-500",
     amber: "bg-amber-500",
     rose: "bg-rose-500",
+    violet: "bg-violet-500",
   };
 
   return (
@@ -316,13 +621,26 @@ const EMPTY_STATE = {
     tratativasPct: 0,
     tratativasConcluidas: 0,
     tratativasTotal: 0,
+    feriasEmGozo: 0,
+    feriasProgramadasMes: 0,
+    feriasVencidas: 0,
+    embarcadosAbertos: 0,
+    embarcadosCriticos: 0,
   },
   pulso: {
-    acompanhamentosMes: 0,
     instrutoresMes: 0,
     acompanhamentosAtivos: 0,
     avariasPendentes: 0,
     tratativasPendentes: 0,
+    tratativasAtrasadas: 0,
+  },
+  trends: {
+    kml: [],
+    mkbf: [],
+    avarias: [],
+    tratativas: [],
+    ferias: [],
+    embarcados: [],
   },
   pioresLinhas: [],
   instrutores: [],
@@ -340,15 +658,30 @@ const EMPTY_STATE = {
     pendentes: 0,
     atrasadas: 0,
   },
+  ferias: {
+    emGozo: 0,
+    programadasMes: 0,
+    vencidas: 0,
+    alerta11: 0,
+  },
+  embarcados: {
+    abertas: 0,
+    criticas: 0,
+    emAnalise: 0,
+    emExecucao: 0,
+    agPecas: 0,
+  },
+  alertas: [],
 };
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const referenciaDia = useMemo(() => todayYMD_SP(), []);
+  const referenciaMes = useMemo(() => referenciaDia.slice(0, 7), [referenciaDia]);
+
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [dashboard, setDashboard] = useState(EMPTY_STATE);
-
-  const referenciaMes = useMemo(() => todayYMD_SP().slice(0, 7), []);
 
   useEffect(() => {
     let ativo = true;
@@ -359,18 +692,21 @@ export default function Dashboard() {
 
       try {
         const { start, end } = monthRange(referenciaMes);
+        const dailyKeys = enumerateDates(start, referenciaDia);
+        const monthKeys = buildLastMonthKeys(referenciaMes, 6);
 
         const [
           premiacaoMes,
           kmRodadoMes,
           sosMes,
-          avarias,
-          tratativasTotalResp,
-          tratativasConcluidasResp,
-          tratativasPendentesResp,
-          tratativasAtrasadasResp,
+          avariasRows,
+          tratativasRows,
           acompanhamentosMes,
           sessoesMes,
+          feriasPeriodos,
+          feriasPlanos,
+          afastadosRows,
+          embarcadosRows,
         ] = await Promise.all([
           supabaseA
             ? fetchAllRows(
@@ -385,36 +721,31 @@ export default function Dashboard() {
               )
             : Promise.resolve([]),
           fetchAllRows(
-            supabase.from("km_rodado_diario").select("data, km_total").gte("data", start).lte("data", end),
+            supabase
+              .from("km_rodado_diario")
+              .select("data, km_total")
+              .gte("data", start)
+              .lte("data", end),
             "data"
           ),
           fetchAllRows(
-            supabase.from("sos_acionamentos").select("id, data_sos, ocorrencia").gte("data_sos", start).lte("data_sos", end),
+            supabase
+              .from("sos_acionamentos")
+              .select("id, data_sos, ocorrencia")
+              .gte("data_sos", start)
+              .lte("data_sos", end),
             "data_sos"
           ),
           fetchAllRows(
             supabase
               .from("avarias")
-              .select("id, status_cobranca, valor_total_orcamento, valor_cobrado"),
-            "id"
+              .select("id, created_at, status_cobranca, valor_total_orcamento, valor_cobrado"),
+            "created_at"
           ),
-          supabase.from("tratativas").select("id", { count: "exact", head: true }),
-          supabase
-            .from("tratativas")
-            .select("id", { count: "exact", head: true })
-            .or("status.ilike.%conclu%,status.ilike.%resolvid%"),
-          supabase
-            .from("tratativas")
-            .select("id", { count: "exact", head: true })
-            .ilike("status", "%pendente%"),
-          supabase
-            .from("tratativas")
-            .select("id", { count: "exact", head: true })
-            .ilike("status", "%pendente%")
-            .lt(
-              "created_at",
-              new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
-            ),
+          fetchAllRows(
+            supabase.from("tratativas").select("id, created_at, status"),
+            "created_at"
+          ),
           fetchAllRows(
             supabase
               .from("diesel_acompanhamentos")
@@ -435,6 +766,24 @@ export default function Dashboard() {
               .lte("data_sessao", end),
             "data_sessao"
           ),
+          fetchAllRows(
+            supabase.from("ferias_periodos_importados").select("*").eq("ativo", true),
+            "nm_funcionario"
+          ),
+          fetchAllRows(
+            supabase.from("ferias_planejamento").select("*"),
+            "atualizado_em"
+          ),
+          fetchAllRows(
+            supabase.from("afastados").select("*").eq("ativo", true),
+            "data_inicio"
+          ),
+          fetchAllRows(
+            supabase
+              .from("embarcados_solicitacoes_reparo")
+              .select("id, created_at, status, prioridade, veiculo, tipo_embarcado"),
+            "created_at"
+          ),
         ]);
 
         const premiacaoNormalizada = (premiacaoMes || [])
@@ -452,13 +801,12 @@ export default function Dashboard() {
               litrosIdeais: n(row.litros_ideais),
             };
           })
-          .filter((row) => row.dia && row.km > 0 && row.litros > 0 && row.kml >= 1.5 && row.kml <= 5);
-
-        const kmMes = premiacaoNormalizada.reduce((acc, row) => acc + row.km, 0);
-        const litrosMes = premiacaoNormalizada.reduce((acc, row) => acc + row.litros, 0);
-        const kmlMes = litrosMes > 0 ? kmMes / litrosMes : 0;
+          .filter(
+            (row) => row.dia && row.km > 0 && row.litros > 0 && row.kml >= 1.5 && row.kml <= 5
+          );
 
         const linhasMap = new Map();
+        const kmlPorDiaMap = new Map();
         premiacaoNormalizada.forEach((row) => {
           if (!linhasMap.has(row.linha)) {
             linhasMap.set(row.linha, {
@@ -468,11 +816,20 @@ export default function Dashboard() {
               litrosIdeais: 0,
             });
           }
-          const item = linhasMap.get(row.linha);
-          item.km += row.km;
-          item.litros += row.litros;
-          item.litrosIdeais += row.litrosIdeais;
+          const linhaItem = linhasMap.get(row.linha);
+          linhaItem.km += row.km;
+          linhaItem.litros += row.litros;
+          linhaItem.litrosIdeais += row.litrosIdeais;
+
+          if (!kmlPorDiaMap.has(row.dia)) kmlPorDiaMap.set(row.dia, { km: 0, litros: 0 });
+          const diaItem = kmlPorDiaMap.get(row.dia);
+          diaItem.km += row.km;
+          diaItem.litros += row.litros;
         });
+
+        const kmMes = premiacaoNormalizada.reduce((acc, row) => acc + row.km, 0);
+        const litrosMes = premiacaoNormalizada.reduce((acc, row) => acc + row.litros, 0);
+        const kmlMes = litrosMes > 0 ? kmMes / litrosMes : 0;
 
         const pioresLinhas = [...linhasMap.values()]
           .map((item) => ({
@@ -484,14 +841,48 @@ export default function Dashboard() {
           .sort((a, b) => a.kml - b.kml)
           .slice(0, 3);
 
-        const mkbfKm = (kmRodadoMes || []).reduce((acc, row) => acc + n(row.km_total), 0);
-        const mkbfOcorrencias = (sosMes || []).reduce((acc, row) => {
-          return acc + (isOcorrenciaValidaParaMKBF(row.ocorrencia) ? 1 : 0);
-        }, 0);
-        const mkbf = mkbfOcorrencias > 0 ? mkbfKm / mkbfOcorrencias : 0;
+        const kmlTrend = dailyKeys.map((dia) => {
+          const day = kmlPorDiaMap.get(dia);
+          const valor = day?.litros > 0 ? day.km / day.litros : 0;
+          return {
+            key: dia,
+            label: formatDayLabel(dia),
+            valor,
+          };
+        });
 
-        const avariasRows = avarias || [];
-        const avariasElegiveis = avariasRows.filter((row) =>
+        const kmPorDiaMap = new Map();
+        (kmRodadoMes || []).forEach((row) => {
+          const key = safeDateStr(row.data);
+          if (!key) return;
+          kmPorDiaMap.set(key, n(kmPorDiaMap.get(key)) + n(row.km_total));
+        });
+
+        const sosPorDiaMap = new Map();
+        (sosMes || []).forEach((row) => {
+          const key = safeDateStr(row.data_sos);
+          if (!key) return;
+          if (!sosPorDiaMap.has(key)) sosPorDiaMap.set(key, 0);
+          sosPorDiaMap.set(
+            key,
+            n(sosPorDiaMap.get(key)) + (isOcorrenciaValidaParaMKBF(row.ocorrencia) ? 1 : 0)
+          );
+        });
+
+        const mkbfKm = [...kmPorDiaMap.values()].reduce((acc, value) => acc + n(value), 0);
+        const mkbfOcorrencias = [...sosPorDiaMap.values()].reduce((acc, value) => acc + n(value), 0);
+        const mkbf = mkbfOcorrencias > 0 ? mkbfKm / mkbfOcorrencias : 0;
+        const mkbfTrend = dailyKeys.map((dia) => {
+          const kmDia = n(kmPorDiaMap.get(dia));
+          const ocorrenciasDia = n(sosPorDiaMap.get(dia));
+          return {
+            key: dia,
+            label: formatDayLabel(dia),
+            valor: ocorrenciasDia > 0 ? kmDia / ocorrenciasDia : 0,
+          };
+        });
+
+        const avariasElegiveis = (avariasRows || []).filter((row) =>
           ["COBRADA", "PENDENTE", "CANCELADA"].includes(
             String(row.status_cobranca || "").trim().toUpperCase()
           )
@@ -516,12 +907,101 @@ export default function Dashboard() {
         const avariasPct =
           avariasElegiveis.length > 0 ? (avariasCobradas.length / avariasElegiveis.length) * 100 : 0;
 
-        const tratativasTotal = tratativasTotalResp.count || 0;
-        const tratativasConcluidas = tratativasConcluidasResp.count || 0;
-        const tratativasPendentes = tratativasPendentesResp.count || 0;
-        const tratativasAtrasadas = tratativasAtrasadasResp.count || 0;
+        const avariaTrend = monthKeys.map((monthKey) => {
+          const rows = avariasElegiveis.filter((row) => monthKeyFromDate(row.created_at) === monthKey);
+          const cobradas = rows.filter(
+            (row) => String(row.status_cobranca || "").trim().toUpperCase() === "COBRADA"
+          );
+          return {
+            key: monthKey,
+            label: formatShortMonthLabel(monthKey),
+            valor: rows.length > 0 ? (cobradas.length / rows.length) * 100 : 0,
+          };
+        });
+
+        const tratativasTotal = (tratativasRows || []).length;
+        const tratativasConcluidas = (tratativasRows || []).filter((row) =>
+          isTratativaConcluida(row.status)
+        ).length;
+        const tratativasPendentes = (tratativasRows || []).filter((row) =>
+          isTratativaPendente(row.status)
+        ).length;
+        const tratativasAtrasadas = (tratativasRows || []).filter((row) => {
+          if (!isTratativaPendente(row.status)) return false;
+          const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
+          if (!createdAt) return false;
+          return createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).getTime();
+        }).length;
         const tratativasPct =
           tratativasTotal > 0 ? (tratativasConcluidas / tratativasTotal) * 100 : 0;
+
+        const tratativaTrend = monthKeys.map((monthKey) => {
+          const rows = (tratativasRows || []).filter(
+            (row) => monthKeyFromDate(row.created_at) === monthKey
+          );
+          const concluidas = rows.filter((row) => isTratativaConcluida(row.status)).length;
+          return {
+            key: monthKey,
+            label: formatShortMonthLabel(monthKey),
+            valor: rows.length > 0 ? (concluidas / rows.length) * 100 : 0,
+          };
+        });
+
+        const afastadosKeys = new Set(
+          (afastadosRows || []).map((row) => buildFuncionarioKey(row)).filter(Boolean)
+        );
+        const planByFeriasId = new Map(
+          (feriasPlanos || []).map((item) => [String(item.ferias_id), item])
+        );
+        const feriasMerge = (feriasPeriodos || [])
+          .flatMap((registro) => {
+            const keys = [
+              buildFuncionarioKey(registro),
+              buildFuncionarioKey({ funcionario_cracha: registro.nr_cracha }),
+              buildFuncionarioKey({ nome: registro.nm_funcionario }),
+            ].filter(Boolean);
+            if (keys.some((key) => afastadosKeys.has(key))) return [];
+
+            const planejamento = planByFeriasId.get(String(registro.ferias_id)) || {};
+            const resumo = deriveResumoStatus({ ...registro, ...planejamento });
+            return [
+              {
+                ...registro,
+                ...planejamento,
+                resumo_status_key: resumo.key,
+                resumo_status_label: resumo.label,
+              },
+            ];
+          })
+          .filter(Boolean);
+
+        const feriasEmGozo = feriasMerge.filter(
+          (item) => item.resumo_status_key === "em_gozo"
+        ).length;
+        const feriasProgramadasMes = feriasMerge.filter((item) => {
+          const startDisplay = getDisplayStart(item);
+          return monthKeyFromDate(startDisplay) === referenciaMes;
+        }).length;
+        const feriasVencidas = feriasMerge.filter(
+          (item) => item.resumo_status_key === "vencido"
+        ).length;
+        const feriasAlerta11 = feriasMerge.filter(
+          (item) => item.resumo_status_key === "alerta"
+        ).length;
+
+        const feriasTrend = dailyKeys.map((dia) => {
+          const ativos = feriasMerge.filter((item) => {
+            const startDisplay = parseDateInput(getDisplayStart(item));
+            const endDisplay = parseDateInput(getDisplayEnd(item));
+            return startDisplay && endDisplay && startDisplay <= dia && endDisplay >= dia;
+          }).length;
+
+          return {
+            key: dia,
+            label: formatDayLabel(dia),
+            valor: ativos,
+          };
+        });
 
         const sessoesPorAcompanhamento = new Map();
         (sessoesMes || []).forEach((sessao) => {
@@ -537,68 +1017,54 @@ export default function Dashboard() {
               safeDateStr(sessao?.encerrado_em),
             instrutor_nome:
               String(sessao?.instrutor_nome || "").trim() ||
-              String(sessao?.instrutor_login || "").trim() ||
-              "Sem instrutor",
+              String(sessao?.instrutor_login || "").trim(),
             duracao_min: getSessionDurationMinutes(sessao),
           });
         });
 
-        const registrosInstrutor = [];
+        const instrutoresMap = new Map();
         (acompanhamentosMes || []).forEach((acompanhamento) => {
           const sessoes = sessoesPorAcompanhamento.get(acompanhamento.id) || [];
           const linha = getLinhaFocoAcompanhamento(acompanhamento);
           const status = statusNorm(acompanhamento.status);
 
-          if (sessoes.length) {
-            sessoes.forEach((sessao) => {
-              registrosInstrutor.push({
-                instrutor_nome: sessao.instrutor_nome,
-                data_ref: sessao.data_ref || safeDateStr(acompanhamento.dt_inicio_monitoramento) || safeDateStr(acompanhamento.created_at),
-                duracao_min: sessao.duracao_min,
-                linha,
-                status,
+          const registros = sessoes.length
+            ? sessoes
+            : [
+                {
+                  data_ref:
+                    safeDateStr(acompanhamento.dt_inicio_monitoramento) ||
+                    safeDateStr(acompanhamento.created_at),
+                  instrutor_nome:
+                    String(acompanhamento?.instrutor_nome || "").trim() ||
+                    String(acompanhamento?.instrutor_login || "").trim(),
+                  duracao_min: 0,
+                },
+              ];
+
+          registros.forEach((registro) => {
+            const nomeInstrutor = String(registro.instrutor_nome || "").trim();
+            if (!nomeInstrutor) return;
+            if (!instrutoresMap.has(nomeInstrutor)) {
+              instrutoresMap.set(nomeInstrutor, {
+                instrutor_nome: nomeInstrutor,
+                total_acompanhamentos: 0,
+                concluidos: 0,
+                em_aberto: 0,
+                total_minutos: 0,
+                linhas: new Set(),
               });
-            });
-            return;
-          }
-
-          registrosInstrutor.push({
-            instrutor_nome:
-              String(acompanhamento?.instrutor_nome || "").trim() ||
-              String(acompanhamento?.instrutor_login || "").trim() ||
-              "Sem instrutor",
-            data_ref:
-              safeDateStr(acompanhamento.dt_inicio_monitoramento) ||
-              safeDateStr(acompanhamento.created_at),
-            duracao_min: 0,
-            linha,
-            status,
+            }
+            const item = instrutoresMap.get(nomeInstrutor);
+            item.total_acompanhamentos += 1;
+            item.total_minutos += n(registro.duracao_min);
+            if (["OK", "ENCERRADO", "ATAS"].includes(status)) {
+              item.concluidos += 1;
+            } else {
+              item.em_aberto += 1;
+            }
+            if (linha) item.linhas.add(linha);
           });
-        });
-
-        const instrutoresMap = new Map();
-        registrosInstrutor.forEach((registro) => {
-          const key = String(registro.instrutor_nome || "Sem instrutor").trim() || "Sem instrutor";
-          if (!instrutoresMap.has(key)) {
-            instrutoresMap.set(key, {
-              instrutor_nome: key,
-              total_acompanhamentos: 0,
-              concluidos: 0,
-              em_aberto: 0,
-              total_minutos: 0,
-              linhas: new Set(),
-            });
-          }
-
-          const item = instrutoresMap.get(key);
-          item.total_acompanhamentos += 1;
-          item.total_minutos += n(registro.duracao_min);
-          if (["OK", "ENCERRADO", "ATAS"].includes(registro.status)) {
-            item.concluidos += 1;
-          } else {
-            item.em_aberto += 1;
-          }
-          if (registro.linha) item.linhas.add(registro.linha);
         });
 
         const instrutores = [...instrutoresMap.values()]
@@ -623,6 +1089,72 @@ export default function Dashboard() {
           return !["OK", "ENCERRADO", "ATAS"].includes(status);
         }).length;
 
+        const embarcadosAbertos = (embarcadosRows || []).filter((row) =>
+          EMBARCADOS_ABERTOS.has(String(row.status || "").trim().toUpperCase())
+        );
+        const embarcadosCriticos = embarcadosAbertos.filter(
+          (row) => String(row.prioridade || "").trim().toUpperCase() === "CRITICA"
+        );
+        const embarcados = {
+          abertas: embarcadosAbertos.length,
+          criticas: embarcadosCriticos.length,
+          emAnalise: embarcadosAbertos.filter(
+            (row) => String(row.status || "").trim().toUpperCase() === "EM_ANALISE"
+          ).length,
+          emExecucao: embarcadosAbertos.filter(
+            (row) => String(row.status || "").trim().toUpperCase() === "EM_EXECUCAO"
+          ).length,
+          agPecas: embarcadosAbertos.filter(
+            (row) => String(row.status || "").trim().toUpperCase() === "AG_PECAS"
+          ).length,
+        };
+
+        const embarcadosTrend = monthKeys.map((monthKey) => {
+          const rows = (embarcadosRows || []).filter(
+            (row) =>
+              monthKeyFromDate(row.created_at) === monthKey &&
+              EMBARCADOS_ABERTOS.has(String(row.status || "").trim().toUpperCase())
+          );
+          return {
+            key: monthKey,
+            label: formatShortMonthLabel(monthKey),
+            valor: rows.length,
+          };
+        });
+
+        const alertas = [
+          {
+            titulo: "Avarias pendentes",
+            valor: avariasPendentes.length,
+            detalhe: "Itens ainda sem cobranca finalizada",
+            tone: "amber",
+          },
+          {
+            titulo: "Tratativas atrasadas",
+            valor: tratativasAtrasadas,
+            detalhe: "Pendencias com mais de 10 dias",
+            tone: "rose",
+          },
+          {
+            titulo: "Ferias vencidas",
+            valor: feriasVencidas,
+            detalhe: "Colaboradores que ja estouraram o limite",
+            tone: "violet",
+          },
+          {
+            titulo: "Acompanhamentos em aberto",
+            valor: acompanhamentosAtivos,
+            detalhe: "Diesel ainda sem fechamento operacional",
+            tone: "blue",
+          },
+          {
+            titulo: "Servicos criticos embarcados",
+            valor: embarcadosCriticos.length,
+            detalhe: "Solicitacoes abertas com prioridade critica",
+            tone: "amber",
+          },
+        ];
+
         if (!ativo) return;
 
         setDashboard({
@@ -645,13 +1177,26 @@ export default function Dashboard() {
             tratativasPct,
             tratativasConcluidas,
             tratativasTotal,
+            feriasEmGozo,
+            feriasProgramadasMes,
+            feriasVencidas,
+            embarcadosAbertos: embarcados.abertas,
+            embarcadosCriticos: embarcados.criticas,
           },
           pulso: {
-            acompanhamentosMes: registrosInstrutor.length,
             instrutoresMes: instrutoresMap.size,
             acompanhamentosAtivos,
             avariasPendentes: avariasPendentes.length,
             tratativasPendentes,
+            tratativasAtrasadas,
+          },
+          trends: {
+            kml: kmlTrend,
+            mkbf: mkbfTrend,
+            avarias: avariaTrend,
+            tratativas: tratativaTrend,
+            ferias: feriasTrend,
+            embarcados: embarcadosTrend,
           },
           pioresLinhas,
           instrutores,
@@ -669,9 +1214,17 @@ export default function Dashboard() {
             pendentes: tratativasPendentes,
             atrasadas: tratativasAtrasadas,
           },
+          ferias: {
+            emGozo: feriasEmGozo,
+            programadasMes: feriasProgramadasMes,
+            vencidas: feriasVencidas,
+            alerta11: feriasAlerta11,
+          },
+          embarcados,
+          alertas,
         });
       } catch (error) {
-        console.error("Erro ao carregar painel executivo:", error);
+        console.error("Erro ao carregar dashboard:", error);
         if (!ativo) return;
         setErro(error?.message || "Nao foi possivel carregar o dashboard.");
         setDashboard(EMPTY_STATE);
@@ -684,27 +1237,39 @@ export default function Dashboard() {
     return () => {
       ativo = false;
     };
-  }, [referenciaMes]);
+  }, [referenciaDia, referenciaMes]);
+
+  const embarcadosStatusChart = useMemo(
+    () => [
+      { label: "Abertas", valor: dashboard.embarcados.abertas },
+      { label: "Em analise", valor: dashboard.embarcados.emAnalise },
+      { label: "Em execucao", valor: dashboard.embarcados.emExecucao },
+      { label: "Ag. pecas", valor: dashboard.embarcados.agPecas },
+    ],
+    [dashboard.embarcados]
+  );
 
   return (
     <div className="space-y-5">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">
               Painel executivo
             </p>
-            <h1 className="mt-3 text-3xl font-black text-slate-900">Dashboard do gestor</h1>
+            <h1 className="mt-3 text-3xl font-black text-slate-900">
+              Dashboard do gestor
+            </h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              Leitura rapida do que esta puxando a operacao agora: consumo, intervencoes,
-              cobrancas e capacidade de acompanhamento.
+              Painel vivo para olhar desempenho, risco, pessoas e servicos em uma leitura so.
+              Os KPIs abaixo abrem a evolucao no hover.
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                Periodo base
+                Mes corrente
               </p>
               <p className="mt-1 text-lg font-black capitalize text-slate-900">
                 {dashboard.periodo || formatMonthLabel(referenciaMes)}
@@ -729,7 +1294,7 @@ export default function Dashboard() {
             Perfil: {user?.nivel || "-"}
           </span>
           <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">
-            Base diesel + SOS + avarias + tratativas
+            Base de Maio ativa
           </span>
         </div>
       </section>
@@ -740,34 +1305,44 @@ export default function Dashboard() {
         </section>
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-4">
-        <KpiCard
+      <section className="grid gap-4 xl:grid-cols-3 2xl:grid-cols-6">
+        <HoverKpiCard
           title="KM/L do mes"
           value={loading ? "--" : fmtNum(dashboard.kpis.kmlMes)}
-          sub={loading ? "Calculando..." : `${fmtInt(dashboard.kpis.kmMes)} km rodados no mes`}
-          meta={loading ? "" : `${fmtInt(dashboard.kpis.litrosMes)} L consumidos`}
+          sub={loading ? "Calculando..." : `${fmtInt(dashboard.kpis.kmMes)} km rodados`}
+          meta={loading ? "" : `${fmtInt(dashboard.kpis.litrosMes)} litros consumidos`}
           icon={<FaGasPump className="text-emerald-600" />}
           tone="emerald"
+          chartColor="#10B981"
+          chartData={dashboard.trends.kml}
+          labelFormatter={(label) => `Dia ${label}`}
+          valueFormatter={(value) => `${fmtNum(value)} km/l`}
+          hoverTitle="Evolucao diaria do KM/L em Maio"
         />
-        <KpiCard
+        <HoverKpiCard
           title="MKBF"
           value={loading ? "--" : fmtNum(dashboard.kpis.mkbf)}
           sub={
             loading
               ? "Calculando..."
-              : `${fmtInt(dashboard.kpis.mkbfOcorrencias)} ocorrencias validas no mes`
+              : `${fmtInt(dashboard.kpis.mkbfOcorrencias)} ocorrencias validas`
           }
           meta={loading ? "" : `${fmtInt(dashboard.kpis.mkbfKm)} km na base SOS`}
           icon={<FaRoad className="text-blue-600" />}
           tone="blue"
+          chartColor="#2563EB"
+          chartData={dashboard.trends.mkbf}
+          labelFormatter={(label) => `Dia ${label}`}
+          valueFormatter={(value) => `${fmtNum(value)} km`}
+          hoverTitle="MKBF diario do mes corrente"
         />
-        <KpiCard
+        <HoverKpiCard
           title="% cobranca de avaria"
           value={loading ? "--" : fmtPercent(dashboard.kpis.avariasPct)}
           sub={
             loading
               ? "Calculando..."
-              : `${fmtCurrency(dashboard.kpis.avariasValorCobrado)} ja cobrados`
+              : `${fmtCurrency(dashboard.kpis.avariasValorCobrado)} recuperados`
           }
           meta={
             loading
@@ -776,8 +1351,13 @@ export default function Dashboard() {
           }
           icon={<FaClipboardCheck className="text-amber-600" />}
           tone="amber"
+          chartColor="#F59E0B"
+          chartData={dashboard.trends.avarias}
+          labelFormatter={(label) => `Mes ${label}`}
+          valueFormatter={(value) => fmtPercent(value)}
+          hoverTitle="Percentual mensal de cobranca de avarias"
         />
-        <KpiCard
+        <HoverKpiCard
           title="Tratativas resolvidas"
           value={loading ? "--" : fmtPercent(dashboard.kpis.tratativasPct)}
           sub={
@@ -785,116 +1365,196 @@ export default function Dashboard() {
               ? "Calculando..."
               : `${fmtInt(dashboard.kpis.tratativasConcluidas)} concluidas`
           }
-          meta={loading ? "" : `${fmtInt(dashboard.kpis.tratativasTotal)} tratativas no historico`}
+          meta={loading ? "" : `${fmtInt(dashboard.kpis.tratativasTotal)} no historico`}
           icon={<FaTools className="text-rose-600" />}
           tone="rose"
+          chartColor="#E11D48"
+          chartData={dashboard.trends.tratativas}
+          labelFormatter={(label) => `Mes ${label}`}
+          valueFormatter={(value) => fmtPercent(value)}
+          hoverTitle="Fechamento mensal das tratativas"
         />
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        <MiniStatCard
-          title="Acompanhamentos do mes"
-          value={loading ? "--" : fmtInt(dashboard.pulso.acompanhamentosMes)}
-          detail="Base de instrutores e sessoes registradas"
-          icon={<FaUserCheck />}
-          tone="blue"
+        <HoverKpiCard
+          title="Ferias ativas"
+          value={loading ? "--" : fmtInt(dashboard.kpis.feriasEmGozo)}
+          sub={
+            loading
+              ? "Calculando..."
+              : `${fmtInt(dashboard.kpis.feriasProgramadasMes)} programados em Maio`
+          }
+          meta={loading ? "" : `${fmtInt(dashboard.kpis.feriasVencidas)} ferias vencidas`}
+          icon={<FaCalendarAlt className="text-violet-600" />}
+          tone="violet"
+          chartColor="#7C3AED"
+          chartData={dashboard.trends.ferias}
+          labelFormatter={(label) => `Dia ${label}`}
+          valueFormatter={(value) => `${fmtInt(value)} colaboradores`}
+          hoverTitle="Colaboradores de ferias por dia no mes"
         />
-        <MiniStatCard
-          title="Instrutores acionados"
-          value={loading ? "--" : fmtInt(dashboard.pulso.instrutoresMes)}
-          detail="Quantos instrutores participaram do mes"
-          icon={<FaUsers />}
-          tone="emerald"
-        />
-        <MiniStatCard
-          title="Avarias pendentes"
-          value={loading ? "--" : fmtInt(dashboard.pulso.avariasPendentes)}
-          detail="Ainda sem cobranca concluida"
-          icon={<FaExclamationTriangle />}
-          tone="amber"
-        />
-        <MiniStatCard
-          title="Tratativas pendentes"
-          value={loading ? "--" : fmtInt(dashboard.pulso.tratativasPendentes)}
-          detail={`${loading ? "--" : fmtInt(dashboard.pulso.acompanhamentosAtivos)} acompanhamentos ainda abertos`}
-          icon={<FaSyncAlt />}
+        <HoverKpiCard
+          title="Servicos embarcados"
+          value={loading ? "--" : fmtInt(dashboard.kpis.embarcadosAbertos)}
+          sub={
+            loading
+              ? "Calculando..."
+              : `${fmtInt(dashboard.kpis.embarcadosCriticos)} criticos em aberto`
+          }
+          meta="Solicitacoes de reparo nao concluídas"
+          icon={<FaWrench className="text-slate-700" />}
           tone="slate"
+          chartColor="#334155"
+          chartData={dashboard.trends.embarcados}
+          labelFormatter={(label) => `Mes ${label}`}
+          valueFormatter={(value) => `${fmtInt(value)} abertas`}
+          hoverTitle="Volume mensal de servicos embarcados em aberto"
         />
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.1fr,0.9fr]">
+      <section className="grid gap-5 xl:grid-cols-[1.25fr,0.75fr]">
         <SectionCard
-          title="KM/L em alerta"
-          subtitle="As 3 linhas com pior resultado de KM/L no mes corrente."
+          title="Diesel do mes"
+          subtitle="Piores linhas de KM/L e a curva diaria que esta puxando o consumo."
           action={
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
-              Piores 3 linhas
+              Maio em foco
             </span>
           }
         >
-          <div className="space-y-3">
-            {loading ? (
-              <p className="text-sm font-medium text-slate-500">Carregando desempenho por linha...</p>
-            ) : dashboard.pioresLinhas.length ? (
-              dashboard.pioresLinhas.map((linha, index) => (
-                <div
-                  key={linha.linha}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
-                        #{index + 1} pior linha
-                      </p>
-                      <h3 className="mt-1 text-xl font-black text-slate-900">{linha.linha}</h3>
-                      <p className="mt-1 text-sm font-semibold text-slate-600">
-                        {fmtInt(linha.km)} km rodados com {fmtInt(linha.litros)} litros
-                      </p>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl bg-white px-4 py-3 text-center shadow-sm">
-                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                          KM/L atual
-                        </p>
-                        <p className="mt-1 text-2xl font-black text-rose-600">
-                          {fmtNum(linha.kml)}
+          <div className="grid gap-5 xl:grid-cols-[0.95fr,1.05fr]">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                Evolucao diaria do KM/L
+              </div>
+              <div className="mt-3 h-64">
+                {dashboard.trends.kml.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={dashboard.trends.kml}>
+                      <defs>
+                        <linearGradient id="kml-board" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" />
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                      <YAxis hide />
+                      <Tooltip
+                        content={
+                          <TrendTooltip
+                            labelFormatter={(label) => `Dia ${label}`}
+                            valueFormatter={(value) => `${fmtNum(value)} km/l`}
+                          />
+                        }
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="valor"
+                        stroke="#10B981"
+                        fill="url(#kml-board)"
+                        strokeWidth={2.5}
+                        dot={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center rounded-2xl bg-white text-sm font-semibold text-slate-400">
+                    Sem base de KM/L no mes corrente.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {dashboard.pioresLinhas.length ? (
+                dashboard.pioresLinhas.map((linha, index) => (
+                  <div
+                    key={linha.linha}
+                    className="rounded-2xl border border-slate-200 bg-white p-4"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                          #{index + 1} pior linha do mes
+                        </div>
+                        <h3 className="mt-1 text-xl font-black text-slate-900">{linha.linha}</h3>
+                        <p className="mt-1 text-sm font-semibold text-slate-600">
+                          {fmtInt(linha.km)} km rodados com {fmtInt(linha.litros)} litros
                         </p>
                       </div>
-                      <div className="rounded-2xl bg-white px-4 py-3 text-center shadow-sm">
-                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                          Meta ponderada
-                        </p>
-                        <p className="mt-1 text-2xl font-black text-emerald-600">
-                          {linha.meta > 0 ? fmtNum(linha.meta) : "--"}
-                        </p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl bg-rose-50 px-4 py-3 text-center">
+                          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-600">
+                            KM/L atual
+                          </div>
+                          <div className="mt-1 text-2xl font-black text-rose-700">
+                            {fmtNum(linha.kml)}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-center">
+                          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">
+                            Meta ponderada
+                          </div>
+                          <div className="mt-1 text-2xl font-black text-emerald-700">
+                            {linha.meta > 0 ? fmtNum(linha.meta) : "--"}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm font-semibold text-slate-400">
+                  Sem linhas suficientes para montar o ranking do mes.
                 </div>
-              ))
-            ) : (
-              <p className="text-sm font-medium text-slate-500">
-                Sem base suficiente de KM/L para montar o ranking do mes.
-              </p>
-            )}
+              )}
+            </div>
           </div>
         </SectionCard>
 
         <SectionCard
-          title="Instrutores em campo"
-          subtitle="Quantidade de acompanhamentos contabilizados por instrutor no mes."
+          title="Radar do dia"
+          subtitle="Fila curta do que pede atencao imediata do gestor."
           action={
-            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-blue-700">
-              Top instrutores
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-slate-700">
+              Leitura rapida
             </span>
           }
         >
           <div className="space-y-3">
-            {loading ? (
-              <p className="text-sm font-medium text-slate-500">
-                Carregando acompanhamentos dos instrutores...
-              </p>
-            ) : dashboard.instrutores.length ? (
+            {dashboard.alertas.map((alerta) => (
+              <div
+                key={alerta.titulo}
+                className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <div
+                  className={`h-12 w-1.5 rounded-full ${
+                    alerta.tone === "rose"
+                      ? "bg-rose-500"
+                      : alerta.tone === "amber"
+                        ? "bg-amber-500"
+                        : alerta.tone === "violet"
+                          ? "bg-violet-500"
+                          : "bg-blue-500"
+                  }`}
+                />
+                <div className="flex-1">
+                  <div className="text-sm font-black text-slate-900">{alerta.titulo}</div>
+                  <div className="mt-1 text-xs font-medium text-slate-500">{alerta.detalhe}</div>
+                </div>
+                <div className="text-2xl font-black text-slate-900">{fmtInt(alerta.valor)}</div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-3">
+        <SectionCard
+          title="Instrutores do mes"
+          subtitle="Somente instrutores identificados na base atual de Maio."
+        >
+          <div className="space-y-3">
+            {dashboard.instrutores.length ? (
               dashboard.instrutores.map((instrutor) => (
                 <div
                   key={instrutor.instrutor_nome}
@@ -902,47 +1562,178 @@ export default function Dashboard() {
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="text-base font-black text-slate-900">
+                      <div className="text-base font-black text-slate-900">
                         {instrutor.instrutor_nome}
-                      </h3>
-                      <p className="mt-1 text-sm font-medium text-slate-500">
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">
                         {fmtInt(instrutor.linhas)} linhas cobertas · media de{" "}
-                        {fmtNum(instrutor.media_minutos)} min por registro
-                      </p>
+                        {fmtNum(instrutor.media_minutos)} min
+                      </div>
                     </div>
                     <div className="grid gap-2 sm:grid-cols-3">
-                      <div className="rounded-2xl bg-white px-3 py-2 text-center shadow-sm">
-                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                          Acompanh.
-                        </p>
-                        <p className="mt-1 text-xl font-black text-slate-900">
+                      <div className="rounded-xl bg-white px-3 py-2 text-center shadow-sm">
+                        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                          Acomp.
+                        </div>
+                        <div className="mt-1 text-lg font-black text-slate-900">
                           {fmtInt(instrutor.total_acompanhamentos)}
-                        </p>
+                        </div>
                       </div>
-                      <div className="rounded-2xl bg-white px-3 py-2 text-center shadow-sm">
-                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                          Concluidos
-                        </p>
-                        <p className="mt-1 text-xl font-black text-emerald-600">
+                      <div className="rounded-xl bg-white px-3 py-2 text-center shadow-sm">
+                        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                          Concl.
+                        </div>
+                        <div className="mt-1 text-lg font-black text-emerald-600">
                           {fmtInt(instrutor.concluidos)}
-                        </p>
+                        </div>
                       </div>
-                      <div className="rounded-2xl bg-white px-3 py-2 text-center shadow-sm">
-                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                          Em aberto
-                        </p>
-                        <p className="mt-1 text-xl font-black text-amber-600">
+                      <div className="rounded-xl bg-white px-3 py-2 text-center shadow-sm">
+                        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                          Abertos
+                        </div>
+                        <div className="mt-1 text-lg font-black text-amber-600">
                           {fmtInt(instrutor.em_aberto)}
-                        </p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               ))
             ) : (
-              <p className="text-sm font-medium text-slate-500">
-                Nenhum acompanhamento encontrado para o mes atual.
-              </p>
+              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm font-semibold text-slate-400">
+                Nenhum instrutor identificado no mes atual.
+              </div>
+            )}
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="Ferias e cobertura"
+          subtitle="Movimento de pessoas que impacta a operacao neste mes."
+        >
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-violet-50 px-4 py-3">
+                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-600">
+                  Em gozo
+                </div>
+                <div className="mt-1 text-2xl font-black text-violet-800">
+                  {fmtInt(dashboard.ferias.emGozo)}
+                </div>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 px-4 py-3">
+                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">
+                  Programadas
+                </div>
+                <div className="mt-1 text-2xl font-black text-emerald-800">
+                  {fmtInt(dashboard.ferias.programadasMes)}
+                </div>
+              </div>
+              <div className="rounded-2xl bg-rose-50 px-4 py-3">
+                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-600">
+                  Vencidas
+                </div>
+                <div className="mt-1 text-2xl font-black text-rose-800">
+                  {fmtInt(dashboard.ferias.vencidas)}
+                </div>
+              </div>
+            </div>
+
+            <div className="h-56 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              {dashboard.trends.ferias.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={dashboard.trends.ferias}>
+                    <defs>
+                      <linearGradient id="ferias-board" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.28} />
+                        <stop offset="95%" stopColor="#7C3AED" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                    <YAxis hide />
+                    <Tooltip
+                      content={
+                        <TrendTooltip
+                          labelFormatter={(label) => `Dia ${label}`}
+                          valueFormatter={(value) => `${fmtInt(value)} colaboradores`}
+                        />
+                      }
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="valor"
+                      stroke="#7C3AED"
+                      fill="url(#ferias-board)"
+                      strokeWidth={2.5}
+                      dot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">
+                  Sem movimentacao de ferias para mostrar agora.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+              {fmtInt(dashboard.ferias.alerta11)} colaborador(es) estao em alerta de 11 meses.
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="Servicos embarcados em aberto"
+          subtitle="Backlog atual de reparos para o gestor acompanhar de perto."
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Abertos agora
+              </div>
+              <div className="mt-1 text-3xl font-black text-slate-900">
+                {fmtInt(dashboard.embarcados.abertas)}
+              </div>
+              <div className="mt-2 text-sm font-semibold text-rose-600">
+                {fmtInt(dashboard.embarcados.criticas)} criticos
+              </div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Em execucao
+              </div>
+              <div className="mt-1 text-3xl font-black text-slate-900">
+                {fmtInt(dashboard.embarcados.emExecucao)}
+              </div>
+              <div className="mt-2 text-sm font-semibold text-amber-600">
+                {fmtInt(dashboard.embarcados.agPecas)} aguardando pecas
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 h-56 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            {embarcadosStatusChart.some((item) => item.valor > 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={embarcadosStatusChart}>
+                  <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                  <YAxis hide />
+                  <Tooltip
+                    content={
+                      <TrendTooltip
+                        labelFormatter={(label) => label}
+                        valueFormatter={(value) => `${fmtInt(value)} servicos`}
+                      />
+                    }
+                  />
+                  <Bar dataKey="valor" fill="#334155" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">
+                Sem servicos em aberto na base atual.
+              </div>
             )}
           </div>
         </SectionCard>
@@ -951,97 +1742,61 @@ export default function Dashboard() {
       <section className="grid gap-5 xl:grid-cols-2">
         <SectionCard
           title="Pulso de cobranca das avarias"
-          subtitle="Leitura historica para acompanhar volume e dinheiro recuperado."
+          subtitle="Percentual historico de recuperacao e fila financeira aberta."
         >
           <div className="space-y-5">
             <ProgressRow
               label="Avarias cobradas"
               value={dashboard.avarias.cobradas}
               total={dashboard.avarias.elegiveis}
+              detail={`${fmtCurrency(dashboard.avarias.valorCobrado)} recuperados`}
               tone="emerald"
-              detail={`${fmtCurrency(dashboard.avarias.valorCobrado)} cobrados`}
             />
             <ProgressRow
               label="Avarias pendentes"
               value={dashboard.avarias.pendentes}
               total={dashboard.avarias.elegiveis}
+              detail="Ainda sem encerramento financeiro"
               tone="amber"
-              detail="Volume ainda em aberto para cobranca"
             />
             <ProgressRow
               label="Avarias canceladas"
               value={dashboard.avarias.canceladas}
               total={dashboard.avarias.elegiveis}
-              tone="rose"
               detail={`${fmtCurrency(dashboard.avarias.valorTotal)} no historico elegivel`}
+              tone="rose"
             />
           </div>
         </SectionCard>
 
         <SectionCard
-          title="Pulso de tratativas"
-          subtitle="Historico consolidado para mostrar entrega, backlog e envelhecimento."
+          title="Pulso das tratativas"
+          subtitle="Entrega historica, backlog e envelhecimento para leitura gerencial."
         >
           <div className="space-y-5">
             <ProgressRow
               label="Tratativas concluidas"
               value={dashboard.tratativas.concluidas}
               total={dashboard.tratativas.total}
-              tone="emerald"
               detail="Encerradas ou resolvidas"
+              tone="emerald"
             />
             <ProgressRow
               label="Tratativas pendentes"
               value={dashboard.tratativas.pendentes}
               total={dashboard.tratativas.total}
+              detail="Ainda aguardando acao"
               tone="amber"
-              detail="Ainda aguardando tratativa"
             />
             <ProgressRow
               label="Tratativas atrasadas"
               value={dashboard.tratativas.atrasadas}
               total={dashboard.tratativas.total}
-              tone="rose"
               detail="Pendentes ha mais de 10 dias"
+              tone="rose"
             />
           </div>
         </SectionCard>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-slate-900 p-5 text-white shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">
-              Proximo nivel do painel
-            </p>
-            <h2 className="mt-2 text-2xl font-black">Base pronta para seguir ampliando</h2>
-            <p className="mt-2 max-w-3xl text-sm text-slate-300">
-              Esse dashboard ja nasce com o eixo que voce pediu. No proximo passo, a gente pode
-              plugar ranking de motoristas, mapa de linhas criticas, farol do diesel e alertas de
-              pessoas sem trocar a estrutura visual de novo.
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200">
-                Base KM/L
-              </p>
-              <p className="mt-1 text-lg font-black">{supabaseA ? "Conectada" : "Pendente"}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200">
-                Base MKBF
-              </p>
-              <p className="mt-1 text-lg font-black">Conectada</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200">
-                Base gestao
-              </p>
-              <p className="mt-1 text-lg font-black">Conectada</p>
-            </div>
-          </div>
-        </div>
       </section>
     </div>
   );

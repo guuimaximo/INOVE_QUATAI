@@ -1181,7 +1181,7 @@ export default function Ferias() {
   async function carregarDados() {
     setLoading(true);
 
-    const [periodosResp, planosResp, pessoasResp, areasResp] = await Promise.all([
+    const [periodosResp, planosResp, pessoasResp, areasResp, afastadosResp] = await Promise.all([
       supabase.from("ferias_periodos_importados").select("*").eq("ativo", true).order("nm_funcionario", { ascending: true }),
       supabase.from("ferias_planejamento").select("*").order("atualizado_em", { ascending: false }),
       supabase
@@ -1193,16 +1193,19 @@ export default function Ferias() {
         .from("organograma_manutencao_areas")
         .select("codigo, parent_codigo, titulo, subtitulo, nivel, ativo")
         .eq("ativo", true),
+      supabase.from("afastados").select("*").eq("ativo", true).order("data_inicio", { ascending: false }),
     ]);
 
     if (periodosResp.error) console.error(periodosResp.error);
     if (planosResp.error) console.error(planosResp.error);
     if (pessoasResp.error) console.error(pessoasResp.error);
     if (areasResp.error) console.error(areasResp.error);
+    if (afastadosResp.error) console.error(afastadosResp.error);
 
     const areasByCodigo = new Map((areasResp.data || []).map((area) => [area.codigo, area]));
     const allocByKey = new Map();
     const gestorByArea = new Map();
+    const afastadosKeys = new Set();
 
     for (const pessoa of pessoasResp.data || []) {
       const key = buildFuncionarioKey(pessoa);
@@ -1212,7 +1215,19 @@ export default function Ferias() {
       }
     }
 
-    const merged = mergeFeriasData(periodosResp.data || [], planosResp.data || [], allocByKey, areasByCodigo, gestorByArea);
+    for (const afastado of afastadosResp.data || []) {
+      const key = buildFuncionarioKey(afastado);
+      if (key) afastadosKeys.add(key);
+    }
+
+    const merged = mergeFeriasData(
+      periodosResp.data || [],
+      planosResp.data || [],
+      allocByKey,
+      areasByCodigo,
+      gestorByArea,
+      afastadosKeys
+    );
     setRegistros(merged);
     setLoading(false);
   }
@@ -1861,14 +1876,24 @@ export default function Ferias() {
   );
 }
 
-function mergeFeriasData(periodos, planos, allocByKey, areasByCodigo, gestorByArea) {
+function mergeFeriasData(periodos, planos, allocByKey, areasByCodigo, gestorByArea, afastadosKeys = new Set()) {
   const planByFeriasId = new Map((planos || []).map((item) => [String(item.ferias_id), item]));
-  return (periodos || []).map((registro) => {
+  return (periodos || []).flatMap((registro) => {
+    const registroKeys = [
+      buildFuncionarioKey(registro),
+      buildFuncionarioKey({ funcionario_cracha: registro.nr_cracha }),
+      buildFuncionarioKey({ nome: registro.nm_funcionario }),
+    ].filter(Boolean);
+
+    if (registroKeys.some((key) => afastadosKeys.has(key))) {
+      return [];
+    }
+
     const planejamento = planByFeriasId.get(String(registro.ferias_id)) || {};
     const allocation =
-      allocByKey.get(buildFuncionarioKey(registro)) ||
-      allocByKey.get(buildFuncionarioKey({ funcionario_cracha: registro.nr_cracha })) ||
-      allocByKey.get(buildFuncionarioKey({ nome: registro.nm_funcionario }));
+      allocByKey.get(registroKeys[0]) ||
+      allocByKey.get(registroKeys[1]) ||
+      allocByKey.get(registroKeys[2]);
     const areaCodigo = planejamento.area_codigo || allocation?.area_codigo || "";
     const areaTitulo = planejamento.area_titulo || areasByCodigo.get(areaCodigo)?.titulo || "";
     const manager = getManagerForArea(areaCodigo, areasByCodigo, gestorByArea);
@@ -1876,7 +1901,7 @@ function mergeFeriasData(periodos, planos, allocByKey, areasByCodigo, gestorByAr
       ...registro,
       ...planejamento,
     });
-    return {
+    return [{
       ...registro,
       ...planejamento,
       area_codigo: areaCodigo,
@@ -1886,6 +1911,6 @@ function mergeFeriasData(periodos, planos, allocByKey, areasByCodigo, gestorByAr
       resumo_status_label: resumo.label,
       resumo_status_chip: resumo.chip,
       resumo_status_order: resumo.order,
-    };
+    }];
   });
 }

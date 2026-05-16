@@ -155,8 +155,7 @@ function formatMonthLabel(ym) {
   return new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
-    timeZone: "America/Sao_Paulo",
-  }).format(new Date(Date.UTC(year, month - 1, 1)));
+  }).format(new Date(year, month - 1, 15, 12, 0, 0));
 }
 
 function formatShortMonthLabel(ym) {
@@ -165,9 +164,8 @@ function formatShortMonthLabel(ym) {
   if (!year || !month) return ym;
   return new Intl.DateTimeFormat("pt-BR", {
     month: "short",
-    timeZone: "America/Sao_Paulo",
   })
-    .format(new Date(Date.UTC(year, month - 1, 1)))
+    .format(new Date(year, month - 1, 15, 12, 0, 0))
     .replace(".", "");
 }
 

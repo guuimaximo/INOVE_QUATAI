@@ -5,11 +5,22 @@ import { FaSearch } from "react-icons/fa";
 import CobrancaDetalheModal from "../../components/CobrancaDetalheModal";
 
 function CardResumo({ titulo, valor, cor, subValor = null }) {
+  const tone =
+    cor?.includes("blue")
+      ? "from-blue-50 to-cyan-50 border-blue-200 text-blue-700"
+      : cor?.includes("yellow")
+      ? "from-amber-50 to-orange-50 border-amber-200 text-amber-700"
+      : cor?.includes("green")
+      ? "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700"
+      : cor?.includes("red")
+      ? "from-rose-50 to-pink-50 border-rose-200 text-rose-700"
+      : "from-slate-50 to-gray-50 border-slate-200 text-slate-700";
+
   return (
-    <div className={`${cor} rounded-3xl border border-white/60 p-5 text-left shadow-sm`}>
-      <h3 className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">{titulo}</h3>
+    <div className={`min-h-[132px] rounded-3xl border bg-gradient-to-br p-5 text-left shadow-sm ${tone}`}>
+      <h3 className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{titulo}</h3>
       <p className="mt-3 text-3xl font-black text-slate-900">{valor}</p>
-      {subValor !== null && <p className="mt-2 text-sm font-semibold">{subValor}</p>}
+      {subValor !== null && <p className="mt-2 text-sm font-semibold opacity-85">{subValor}</p>}
     </div>
   );
 }

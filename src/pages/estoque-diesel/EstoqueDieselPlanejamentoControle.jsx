@@ -10,6 +10,7 @@ import {
   DEFAULT_PARAMS,
   MONTHS_2026,
   PRODUCT_CONFIG,
+  fetchDieselReceipts,
   fetchMeasurementContext,
   fetchMeasurementEntries,
   getDefaultDateForMonth,
@@ -645,43 +646,76 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
   });
 }
 
-function decorateReceiptHighlightRows(rows = []) {
-  const forwardedReceiptsByDate = new Map();
-  const forwardedSourceDates = new Map();
+function buildReceiptSummaryMap(receipts = []) {
+  const summaryByDate = new Map();
 
-  for (const row of rows) {
-    const receiptQuantity = safeNumber(
-      row?.actual?.entradaDiesel ??
-        row?.actual?.entradaRecebimentos ??
-        row?.actual?.receiptMeasuredLiters ??
-        0,
+  for (const receipt of receipts) {
+    const date = receipt?.date || receipt?.dataRecebimento || null;
+    if (!date) continue;
+
+    const current = summaryByDate.get(date) || {
+      date,
+      supplier: "",
+      dieselPrice: null,
+      receivedLiters: 0,
+    };
+
+    current.receivedLiters += safeNumber(
+      receipt?.volumeRecebidoLitros ?? receipt?.nfVolumeLitros,
       0
     );
 
-    const receiptDate = row?.actual?.date || row?.measurementSourceDate || null;
+    if (!current.supplier && String(receipt?.supplier || "").trim()) {
+      current.supplier = String(receipt.supplier).trim();
+    }
 
-    if (receiptQuantity > 0 && receiptDate && receiptDate !== row.date) {
-      forwardedReceiptsByDate.set(receiptDate, {
-        quantity: receiptQuantity,
-        sourceDate: row.date,
-      });
+    if (
+      (current.dieselPrice === null || current.dieselPrice === undefined) &&
+      receipt?.unitPrice !== null &&
+      receipt?.unitPrice !== undefined
+    ) {
+      current.dieselPrice = receipt.unitPrice;
+    }
+
+    summaryByDate.set(date, current);
+  }
+
+  return summaryByDate;
+}
+
+function decorateReceiptHighlightRows(rows = [], receipts = []) {
+  const receiptSummaryByDate = buildReceiptSummaryMap(receipts);
+  const forwardedSourceDates = new Map();
+
+  for (const row of rows) {
+    const receiptDate = row?.actual?.date || null;
+    const receiptSummary = receiptDate ? receiptSummaryByDate.get(receiptDate) : null;
+
+    if (receiptSummary && receiptDate !== row.date) {
       forwardedSourceDates.set(row.date, receiptDate);
     }
   }
 
   return rows.map((row) => {
-    const forwardedReceipt = forwardedReceiptsByDate.get(row.date) || null;
+    const receiptSummary = receiptSummaryByDate.get(row.date) || null;
     const scheduledQuantity = safeNumber(row.plannedReceipt ?? 0, 0);
     const forwardedToDate = forwardedSourceDates.get(row.date) || null;
 
     let receiptStatus = null;
     let receiptNoticeQuantity = null;
     let receiptNoticeLabel = "";
+    let displaySupplier = row.supplier || "";
+    let displayDieselPrice = row.dieselPrice ?? null;
 
-    if (forwardedReceipt) {
+    if (receiptSummary) {
       receiptStatus = "received";
-      receiptNoticeQuantity = forwardedReceipt.quantity;
+      receiptNoticeQuantity = receiptSummary.receivedLiters;
       receiptNoticeLabel = "Ja recebido";
+      displaySupplier = receiptSummary.supplier || displaySupplier;
+      displayDieselPrice =
+        receiptSummary.dieselPrice !== null && receiptSummary.dieselPrice !== undefined
+          ? receiptSummary.dieselPrice
+          : displayDieselPrice;
     } else if (!row.isRealized && scheduledQuantity > 0) {
       receiptStatus = "scheduled";
       receiptNoticeQuantity = scheduledQuantity;
@@ -694,6 +728,8 @@ function decorateReceiptHighlightRows(rows = []) {
       receiptNoticeQuantity,
       receiptNoticeLabel,
       receiptForwardedToDate: forwardedToDate,
+      displaySupplier,
+      displayDieselPrice,
     };
   });
 }
@@ -732,6 +768,32 @@ function getReceiptValueText(row) {
   return formatLiters(row.plannedReceipt);
 }
 
+function mapReceiptToAnalyticalRow(receipt) {
+  return {
+    id: receipt.id,
+    date: receipt.date || receipt.dataRecebimento,
+    product: normalizeProductCode(receipt.product || receipt.tipoDiesel || "S500"),
+    supplier: receipt.supplier || "",
+    dieselPrice: receipt.unitPrice ?? null,
+    cbieGap: null,
+    cbieValue: null,
+    plannedReceipt: safeNumber(
+      receipt.volumeRecebidoLitros ?? receipt.nfVolumeLitros,
+      0
+    ),
+    sourceKind: "receipt",
+  };
+}
+
+function mapPlanningToProjectedAnalyticalRow(row) {
+  return {
+    ...row,
+    date: shiftDate(row.date, -1),
+    product: normalizeProductCode(row.product),
+    sourceKind: "planning",
+  };
+}
+
 function buildForm(date, product, row = null) {
   const sourceDate = row?.planningSourceDate || getPlanningSourceDateForViewDate(date);
 
@@ -748,19 +810,30 @@ function buildForm(date, product, row = null) {
 }
 
 
-function buildAnalyticalRows(planningRows = []) {
+function buildAnalyticalRows(planningRows = [], receipts = []) {
   const products = ["S500", "S10"];
   const today = todayISO();
 
   return products.reduce((acc, product) => {
-    const purchases = [...planningRows]
-      .map((row) => ({ ...row, product: normalizeProductCode(row.product) }))
+    const realizedPurchases = [...(receipts || [])]
+      .map((receipt) => mapReceiptToAnalyticalRow(receipt))
       .filter((row) => row.product === product)
-      .filter((row) => safeNumber(row.plannedReceipt, 0) > 0 || safeNumber(row.dieselPrice, 0) > 0)
+      .filter((row) => safeNumber(row.plannedReceipt, 0) > 0)
       .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
 
-    const withVariation = purchases.map((row, index) => {
-      const previousWithPrice = [...purchases]
+    const futureProjectedPurchases = [...planningRows]
+      .map((row) => mapPlanningToProjectedAnalyticalRow(row))
+      .filter((row) => row.product === product)
+      .filter((row) => safeNumber(row.plannedReceipt, 0) > 0 || safeNumber(row.dieselPrice, 0) > 0)
+      .filter((row) => row.date > today)
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+
+    const timeline = [...realizedPurchases, ...futureProjectedPurchases].sort(
+      (a, b) => String(a.date || "").localeCompare(String(b.date || ""))
+    );
+
+    const withVariation = timeline.map((row, index) => {
+      const previousWithPrice = [...timeline]
         .slice(0, index)
         .reverse()
         .find((item) => safeNumber(item.dieselPrice, 0) > 0);
@@ -794,16 +867,16 @@ function buildAnalyticalRows(planningRows = []) {
     });
 
     const realized = [...withVariation]
-      .filter((row) => row.date <= today)
+      .filter((row) => row.sourceKind === "receipt")
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 
     const future = [...withVariation]
-      .filter((row) => row.date > today)
+      .filter((row) => row.sourceKind === "planning")
       .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
 
     // Se não houver compras com data <= hoje, mostra as últimas compras conhecidas da janela,
     // para não deixar a tela vazia em bases de teste ou meses futuros.
-    const fallbackLastPurchases = [...withVariation]
+    const fallbackLastPurchases = [...realizedPurchases]
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
       .slice(0, 7);
 
@@ -1279,6 +1352,7 @@ export default function EstoqueDieselPlanejamentoControle() {
   const [metadata, setMetadata] = useState(null);
   const [paramStore, setParamStore] = useState(DEFAULT_PARAMS);
   const [measurements, setMeasurements] = useState([]);
+  const [receipts, setReceipts] = useState([]);
   const [planningRows, setPlanningRows] = useState([]);
   const [analyticalRows, setAnalyticalRows] = useState([]);
   const [selectedDate, setSelectedDate] = useState(getDefaultDateForMonth(year, month));
@@ -1304,9 +1378,10 @@ export default function EstoqueDieselPlanejamentoControle() {
   const monthRows = useMemo(
     () =>
       decorateReceiptHighlightRows(
-        buildMonthRows({ year, month, product, measurements, planningRows })
+        buildMonthRows({ year, month, product, measurements, planningRows }),
+        receipts.filter((receipt) => normalizeProductCode(receipt.product) === product)
       ),
-    [measurements, month, planningRows, product, year]
+    [measurements, month, planningRows, product, receipts, year]
   );
 
   const selectedRow = useMemo(
@@ -1320,8 +1395,8 @@ export default function EstoqueDieselPlanejamentoControle() {
   );
 
   const analyticalData = useMemo(
-    () => buildAnalyticalRows(analyticalRows),
-    [analyticalRows]
+    () => buildAnalyticalRows(analyticalRows, receipts),
+    [analyticalRows, receipts]
   );
 
   const summary = useMemo(() => {
@@ -1400,13 +1475,17 @@ export default function EstoqueDieselPlanejamentoControle() {
 
         const context = await fetchMeasurementContext();
 
-        const [measurementData, planningData, analyticalDataResponse] = await Promise.all([
+        const [measurementData, receiptData, planningData, analyticalDataResponse] = await Promise.all([
           fetchMeasurementEntries({
             year,
             product,
             metadata: context.metadata,
             paramStore: context.paramStore,
             includePumps: false,
+          }),
+          fetchDieselReceipts({
+            year,
+            metadata: context.metadata,
           }),
           fetchPlanningRows({
             year,
@@ -1427,6 +1506,7 @@ export default function EstoqueDieselPlanejamentoControle() {
         setMetadata(context.metadata);
         setParamStore(context.paramStore);
         setMeasurements(filterMeasurementWindow(measurementData, year, month, product));
+        setReceipts(receiptData || []);
         setPlanningRows(planningData);
         setAnalyticalRows(analyticalDataResponse);
       } catch (error) {
@@ -2188,7 +2268,7 @@ export default function EstoqueDieselPlanejamentoControle() {
                         {row.weekday}
                       </td>
                       <td className={`px-4 py-3 ${emphasizedCellClass}`}>
-                        <div>{row.supplier || "--"}</div>
+                        <div>{row.displaySupplier || row.supplier || "--"}</div>
                         {row.receiptStatus ? (
                           <div
                             className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wider ${
@@ -2202,7 +2282,7 @@ export default function EstoqueDieselPlanejamentoControle() {
                         ) : null}
                       </td>
                       <td className={`px-4 py-3 ${emphasizedCellClass}`}>
-                        {formatMoney(row.dieselPrice)}
+                        {formatMoney(row.displayDieselPrice ?? row.dieselPrice)}
                       </td>
                       <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         {formatPct(row.cbieGap)}

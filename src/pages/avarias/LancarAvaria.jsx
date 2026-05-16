@@ -198,14 +198,20 @@ export default function LancarAvaria() {
   // --- RENDERIZAÇÃO (JSX) ---
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Registrar Lançamento de Avaria</h1>
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Avarias</div>
+        <h1 className="mt-3 text-3xl font-black text-slate-900">Registrar Lançamento de Avaria</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Abra uma nova avaria com o mesmo padrão visual do resumo, priorizando leitura, hierarquia e clareza.
+        </p>
+      </div>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* --- Seção 1 & 2: Identificação e Detalhes --- */}
-        <div className="bg-white shadow rounded-lg p-4">
-          <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="border-b border-slate-200 pb-2 text-lg font-black text-slate-900">
             Identificação e Detalhes
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Campo Prefixo */}
             <div className="flex flex-col">
               <CampoPrefixo value={prefixo} onChange={setPrefixo} label="Prefixo" />
@@ -225,7 +231,7 @@ export default function LancarAvaria() {
                 type="datetime-local"
                 name="dataAvaria"
                 id="dataAvaria"
-                className="border rounded-md px-3 py-2"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
                 onChange={handleFormChange}
                 value={formData.dataAvaria}
                 required
@@ -241,7 +247,7 @@ export default function LancarAvaria() {
                 type="text"
                 name="tipoOcorrencia"
                 id="tipoOcorrencia"
-                className="border rounded-md px-3 py-2"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
                 onChange={handleFormChange}
                 value={formData.tipoOcorrencia}
                 required
@@ -257,7 +263,7 @@ export default function LancarAvaria() {
                 type="text"
                 name="numero_da_avaria"
                 id="numero_da_avaria"
-                className="border rounded-md px-3 py-2"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
                 placeholder="Ex: 12345"
                 value={formData.numero_da_avaria}
                 onChange={handleFormChange}
@@ -273,7 +279,7 @@ export default function LancarAvaria() {
                 name="descricao"
                 id="descricao"
                 rows="4"
-                className="border rounded-md px-3 py-2"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
                 placeholder="Descreva o que foi identificado pela manutenção..."
                 onChange={handleFormChange}
                 value={formData.descricao}
@@ -283,13 +289,13 @@ export default function LancarAvaria() {
         </div>
 
         {/* ORÇAMENTO */}
-        <div className="bg-white shadow rounded-lg p-4">
-          <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Orçamento de Reparo</h2>
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="border-b border-slate-200 pb-2 text-lg font-black text-slate-900">Orçamento de Reparo</h2>
 
           {/* Peças */}
-          <div>
-            <h3 className="text-base font-semibold mb-3 text-gray-700">Peças</h3>
-            <div className="grid grid-cols-12 gap-3 mb-2 px-2 text-sm font-bold text-gray-500">
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="mb-3 text-base font-black text-slate-900">Peças</h3>
+            <div className="mb-2 grid grid-cols-12 gap-3 px-2 text-xs font-black uppercase tracking-wide text-slate-500">
               <span className="col-span-5">Item/Peça</span>
               <span className="col-span-2">Qtd</span>
               <span className="col-span-2">Vl. Unitário</span>
@@ -308,21 +314,21 @@ export default function LancarAvaria() {
             <button
               type="button"
               onClick={handleAddPeca}
-              className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+              className="mt-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
             >
               + Adicionar Peça
             </button>
-            <div className="text-right font-bold mt-2 pr-14 text-gray-800">
+            <div className="mt-2 pr-14 text-right font-bold text-slate-800">
               Total Peças: {totalPecas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </div>
           </div>
 
-          <hr className="my-6 border-gray-200" />
+          <hr className="my-6 border-slate-200" />
 
           {/* Serviços */}
-          <div>
-            <h3 className="text-base font-semibold mb-3 text-gray-700">Mão de Obra / Serviços</h3>
-            <div className="grid grid-cols-12 gap-3 mb-2 px-2 text-sm font-bold text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="mb-3 text-base font-black text-slate-900">Mão de Obra / Serviços</h3>
+            <div className="mb-2 grid grid-cols-12 gap-3 px-2 text-xs font-black uppercase tracking-wide text-slate-500">
               <span className="col-span-5">Serviço</span>
               <span className="col-span-2">Qtd/Horas</span>
               <span className="col-span-2">Vl. Unitário</span>
@@ -341,35 +347,35 @@ export default function LancarAvaria() {
             <button
               type="button"
               onClick={handleAddServico}
-              className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+              className="mt-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
             >
               + Adicionar Serviço
             </button>
-            <div className="text-right font-bold mt-2 pr-14 text-gray-800">
+            <div className="mt-2 pr-14 text-right font-bold text-slate-800">
               Total M.O.: {totalServicos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </div>
           </div>
 
           {/* Total */}
-          <div className="text-right text-xl font-bold mt-6 pt-4 border-t border-gray-200 text-gray-900">
+          <div className="mt-6 border-t border-slate-200 pt-4 text-right text-xl font-black text-slate-900">
             Total do Orçamento: {totalOrcamento.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </div>
         </div>
 
         {/* EVIDÊNCIAS */}
-        <div className="bg-white shadow rounded-lg p-4">
-          <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="border-b border-slate-200 pb-2 text-lg font-black text-slate-900">
             Evidências (Fotos e Vídeos)
           </h2>
           <label
             htmlFor="file-upload"
-            className="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100"
+            className="mt-4 flex h-48 w-full cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100"
           >
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
-              <p className="mb-2 text-sm text-gray-500">
+              <p className="mb-2 text-sm text-slate-500">
                 <span className="font-semibold">Clique para enviar</span> ou arraste e solte
               </p>
-              <p className="text-xs text-gray-500">Imagens (PNG, JPG) ou Vídeos (MP4, MOV)</p>
+              <p className="text-xs text-slate-500">Imagens (PNG, JPG) ou Vídeos (MP4, MOV)</p>
             </div>
 
             {/* ✅ mantém multiple */}
@@ -385,8 +391,8 @@ export default function LancarAvaria() {
 
           {arquivos.length > 0 && (
             <div className="mt-4">
-              <h4 className="font-medium text-gray-700">Arquivos selecionados:</h4>
-              <ul className="list-disc list-inside text-gray-600">
+              <h4 className="font-medium text-slate-700">Arquivos selecionados:</h4>
+              <ul className="list-disc list-inside text-slate-600">
                 {arquivos.map((file, index) => (
                   <li key={index}>
                     {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
@@ -398,14 +404,14 @@ export default function LancarAvaria() {
         </div>
 
         {/* AÇÕES */}
-        <div className="flex justify-end gap-4 pt-4">
-          <button type="button" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">
+        <div className="flex justify-end gap-4 pt-2">
+          <button type="button" className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-200">
             Limpar
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="ml-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+            className="ml-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:bg-slate-400"
           >
             {loading ? 'Salvando...' : 'Enviar para Aprovação'}
           </button>

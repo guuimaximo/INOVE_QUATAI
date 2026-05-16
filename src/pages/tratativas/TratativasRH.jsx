@@ -475,33 +475,33 @@ export default function TratativasRH() {
         <table className="min-w-full">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("ultima_data")}>Data <SortIcon colKey="ultima_data" /></th>
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("motorista_nome")}>Motorista <SortIcon colKey="motorista_nome" /></th>
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("motorista_chapa")}>Chapa <SortIcon colKey="motorista_chapa" /></th>
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("acao_aplicada")}>Ação <SortIcon colKey="acao_aplicada" /></th>
-              <th className="py-2 px-3 text-center cursor-pointer select-none" onClick={() => toggleSort("qtd_tratativas")}>Qtd. <SortIcon colKey="qtd_tratativas" /></th>
-              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("status")}>Status RH <SortIcon colKey="status" /></th>
-              <th className="py-2 px-3 text-left">Ações</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em] cursor-pointer select-none" onClick={() => toggleSort("ultima_data")}>Data <SortIcon colKey="ultima_data" /></th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em] cursor-pointer select-none" onClick={() => toggleSort("motorista_nome")}>Motorista <SortIcon colKey="motorista_nome" /></th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em] cursor-pointer select-none" onClick={() => toggleSort("motorista_chapa")}>Chapa <SortIcon colKey="motorista_chapa" /></th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em] cursor-pointer select-none" onClick={() => toggleSort("acao_aplicada")}>Ação <SortIcon colKey="acao_aplicada" /></th>
+              <th className="px-4 py-4 text-center text-xs font-black uppercase tracking-[0.18em] cursor-pointer select-none" onClick={() => toggleSort("qtd_tratativas")}>Qtd. <SortIcon colKey="qtd_tratativas" /></th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em] cursor-pointer select-none" onClick={() => toggleSort("status")}>Status RH <SortIcon colKey="status" /></th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Ações</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" className="text-center p-4 text-gray-500">Carregando...</td></tr>
+              <tr><td colSpan="7" className="p-6 text-center text-slate-500">Carregando...</td></tr>
             ) : sortedGroups.length === 0 ? (
-              <tr><td colSpan="7" className="text-center p-4 text-gray-500">Nenhuma tratativa encontrada para este período.</td></tr>
+              <tr><td colSpan="7" className="p-6 text-center text-slate-500">Nenhuma tratativa encontrada para este período.</td></tr>
             ) : (
               sortedGroups.map((g) => (
-                <tr key={g.key} className="border-t hover:bg-gray-50">
-                  <td className="py-2 px-3 text-gray-600">{brDateTime(g.ultima_data)}</td>
-                  <td className="py-2 px-3 text-gray-700 font-medium">{g.motorista_nome || "—"}</td>
-                  <td className="py-2 px-3 text-gray-700">{g.motorista_chapa || "—"}</td>
-                  <td className="py-2 px-3"><BadgeAcao acao={g.acao_aplicada} /></td>
-                  <td className="py-2 px-3 text-center font-semibold">{g.qtd_tratativas}</td>
-                  <td className="py-2 px-3"><StatusPill lancado={g.rh_lancado} /></td>
-                  <td className="py-2 px-3">
+                <tr key={g.key} className="border-t border-slate-100 transition-colors hover:bg-slate-50">
+                  <td className="px-4 py-3 text-slate-600">{brDateTime(g.ultima_data)}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">{g.motorista_nome || "—"}</td>
+                  <td className="px-4 py-3 text-slate-700">{g.motorista_chapa || "—"}</td>
+                  <td className="px-4 py-3"><BadgeAcao acao={g.acao_aplicada} /></td>
+                  <td className="px-4 py-3 text-center font-semibold text-slate-900">{g.qtd_tratativas}</td>
+                  <td className="px-4 py-3"><StatusPill lancado={g.rh_lancado} /></td>
+                  <td className="px-4 py-3">
                     <button
                       onClick={() => openGroup(g)}
-                      className={["px-3 py-1 rounded-md text-sm font-semibold text-white", g.rh_lancado ? "bg-gray-600 hover:bg-gray-700" : "bg-emerald-600 hover:bg-emerald-700"].join(" ")}
+                      className={["rounded-2xl px-4 py-2 text-sm font-bold text-white transition", g.rh_lancado ? "bg-slate-700 hover:bg-slate-800" : "bg-violet-600 hover:bg-violet-700"].join(" ")}
                     >
                       {g.rh_lancado ? "Consultar" : "Lançar"}
                     </button>

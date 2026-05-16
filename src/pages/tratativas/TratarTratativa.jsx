@@ -820,28 +820,34 @@ export default function TratarTratativa() {
   const criadoEm = brDateTime(t.created_at);
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
+      <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
         <div className="space-y-3">
           <button
             onClick={() => nav(-1)}
-            className="px-4 py-2 bg-white border rounded-lg shadow-sm hover:bg-slate-50 font-bold text-sm flex items-center gap-2"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           >
             <FaArrowLeft />
             Voltar
           </button>
 
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-              <FaGavel className="text-violet-500" /> Tratar Tratativa
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-violet-600">
+              Tratativas
+            </div>
+            <h1 className="mt-3 flex items-center gap-3 text-3xl font-black text-slate-900">
+              <span className="rounded-2xl bg-violet-50 p-3 text-violet-600 shadow-sm">
+                <FaGavel />
+              </span>
+              Tratar Tratativa
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="mt-2 text-sm text-slate-600">
               Revise os dados, registre a ação aplicada e conclua a tratativa.
             </p>
           </div>
         </div>
 
-        <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           <span className="font-semibold">Criado por:</span> {criadoPor}
           <span className="mx-2 text-blue-300">•</span>
           <span className="font-semibold">Data/Hora:</span> {criadoEm}
@@ -879,7 +885,7 @@ export default function TratarTratativa() {
         />
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border p-5">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2">
             <FaClipboardList className="text-slate-500" />
@@ -1040,7 +1046,7 @@ export default function TratarTratativa() {
         </dl>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border p-5">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <FaClipboardList className="text-slate-500" />
           <h2 className="text-lg font-bold text-slate-800">Conclusão</h2>

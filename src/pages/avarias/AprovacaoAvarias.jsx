@@ -687,17 +687,23 @@ export default function AprovacaoAvarias() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Aprovação de Avarias</h1>
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Avarias</div>
+        <h1 className="mt-3 text-3xl font-black text-slate-900">Aprovação de Avarias</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Valide as aprovações pendentes com a mesma leitura limpa e executiva usada no resumo do módulo.
+        </p>
+      </div>
 
       <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th className="py-2 px-3 text-left">Data</th>
-              <th className="py-2 px-3 text-left">Prefixo</th>
-              <th className="py-2 px-3 text-left">Tipo</th>
-              <th className="py-2 px-3 text-left">Valor</th>
-              <th className="py-2 px-3 text-left">Ações</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Data</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Prefixo</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Tipo</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Valor</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Ações</th>
             </tr>
           </thead>
           <tbody>

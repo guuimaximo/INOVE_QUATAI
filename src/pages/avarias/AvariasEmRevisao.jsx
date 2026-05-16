@@ -564,20 +564,26 @@ export default function AvariasEmRevisao() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Pendências de Revisão</h1>
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="text-xs font-black uppercase tracking-[0.24em] text-amber-600">Avarias</div>
+        <h1 className="mt-3 text-3xl font-black text-slate-900">Pendências de Revisão</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Trate reprovações e ajustes com o mesmo padrão visual do resumo e das centrais mais novas.
+        </p>
+      </div>
 
       <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th className="py-2 px-3 text-left">Data</th>
-              <th className="py-2 px-3 text-left">Prefixo</th>
-              <th className="py-2 px-3 text-left">Nº Avaria</th>
-              <th className="py-2 px-3 text-left">Tipo</th>
-              <th className="py-2 px-3 text-left">Valor</th>
-              <th className="py-2 px-3 text-left">Reprovado por</th>
-              <th className="py-2 px-3 text-left w-80">Motivo / Observação</th>
-              <th className="py-2 px-3 text-left">Ações</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Data</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Prefixo</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Nº Avaria</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Tipo</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Valor</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Reprovado por</th>
+              <th className="w-80 px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Motivo / Observação</th>
+              <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-[0.18em]">Ações</th>
             </tr>
           </thead>
 

@@ -83,9 +83,11 @@ function StatusPill({ lancado }) {
 
 function CardResumo({ titulo, valor, cor }) {
   return (
-    <div className={`${cor} rounded-lg shadow p-5 text-center`}>
-      <h3 className="text-sm font-medium text-gray-600">{titulo}</h3>
-      <p className="text-3xl font-bold mt-2 text-gray-800">{valor}</p>
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className={`inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${cor}`}>
+        {titulo}
+      </div>
+      <p className="mt-4 text-3xl font-black text-slate-900">{valor}</p>
     </div>
   );
 }
@@ -375,51 +377,64 @@ export default function TratativasRH() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <h1 className="text-2xl font-bold text-gray-700">Tratativas RH</h1>
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
+      <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="text-xs font-black uppercase tracking-[0.24em] text-violet-600">
+            Tratativas
+          </div>
+          <h1 className="mt-3 text-3xl font-black text-slate-900">Tratativas RH</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Consolide advertencias e suspensoes do fluxo de tratativas no mesmo padrao visual das centrais.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode(VIEW.ALL)}
-            className={["px-3 py-2 rounded-md text-sm border", viewMode === VIEW.ALL ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300"].join(" ")}
+            className={["rounded-full px-4 py-2 text-xs font-black uppercase tracking-wide transition", viewMode === VIEW.ALL ? "bg-slate-900 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"].join(" ")}
           >
             VER TUDO
           </button>
           <button
             onClick={() => setViewMode(VIEW.OPEN_ONLY)}
-            className={["px-3 py-2 rounded-md text-sm border", viewMode === VIEW.OPEN_ONLY ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300"].join(" ")}
+            className={["rounded-full px-4 py-2 text-xs font-black uppercase tracking-wide transition", viewMode === VIEW.OPEN_ONLY ? "bg-violet-600 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"].join(" ")}
           >
             PENDENTES DO RH
           </button>
         </div>
       </div>
 
-      <div className="bg-white shadow rounded-lg p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Filtros</h2>
+      <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="text-lg font-black text-slate-900">Filtros do RH</h2>
+          <p className="text-sm text-slate-500">
+            Refine por texto, periodo, status e acao para localizar rapidamente o que ainda depende do RH.
+          </p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <input
             type="text"
             placeholder="Buscar..."
             value={filtros.busca}
             onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-            className="border rounded-md px-3 py-2 col-span-2"
+            className="col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
           />
           <input
             type="date"
             value={filtros.dataInicio}
             onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
           />
           <input
             type="date"
             value={filtros.dataFim}
             onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
           />
           <select
             value={filtros.status}
             onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
-            className="border rounded-md px-3 py-2 bg-white"
+            className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
           >
             <option value="">Status</option>
             <option value="PENDENTE">Pendentes</option>
@@ -428,27 +443,27 @@ export default function TratativasRH() {
           <select
             value={filtros.acao}
             onChange={(e) => setFiltros({ ...filtros, acao: e.target.value })}
-            className="border rounded-md px-3 py-2 bg-white"
+            className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
           >
             <option value="">Ação</option>
             <option value="Advertência">Advertência</option>
             <option value="Suspensão">Suspensão</option>
           </select>
         </div>
-        <div className="flex justify-between items-center mt-3">
-          <div className="text-sm text-gray-600">
+        <div className="mt-3 flex items-center justify-between">
+          <div className="text-sm text-slate-600">
             {loading ? "Carregando..." : `${sortedGroups.length} registros (Filtrados)`}
           </div>
           <div className="flex gap-2">
-            <button onClick={limparFiltros} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">Limpar</button>
-            <button onClick={load} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
+            <button onClick={limparFiltros} className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-200">Limpar</button>
+            <button onClick={load} disabled={loading} className="rounded-2xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-violet-700 disabled:bg-slate-400">
               {loading ? "Atualizando..." : "Atualizar"}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
         <CardResumo titulo="Total na Tela" valor={counts.total} cor="bg-blue-100 text-blue-700" />
         <CardResumo titulo="Pendentes RH" valor={counts.pend} cor="bg-yellow-100 text-yellow-700" />
         <CardResumo titulo="Concluídas RH" valor={counts.concl} cor="bg-green-100 text-green-700" />
@@ -456,9 +471,9 @@ export default function TratativasRH() {
         <CardResumo titulo="Suspensões" valor={counts.susp} cor="bg-red-50 text-red-700" />
       </div>
 
-      <div className="bg-white shadow rounded-lg overflow-x-auto">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full">
-          <thead className="bg-blue-600 text-white">
+          <thead className="bg-slate-50 text-slate-600">
             <tr>
               <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("ultima_data")}>Data <SortIcon colKey="ultima_data" /></th>
               <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("motorista_nome")}>Motorista <SortIcon colKey="motorista_nome" /></th>

@@ -271,16 +271,24 @@ export default function SolicitacaoTratativa() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <h1 className="text-2xl font-bold mb-4">Solicitar Tratativa</h1>
+    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6 text-slate-800">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="text-xs font-black uppercase tracking-[0.24em] text-violet-600">
+          Tratativas
+        </div>
+        <h1 className="mt-3 text-3xl font-black text-slate-900">Solicitar Tratativa</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Registre a ocorrencia, anexe evidencias e envie a solicitacao para a central.
+        </p>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-lg shadow-sm">
+      <div className="grid grid-cols-1 gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-2">
         <CampoMotorista value={motorista} onChange={setMotorista} />
 
         <div>
           <label className="block text-sm text-gray-600 mb-1">Tipo de Ocorrência</label>
           <select
-            className="w-full rounded-md border px-3 py-2"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
             value={form.tipo_ocorrencia}
             onChange={(e) => setForm({ ...form, tipo_ocorrencia: e.target.value })}
           >
@@ -297,7 +305,7 @@ export default function SolicitacaoTratativa() {
         <div>
           <label className="block text-sm text-gray-600 mb-1">Setor de Origem</label>
           <select
-            className="w-full rounded-md border px-3 py-2"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
             value={form.setor_origem}
             onChange={(e) => setForm({ ...form, setor_origem: e.target.value })}
           >
@@ -313,7 +321,7 @@ export default function SolicitacaoTratativa() {
         <div>
           <label className="block text-sm text-gray-600 mb-1">Linha</label>
           <select
-            className="w-full rounded-md border px-3 py-2"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
             value={form.linha}
             onChange={(e) => setForm({ ...form, linha: e.target.value })}
           >
@@ -333,7 +341,7 @@ export default function SolicitacaoTratativa() {
         <div>
           <label className="block text-sm text-gray-600 mb-1">Prioridade</label>
           <select
-            className="w-full rounded-md border px-3 py-2"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
             value={form.prioridade}
             onChange={(e) => setForm({ ...form, prioridade: e.target.value })}
           >
@@ -349,7 +357,7 @@ export default function SolicitacaoTratativa() {
           <label className="block text-sm text-gray-600 mb-1">Data do ocorrido</label>
           <input
             type="date"
-            className="w-full rounded-md border px-3 py-2"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
             value={form.data_ocorrida}
             onChange={(e) => setForm({ ...form, data_ocorrida: e.target.value })}
           />
@@ -359,7 +367,7 @@ export default function SolicitacaoTratativa() {
           <label className="block text-sm text-gray-600 mb-1">Hora do ocorrido</label>
           <input
             type="time"
-            className="w-full rounded-md border px-3 py-2"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
             value={form.hora_ocorrida}
             onChange={(e) => setForm({ ...form, hora_ocorrida: e.target.value })}
           />
@@ -369,7 +377,7 @@ export default function SolicitacaoTratativa() {
           <label className="block text-sm text-gray-600 mb-1">Descrição</label>
           <textarea
             rows={4}
-            className="w-full rounded-md border px-3 py-2"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
             value={form.descricao}
             onChange={(e) => setForm({ ...form, descricao: e.target.value })}
           />
@@ -397,20 +405,20 @@ export default function SolicitacaoTratativa() {
               onClick={() => fileInputRef.current?.click()}
               className={[
                 "w-full rounded-xl border-2 border-dashed transition",
-                "bg-gray-50 hover:bg-gray-100",
-                "focus:outline-none focus:ring-2 focus:ring-blue-500",
-                isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300",
+                "bg-slate-50 hover:bg-slate-100",
+                "focus:outline-none focus:ring-2 focus:ring-violet-500",
+                isDragging ? "border-violet-500 bg-violet-50" : "border-slate-300",
               ].join(" ")}
               style={{ minHeight: 150 }}
             >
               <div className="h-full w-full flex flex-col items-center justify-center py-8 cursor-pointer select-none px-4 text-center">
-                <p className="text-sm font-semibold text-gray-700">
+                <p className="text-sm font-semibold text-slate-700">
                   Clique para enviar{" "}
                   <span className="font-normal">ou arraste e solte</span>
                 </p>
-                <p className="text-xs text-gray-500 mt-1">PNG, JPG, MP4, MOV ou PDF</p>
+                <p className="mt-1 text-xs text-slate-500">PNG, JPG, MP4, MOV ou PDF</p>
 
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs text-gray-600 border">                 
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">                 
                 </div>
               </div>
 
@@ -426,17 +434,17 @@ export default function SolicitacaoTratativa() {
 
             {/* ✅ CAMPO EXPLÍCITO CTRL+V */}
             <div className="w-full">
-              <div className="rounded-xl border bg-white p-4 h-full">
+              <div className="h-full rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">                    
+                    <p className="text-sm font-semibold text-slate-800">                    
                       
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">                     
+                    <p className="mt-1 text-xs text-slate-500">                     
                     </p>
                   </div>
 
-                  <span className="text-[11px] text-gray-500 border rounded-full px-2 py-1">                   
+                  <span className="rounded-full border border-slate-200 px-2 py-1 text-[11px] text-slate-500">                   
                   </span>
                 </div>
 
@@ -445,17 +453,17 @@ export default function SolicitacaoTratativa() {
                   onPaste={onPasteEvidencia}
                   className={[
                     "mt-3 rounded-lg border-2 border-dashed p-4",
-                    "bg-gray-50 text-gray-700",
-                    "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                    "border-slate-300 bg-slate-50 text-slate-700",
+                    "focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500",
                   ].join(" ")}
                 >
                   <p className="text-sm">Clique aqui e cole seu print.</p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="mt-1 text-xs text-slate-500">
                     Somente imagens do clipboard serão adicionadas.
                   </p>
                 </div>
 
-                <div className="mt-3 text-xs text-gray-500">
+                <div className="mt-3 text-xs text-slate-500">
                   {files.length > 0 ? (
                     <span>
                       <b>{files.length}</b> evidência(s) anexada(s)
@@ -472,7 +480,7 @@ export default function SolicitacaoTratativa() {
           {files.length > 0 && (
             <div className="mt-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-700">Arquivos anexados</p>
+                <p className="text-sm font-medium text-slate-700">Arquivos anexados</p>
 
                 <button
                   type="button"
@@ -493,14 +501,14 @@ export default function SolicitacaoTratativa() {
                   return (
                     <div
                       key={`${f.name}-${f.size}-${idx}`}
-                      className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm"
+                      className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] rounded-full border px-2 py-0.5 text-gray-600">
+                          <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600">
                             {badge}
                           </span>
-                          <span className="text-[11px] text-gray-500">
+                          <span className="text-[11px] text-slate-500">
                             {Math.round(f.size / 1024)} KB
                           </span>
                         </div>
@@ -529,11 +537,11 @@ export default function SolicitacaoTratativa() {
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="flex justify-end">
         <button
           onClick={salvar}
           disabled={loading || !camposObrigatoriosPreenchidos}
-          className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
+          className="rounded-2xl bg-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-60"
         >
           {loading ? "Salvando…" : "Criar"}
         </button>

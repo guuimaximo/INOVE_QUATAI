@@ -868,7 +868,7 @@ function buildAnalyticalRows(planningRows = [], receipts = []) {
 
     const realized = [...withVariation]
       .filter((row) => row.sourceKind === "receipt")
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
 
     const future = [...withVariation]
       .filter((row) => row.sourceKind === "planning")
@@ -877,11 +877,11 @@ function buildAnalyticalRows(planningRows = [], receipts = []) {
     // Se não houver compras com data <= hoje, mostra as últimas compras conhecidas da janela,
     // para não deixar a tela vazia em bases de teste ou meses futuros.
     const fallbackLastPurchases = [...realizedPurchases]
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
-      .slice(0, 7);
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+      .slice(-7);
 
     acc[product] = {
-      lastPurchases: realized.length ? realized.slice(0, 7) : fallbackLastPurchases,
+      lastPurchases: realized.length ? realized.slice(-7) : fallbackLastPurchases,
       futurePurchases: future,
       allPurchases: withVariation,
     };

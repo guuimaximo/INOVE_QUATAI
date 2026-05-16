@@ -686,12 +686,12 @@ export default function AprovacaoAvarias() {
   }, []);
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">Aprovação de Avarias</h1>
 
-      <div className="bg-white shadow rounded-lg overflow-x-auto">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full">
-          <thead className="bg-blue-600 text-white">
+          <thead className="bg-slate-50 text-slate-600">
             <tr>
               <th className="py-2 px-3 text-left">Data</th>
               <th className="py-2 px-3 text-left">Prefixo</th>
@@ -702,22 +702,22 @@ export default function AprovacaoAvarias() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="5" className="text-center p-4">Carregando...</td></tr>
+              <tr><td colSpan="5" className="p-6 text-center text-slate-500">Carregando...</td></tr>
             ) : avarias.length === 0 ? (
-              <tr><td colSpan="5" className="text-center p-4 text-gray-600">Nenhuma avaria pendente.</td></tr>
+              <tr><td colSpan="5" className="p-6 text-center text-slate-500">Nenhuma avaria pendente.</td></tr>
             ) : (
               avarias.map((a) => (
-                <tr key={a.id} className="border-t hover:bg-gray-50">
+                <tr key={a.id} className="border-t border-slate-100 transition-colors hover:bg-slate-50">
                   <td className="py-2 px-3">{new Date(a.created_at).toLocaleDateString('pt-BR')}</td>
                   <td className="py-2 px-3">{a.prefixo}</td>
                   <td className="py-2 px-3">{a.tipoOcorrencia}</td>
-                  <td className="py-2 px-3 font-medium">
+                  <td className="py-2 px-3 font-semibold text-slate-900">
                     {(a.valor_total_orcamento || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </td>
                   <td className="py-2 px-3">
                     <button
                       onClick={() => setSelected(a)}
-                      className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm flex items-center gap-1"
+                      className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
                     >
                       <FaEye /> Ver Detalhes
                     </button>

@@ -563,12 +563,12 @@ export default function AvariasEmRevisao() {
   }, []);
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">Pendências de Revisão</h1>
 
-      <div className="bg-white shadow rounded-lg overflow-x-auto">
-        <table className="min-w-full border">
-          <thead className="bg-yellow-600 text-white">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <table className="min-w-full">
+          <thead className="bg-slate-50 text-slate-600">
             <tr>
               <th className="py-2 px-3 text-left">Data</th>
               <th className="py-2 px-3 text-left">Prefixo</th>
@@ -584,19 +584,19 @@ export default function AvariasEmRevisao() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="8" className="text-center p-4">
+                <td colSpan="8" className="p-6 text-center text-slate-500">
                   Carregando...
                 </td>
               </tr>
             ) : avarias.length === 0 ? (
               <tr>
-                <td colSpan="8" className="text-center p-4 text-gray-600">
+                <td colSpan="8" className="p-6 text-center text-slate-500">
                   Nenhuma pendência.
                 </td>
               </tr>
             ) : (
               avarias.map((a) => (
-                <tr key={a.id} className="border-t">
+                <tr key={a.id} className="border-t border-slate-100 transition-colors hover:bg-slate-50">
                   <td className="py-2 px-3">
                     {a.dataAvaria ? new Date(a.dataAvaria).toLocaleDateString('pt-BR') : '—'}
                   </td>
@@ -614,7 +614,7 @@ export default function AvariasEmRevisao() {
                   <td className="py-2 px-3">{a.aprovado_por || '—'}</td>
 
                   <td className="py-2 px-3">
-                    <p className="text-sm bg-yellow-50 border rounded p-2 min-h-[48px]">
+                    <p className="min-h-[48px] rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-slate-700">
                       {a.observacao_operacao || 'Sem observação.'}
                     </p>
                   </td>
@@ -622,7 +622,7 @@ export default function AvariasEmRevisao() {
                   <td className="py-2 px-3">
                     <button
                       onClick={() => setSelected(a)}
-                      className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-sm flex items-center gap-1"
+                      className="flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
                     >
                       <FaEdit /> Editar
                     </button>

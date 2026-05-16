@@ -197,7 +197,7 @@ export default function LancarAvaria() {
 
   // --- RENDERIZAÇÃO (JSX) ---
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">Registrar Lançamento de Avaria</h1>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* --- Seção 1 & 2: Identificação e Detalhes --- */}

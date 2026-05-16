@@ -380,13 +380,19 @@ export default function CentralTratativas() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
+      <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <FaGavel className="text-violet-500" /> Central de Tratativas
+          <div className="text-xs font-black uppercase tracking-[0.24em] text-violet-600">
+            Tratativas
+          </div>
+          <h1 className="mt-3 flex items-center gap-3 text-3xl font-black text-slate-900">
+            <span className="rounded-2xl bg-violet-50 p-3 text-violet-600 shadow-sm">
+              <FaGavel />
+            </span>
+            Central de Tratativas
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="mt-2 text-sm text-slate-600">
             Acompanhe pendências, atrasos por SLA e resoluções das tratativas.
           </p>
         </div>
@@ -394,31 +400,31 @@ export default function CentralTratativas() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setViewMode(VIEW.ALL)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
+            className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-wide transition ${
               viewMode === VIEW.ALL
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                ? "bg-slate-900 text-white shadow-sm"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
-            VER TUDO
+            Ver tudo
           </button>
 
           <button
             onClick={() => setViewMode(VIEW.OPEN_ONLY)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border shadow-sm ${
+            className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-wide transition ${
               viewMode === VIEW.OPEN_ONLY
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
-            PENDENTES & ATRASADAS
+            Pendentes e atrasadas
           </button>
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border shadow-sm space-y-4">
+      <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Filtros</h2>
+          <h2 className="text-lg font-black text-slate-900">Filtros da central</h2>
           <p className="text-sm text-slate-500">
             Refine a visualização por texto, período, setor, prioridade e status.
           </p>
@@ -432,7 +438,7 @@ export default function CentralTratativas() {
               placeholder="Buscar (nome, chapa, descrição...)"
               value={filtros.busca}
               onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
             />
           </div>
 
@@ -440,14 +446,14 @@ export default function CentralTratativas() {
             type="date"
             value={filtros.dataInicio}
             onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
           />
 
           <input
             type="date"
             value={filtros.dataFim}
             onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className="p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
           />
 
           <div className="relative">
@@ -455,7 +461,7 @@ export default function CentralTratativas() {
             <select
               value={filtros.setor}
               onChange={(e) => setFiltros({ ...filtros, setor: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
             >
               <option value="">Todos os Setores</option>
               {setores.map((nome) => (
@@ -471,7 +477,7 @@ export default function CentralTratativas() {
             <select
               value={filtros.prioridade}
               onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
             >
               <option value="">Todas as Prioridades</option>
               <option value="Gravíssima">Gravíssima</option>
@@ -486,7 +492,7 @@ export default function CentralTratativas() {
             <select
               value={filtros.status}
               onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
-              className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium bg-white text-slate-700"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
             >
               <option value="">Todos os Status</option>
               <option value="Pendente">Pendente</option>
@@ -499,14 +505,14 @@ export default function CentralTratativas() {
         <div className="flex justify-end gap-2 flex-wrap">
           <button
             onClick={limparFiltros}
-            className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-bold text-sm"
+            className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
           >
             Limpar
           </button>
           <button
             onClick={aplicar}
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-400 font-bold text-sm"
+            className="rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:bg-slate-400"
           >
             {loading ? "Aplicando..." : "Aplicar"}
           </button>
@@ -518,8 +524,8 @@ export default function CentralTratativas() {
           terceira volta ao padrão.
         </div>
 
-        <div className="rounded-xl border bg-slate-50 p-3">
-          <div className="text-xs font-bold text-slate-700 mb-2">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-slate-700">
             Regra de SLA para considerar como <span className="text-red-700">ATRASADA</span>
           </div>
 
@@ -575,11 +581,11 @@ export default function CentralTratativas() {
 
       <div className="space-y-3 lg:hidden">
         {loading ? (
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
+          <div className="rounded-3xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
             Carregando...
           </div>
         ) : tratativasOrdenadas.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
+          <div className="rounded-3xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
             Nenhuma tratativa encontrada.
           </div>
         ) : (
@@ -587,7 +593,7 @@ export default function CentralTratativas() {
             const concluida = isConcluidaOuResolvida(t?.status);
 
             return (
-              <div key={t.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div key={t.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-bold text-slate-900">
@@ -633,14 +639,14 @@ export default function CentralTratativas() {
                   {concluida ? (
                     <button
                       onClick={() => navigate(`/consultar/${t.id}`)}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-900"
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-800 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-900"
                     >
                       <FaEye size={13} /> Consultar
                     </button>
                   ) : (
                     <button
                       onClick={() => navigate(`/tratar/${t.id}`)}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
                     >
                       <FaGavel size={13} /> Tratar
                     </button>
@@ -652,7 +658,7 @@ export default function CentralTratativas() {
         )}
       </div>
 
-      <div className="hidden overflow-x-auto rounded-xl border bg-white shadow-sm lg:block">
+      <div className="hidden overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm lg:block">
         <table className="w-full text-left min-w-[1200px]">
           <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs md:text-sm uppercase tracking-wider select-none">
             <tr>
@@ -732,7 +738,7 @@ export default function CentralTratativas() {
                 const concluida = isConcluidaOuResolvida(t?.status);
 
                 return (
-                  <tr key={t.id} className="hover:bg-blue-50/40 transition-colors">
+                  <tr key={t.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-4 py-4 text-slate-500 font-mono text-sm whitespace-nowrap">
                       {t.created_at
                         ? new Date(t.created_at).toLocaleDateString("pt-BR")
@@ -764,14 +770,14 @@ export default function CentralTratativas() {
                       {concluida ? (
                         <button
                           onClick={() => navigate(`/consultar/${t.id}`)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 text-white rounded font-bold text-xs shadow-sm hover:bg-slate-800 transition-all whitespace-nowrap"
+                          className="flex items-center gap-1.5 rounded-2xl bg-slate-800 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-slate-900 whitespace-nowrap"
                         >
                           <FaEye size={12} /> Consultar
                         </button>
                       ) : (
                         <button
                           onClick={() => navigate(`/tratar/${t.id}`)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded font-bold text-xs shadow-sm hover:bg-blue-700 transition-all whitespace-nowrap"
+                          className="flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 whitespace-nowrap"
                         >
                           <FaGavel size={12} /> Tratar
                         </button>
@@ -790,7 +796,7 @@ export default function CentralTratativas() {
 
 function CardResumo({ titulo, valor, icone, border }) {
   return (
-    <div className={`bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 ${border}`}>
+    <div className={`flex items-center justify-between rounded-3xl border border-slate-200 bg-white p-4 shadow-sm border-l-4 ${border}`}>
       <div>
         <p className="text-sm text-slate-500 font-bold">{titulo}</p>
         <p className="text-2xl font-black text-slate-800">{valor}</p>

@@ -6,10 +6,10 @@ import CobrancaDetalheModal from "../../components/CobrancaDetalheModal";
 
 function CardResumo({ titulo, valor, cor, subValor = null }) {
   return (
-    <div className={`${cor} rounded-lg shadow p-5 text-center`}>
-      <h3 className="text-sm font-medium text-gray-600">{titulo}</h3>
-      <p className="text-3xl font-bold mt-2 text-gray-800">{valor}</p>
-      {subValor !== null && <p className="text-xs font-medium mt-1">{subValor}</p>}
+    <div className={`${cor} rounded-3xl border border-white/60 p-5 text-left shadow-sm`}>
+      <h3 className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">{titulo}</h3>
+      <p className="mt-3 text-3xl font-black text-slate-900">{valor}</p>
+      {subValor !== null && <p className="mt-2 text-sm font-semibold">{subValor}</p>}
     </div>
   );
 }
@@ -368,45 +368,51 @@ export default function CobrancasAvarias() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-4 text-gray-700">Central de Cobranças de Avarias</h1>
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Avarias</div>
+        <h1 className="mt-3 text-3xl font-black text-slate-900">Central de Cobranças de Avarias</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Aparência alinhada ao padrão novo, mantendo toda a leitura e o fluxo atual da central.
+        </p>
+      </div>
 
       {/* Filtros */}
-      <div className="bg-white p-4 shadow rounded-lg mb-6 flex flex-wrap gap-3 items-center">
-        <div className="flex items-center border rounded-md px-2 flex-1 min-w-[220px]">
-          <FaSearch className="text-gray-400 mr-2" />
+      <div className="flex flex-wrap items-end gap-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex min-w-[220px] flex-1 items-center rounded-2xl border border-slate-200 bg-slate-50 px-3">
+          <FaSearch className="mr-2 text-slate-400" />
           <input
             type="text"
             placeholder="Buscar (motorista, prefixo, nº avaria...)"
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
-            className="flex-1 outline-none py-1"
+            className="flex-1 bg-transparent py-3 text-sm font-medium text-slate-700 outline-none"
           />
         </div>
 
         {/* Período */}
         <div className="flex flex-wrap gap-2 items-center">
           <div className="flex flex-col">
-            <label className="text-xs text-gray-500 mb-1">Início</label>
+            <label className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Início</label>
             <input
               type="date"
               value={dataInicio}
               onChange={(e) => setDataInicio(e.target.value)}
-              className="border rounded-md p-2 text-sm"
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700 outline-none"
             />
           </div>
           <div className="flex flex-col">
-            <label className="text-xs text-gray-500 mb-1">Fim</label>
+            <label className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Fim</label>
             <input
               type="date"
               value={dataFim}
               onChange={(e) => setDataFim(e.target.value)}
-              className="border rounded-md p-2 text-sm"
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700 outline-none"
             />
           </div>
         </div>
 
-        <select className="border rounded-md p-2" value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
+        <select className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700" value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
           <option value="">Todos os Status</option>
           <option value="Pendente">Pendentes</option>
           <option value="Cobrada">Cobradas</option>
@@ -414,7 +420,7 @@ export default function CobrancasAvarias() {
         </select>
 
         <select
-          className="border rounded-md p-2"
+          className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700"
           value={origemFiltro}
           onChange={(e) => setOrigemFiltro(e.target.value)}
           title="Filtrar por origem"
@@ -432,14 +438,14 @@ export default function CobrancasAvarias() {
             setDataInicio("");
             setDataFim("");
           }}
-          className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-4 py-2"
+          className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
         >
           Limpar
         </button>
       </div>
 
       {/* Cards resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <CardResumo titulo="Total Aprovado" valor={resumo.total} subValor={formatCurrency(resumo.totalAprovadoValue)} cor="bg-blue-100 text-blue-700" />
         <CardResumo titulo="Pendentes Cobrança" valor={resumo.pendentes} subValor={formatCurrency(resumo.pendentesTotalValue)} cor="bg-yellow-100 text-yellow-700" />
         <CardResumo titulo="Cobradas" valor={resumo.cobradas} subValor={formatCurrency(resumo.cobradasTotalValue)} cor="bg-green-100 text-green-700" />
@@ -447,44 +453,44 @@ export default function CobrancasAvarias() {
       </div>
 
       {/* Tabela */}
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full border-collapse">
           <thead>
-            <tr className="bg-blue-600 text-white text-left">
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("numero_da_avaria")}>
+            <tr className="bg-slate-50 text-left text-xs font-black uppercase tracking-[0.18em] text-slate-600">
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("numero_da_avaria")}>
                 Nº Avaria{renderSortIndicator("numero_da_avaria")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("data_avaria")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("data_avaria")}>
                 Data da Avaria{renderSortIndicator("data_avaria")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("aprovado_em")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("aprovado_em")}>
                 Data Aprovação{renderSortIndicator("aprovado_em")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("data_cobranca")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("data_cobranca")}>
                 Data Cobrança{renderSortIndicator("data_cobranca")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("origem")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("origem")}>
                 Origem{renderSortIndicator("origem")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("delta_dias")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("delta_dias")}>
                 Δ (dias){renderSortIndicator("delta_dias")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("motoristaId")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("motoristaId")}>
                 Motorista{renderSortIndicator("motoristaId")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("prefixo")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("prefixo")}>
                 Prefixo{renderSortIndicator("prefixo")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("valor_total_orcamento")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("valor_total_orcamento")}>
                 Valor Orçado{renderSortIndicator("valor_total_orcamento")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("valor_cobrado")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("valor_cobrado")}>
                 Valor Cobrado{renderSortIndicator("valor_cobrado")}
               </th>
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("status_cobranca")}>
+              <th className="p-4 cursor-pointer select-none hover:bg-slate-100" onClick={() => handleSort("status_cobranca")}>
                 Status Cobrança{renderSortIndicator("status_cobranca")}
               </th>
-              <th className="p-3">Ações</th>
+              <th className="p-4">Ações</th>
             </tr>
           </thead>
 
@@ -508,14 +514,14 @@ export default function CobrancasAvarias() {
                 const origem = normalizarOrigem(pickOrigemCobranca(c)) || "-";
 
                 return (
-                  <tr key={c.id} className="border-b hover:bg-gray-50">
-                    <td className="p-3 text-gray-700">{c.numero_da_avaria || "-"}</td>
-                    <td className="p-3 text-gray-700">{formatarDataAvaria(c)}</td>
-                    <td className="p-3 text-gray-700">{formatarDataAprovacao(c)}</td>
-                    <td className="p-3 text-gray-700">{formatarDataCobranca(c)}</td>
-                    <td className="p-3 text-gray-700">{origem}</td>
+                  <tr key={c.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50">
+                    <td className="p-4 text-slate-700">{c.numero_da_avaria || "-"}</td>
+                    <td className="p-4 text-slate-700">{formatarDataAvaria(c)}</td>
+                    <td className="p-4 text-slate-700">{formatarDataAprovacao(c)}</td>
+                    <td className="p-4 text-slate-700">{formatarDataCobranca(c)}</td>
+                    <td className="p-4 text-slate-700">{origem}</td>
 
-                    <td className="p-3">
+                    <td className="p-4">
                       {deltaDias !== null ? (
                         <span className={`font-semibold ${deltaDias > 7 ? "text-red-600" : "text-green-600"}`}>
                           {deltaDias}d
@@ -525,15 +531,15 @@ export default function CobrancasAvarias() {
                       )}
                     </td>
 
-                    <td className="p-3 text-gray-700">{c.motoristaId || "-"}</td>
-                    <td className="p-3 text-gray-700">{c.prefixo || "-"}</td>
+                    <td className="p-4 text-slate-700">{c.motoristaId || "-"}</td>
+                    <td className="p-4 text-slate-700">{c.prefixo || "-"}</td>
 
-                    <td className="p-3 text-gray-700">{formatCurrency(c.valor_total_orcamento)}</td>
-                    <td className="p-3 text-gray-900 font-medium">{formatCurrency(c.valor_cobrado)}</td>
+                    <td className="p-4 text-slate-700">{formatCurrency(c.valor_total_orcamento)}</td>
+                    <td className="p-4 font-medium text-slate-900">{formatCurrency(c.valor_cobrado)}</td>
 
-                    <td className="p-3">
+                    <td className="p-4">
                       <span
-                        className={`px-2 py-1 rounded text-xs font-medium ${
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
                           statusCobranca === "Cobrada"
                             ? "bg-green-100 text-green-800"
                             : statusCobranca === "Cancelada"
@@ -545,18 +551,18 @@ export default function CobrancasAvarias() {
                       </span>
                     </td>
 
-                    <td className="p-3">
+                    <td className="p-4">
                       {statusCobranca === "Pendente" ? (
                         <button
                           onClick={() => handleVerDetalhes(c)}
-                          className="flex items-center gap-1 bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600 text-sm"
+                          className="flex items-center gap-1 rounded-2xl bg-yellow-500 px-3 py-2 text-sm font-bold text-white transition hover:bg-yellow-600"
                         >
                           💰 Cobrar
                         </button>
                       ) : statusCobranca === "Cobrada" ? (
                         <button
                           onClick={() => handleVerDetalhes(c)}
-                          className="flex items-center gap-1 bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 text-sm"
+                          className="flex items-center gap-1 rounded-2xl bg-green-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-green-700"
                         >
                           ✏️ Editar
                         </button>
@@ -564,7 +570,7 @@ export default function CobrancasAvarias() {
                         // ✅ ALTERADO: Cancelada agora mostra Editar (não mais só Detalhes)
                         <button
                           onClick={() => handleVerDetalhes(c)}
-                          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
+                          className="flex items-center gap-1 rounded-2xl bg-blue-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
                         >
                           ✏️ Editar
                         </button>

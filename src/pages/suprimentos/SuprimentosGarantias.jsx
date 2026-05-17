@@ -131,11 +131,13 @@ function ModalShell({ onClose, title, eyebrow, subtitle = null, actions = null, 
 
 function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
   const [form, setForm] = useState(QUICK_FORM);
+  const [newFiles, setNewFiles] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setForm(QUICK_FORM);
+    setNewFiles([]);
   }, [open]);
 
   if (!open) return null;
@@ -145,6 +147,11 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
     setSaving(true);
 
     try {
+      const uploaded = await uploadSuprimentosFiles(
+        newFiles,
+        `garantias/${form.prefixo || "sem-prefixo"}`
+      );
+
       const numeroControle = await generateNextControlNumber("suprimentos_garantias", "GAR");
       const payload = {
         numero_controle: numeroControle,
@@ -158,7 +165,7 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
         km_falha: safeNumber(form.km_falha),
         data_falha: form.data_falha || null,
         tipo_solicitacao: form.tipo_solicitacao || null,
-        anexos: [],
+        anexos: uploaded,
         updated_at: new Date().toISOString(),
         ...buildOpenedBy(user),
       };
@@ -270,6 +277,16 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
             </select>
           </Field>
         </div>
+
+        <Panel title="Anexos iniciais" subtitle="Se ja tiver fotos ou videos da garantia, pode incluir na abertura.">
+          <AttachmentInput
+            existingUrls={[]}
+            onExistingUrlsChange={() => {}}
+            newFiles={newFiles}
+            onNewFilesChange={setNewFiles}
+            helperText="Pode anexar varias fotos e varios videos ja na criacao."
+          />
+        </Panel>
 
         <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
           <ActionButton onClick={onClose}>Cancelar</ActionButton>

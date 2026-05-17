@@ -135,6 +135,8 @@ export function AttachmentInput({
   newFiles,
   onNewFilesChange,
   label = "Anexos",
+  accept = "image/*,video/*",
+  helperText = "Aceita múltiplas fotos e vídeos.",
 }) {
   const fileNames = useMemo(() => (newFiles || []).map((file) => file?.name).filter(Boolean), [newFiles]);
 
@@ -162,6 +164,7 @@ export function AttachmentInput({
           <input
             type="file"
             multiple
+            accept={accept}
             className="hidden"
             onChange={(event) => {
               appendFiles(event.target.files);
@@ -170,6 +173,8 @@ export function AttachmentInput({
           />
         </label>
       </div>
+
+      {helperText ? <p className="text-xs font-medium text-slate-500">{helperText}</p> : null}
 
       {existingUrls?.length ? (
         <div className="space-y-2">

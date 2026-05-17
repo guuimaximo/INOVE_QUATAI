@@ -1,6 +1,7 @@
 import { supabase } from "../../supabase";
 
 export const SUPRIMENTOS_BUCKET = "suprimentos";
+const TESTE_INTERCORRENCIAS_MARKER = "__teste_intercorrencias__:";
 
 export const GARANTIA_TIPOS_SOLICITACAO = ["Ressarcimento", "Peça nova"];
 export const GARANTIA_RESULTADOS = ["Aprovada", "Negada"];
@@ -179,14 +180,94 @@ export function deriveGarantiaMeta(row) {
   };
 }
 
+function normalizeIntercorrencia(item, index = 0) {
+  if (!item || typeof item !== "object") return null;
+  const data = String(item.data || "").trim();
+  const km = safeNumber(item.km);
+  const descricao = String(item.descricao || "").trim();
+
+  if (!data && km === null && !descricao) return null;
+
+  return {
+    id: item.id || `intercorrencia-${Date.now()}-${index}`,
+    data,
+    km: km === null ? "" : km,
+    descricao,
+  };
+}
+
+function parseIntercorrenciasPayload(value) {
+  if (!value || typeof value !== "string") return null;
+  if (!value.startsWith(TESTE_INTERCORRENCIAS_MARKER)) return null;
+
+  try {
+    const parsed = JSON.parse(value.slice(TESTE_INTERCORRENCIAS_MARKER.length));
+    return Array.isArray(parsed?.intercorrencias) ? parsed.intercorrencias : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseTesteIntercorrencias(row) {
+  const fromPayload = parseIntercorrenciasPayload(row?.descricao_falha)
+    ?.map((item, index) => normalizeIntercorrencia(item, index))
+    .filter(Boolean);
+
+  if (fromPayload?.length) return fromPayload;
+
+  const legacy = normalizeIntercorrencia(
+    {
+      id: "legacy",
+      data: row?.data_falha || "",
+      km: row?.km_falha ?? "",
+      descricao: row?.falha_registrada ? row?.descricao_falha || "" : "",
+    },
+    0
+  );
+
+  return legacy ? [legacy] : [];
+}
+
+export function serializeTesteIntercorrencias(intercorrencias) {
+  const cleaned = (intercorrencias || [])
+    .map((item, index) => normalizeIntercorrencia(item, index))
+    .filter(Boolean)
+    .map((item) => ({
+      id: item.id,
+      data: item.data || null,
+      km: safeNumber(item.km),
+      descricao: item.descricao || null,
+    }));
+
+  if (!cleaned.length) return null;
+
+  return `${TESTE_INTERCORRENCIAS_MARKER}${JSON.stringify({
+    intercorrencias: cleaned,
+  })}`;
+}
+
+export function getTesteLastIntercorrencia(rowOrIntercorrencias) {
+  const list = Array.isArray(rowOrIntercorrencias)
+    ? rowOrIntercorrencias
+    : parseTesteIntercorrencias(rowOrIntercorrencias);
+
+  return [...list]
+    .filter(Boolean)
+    .sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")))
+    .at(-1) || null;
+}
+
 export function deriveTesteMeta(row) {
   const resultado = String(row?.resultado_final || "").trim();
-  const concluido = Boolean(row?.encerrado_em) || Boolean(resultado);
+  const concluiDo = Boolean(row?.encerrado_em) || Boolean(resultado);
+  const intercorrencias = parseTesteIntercorrencias(row);
+  const kmAtual = safeNumber(row?.km_atual);
+  const kmInicial = safeNumber(row?.km_inicial);
 
   let fase = "Iniciado";
   let tone = "slate";
 
-  if (concluido) {
+  if (concluiDo) {
     if (resultado === "Aprovado") {
       fase = "Finalizado aprovado";
       tone = "emerald";
@@ -197,19 +278,19 @@ export function deriveTesteMeta(row) {
       fase = "Finalizado";
       tone = "emerald";
     }
-  } else if (row?.falha_registrada) {
-    fase = "Com falha registrada";
+  } else if (intercorrencias.length > 0) {
+    fase = "Com intercorrencia";
     tone = "rose";
-  } else if (safeNumber(row?.km_atual) && safeNumber(row?.km_inicial) !== safeNumber(row?.km_atual)) {
+  } else if (kmAtual !== null && kmInicial !== null && kmAtual > kmInicial) {
     fase = "Em acompanhamento";
     tone = "cyan";
   }
 
   return {
-    status: concluido ? "Concluído" : "Ativo",
+    status: concluiDo ? "Concluído" : "Ativo",
     fase,
     tone,
-    concluido,
+    concluido: concluiDo,
   };
 }
 

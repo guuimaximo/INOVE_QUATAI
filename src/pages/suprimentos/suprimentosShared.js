@@ -3,6 +3,7 @@ import { supabase } from "../../supabase";
 export const SUPRIMENTOS_BUCKET = "suprimentos";
 const TESTE_INTERCORRENCIAS_MARKER = "__teste_intercorrencias__:";
 
+export const GARANTIA_TIPOS = ["Peca comprada", "Veiculo novo"];
 export const GARANTIA_TIPOS_SOLICITACAO = ["Ressarcimento", "Peça nova"];
 export const GARANTIA_RESULTADOS = ["Aprovada", "Negada"];
 export const GARANTIA_TIPOS_RETORNO = ["Crédito", "Peça nova"];
@@ -45,6 +46,14 @@ export function formatCurrencyBR(value) {
 export function formatKm(value) {
   if (value === null || value === undefined || value === "") return "--";
   return `${Number(value || 0).toLocaleString("pt-BR")} km`;
+}
+
+export function addDaysToISODate(value, days) {
+  if (!value || days === null || days === undefined || days === "") return "";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + Number(days || 0));
+  return toISODate(date);
 }
 
 export function safeNumber(value) {
@@ -136,6 +145,8 @@ export function deriveGarantiaMeta(row) {
   const retorno = String(row?.tipo_retorno || "").trim();
   const retornoCredito = retorno === "Credito" || retorno === "Crédito";
   const retornoPeca = retorno === "Peca nova" || retorno === "Peça nova";
+  const prazoRetorno = safeNumber(row?.prazo_retorno_dias);
+  const limiteRetorno = addDaysToISODate(row?.retirada_fornecedor_em, prazoRetorno);
 
   const concluida =
     Boolean(row?.encerrada_em) ||
@@ -167,6 +178,11 @@ export function deriveGarantiaMeta(row) {
   } else if (resultado === "Negada") {
     fase = "Negada";
     tone = "rose";
+  } else if (row?.retirada_fornecedor_em) {
+    fase = limiteRetorno
+      ? `Aguardando retorno ate ${formatDateBR(limiteRetorno)}`
+      : "Peca retirada pelo fornecedor";
+    tone = "amber";
   } else if (row?.protocolo_fornecedor || row?.enviado_fornecedor_em) {
     fase = "Enviada ao fornecedor";
     tone = "amber";
@@ -177,6 +193,7 @@ export function deriveGarantiaMeta(row) {
     fase,
     tone,
     concluida,
+    limiteRetorno,
   };
 }
 
@@ -259,7 +276,7 @@ export function getTesteLastIntercorrencia(rowOrIntercorrencias) {
 
 export function deriveTesteMeta(row) {
   const resultado = String(row?.resultado_final || "").trim();
-  const concluiDo = Boolean(row?.encerrado_em) || Boolean(resultado);
+  const concluiu = Boolean(row?.encerrado_em) || Boolean(resultado);
   const intercorrencias = parseTesteIntercorrencias(row);
   const kmAtual = safeNumber(row?.km_atual);
   const kmInicial = safeNumber(row?.km_inicial);
@@ -267,7 +284,7 @@ export function deriveTesteMeta(row) {
   let fase = "Iniciado";
   let tone = "slate";
 
-  if (concluiDo) {
+  if (concluiu) {
     if (resultado === "Aprovado") {
       fase = "Finalizado aprovado";
       tone = "emerald";
@@ -287,10 +304,10 @@ export function deriveTesteMeta(row) {
   }
 
   return {
-    status: concluiDo ? "Concluído" : "Ativo",
+    status: concluiu ? "Concluído" : "Ativo",
     fase,
     tone,
-    concluido: concluiDo,
+    concluido: concluiu,
   };
 }
 

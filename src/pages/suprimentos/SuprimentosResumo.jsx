@@ -68,9 +68,9 @@ export default function SuprimentosResumo() {
 
   const resumo = useMemo(() => {
     const garantiasAbertas = garantias.filter((row) => deriveGarantiaMeta(row).status === "Aberta");
-    const garantiasConcluidas = garantias.filter((row) => deriveGarantiaMeta(row).status === "ConcluÃ­da");
+    const garantiasConcluidas = garantias.filter((row) => deriveGarantiaMeta(row).status === "Concluída");
     const testesAtivos = testes.filter((row) => deriveTesteMeta(row).status === "Ativo");
-    const testesConcluidos = testes.filter((row) => deriveTesteMeta(row).status === "ConcluÃ­do");
+    const testesConcluidos = testes.filter((row) => deriveTesteMeta(row).status === "Concluído");
     const valorEmGarantia = garantiasAbertas.reduce((sum, row) => sum + Number(row.valor_peca || 0), 0);
     const valorRecuperado = garantias
       .filter((row) => row.resultado === "Aprovada")

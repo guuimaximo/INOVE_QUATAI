@@ -195,7 +195,7 @@ export default function ConsultarTratativa() {
   const conclusaoObs = ultima?.observacoes || 'Sem observações registradas.'
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 text-slate-800">
+    <div className="min-h-screen space-y-5 bg-slate-50 p-4 md:p-6 text-slate-800">
       <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
         <div className="space-y-3">
           <button

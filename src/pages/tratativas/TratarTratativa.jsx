@@ -1313,6 +1313,13 @@ export default function TratarTratativa() {
           </button>
         </div>
       </div>
+
+      <FileViewerModal
+        open={Boolean(viewerFile?.url)}
+        url={viewerFile?.url || ""}
+        name={viewerFile?.name || ""}
+        onClose={() => setViewerFile(null)}
+      />
     </div>
   );
 }
@@ -1341,13 +1348,6 @@ function ResumoCard({ titulo, valor, subtitulo, icon, border }) {
         </div>
         <div className="text-2xl opacity-80">{icon}</div>
       </div>
-
-      <FileViewerModal
-        open={Boolean(viewerFile?.url)}
-        url={viewerFile?.url || ""}
-        name={viewerFile?.name || ""}
-        onClose={() => setViewerFile(null)}
-      />
     </div>
   );
 }
@@ -1372,4 +1372,5 @@ function Item({ titulo, valor, className, icon }) {
     </div>
   );
 }
+
 

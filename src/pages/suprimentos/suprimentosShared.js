@@ -81,6 +81,28 @@ export function sanitizeFileName(name) {
     .replace(/[^a-zA-Z0-9._-]+/g, "_");
 }
 
+function parseControlNumber(value, prefix) {
+  const match = String(value || "").match(new RegExp(`^${prefix}-(\\d+)$`, "i"));
+  return match ? Number(match[1]) : 0;
+}
+
+export async function generateNextControlNumber(table, prefix) {
+  const { data, error } = await supabase
+    .from(table)
+    .select("numero_controle")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+
+  const maxValue = (data || []).reduce((max, row) => {
+    const current = parseControlNumber(row?.numero_controle, prefix);
+    return current > max ? current : max;
+  }, 0);
+
+  return `${prefix}-${String(maxValue + 1).padStart(5, "0")}`;
+}
+
 export function buildOpenedBy(user) {
   return {
     aberto_por_id: Number(user?.usuario_id || user?.id || 0) || null,

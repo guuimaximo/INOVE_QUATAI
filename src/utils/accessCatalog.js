@@ -55,6 +55,10 @@ export const APP_ACCESS_PAGES = [
   { key: "estoque_diesel_planejamento_controle", label: "Programacao de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/programacao", patterns: ["/estoque-diesel/programacao", "/estoque-diesel/programacao/:ano/:mes", "/estoque-diesel/planejamento-controle"] },
   { key: "estoque_diesel_parametros", label: "Parametros de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/parametros", patterns: ["/estoque-diesel/parametros"] },
 
+  { key: "suprimentos_resumo", label: "Suprimentos Resumo", category: "Suprimentos", path: "/suprimentos/resumo", patterns: ["/suprimentos/resumo", "/suprimentos"] },
+  { key: "suprimentos_garantias", label: "Suprimentos Garantias", category: "Suprimentos", path: "/suprimentos/garantias", patterns: ["/suprimentos/garantias"] },
+  { key: "suprimentos_testes", label: "Suprimentos Testes", category: "Suprimentos", path: "/suprimentos/testes", patterns: ["/suprimentos/testes"] },
+
   { key: "estrutura_fisica_solicitacao", label: "Estrutura Fisica Solicitacao", category: "Estrutura Fisica", path: "/estrutura-fisica/solicitacao", patterns: ["/estrutura-fisica/solicitacao"] },
   { key: "estrutura_fisica_central", label: "Estrutura Fisica Central", category: "Estrutura Fisica", path: "/estrutura-fisica/central", patterns: ["/estrutura-fisica/central", "/estrutura-fisica"] },
   { key: "estrutura_fisica_consultar", label: "Estrutura Fisica Consultar", category: "Estrutura Fisica", path: "/estrutura-fisica/consultar/:id", patterns: ["/estrutura-fisica/consultar/:id"] },
@@ -147,6 +151,9 @@ export const DEFAULT_LEVEL_PROFILES = [
       "embarcados_reparo_detalhe",
       "embarcados_reparo_execucao",
       "embarcados_envio_manutencao",
+      "suprimentos_resumo",
+      "suprimentos_garantias",
+      "suprimentos_testes",
       "pessoas_funcionarios",
       "pessoas_ferias",
       "pessoas_organograma",

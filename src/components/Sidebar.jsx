@@ -36,6 +36,8 @@ import {
   FaCalendarAlt,
   FaSitemap,
   FaBriefcase,
+  FaBoxes,
+  FaFlask,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -101,6 +103,7 @@ export default function Sidebar() {
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
   const [embarcadosOpen, setEmbarcadosOpen] = useState(false);
   const [estruturaFisicaOpen, setEstruturaFisicaOpen] = useState(false);
+  const [suprimentosOpen, setSuprimentosOpen] = useState(false);
   const [pessoasOpen, setPessoasOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
@@ -213,6 +216,16 @@ export default function Sidebar() {
         ],
       },
 
+      suprimentos: {
+        label: "Suprimentos",
+        icon: <FaBoxes />,
+        tabs: [
+          { path: "/suprimentos/resumo", label: "Resumo", icon: <FaChartPie /> },
+          { path: "/suprimentos/garantias", label: "Garantias", icon: <FaShieldAlt /> },
+          { path: "/suprimentos/testes", label: "Testes", icon: <FaFlask /> },
+        ],
+      },
+
       tratativas: [
         { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie /> },
         { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
@@ -266,6 +279,7 @@ export default function Sidebar() {
     if (path.startsWith("/sos") || path.startsWith("/km-rodado")) setIntervencoesOpen(true);
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
+    if (path.startsWith("/suprimentos")) setSuprimentosOpen(true);
     if (path.startsWith("/funcionarios") || path.startsWith("/organograma")) setPessoasOpen(true);
     if (path.startsWith("/usuarios") || path.startsWith("/niveis-acesso")) setConfigOpen(true);
   }, [location.pathname]);
@@ -285,6 +299,7 @@ export default function Sidebar() {
   const showDesempenhoDiesel = links.desempenhoDiesel.tabs.some((t) => canSee(t.path));
   const showEstoqueDiesel = links.estoqueDiesel.tabs.some((t) => canSee(t.path));
   const showEstruturaFisica = links.estruturaFisica.tabs.some((t) => canSee(t.path));
+  const showSuprimentos = links.suprimentos.tabs.some((t) => canSee(t.path));
   const showPessoas = links.pessoas.tabs.some((t) => canSee(t.path));
   const showTratativas = links.tratativas.some((l) => canSee(l.path));
   const showAvarias = links.avarias.some((l) => canSee(l.path));
@@ -493,6 +508,35 @@ export default function Sidebar() {
             {estruturaFisicaOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.estruturaFisica.tabs.map((t) =>
+                  canSee(t.path) ? (
+                    <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
+                      {t.icon}
+                      <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {showSuprimentos && (
+          <>
+            <button
+              onClick={() => setSuprimentosOpen(!suprimentosOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {links.suprimentos.icon}
+                <span className="whitespace-nowrap truncate">{links.suprimentos.label}</span>
+              </div>
+              {suprimentosOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {suprimentosOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.suprimentos.tabs.map((t) =>
                   canSee(t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
                       {t.icon}

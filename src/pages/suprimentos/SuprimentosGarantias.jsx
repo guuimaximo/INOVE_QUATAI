@@ -28,8 +28,10 @@ import {
 } from "./SuprimentosUI";
 import {
   GARANTIA_RESULTADOS,
+  GARANTIA_TIPOS,
   GARANTIA_TIPOS_RETORNO,
   GARANTIA_TIPOS_SOLICITACAO,
+  addDaysToISODate,
   buildOpenedBy,
   deriveGarantiaMeta,
   formatCurrencyBR,
@@ -49,6 +51,7 @@ const QUICK_FORM = {
   fornecedor: "",
   data_compra: "",
   valor_peca: "",
+  tipo_garantia: "Peca comprada",
   prefixo: "",
   km_instalacao: "",
   km_falha: "",
@@ -59,6 +62,8 @@ const QUICK_FORM = {
 const DETAIL_FORM = {
   protocolo_fornecedor: "",
   enviado_fornecedor_em: "",
+  retirada_fornecedor_em: "",
+  prazo_retorno_dias: "",
   observacao: "",
   resultado: "",
   tipo_retorno: "",
@@ -160,6 +165,7 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
         fornecedor: form.fornecedor.trim(),
         data_compra: form.data_compra || null,
         valor_peca: safeNumber(form.valor_peca) ?? 0,
+        tipo_garantia: form.tipo_garantia || "Peca comprada",
         prefixo: form.prefixo.trim(),
         km_instalacao: safeNumber(form.km_instalacao),
         km_falha: safeNumber(form.km_falha),
@@ -226,6 +232,19 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
               onChange={(e) => setForm((prev) => ({ ...prev, valor_peca: e.target.value }))}
               className={inputClass}
             />
+          </Field>
+          <Field label="Tipo da garantia">
+            <select
+              value={form.tipo_garantia}
+              onChange={(e) => setForm((prev) => ({ ...prev, tipo_garantia: e.target.value }))}
+              className={inputClass}
+            >
+              {GARANTIA_TIPOS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Prefixo" required>
             <CampoPrefixo
@@ -303,6 +322,8 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
   const [form, setForm] = useState(DETAIL_FORM);
   const [existingAttachments, setExistingAttachments] = useState([]);
   const [newFiles, setNewFiles] = useState([]);
+  const [existingLaudoUrls, setExistingLaudoUrls] = useState([]);
+  const [newLaudoFiles, setNewLaudoFiles] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -310,6 +331,8 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
     setForm({
       protocolo_fornecedor: item.protocolo_fornecedor || "",
       enviado_fornecedor_em: item.enviado_fornecedor_em || "",
+      retirada_fornecedor_em: item.retirada_fornecedor_em || "",
+      prazo_retorno_dias: item.prazo_retorno_dias ?? "",
       observacao: item.observacao || "",
       resultado: item.resultado || "",
       tipo_retorno: item.tipo_retorno || "",
@@ -321,6 +344,8 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
     });
     setExistingAttachments(Array.isArray(item.anexos) ? item.anexos : []);
     setNewFiles([]);
+    setExistingLaudoUrls(Array.isArray(item.laudo_urls) ? item.laudo_urls : []);
+    setNewLaudoFiles([]);
   }, [item, open]);
 
   if (!open || !item) return null;
@@ -334,10 +359,16 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
         newFiles,
         `garantias/${item.prefixo || "sem-prefixo"}`
       );
+      const uploadedLaudos = await uploadSuprimentosFiles(
+        newLaudoFiles,
+        `garantias/${item.prefixo || "sem-prefixo"}/laudos`
+      );
 
       const payload = {
         protocolo_fornecedor: form.protocolo_fornecedor.trim() || null,
         enviado_fornecedor_em: form.enviado_fornecedor_em || null,
+        retirada_fornecedor_em: form.retirada_fornecedor_em || null,
+        prazo_retorno_dias: safeNumber(form.prazo_retorno_dias),
         observacao: form.observacao.trim() || null,
         resultado: form.resultado || null,
         tipo_retorno: form.resultado === "Aprovada" ? form.tipo_retorno || null : null,
@@ -347,6 +378,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
         recebida_em: form.recebida_em || null,
         encerrada_em: form.encerrada_em || null,
         anexos: [...existingAttachments, ...uploaded],
+        laudo_urls: [...existingLaudoUrls, ...uploadedLaudos],
         updated_at: new Date().toISOString(),
       };
 
@@ -364,6 +396,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
 
   const meta = deriveGarantiaMeta({ ...item, ...form });
   const showApprovedFields = form.resultado === "Aprovada";
+  const prazoRetornoData = addDaysToISODate(form.retirada_fornecedor_em, form.prazo_retorno_dias);
 
   return (
     <ModalShell
@@ -381,6 +414,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Detail label="Controle" value={item.numero_controle} />
+          <Detail label="Tipo da garantia" value={item.tipo_garantia || "Peca comprada"} />
           <Detail label="Peca" value={item.peca} />
           <Detail label="Codigo" value={item.codigo_peca} />
           <Detail label="Fornecedor" value={item.fornecedor} />
@@ -404,6 +438,32 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               value={form.enviado_fornecedor_em}
               onChange={(e) => setForm((prev) => ({ ...prev, enviado_fornecedor_em: e.target.value }))}
               className={inputClass}
+            />
+          </Field>
+          <Field label="Fornecedor retirou a peca em">
+            <input
+              type="date"
+              value={form.retirada_fornecedor_em}
+              onChange={(e) => setForm((prev) => ({ ...prev, retirada_fornecedor_em: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Prazo de retorno (dias)">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.prazo_retorno_dias}
+              onChange={(e) => setForm((prev) => ({ ...prev, prazo_retorno_dias: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Data limite do retorno">
+            <input
+              type="date"
+              value={prazoRetornoData || ""}
+              className={inputClass}
+              disabled
             />
           </Field>
           <Field label="Resultado">
@@ -508,6 +568,20 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
           </Panel>
         </div>
 
+        <Panel title="Laudo do fornecedor" subtitle="Arquive aqui o laudo ou parecer formal da suposta garantia.">
+          <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+            <AttachmentInput
+              existingUrls={existingLaudoUrls}
+              onExistingUrlsChange={setExistingLaudoUrls}
+              newFiles={newLaudoFiles}
+              onNewFilesChange={setNewLaudoFiles}
+              accept="image/*,application/pdf,video/*"
+              helperText="Pode anexar PDF, foto ou video do laudo do fornecedor."
+            />
+            <AttachmentGallery urls={existingLaudoUrls} />
+          </div>
+        </Panel>
+
         <Panel title="Arquivos ja salvos" subtitle="Tudo o que ja foi anexado nessa garantia.">
           <AttachmentGallery urls={existingAttachments} />
         </Panel>
@@ -551,6 +625,7 @@ export default function SuprimentosGarantias() {
         (data || []).map((row) => ({
           ...row,
           anexos: Array.isArray(row?.anexos) ? row.anexos : [],
+          laudo_urls: Array.isArray(row?.laudo_urls) ? row.laudo_urls : [],
         }))
       );
     }
@@ -570,6 +645,7 @@ export default function SuprimentosGarantias() {
         "peca",
         "codigo_peca",
         "fornecedor",
+        "tipo_garantia",
         "prefixo",
         "aberto_por_nome",
         "protocolo_fornecedor",

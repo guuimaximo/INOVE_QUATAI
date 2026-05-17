@@ -87,6 +87,9 @@ import EstruturaFisicaSolicitacao from "./pages/estrutura-fisica/EstruturaFisica
 import EstruturaFisicaCentral from "./pages/estrutura-fisica/EstruturaFisicaCentral";
 import EstruturaFisicaConsultar from "./pages/estrutura-fisica/EstruturaFisicaConsultar";
 import EstruturaFisicaTratar from "./pages/estrutura-fisica/EstruturaFisicaTratar";
+import SuprimentosResumo from "./pages/suprimentos/SuprimentosResumo";
+import SuprimentosGarantias from "./pages/suprimentos/SuprimentosGarantias";
+import SuprimentosTestes from "./pages/suprimentos/SuprimentosTestes";
 
 function HomeDecider() {
   const { user } = useContext(AuthContext);
@@ -243,6 +246,12 @@ export default function App() {
                 path="/estrutura-fisica"
                 element={<Navigate to="/estrutura-fisica/central" replace />}
               />
+
+              {/* Suprimentos */}
+              <Route path="/suprimentos/resumo" element={<SuprimentosResumo />} />
+              <Route path="/suprimentos/garantias" element={<SuprimentosGarantias />} />
+              <Route path="/suprimentos/testes" element={<SuprimentosTestes />} />
+              <Route path="/suprimentos" element={<Navigate to="/suprimentos/resumo" replace />} />
 
               {/* Avarias */}
               <Route path="/lancar-avaria" element={<LancarAvaria />} />

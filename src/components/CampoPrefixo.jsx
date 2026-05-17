@@ -1,13 +1,10 @@
-// src/components/CampoPrefixo.jsx
-// (Corrigido para usar a coluna 'codigo' + retornar cluster quando existir)
-
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 
 export default function CampoPrefixo({
   value,
   onChange,
-  onChangeCluster, // ✅ novo (opcional)
+  onChangeCluster,
   label = "Prefixo",
   inputMode = "text",
   pattern,
@@ -21,13 +18,22 @@ export default function CampoPrefixo({
     return String(text || "").trim().toLowerCase().replace(/^w/, "");
   }
 
-  // 1. Carrega todos os prefixos (agora inclui cluster)
+  function buildMatches(text, rows) {
+    const normalized = normalizePrefixSearch(text);
+    if (!normalized || !Array.isArray(rows)) return [];
+
+    return rows
+      .filter((p) => normalizePrefixSearch(p.codigo).startsWith(normalized))
+      .slice(0, 8);
+  }
+
   useEffect(() => {
     setErrorLoading(null);
+
     (async () => {
       const { data, error } = await supabase
         .from("prefixos")
-        .select("id, codigo, cluster") // ✅ inclui cluster
+        .select("id, codigo, cluster")
         .order("codigo", { ascending: true });
 
       if (error) {
@@ -40,77 +46,57 @@ export default function CampoPrefixo({
     })();
   }, []);
 
-  // 2. Filtra os prefixos
-  const filtrados = useMemo(() => {
-    const s = normalizePrefixSearch(q);
-    if (!s) return [];
-    if (!Array.isArray(todos)) return [];
+  const filtrados = useMemo(() => buildMatches(q, todos), [q, todos]);
 
-    return todos
-      .filter((p) => normalizePrefixSearch(p.codigo).startsWith(s))
-      .slice(0, 8);
-  }, [q, todos]);
-
-  // 3. Abre/fecha dropdown
-  useEffect(() => {
-    if (!String(q || "")) {
-      setOpen(false);
-      return;
-    }
-    setOpen(filtrados.length > 0);
-  }, [q, filtrados.length]);
-
-  // ✅ Mapa rápido para achar cluster quando digitar o código completo
   const mapByCodigo = useMemo(() => {
-    const m = new Map();
+    const map = new Map();
     (todos || []).forEach((p) => {
-      const cod = String(p?.codigo || "").trim();
-      if (cod) m.set(cod, p);
-      const normalized = normalizePrefixSearch(cod);
-      if (normalized) m.set(normalized, p);
+      const codigo = String(p?.codigo || "").trim();
+      if (!codigo) return;
+      map.set(codigo, p);
+      map.set(normalizePrefixSearch(codigo), p);
     });
-    return m;
+    return map;
   }, [todos]);
 
-  // 4. Aplica a seleção (dropdown)
-  function aplicar(p) {
-    const cod = String(p?.codigo || "").trim();
-    onChange?.(cod);
-    setQ(cod);
+  useEffect(() => {
+    setQ(String(value || ""));
+    setOpen(false);
+  }, [value]);
 
-    // ✅ devolve cluster junto, se o pai quiser
+  function aplicar(prefixo) {
+    const codigo = String(prefixo?.codigo || "").trim();
+    onChange?.(codigo);
+    setQ(codigo);
+
     if (onChangeCluster) {
-      const cl = String(p?.cluster || "").trim();
-      onChangeCluster(cl);
+      onChangeCluster(String(prefixo?.cluster || "").trim());
     }
 
     setOpen(false);
   }
 
-  // 5. Sincroniza o input com value externo
-  useEffect(() => {
-    setQ(String(value || ""));
-  }, [value]);
-
-  // ✅ Quando digitar, atualiza value e tenta resolver cluster se tiver match exato
-  function handleInputChange(v) {
-    setQ(v);
-    onChange?.(v);
+  function handleInputChange(nextValue) {
+    setQ(nextValue);
+    onChange?.(nextValue);
 
     if (onChangeCluster) {
-      const row = mapByCodigo.get(String(v || "").trim()) || mapByCodigo.get(normalizePrefixSearch(v));
-      const cl = String(row?.cluster || "").trim();
-      onChangeCluster(cl);
+      const row =
+        mapByCodigo.get(String(nextValue || "").trim()) ||
+        mapByCodigo.get(normalizePrefixSearch(nextValue));
+      onChangeCluster(String(row?.cluster || "").trim());
     }
+
+    setOpen(buildMatches(nextValue, todos).length > 0);
   }
 
   return (
     <div className="relative">
-      <label className="block text-sm text-gray-600 mb-1">{label}</label>
+      {label ? <label className="mb-1 block text-sm text-gray-600">{label}</label> : null}
 
       <input
         className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        placeholder={errorLoading ? "Erro ao carregar" : "Digite o prefixo…"}
+        placeholder={errorLoading ? "Erro ao carregar" : "Digite o prefixo..."}
         value={q}
         inputMode={inputMode}
         pattern={pattern}
@@ -120,25 +106,25 @@ export default function CampoPrefixo({
         }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         required
-        disabled={!!errorLoading}
+        disabled={Boolean(errorLoading)}
       />
 
-      {errorLoading && <div className="text-red-600 text-xs mt-1">{errorLoading}</div>}
+      {errorLoading ? <div className="mt-1 text-xs text-red-600">{errorLoading}</div> : null}
 
-      {open && filtrados.length > 0 && (
+      {open && filtrados.length > 0 ? (
         <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow">
-          {filtrados.map((p) => (
+          {filtrados.map((prefixo) => (
             <button
-              key={p.id}
+              key={prefixo.id}
               type="button"
-              onMouseDown={() => aplicar(p)}
-              className="block w-full text-left px-3 py-2 hover:bg-gray-100"
+              onMouseDown={() => aplicar(prefixo)}
+              className="block w-full px-3 py-2 text-left hover:bg-gray-100"
             >
-              <div className="text-sm font-medium">{p.codigo}</div>
+              <div className="text-sm font-medium">{prefixo.codigo}</div>
             </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

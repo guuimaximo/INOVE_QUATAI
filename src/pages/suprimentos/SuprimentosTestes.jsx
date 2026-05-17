@@ -448,7 +448,7 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
               {form.nome_teste || item.nome_teste} - {form.prefixo || item.prefixo || "--"}
             </h2>
             <p className="mt-2 text-sm font-semibold text-slate-500">
-              {item.numero_controle || "--"} · Aberto por {item.aberto_por_nome || "--"} em{" "}
+              {item.numero_controle || "--"} - Aberto por {item.aberto_por_nome || "--"} em{" "}
               {formatDateTimeBR(item.created_at)}
             </p>
           </div>
@@ -472,87 +472,87 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
           title="Dados iniciais do teste"
           subtitle="Base principal do teste no mesmo padrao de leitura da programacao de diesel."
         >
-          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="grid gap-4 md:grid-cols-2">
-              <StaticInfoCard label="Controle" value={item.numero_controle} />
-              <StaticInfoCard label="KM rodado" value={kmRodado !== null ? formatKm(kmRodado) : "--"} />
-            </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StaticInfoCard label="Controle" value={item.numero_controle} />
+            <StaticInfoCard label="KM inicial" value={formatKm(form.km_inicial)} />
+            <StaticInfoCard label="KM atual" value={formatKm(form.km_atual)} />
+            <StaticInfoCard label="KM rodado" value={kmRodado !== null ? formatKm(kmRodado) : "--"} />
+          </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Nome do teste" required>
-                <input
-                  value={form.nome_teste}
-                  onChange={(e) => setForm((prev) => ({ ...prev, nome_teste: e.target.value }))}
-                  className={inputClass}
-                  required
-                />
-              </Field>
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Field label="Nome do teste" required className="xl:col-span-2">
+              <input
+                value={form.nome_teste}
+                onChange={(e) => setForm((prev) => ({ ...prev, nome_teste: e.target.value }))}
+                className={inputClass}
+                required
+              />
+            </Field>
 
-              <Field label="Peca" required>
-                <input
-                  value={form.peca}
-                  onChange={(e) => setForm((prev) => ({ ...prev, peca: e.target.value }))}
-                  className={inputClass}
-                  required
-                />
-              </Field>
+            <Field label="Peca" required>
+              <input
+                value={form.peca}
+                onChange={(e) => setForm((prev) => ({ ...prev, peca: e.target.value }))}
+                className={inputClass}
+                required
+              />
+            </Field>
 
-              <Field label="Codigo da peca">
-                <input
-                  value={form.codigo_peca}
-                  onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: e.target.value }))}
-                  className={inputClass}
-                />
-              </Field>
+            <Field label="Codigo da peca">
+              <input
+                value={form.codigo_peca}
+                onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
 
-              <Field label="Fornecedor / marca" required>
-                <input
-                  value={form.fornecedor}
-                  onChange={(e) => setForm((prev) => ({ ...prev, fornecedor: e.target.value }))}
-                  className={inputClass}
-                  required
-                />
-              </Field>
+            <Field label="Fornecedor / marca" required className="xl:col-span-2">
+              <input
+                value={form.fornecedor}
+                onChange={(e) => setForm((prev) => ({ ...prev, fornecedor: e.target.value }))}
+                className={inputClass}
+                required
+              />
+            </Field>
 
-              <Field label="Prefixo" required>
-                <CampoPrefixo
-                  value={form.prefixo}
-                  onChange={(value) => setForm((prev) => ({ ...prev, prefixo: value }))}
-                  label=""
-                />
-              </Field>
+            <Field label="Prefixo" required>
+              <CampoPrefixo
+                value={form.prefixo}
+                onChange={(value) => setForm((prev) => ({ ...prev, prefixo: value }))}
+                label={null}
+              />
+            </Field>
 
-              <Field label="Data de inicio" required>
-                <input
-                  type="date"
-                  value={form.data_inicio}
-                  onChange={(e) => setForm((prev) => ({ ...prev, data_inicio: e.target.value }))}
-                  className={inputClass}
-                  required
-                />
-              </Field>
+            <Field label="Data de inicio" required>
+              <input
+                type="date"
+                value={form.data_inicio}
+                onChange={(e) => setForm((prev) => ({ ...prev, data_inicio: e.target.value }))}
+                className={inputClass}
+                required
+              />
+            </Field>
 
-              <Field label="KM inicial" required>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.km_inicial}
-                  onChange={(e) => setForm((prev) => ({ ...prev, km_inicial: e.target.value }))}
-                  className={inputClass}
-                  required
-                />
-              </Field>
+            <Field label="KM inicial" required>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.km_inicial}
+                onChange={(e) => setForm((prev) => ({ ...prev, km_inicial: e.target.value }))}
+                className={inputClass}
+                required
+              />
+            </Field>
 
-              <Field label="Prazo do teste">
-                <input
-                  type="date"
-                  value={form.prazo_teste}
-                  onChange={(e) => setForm((prev) => ({ ...prev, prazo_teste: e.target.value }))}
-                  className={inputClass}
-                />
-              </Field>
-            </div>
+            <Field label="Prazo do teste">
+              <input
+                type="date"
+                value={form.prazo_teste}
+                onChange={(e) => setForm((prev) => ({ ...prev, prazo_teste: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
           </div>
 
           <div className="mt-4">

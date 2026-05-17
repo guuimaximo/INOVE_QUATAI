@@ -9,6 +9,21 @@ import {
 import FileViewerModal from "../../components/FileViewerModal";
 import { fileNameFromUrl } from "./suprimentosShared";
 
+function isImageUrl(url) {
+  const value = String(url || "").toLowerCase();
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(value);
+}
+
+function isPdfUrl(url) {
+  const value = String(url || "").toLowerCase();
+  return value.includes(".pdf") || /\.(pdf)(\?|#|$)/.test(value);
+}
+
+function isVideoUrl(url) {
+  const value = String(url || "").toLowerCase();
+  return /\.(mp4|mov|webm|ogg)(\?|#|$)/.test(value);
+}
+
 const TONE_MAP = {
   slate: {
     chip: "border-slate-200 bg-slate-100 text-slate-700",
@@ -226,20 +241,55 @@ export function AttachmentGallery({ urls }) {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((url, index) => {
           const name = fileNameFromUrl(url);
+          const image = isImageUrl(url);
+          const video = isVideoUrl(url);
+          const pdf = isPdfUrl(url);
+
           return (
             <button
               key={`${url}-${index}`}
               type="button"
               onClick={() => setViewerFile({ url, name })}
-              className="group rounded-[20px] border border-slate-200 bg-slate-50 p-3 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-sm"
+              className="group overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-sm"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Arquivo</p>
-                  <p className="mt-2 truncate text-sm font-semibold text-slate-800">{name}</p>
+              {image ? (
+                <>
+                  <img
+                    src={url}
+                    alt={name}
+                    className="h-28 w-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="flex items-start justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Imagem</p>
+                      <p className="mt-2 truncate text-sm font-semibold text-slate-800">{name}</p>
+                    </div>
+                    <FaDownload className="text-slate-300 transition group-hover:text-slate-500" />
+                  </div>
+                </>
+              ) : video ? (
+                <>
+                  <video src={url} className="h-28 w-full object-cover" muted />
+                  <div className="flex items-start justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Video</p>
+                      <p className="mt-2 truncate text-sm font-semibold text-slate-800">{name}</p>
+                    </div>
+                    <FaDownload className="text-slate-300 transition group-hover:text-slate-500" />
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-start justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">
+                      {pdf ? "PDF" : "Arquivo"}
+                    </p>
+                    <p className="mt-2 truncate text-sm font-semibold text-slate-800">{name}</p>
+                  </div>
+                  <FaDownload className="text-slate-300 transition group-hover:text-slate-500" />
                 </div>
-                <FaDownload className="text-slate-300 transition group-hover:text-slate-500" />
-              </div>
+              )}
             </button>
           );
         })}

@@ -21,16 +21,16 @@ export function todayISO() {
 }
 
 export function formatDateBR(value) {
-  if (!value) return "—";
+  if (!value) return "--";
   const date = new Date(String(value).includes("T") ? value : `${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "--";
   return date.toLocaleDateString("pt-BR");
 }
 
 export function formatDateTimeBR(value) {
-  if (!value) return "—";
+  if (!value) return "--";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "--";
   return date.toLocaleString("pt-BR");
 }
 
@@ -42,7 +42,7 @@ export function formatCurrencyBR(value) {
 }
 
 export function formatKm(value) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "--";
   return `${Number(value || 0).toLocaleString("pt-BR")} km`;
 }
 
@@ -106,7 +106,7 @@ export async function generateNextControlNumber(table, prefix) {
 export function buildOpenedBy(user) {
   return {
     aberto_por_id: Number(user?.usuario_id || user?.id || 0) || null,
-    aberto_por_nome: user?.nome || user?.nome_completo || user?.login || user?.email || "Usuário INOVE",
+    aberto_por_nome: user?.nome || user?.nome_completo || user?.login || user?.email || "Usuario INOVE",
     aberto_por_login: user?.login || user?.email || null,
   };
 }
@@ -133,13 +133,15 @@ export async function uploadSuprimentosFiles(files, folder = "geral") {
 export function deriveGarantiaMeta(row) {
   const resultado = String(row?.resultado || "").trim();
   const retorno = String(row?.tipo_retorno || "").trim();
+  const retornoCredito = retorno === "Credito" || retorno === "Crédito";
+  const retornoPeca = retorno === "Peca nova" || retorno === "Peça nova";
 
   const concluida =
     Boolean(row?.encerrada_em) ||
     (resultado === "Negada" && Boolean(row?.retorno_fornecedor_em)) ||
     (resultado === "Aprovada" &&
-      ((retorno === "Crédito" && Boolean(row?.retorno_fornecedor_em)) ||
-        (retorno === "Peça nova" && Boolean(row?.recebida_em))));
+      ((retornoCredito && Boolean(row?.retorno_fornecedor_em)) ||
+        (retornoPeca && Boolean(row?.recebida_em))));
 
   let fase = "Aberta";
   let tone = "slate";
@@ -148,11 +150,11 @@ export function deriveGarantiaMeta(row) {
     if (resultado === "Negada") {
       fase = "Finalizada negada";
       tone = "rose";
-    } else if (retorno === "Crédito") {
-      fase = "Finalizada com crédito";
+    } else if (retornoCredito) {
+      fase = "Finalizada com credito";
       tone = "emerald";
-    } else if (retorno === "Peça nova") {
-      fase = "Finalizada com peça";
+    } else if (retornoPeca) {
+      fase = "Finalizada com peca";
       tone = "emerald";
     } else {
       fase = "Finalizada";

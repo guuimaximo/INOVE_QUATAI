@@ -2,6 +2,13 @@
 import React, { useEffect, useMemo, useState, useContext } from "react";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
+import {
+  FaCheckCircle,
+  FaClock,
+  FaExclamationTriangle,
+  FaLayerGroup,
+  FaUserShield,
+} from "react-icons/fa";
 
 import TratativasLancarRH from "./TratativasLancarRH";
 import TratativasConsultarRH from "./TratativasConsultarRH";
@@ -81,13 +88,19 @@ function StatusPill({ lancado }) {
   );
 }
 
-function CardResumo({ titulo, valor, cor }) {
+function CardResumo({ titulo, valor, subtitulo, icon, tone }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className={`inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${cor}`}>
-        {titulo}
+    <div className={`min-h-[124px] rounded-3xl border bg-gradient-to-br p-4 shadow-sm ${tone}`}>
+      <div className="flex h-full items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{titulo}</p>
+          <p className="mt-3 text-2xl font-black text-slate-900 break-words">{valor}</p>
+          {subtitulo ? (
+            <p className="mt-2 text-xs font-semibold break-words opacity-80">{subtitulo}</p>
+          ) : null}
+        </div>
+        <div className="text-2xl opacity-80">{icon}</div>
       </div>
-      <p className="mt-4 text-3xl font-black text-slate-900">{valor}</p>
     </div>
   );
 }
@@ -464,12 +477,50 @@ export default function TratativasRH() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+        <CardResumo
+          titulo="Total na Tela"
+          valor={counts.total}
+          subtitulo="Consolidacoes exibidas no filtro atual"
+          icon={<FaLayerGroup className="text-blue-300" />}
+          tone="from-blue-50 to-cyan-50 border-blue-200 text-blue-700"
+        />
+        <CardResumo
+          titulo="Pendentes RH"
+          valor={counts.pend}
+          subtitulo="Aguardando lancamento no Transnet"
+          icon={<FaClock className="text-amber-300" />}
+          tone="from-amber-50 to-orange-50 border-amber-200 text-amber-700"
+        />
+        <CardResumo
+          titulo="Concluidas RH"
+          valor={counts.concl}
+          subtitulo="Ja registradas e fechadas no RH"
+          icon={<FaCheckCircle className="text-emerald-300" />}
+          tone="from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700"
+        />
+        <CardResumo
+          titulo="Advertencias"
+          valor={counts.adv}
+          subtitulo="Medidas disciplinares de advertencia"
+          icon={<FaExclamationTriangle className="text-yellow-300" />}
+          tone="from-yellow-50 to-amber-50 border-yellow-200 text-yellow-700"
+        />
+        <CardResumo
+          titulo="Suspensoes"
+          valor={counts.susp}
+          subtitulo="Casos consolidados com suspensao"
+          icon={<FaUserShield className="text-rose-300" />}
+          tone="from-rose-50 to-pink-50 border-rose-200 text-rose-700"
+        />
+      </div>
+
+      {false && <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
         <CardResumo titulo="Total na Tela" valor={counts.total} cor="bg-blue-100 text-blue-700" />
         <CardResumo titulo="Pendentes RH" valor={counts.pend} cor="bg-yellow-100 text-yellow-700" />
         <CardResumo titulo="Concluídas RH" valor={counts.concl} cor="bg-green-100 text-green-700" />
         <CardResumo titulo="Advertências" valor={counts.adv} cor="bg-yellow-50 text-yellow-700" />
         <CardResumo titulo="Suspensões" valor={counts.susp} cor="bg-red-50 text-red-700" />
-      </div>
+      </div>}
 
       <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full">

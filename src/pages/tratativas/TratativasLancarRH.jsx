@@ -1,6 +1,7 @@
 // src/pages/TratativasLancarRH.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabase";
+import FileViewerModal from "../../components/FileViewerModal";
 
 /* =========================
    Helpers
@@ -138,6 +139,39 @@ function EvidenciasGrid({ urls, label }) {
   );
 }
 
+function EvidenciasGridViewer({ urls, label, onOpen }) {
+  const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
+  return (
+    <div>
+      <div className="mb-2 text-sm text-gray-600">{label}</div>
+
+      {arr.length === 0 ? (
+        <div className="text-sm text-gray-400">-</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {arr.map((u, i) => {
+            const name = fileNameFromUrl(u);
+            const pdf = isPdf(u);
+            const img = isImageUrl(u) && !pdf;
+
+            return (
+              <button
+                type="button"
+                key={`${u}-${i}`}
+                onClick={() => onOpen?.(u)}
+                title="Visualizar evidencia"
+                className="block text-left"
+              >
+                {img ? <ImgTile src={u} name={name} /> : <PdfTile name={name} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [obsRH, setObsRH] = useState("");
@@ -157,6 +191,11 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
 
   // ✅ Preview do arquivo selecionado (objURL)
   const [previewObjUrl, setPreviewObjUrl] = useState(null);
+  const [viewerFile, setViewerFile] = useState(null);
+  const openViewer = (url) => {
+    if (!url) return;
+    setViewerFile({ url, name: fileNameFromUrl(url) });
+  };
   useEffect(() => {
     if (!evidFile) {
       if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
@@ -370,7 +409,11 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
           </div>
 
           {/* ✅ miniaturas tratador */}
-          <EvidenciasGrid urls={evidenciasTratador} label="Evidências (Tratador) — miniaturas" />
+          <EvidenciasGridViewer
+            urls={evidenciasTratador}
+            label="Evidências (Tratador) — miniaturas"
+            onOpen={openViewer}
+          />
 
           <hr />
 
@@ -467,7 +510,16 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
             {loading ? "Salvando..." : "Fechar Medida"}
           </button>
         </div>
+
+        <FileViewerModal
+          open={Boolean(viewerFile?.url)}
+          url={viewerFile?.url || ""}
+          name={viewerFile?.name || ""}
+          onClose={() => setViewerFile(null)}
+        />
       </div>
     </div>
   );
 }
+
+

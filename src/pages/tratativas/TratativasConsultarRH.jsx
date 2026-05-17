@@ -1,5 +1,6 @@
 // src/pages/TratativasConsultarRH.jsx
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
+import FileViewerModal from "../../components/FileViewerModal";
 
 /* =========================
    Helpers
@@ -57,6 +58,46 @@ function Thumb({ url }) {
     <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">
       {fileNameFromUrl(url)}
     </a>
+  );
+}
+
+function ThumbViewer({ url }) {
+  const [viewerFile, setViewerFile] = useState(null);
+  if (!url) return <span className="text-gray-400">-</span>;
+  const img = isImageUrl(url) && !isPdf(url);
+
+  return (
+    <>
+      {img ? (
+        <button
+          type="button"
+          onClick={() => setViewerFile({ url, name: fileNameFromUrl(url) })}
+          title="Visualizar"
+        >
+          <img
+            src={url}
+            alt={fileNameFromUrl(url)}
+            className="h-14 w-14 rounded border object-cover hover:opacity-90"
+            loading="lazy"
+          />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setViewerFile({ url, name: fileNameFromUrl(url) })}
+          className="text-blue-600 underline text-xs"
+        >
+          {fileNameFromUrl(url)}
+        </button>
+      )}
+
+      <FileViewerModal
+        open={Boolean(viewerFile?.url)}
+        url={viewerFile?.url || ""}
+        name={viewerFile?.name || ""}
+        onClose={() => setViewerFile(null)}
+      />
+    </>
   );
 }
 
@@ -123,7 +164,7 @@ export default function TratativasConsultarRH({ aberto, grupo, onClose }) {
               {evidenciasTratador.length === 0 ? (
                 <div className="text-sm text-gray-400">—</div>
               ) : (
-                evidenciasTratador.map((u) => <Thumb key={u} url={u} />)
+                evidenciasTratador.map((u) => <ThumbViewer key={u} url={u} />)
               )}
             </div>
           </div>
@@ -154,7 +195,7 @@ export default function TratativasConsultarRH({ aberto, grupo, onClose }) {
 
             <div className="mt-3">
               <div className="text-sm text-gray-600 mb-2">Evidência RH (Transnet) — miniatura</div>
-              {grupo.rh_evid_url ? <Thumb url={grupo.rh_evid_url} /> : <div className="text-sm text-gray-400">—</div>}
+              {grupo.rh_evid_url ? <ThumbViewer url={grupo.rh_evid_url} /> : <div className="text-sm text-gray-400">—</div>}
             </div>
           </div>
         </div>
@@ -168,3 +209,5 @@ export default function TratativasConsultarRH({ aberto, grupo, onClose }) {
     </div>
   );
 }
+
+

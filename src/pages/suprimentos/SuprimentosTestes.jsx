@@ -135,11 +135,13 @@ function Field({ label, required = false, children, className = "" }) {
 
 function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
   const [form, setForm] = useState(QUICK_FORM);
+  const [newFiles, setNewFiles] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setForm(QUICK_FORM);
+    setNewFiles([]);
   }, [open]);
 
   async function handleSubmit(event) {
@@ -147,6 +149,11 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
     setSaving(true);
 
     try {
+      const uploaded = await uploadSuprimentosFiles(
+        newFiles,
+        `testes/${form.prefixo || "sem-prefixo"}`
+      );
+
       const numeroControle = await generateNextControlNumber("suprimentos_testes", "TST");
       const payload = {
         numero_controle: numeroControle,
@@ -168,7 +175,7 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
         parecer_tecnico: null,
         resultado_final: null,
         encerrado_em: null,
-        anexos: [],
+        anexos: uploaded,
         updated_at: new Date().toISOString(),
         ...buildOpenedBy(user),
       };
@@ -274,6 +281,16 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
             />
           </Field>
         </div>
+
+        <Panel title="Anexos iniciais" subtitle="Se ja tiver fotos ou videos, pode incluir na abertura do teste.">
+          <AttachmentInput
+            existingUrls={[]}
+            onExistingUrlsChange={() => {}}
+            newFiles={newFiles}
+            onNewFilesChange={setNewFiles}
+            helperText="Pode anexar varias fotos e varios videos ja na criacao."
+          />
+        </Panel>
 
         <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
           <ActionButton onClick={onClose}>Cancelar</ActionButton>

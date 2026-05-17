@@ -8,6 +8,7 @@ import { supabase } from "../supabase";
 import { FaTimes } from "react-icons/fa";
 import CampoMotorista from "./CampoMotorista";
 import ChamadosMotoristasModal from "./ChamadosMotoristasModal";
+import FileViewerModal from "./FileViewerModal";
 
 // Helper para converter string (BRL ou US) para número
 const parseCurrency = (value) => {
@@ -15,6 +16,18 @@ const parseCurrency = (value) => {
   if (typeof value !== "string") return null;
   const num = parseFloat(value.replace(/\./g, "").replace(",", "."));
   return Number.isNaN(num) ? null : num;
+};
+
+const fileNameFromUrl = (url) => {
+  try {
+    const raw = String(url || "");
+    const noHash = raw.split("#")[0];
+    const noQuery = noHash.split("?")[0];
+    const last = noQuery.split("/").filter(Boolean).pop() || "arquivo";
+    return decodeURIComponent(last);
+  } catch {
+    return "arquivo";
+  }
 };
 
 export default function CobrancaDetalheModal({
@@ -36,6 +49,7 @@ export default function CobrancaDetalheModal({
   const [isEditing, setIsEditing] = useState(false);
   const [tratativaTexto, setTratativaTexto] = useState("");
   const [salvandoInfo, setSalvandoInfo] = useState(false);
+  const [viewerFile, setViewerFile] = useState(null);
 
   // ✅ NOVO: modal de chamados
   const [openChamados, setOpenChamados] = useState(false);
@@ -623,16 +637,15 @@ export default function CobrancaDetalheModal({
                     {fotosTerceiro.length > 0 ? (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {fotosTerceiro.map((url, i) => (
-                          <a
+                          <button
+                            type="button"
                             key={i}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            onClick={() => setViewerFile({ url, name: fileNameFromUrl(url) })}
                             className="border rounded-lg overflow-hidden hover:opacity-80 bg-white"
-                            title="Abrir imagem"
+                            title="Visualizar imagem"
                           >
                             <img src={url} alt={`Foto Terceiro ${i + 1}`} className="w-full h-24 object-cover" />
-                          </a>
+                          </button>
                         ))}
                       </div>
                     ) : (
@@ -671,11 +684,10 @@ export default function CobrancaDetalheModal({
               {urlsEvidencias.length > 0 ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {urlsEvidencias.map((url, i) => (
-                    <a
+                    <button
+                      type="button"
                       key={i}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      onClick={() => setViewerFile({ url, name: fileNameFromUrl(url) })}
                       className="border rounded-lg overflow-hidden hover:opacity-80"
                     >
                       {url.match(/\.(mp4|mov|webm)$/i) ? (
@@ -683,7 +695,7 @@ export default function CobrancaDetalheModal({
                       ) : (
                         <img src={url} alt={`Evidência ${i + 1}`} className="w-full h-32 object-cover" />
                       )}
-                    </a>
+                    </button>
                   ))}
                 </div>
               ) : (
@@ -812,11 +824,10 @@ export default function CobrancaDetalheModal({
                     <h4 className="text-sm font-semibold mb-1">Anexos da tratativa</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {tratativaUrls.map((url, i) => (
-                        <a
+                        <button
+                          type="button"
                           key={i}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          onClick={() => setViewerFile({ url, name: fileNameFromUrl(url) })}
                           className="border rounded-lg overflow-hidden hover:opacity-80"
                         >
                           {url.match(/\.(mp4|mov|webm)$/i) ? (
@@ -834,7 +845,7 @@ export default function CobrancaDetalheModal({
                               <span className="mt-1">Arquivo</span>
                             </div>
                           )}
-                        </a>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -968,6 +979,13 @@ export default function CobrancaDetalheModal({
       )}
 
       {/* === LAYOUT DE IMPRESSÃO === */}
+      <FileViewerModal
+        open={Boolean(viewerFile?.url)}
+        url={viewerFile?.url || ""}
+        name={viewerFile?.name || ""}
+        onClose={() => setViewerFile(null)}
+      />
+
       <div id="printable-area" className="hidden font-sans text-[11px] leading-tight text-gray-900">
         <style>{`
           @page { margin: 12mm; }

@@ -407,16 +407,29 @@ export default function ConsultarTratativa() {
 }
 
 function ResumoCard({ titulo, valor, subtitulo, icon, border }) {
+  const tone =
+    border?.includes("blue")
+      ? "from-blue-50 to-cyan-50 border-blue-200 text-blue-700"
+      : border?.includes("amber")
+      ? "from-amber-50 to-orange-50 border-amber-200 text-amber-700"
+      : border?.includes("violet")
+      ? "from-violet-50 to-fuchsia-50 border-violet-200 text-violet-700"
+      : border?.includes("emerald")
+      ? "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700"
+      : "from-slate-50 to-gray-50 border-slate-200 text-slate-700";
+
   return (
-    <div className={`bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 ${border}`}>
-      <div className="min-w-0">
-        <p className="text-sm text-slate-500 font-bold">{titulo}</p>
-        <p className="text-xl font-black text-slate-800 break-words">{valor}</p>
-        {subtitulo ? (
-          <p className="text-xs text-slate-500 mt-1 font-semibold break-words">{subtitulo}</p>
-        ) : null}
+    <div className={`min-h-[124px] rounded-3xl border bg-gradient-to-br p-4 shadow-sm ${tone}`}>
+      <div className="flex h-full items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{titulo}</p>
+          <p className="mt-3 text-2xl font-black text-slate-900 break-words">{valor}</p>
+          {subtitulo ? (
+            <p className="mt-2 text-xs font-semibold break-words opacity-80">{subtitulo}</p>
+          ) : null}
+        </div>
+        <div className="text-2xl opacity-80">{icon}</div>
       </div>
-      <div>{icon}</div>
     </div>
   )
 }

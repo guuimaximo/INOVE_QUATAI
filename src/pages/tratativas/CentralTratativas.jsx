@@ -795,13 +795,26 @@ export default function CentralTratativas() {
 }
 
 function CardResumo({ titulo, valor, icone, border }) {
+  const tone =
+    border?.includes("blue")
+      ? "from-blue-50 to-cyan-50 border-blue-200 text-blue-700"
+      : border?.includes("yellow")
+      ? "from-amber-50 to-orange-50 border-amber-200 text-amber-700"
+      : border?.includes("emerald")
+      ? "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700"
+      : border?.includes("red")
+      ? "from-rose-50 to-pink-50 border-rose-200 text-rose-700"
+      : "from-slate-50 to-gray-50 border-slate-200 text-slate-700";
+
   return (
-    <div className={`flex items-center justify-between rounded-3xl border border-slate-200 bg-white p-4 shadow-sm border-l-4 ${border}`}>
-      <div>
-        <p className="text-sm text-slate-500 font-bold">{titulo}</p>
-        <p className="text-2xl font-black text-slate-800">{valor}</p>
+    <div className={`min-h-[124px] rounded-3xl border bg-gradient-to-br p-4 shadow-sm ${tone}`}>
+      <div className="flex h-full items-start justify-between gap-3">
+        <div className="flex h-full min-w-0 flex-col justify-between">
+          <p className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{titulo}</p>
+          <p className="mt-3 text-3xl font-black text-slate-900">{valor}</p>
+        </div>
+        <div className="text-2xl opacity-80">{icone}</div>
       </div>
-      {icone}
     </div>
   );
 }

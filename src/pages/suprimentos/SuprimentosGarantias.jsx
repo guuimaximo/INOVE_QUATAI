@@ -2,13 +2,13 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import {
   FaCheckCircle,
   FaCoins,
-  FaEdit,
   FaEye,
   FaFilter,
   FaPlus,
   FaRedo,
   FaSearch,
   FaShieldAlt,
+  FaTimes,
   FaTimesCircle,
   FaTools,
   FaTruckLoading,
@@ -43,7 +43,7 @@ import {
   uploadSuprimentosFiles,
 } from "./suprimentosShared";
 
-const EMPTY_FORM = {
+const QUICK_FORM = {
   peca: "",
   codigo_peca: "",
   fornecedor: "",
@@ -54,6 +54,9 @@ const EMPTY_FORM = {
   km_falha: "",
   data_falha: todayISO(),
   tipo_solicitacao: "Ressarcimento",
+};
+
+const DETAIL_FORM = {
   protocolo_fornecedor: "",
   enviado_fornecedor_em: "",
   observacao: "",
@@ -65,6 +68,9 @@ const EMPTY_FORM = {
   recebida_em: "",
   encerrada_em: "",
 };
+
+const inputClass =
+  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 
 function Field({ label, required = false, children, className = "" }) {
   return (
@@ -81,40 +87,210 @@ function Detail({ label, value }) {
   return (
     <div className="rounded-[20px] border border-slate-200 bg-white p-4">
       <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-800">{value || "—"}</p>
+      <p className="mt-2 text-sm font-semibold text-slate-800">{value || "--"}</p>
     </div>
   );
 }
 
-const inputClass =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
+function ModalShell({ onClose, title, eyebrow, subtitle = null, actions = null, children }) {
+  return (
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-[32px] border border-slate-200 bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-slate-100 px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.34em] text-blue-600">{eyebrow}</p>
+              <h2 className="mt-3 text-2xl font-black text-slate-900">{title}</h2>
+              {subtitle ? <p className="mt-2 text-sm font-medium text-slate-500">{subtitle}</p> : null}
+            </div>
+            <div className="flex items-center gap-2">
+              {actions}
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-100"
+              >
+                <FaTimes />
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
 
-function GarantiaModal({ open, item, onClose, onSaved, user }) {
-  const [form, setForm] = useState(EMPTY_FORM);
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
+  const [form, setForm] = useState(QUICK_FORM);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm(QUICK_FORM);
+  }, [open]);
+
+  if (!open) return null;
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSaving(true);
+
+    try {
+      const numeroControle = await generateNextControlNumber("suprimentos_garantias", "GAR");
+      const payload = {
+        numero_controle: numeroControle,
+        peca: form.peca.trim(),
+        codigo_peca: form.codigo_peca.trim() || null,
+        fornecedor: form.fornecedor.trim(),
+        data_compra: form.data_compra || null,
+        valor_peca: safeNumber(form.valor_peca) ?? 0,
+        prefixo: form.prefixo.trim(),
+        km_instalacao: safeNumber(form.km_instalacao),
+        km_falha: safeNumber(form.km_falha),
+        data_falha: form.data_falha || null,
+        tipo_solicitacao: form.tipo_solicitacao || null,
+        anexos: [],
+        updated_at: new Date().toISOString(),
+        ...buildOpenedBy(user),
+      };
+
+      const { error } = await supabase.from("suprimentos_garantias").insert(payload).select().single();
+      if (error) throw error;
+
+      onSaved?.();
+      onClose?.();
+    } catch (error) {
+      alert(`Erro ao criar garantia: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell onClose={onClose} title="Nova garantia" eyebrow="Cadastro rapido">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Peca" required>
+            <input
+              value={form.peca}
+              onChange={(e) => setForm((prev) => ({ ...prev, peca: e.target.value }))}
+              className={inputClass}
+              required
+            />
+          </Field>
+          <Field label="Codigo da peca">
+            <input
+              value={form.codigo_peca}
+              onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Fornecedor" required>
+            <input
+              value={form.fornecedor}
+              onChange={(e) => setForm((prev) => ({ ...prev, fornecedor: e.target.value }))}
+              className={inputClass}
+              required
+            />
+          </Field>
+          <Field label="Data da compra">
+            <input
+              type="date"
+              value={form.data_compra}
+              onChange={(e) => setForm((prev) => ({ ...prev, data_compra: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Valor da peca">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.valor_peca}
+              onChange={(e) => setForm((prev) => ({ ...prev, valor_peca: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Prefixo" required>
+            <CampoPrefixo
+              value={form.prefixo}
+              onChange={(value) => setForm((prev) => ({ ...prev, prefixo: value }))}
+              label=""
+            />
+          </Field>
+          <Field label="KM instalacao">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.km_instalacao}
+              onChange={(e) => setForm((prev) => ({ ...prev, km_instalacao: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="KM falha">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.km_falha}
+              onChange={(e) => setForm((prev) => ({ ...prev, km_falha: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Data da falha" required>
+            <input
+              type="date"
+              value={form.data_falha}
+              onChange={(e) => setForm((prev) => ({ ...prev, data_falha: e.target.value }))}
+              className={inputClass}
+              required
+            />
+          </Field>
+          <Field label="Tipo de solicitacao">
+            <select
+              value={form.tipo_solicitacao}
+              onChange={(e) => setForm((prev) => ({ ...prev, tipo_solicitacao: e.target.value }))}
+              className={inputClass}
+            >
+              {GARANTIA_TIPOS_SOLICITACAO.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+          <ActionButton onClick={onClose}>Cancelar</ActionButton>
+          <ActionButton type="submit" tone="blue" disabled={saving} className={saving ? "opacity-60" : ""}>
+            {saving ? "Salvando..." : "Salvar garantia"}
+          </ActionButton>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
+function GarantiaDetailModal({ open, item, onClose, onSaved }) {
+  const [form, setForm] = useState(DETAIL_FORM);
   const [existingAttachments, setExistingAttachments] = useState([]);
   const [newFiles, setNewFiles] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
-    if (!item) {
-      setForm(EMPTY_FORM);
-      setExistingAttachments([]);
-      setNewFiles([]);
-      return;
-    }
-
+    if (!open || !item) return;
     setForm({
-      peca: item.peca || "",
-      codigo_peca: item.codigo_peca || "",
-      fornecedor: item.fornecedor || "",
-      data_compra: item.data_compra || "",
-      valor_peca: item.valor_peca ?? "",
-      prefixo: item.prefixo || "",
-      km_instalacao: item.km_instalacao ?? "",
-      km_falha: item.km_falha ?? "",
-      data_falha: item.data_falha || todayISO(),
-      tipo_solicitacao: item.tipo_solicitacao || "Ressarcimento",
       protocolo_fornecedor: item.protocolo_fornecedor || "",
       enviado_fornecedor_em: item.enviado_fornecedor_em || "",
       observacao: item.observacao || "",
@@ -130,7 +306,7 @@ function GarantiaModal({ open, item, onClose, onSaved, user }) {
     setNewFiles([]);
   }, [item, open]);
 
-  if (!open) return null;
+  if (!open || !item) return null;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -139,20 +315,10 @@ function GarantiaModal({ open, item, onClose, onSaved, user }) {
     try {
       const uploaded = await uploadSuprimentosFiles(
         newFiles,
-        `garantias/${form.prefixo || "sem-prefixo"}`
+        `garantias/${item.prefixo || "sem-prefixo"}`
       );
 
       const payload = {
-        peca: form.peca.trim(),
-        codigo_peca: form.codigo_peca.trim() || null,
-        fornecedor: form.fornecedor.trim(),
-        data_compra: form.data_compra || null,
-        valor_peca: safeNumber(form.valor_peca) ?? 0,
-        prefixo: form.prefixo.trim(),
-        km_instalacao: safeNumber(form.km_instalacao),
-        km_falha: safeNumber(form.km_falha),
-        data_falha: form.data_falha || null,
-        tipo_solicitacao: form.tipo_solicitacao || null,
         protocolo_fornecedor: form.protocolo_fornecedor.trim() || null,
         enviado_fornecedor_em: form.enviado_fornecedor_em || null,
         observacao: form.observacao.trim() || null,
@@ -167,347 +333,27 @@ function GarantiaModal({ open, item, onClose, onSaved, user }) {
         updated_at: new Date().toISOString(),
       };
 
-      if (item?.id) {
-        const { error } = await supabase
-          .from("suprimentos_garantias")
-          .update(payload)
-          .eq("id", item.id);
-        if (error) throw error;
-      } else {
-        const numeroControle = await generateNextControlNumber(
-          "suprimentos_garantias",
-          "GAR"
-        );
-        const { error } = await supabase.from("suprimentos_garantias").insert({
-          ...payload,
-          numero_controle: numeroControle,
-          ...buildOpenedBy(user),
-        });
-        if (error) throw error;
-      }
+      const { error } = await supabase.from("suprimentos_garantias").update(payload).eq("id", item.id);
+      if (error) throw error;
 
       onSaved?.();
       onClose?.();
     } catch (error) {
-      alert(`Erro ao salvar garantia: ${error.message}`);
+      alert(`Erro ao atualizar garantia: ${error.message}`);
     } finally {
       setSaving(false);
     }
   }
 
+  const meta = deriveGarantiaMeta({ ...item, ...form });
   const showApprovedFields = form.resultado === "Aprovada";
 
   return (
-    <div
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-[32px] border border-slate-200 bg-white shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <form onSubmit={handleSubmit} className="p-5">
-          <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.34em] text-blue-600">
-                Suprimentos
-              </p>
-              <h2 className="mt-3 text-2xl font-black text-slate-900">
-                {item ? "Atualizar garantia" : "Nova garantia"}
-              </h2>
-              {item?.numero_controle ? (
-                <p className="mt-2 text-xs font-black uppercase tracking-[0.24em] text-slate-400">
-                  Controle {item.numero_controle}
-                </p>
-              ) : null}
-              <p className="mt-2 text-sm font-medium text-slate-500">
-                Controle a peca, a resposta do fornecedor e o fechamento da garantia
-                sem depender de status manual.
-              </p>
-            </div>
-            <ActionButton onClick={onClose}>Fechar</ActionButton>
-          </div>
-
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="Peca" required>
-              <input
-                value={form.peca}
-                onChange={(e) => setForm((prev) => ({ ...prev, peca: e.target.value }))}
-                className={inputClass}
-                required
-              />
-            </Field>
-            <Field label="Codigo da peca">
-              <input
-                value={form.codigo_peca}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, codigo_peca: e.target.value }))
-                }
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Fornecedor" required>
-              <input
-                value={form.fornecedor}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, fornecedor: e.target.value }))
-                }
-                className={inputClass}
-                required
-              />
-            </Field>
-            <Field label="Data da compra">
-              <input
-                type="date"
-                value={form.data_compra}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, data_compra: e.target.value }))
-                }
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Valor da peca">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.valor_peca}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, valor_peca: e.target.value }))
-                }
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Prefixo" required>
-              <CampoPrefixo
-                value={form.prefixo}
-                onChange={(value) => setForm((prev) => ({ ...prev, prefixo: value }))}
-                label=""
-              />
-            </Field>
-            <Field label="KM instalacao">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={form.km_instalacao}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, km_instalacao: e.target.value }))
-                }
-                className={inputClass}
-              />
-            </Field>
-            <Field label="KM falha">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={form.km_falha}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, km_falha: e.target.value }))
-                }
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Data da falha" required>
-              <input
-                type="date"
-                value={form.data_falha}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, data_falha: e.target.value }))
-                }
-                className={inputClass}
-                required
-              />
-            </Field>
-            <Field label="Tipo de solicitacao">
-              <select
-                value={form.tipo_solicitacao}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, tipo_solicitacao: e.target.value }))
-                }
-                className={inputClass}
-              >
-                {GARANTIA_TIPOS_SOLICITACAO.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Protocolo / RMA">
-              <input
-                value={form.protocolo_fornecedor}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, protocolo_fornecedor: e.target.value }))
-                }
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Enviado ao fornecedor em">
-              <input
-                type="date"
-                value={form.enviado_fornecedor_em}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, enviado_fornecedor_em: e.target.value }))
-                }
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Resultado">
-              <select
-                value={form.resultado}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    resultado: e.target.value,
-                    tipo_retorno: e.target.value === "Aprovada" ? prev.tipo_retorno : "",
-                    valor_aprovado:
-                      e.target.value === "Aprovada" ? prev.valor_aprovado : "",
-                  }))
-                }
-                className={inputClass}
-              >
-                <option value="">Em aberto</option>
-                {GARANTIA_RESULTADOS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Data do retorno">
-              <input
-                type="date"
-                value={form.retorno_fornecedor_em}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    retorno_fornecedor_em: e.target.value,
-                  }))
-                }
-                className={inputClass}
-              />
-            </Field>
-            {showApprovedFields ? (
-              <>
-                <Field label="Tipo de retorno">
-                  <select
-                    value={form.tipo_retorno}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, tipo_retorno: e.target.value }))
-                    }
-                    className={inputClass}
-                  >
-                    <option value="">Selecione</option>
-                    {GARANTIA_TIPOS_RETORNO.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Valor aprovado">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.valor_aprovado}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, valor_aprovado: e.target.value }))
-                    }
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Previsao de recebimento">
-                  <input
-                    type="date"
-                    value={form.previsao_recebimento}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        previsao_recebimento: e.target.value,
-                      }))
-                    }
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Data do recebimento">
-                  <input
-                    type="date"
-                    value={form.recebida_em}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, recebida_em: e.target.value }))
-                    }
-                    className={inputClass}
-                  />
-                </Field>
-              </>
-            ) : null}
-            <Field label="Data de encerramento">
-              <input
-                type="date"
-                value={form.encerrada_em}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, encerrada_em: e.target.value }))
-                }
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <div className="mt-4 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-            <Field label="Observacao" className="h-full">
-              <textarea
-                value={form.observacao}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, observacao: e.target.value }))
-                }
-                className={`${inputClass} min-h-[140px]`}
-              />
-            </Field>
-            <Panel
-              title="Anexos"
-              subtitle="Aceita mais de uma foto ou video da peca, da falha e da devolutiva do fornecedor."
-              className="h-full"
-            >
-              <AttachmentInput
-                existingUrls={existingAttachments}
-                onExistingUrlsChange={setExistingAttachments}
-                newFiles={newFiles}
-                onNewFilesChange={setNewFiles}
-                helperText="Selecione quantas fotos e videos precisar."
-              />
-            </Panel>
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
-            <ActionButton onClick={onClose}>Cancelar</ActionButton>
-            <ActionButton
-              type="submit"
-              tone="blue"
-              disabled={saving}
-              className={saving ? "opacity-60" : ""}
-            >
-              {saving ? "Salvando..." : item ? "Atualizar garantia" : "Criar garantia"}
-            </ActionButton>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function GarantiaDetail({ item }) {
-  if (!item) return null;
-  const meta = deriveGarantiaMeta(item);
-
-  return (
-    <Panel
-      title={`${item.peca} · ${item.prefixo || "Sem prefixo"}`}
-      subtitle={`${item.numero_controle || "Sem controle"} · Aberto por ${
-        item.aberto_por_nome || "—"
-      } em ${formatDateTimeBR(item.created_at)}`}
+    <ModalShell
+      onClose={onClose}
+      title={`${item.numero_controle || "GAR"} · ${item.peca}`}
+      eyebrow="Detalhes da garantia"
+      subtitle={`Aberto por ${item.aberto_por_nome || "--"} em ${formatDateTimeBR(item.created_at)}`}
       actions={
         <div className="flex flex-wrap gap-2">
           <StatusChip label={meta.status} tone={meta.concluida ? "emerald" : "amber"} />
@@ -515,8 +361,8 @@ function GarantiaDetail({ item }) {
         </div>
       }
     >
-      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="grid gap-4 md:grid-cols-2">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Detail label="Controle" value={item.numero_controle} />
           <Detail label="Peca" value={item.peca} />
           <Detail label="Codigo" value={item.codigo_peca} />
@@ -524,39 +370,139 @@ function GarantiaDetail({ item }) {
           <Detail label="Prefixo" value={item.prefixo} />
           <Detail label="Data falha" value={formatDateBR(item.data_falha)} />
           <Detail label="KM falha" value={formatKm(item.km_falha)} />
-          <Detail label="KM instalacao" value={formatKm(item.km_instalacao)} />
-          <Detail label="Valor peca" value={formatCurrencyBR(item.valor_peca)} />
           <Detail label="Solicitacao" value={item.tipo_solicitacao} />
-          <Detail label="Protocolo" value={item.protocolo_fornecedor} />
-          <Detail label="Resultado" value={item.resultado || "Em aberto"} />
-          <Detail label="Retorno" value={item.tipo_retorno || "—"} />
-          <Detail
-            label="Valor aprovado"
-            value={item.valor_aprovado ? formatCurrencyBR(item.valor_aprovado) : "—"}
-          />
-          <Detail label="Recebida em" value={formatDateBR(item.recebida_em)} />
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
-              Observacao
-            </p>
-            <p className="mt-3 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-700">
-              {item.observacao || "Sem observacoes."}
-            </p>
-          </div>
-          <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
-              Anexos
-            </p>
-            <div className="mt-3">
-              <AttachmentGallery urls={item.anexos} />
-            </div>
-          </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Protocolo / RMA">
+            <input
+              value={form.protocolo_fornecedor}
+              onChange={(e) => setForm((prev) => ({ ...prev, protocolo_fornecedor: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Enviado ao fornecedor em">
+            <input
+              type="date"
+              value={form.enviado_fornecedor_em}
+              onChange={(e) => setForm((prev) => ({ ...prev, enviado_fornecedor_em: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Resultado">
+            <select
+              value={form.resultado}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  resultado: e.target.value,
+                  tipo_retorno: e.target.value === "Aprovada" ? prev.tipo_retorno : "",
+                  valor_aprovado: e.target.value === "Aprovada" ? prev.valor_aprovado : "",
+                }))
+              }
+              className={inputClass}
+            >
+              <option value="">Em aberto</option>
+              {GARANTIA_RESULTADOS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Data do retorno">
+            <input
+              type="date"
+              value={form.retorno_fornecedor_em}
+              onChange={(e) => setForm((prev) => ({ ...prev, retorno_fornecedor_em: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          {showApprovedFields ? (
+            <>
+              <Field label="Tipo de retorno">
+                <select
+                  value={form.tipo_retorno}
+                  onChange={(e) => setForm((prev) => ({ ...prev, tipo_retorno: e.target.value }))}
+                  className={inputClass}
+                >
+                  <option value="">Selecione</option>
+                  {GARANTIA_TIPOS_RETORNO.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Valor aprovado">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.valor_aprovado}
+                  onChange={(e) => setForm((prev) => ({ ...prev, valor_aprovado: e.target.value }))}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Previsao de recebimento">
+                <input
+                  type="date"
+                  value={form.previsao_recebimento}
+                  onChange={(e) => setForm((prev) => ({ ...prev, previsao_recebimento: e.target.value }))}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Data do recebimento">
+                <input
+                  type="date"
+                  value={form.recebida_em}
+                  onChange={(e) => setForm((prev) => ({ ...prev, recebida_em: e.target.value }))}
+                  className={inputClass}
+                />
+              </Field>
+            </>
+          ) : null}
+          <Field label="Data de encerramento">
+            <input
+              type="date"
+              value={form.encerrada_em}
+              onChange={(e) => setForm((prev) => ({ ...prev, encerrada_em: e.target.value }))}
+              className={inputClass}
+            />
+          </Field>
         </div>
-      </div>
-    </Panel>
+
+        <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <Field label="Observacao">
+            <textarea
+              value={form.observacao}
+              onChange={(e) => setForm((prev) => ({ ...prev, observacao: e.target.value }))}
+              className={`${inputClass} min-h-[150px]`}
+            />
+          </Field>
+          <Panel title="Anexos" subtitle="Adicione mais fotos e videos conforme a garantia evolui." className="h-full">
+            <AttachmentInput
+              existingUrls={existingAttachments}
+              onExistingUrlsChange={setExistingAttachments}
+              newFiles={newFiles}
+              onNewFilesChange={setNewFiles}
+              helperText="Pode anexar varias fotos e varios videos."
+            />
+          </Panel>
+        </div>
+
+        <Panel title="Arquivos ja salvos" subtitle="Tudo o que ja foi anexado nessa garantia.">
+          <AttachmentGallery urls={existingAttachments} />
+        </Panel>
+
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+          <ActionButton onClick={onClose}>Fechar</ActionButton>
+          <ActionButton type="submit" tone="blue" disabled={saving} className={saving ? "opacity-60" : ""}>
+            {saving ? "Salvando..." : "Salvar detalhes"}
+          </ActionButton>
+        </div>
+      </form>
+    </ModalShell>
   );
 }
 
@@ -567,9 +513,9 @@ export default function SuprimentosGarantias() {
   const [errorMessage, setErrorMessage] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailItem, setDetailItem] = useState(null);
 
   async function carregar() {
     setLoading(true);
@@ -615,57 +561,36 @@ export default function SuprimentosGarantias() {
     });
   }, [rows, search, statusFilter]);
 
-  const selected = useMemo(
-    () => rows.find((row) => row.id === selectedId) || filteredRows[0] || null,
-    [filteredRows, rows, selectedId]
-  );
-
   const cards = useMemo(() => {
     const abertas = rows.filter((row) => deriveGarantiaMeta(row).status === "Aberta");
-    const concluidas = rows.filter(
-      (row) => deriveGarantiaMeta(row).status === "Concluída"
-    );
+    const concluidas = rows.filter((row) => deriveGarantiaMeta(row).status === "Concluída");
     const aprovadas = rows.filter((row) => row.resultado === "Aprovada");
     const negadas = rows.filter((row) => row.resultado === "Negada");
-    const valorEmGarantia = abertas.reduce(
-      (sum, row) => sum + Number(row.valor_peca || 0),
-      0
-    );
+    const valorEmGarantia = abertas.reduce((sum, row) => sum + Number(row.valor_peca || 0), 0);
     const valorRecuperado = rows
       .filter((row) => row.resultado === "Aprovada")
-      .reduce(
-        (sum, row) => sum + Number(row.valor_aprovado || row.valor_peca || 0),
-        0
-      );
+      .reduce((sum, row) => sum + Number(row.valor_aprovado || row.valor_peca || 0), 0);
 
-    return {
-      abertas,
-      concluidas,
-      aprovadas,
-      negadas,
-      valorEmGarantia,
-      valorRecuperado,
-    };
+    return { abertas, concluidas, aprovadas, negadas, valorEmGarantia, valorRecuperado };
   }, [rows]);
+
+  function openDetail(item) {
+    setDetailItem(item);
+    setDetailOpen(true);
+  }
 
   return (
     <div className="space-y-6">
       <PageHero
         eyebrow="Suprimentos"
         title="Garantias"
-        description="Acompanhe a peca, o prefixo, a resposta do fornecedor e o fechamento financeiro ou logistico da garantia no mesmo fluxo."
+        description="Crie a garantia com cadastro rapido e complemente as informacoes depois no popup de detalhes."
         actions={
           <>
             <ActionButton onClick={carregar}>
               <FaRedo /> Atualizar
             </ActionButton>
-            <ActionButton
-              tone="blue"
-              onClick={() => {
-                setEditingItem(null);
-                setEditorOpen(true);
-              }}
-            >
+            <ActionButton tone="blue" onClick={() => setCreateOpen(true)}>
               <FaPlus /> Nova garantia
             </ActionButton>
           </>
@@ -673,54 +598,15 @@ export default function SuprimentosGarantias() {
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        <KpiCard
-          title="Garantias abertas"
-          value={cards.abertas.length}
-          subtitle="Em tratamento ou aguardando fornecedor"
-          icon={<FaShieldAlt />}
-          tone="amber"
-        />
-        <KpiCard
-          title="Garantias concluidas"
-          value={cards.concluidas.length}
-          subtitle="Fechadas por credito, peca ou negativa"
-          icon={<FaCheckCircle />}
-          tone="emerald"
-        />
-        <KpiCard
-          title="Aprovadas"
-          value={cards.aprovadas.length}
-          subtitle="Com resposta positiva do fornecedor"
-          icon={<FaTruckLoading />}
-          tone="cyan"
-        />
-        <KpiCard
-          title="Negadas"
-          value={cards.negadas.length}
-          subtitle="Sem cobertura da garantia"
-          icon={<FaTimesCircle />}
-          tone="rose"
-        />
-        <KpiCard
-          title="Valor em garantia"
-          value={formatCurrencyBR(cards.valorEmGarantia)}
-          subtitle="Somatorio das garantias abertas"
-          icon={<FaCoins />}
-          tone="blue"
-        />
-        <KpiCard
-          title="Valor recuperado"
-          value={formatCurrencyBR(cards.valorRecuperado)}
-          subtitle="Credito ou valor reconhecido"
-          icon={<FaTools />}
-          tone="violet"
-        />
+        <KpiCard title="Garantias abertas" value={cards.abertas.length} subtitle="Em tratamento ou aguardando fornecedor" icon={<FaShieldAlt />} tone="amber" />
+        <KpiCard title="Garantias concluidas" value={cards.concluidas.length} subtitle="Fechadas por credito, peca ou negativa" icon={<FaCheckCircle />} tone="emerald" />
+        <KpiCard title="Aprovadas" value={cards.aprovadas.length} subtitle="Com resposta positiva do fornecedor" icon={<FaTruckLoading />} tone="cyan" />
+        <KpiCard title="Negadas" value={cards.negadas.length} subtitle="Sem cobertura da garantia" icon={<FaTimesCircle />} tone="rose" />
+        <KpiCard title="Valor em garantia" value={formatCurrencyBR(cards.valorEmGarantia)} subtitle="Somatorio das garantias abertas" icon={<FaCoins />} tone="blue" />
+        <KpiCard title="Valor recuperado" value={formatCurrencyBR(cards.valorRecuperado)} subtitle="Credito ou valor reconhecido" icon={<FaTools />} tone="violet" />
       </section>
 
-      <Panel
-        title="Central de garantias"
-        subtitle="Filtre a carteira e clique em uma linha para ver o detalhe completo."
-      >
+      <Panel title="Central de garantias" subtitle="Clique na linha para abrir o popup de detalhes e complementar a garantia.">
         <div className="grid gap-3 border-b border-slate-100 pb-4 lg:grid-cols-[1.2fr_0.45fr_0.25fr]">
           <label className="relative block">
             <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -736,11 +622,7 @@ export default function SuprimentosGarantias() {
             <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.2em] text-slate-500">
               <FaFilter className="mr-1 inline" /> Situacao
             </span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className={inputClass}
-            >
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={inputClass}>
               <option value="todos">Todas</option>
               <option value="Aberta">Abertas</option>
               <option value="Concluída">Concluidas</option>
@@ -748,9 +630,7 @@ export default function SuprimentosGarantias() {
           </label>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">
-              Na tela
-            </p>
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Na tela</p>
             <p className="mt-2 text-2xl font-black text-slate-900">{filteredRows.length}</p>
           </div>
         </div>
@@ -762,15 +642,10 @@ export default function SuprimentosGarantias() {
         ) : null}
 
         {loading ? (
-          <div className="py-16 text-center text-sm font-semibold text-slate-500">
-            Carregando garantias...
-          </div>
+          <div className="py-16 text-center text-sm font-semibold text-slate-500">Carregando garantias...</div>
         ) : filteredRows.length === 0 ? (
           <div className="mt-5">
-            <EmptyState
-              title="Nenhuma garantia encontrada"
-              subtitle="Ajuste os filtros ou abra a primeira garantia do cluster."
-            />
+            <EmptyState title="Nenhuma garantia encontrada" subtitle="Ajuste os filtros ou abra a primeira garantia do cluster." />
           </div>
         ) : (
           <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200">
@@ -786,87 +661,45 @@ export default function SuprimentosGarantias() {
                     <th className="px-4 py-3">Solicitacao</th>
                     <th className="px-4 py-3">Situacao</th>
                     <th className="px-4 py-3">Aberto por</th>
-                    <th className="px-4 py-3 text-right">Acoes</th>
+                    <th className="px-4 py-3 text-right">Detalhes</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRows.map((row) => {
                     const meta = deriveGarantiaMeta(row);
-                    const active = selected?.id === row.id;
                     return (
                       <tr
                         key={row.id}
-                        className={`border-t border-slate-100 transition hover:bg-slate-50 ${
-                          active ? "bg-blue-50/60" : ""
-                        }`}
+                        onClick={() => openDetail(row)}
+                        className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60"
                       >
-                        <td className="px-4 py-3 font-black text-slate-700">
-                          {row.numero_controle || "—"}
-                        </td>
+                        <td className="px-4 py-3 font-black text-slate-700">{row.numero_controle || "--"}</td>
                         <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedId(row.id)}
-                            className="text-left"
-                          >
-                            <p className="font-black text-slate-900">{row.peca}</p>
-                            <p className="mt-1 text-xs font-semibold text-slate-500">
-                              {row.codigo_peca || "Sem codigo"}
-                            </p>
-                          </button>
+                          <p className="font-black text-slate-900">{row.peca}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">{row.codigo_peca || "Sem codigo"}</p>
                         </td>
-                        <td className="px-4 py-3 font-semibold text-slate-700">
-                          {row.fornecedor}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-slate-700">
-                          {row.prefixo || "—"}
-                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-700">{row.fornecedor}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-700">{row.prefixo || "--"}</td>
                         <td className="px-4 py-3">
-                          <p className="font-semibold text-slate-700">
-                            {formatDateBR(row.data_falha)}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {formatKm(row.km_falha)}
-                          </p>
+                          <p className="font-semibold text-slate-700">{formatDateBR(row.data_falha)}</p>
+                          <p className="mt-1 text-xs text-slate-500">{formatKm(row.km_falha)}</p>
                         </td>
-                        <td className="px-4 py-3 font-semibold text-slate-700">
-                          {row.tipo_solicitacao || "—"}
-                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-700">{row.tipo_solicitacao || "--"}</td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-2">
-                            <StatusChip
-                              label={meta.status}
-                              tone={meta.concluida ? "emerald" : "amber"}
-                            />
+                            <StatusChip label={meta.status} tone={meta.concluida ? "emerald" : "amber"} />
                             <StatusChip label={meta.fase} tone={meta.tone} />
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="font-semibold text-slate-700">
-                            {row.aberto_por_nome || "—"}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {formatDateBR(row.created_at)}
-                          </p>
+                          <p className="font-semibold text-slate-700">{row.aberto_por_nome || "--"}</p>
+                          <p className="mt-1 text-xs text-slate-500">{formatDateBR(row.created_at)}</p>
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <ActionButton
-                              className="px-3 py-2 text-xs"
-                              onClick={() => setSelectedId(row.id)}
-                            >
-                              <FaEye /> Ver
-                            </ActionButton>
-                            <ActionButton
-                              className="px-3 py-2 text-xs"
-                              onClick={() => {
-                                setEditingItem(row);
-                                setEditorOpen(true);
-                              }}
-                            >
-                              <FaEdit /> Editar
-                            </ActionButton>
-                          </div>
+                        <td className="px-4 py-3 text-right">
+                          <span className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700">
+                            <FaEye />
+                            Abrir
+                          </span>
                         </td>
                       </tr>
                     );
@@ -878,14 +711,18 @@ export default function SuprimentosGarantias() {
         )}
       </Panel>
 
-      {selected ? <GarantiaDetail item={selected} /> : null}
-
-      <GarantiaModal
-        open={editorOpen}
-        item={editingItem}
-        onClose={() => setEditorOpen(false)}
+      <QuickCreateGarantiaModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
         onSaved={carregar}
         user={user}
+      />
+
+      <GarantiaDetailModal
+        open={detailOpen}
+        item={detailItem}
+        onClose={() => setDetailOpen(false)}
+        onSaved={carregar}
       />
     </div>
   );

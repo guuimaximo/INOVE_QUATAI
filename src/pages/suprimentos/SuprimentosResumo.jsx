@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   FaBoxOpen,
   FaBug,
@@ -68,9 +68,9 @@ export default function SuprimentosResumo() {
 
   const resumo = useMemo(() => {
     const garantiasAbertas = garantias.filter((row) => deriveGarantiaMeta(row).status === "Aberta");
-    const garantiasConcluidas = garantias.filter((row) => deriveGarantiaMeta(row).status === "Concluída");
+    const garantiasConcluidas = garantias.filter((row) => deriveGarantiaMeta(row).status === "ConcluÃ­da");
     const testesAtivos = testes.filter((row) => deriveTesteMeta(row).status === "Ativo");
-    const testesConcluidos = testes.filter((row) => deriveTesteMeta(row).status === "Concluído");
+    const testesConcluidos = testes.filter((row) => deriveTesteMeta(row).status === "ConcluÃ­do");
     const valorEmGarantia = garantiasAbertas.reduce((sum, row) => sum + Number(row.valor_peca || 0), 0);
     const valorRecuperado = garantias
       .filter((row) => row.resultado === "Aprovada")
@@ -103,7 +103,7 @@ export default function SuprimentosResumo() {
         itens.push({
           id: `g-${row.id}`,
           tipo: "Garantia",
-          titulo: `${row.peca} · ${row.prefixo || "sem prefixo"}`,
+          titulo: `${row.peca} Â· ${row.prefixo || "sem prefixo"}`,
           texto: `Enviada ao fornecedor em ${formatDateBR(row.enviado_fornecedor_em)} e ainda sem retorno.`,
           tone: "amber",
         });
@@ -116,7 +116,7 @@ export default function SuprimentosResumo() {
         itens.push({
           id: `t-${row.id}`,
           tipo: "Teste",
-          titulo: `${row.nome_teste} · ${row.prefixo || "sem prefixo"}`,
+          titulo: `${row.nome_teste} Â· ${row.prefixo || "sem prefixo"}`,
           texto: "Existe falha registrada e o teste segue sem encerramento final.",
           tone: "rose",
         });
@@ -131,16 +131,16 @@ export default function SuprimentosResumo() {
       <PageHero
         eyebrow="Suprimentos"
         title="Resumo Suprimentos"
-        description="Visão conjunta das garantias e dos testes de peças, com foco em carteira aberta, retorno financeiro, peças em acompanhamento e alertas operacionais."
+        description="VisÃ£o conjunta das garantias e dos testes de peÃ§as, com foco em carteira aberta, retorno financeiro, peÃ§as em acompanhamento e alertas operacionais."
         actions={<ActionButton onClick={carregar}><FaRedo /> Atualizar resumo</ActionButton>}
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <KpiCard title="Garantias abertas" value={resumo.garantiasAbertas.length} subtitle="Itens aguardando resposta ou fechamento" icon={<FaShieldAlt />} tone="amber" />
-        <KpiCard title="Garantias concluídas" value={resumo.garantiasConcluidas.length} subtitle="Fechadas por crédito, peça ou negativa" icon={<FaCheckCircle />} tone="emerald" />
+        <KpiCard title="Garantias concluÃ­das" value={resumo.garantiasConcluidas.length} subtitle="Fechadas por crÃ©dito, peÃ§a ou negativa" icon={<FaCheckCircle />} tone="emerald" />
         <KpiCard title="Valor em garantia" value={formatCurrencyBR(resumo.valorEmGarantia)} subtitle="Base aberta para cobrar resposta" icon={<FaCoins />} tone="blue" />
         <KpiCard title="Valor recuperado" value={formatCurrencyBR(resumo.valorRecuperado)} subtitle="Aprovado pelo fornecedor" icon={<FaChartLine />} tone="cyan" />
-        <KpiCard title="Testes ativos" value={resumo.testesAtivos.length} subtitle="Peças rodando em campo" icon={<FaFlask />} tone="violet" />
+        <KpiCard title="Testes ativos" value={resumo.testesAtivos.length} subtitle="PeÃ§as rodando em campo" icon={<FaFlask />} tone="violet" />
         <KpiCard title="KM em teste" value={`${resumo.kmAtivo.toLocaleString("pt-BR")} km`} subtitle="Rodagem acumulada dos testes ativos" icon={<FaRoute />} tone="slate" />
       </section>
 
@@ -151,13 +151,13 @@ export default function SuprimentosResumo() {
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Panel
           title="Radar de garantias"
-          subtitle="As últimas garantias abertas ou atualizadas ficam aqui para a gestão rápida da carteira."
+          subtitle="As Ãºltimas garantias abertas ou atualizadas ficam aqui para a gestÃ£o rÃ¡pida da carteira."
           actions={<StatusChip label={`${garantias.length} registros`} tone="blue" />}
         >
           {loading ? (
             <div className="py-12 text-center text-sm font-semibold text-slate-500">Carregando garantias...</div>
           ) : garantiasRecentes.length === 0 ? (
-            <EmptyState title="Sem garantias ainda" subtitle="Assim que você abrir a primeira garantia, o resumo passa a acompanhar a carteira." />
+            <EmptyState title="Sem garantias ainda" subtitle="Assim que vocÃª abrir a primeira garantia, o resumo passa a acompanhar a carteira." />
           ) : (
             <div className="space-y-3">
               {garantiasRecentes.map((row) => {
@@ -168,10 +168,10 @@ export default function SuprimentosResumo() {
                       <div>
                         <p className="text-base font-black text-slate-900">{row.peca}</p>
                         <p className="mt-1 text-sm font-semibold text-slate-500">
-                          {row.fornecedor} · Prefixo {row.prefixo || "—"} · Falha em {formatDateBR(row.data_falha)}
+                          {row.fornecedor} Â· Prefixo {row.prefixo || "â€”"} Â· Falha em {formatDateBR(row.data_falha)}
                         </p>
                         <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                          Aberto por {row.aberto_por_nome || "—"} · {formatDateTimeBR(row.created_at)}
+                          Aberto por {row.aberto_por_nome || "â€”"} Â· {formatDateTimeBR(row.created_at)}
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -180,9 +180,9 @@ export default function SuprimentosResumo() {
                       </div>
                     </div>
                     <div className="mt-3 grid gap-3 md:grid-cols-3">
-                      <MiniInfo label="Valor peça" value={formatCurrencyBR(row.valor_peca)} />
+                      <MiniInfo label="Valor peÃ§a" value={formatCurrencyBR(row.valor_peca)} />
                       <MiniInfo label="KM falha" value={formatKm(row.km_falha)} />
-                      <MiniInfo label="Solicitação" value={row.tipo_solicitacao || "—"} />
+                      <MiniInfo label="SolicitaÃ§Ã£o" value={row.tipo_solicitacao || "â€”"} />
                     </div>
                   </div>
                 );
@@ -193,7 +193,7 @@ export default function SuprimentosResumo() {
 
         <Panel
           title="Alertas"
-          subtitle="Pontos que merecem atenção da manutenção e do suprimentos."
+          subtitle="Pontos que merecem atenÃ§Ã£o da manutenÃ§Ã£o e do suprimentos."
           actions={<StatusChip label={`${alertas.length} alertas`} tone={alertas.length ? "amber" : "emerald"} />}
         >
           {loading ? (
@@ -210,7 +210,7 @@ export default function SuprimentosResumo() {
                       <p className="mt-2 text-sm font-black text-slate-900">{item.titulo}</p>
                       <p className="mt-2 text-sm font-medium leading-6 text-slate-600">{item.texto}</p>
                     </div>
-                    <StatusChip label="Atenção" tone={item.tone} />
+                    <StatusChip label="AtenÃ§Ã£o" tone={item.tone} />
                   </div>
                 </div>
               ))}
@@ -222,13 +222,13 @@ export default function SuprimentosResumo() {
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel
           title="Testes em andamento"
-          subtitle="Leitura rápida da base ativa para saber o que está rodando em campo."
+          subtitle="Leitura rÃ¡pida da base ativa para saber o que estÃ¡ rodando em campo."
           actions={<StatusChip label={`${resumo.testesAtivos.length} ativos`} tone="violet" />}
         >
           {loading ? (
             <div className="py-12 text-center text-sm font-semibold text-slate-500">Carregando testes...</div>
           ) : testesRecentes.length === 0 ? (
-            <EmptyState title="Sem testes cadastrados" subtitle="Crie um teste para começar a acompanhar peça, quilometragem e parecer técnico." />
+            <EmptyState title="Sem testes cadastrados" subtitle="Crie um teste para comeÃ§ar a acompanhar peÃ§a, quilometragem e parecer tÃ©cnico." />
           ) : (
             <div className="space-y-3">
               {testesRecentes.map((row) => {
@@ -240,10 +240,10 @@ export default function SuprimentosResumo() {
                       <div>
                         <p className="text-base font-black text-slate-900">{row.nome_teste}</p>
                         <p className="mt-1 text-sm font-semibold text-slate-500">
-                          {row.peca} · {row.fornecedor} · Prefixo {row.prefixo || "—"}
+                          {row.peca} Â· {row.fornecedor} Â· Prefixo {row.prefixo || "â€”"}
                         </p>
                         <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                          Aberto por {row.aberto_por_nome || "—"} · {formatDateTimeBR(row.created_at)}
+                          Aberto por {row.aberto_por_nome || "â€”"} Â· {formatDateTimeBR(row.created_at)}
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -265,7 +265,7 @@ export default function SuprimentosResumo() {
 
         <Panel
           title="Pulso do cluster"
-          subtitle="Resumo cruzado para o gestor entender rápido o tamanho da carteira e do acompanhamento."
+          subtitle="Resumo cruzado para o gestor entender rÃ¡pido o tamanho da carteira e do acompanhamento."
         >
           <div className="grid gap-4 md:grid-cols-2">
             <PulseCard
@@ -273,7 +273,7 @@ export default function SuprimentosResumo() {
               lines={[
                 { icon: <FaClipboardList />, label: "Total cadastrado", value: garantias.length },
                 { icon: <FaTruckLoading />, label: "Em tratamento", value: resumo.garantiasAbertas.length },
-                { icon: <FaCheckCircle />, label: "Concluídas", value: resumo.garantiasConcluidas.length },
+                { icon: <FaCheckCircle />, label: "ConcluÃ­das", value: resumo.garantiasConcluidas.length },
                 { icon: <FaCoins />, label: "Recuperado", value: formatCurrencyBR(resumo.valorRecuperado) },
               ]}
             />
@@ -297,7 +297,7 @@ function MiniInfo({ label, value }) {
   return (
     <div className="rounded-[18px] border border-white bg-white px-3 py-3 shadow-sm">
       <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-800">{value || "—"}</p>
+      <p className="mt-2 text-sm font-semibold text-slate-800">{value || "â€”"}</p>
     </div>
   );
 }
@@ -320,3 +320,4 @@ function PulseCard({ title, lines }) {
     </div>
   );
 }
+

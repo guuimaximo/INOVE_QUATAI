@@ -18,6 +18,7 @@ import {
   FaEdit,
   FaArrowLeft,
 } from "react-icons/fa";
+import FileViewerModal from "../../components/FileViewerModal";
 
 const acoes = [
   "Orientação",
@@ -281,6 +282,106 @@ export default function TratarTratativa() {
 
   const [previewTratativaUrl, setPreviewTratativaUrl] = useState(null);
   const [previewValeUrl, setPreviewValeUrl] = useState(null);
+  const [viewerFile, setViewerFile] = useState(null);
+
+  const openViewer = (url) => {
+    if (!url) return;
+    setViewerFile({ url, name: fileNameFromUrl(url) });
+  };
+
+  const renderViewerEvidenciasGrid = (urls, label) => {
+    const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
+    if (arr.length === 0) return null;
+
+    return (
+      <div className="mt-3">
+        <span className="mb-2 block text-sm font-semibold text-slate-500">{label}</span>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {arr.map((u, i) => {
+            const pdf = isPdf(u);
+            const img = !pdf && isImageUrl(u);
+            const name = fileNameFromUrl(u);
+
+            return (
+              <button
+                type="button"
+                key={`${u}-${i}`}
+                onClick={() => openViewer(u)}
+                className="rounded-xl border bg-white text-left hover:shadow-sm"
+                title="Visualizar evidencia"
+              >
+                {img ? (
+                  <>
+                    <img
+                      src={u}
+                      alt={name}
+                      className="h-24 w-full rounded-t-xl object-cover"
+                      loading="lazy"
+                    />
+                    <div className="truncate px-2 py-1.5 text-xs text-slate-700">{name}</div>
+                  </>
+                ) : (
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                        {pdf ? "PDF" : "ARQ"}
+                      </span>
+                    </div>
+                    <div className="mt-2 break-words text-xs text-blue-700 underline">{name}</div>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderViewerArquivoOuThumb = (url, label) => {
+    if (!url) return null;
+
+    const pdf = isPdf(url);
+    const img = !pdf && isImageUrl(url);
+    const name = fileNameFromUrl(url);
+
+    return (
+      <div className="mt-2">
+        <span className="mb-2 block text-sm font-semibold text-slate-500">{label}</span>
+
+        {pdf || !img ? (
+          <button
+            type="button"
+            onClick={() => openViewer(url)}
+            className="block rounded-xl border bg-white p-3 text-left hover:shadow-sm"
+            title="Visualizar arquivo"
+          >
+            <div className="flex items-center justify-between">
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                {pdf ? "PDF" : "ARQ"}
+              </span>
+            </div>
+            <div className="mt-2 break-words text-sm text-blue-700 underline">{name}</div>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => openViewer(url)}
+            title="Visualizar imagem"
+            className="inline-block"
+          >
+            <img
+              src={url}
+              alt={name}
+              className="h-24 w-24 rounded-xl border object-cover hover:opacity-90"
+              loading="lazy"
+            />
+          </button>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (!anexoTratativa) {
@@ -1038,7 +1139,7 @@ export default function TratarTratativa() {
           />
 
           <div className="md:col-span-2">
-            {renderEvidenciasGrid(
+            {renderViewerEvidenciasGrid(
               evidenciasSolicitacao,
               "Evidências da solicitação (reclamação)"
             )}
@@ -1184,7 +1285,7 @@ export default function TratarTratativa() {
               </div>
             )}
 
-            {renderArquivoOuThumb(t.anexo_tratativa || null, "Anexo já anexado (se houver)")}
+            {renderViewerArquivoOuThumb(t.anexo_tratativa || null, "Anexo já anexado (se houver)")}
           </div>
         </div>
 
@@ -1240,6 +1341,13 @@ function ResumoCard({ titulo, valor, subtitulo, icon, border }) {
         </div>
         <div className="text-2xl opacity-80">{icon}</div>
       </div>
+
+      <FileViewerModal
+        open={Boolean(viewerFile?.url)}
+        url={viewerFile?.url || ""}
+        name={viewerFile?.name || ""}
+        onClose={() => setViewerFile(null)}
+      />
     </div>
   );
 }
@@ -1264,3 +1372,4 @@ function Item({ titulo, valor, className, icon }) {
     </div>
   );
 }
+

@@ -18,6 +18,7 @@ import {
   FaImage,
   FaArrowLeft,
 } from 'react-icons/fa'
+import FileViewerModal from '../../components/FileViewerModal'
 
 export default function ConsultarTratativa() {
   const { id } = useParams()
@@ -26,6 +27,7 @@ export default function ConsultarTratativa() {
   const [t, setT] = useState(null)
   const [historico, setHistorico] = useState([])
   const [linhaDesc, setLinhaDesc] = useState('')
+  const [viewerFile, setViewerFile] = useState(null)
 
   const fileNameFromUrl = (u) => {
     try {
@@ -48,6 +50,76 @@ export default function ConsultarTratativa() {
   const isImageUrl = (u) => {
     const s = String(u || '').toLowerCase()
     return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s)
+  }
+
+  const openViewer = (url) => {
+    if (!url) return
+    setViewerFile({ url, name: fileNameFromUrl(url) })
+  }
+
+  const renderViewerArquivoOuThumb = (url, label) => {
+    if (!url) return null
+    const pdf = isPdf(url)
+    const img = !pdf && isImageUrl(url)
+
+    return (
+      <div className="mt-2">
+        <span className="mb-2 block text-sm font-semibold text-slate-500">{label}</span>
+
+        {pdf || !img ? (
+          <button
+            type="button"
+            onClick={() => openViewer(url)}
+            className="block rounded-xl border bg-white p-3 text-left hover:shadow-sm"
+            title="Visualizar arquivo"
+          >
+            <div className="flex items-center justify-between">
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                {pdf ? 'PDF' : 'ARQ'}
+              </span>
+            </div>
+            <div className="mt-2 break-words text-sm text-blue-700 underline">
+              {fileNameFromUrl(url)}
+            </div>
+          </button>
+        ) : (
+          <button type="button" onClick={() => openViewer(url)} title="Visualizar imagem">
+            <img
+              src={url}
+              alt={fileNameFromUrl(url)}
+              className="h-24 w-24 rounded-xl border object-cover hover:opacity-90"
+              loading="lazy"
+            />
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const renderViewerListaArquivosCompacta = (urls, label) => {
+    const arr = Array.isArray(urls) ? urls.filter(Boolean) : []
+    if (arr.length === 0) return null
+
+    return (
+      <div className="mt-2">
+        <span className="mb-2 block text-sm font-semibold text-slate-500">{label}</span>
+        <ul className="space-y-2">
+          {arr.map((u, i) => (
+            <li key={`${u}-${i}`} className="text-sm">
+              <button
+                type="button"
+                onClick={() => openViewer(u)}
+                className="inline-flex items-center gap-2 text-left text-blue-600 underline"
+                title="Visualizar evidência"
+              >
+                {isImageUrl(u) && !isPdf(u) ? <FaImage className="text-xs" /> : <FaPaperclip className="text-xs" />}
+                {fileNameFromUrl(u)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
   }
 
   const renderArquivoOuThumb = (url, label) => {
@@ -286,7 +358,7 @@ export default function ConsultarTratativa() {
           />
 
           <div className="md:col-span-2">
-            {renderListaArquivosCompacta(
+            {renderViewerListaArquivosCompacta(
               evidenciasSolicitacao,
               'Evidências da solicitação (reclamação)'
             )}
@@ -315,9 +387,9 @@ export default function ConsultarTratativa() {
           <div className="mt-3 whitespace-pre-wrap text-slate-700">{conclusaoObs}</div>
 
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>{renderArquivoOuThumb(ultima?.imagem_tratativa, 'Evidência da conclusão')}</div>
-            <div>{renderArquivoOuThumb(ultima?.anexo_tratativa, 'Anexo da tratativa')}</div>
-            <div>{renderArquivoOuThumb(ultima?.anexo_vale, 'Anexo do vale')}</div>
+            <div>{renderViewerArquivoOuThumb(ultima?.imagem_tratativa, 'Evidência da conclusão')}</div>
+            <div>{renderViewerArquivoOuThumb(ultima?.anexo_tratativa, 'Anexo da tratativa')}</div>
+            <div>{renderViewerArquivoOuThumb(ultima?.anexo_vale, 'Anexo do vale')}</div>
           </div>
         </div>
       </div>
@@ -355,9 +427,9 @@ export default function ConsultarTratativa() {
                   )}
 
                   <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>{renderArquivoOuThumb(h.imagem_tratativa, 'Evidência da conclusão')}</div>
-                    <div>{renderArquivoOuThumb(h.anexo_tratativa, 'Anexo da tratativa')}</div>
-                    <div>{renderArquivoOuThumb(h.anexo_vale, 'Anexo do vale')}</div>
+                    <div>{renderViewerArquivoOuThumb(h.imagem_tratativa, 'Evidência da conclusão')}</div>
+                    <div>{renderViewerArquivoOuThumb(h.anexo_tratativa, 'Anexo da tratativa')}</div>
+                    <div>{renderViewerArquivoOuThumb(h.anexo_vale, 'Anexo do vale')}</div>
                   </div>
                 </li>
               )
@@ -393,8 +465,8 @@ export default function ConsultarTratativa() {
                   )}
 
                   <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>{renderArquivoOuThumb(s.imagem_tratativa, 'Evidência')}</div>
-                    <div>{renderArquivoOuThumb(s.anexo_vale, 'Anexo do vale')}</div>
+                    <div>{renderViewerArquivoOuThumb(s.imagem_tratativa, 'Evidência')}</div>
+                    <div>{renderViewerArquivoOuThumb(s.anexo_vale, 'Anexo do vale')}</div>
                   </div>
                 </li>
               )
@@ -402,6 +474,13 @@ export default function ConsultarTratativa() {
           </ul>
         )}
       </div>
+
+      <FileViewerModal
+        open={Boolean(viewerFile?.url)}
+        url={viewerFile?.url || ''}
+        name={viewerFile?.name || ''}
+        onClose={() => setViewerFile(null)}
+      />
     </div>
   )
 }
@@ -445,3 +524,4 @@ function Item({ titulo, valor, className, icon }) {
     </div>
   )
 }
+

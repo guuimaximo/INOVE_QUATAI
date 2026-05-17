@@ -105,40 +105,6 @@ function ImgTile({ src, name }) {
 }
 
 // ✅ Grid de evidências (com PDF tile + nome embaixo)
-function EvidenciasGrid({ urls, label }) {
-  const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
-  return (
-    <div>
-      <div className="text-sm text-gray-600 mb-2">{label}</div>
-
-      {arr.length === 0 ? (
-        <div className="text-sm text-gray-400">—</div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {arr.map((u, i) => {
-            const name = fileNameFromUrl(u);
-            const pdf = isPdf(u);
-            const img = isImageUrl(u) && !pdf;
-
-            return (
-              <a
-                key={`${u}-${i}`}
-                href={u}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Abrir evidência"
-                className="block"
-              >
-                {img ? <ImgTile src={u} name={name} /> : <PdfTile name={name} />}
-              </a>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function EvidenciasGridViewer({ urls, label, onOpen }) {
   const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
   return (
@@ -521,5 +487,6 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
     </div>
   );
 }
+
 
 

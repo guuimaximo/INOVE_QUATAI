@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabase';
+import FileViewerModal from '../../components/FileViewerModal';
 import { FaUndo, FaEdit, FaSave, FaPlus, FaTrash, FaLock } from 'react-icons/fa';
 
 // ======================================================================
@@ -104,6 +105,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
   const [valorTotal, setValorTotal] = useState(0);
 
   const [urlsEvidencias, setUrlsEvidencias] = useState([]);
+  const [viewerFile, setViewerFile] = useState(null);
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [acaoPendente, setAcaoPendente] = useState(null); // excluir_item | excluir_evidencia | excluir_avaria
@@ -112,6 +114,18 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
   useEffect(() => {
     if (avaria) carregarItens();
   }, [avaria]);
+
+  const fileNameFromUrl = (url) => {
+    try {
+      const raw = String(url || '');
+      const noHash = raw.split('#')[0];
+      const noQuery = noHash.split('?')[0];
+      const last = noQuery.split('/').filter(Boolean).pop() || 'arquivo';
+      return decodeURIComponent(last);
+    } catch {
+      return 'arquivo';
+    }
+  };
 
   async function carregarItens() {
     setLoadingItens(true);
@@ -417,11 +431,17 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
                     <FaTrash /> Excluir
                   </button>
 
-                  {url.match(/\.(mp4|mov|webm)$/i) ? (
-                    <video controls src={url} className="w-full h-32 object-cover" />
-                  ) : (
-                    <img src={url} alt="" className="w-full h-32 object-cover" />
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setViewerFile({ url, name: fileNameFromUrl(url) })}
+                    className="block w-full"
+                  >
+                    {url.match(/\.(mp4|mov|webm)$/i) ? (
+                      <video controls src={url} className="w-full h-32 object-cover" />
+                    ) : (
+                      <img src={url} alt="" className="w-full h-32 object-cover" />
+                    )}
+                  </button>
                 </div>
               ))}
             </div>
@@ -534,6 +554,13 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
           }}
         />
       )}
+
+      <FileViewerModal
+        open={Boolean(viewerFile?.url)}
+        url={viewerFile?.url || ''}
+        name={viewerFile?.name || ''}
+        onClose={() => setViewerFile(null)}
+      />
     </div>
   );
 }
@@ -647,6 +674,14 @@ export default function AvariasEmRevisao() {
           onAtualizarLista={carregar}
         />
       )}
+
+      <FileViewerModal
+        open={Boolean(viewerFile?.url)}
+        url={viewerFile?.url || ''}
+        name={viewerFile?.name || ''}
+        onClose={() => setViewerFile(null)}
+      />
     </div>
   );
 }
+

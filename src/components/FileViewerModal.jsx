@@ -11,6 +11,11 @@ function isPdfUrl(url) {
   return value.includes(".pdf") || /\.(pdf)(\?|#|$)/.test(value);
 }
 
+function isVideoUrl(url) {
+  const value = String(url || "").toLowerCase();
+  return /\.(mp4|mov|webm|ogg)(\?|#|$)/.test(value);
+}
+
 export default function FileViewerModal({ open, url, name, onClose }) {
   useEffect(() => {
     if (!open) return undefined;
@@ -28,6 +33,7 @@ export default function FileViewerModal({ open, url, name, onClose }) {
   const fileName = name || "arquivo";
   const image = isImageUrl(url);
   const pdf = isPdfUrl(url);
+  const video = isVideoUrl(url);
 
   return (
     <div
@@ -72,6 +78,12 @@ export default function FileViewerModal({ open, url, name, onClose }) {
               src={url}
               alt={fileName}
               className="max-h-[78vh] w-auto max-w-full rounded-2xl border border-slate-200 bg-white object-contain shadow-sm"
+            />
+          ) : video ? (
+            <video
+              src={url}
+              controls
+              className="max-h-[78vh] w-auto max-w-full rounded-2xl border border-slate-200 bg-white shadow-sm"
             />
           ) : pdf ? (
             <iframe

@@ -1,6 +1,7 @@
 // src/pages/AprovacaoAvarias.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../supabase';
+import FileViewerModal from '../../components/FileViewerModal';
 import {
   FaCheckCircle, FaTimesCircle, FaEye, FaTimes, FaLock,
   FaEdit, FaSave, FaPlus, FaTrash
@@ -86,6 +87,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   const [valorTotal, setValorTotal] = useState(0);
   const [observacao, setObservacao] = useState('');
   const [urlsEvidencias, setUrlsEvidencias] = useState([]);
+  const [viewerFile, setViewerFile] = useState(null);
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [loginTitle, setLoginTitle] = useState('Aprovação Restrita');
@@ -139,6 +141,18 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
 
   const formatCurrency = (v) =>
     (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const fileNameFromUrl = (url) => {
+    try {
+      const raw = String(url || '');
+      const noHash = raw.split('#')[0];
+      const noQuery = noHash.split('?')[0];
+      const last = noQuery.split('/').filter(Boolean).pop() || 'arquivo';
+      return decodeURIComponent(last);
+    } catch {
+      return 'arquivo';
+    }
+  };
 
   // Helper: tenta salvar urls como array; se falhar, salva como string
   async function atualizarUrlsNoBanco(nextUrls) {
@@ -500,10 +514,9 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
                       </button>
                     )}
 
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => setViewerFile({ url, name: fileNameFromUrl(url) })}
                       className="block hover:opacity-90"
                     >
                       {url.match(/\.(mp4|mov|webm)$/i) ? (
@@ -515,7 +528,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
                           className="w-full h-32 object-cover"
                         />
                       )}
-                    </a>
+                    </button>
                   </div>
                 ))
               ) : (
@@ -656,6 +669,13 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             }}
           />
         )}
+
+        <FileViewerModal
+          open={Boolean(viewerFile?.url)}
+          url={viewerFile?.url || ''}
+          name={viewerFile?.name || ''}
+          onClose={() => setViewerFile(null)}
+        />
       </div>
     </div>
   );

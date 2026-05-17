@@ -41,26 +41,6 @@ function isPdf(u) {
   return s.includes(".pdf") || /\.(pdf)(\?|#|$)/.test(s);
 }
 
-function Thumb({ url }) {
-  if (!url) return <span className="text-gray-400">—</span>;
-  const img = isImageUrl(url) && !isPdf(url);
-
-  return img ? (
-    <a href={url} target="_blank" rel="noopener noreferrer" title="Abrir">
-      <img
-        src={url}
-        alt={fileNameFromUrl(url)}
-        className="h-14 w-14 rounded border object-cover hover:opacity-90"
-        loading="lazy"
-      />
-    </a>
-  ) : (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">
-      {fileNameFromUrl(url)}
-    </a>
-  );
-}
-
 function ThumbViewer({ url }) {
   const [viewerFile, setViewerFile] = useState(null);
   if (!url) return <span className="text-gray-400">-</span>;
@@ -209,5 +189,6 @@ export default function TratativasConsultarRH({ aberto, grupo, onClose }) {
     </div>
   );
 }
+
 
 

@@ -176,6 +176,9 @@ export default function App() {
               <Route path="/diesel-tratativas" element={<Desempenho_Diesel_Tratativas_Central />} />
               <Route path="/diesel-tratar/:id" element={<DieselTratarTratativa />} />
               <Route path="/diesel-consultar/:id" element={<DieselConsultarTratativa />} />
+              <Route path="/diesel/tratativas" element={<Navigate to="/diesel-tratativas" replace />} />
+              <Route path="/diesel/tratar/:id" element={<DieselTratarTratativa />} />
+              <Route path="/diesel/consultar/:id" element={<DieselConsultarTratativa />} />
 
               {/* Estoque Diesel */}
               <Route path="/estoque-diesel/resumo" element={<EstoqueDieselResumo />} />

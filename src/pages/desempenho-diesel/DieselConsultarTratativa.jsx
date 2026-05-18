@@ -154,6 +154,10 @@ export default function DieselConsultarTratativa() {
   useEffect(() => {
     (async () => {
       try {
+        if (!isValidUUID(id)) {
+          throw new Error("Identificador de tratativa diesel invalido.");
+        }
+
         const { data, error } = await supabase
           .from("diesel_tratativas")
           .select("*")
@@ -249,7 +253,7 @@ export default function DieselConsultarTratativa() {
           </div>
 
           <button
-            onClick={() => nav(`/diesel/tratar/${id}`)}
+            onClick={() => nav(`/diesel-tratar/${id}`)}
             className="mt-1 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all"
           >
             IR PARA TRATAR
@@ -521,7 +525,7 @@ export default function DieselConsultarTratativa() {
       {/* Footer */}
       <div className="pt-2">
         <button
-          onClick={() => nav("/diesel/tratativas")}
+          onClick={() => nav("/diesel-tratativas")}
           className="rounded-xl bg-slate-200 px-5 py-3 text-slate-700 hover:bg-slate-300 font-bold text-sm"
         >
           Voltar à Central

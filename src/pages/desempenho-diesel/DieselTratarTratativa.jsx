@@ -33,6 +33,14 @@ const acoes = [
   "Elogiado",
 ];
 
+function isValidUUID(v) {
+  if (!v) return false;
+  const s = String(v).trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    s
+  );
+}
+
 function pickNumericUserId(user) {
   const candidates = [user?.usuario_id, user?.id];
 
@@ -242,6 +250,10 @@ export default function DieselTratarTratativa() {
 
   async function carregarDados() {
     try {
+      if (!isValidUUID(id)) {
+        throw new Error("Identificador de tratativa diesel invalido.");
+      }
+
       const { data, error } = await supabase
         .from("diesel_tratativas")
         .select("*")
@@ -330,7 +342,7 @@ export default function DieselTratarTratativa() {
       if (upd.error) throw upd.error;
 
       alert("Tratativa Diesel concluída com sucesso!");
-      nav("/desempenho-diesel/tratativas");
+      nav("/diesel-tratativas");
     } catch (e) {
       alert(`Erro: ${e.message}`);
     } finally {
@@ -373,7 +385,7 @@ export default function DieselTratarTratativa() {
       if (delMain.error) throw delMain.error;
 
       alert("Tratativa excluída com sucesso!");
-      nav("/desempenho-diesel/tratativas");
+      nav("/diesel-tratativas");
     } catch (e) {
       alert(`Erro ao excluir: ${e.message}`);
     } finally {
@@ -915,7 +927,7 @@ export default function DieselTratarTratativa() {
           </div>
 
           <button
-            onClick={() => nav("/desempenho-diesel/tratativas")}
+            onClick={() => nav("/diesel-tratativas")}
             className="mt-6 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors shadow-md"
           >
             Voltar à Central

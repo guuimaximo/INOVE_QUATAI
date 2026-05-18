@@ -2,9 +2,12 @@
 import { useMemo, useState, useContext, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { supabaseBCNT } from "../../supabaseBCNT";
 import CampoMotorista from "../../components/CampoMotorista";
 import { AuthContext } from "../../context/AuthContext";
 import {
+  deriveClusterFromPrefixo,
+  extractDriverChapa,
   formatDateBR,
   getAcompanhamentoWindowInfo,
 } from "../../utils/dieselAcompanhamento";
@@ -122,6 +125,34 @@ async function buscarAcompanhamentoPaiElegivel(chapa) {
   });
 
   return elegivel || null;
+}
+
+async function buscarContextoOperacionalMotorista(chapa) {
+  const registro = String(chapa || "").trim();
+  if (!registro) return { linha: "", cluster: "", prefixo: "" };
+
+  const { data, error } = await supabaseBCNT
+    .from("premiacao_diaria_atualizada")
+    .select("dia, motorista, linha, cluster, prefixo")
+    .ilike("motorista", `%${registro}%`)
+    .order("dia", { ascending: false })
+    .limit(30);
+
+  if (error) throw error;
+
+  const match = (data || []).find(
+    (item) => extractDriverChapa(item?.motorista) === registro
+  );
+
+  if (!match) return { linha: "", cluster: "", prefixo: "" };
+
+  return {
+    linha: String(match?.linha || "").trim().toUpperCase(),
+    cluster:
+      String(match?.cluster || "").trim().toUpperCase() ||
+      deriveClusterFromPrefixo(match?.prefixo),
+    prefixo: String(match?.prefixo || "").trim(),
+  };
 }
 
 // =============================================================================
@@ -279,14 +310,28 @@ export default function DesempenhoLancamento() {
             `Já existe um acompanhamento deste motorista dentro da janela de 30 dias (até ${formatDateBR(windowInfo.expiresAt)}). Abra a Central de Acompanhamento e registre a nova sessão dentro dele.`
           );
         }
+
+        let contextoOperacional = { linha: "", cluster: "", prefixo: "" };
+        try {
+          contextoOperacional = await buscarContextoOperacionalMotorista(chapa);
+        } catch (contextoErro) {
+          console.warn("Nao foi possivel resolver linha/cluster do motorista no lancamento:", contextoErro);
+        }
         
         const { data: acompData, error: errAcomp } = await supabase.from("diesel_acompanhamentos").insert({
           motorista_chapa: chapa || null,
           motorista_nome: nomeMot,
+          linha_foco: contextoOperacional.linha || null,
+          cluster_foco: contextoOperacional.cluster || null,
           motivo: motivoFinal,
           status: "AGUARDANDO_INSTRUTOR",
           observacao_inicial: observacaoInicial,
-          metadata: { origem: "LANCAMENTO_MANUAL_UI" }
+          metadata: {
+            origem: "LANCAMENTO_MANUAL_UI",
+            linha_foco: contextoOperacional.linha || null,
+            cluster_foco: contextoOperacional.cluster || null,
+            prefixo_referencia: contextoOperacional.prefixo || null,
+          }
         }).select("id").single();
         if (errAcomp) throw errAcomp;
 

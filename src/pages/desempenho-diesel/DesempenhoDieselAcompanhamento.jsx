@@ -20,7 +20,7 @@ import { AuthContext } from "../../context/AuthContext";
 import ModalLancamentoIntervencao from "../../components/desempenho/ModalLancamentoIntervencao";
 import ModalProntuarioUnificado from "../../components/desempenho/ModalProntuarioUnificado";
 import ModalCheckpointAnalise from "../../components/desempenho/ModalCheckpointAnalise";
-import { formatDateBR } from "../../utils/dieselAcompanhamento";
+import { formatDateBR, resolveAcompanhamentoContext } from "../../utils/dieselAcompanhamento";
 
 // =============================================================================
 // HELPERS
@@ -50,8 +50,8 @@ function getFoco(item) {
   const m = item?.metadata || {};
   if (m?.foco) return String(m.foco).trim();
 
-  const cl = m?.cluster_foco;
-  const ln = m?.linha_foco;
+  const cl = m?.cluster_foco || item?.cluster_foco;
+  const ln = m?.linha_foco || item?.linha_foco;
   if (cl && ln) return `${cl} - Linha ${ln}`;
   if (ln) return `Linha ${ln}`;
 
@@ -69,11 +69,11 @@ function extrairLinhaDoMotivo(motivo) {
 }
 
 function getLinhaApenas(item) {
+  const linhaContexto = resolveAcompanhamentoContext(item).linha;
+  if (linhaContexto) return linhaContexto;
+
   const linhaMotivo = extrairLinhaDoMotivo(item?.motivo);
   if (linhaMotivo) return linhaMotivo;
-
-  const linhaMeta = String(item?.metadata?.linha_foco || "").trim();
-  if (linhaMeta) return linhaMeta.toUpperCase();
 
   return "Sem Linha";
 }

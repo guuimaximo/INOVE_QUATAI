@@ -148,6 +148,18 @@ export default function AcompanhamentosModal({
         </div>
       </div>
 
+      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-900">
+        <div className="flex items-start gap-3">
+          <FaInfoCircle className="mt-0.5 shrink-0 text-blue-600" />
+          <div>
+            <span className="font-black">Como ler o prontuário:</span>{" "}
+            Prontuário 10/20/30 compara o desempenho do motorista em janelas simétricas de
+            10, 20 ou 30 dias antes e depois do início do acompanhamento. Quando ainda não
+            existe janela completa, o sistema mostra um checkpoint menor ou sem dados.
+          </div>
+        </div>
+      </div>
+
       {subAcompanhamento === "RESUMO_INSTRUTOR" && (
         <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
           <table className="w-full text-left min-w-[1100px]">

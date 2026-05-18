@@ -19,17 +19,13 @@ import {
   formatDateTimeBR,
   formatTimeBR,
   getAcompanhamentoWindowInfo,
+  resolveAcompanhamentoContext,
   toISODateInBrazil,
   toTimeInBrazil,
 } from "../../utils/dieselAcompanhamento";
 
 function getLinhaApenas(item) {
-  const motivo = String(item?.motivo || "").trim();
-  const match = motivo.match(/linha\s*([a-z0-9]+)$/i);
-  if (match?.[1]) return match[1].toUpperCase();
-
-  const linhaMeta = String(item?.metadata?.linha_foco || "").trim();
-  return linhaMeta ? linhaMeta.toUpperCase() : null;
+  return resolveAcompanhamentoContext(item).linha || null;
 }
 
 function formatCoordinate(value) {

@@ -128,6 +128,91 @@ export function buildInstrutorNome(user) {
   return String(user?.login || user?.email || "").trim() || null;
 }
 
+export function normalizeDieselText(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+export function extractDriverChapa(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/\b(\d{3,10})\b/);
+  return match?.[1] || raw;
+}
+
+export function extractLinhaFromMotivo(motivo) {
+  const raw = String(motivo || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/linha\s+([a-z0-9]+)/i);
+  return match?.[1] ? match[1].toUpperCase() : "";
+}
+
+export function deriveClusterFromPrefixo(prefixo) {
+  const value = normalizeDieselText(prefixo);
+  if (!value) return "";
+  if (["W511", "W513", "W515"].includes(value)) return "";
+  if (value.startsWith("2216")) return "C8";
+  if (value.startsWith("2222")) return "C9";
+  if (value.startsWith("2224")) return "C10";
+  if (value.startsWith("2425")) return "C11";
+  if (value.startsWith("W")) return "C6";
+  return "";
+}
+
+export function buildMotoristaContextMap(rows = []) {
+  const map = new Map();
+
+  rows.forEach((row) => {
+    const chapa = extractDriverChapa(
+      row?.chapa || row?.motorista_chapa || row?.Motorista || row?.motorista
+    );
+    if (!chapa) return;
+
+    const linha = normalizeDieselText(row?.linha);
+    const cluster =
+      normalizeDieselText(row?.Cluster || row?.cluster) ||
+      deriveClusterFromPrefixo(row?.veiculo || row?.prefixo);
+    const dateRef = String(row?.dateOnly || row?.dia || row?.created_at || row?.data_ref || "");
+    const current = map.get(chapa);
+
+    if (!current || dateRef > current.dateRef) {
+      map.set(chapa, {
+        linha,
+        cluster,
+        prefixo: String(row?.veiculo || row?.prefixo || "").trim(),
+        dateRef,
+      });
+    }
+  });
+
+  return map;
+}
+
+export function resolveAcompanhamentoContext(item, motoristaContextMap = null) {
+  const metadata =
+    item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
+  const chapa = extractDriverChapa(item?.motorista_chapa);
+  const fromMap = chapa && motoristaContextMap?.get ? motoristaContextMap.get(chapa) : null;
+
+  const linha =
+    normalizeDieselText(metadata?.linha_foco) ||
+    normalizeDieselText(item?.linha_foco) ||
+    extractLinhaFromMotivo(item?.motivo) ||
+    normalizeDieselText(fromMap?.linha) ||
+    "";
+
+  const cluster =
+    normalizeDieselText(metadata?.cluster_foco) ||
+    normalizeDieselText(item?.cluster_foco) ||
+    normalizeDieselText(fromMap?.cluster) ||
+    "";
+
+  return {
+    linha,
+    cluster,
+    prefixo: String(fromMap?.prefixo || "").trim(),
+  };
+}
+
 export function toISODateInBrazil(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",

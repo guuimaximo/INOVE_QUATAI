@@ -31,8 +31,8 @@ function getFoco(item) {
   if (item?.motivo) return item.motivo;
   const m = item?.metadata;
   if (m?.foco) return m.foco;
-  const cl = m?.cluster_foco;
-  const ln = m?.linha_foco;
+  const cl = m?.cluster_foco || item?.cluster_foco;
+  const ln = m?.linha_foco || item?.linha_foco;
   if (cl && ln) return `${cl} - Linha ${ln}`;
   if (ln) return `Linha ${ln}`;
   return "Geral";

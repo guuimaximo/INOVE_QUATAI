@@ -185,7 +185,7 @@ export default function App() {
               />
               <Route
                 path="/desempenho-diesel-tratativas"
-                element={<DesempenhoDieselTratativas />}
+                element={<Navigate to="/diesel-tratativas" replace />}
               />
               <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
               <Route

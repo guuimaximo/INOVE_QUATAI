@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import { useContext, useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 
@@ -119,6 +119,30 @@ function EstoqueDieselProgramacaoRedirect() {
   return <Navigate to={`/estoque-diesel/programacao/2026/${month}`} replace />;
 }
 
+function isValidUuidParam(value) {
+  if (!value) return false;
+  const s = String(value).trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    s
+  );
+}
+
+function DieselTratarRouteGuard() {
+  const { id } = useParams();
+  if (!isValidUuidParam(id)) {
+    return <Navigate to="/diesel-tratativas" replace />;
+  }
+  return <DieselTratarTratativa />;
+}
+
+function DieselConsultarRouteGuard() {
+  const { id } = useParams();
+  if (!isValidUuidParam(id)) {
+    return <Navigate to="/diesel-tratativas" replace />;
+  }
+  return <DieselConsultarTratativa />;
+}
+
 export default function App() {
   useEffect(() => {
     window.__INOVE_SET_BOOT_STAGE?.(
@@ -174,11 +198,11 @@ export default function App() {
               />
 
               <Route path="/diesel-tratativas" element={<Desempenho_Diesel_Tratativas_Central />} />
-              <Route path="/diesel-tratar/:id" element={<DieselTratarTratativa />} />
-              <Route path="/diesel-consultar/:id" element={<DieselConsultarTratativa />} />
+              <Route path="/diesel-tratar/:id" element={<DieselTratarRouteGuard />} />
+              <Route path="/diesel-consultar/:id" element={<DieselConsultarRouteGuard />} />
               <Route path="/diesel/tratativas" element={<Navigate to="/diesel-tratativas" replace />} />
-              <Route path="/diesel/tratar/:id" element={<DieselTratarTratativa />} />
-              <Route path="/diesel/consultar/:id" element={<DieselConsultarTratativa />} />
+              <Route path="/diesel/tratar/:id" element={<DieselTratarRouteGuard />} />
+              <Route path="/diesel/consultar/:id" element={<DieselConsultarRouteGuard />} />
 
               {/* Estoque Diesel */}
               <Route path="/estoque-diesel/resumo" element={<EstoqueDieselResumo />} />

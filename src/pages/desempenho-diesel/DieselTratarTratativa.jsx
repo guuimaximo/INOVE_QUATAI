@@ -41,13 +41,13 @@ function isValidUUID(v) {
   );
 }
 
-function pickNumericUserId(user) {
-  const candidates = [user?.usuario_id, user?.id];
+function pickUserUuid(user) {
+  const candidates = [user?.auth_user_id, user?.id];
 
   for (const value of candidates) {
-    const parsed = Number(value);
-    if (Number.isInteger(parsed) && parsed > 0) {
-      return parsed;
+    const raw = String(value || "").trim();
+    if (isValidUUID(raw)) {
+      return raw;
     }
   }
 
@@ -323,7 +323,7 @@ export default function DieselTratarTratativa() {
           .getPublicUrl(safe).data.publicUrl;
       }
 
-      const tratadoPorId = pickNumericUserId(user);
+      const tratadoPorId = pickUserUuid(user);
       const tratadoPorLogin = user?.login || user?.email || null;
       const tratadoPorNome = user?.nome_completo || user?.nome || user?.login || user?.email || null;
 

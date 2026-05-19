@@ -137,6 +137,35 @@ function statusNorm(v) {
   return s;
 }
 
+function deriveProntuarioPendenteCompat(item) {
+  if (item?.prontuario_pendente) {
+    return String(item.prontuario_pendente).toUpperCase();
+  }
+
+  const status = statusNorm(item?.status_ciclo || item?.status);
+  const fase = String(item?.fase_monitoramento || "").toUpperCase();
+
+  if (
+    !item?.prontuario_10_gerado_em &&
+    ["EM_MONITORAMENTO", "EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(status)
+  ) {
+    return "PRONTUARIO_10";
+  }
+
+  if (!item?.prontuario_20_gerado_em && item?.prontuario_10_gerado_em) {
+    return "PRONTUARIO_20";
+  }
+
+  if (
+    !item?.prontuario_30_gerado_em &&
+    (item?.prontuario_20_gerado_em || fase === "FIM_MONITORAMENTO" || status === "EM_ANALISE")
+  ) {
+    return "PRONTUARIO_30";
+  }
+
+  return null;
+}
+
 function statusBadgeClass(status) {
   const st = statusNorm(status);
   if (st === "AGUARDANDO_INSTRUTOR") return "bg-amber-50 text-amber-700 border-amber-200";
@@ -346,13 +375,16 @@ export default function DesempenhoDieselAnalise() {
     const { data, error } = await supabase
       .from("diesel_acompanhamentos")
       .select(
-        "id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, intervencao_hora_inicio, intervencao_hora_fim, motivo, metadata, prontuario_pendente, prontuario_10_gerado_em, prontuario_20_gerado_em, prontuario_30_gerado_em, intervencao_nota, intervencao_obs, arquivo_pdf_url, status_ciclo, fase_monitoramento"
+        "id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, intervencao_hora_inicio, intervencao_hora_fim, motivo, metadata, prontuario_10_gerado_em, prontuario_20_gerado_em, prontuario_30_gerado_em, intervencao_nota, intervencao_obs, arquivo_pdf_url, status_ciclo, fase_monitoramento"
       )
       .order("created_at", { ascending: false })
       .limit(6000);
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map((item) => ({
+      ...item,
+      prontuario_pendente: deriveProntuarioPendenteCompat(item),
+    }));
   }
 
   async function carregarSessoesAcompanhamento() {

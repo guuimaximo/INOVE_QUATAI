@@ -116,10 +116,10 @@ export default defineConfig({
   },
   build: {
     target: "es2019",
-    sourcemap: true,
+    sourcemap: process.env.INOVE_DIAGNOSTIC_BUILD === "true",
     minify: "esbuild",
   },
   esbuild: {
-    keepNames: true,
+    keepNames: process.env.INOVE_DIAGNOSTIC_BUILD === "true",
   },
 });

@@ -499,6 +499,7 @@ export default function AcompanhamentosModal({
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Janela</p>
                   <p className="text-lg font-black text-slate-800 mt-1">{detalheModal.janela_aplicada || 0} dias</p>
                 </div>
+                <>
                 <div className="bg-white p-4 rounded-xl border flex flex-col gap-2">
                   <div>
                     <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Início Monitoramento</p>
@@ -509,10 +510,42 @@ export default function AcompanhamentosModal({
                     <p className="text-sm font-black text-slate-800 mt-0.5">{detalheModal.checkpoint_tipo}</p>
                   </div>
                 </div>
+                <div className="hidden bg-white p-4 rounded-xl border flex flex-col gap-2">
+                  <div>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Início Monitoramento</p>
+                    <p className="text-sm font-black text-slate-800 mt-0.5">{fmtDateBr(detalheModal.data_ref)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Evento</p>
+                    <p className="text-sm font-black text-slate-800 mt-0.5">{detalheModal.checkpoint_tipo}</p>
+                  </div>
+                </div>
+                </>
               </div>
 
               {detalheModal.prontuario_pendente && (
+                <>
                 <div className="bg-rose-50 border border-rose-200 rounded-xl px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-black uppercase tracking-wider text-rose-700 mb-1">
+                      Prontuário Faltante
+                    </div>
+                    <div className="text-base font-black text-slate-800">
+                      Falta realizar o {detalheModal.prontuario_pendente.replace("PRONTUARIO_", "")} dias
+                    </div>
+                    <div className="text-sm text-rose-700 mt-1">
+                      Esse é o prontuário pendente atual deste acompanhamento.
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onOpenCheckpoint(detalheModal, detalheModal.prontuario_pendente)}
+                    className="px-4 py-2 rounded-lg bg-rose-600 text-white font-black hover:bg-rose-700 transition inline-flex items-center gap-2 w-fit"
+                  >
+                    <FaArrowRight />
+                    Realizar prontuário faltante
+                  </button>
+                </div>
+                <div className="hidden bg-rose-50 border border-rose-200 rounded-xl px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
                     <div className="text-xs font-black uppercase tracking-wider text-rose-700 mb-1">
                       ProntuÃ¡rio Faltante
@@ -532,6 +565,7 @@ export default function AcompanhamentosModal({
                     Realizar prontuÃ¡rio faltante
                   </button>
                 </div>
+                </>
               )}
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

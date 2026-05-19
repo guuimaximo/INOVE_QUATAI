@@ -33,6 +33,13 @@ function titleFromTipo(tipo) {
   return "Checkpoint";
 }
 
+function prontuarioLabelFromTipo(tipo) {
+  if (tipo === "PRONTUARIO_10") return "Prontuário 10 dias";
+  if (tipo === "PRONTUARIO_20") return "Prontuário 20 dias";
+  if (tipo === "PRONTUARIO_30") return "Prontuário 30 dias";
+  return "Prontuário";
+}
+
 function eventTypeFromTipo(tipo) {
   return tipo;
 }
@@ -679,7 +686,7 @@ export default function ModalCheckpointAnalise({
                   Evento
                 </div>
                 <div className="text-sm font-black text-slate-700">
-                  {evento?.tipo || checkpointTipo}
+                  {prontuarioLabelFromTipo(evento?.tipo || checkpointTipo)}
                 </div>
               </div>
             </div>

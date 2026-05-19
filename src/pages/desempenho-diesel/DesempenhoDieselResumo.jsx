@@ -1197,6 +1197,16 @@ export default function DesempenhoDieselAnalise() {
     });
   }, [acompanhamentosComEvolucao, sessoesPorAcompanhamento, mesReferencia]);
 
+  const idsAcompanhamentosResumoInstrutor = useMemo(
+    () => new Set(registrosInstrutor.map((row) => row.acompanhamento_id).filter(Boolean)),
+    [registrosInstrutor]
+  );
+
+  const acompanhamentosEscopoInstrutor = useMemo(
+    () => acompanhamentosComEvolucao.filter((item) => idsAcompanhamentosResumoInstrutor.has(item.id)),
+    [acompanhamentosComEvolucao, idsAcompanhamentosResumoInstrutor]
+  );
+
   function abrirCheckpoint(item, checkpointTipo) {
     if (!item?.id || !checkpointTipo) return;
 
@@ -1291,26 +1301,27 @@ export default function DesempenhoDieselAnalise() {
   }
 
   const checkpointResumo = useMemo(() => {
-    const rows = acompanhamentosComEvolucao.filter(
+    const rowsCalculados = acompanhamentosEscopoInstrutor.filter(
       (r) => r.checkpoint_tipo !== "SEM_DADOS" && (r.delta_kml != null || r.delta_desperdicio != null)
     );
     return {
-      total: rows.length,
-      melhoraramKml: rows.filter((r) => n(r.delta_kml) > 0).length,
-      pioraramKml: rows.filter((r) => n(r.delta_kml) < 0).length,
-      estavelKml: rows.filter((r) => n(r.delta_kml) === 0).length,
-      reduziramDesperdicio: rows.filter((r) => n(r.depois_desp) < n(r.antes_desp)).length,
-      aumentaramDesperdicio: rows.filter((r) => n(r.depois_desp) > n(r.antes_desp)).length,
-      mediaDeltaKml: rows.length ? rows.reduce((acc, r) => acc + n(r.delta_kml), 0) / rows.length : 0,
-      mediaDeltaDesp: rows.length
-        ? rows.reduce((acc, r) => acc + n(r.delta_desperdicio), 0) / rows.length
+      total: acompanhamentosEscopoInstrutor.length,
+      calculados: rowsCalculados.length,
+      melhoraramKml: rowsCalculados.filter((r) => n(r.delta_kml) > 0).length,
+      pioraramKml: rowsCalculados.filter((r) => n(r.delta_kml) < 0).length,
+      estavelKml: rowsCalculados.filter((r) => n(r.delta_kml) === 0).length,
+      reduziramDesperdicio: rowsCalculados.filter((r) => n(r.depois_desp) < n(r.antes_desp)).length,
+      aumentaramDesperdicio: rowsCalculados.filter((r) => n(r.depois_desp) > n(r.antes_desp)).length,
+      mediaDeltaKml: rowsCalculados.length ? rowsCalculados.reduce((acc, r) => acc + n(r.delta_kml), 0) / rowsCalculados.length : 0,
+      mediaDeltaDesp: rowsCalculados.length
+        ? rowsCalculados.reduce((acc, r) => acc + n(r.delta_desperdicio), 0) / rowsCalculados.length
         : 0,
     };
-  }, [acompanhamentosComEvolucao]);
+  }, [acompanhamentosEscopoInstrutor]);
 
   const resumoPorLinhaCheckpoint = useMemo(() => {
     const map = new Map();
-    acompanhamentosComEvolucao
+    acompanhamentosEscopoInstrutor
       .filter((r) => r.checkpoint_tipo !== "SEM_DADOS" && (r.delta_kml != null || r.delta_desperdicio != null))
       .forEach((r) => {
         const key = `${r.linha_resolvida}__${r.checkpoint_tipo}`;
@@ -1379,7 +1390,7 @@ export default function DesempenhoDieselAnalise() {
         delta_desperdicio: r.qtd_motoristas ? (r.depois_desp - r.antes_desp) / r.qtd_motoristas : 0,
       }))
       .sort((a, b) => a.delta_desperdicio - b.delta_desperdicio);
-  }, [acompanhamentosComEvolucao]);
+  }, [acompanhamentosEscopoInstrutor]);
 
   const resumoInstrutor = useMemo(() => {
     const map = new Map();
@@ -1447,7 +1458,7 @@ export default function DesempenhoDieselAnalise() {
   }, [registrosInstrutor]);
 
   const revisaoProntuarios = useMemo(() => {
-    return acompanhamentosComEvolucao
+    return acompanhamentosEscopoInstrutor
       .map((item) => {
         const esperado = getProntuarioEsperadoPorDias(item);
         const atual = getProntuarioGeradoAtual(item);
@@ -1467,12 +1478,12 @@ export default function DesempenhoDieselAnalise() {
       })
       .filter(Boolean)
       .sort((a, b) => n(b.dias_decorridos) - n(a.dias_decorridos));
-  }, [acompanhamentosComEvolucao]);
+  }, [acompanhamentosEscopoInstrutor]);
 
   const prontuariosParaAjuste = useMemo(() => {
     const map = new Map();
 
-    (acompanhamentosComEvolucao || []).forEach((item) => {
+    (acompanhamentosEscopoInstrutor || []).forEach((item) => {
       if (!item?.id || !String(item?.motorista_chapa || "").trim()) return;
 
       const pendente = String(item?.prontuario_pendente || "").toUpperCase() || null;
@@ -1493,7 +1504,7 @@ export default function DesempenhoDieselAnalise() {
     });
 
     return [...map.values()].sort((a, b) => n(b.dias_decorridos) - n(a.dias_decorridos));
-  }, [acompanhamentosComEvolucao]);
+  }, [acompanhamentosEscopoInstrutor]);
 
   const revisaoProntuariosIds = useMemo(
     () => new Set(revisaoProntuarios.map((item) => item.id).filter(Boolean)),
@@ -1638,7 +1649,7 @@ export default function DesempenhoDieselAnalise() {
     }));
 
   const getAcompanhamentosAcompanhamentosExport = () =>
-    acompanhamentosComEvolucao.map((row) => ({
+    acompanhamentosEscopoInstrutor.map((row) => ({
       Motorista: row.motorista_nome,
       Chapa: row.motorista_chapa,
       Linha: row.linha_resolvida,
@@ -2042,7 +2053,7 @@ export default function DesempenhoDieselAnalise() {
             resumoInstrutor={resumoInstrutor}
             tempoPorDia={tempoPorDia}
             resumoPorLinhaCheckpoint={resumoPorLinhaCheckpoint}
-            acompanhamentosComEvolucao={acompanhamentosComEvolucao}
+            acompanhamentosComEvolucao={acompanhamentosEscopoInstrutor}
             checkpointResumo={checkpointResumo}
             fmtNum={fmtNum}
             fmtInt={fmtInt}

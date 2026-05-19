@@ -1104,8 +1104,13 @@ export default function DesempenhoDieselAnalise() {
       });
     });
 
-    return rows;
-  }, [acompanhamentosComEvolucao, sessoesPorAcompanhamento]);
+    if (!mesReferencia) return rows;
+
+    return rows.filter((row) => {
+      const mesItem = row?.data_ref ? String(row.data_ref).slice(0, 7) : "";
+      return mesItem === mesReferencia;
+    });
+  }, [acompanhamentosComEvolucao, sessoesPorAcompanhamento, mesReferencia]);
 
   function abrirCheckpoint(item, checkpointTipo) {
     if (!item?.id || !checkpointTipo) return;

@@ -116,5 +116,10 @@ export default defineConfig({
   },
   build: {
     target: "es2019",
+    sourcemap: true,
+    minify: "esbuild",
+  },
+  esbuild: {
+    keepNames: true,
   },
 });

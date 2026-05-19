@@ -32,6 +32,11 @@ import ModalCheckpointAnalise from "../../components/desempenho/ModalCheckpointA
 
 const SUPABASE_A_URL = import.meta.env.VITE_SUPA_BASE_BCNT_URL;
 const SUPABASE_A_ANON_KEY = import.meta.env.VITE_SUPA_BASE_BCNT_ANON_KEY;
+const GH_USER = import.meta.env.VITE_GITHUB_USER;
+const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
+const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
+const GH_REF = "main";
+const WF_ACOMP = "ordem-acompanhamento.yml";
 
 const supabaseA =
   SUPABASE_A_URL && SUPABASE_A_ANON_KEY
@@ -79,6 +84,77 @@ function fmtNum(v, dec = 2) {
 
 function fmtInt(v) {
   return Math.round(n(v)).toLocaleString("pt-BR");
+}
+
+function todayISO() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function diffDaysBetweenISO(startISO, endISO = todayISO()) {
+  const start = safeDateStr(startISO);
+  const end = safeDateStr(endISO);
+  if (!start || !end) return 0;
+  const startDate = new Date(`${start}T12:00:00`);
+  const endDate = new Date(`${end}T12:00:00`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return 0;
+  return Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / 86400000));
+}
+
+function getProntuarioGeradoAtual(item) {
+  if (item?.prontuario_30_gerado_em) return "PRONTUARIO_30";
+  if (item?.prontuario_20_gerado_em) return "PRONTUARIO_20";
+  if (item?.prontuario_10_gerado_em) return "PRONTUARIO_10";
+  return null;
+}
+
+function getProntuarioEsperadoPorDias(item) {
+  const dias = diffDaysBetweenISO(item?.dt_inicio_monitoramento);
+  if (dias >= 30) return "PRONTUARIO_30";
+  if (dias >= 20) return "PRONTUARIO_20";
+  if (dias >= 10) return "PRONTUARIO_10";
+  return null;
+}
+
+function prontuarioLabel(tipo) {
+  if (tipo === "PRONTUARIO_10") return "Prontuário 10";
+  if (tipo === "PRONTUARIO_20") return "Prontuário 20";
+  if (tipo === "PRONTUARIO_30") return "Prontuário 30";
+  if (tipo) return String(tipo);
+  return "Sem prontuário";
+}
+
+async function dispatchGitHubWorkflow(workflowFile, inputs) {
+  if (!GH_USER || !GH_REPO || !GH_TOKEN) {
+    throw new Error("Credenciais GitHub ausentes.");
+  }
+
+  const safeInputs = {};
+  for (const key in inputs) {
+    safeInputs[key] = String(inputs[key] || "");
+  }
+
+  const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${GH_TOKEN}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ref: GH_REF, inputs: safeInputs }),
+  });
+
+  if (response.status !== 204) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Erro GitHub: ${response.status}`);
+  }
+
+  return true;
 }
 
 function parseHoraToMin(hora) {
@@ -314,6 +390,7 @@ export default function DesempenhoDieselAnalise() {
   const [modalCheckpointOpen, setModalCheckpointOpen] = useState(false);
   const [acompanhamentoSelecionado, setAcompanhamentoSelecionado] = useState(null);
   const [checkpointTipoSelecionado, setCheckpointTipoSelecionado] = useState(null);
+  const [ajustandoProntuarios, setAjustandoProntuarios] = useState(false);
 
   const [busca, setBusca] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
@@ -1130,6 +1207,76 @@ export default function DesempenhoDieselAnalise() {
     setModalCheckpointOpen(true);
   }
 
+  async function ajustarTodosProntuarios() {
+    if (ajustandoProntuarios) return;
+
+    const itens = revisaoProntuarios.filter(
+      (item) => item?.id && String(item?.motorista_chapa || "").trim()
+    );
+
+    if (!itens.length) {
+      window.alert("Nenhum prontuário pendente de ajuste foi encontrado no filtro atual.");
+      return;
+    }
+
+    const confirmou = window.confirm(
+      `Confirma o ajuste de ${itens.length} prontuário(s) no resumo atual?`
+    );
+    if (!confirmou) return;
+
+    setAjustandoProntuarios(true);
+    try {
+      const { data: lote, error: errL } = await supabase
+        .from("acompanhamento_lotes")
+        .insert({
+          status: "PROCESSANDO",
+          qtd: itens.length,
+          extra: {
+            origem: "resumo_diesel_revisao_prontuarios",
+            gerado_em: new Date().toISOString(),
+            tipo: "prontuarios_revisao_resumo",
+            mes_referencia: mesReferencia || null,
+          },
+        })
+        .select("id")
+        .single();
+
+      if (errL) throw errL;
+
+      const payloadItens = itens.map((item) => ({
+        lote_id: lote.id,
+        motorista_chapa: String(item.motorista_chapa || "").trim(),
+        extra: {
+          acompanhamento_id: item.id,
+          motorista_nome: item.motorista_nome || null,
+          prontuario_atual: item.prontuario_atual || null,
+          prontuario_esperado: item.prontuario_esperado || null,
+          prontuario_pendente: item.prontuario_ajuste || null,
+          dias_decorridos: item.dias_decorridos,
+          origem: "resumo_diesel_revisao_prontuarios",
+        },
+      }));
+
+      const { error: errI } = await supabase
+        .from("acompanhamento_lote_itens")
+        .insert(payloadItens);
+      if (errI) throw errI;
+
+      await dispatchGitHubWorkflow(WF_ACOMP, {
+        ordem_batch_id: String(lote.id),
+        qtd: String(itens.length),
+      });
+
+      window.alert(`Lote #${lote.id} enviado para ajustar ${itens.length} prontuário(s).`);
+      await carregarTudo();
+    } catch (e) {
+      console.error(e);
+      window.alert(e?.message || "Erro ao ajustar prontuários.");
+    } finally {
+      setAjustandoProntuarios(false);
+    }
+  }
+
   const checkpointResumo = useMemo(() => {
     const rows = acompanhamentosComEvolucao.filter(
       (r) => r.checkpoint_tipo !== "SEM_DADOS" && (r.delta_kml != null || r.delta_desperdicio != null)
@@ -1285,6 +1432,29 @@ export default function DesempenhoDieselAnalise() {
           return String(b.data_ref).localeCompare(String(a.data_ref));
         });
   }, [registrosInstrutor]);
+
+  const revisaoProntuarios = useMemo(() => {
+    return acompanhamentosComEvolucao
+      .map((item) => {
+        const esperado = getProntuarioEsperadoPorDias(item);
+        const atual = getProntuarioGeradoAtual(item);
+        const pendente = String(item?.prontuario_pendente || "").toUpperCase() || null;
+        const diasDecorridos = diffDaysBetweenISO(item?.dt_inicio_monitoramento);
+
+        if (!esperado) return null;
+        if (atual === esperado) return null;
+
+        return {
+          ...item,
+          prontuario_esperado: esperado,
+          prontuario_atual: atual,
+          prontuario_ajuste: pendente || esperado,
+          dias_decorridos: diasDecorridos,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => n(b.dias_decorridos) - n(a.dias_decorridos));
+  }, [acompanhamentosComEvolucao]);
 
   const totalDesperdicioMeta = useMemo(
     () => rowsReferenciaComRef.reduce((acc, r) => acc + n(r.Litros_Desp_Meta), 0),
@@ -1532,6 +1702,19 @@ export default function DesempenhoDieselAnalise() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {abaAtiva === "ACOMPANHAMENTOS" && (
+              <button
+                onClick={ajustarTodosProntuarios}
+                disabled={ajustandoProntuarios || revisaoProntuarios.length === 0}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-black hover:bg-amber-400 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FaClipboardList />
+                {ajustandoProntuarios
+                  ? "Ajustando..."
+                  : `Ajustar prontuários (${fmtInt(revisaoProntuarios.length)})`}
+              </button>
+            )}
+
             <button
               onClick={() => {
                 if (abaAtiva === "LINHAS") exportarParaExcel(getLinhasExport(), "Analise_Linhas");
@@ -1745,6 +1928,29 @@ export default function DesempenhoDieselAnalise() {
 
       {abaAtiva === "ACOMPANHAMENTOS" && (
         <div className="bg-white rounded-2xl border shadow-sm p-4 md:p-5 space-y-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wider text-amber-700">
+                  Revisão de Prontuários
+                </div>
+                <div className="text-sm font-semibold text-amber-900 mt-1">
+                  {revisaoProntuarios.length
+                    ? `${fmtInt(revisaoProntuarios.length)} acompanhamento(s) do filtro atual estão fora do prontuário esperado pelo tempo decorrido.`
+                    : "Todos os acompanhamentos filtrados estão no prontuário esperado para 10/20/30 dias."}
+                </div>
+                {revisaoProntuarios[0] && (
+                  <div className="text-xs font-semibold text-amber-800 mt-1">
+                    Exemplo: {revisaoProntuarios[0].motorista_nome || revisaoProntuarios[0].motorista_chapa} • atual {prontuarioLabel(revisaoProntuarios[0].prontuario_atual)} • esperado {prontuarioLabel(revisaoProntuarios[0].prontuario_esperado)}.
+                  </div>
+                )}
+              </div>
+              <div className="text-xs font-black text-amber-800">
+                Referência do mês: {mesReferencia || "não definida"}
+              </div>
+            </div>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             {[
               { key: "RESUMO_INSTRUTOR", label: "Resumo por Instrutor" },
@@ -1791,6 +1997,8 @@ export default function DesempenhoDieselAnalise() {
             EvolucaoBadge={EvolucaoBadge}
             SortIcon={SortIcon}
             onOpenCheckpoint={abrirCheckpoint}
+            onAjustarTodosProntuarios={ajustarTodosProntuarios}
+            ajustandoProntuarios={ajustandoProntuarios}
           />
         </div>
       )}

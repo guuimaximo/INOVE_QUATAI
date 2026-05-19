@@ -166,6 +166,25 @@ function deriveProntuarioPendenteCompat(item) {
   return null;
 }
 
+function deriveFaseMonitoramentoCompat(item) {
+  if (item?.fase_monitoramento) return String(item.fase_monitoramento);
+
+  if (item?.prontuario_30_gerado_em) return "FIM_MONITORAMENTO";
+  if (item?.prontuario_20_gerado_em) return "3_DE_3";
+  if (item?.prontuario_10_gerado_em) return "2_DE_3";
+
+  const status = statusNorm(item?.status);
+  if (["EM_MONITORAMENTO", "EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(status)) {
+    return "1_DE_3";
+  }
+
+  return null;
+}
+
+function deriveStatusCicloCompat(item) {
+  return String(item?.status_ciclo || item?.status || "");
+}
+
 function statusBadgeClass(status) {
   const st = statusNorm(status);
   if (st === "AGUARDANDO_INSTRUTOR") return "bg-amber-50 text-amber-700 border-amber-200";
@@ -375,7 +394,7 @@ export default function DesempenhoDieselAnalise() {
     const { data, error } = await supabase
       .from("diesel_acompanhamentos")
       .select(
-        "id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, intervencao_hora_inicio, intervencao_hora_fim, motivo, metadata, prontuario_10_gerado_em, prontuario_20_gerado_em, prontuario_30_gerado_em, intervencao_nota, intervencao_obs, arquivo_pdf_url, status_ciclo, fase_monitoramento"
+        "id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, intervencao_hora_inicio, intervencao_hora_fim, motivo, metadata, prontuario_10_gerado_em, prontuario_20_gerado_em, prontuario_30_gerado_em, intervencao_nota, intervencao_obs, arquivo_pdf_url"
       )
       .order("created_at", { ascending: false })
       .limit(6000);
@@ -383,6 +402,8 @@ export default function DesempenhoDieselAnalise() {
     if (error) throw error;
     return (data || []).map((item) => ({
       ...item,
+      status_ciclo: deriveStatusCicloCompat(item),
+      fase_monitoramento: deriveFaseMonitoramentoCompat(item),
       prontuario_pendente: deriveProntuarioPendenteCompat(item),
     }));
   }

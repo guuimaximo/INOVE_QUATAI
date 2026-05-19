@@ -344,10 +344,28 @@ export default function DesempenhoLancamento() {
         });
 
         const { data: lote } = await supabase.from("acompanhamento_lotes").insert({
-          status: "PROCESSANDO", qtd: 1, extra: { tipo: TIPO_PRONTUARIO, chapa }
+          status: "PROCESSANDO",
+          qtd: 1,
+          extra: {
+            tipo: TIPO_PRONTUARIO,
+            chapa,
+            origem: "lancamento_manual_ui",
+            acompanhamento_id: acompData.id,
+          }
         }).select("id").single();
-        
-        await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
+
+        await supabase.from("acompanhamento_lote_itens").insert([{
+          lote_id: lote.id,
+          motorista_chapa: chapa,
+          extra: {
+            acompanhamento_id: acompData.id,
+            motorista_nome: nomeMot,
+            linha_foco: contextoOperacional.linha || null,
+            cluster_foco: contextoOperacional.cluster || null,
+            prefixo_referencia: contextoOperacional.prefixo || null,
+            origem: "lancamento_manual_ui",
+          },
+        }]);
         await dispatchGitHubWorkflow(WF_ACOMP, { ordem_batch_id: String(lote.id), qtd: "1" });
       } 
       
@@ -374,10 +392,26 @@ export default function DesempenhoLancamento() {
         });
 
         const { data: lote } = await supabase.from("acompanhamento_lotes").insert({
-          status: "PROCESSANDO", qtd: 1, extra: { tipo: "prontuario_tratativa", chapa }
+          status: "PROCESSANDO",
+          qtd: 1,
+          extra: {
+            tipo: "prontuario_tratativa",
+            chapa,
+            origem: "lancamento_manual_ui",
+            tratativa_id: tratData.id,
+          }
         }).select("id").single();
-        
-        await supabase.from("acompanhamento_lote_itens").insert([{ lote_id: lote.id, motorista_chapa: chapa }]);
+
+        await supabase.from("acompanhamento_lote_itens").insert([{
+          lote_id: lote.id,
+          motorista_chapa: chapa,
+          extra: {
+            tratativa_id: tratData.id,
+            motorista_nome: nomeMot,
+            prioridade: prioridadeTratativa,
+            origem: "lancamento_manual_ui",
+          },
+        }]);
         await dispatchGitHubWorkflow(WF_TRAT, { ordem_batch_id: String(lote.id), qtd: "1" });
       }
 

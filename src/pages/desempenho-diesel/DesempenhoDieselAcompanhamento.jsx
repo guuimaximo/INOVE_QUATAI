@@ -27,7 +27,7 @@ const GH_USER = import.meta.env.VITE_GITHUB_USER;
 const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
 const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GH_REF = "main";
-const WF_ACOMP = "ordem-acompanhamento.yml";
+const WF_PRONTUARIOS_POS = "prontuarios-pos-acompanhamento.yml";
 
 // =============================================================================
 // HELPERS
@@ -512,8 +512,8 @@ export default function DesempenhoDieselAcompanhamento() {
         .insert(itens);
       if (errI) throw errI;
 
-      await dispatchGitHubWorkflow(WF_ACOMP, {
-        ordem_batch_id: String(lote.id),
+      await dispatchGitHubWorkflow(WF_PRONTUARIOS_POS, {
+        prontuario_lote_id: String(lote.id),
         qtd: String(pendentes.length),
       });
 

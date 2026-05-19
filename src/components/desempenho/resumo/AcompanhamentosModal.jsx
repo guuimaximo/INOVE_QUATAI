@@ -32,10 +32,12 @@ export default function AcompanhamentosModal({
   onOpenCheckpoint = () => {},
   onAjustarTodosProntuarios = null,
   ajustandoProntuarios = false,
+  qtdAjustesProntuarios = null,
 }) {
-  const qtdProntuariosPendentes = (acompanhamentosComEvolucao || []).filter(
-    (a) => !!a?.prontuario_pendente
-  ).length;
+  const qtdProntuariosPendentes =
+    Number.isFinite(Number(qtdAjustesProntuarios))
+      ? Number(qtdAjustesProntuarios)
+      : (acompanhamentosComEvolucao || []).filter((a) => !!a?.prontuario_pendente).length;
   const [detalheModal, setDetalheModal] = useState(null);
 
   // Estados para a ordenação

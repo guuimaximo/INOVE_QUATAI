@@ -36,7 +36,7 @@ const GH_USER = import.meta.env.VITE_GITHUB_USER;
 const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
 const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GH_REF = "main";
-const WF_ACOMP = "ordem-acompanhamento.yml";
+const WF_PRONTUARIOS_POS = "prontuarios-pos-acompanhamento.yml";
 
 const supabaseA =
   SUPABASE_A_URL && SUPABASE_A_ANON_KEY
@@ -1218,7 +1218,7 @@ export default function DesempenhoDieselAnalise() {
   async function ajustarTodosProntuarios() {
     if (ajustandoProntuarios) return;
 
-    const itens = revisaoProntuarios.filter(
+    const itens = prontuariosParaAjuste.filter(
       (item) => item?.id && String(item?.motorista_chapa || "").trim()
     );
 
@@ -1244,6 +1244,11 @@ export default function DesempenhoDieselAnalise() {
             gerado_em: new Date().toISOString(),
             tipo: "prontuarios_revisao_resumo",
             mes_referencia: mesReferencia || null,
+            total_pendentes: itens.filter((item) => !!item?.prontuario_pendente).length,
+            total_defasados: itens.filter(
+              (item) =>
+                !item?.prontuario_pendente && item?.prontuario_esperado !== item?.prontuario_atual
+            ).length,
           },
         })
         .select("id")
@@ -1270,8 +1275,8 @@ export default function DesempenhoDieselAnalise() {
         .insert(payloadItens);
       if (errI) throw errI;
 
-      await dispatchGitHubWorkflow(WF_ACOMP, {
-        ordem_batch_id: String(lote.id),
+      await dispatchGitHubWorkflow(WF_PRONTUARIOS_POS, {
+        prontuario_lote_id: String(lote.id),
         qtd: String(itens.length),
       });
 
@@ -1462,6 +1467,32 @@ export default function DesempenhoDieselAnalise() {
       })
       .filter(Boolean)
       .sort((a, b) => n(b.dias_decorridos) - n(a.dias_decorridos));
+  }, [acompanhamentosComEvolucao]);
+
+  const prontuariosParaAjuste = useMemo(() => {
+    const map = new Map();
+
+    (acompanhamentosComEvolucao || []).forEach((item) => {
+      if (!item?.id || !String(item?.motorista_chapa || "").trim()) return;
+
+      const pendente = String(item?.prontuario_pendente || "").toUpperCase() || null;
+      const esperado = getProntuarioEsperadoPorDias(item);
+      const atual = getProntuarioGeradoAtual(item);
+      const diasDecorridos = diffDaysBetweenISO(item?.dt_inicio_monitoramento);
+      const ajuste = pendente || (esperado && esperado !== atual ? esperado : null);
+
+      if (!ajuste) return;
+
+      map.set(item.id, {
+        ...item,
+        prontuario_atual: atual,
+        prontuario_esperado: esperado,
+        prontuario_ajuste: ajuste,
+        dias_decorridos: diasDecorridos,
+      });
+    });
+
+    return [...map.values()].sort((a, b) => n(b.dias_decorridos) - n(a.dias_decorridos));
   }, [acompanhamentosComEvolucao]);
 
   const totalDesperdicioMeta = useMemo(
@@ -2007,6 +2038,7 @@ export default function DesempenhoDieselAnalise() {
             onOpenCheckpoint={abrirCheckpoint}
             onAjustarTodosProntuarios={ajustarTodosProntuarios}
             ajustandoProntuarios={ajustandoProntuarios}
+            qtdAjustesProntuarios={prontuariosParaAjuste.length}
           />
         </div>
       )}

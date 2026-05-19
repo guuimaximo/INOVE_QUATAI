@@ -30,7 +30,12 @@ export default function AcompanhamentosModal({
   statusBadgeClass = () => "",
   EvolucaoBadge = () => null,
   onOpenCheckpoint = () => {},
+  onAjustarTodosProntuarios = null,
+  ajustandoProntuarios = false,
 }) {
+  const qtdProntuariosPendentes = (acompanhamentosComEvolucao || []).filter(
+    (a) => !!a?.prontuario_pendente
+  ).length;
   const [detalheModal, setDetalheModal] = useState(null);
 
   // Estados para a ordenação
@@ -88,7 +93,21 @@ export default function AcompanhamentosModal({
             </p>
           </div>
 
-          <div className="flex flex-wrap bg-slate-100 p-1 rounded-lg gap-1">
+          <div className="flex flex-wrap items-center gap-3">
+            {onAjustarTodosProntuarios && qtdProntuariosPendentes > 0 && (
+              <button
+                onClick={onAjustarTodosProntuarios}
+                disabled={ajustandoProntuarios}
+                className="px-4 py-2 rounded-lg bg-rose-600 text-white font-black hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed transition inline-flex items-center gap-2"
+                title="Disparar ordem para todos os prontuários pendentes do resumo atual"
+              >
+                <FaArrowRight />
+                {ajustandoProntuarios
+                  ? "Processando..."
+                  : `Realizar todos faltantes (${qtdProntuariosPendentes})`}
+              </button>
+            )}
+            <div className="flex flex-wrap bg-slate-100 p-1 rounded-lg gap-1">
             {tabs.map(([key, label]) => (
               <button
                 key={key}
@@ -102,6 +121,7 @@ export default function AcompanhamentosModal({
                 {label}
               </button>
             ))}
+            </div>
           </div>
         </div>
       </div>

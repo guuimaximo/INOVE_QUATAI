@@ -383,19 +383,25 @@ export default function AcompanhamentosModal({
                 <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("delta_desperdicio")}>
                   Δ Desp. {getSortIcon("delta_desperdicio")}
                 </th>
-                <th className="px-4 py-4 text-center">Ações</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-gray-100">
               {sortedAcompanhamentosData.map((row) => (
-                <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
+                <tr
+                  key={row.id}
+                  onClick={() => setDetalheModal(row)}
+                  className="hover:bg-blue-50/50 transition-colors cursor-pointer"
+                >
                   <td className="px-4 py-4 font-black text-slate-900">
                     <div className="flex items-center gap-2">
                       {row.motorista_nome || "-"}
                       {row.checkpoint_tipo !== "SEM_DADOS" && (
                         <button
-                          onClick={() => setDetalheModal(row)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDetalheModal(row);
+                          }}
                           className="text-blue-500 hover:text-blue-700 transition-colors"
                           title="Entender Memória de Cálculo"
                         >
@@ -422,13 +428,10 @@ export default function AcompanhamentosModal({
                     <div className="flex flex-col gap-2">
                       <span>{row.checkpoint_tipo || "-"}</span>
                       {row.prontuario_pendente && (
-                        <button
-                          onClick={() => onOpenCheckpoint(row, row.prontuario_pendente)}
-                          className="w-fit px-2.5 py-1.5 rounded-lg text-[11px] font-black border bg-rose-600 text-white border-rose-600 hover:bg-rose-700 transition inline-flex items-center gap-1.5"
-                        >
+                        <span className="w-fit px-2.5 py-1.5 rounded-lg text-[11px] font-black border bg-rose-50 text-rose-700 border-rose-200 inline-flex items-center gap-1.5">
                           <FaArrowRight size={10} />
-                          Realizar faltante
-                        </button>
+                          Falta {row.prontuario_pendente.replace("PRONTUARIO_", "")} dias
+                        </span>
                       )}
                     </div>
                   </td>
@@ -444,33 +447,11 @@ export default function AcompanhamentosModal({
                       <EvolucaoBadge value={row.delta_desperdicio} invert />
                     )}
                   </td>
-                  <td className="px-4 py-4 flex items-center justify-center gap-2">
-                    {row.prontuario_pendente && (
-                      <button
-                        onClick={() => onOpenCheckpoint(row, row.prontuario_pendente)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-md font-bold transition border border-rose-600 text-xs"
-                        title="Realizar prontuário faltante"
-                      >
-                        <FaArrowRight />
-                        Realizar prontuário
-                      </button>
-                    )}
-                    {row.checkpoint_tipo !== "SEM_DADOS" && (
-                      <button
-                        onClick={() => setDetalheModal(row)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-md font-bold transition border border-blue-200 hover:border-blue-600"
-                        title="Abrir Análise"
-                      >
-                        <FaChartBar />
-                        Análise
-                      </button>
-                    )}
-                  </td>
                 </tr>
               ))}
               {sortedAcompanhamentosData.length === 0 && (
                 <tr>
-                  <td colSpan={15} className="px-6 py-12 text-center text-slate-500 font-bold">
+                  <td colSpan={14} className="px-6 py-12 text-center text-slate-500 font-bold">
                     Nenhum acompanhamento encontrado.
                   </td>
                 </tr>
@@ -529,6 +510,29 @@ export default function AcompanhamentosModal({
                   </div>
                 </div>
               </div>
+
+              {detalheModal.prontuario_pendente && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-black uppercase tracking-wider text-rose-700 mb-1">
+                      ProntuÃ¡rio Faltante
+                    </div>
+                    <div className="text-base font-black text-slate-800">
+                      Falta realizar o {detalheModal.prontuario_pendente.replace("PRONTUARIO_", "")} dias
+                    </div>
+                    <div className="text-sm text-rose-700 mt-1">
+                      Esse Ã© o prontuÃ¡rio pendente atual deste acompanhamento.
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onOpenCheckpoint(detalheModal, detalheModal.prontuario_pendente)}
+                    className="px-4 py-2 rounded-lg bg-rose-600 text-white font-black hover:bg-rose-700 transition inline-flex items-center gap-2 w-fit"
+                  >
+                    <FaArrowRight />
+                    Realizar prontuÃ¡rio faltante
+                  </button>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-xl border text-center shadow-sm">

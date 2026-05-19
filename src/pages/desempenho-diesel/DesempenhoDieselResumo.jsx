@@ -221,21 +221,29 @@ function deriveProntuarioPendenteCompat(item) {
 
   const status = statusNorm(item?.status_ciclo || item?.status);
   const fase = String(item?.fase_monitoramento || "").toUpperCase();
+  const dias = diffDaysBetweenISO(item?.dt_inicio_monitoramento);
+  const statusAtivo = ["EM_MONITORAMENTO", "EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(status);
 
   if (
     !item?.prontuario_10_gerado_em &&
-    ["EM_MONITORAMENTO", "EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(status)
+    statusAtivo &&
+    dias >= 10
   ) {
     return "PRONTUARIO_10";
   }
 
-  if (!item?.prontuario_20_gerado_em && item?.prontuario_10_gerado_em) {
+  if (
+    !item?.prontuario_20_gerado_em &&
+    item?.prontuario_10_gerado_em &&
+    dias >= 20
+  ) {
     return "PRONTUARIO_20";
   }
 
   if (
     !item?.prontuario_30_gerado_em &&
-    (item?.prontuario_20_gerado_em || fase === "FIM_MONITORAMENTO" || status === "EM_ANALISE")
+    (item?.prontuario_20_gerado_em || fase === "FIM_MONITORAMENTO" || status === "EM_ANALISE") &&
+    dias >= 30
   ) {
     return "PRONTUARIO_30";
   }

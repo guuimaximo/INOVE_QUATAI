@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaBolt,
   FaSync,
@@ -299,6 +300,7 @@ function exportarParaExcel(dados, nomeArquivo) {
 }
 
 export default function DesempenhoDieselAnalise() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -1107,6 +1109,17 @@ export default function DesempenhoDieselAnalise() {
 
   function abrirCheckpoint(item, checkpointTipo) {
     if (!item?.id || !checkpointTipo) return;
+
+    const checkpointNormalizado = String(checkpointTipo || "").toUpperCase();
+    const prontuarioPendente = String(item?.prontuario_pendente || "").toUpperCase();
+
+    if (prontuarioPendente && prontuarioPendente === checkpointNormalizado) {
+      navigate(
+        `/desempenho-diesel-checkpoint/${item.id}?checkpoint=${encodeURIComponent(checkpointNormalizado)}`
+      );
+      return;
+    }
+
     setAcompanhamentoSelecionado(item);
     setCheckpointTipoSelecionado(checkpointTipo);
     setModalCheckpointOpen(true);

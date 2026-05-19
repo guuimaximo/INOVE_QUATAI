@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useContext } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaBolt,
   FaSync,
@@ -210,6 +211,7 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
 // COMPONENTE PRINCIPAL
 // =============================================================================
 export default function DesempenhoDieselAcompanhamento() {
+  const navigate = useNavigate();
   const { user } = useContext(AuthContext);
 
   const [loading, setLoading] = useState(false);
@@ -526,6 +528,16 @@ export default function DesempenhoDieselAcompanhamento() {
   };
 
   const abrirCheckpoint = (item, tipo) => {
+    const checkpointNormalizado = String(tipo || "").toUpperCase();
+    const prontuarioPendente = String(item?.prontuario_pendente || "").toUpperCase();
+
+    if (item?.id && prontuarioPendente && prontuarioPendente === checkpointNormalizado) {
+      navigate(
+        `/desempenho-diesel-checkpoint/${item.id}?checkpoint=${encodeURIComponent(checkpointNormalizado)}`
+      );
+      return;
+    }
+
     setItemSelecionado(item);
     setCheckpointTipo(tipo);
     setModalCheckpointOpen(true);

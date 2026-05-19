@@ -1,6 +1,6 @@
 // src/pages/DesempenhoDieselCheckpoint.jsx
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { FaInfoCircle } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../context/AuthContext";
@@ -189,6 +189,13 @@ function groupItems(items) {
   return g;
 }
 
+function titleFromCheckpointTipo(tipo) {
+  if (tipo === "PRONTUARIO_10") return "Prontuário 10 dias";
+  if (tipo === "PRONTUARIO_20") return "Prontuário 20 dias";
+  if (tipo === "PRONTUARIO_30") return "Prontuário 30 dias";
+  return "Checkpoint do Instrutor";
+}
+
 function OkNokToggle({ value, onChange }) {
   return (
     <div className="flex items-center gap-2">
@@ -334,8 +341,13 @@ function PublicUrlList({ title, urls }) {
 
 export default function DesempenhoDieselCheckpoint() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth ? useAuth() : { user: null };
+  const checkpointTipoSolicitado = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return String(params.get("checkpoint") || "").toUpperCase();
+  }, [location.search]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -828,7 +840,7 @@ export default function DesempenhoDieselCheckpoint() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200">
             <FaInfoCircle className="text-blue-600" /> Operacao Diesel
           </div>
-          <h1 className="mt-3 text-2xl font-black text-gray-800">Checkpoint do Instrutor</h1>
+          <h1 className="mt-3 text-2xl font-black text-gray-800">{titleFromCheckpointTipo(checkpointTipoSolicitado)}</h1>
           <p className="text-sm text-gray-600 mt-1 font-semibold">
             Preencha o checklist (OK/NOK), adicione evidências e salve o acompanhamento.
           </p>
@@ -848,6 +860,12 @@ export default function DesempenhoDieselCheckpoint() {
 
       {okMsg && (
         <div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{okMsg}</div>
+      )}
+
+      {!!checkpointTipoSolicitado && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+          Prontuário pendente identificado: <strong>{titleFromCheckpointTipo(checkpointTipoSolicitado)}</strong>. Preencha esta etapa para continuar o fluxo do acompanhamento.
+        </div>
       )}
 
       {/* Resumo do caso */}

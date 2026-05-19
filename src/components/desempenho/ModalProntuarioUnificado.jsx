@@ -68,9 +68,8 @@ function buildCheckpointCard(label, dataGerada, onClick) {
   const gerado = !!dataGerada;
 
   return (
-    <button
-      onClick={onClick}
-      className={`text-left border rounded-xl p-4 shadow-sm transition-all hover:shadow-md ${
+    <div
+      className={`text-left border rounded-xl p-4 shadow-sm transition-all ${
         gerado
           ? "bg-emerald-50 border-emerald-200"
           : "bg-rose-50 border-rose-200"
@@ -85,7 +84,20 @@ function buildCheckpointCard(label, dataGerada, onClick) {
           ? `Gerado em ${formatarDataHoraBR(dataGerada, false)}`
           : "Pendente"}
       </div>
-    </button>
+      <div className="mt-4">
+        <button
+          onClick={onClick}
+          className={`px-3 py-2 rounded-lg text-xs font-black border inline-flex items-center gap-2 transition ${
+            gerado
+              ? "bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+              : "bg-rose-600 text-white border-rose-600 hover:bg-rose-700"
+          }`}
+        >
+          <FaArrowRight />
+          {gerado ? "Abrir prontuário" : "Realizar prontuário faltante"}
+        </button>
+      </div>
+    </div>
   );
 }
 

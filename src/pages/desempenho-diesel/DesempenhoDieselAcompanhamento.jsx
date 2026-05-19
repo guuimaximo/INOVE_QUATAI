@@ -932,9 +932,9 @@ export default function DesempenhoDieselAcompanhamento() {
                           onClick={() =>
                             abrirCheckpoint(item, item.prontuario_pendente)
                           }
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold border bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 transition-all"
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border bg-rose-600 text-white border-rose-600 hover:bg-rose-700 transition-all"
                         >
-                          {getProntuarioPendenteLabel(item)} pendente
+                          Realizar {getProntuarioPendenteLabel(item)}
                         </button>
                       ) : (
                         <span className="px-3 py-1.5 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">

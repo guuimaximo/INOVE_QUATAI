@@ -27,6 +27,7 @@ import AnaliseLinhasModal from "../../components/desempenho/resumo/AnaliseLinhas
 import RankingMotoristasModal from "../../components/desempenho/resumo/RankingMotoristasModal";
 import RankingCarrosModal from "../../components/desempenho/resumo/RankingCarrosModal";
 import AcompanhamentosModal from "../../components/desempenho/resumo/AcompanhamentosModal";
+import ModalCheckpointAnalise from "../../components/desempenho/ModalCheckpointAnalise";
 
 const SUPABASE_A_URL = import.meta.env.VITE_SUPA_BASE_BCNT_URL;
 const SUPABASE_A_ANON_KEY = import.meta.env.VITE_SUPA_BASE_BCNT_ANON_KEY;
@@ -260,6 +261,9 @@ export default function DesempenhoDieselAnalise() {
 
   const [abaAtiva, setAbaAtiva] = useState("LINHAS");
   const [subAcompanhamento, setSubAcompanhamento] = useState("RESUMO_INSTRUTOR");
+  const [modalCheckpointOpen, setModalCheckpointOpen] = useState(false);
+  const [acompanhamentoSelecionado, setAcompanhamentoSelecionado] = useState(null);
+  const [checkpointTipoSelecionado, setCheckpointTipoSelecionado] = useState(null);
 
   const [busca, setBusca] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
@@ -342,7 +346,7 @@ export default function DesempenhoDieselAnalise() {
     const { data, error } = await supabase
       .from("diesel_acompanhamentos")
       .select(
-        "id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, intervencao_hora_inicio, intervencao_hora_fim, motivo, metadata"
+        "id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, intervencao_hora_inicio, intervencao_hora_fim, motivo, metadata, prontuario_pendente, prontuario_10_gerado_em, prontuario_20_gerado_em, prontuario_30_gerado_em, intervencao_nota, intervencao_obs, arquivo_pdf_url, status_ciclo, fase_monitoramento"
       )
       .order("created_at", { ascending: false })
       .limit(6000);
@@ -1048,6 +1052,13 @@ export default function DesempenhoDieselAnalise() {
     return rows;
   }, [acompanhamentosComEvolucao, sessoesPorAcompanhamento]);
 
+  function abrirCheckpoint(item, checkpointTipo) {
+    if (!item?.id || !checkpointTipo) return;
+    setAcompanhamentoSelecionado(item);
+    setCheckpointTipoSelecionado(checkpointTipo);
+    setModalCheckpointOpen(true);
+  }
+
   const checkpointResumo = useMemo(() => {
     const rows = acompanhamentosComEvolucao.filter(
       (r) => r.checkpoint_tipo !== "SEM_DADOS" && (r.delta_kml != null || r.delta_desperdicio != null)
@@ -1695,6 +1706,7 @@ export default function DesempenhoDieselAnalise() {
 
           <AcompanhamentosModal
             subAcompanhamento={subAcompanhamento}
+            setSubAcompanhamento={setSubAcompanhamento}
             resumoInstrutor={resumoInstrutor}
             tempoPorDia={tempoPorDia}
             resumoPorLinhaCheckpoint={resumoPorLinhaCheckpoint}
@@ -1707,6 +1719,7 @@ export default function DesempenhoDieselAnalise() {
             statusBadgeClass={statusBadgeClass}
             EvolucaoBadge={EvolucaoBadge}
             SortIcon={SortIcon}
+            onOpenCheckpoint={abrirCheckpoint}
           />
         </div>
       )}
@@ -1757,6 +1770,24 @@ export default function DesempenhoDieselAnalise() {
         <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl p-4 font-semibold">
           {erro}
         </div>
+      )}
+
+      {modalCheckpointOpen && acompanhamentoSelecionado && checkpointTipoSelecionado && (
+        <ModalCheckpointAnalise
+          item={acompanhamentoSelecionado}
+          checkpointTipo={checkpointTipoSelecionado}
+          onClose={() => {
+            setModalCheckpointOpen(false);
+            setAcompanhamentoSelecionado(null);
+            setCheckpointTipoSelecionado(null);
+          }}
+          onSaved={async () => {
+            await carregarTudo();
+            setModalCheckpointOpen(false);
+            setAcompanhamentoSelecionado(null);
+            setCheckpointTipoSelecionado(null);
+          }}
+        />
       )}
     </div>
   );

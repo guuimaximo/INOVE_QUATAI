@@ -101,12 +101,12 @@ export default function AcompanhamentosModal({
                 onClick={onAjustarTodosProntuarios}
                 disabled={ajustandoProntuarios}
                 className="px-4 py-2 rounded-lg bg-rose-600 text-white font-black hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed transition inline-flex items-center gap-2"
-                title="Disparar ordem para todos os prontuários pendentes do resumo atual"
+                title="Gerar todos os prontuários faltantes do resumo atual"
               >
                 <FaArrowRight />
                 {ajustandoProntuarios
                   ? "Processando..."
-                  : `Realizar todos faltantes (${qtdProntuariosPendentes})`}
+                  : `Gerar todos faltantes (${qtdProntuariosPendentes})`}
               </button>
             )}
             <div className="flex flex-wrap bg-slate-100 p-1 rounded-lg gap-1">

@@ -1495,6 +1495,18 @@ export default function DesempenhoDieselAnalise() {
     return [...map.values()].sort((a, b) => n(b.dias_decorridos) - n(a.dias_decorridos));
   }, [acompanhamentosComEvolucao]);
 
+  const revisaoProntuariosIds = useMemo(
+    () => new Set(revisaoProntuarios.map((item) => item.id).filter(Boolean)),
+    [revisaoProntuarios]
+  );
+
+  const prontuariosPendentesOperacionais = useMemo(
+    () => prontuariosParaAjuste.filter((item) => item?.id && !revisaoProntuariosIds.has(item.id)),
+    [prontuariosParaAjuste, revisaoProntuariosIds]
+  );
+
+  const exemploRevisaoProntuario = revisaoProntuarios[0] || prontuariosParaAjuste[0] || null;
+
   const totalDesperdicioMeta = useMemo(
     () => rowsReferenciaComRef.reduce((acc, r) => acc + n(r.Litros_Desp_Meta), 0),
     [rowsReferenciaComRef]
@@ -1974,13 +1986,17 @@ export default function DesempenhoDieselAnalise() {
                   Revisão de Prontuários
                 </div>
                 <div className="text-sm font-semibold text-amber-900 mt-1">
-                  {revisaoProntuarios.length
-                    ? `${fmtInt(revisaoProntuarios.length)} acompanhamento(s) do filtro atual estão fora do prontuário esperado pelo tempo decorrido.`
+                  {prontuariosParaAjuste.length
+                    ? `${fmtInt(prontuariosParaAjuste.length)} prontuário(s) para gerar no filtro atual: ${fmtInt(revisaoProntuarios.length)} fora do esperado pelo tempo decorrido${
+                        prontuariosPendentesOperacionais.length
+                          ? ` e ${fmtInt(prontuariosPendentesOperacionais.length)} pendente(s) operacional(is).`
+                          : "."
+                      }`
                     : "Todos os acompanhamentos filtrados estão no prontuário esperado para 10/20/30 dias."}
                 </div>
-                {revisaoProntuarios[0] && (
+                {exemploRevisaoProntuario && (
                   <div className="text-xs font-semibold text-amber-800 mt-1">
-                    Exemplo: {revisaoProntuarios[0].motorista_nome || revisaoProntuarios[0].motorista_chapa} • atual {prontuarioLabel(revisaoProntuarios[0].prontuario_atual)} • esperado {prontuarioLabel(revisaoProntuarios[0].prontuario_esperado)}.
+                    Exemplo: {exemploRevisaoProntuario.motorista_nome || exemploRevisaoProntuario.motorista_chapa} • atual {prontuarioLabel(exemploRevisaoProntuario.prontuario_atual)} • próximo {prontuarioLabel(exemploRevisaoProntuario.prontuario_ajuste || exemploRevisaoProntuario.prontuario_esperado)}.
                   </div>
                 )}
               </div>

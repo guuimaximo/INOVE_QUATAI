@@ -20,7 +20,13 @@ import { AuthContext } from "../../context/AuthContext";
 import ModalLancamentoIntervencao from "../../components/desempenho/ModalLancamentoIntervencao";
 import ModalProntuarioUnificado from "../../components/desempenho/ModalProntuarioUnificado";
 import ModalCheckpointAnalise from "../../components/desempenho/ModalCheckpointAnalise";
-import { formatDateBR } from "../../utils/dieselAcompanhamento";
+import { formatDateBR, resolveAcompanhamentoContext } from "../../utils/dieselAcompanhamento";
+
+const GH_USER = import.meta.env.VITE_GITHUB_USER;
+const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
+const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
+const GH_REF = "main";
+const WF_ACOMP = "ordem-acompanhamento.yml";
 
 // =============================================================================
 // HELPERS
@@ -50,8 +56,8 @@ function getFoco(item) {
   const m = item?.metadata || {};
   if (m?.foco) return String(m.foco).trim();
 
-  const cl = m?.cluster_foco;
-  const ln = m?.linha_foco;
+  const cl = m?.cluster_foco || item?.cluster_foco;
+  const ln = m?.linha_foco || item?.linha_foco;
   if (cl && ln) return `${cl} - Linha ${ln}`;
   if (ln) return `Linha ${ln}`;
 
@@ -69,11 +75,11 @@ function extrairLinhaDoMotivo(motivo) {
 }
 
 function getLinhaApenas(item) {
+  const linhaContexto = resolveAcompanhamentoContext(item).linha;
+  if (linhaContexto) return linhaContexto;
+
   const linhaMotivo = extrairLinhaDoMotivo(item?.motivo);
   if (linhaMotivo) return linhaMotivo;
-
-  const linhaMeta = String(item?.metadata?.linha_foco || "").trim();
-  if (linhaMeta) return linhaMeta.toUpperCase();
 
   return "Sem Linha";
 }
@@ -172,6 +178,34 @@ function isEmAnalise(item) {
   return ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(st);
 }
 
+async function dispatchGitHubWorkflow(workflowFile, inputs) {
+  if (!GH_USER || !GH_REPO || !GH_TOKEN) {
+    throw new Error("Credenciais GitHub ausentes.");
+  }
+
+  const safeInputs = {};
+  for (const key in inputs) {
+    safeInputs[key] = String(inputs[key] || "");
+  }
+
+  const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${GH_TOKEN}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ref: GH_REF, inputs: safeInputs }),
+  });
+
+  if (response.status !== 204) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Erro GitHub: ${response.status}`);
+  }
+}
+
 // =============================================================================
 // COMPONENTE PRINCIPAL
 // =============================================================================
@@ -202,6 +236,7 @@ export default function DesempenhoDieselAcompanhamento() {
   const [modalLancarOpen, setModalLancarOpen] = useState(false);
   const [modalVisaoGeralOpen, setModalVisaoGeralOpen] = useState(false);
   const [modalCheckpointOpen, setModalCheckpointOpen] = useState(false);
+  const [loadingReprocessarPendentes, setLoadingReprocessarPendentes] = useState(false);
 
   const [itemSelecionado, setItemSelecionado] = useState(null);
   const [checkpointTipo, setCheckpointTipo] = useState(null);
@@ -365,6 +400,24 @@ export default function DesempenhoDieselAcompanhamento() {
     (i) => !!i?.prontuario_pendente
   ).length;
 
+  const prontuariosPendentes = useMemo(
+    () =>
+      lista.filter(
+        (item) => !!item?.prontuario_pendente && String(item?.motorista_chapa || "").trim()
+      ),
+    [lista]
+  );
+
+  const prontuariosPendentesUnicos = useMemo(() => {
+    const map = new Map();
+    prontuariosPendentes.forEach((item) => {
+      if (!map.has(item.id)) {
+        map.set(item.id, item);
+      }
+    });
+    return [...map.values()];
+  }, [prontuariosPendentes]);
+
   const countEmAnaliseFiltrado = listaComFiltrosSemAba.filter((i) => isEmAnalise(i)).length;
 
   const handleExcluir = async (id) => {
@@ -408,6 +461,68 @@ export default function DesempenhoDieselAcompanhamento() {
   const abrirVisaoGeral = (item) => {
     setItemSelecionado(item);
     setModalVisaoGeralOpen(true);
+  };
+
+  const handleReprocessarPendentes = async () => {
+    if (loadingReprocessarPendentes) return;
+
+    const pendentes = prontuariosPendentesUnicos;
+    if (!pendentes.length) {
+      alert("Nao existem prontuarios pendentes para reprocessar.");
+      return;
+    }
+
+    const confirmou = window.confirm(
+      `Confirma o reprocessamento de ${pendentes.length} prontuario(s) pendente(s)?`
+    );
+    if (!confirmou) return;
+
+    setLoadingReprocessarPendentes(true);
+    try {
+      const { data: lote, error: errL } = await supabase
+        .from("acompanhamento_lotes")
+        .insert({
+          status: "PROCESSANDO",
+          qtd: pendentes.length,
+          extra: {
+            origem: "diesel_acompanhamento_pendentes",
+            gerado_em: new Date().toISOString(),
+            tipo: "prontuarios_pendentes_reprocesso",
+          },
+        })
+        .select("id")
+        .single();
+
+      if (errL) throw errL;
+
+      const itens = pendentes.map((item) => ({
+        lote_id: lote.id,
+        motorista_chapa: String(item.motorista_chapa || "").trim(),
+        extra: {
+          acompanhamento_id: item.id,
+          motorista_nome: item.motorista_nome || null,
+          prontuario_pendente: item.prontuario_pendente || null,
+        },
+      }));
+
+      const { error: errI } = await supabase
+        .from("acompanhamento_lote_itens")
+        .insert(itens);
+      if (errI) throw errI;
+
+      await dispatchGitHubWorkflow(WF_ACOMP, {
+        ordem_batch_id: String(lote.id),
+        qtd: String(pendentes.length),
+      });
+
+      alert(`Lote #${lote.id} enviado para reprocessar ${pendentes.length} pendente(s).`);
+      await carregarOrdens();
+    } catch (e) {
+      console.error(e);
+      alert(e?.message || "Erro ao reprocessar prontuarios pendentes.");
+    } finally {
+      setLoadingReprocessarPendentes(false);
+    }
   };
 
   const abrirCheckpoint = (item, tipo) => {
@@ -617,6 +732,16 @@ export default function DesempenhoDieselAcompanhamento() {
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
                 filtrado: {countProntuariosPendentesFiltrado}
               </span>
+            </div>
+            <div className="mt-3">
+              <button
+                onClick={handleReprocessarPendentes}
+                disabled={loadingReprocessarPendentes || countProntuariosPendentes === 0}
+                className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-black hover:bg-rose-700 disabled:bg-rose-300 disabled:cursor-not-allowed transition inline-flex items-center gap-2"
+              >
+                <FaSync className={loadingReprocessarPendentes ? "animate-spin" : ""} />
+                Reprocessar todos
+              </button>
             </div>
           </div>
           <div className="h-11 w-11 rounded-xl bg-white/80 border border-white/90 flex items-center justify-center text-rose-700">
@@ -932,9 +1057,9 @@ export default function DesempenhoDieselAcompanhamento() {
                           onClick={() =>
                             abrirCheckpoint(item, item.prontuario_pendente)
                           }
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold border bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 transition-all"
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border bg-rose-600 text-white border-rose-600 hover:bg-rose-700 transition-all"
                         >
-                          {getProntuarioPendenteLabel(item)} pendente
+                          Realizar {getProntuarioPendenteLabel(item)}
                         </button>
                       ) : (
                         <span className="px-3 py-1.5 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">

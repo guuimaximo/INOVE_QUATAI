@@ -11,6 +11,7 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
+import { resolveAcompanhamentoContext } from "../../utils/dieselAcompanhamento";
 
 // =============================================================================
 // CONFIG (GitHub Actions)
@@ -117,8 +118,8 @@ function getFoco(item) {
   const m = item?.metadata;
   if (m?.foco) return m.foco;
 
-  const cl = m?.cluster_foco;
-  const ln = m?.linha_foco;
+  const cl = m?.cluster_foco || item?.cluster_foco;
+  const ln = m?.linha_foco || item?.linha_foco;
   if (cl && ln) return `${cl} - Linha ${ln}`;
   if (ln) return `Linha ${ln}`;
 
@@ -126,11 +127,11 @@ function getFoco(item) {
 }
 
 function getLinhaApenas(item) {
-  return item?.metadata?.linha_foco || null;
+  return resolveAcompanhamentoContext(item).linha || null;
 }
 
 function getClusterApenas(item) {
-  return item?.metadata?.cluster_foco || null;
+  return resolveAcompanhamentoContext(item).cluster || null;
 }
 
 function getNotaInstrutorValue(nota) {

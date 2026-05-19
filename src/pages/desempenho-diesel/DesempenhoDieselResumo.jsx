@@ -16,11 +16,18 @@ import {
 } from "react-icons/fa";
 import { createClient } from "@supabase/supabase-js";
 import { supabase } from "../../supabase";
+import {
+  buildMotoristaContextMap,
+  deriveClusterFromPrefixo,
+  extractDriverChapa,
+  resolveAcompanhamentoContext,
+} from "../../utils/dieselAcompanhamento";
 
 import AnaliseLinhasModal from "../../components/desempenho/resumo/AnaliseLinhasModal";
 import RankingMotoristasModal from "../../components/desempenho/resumo/RankingMotoristasModal";
 import RankingCarrosModal from "../../components/desempenho/resumo/RankingCarrosModal";
 import AcompanhamentosModal from "../../components/desempenho/resumo/AcompanhamentosModal";
+import ModalCheckpointAnalise from "../../components/desempenho/ModalCheckpointAnalise";
 
 const SUPABASE_A_URL = import.meta.env.VITE_SUPA_BASE_BCNT_URL;
 const SUPABASE_A_ANON_KEY = import.meta.env.VITE_SUPA_BASE_BCNT_ANON_KEY;
@@ -120,25 +127,6 @@ function formatMinutes(mins) {
   return `${h}h ${String(m).padStart(2, "0")}min`;
 }
 
-function deriveCluster(prefixo) {
-  const v = normalize(prefixo);
-  if (!v) return null;
-  if (["W511", "W513", "W515"].includes(v)) return null;
-  if (v.startsWith("2216")) return "C8";
-  if (v.startsWith("2222")) return "C9";
-  if (v.startsWith("2224")) return "C10";
-  if (v.startsWith("2425")) return "C11";
-  if (v.startsWith("W")) return "C6";
-  return null;
-}
-
-function extractChapa(motorista) {
-  const s = String(motorista || "").trim();
-  if (!s) return "N/D";
-  const match = s.match(/\b(\d{3,10})\b/);
-  return match?.[1] || s;
-}
-
 function statusNorm(v) {
   const s = normalize(v);
   if (!s) return "AGUARDANDO_INSTRUTOR";
@@ -147,19 +135,6 @@ function statusNorm(v) {
   if (s === "CONCLUIDO") return "OK";
   if (s === "TRATATIVA") return "ATAS";
   return s;
-}
-
-function getLinhaFocoAcompanhamento(item) {
-  const meta = item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
-  const linhaMeta = String(meta?.linha_foco || "").trim();
-  if (linhaMeta) return linhaMeta.toUpperCase();
-
-  const linhaDireta = String(item?.linha_foco || "").trim();
-  if (linhaDireta) return linhaDireta.toUpperCase();
-
-  const motivo = String(item?.motivo || "");
-  const match = motivo.match(/linha\s+([a-z0-9]+)/i);
-  return match?.[1] ? match[1].toUpperCase() : "SEM LINHA";
 }
 
 function statusBadgeClass(status) {
@@ -286,6 +261,9 @@ export default function DesempenhoDieselAnalise() {
 
   const [abaAtiva, setAbaAtiva] = useState("LINHAS");
   const [subAcompanhamento, setSubAcompanhamento] = useState("RESUMO_INSTRUTOR");
+  const [modalCheckpointOpen, setModalCheckpointOpen] = useState(false);
+  const [acompanhamentoSelecionado, setAcompanhamentoSelecionado] = useState(null);
+  const [checkpointTipoSelecionado, setCheckpointTipoSelecionado] = useState(null);
 
   const [busca, setBusca] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
@@ -368,7 +346,7 @@ export default function DesempenhoDieselAnalise() {
     const { data, error } = await supabase
       .from("diesel_acompanhamentos")
       .select(
-        "id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, intervencao_hora_inicio, intervencao_hora_fim, motivo, metadata"
+        "id, created_at, motorista_chapa, motorista_nome, linha_foco, cluster_foco, status, instrutor_login, instrutor_nome, dt_inicio_monitoramento, intervencao_hora_inicio, intervencao_hora_fim, motivo, metadata, prontuario_pendente, prontuario_10_gerado_em, prontuario_20_gerado_em, prontuario_30_gerado_em, intervencao_nota, intervencao_obs, arquivo_pdf_url, status_ciclo, fase_monitoramento"
       )
       .order("created_at", { ascending: false })
       .limit(6000);
@@ -434,9 +412,9 @@ export default function DesempenhoDieselAnalise() {
       const comb = n(r.litros_consumidos);
       const kml = comb > 0 ? km / comb : 0;
       const clusterOrig = normalize(r.cluster);
-      const cluster = clusterOrig || deriveCluster(r.prefixo);
+      const cluster = clusterOrig || deriveClusterFromPrefixo(r.prefixo);
       const motoristaRaw = String(r.motorista || "").trim() || "SEM_MOTORISTA";
-      const chapa = extractChapa(motoristaRaw);
+      const chapa = extractDriverChapa(motoristaRaw);
       const motoristaNome = mapaFuncionarios.get(chapa) || motoristaRaw;
       const metaLinha = n(r.meta_kml_usada);
       const litrosIdeais = n(r.litros_ideais);
@@ -469,6 +447,8 @@ export default function DesempenhoDieselAnalise() {
     );
   }, [rowsBase, mapaFuncionarios]);
 
+  const motoristaContextMap = useMemo(() => buildMotoristaContextMap(dataset), [dataset]);
+
   const mesesDisponiveis = useMemo(() => {
     return [...new Set(dataset.map((r) => r.Mes_Ano).filter(Boolean))].sort();
   }, [dataset]);
@@ -488,18 +468,21 @@ export default function DesempenhoDieselAnalise() {
   const linhasUnicas = useMemo(() => {
     const set = new Set();
     dataset.forEach((r) => set.add(r.linha));
-    acompanhamentos.forEach((a) => set.add(getLinhaFocoAcompanhamento(a)));
+    acompanhamentos.forEach((a) => {
+      const linha = resolveAcompanhamentoContext(a, motoristaContextMap).linha || "SEM LINHA";
+      set.add(linha);
+    });
     return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [dataset, acompanhamentos]);
+  }, [dataset, acompanhamentos, motoristaContextMap]);
 
   const clustersUnicos = useMemo(() => {
     const set = new Set(dataset.map((r) => r.Cluster).filter(Boolean));
     acompanhamentos.forEach((a) => {
-      const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
+      const c = resolveAcompanhamentoContext(a, motoristaContextMap).cluster;
       if (c) set.add(c);
     });
     return [...set].filter(Boolean).sort();
-  }, [dataset, acompanhamentos]);
+  }, [dataset, acompanhamentos, motoristaContextMap]);
 
   const instrutoresUnicos = useMemo(() => {
     return [
@@ -847,6 +830,7 @@ export default function DesempenhoDieselAnalise() {
     return acompanhamentos
       .filter((a) => a.dt_inicio_monitoramento)
       .map((a) => {
+        const contexto = resolveAcompanhamentoContext(a, motoristaContextMap);
         const iniMin = parseHoraToMin(a.intervencao_hora_inicio);
         const fimMin = parseHoraToMin(a.intervencao_hora_fim);
         const duracaoMinIntervencao =
@@ -862,7 +846,8 @@ export default function DesempenhoDieselAnalise() {
         const aBase = {
           ...a,
           status_norm: statusNorm(a.status),
-          linha_resolvida: getLinhaFocoAcompanhamento(a),
+          linha_resolvida: contexto.linha || "SEM LINHA",
+          cluster_resolvido: contexto.cluster || "",
           data_ref: dtInicioStr,
           duracao_min: duracaoMin,
           duracao_intervencao_min: duracaoMinIntervencao,
@@ -993,7 +978,7 @@ export default function DesempenhoDieselAnalise() {
       .filter((a) => {
         if (filtroLinha && a.linha_resolvida !== filtroLinha) return false;
         if (filtroCluster) {
-          const c = normalize(a.cluster_foco || a.metadata?.cluster_foco);
+          const c = normalize(a.cluster_resolvido);
           if (c !== filtroCluster) return false;
         }
         if (filtroInstrutor && String(a.instrutor_nome || "").trim() !== filtroInstrutor)
@@ -1028,6 +1013,7 @@ export default function DesempenhoDieselAnalise() {
     mesReferencia,
     filtroConclusao,
     busca,
+    motoristaContextMap,
   ]);
 
   const registrosInstrutor = useMemo(() => {
@@ -1065,6 +1051,13 @@ export default function DesempenhoDieselAnalise() {
 
     return rows;
   }, [acompanhamentosComEvolucao, sessoesPorAcompanhamento]);
+
+  function abrirCheckpoint(item, checkpointTipo) {
+    if (!item?.id || !checkpointTipo) return;
+    setAcompanhamentoSelecionado(item);
+    setCheckpointTipoSelecionado(checkpointTipo);
+    setModalCheckpointOpen(true);
+  }
 
   const checkpointResumo = useMemo(() => {
     const rows = acompanhamentosComEvolucao.filter(
@@ -1713,6 +1706,7 @@ export default function DesempenhoDieselAnalise() {
 
           <AcompanhamentosModal
             subAcompanhamento={subAcompanhamento}
+            setSubAcompanhamento={setSubAcompanhamento}
             resumoInstrutor={resumoInstrutor}
             tempoPorDia={tempoPorDia}
             resumoPorLinhaCheckpoint={resumoPorLinhaCheckpoint}
@@ -1725,6 +1719,7 @@ export default function DesempenhoDieselAnalise() {
             statusBadgeClass={statusBadgeClass}
             EvolucaoBadge={EvolucaoBadge}
             SortIcon={SortIcon}
+            onOpenCheckpoint={abrirCheckpoint}
           />
         </div>
       )}
@@ -1775,6 +1770,24 @@ export default function DesempenhoDieselAnalise() {
         <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl p-4 font-semibold">
           {erro}
         </div>
+      )}
+
+      {modalCheckpointOpen && acompanhamentoSelecionado && checkpointTipoSelecionado && (
+        <ModalCheckpointAnalise
+          item={acompanhamentoSelecionado}
+          checkpointTipo={checkpointTipoSelecionado}
+          onClose={() => {
+            setModalCheckpointOpen(false);
+            setAcompanhamentoSelecionado(null);
+            setCheckpointTipoSelecionado(null);
+          }}
+          onSaved={async () => {
+            await carregarTudo();
+            setModalCheckpointOpen(false);
+            setAcompanhamentoSelecionado(null);
+            setCheckpointTipoSelecionado(null);
+          }}
+        />
       )}
     </div>
   );

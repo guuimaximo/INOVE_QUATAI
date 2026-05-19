@@ -4,7 +4,8 @@ import {
   FaChartBar, 
   FaFilePdf, 
   FaCode, 
-  FaInfoCircle
+  FaInfoCircle,
+  FaArrowRight
 } from "react-icons/fa";
 
 // Função local para garantir segurança matemática e evitar tela branca
@@ -28,6 +29,7 @@ export default function AcompanhamentosModal({
   formatMinutes = (v) => v,
   statusBadgeClass = () => "",
   EvolucaoBadge = () => null,
+  onOpenCheckpoint = () => {},
 }) {
   const [detalheModal, setDetalheModal] = useState(null);
 
@@ -145,6 +147,18 @@ export default function AcompanhamentosModal({
           <p className="text-2xl font-black text-slate-800">
             {fmtNum(checkpointResumo.mediaDeltaKml)}
           </p>
+        </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-900">
+        <div className="flex items-start gap-3">
+          <FaInfoCircle className="mt-0.5 shrink-0 text-blue-600" />
+          <div>
+            <span className="font-black">Como ler o prontuário:</span>{" "}
+            Prontuário 10/20/30 compara o desempenho do motorista em janelas simétricas de
+            10, 20 ou 30 dias antes e depois do início do acompanhamento. Quando ainda não
+            existe janela completa, o sistema mostra um checkpoint menor ou sem dados.
+          </div>
         </div>
       </div>
 
@@ -404,7 +418,20 @@ export default function AcompanhamentosModal({
                   </td>
                   <td className="px-4 py-4">{fmtDateBr(row.data_ref)}</td>
                   <td className="px-4 py-4">{formatMinutes(row.duracao_min)}</td>
-                  <td className="px-4 py-4">{row.checkpoint_tipo || "-"}</td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-col gap-2">
+                      <span>{row.checkpoint_tipo || "-"}</span>
+                      {row.prontuario_pendente && (
+                        <button
+                          onClick={() => onOpenCheckpoint(row, row.prontuario_pendente)}
+                          className="w-fit px-2.5 py-1.5 rounded-lg text-[11px] font-black border bg-rose-600 text-white border-rose-600 hover:bg-rose-700 transition inline-flex items-center gap-1.5"
+                        >
+                          <FaArrowRight size={10} />
+                          Realizar faltante
+                        </button>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-4">{row.antes_kml == null ? "-" : fmtNum(row.antes_kml)}</td>
                   <td className="px-4 py-4">{row.depois_kml == null ? "-" : fmtNum(row.depois_kml)}</td>
                   <td className="px-4 py-4">
@@ -418,6 +445,16 @@ export default function AcompanhamentosModal({
                     )}
                   </td>
                   <td className="px-4 py-4 flex items-center justify-center gap-2">
+                    {row.prontuario_pendente && (
+                      <button
+                        onClick={() => onOpenCheckpoint(row, row.prontuario_pendente)}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-md font-bold transition border border-rose-600 text-xs"
+                        title="Realizar prontuário faltante"
+                      >
+                        <FaArrowRight />
+                        Realizar prontuário
+                      </button>
+                    )}
                     {row.checkpoint_tipo !== "SEM_DADOS" && (
                       <button
                         onClick={() => setDetalheModal(row)}

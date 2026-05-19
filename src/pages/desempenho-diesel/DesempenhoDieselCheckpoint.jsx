@@ -594,6 +594,11 @@ export default function DesempenhoDieselCheckpoint() {
     return Math.max(0, total - responded);
   }, [itensChecklist, respostasChecklist]);
 
+  const sessaoAberta = useMemo(
+    () => (sessoesAcomp || []).find((sessao) => !sessao.encerrado_em) || null,
+    [sessoesAcomp]
+  );
+
   const pronto = useMemo(() => {
     if (!acomp?.id) return false;
     if (!String(observacoes || "").trim()) return false;
@@ -624,11 +629,6 @@ export default function DesempenhoDieselCheckpoint() {
       kmAcomp: kmAcomp != null && Number.isFinite(kmAcomp) ? kmAcomp : null,
     };
   }, [detalhes.hora_inicial, detalhes.hora_final, detalhes.km_inicial, detalhes.km_final]);
-
-  const sessaoAberta = useMemo(
-    () => (sessoesAcomp || []).find((sessao) => !sessao.encerrado_em) || null,
-    [sessoesAcomp]
-  );
 
   const sessaoReferencia = useMemo(
     () =>

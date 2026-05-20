@@ -3,7 +3,7 @@ import { supabase } from "../../supabase";
 export const SUPRIMENTOS_BUCKET = "suprimentos";
 const TESTE_INTERCORRENCIAS_MARKER = "__teste_intercorrencias__:";
 
-export const GARANTIA_TIPOS = ["Peca comprada", "Veiculo novo"];
+export const GARANTIA_TIPOS = ["Peça comprada", "Veículo novo"];
 export const GARANTIA_TIPOS_SOLICITACAO = ["Ressarcimento", "Peça nova"];
 export const GARANTIA_RESULTADOS = ["Aprovada", "Negada"];
 export const GARANTIA_TIPOS_RETORNO = ["Crédito", "Peça nova"];
@@ -143,8 +143,12 @@ export async function uploadSuprimentosFiles(files, folder = "geral") {
 export function deriveGarantiaMeta(row) {
   const resultado = String(row?.resultado || "").trim();
   const retorno = String(row?.tipo_retorno || "").trim();
-  const retornoCredito = retorno === "Credito" || retorno === "Crédito";
-  const retornoPeca = retorno === "Peca nova" || retorno === "Peça nova";
+  const retornoKey = retorno
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const retornoCredito = retornoKey.includes("credito") || (retornoKey.includes("cr") && retornoKey.includes("dito"));
+  const retornoPeca = retornoKey.includes("peca") || retornoKey.includes("pea") || retornoKey.includes("nova");
   const prazoRetorno = safeNumber(row?.prazo_retorno_dias);
   const limiteRetorno = addDaysToISODate(row?.retirada_fornecedor_em, prazoRetorno);
 
@@ -160,16 +164,16 @@ export function deriveGarantiaMeta(row) {
 
   if (concluida) {
     if (resultado === "Negada") {
-      fase = "Finalizada negada";
+      fase = "Fechada por negativa";
       tone = "rose";
     } else if (retornoCredito) {
-      fase = "Finalizada com credito";
+      fase = "Fechada por crédito";
       tone = "emerald";
     } else if (retornoPeca) {
-      fase = "Finalizada com peca";
+      fase = "Fechada por peça";
       tone = "emerald";
     } else {
-      fase = "Finalizada";
+      fase = "Fechada";
       tone = "emerald";
     }
   } else if (resultado === "Aprovada") {
@@ -180,8 +184,8 @@ export function deriveGarantiaMeta(row) {
     tone = "rose";
   } else if (row?.retirada_fornecedor_em) {
     fase = limiteRetorno
-      ? `Aguardando retorno ate ${formatDateBR(limiteRetorno)}`
-      : "Peca retirada pelo fornecedor";
+      ? `Aguardando retorno até ${formatDateBR(limiteRetorno)}`
+      : "Peça retirada pelo fornecedor";
     tone = "amber";
   } else if (row?.protocolo_fornecedor || row?.enviado_fornecedor_em) {
     fase = "Enviada ao fornecedor";

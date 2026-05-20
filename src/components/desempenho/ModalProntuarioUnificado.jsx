@@ -113,59 +113,6 @@ function isCheckpointFinal30(tipo) {
   return String(tipo || "").toUpperCase() === "PRONTUARIO_30";
 }
 
-function getNotaInstrutorValue(nota) {
-  if (nota == null || nota === "") return null;
-  const valor = Number(nota);
-  if (!Number.isFinite(valor)) return null;
-  return Math.max(0, Math.min(100, valor));
-}
-
-function getNotaInstrutorColors(nota) {
-  const valor = getNotaInstrutorValue(nota);
-
-  if (valor == null) {
-    return {
-      box: "bg-slate-50 border-slate-200",
-      text: "text-slate-700",
-      badge: "bg-slate-100 text-slate-700 border-slate-200",
-      label: "text-slate-500",
-    };
-  }
-
-  if (valor < 50) {
-    return {
-      box: "bg-rose-50 border-rose-200",
-      text: "text-rose-700",
-      badge: "bg-rose-100 text-rose-700 border-rose-200",
-      label: "text-rose-600",
-    };
-  }
-
-  if (valor < 80) {
-    return {
-      box: "bg-amber-50 border-amber-200",
-      text: "text-amber-700",
-      badge: "bg-amber-100 text-amber-700 border-amber-200",
-      label: "text-amber-600",
-    };
-  }
-
-  return {
-    box: "bg-emerald-50 border-emerald-200",
-    text: "text-emerald-700",
-    badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    label: "text-emerald-600",
-  };
-}
-
-function getNotaInstrutorFaixa(nota) {
-  const valor = getNotaInstrutorValue(nota);
-  if (valor == null) return "Sem nota";
-  if (valor < 50) return "Crítica";
-  if (valor < 80) return "Atenção";
-  return "Boa";
-}
-
 function getSessaoReferenceTimestamp(sessao) {
   if (!sessao) return 0;
   const ref = sessao.encerrado_em || sessao.iniciado_em || sessao.created_at || sessao.data_sessao;
@@ -226,19 +173,6 @@ export default function ModalProntuarioUnificado({
 
   const isAnaliseFinal = ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(
     statusAtual
-  );
-
-  const notaInstrutor = useMemo(
-    () => getNotaInstrutorValue(item?.intervencao_nota),
-    [item]
-  );
-  const notaColors = useMemo(
-    () => getNotaInstrutorColors(item?.intervencao_nota),
-    [item]
-  );
-  const notaFaixa = useMemo(
-    () => getNotaInstrutorFaixa(item?.intervencao_nota),
-    [item]
   );
 
   const decisaoInfo = useMemo(() => {
@@ -379,57 +313,14 @@ export default function ModalProntuarioUnificado({
                 <FaEye className="text-blue-600" /> Resumo da Ordem Atual
               </h4>
 
-              {statusAtual === "EM_MONITORAMENTO" ? (
-                <ResumoLancamentoInstrutor item={item} />
-              ) : (
-                <ResumoAnalise item={item} />
-              )}
+              <ResumoLancamentoInstrutor item={item} />
 
               {isAnaliseFinal && (
-                <div className="mt-5 border rounded-xl p-4 bg-slate-50 border-slate-200">
+                <div className="mt-5">
                   <div className="font-black text-sm uppercase tracking-wider mb-3 text-slate-700">
-                    Parecer do Instrutor
+                    Resultado do Monitoramento
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div className={`rounded-lg border p-3 ${notaColors.box}`}>
-                      <div
-                        className={`text-xs font-bold uppercase tracking-wider mb-2 ${notaColors.label}`}
-                      >
-                        Nota do Instrutor (0 a 100)
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className={`text-2xl font-black ${notaColors.text}`}>
-                          {notaInstrutor != null ? `${notaInstrutor}/100` : "-"}
-                        </div>
-
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-black border ${notaColors.badge}`}
-                        >
-                          {notaFaixa}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-lg border p-3">
-                      <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                        Tipo do Checkpoint para Decisão
-                      </div>
-                      <div className="text-lg font-black text-slate-800">
-                        {checkpointDecisao || "-"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Parecer do Instrutor
-                    </div>
-                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-line bg-white border rounded-lg p-3">
-                      {item?.intervencao_obs || "Sem parecer do instrutor registrado."}
-                    </div>
-                  </div>
+                  <ResumoAnalise item={item} />
                 </div>
               )}
 

@@ -10,6 +10,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList,
 } from "recharts";
 import {
   FaClipboardList,
@@ -85,6 +86,11 @@ function ilikeContains(hay, needle) {
 
 function fmtInt(v) {
   return Math.round(Number(v || 0)).toLocaleString("pt-BR");
+}
+
+function fmtChartLabel(v) {
+  const n = Number(v || 0);
+  return n > 0 ? fmtInt(n) : "";
 }
 
 function formatDateBR(v) {
@@ -1049,16 +1055,24 @@ export default function TratativasResumo() {
             ) : (
               <div className="h-80 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 25, right: 20, left: 0, bottom: 0 }}>
+                  <LineChart data={chartData} margin={{ top: 35, right: 24, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} />
                     <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: "20px", fontSize: "12px", fontWeight: "bold" }} />
-                    <Line type="monotone" dataKey="total" name="Total" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="pendentes" name="Pendentes" stroke="#f59e0b" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="concluidas" name="Concluídas" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="atrasadas" name="Atrasadas" stroke="#ef4444" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
+                    <Line type="monotone" dataKey="total" name="Total" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }}>
+                      <LabelList dataKey="total" position="top" formatter={fmtChartLabel} style={{ fill: "#2563eb", fontSize: 10, fontWeight: 900 }} />
+                    </Line>
+                    <Line type="monotone" dataKey="pendentes" name="Pendentes" stroke="#f59e0b" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }}>
+                      <LabelList dataKey="pendentes" position="bottom" formatter={fmtChartLabel} style={{ fill: "#b45309", fontSize: 10, fontWeight: 900 }} />
+                    </Line>
+                    <Line type="monotone" dataKey="concluidas" name="Concluídas" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }}>
+                      <LabelList dataKey="concluidas" position="top" formatter={fmtChartLabel} style={{ fill: "#047857", fontSize: 10, fontWeight: 900 }} />
+                    </Line>
+                    <Line type="monotone" dataKey="atrasadas" name="Atrasadas" stroke="#ef4444" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }}>
+                      <LabelList dataKey="atrasadas" position="bottom" formatter={fmtChartLabel} style={{ fill: "#dc2626", fontSize: 10, fontWeight: 900 }} />
+                    </Line>
                   </LineChart>
                 </ResponsiveContainer>
               </div>

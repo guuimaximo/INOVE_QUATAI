@@ -166,6 +166,13 @@ function getNotaInstrutorFaixa(nota) {
   return "Boa";
 }
 
+function getSessaoReferenceTimestamp(sessao) {
+  if (!sessao) return 0;
+  const ref = sessao.encerrado_em || sessao.iniciado_em || sessao.created_at || sessao.data_sessao;
+  const stamp = new Date(String(ref || "")).getTime();
+  return Number.isNaN(stamp) ? 0 : stamp;
+}
+
 export default function ModalProntuarioUnificado({
   item,
   onClose,
@@ -174,6 +181,7 @@ export default function ModalProntuarioUnificado({
 }) {
   const [historico, setHistorico] = useState([]);
   const [loadingHist, setLoadingHist] = useState(false);
+  const [sessoesAcompanhamento, setSessoesAcompanhamento] = useState([]);
 
   useEffect(() => {
     async function carregarHistorico() {
@@ -201,6 +209,20 @@ export default function ModalProntuarioUnificado({
 
   const statusAtual = normalizeStatus(item?.status_ciclo || item?.status);
   const checkpointDecisao = useMemo(() => getCheckpointDecisao(item), [item]);
+  const ultimaSessaoInstrutor = useMemo(() => {
+    return [...(sessoesAcompanhamento || [])].sort(
+      (a, b) => getSessaoReferenceTimestamp(b) - getSessaoReferenceTimestamp(a)
+    )[0] || null;
+  }, [sessoesAcompanhamento]);
+  const instrutorAcompanhamento = useMemo(() => {
+    return (
+      item?.instrutor_nome ||
+      item?.instrutor_login ||
+      ultimaSessaoInstrutor?.instrutor_nome ||
+      ultimaSessaoInstrutor?.instrutor_login ||
+      "-"
+    );
+  }, [item, ultimaSessaoInstrutor]);
 
   const isAnaliseFinal = ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(
     statusAtual
@@ -246,9 +268,9 @@ export default function ModalProntuarioUnificado({
 
     if (checkpointDecisao) {
       return {
-        titulo: "Checkpoint disponÃ­vel apenas para consulta",
+        titulo: "Checkpoint disponível apenas para consulta",
         texto:
-          "Checkpoints de 10 e 20 dias continuam servindo para leitura da evoluÃ§Ã£o do motorista, mas a decisÃ£o final de encerrar ou enviar para tratativa sÃ³ acontece no checkpoint de 30 dias.",
+          "Checkpoints de 10 e 20 dias continuam servindo para leitura da evolução do motorista, mas a decisão final de encerrar ou enviar para tratativa só acontece no checkpoint de 30 dias.",
         classe: "bg-slate-50 border-slate-200 text-slate-700",
         icon: <FaInfoCircle className="text-slate-500" />,
         cta: null,
@@ -271,7 +293,7 @@ export default function ModalProntuarioUnificado({
       return;
     }
     if (!isCheckpointFinal30(checkpointDecisao)) {
-      alert("A decisÃ£o final sÃ³ fica disponÃ­vel quando o checkpoint de 30 dias existir.");
+      alert("A decisão final só fica disponível quando o checkpoint de 30 dias existir.");
       return;
     }
     onOpenCheckpoint?.(item, checkpointDecisao);
@@ -303,7 +325,16 @@ export default function ModalProntuarioUnificado({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full lg:w-auto">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 w-full lg:w-auto">
+              <div className="bg-white rounded-lg border px-3 py-2">
+                <div className="text-[10px] font-bold text-slate-500 uppercase">
+                  Instrutor
+                </div>
+                <div className="text-sm font-black text-slate-700">
+                  {instrutorAcompanhamento}
+                </div>
+              </div>
+
               <div className="bg-white rounded-lg border px-3 py-2">
                 <div className="text-[10px] font-bold text-slate-500 uppercase">
                   Foco
@@ -441,7 +472,7 @@ export default function ModalProntuarioUnificado({
                         Regras
                       </div>
                       <div>
-                        A intervenÃ§Ã£o tÃ©cnica e as sessÃµes do instrutor alimentam o acompanhamento pai. O checkpoint organiza a anÃ¡lise, mas a decisÃ£o de <strong>OK</strong> ou <strong>ATAS</strong> sÃ³ fica disponÃ­vel quando o checkpoint de 30 dias existir.
+                        A intervenção técnica e as sessões do instrutor alimentam o acompanhamento pai. O checkpoint organiza a análise, mas a decisão de <strong>OK</strong> ou <strong>ATAS</strong> só fica disponível quando o checkpoint de 30 dias existir.
                       </div>
                     </div>
                   </div>
@@ -490,6 +521,7 @@ export default function ModalProntuarioUnificado({
 
           <PainelSessoesAcompanhamento
             item={item}
+            onSessionsLoaded={setSessoesAcompanhamento}
             onSessionSaved={onSessionSaved}
           />
 

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   FaCheckCircle,
   FaClock,
@@ -76,6 +76,103 @@ function buildGoogleMapsLink(lat, lng) {
   return `https://www.google.com/maps?q=${latitude},${longitude}`;
 }
 
+function toFiniteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function buildRoutePing(location, origem = "PING") {
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    accuracy: location.accuracy,
+    altitude: location.altitude ?? null,
+    heading: location.heading ?? null,
+    speed: location.speed ?? null,
+    captured_at: location.captured_at || new Date().toISOString(),
+    origem,
+  };
+}
+
+function getRoutePings(sessao) {
+  const pings = sessao?.metadata?.rota_pings;
+  return Array.isArray(pings)
+    ? pings.filter(
+        (ping) =>
+          Number.isFinite(Number(ping?.latitude)) &&
+          Number.isFinite(Number(ping?.longitude))
+      )
+    : [];
+}
+
+function distanceMeters(a, b) {
+  const lat1 = toFiniteNumber(a?.latitude);
+  const lon1 = toFiniteNumber(a?.longitude);
+  const lat2 = toFiniteNumber(b?.latitude);
+  const lon2 = toFiniteNumber(b?.longitude);
+
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
+
+  const toRad = (value) => (value * Math.PI) / 180;
+  const earthRadius = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const rLat1 = toRad(lat1);
+  const rLat2 = toRad(lat2);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dLon / 2) ** 2;
+
+  return 2 * earthRadius * Math.asin(Math.sqrt(h));
+}
+
+function routeDistanceMeters(pings) {
+  return (pings || []).reduce((total, ping, index, list) => {
+    if (index === 0) return total;
+    return total + distanceMeters(list[index - 1], ping);
+  }, 0);
+}
+
+function formatDistance(meters) {
+  const total = Number(meters);
+  if (!Number.isFinite(total) || total <= 0) return "0 m";
+  if (total < 1000) return `${Math.round(total)} m`;
+  return `${(total / 1000).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} km`;
+}
+
+function sampleWaypoints(pings, maxPoints = 10) {
+  if (!Array.isArray(pings) || pings.length <= 2) return [];
+  const middle = pings.slice(1, -1);
+  if (middle.length <= maxPoints) return middle;
+
+  const step = (middle.length - 1) / (maxPoints - 1);
+  return Array.from({ length: maxPoints }, (_, index) => middle[Math.round(index * step)]);
+}
+
+function buildGoogleRouteLink(pings) {
+  if (!Array.isArray(pings) || pings.length < 2) return null;
+
+  const first = pings[0];
+  const last = pings[pings.length - 1];
+  const params = new URLSearchParams({
+    api: "1",
+    origin: `${first.latitude},${first.longitude}`,
+    destination: `${last.latitude},${last.longitude}`,
+    travelmode: "driving",
+  });
+
+  const waypoints = sampleWaypoints(pings)
+    .map((ping) => `${ping.latitude},${ping.longitude}`)
+    .join("|");
+
+  if (waypoints) params.set("waypoints", waypoints);
+
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     String(value || "")
@@ -104,6 +201,11 @@ export default function PainelSessoesAcompanhamento({
   const [okMsg, setOkMsg] = useState("");
   const [sessoes, setSessoes] = useState([]);
   const [sessaoMapaAbertaId, setSessaoMapaAbertaId] = useState(null);
+  const [rotaStatus, setRotaStatus] = useState("");
+  const rotaWatchIdRef = useRef(null);
+  const rotaSavingRef = useRef(false);
+  const rotaPingsRef = useRef([]);
+  const rotaLastSavedAtRef = useRef(0);
 
   const windowInfo = useMemo(() => getAcompanhamentoWindowInfo(item), [item]);
   const instrutorLogin = user?.login || user?.email || null;
@@ -154,6 +256,10 @@ export default function PainelSessoesAcompanhamento({
     return String(sessaoAberta.instrutor_login || "").trim() === instrutorLogin;
   }, [sessaoAberta, instrutorLogin]);
 
+  useEffect(() => {
+    rotaPingsRef.current = getRoutePings(sessaoAberta);
+  }, [sessaoAberta?.id, sessaoAberta?.metadata]);
+
   const resumo = useMemo(() => {
     const total = (sessoes || []).length;
     const abertas = (sessoes || []).filter((sessao) => !sessao.encerrado_em).length;
@@ -165,6 +271,109 @@ export default function PainelSessoesAcompanhamento({
   const canManageSessions = useMemo(() => {
     return !["OK", "ENCERRADO", "ATAS"].includes(statusAtual);
   }, [statusAtual]);
+
+  async function salvarPingRota(sessao, location, origem = "PING") {
+    if (!sessao?.id || rotaSavingRef.current) return;
+
+    const nextPing = buildRoutePing(location, origem);
+    const currentPings = rotaPingsRef.current || getRoutePings(sessao);
+    const lastPing = currentPings[currentPings.length - 1] || null;
+    const nowMs = Date.now();
+    const isImportant = origem !== "PING";
+    const movedEnough = !lastPing || distanceMeters(lastPing, nextPing) >= 15;
+    const waitedEnough = nowMs - rotaLastSavedAtRef.current >= 30000;
+
+    if (!isImportant && lastPing && (!movedEnough || !waitedEnough)) return;
+
+    const nextPings = [...currentPings, nextPing].slice(-1000);
+    const nextMetadata = {
+      ...(sessao.metadata || {}),
+      rota_pings: nextPings,
+      rota_tracking: {
+        ...((sessao.metadata || {}).rota_tracking || {}),
+        status: origem === "FIM" ? "ENCERRADA" : "ATIVA",
+        iniciado_em:
+          (sessao.metadata || {}).rota_tracking?.iniciado_em ||
+          sessao.iniciado_em ||
+          nextPing.captured_at,
+        atualizado_em: nextPing.captured_at,
+        encerrado_em:
+          origem === "FIM"
+            ? nextPing.captured_at
+            : (sessao.metadata || {}).rota_tracking?.encerrado_em || null,
+        pontos: nextPings.length,
+        distancia_m: Math.round(routeDistanceMeters(nextPings)),
+      },
+    };
+
+    rotaSavingRef.current = true;
+    try {
+      const { error } = await supabase
+        .from("diesel_acompanhamento_sessoes")
+        .update({ metadata: nextMetadata })
+        .eq("id", sessao.id);
+
+      if (error) throw error;
+
+      rotaPingsRef.current = nextPings;
+      rotaLastSavedAtRef.current = nowMs;
+      setRotaStatus(
+        `Rota gravando: ${nextPings.length} ponto(s), ${formatDistance(routeDistanceMeters(nextPings))}.`
+      );
+    } catch (e) {
+      console.error("Erro ao salvar ping da rota:", e);
+      setRotaStatus(e?.message || "Nao foi possivel salvar o ping da rota.");
+    } finally {
+      rotaSavingRef.current = false;
+    }
+  }
+
+  useEffect(() => {
+    if (rotaWatchIdRef.current != null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(rotaWatchIdRef.current);
+      rotaWatchIdRef.current = null;
+    }
+
+    if (!sessaoAberta || !sessaoAbertaEhDoUsuario || !canManageSessions) {
+      if (!sessaoAberta) setRotaStatus("");
+      return undefined;
+    }
+
+    if (!navigator.geolocation) {
+      setRotaStatus("Este dispositivo nao possui geolocalizacao continua disponivel.");
+      return undefined;
+    }
+
+    setRotaStatus("Rota ativa. Gravando pontos enquanto esta tela permanecer aberta.");
+    rotaWatchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        salvarPingRota(sessaoAberta, {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          altitude: position.coords.altitude,
+          heading: position.coords.heading,
+          speed: position.coords.speed,
+          captured_at: new Date().toISOString(),
+        });
+      },
+      (error) => {
+        setRotaStatus(error?.message || "Nao foi possivel acompanhar a rota pelo GPS.");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 20000,
+      }
+    );
+
+    return () => {
+      if (rotaWatchIdRef.current != null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(rotaWatchIdRef.current);
+        rotaWatchIdRef.current = null;
+      }
+    };
+  }, [sessaoAberta?.id, sessaoAbertaEhDoUsuario, canManageSessions]);
 
   async function iniciarSessao() {
     if (!item?.id || !instrutorLogin) {
@@ -199,6 +408,7 @@ export default function PainelSessoesAcompanhamento({
       const horaInicio = toTimeInBrazil(now);
       const location = await captureCurrentInstructorPosition();
       const nowIso = now.toISOString();
+      const initialPing = buildRoutePing(location, "INICIO");
 
       const payload = {
         acompanhamento_id: item.id,
@@ -219,6 +429,15 @@ export default function PainelSessoesAcompanhamento({
         metadata: {
           origem: "PRONTUARIO_UNIFICADO",
           device: navigator.userAgent,
+          rota_pings: [initialPing],
+          rota_tracking: {
+            status: "ATIVA",
+            iniciado_em: initialPing.captured_at,
+            atualizado_em: initialPing.captured_at,
+            encerrado_em: null,
+            pontos: 1,
+            distancia_m: 0,
+          },
         },
       };
 
@@ -287,6 +506,28 @@ export default function PainelSessoesAcompanhamento({
       const horaFim = toTimeInBrazil(now);
       const location = await captureCurrentInstructorPosition();
       const nowIso = now.toISOString();
+      const finalPing = buildRoutePing(location, "FIM");
+      const currentPings = rotaPingsRef.current.length
+        ? rotaPingsRef.current
+        : getRoutePings(sessaoAberta);
+      const nextPings = [...currentPings, finalPing].slice(-1000);
+      const nextMetadata = {
+        ...(sessaoAberta.metadata || {}),
+        rota_pings: nextPings,
+        rota_tracking: {
+          ...((sessaoAberta.metadata || {}).rota_tracking || {}),
+          status: "ENCERRADA",
+          iniciado_em:
+            (sessaoAberta.metadata || {}).rota_tracking?.iniciado_em ||
+            sessaoAberta.iniciado_em ||
+            nextPings[0]?.captured_at ||
+            nowIso,
+          atualizado_em: finalPing.captured_at,
+          encerrado_em: finalPing.captured_at,
+          pontos: nextPings.length,
+          distancia_m: Math.round(routeDistanceMeters(nextPings)),
+        },
+      };
 
       const { error } = await supabase
         .from("diesel_acompanhamento_sessoes")
@@ -298,6 +539,7 @@ export default function PainelSessoesAcompanhamento({
           longitude_fim: location.longitude,
           precisao_fim: location.accuracy,
           capturado_em_fim: location.captured_at,
+          metadata: nextMetadata,
         })
         .eq("id", sessaoAberta.id);
 
@@ -451,6 +693,13 @@ export default function PainelSessoesAcompanhamento({
       {okMsg && (
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           {okMsg}
+        </div>
+      )}
+
+      {rotaStatus && sessaoAbertaEhDoUsuario && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 flex items-start gap-2">
+          <FaRoute className="mt-0.5 shrink-0" />
+          <span>{rotaStatus}</span>
         </div>
       )}
 
@@ -680,6 +929,52 @@ export default function PainelSessoesAcompanhamento({
                   </div>
                 </div>
               </div>
+
+              {(() => {
+                const rotaPings = getRoutePings(sessao);
+                const rotaDistancia = routeDistanceMeters(rotaPings);
+                const rotaLink = buildGoogleRouteLink(rotaPings);
+
+                return (
+                  <div className="rounded-lg border bg-white px-3 py-3 mt-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+                          <FaRoute /> Rota do acompanhamento
+                        </div>
+                        <div className="text-sm font-black text-slate-800">
+                          {rotaPings.length} ponto(s) gravado(s) - {formatDistance(rotaDistancia)}
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          Primeiro ping:{" "}
+                          {rotaPings[0]?.captured_at
+                            ? formatDateTimeBR(rotaPings[0].captured_at)
+                            : "-"}{" "}
+                          | Ultimo ping:{" "}
+                          {rotaPings[rotaPings.length - 1]?.captured_at
+                            ? formatDateTimeBR(rotaPings[rotaPings.length - 1].captured_at)
+                            : "-"}
+                        </div>
+                      </div>
+
+                      {rotaLink ? (
+                        <a
+                          href={rotaLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-black text-white hover:bg-blue-500"
+                        >
+                          <FaMapMarkedAlt /> Abrir rota
+                        </a>
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-500">
+                          A rota aparece quando houver pelo menos 2 pontos.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {sessaoMapaAbertaId === sessao.id && (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-3">

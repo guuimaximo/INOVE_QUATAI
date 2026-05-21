@@ -15,8 +15,8 @@ import {
   FaInfoCircle,
   FaArrowDown as FaDownload,
 } from "react-icons/fa";
-import { createClient } from "@supabase/supabase-js";
 import { supabase } from "../../supabase";
+import { isSupabaseBCNTConfigured, supabaseBCNT } from "../../supabaseBCNT";
 import {
   buildMotoristaContextMap,
   deriveClusterFromPrefixo,
@@ -30,18 +30,11 @@ import RankingCarrosModal from "../../components/desempenho/resumo/RankingCarros
 import AcompanhamentosModal from "../../components/desempenho/resumo/AcompanhamentosModal";
 import ModalCheckpointAnalise from "../../components/desempenho/ModalCheckpointAnalise";
 
-const SUPABASE_A_URL = import.meta.env.VITE_SUPA_BASE_BCNT_URL;
-const SUPABASE_A_ANON_KEY = import.meta.env.VITE_SUPA_BASE_BCNT_ANON_KEY;
 const GH_USER = import.meta.env.VITE_GITHUB_USER;
 const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
 const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GH_REF = "main";
 const WF_PRONTUARIOS_POS = "prontuarios-pos-acompanhamento.yml";
-
-const supabaseA =
-  SUPABASE_A_URL && SUPABASE_A_ANON_KEY
-    ? createClient(SUPABASE_A_URL, SUPABASE_A_ANON_KEY)
-    : null;
 
 function n(v) {
   const x = Number(v);
@@ -326,6 +319,20 @@ function EvolucaoBadge({ value, invert = false, percent = false }) {
   );
 }
 
+function mensagemErroFonteDados(nomeFonte, erro) {
+  const msg = erro?.message || String(erro || "erro desconhecido");
+
+  if (!isSupabaseBCNTConfigured) {
+    return `${nomeFonte}: Supabase BCNT nao configurado no ambiente local. Configure VITE_SUPA_BASE_BCNT_URL e VITE_SUPA_BASE_BCNT_ANON_KEY para carregar esses dados.`;
+  }
+
+  if (erro?.code === "PGRST205" || msg.includes("Could not find the table")) {
+    return `${nomeFonte}: tabela nao encontrada no Supabase BCNT configurado.`;
+  }
+
+  return `${nomeFonte}: ${msg}`;
+}
+
 function aggregatePeriodo(rows) {
   const km = rows.reduce((acc, r) => acc + n(r.Km), 0);
   const comb = rows.reduce((acc, r) => acc + n(r.Comb), 0);
@@ -387,6 +394,7 @@ export default function DesempenhoDieselAnalise() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
+  const [avisoDadosExternos, setAvisoDadosExternos] = useState("");
 
   const [rowsBase, setRowsBase] = useState([]);
   const [acompanhamentos, setAcompanhamentos] = useState([]);
@@ -422,14 +430,17 @@ export default function DesempenhoDieselAnalise() {
   });
 
   async function carregarPremiacao() {
-    if (!supabaseA) throw new Error("Supabase A não configurado.");
+    if (!isSupabaseBCNTConfigured) {
+      throw new Error("Supabase BCNT nao configurado.");
+    }
+
     const pageSize = 1000;
     let start = 0;
     let all = [];
 
     while (true) {
       const end = start + pageSize - 1;
-      const { data, error } = await supabaseA
+      const { data, error } = await supabaseBCNT
         .from("premiacao_diaria_atualizada")
         .select(
           "id_premiacao_diaria, dia, ano, mes, anomes, motorista, linha, prefixo, fabricante, cluster, km_rodado, litros_consumidos, km_l, meta_kml_usada, litros_ideais"
@@ -451,14 +462,17 @@ export default function DesempenhoDieselAnalise() {
   }
 
   async function carregarFuncionarios() {
-    if (!supabaseA) return [];
+    if (!isSupabaseBCNTConfigured) {
+      throw new Error("Supabase BCNT nao configurado.");
+    }
+
     const pageSize = 1000;
     let start = 0;
     let all = [];
 
     while (true) {
       const end = start + pageSize - 1;
-      const { data, error } = await supabaseA
+      const { data, error } = await supabaseBCNT
         .from("funcionarios_atualizada")
         .select("nr_cracha, nm_funcionario, status")
         .eq("status", "ativo")
@@ -512,17 +526,39 @@ export default function DesempenhoDieselAnalise() {
   async function carregarTudo() {
     setLoading(true);
     setErro("");
+    setAvisoDadosExternos("");
     try {
-      const [premiacao, acomp, funcs, sessoes] = await Promise.all([
+      const [premiacaoResult, acompResult, funcsResult, sessoesResult] = await Promise.allSettled([
         carregarPremiacao(),
         carregarAcompanhamentos(),
         carregarFuncionarios(),
         carregarSessoesAcompanhamento(),
       ]);
-      setRowsBase(premiacao);
-      setAcompanhamentos(acomp);
-      setFuncionarios(funcs);
-      setSessoesAcompanhamento(sessoes);
+
+      if (acompResult.status === "rejected") throw acompResult.reason;
+      if (sessoesResult.status === "rejected") throw sessoesResult.reason;
+
+      const avisos = [];
+
+      if (premiacaoResult.status === "fulfilled") {
+        setRowsBase(premiacaoResult.value);
+      } else {
+        console.warn("Falha ao carregar premiacao BCNT", premiacaoResult.reason);
+        setRowsBase([]);
+        avisos.push(mensagemErroFonteDados("Premiacao diaria", premiacaoResult.reason));
+      }
+
+      if (funcsResult.status === "fulfilled") {
+        setFuncionarios(funcsResult.value);
+      } else {
+        console.warn("Falha ao carregar funcionarios BCNT", funcsResult.reason);
+        setFuncionarios([]);
+        avisos.push(mensagemErroFonteDados("Funcionarios", funcsResult.reason));
+      }
+
+      setAcompanhamentos(acompResult.value);
+      setSessoesAcompanhamento(sessoesResult.value);
+      setAvisoDadosExternos([...new Set(avisos)].join(" "));
     } catch (e) {
       console.error(e);
       setErro(e?.message || String(e));
@@ -1969,6 +2005,13 @@ export default function DesempenhoDieselAnalise() {
           </span>
         </div>
       </div>
+
+      {!!avisoDadosExternos && !erro && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 font-semibold flex items-start gap-2">
+          <FaInfoCircle className="mt-0.5 shrink-0" />
+          <span>{avisoDadosExternos}</span>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2">
         <div className="flex flex-wrap gap-2">

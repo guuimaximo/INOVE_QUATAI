@@ -18,6 +18,7 @@ import {
   FaChevronRight,
   FaEdit,
 } from "react-icons/fa";
+import EmbarcadosModuleTabs from "../../components/embarcados/EmbarcadosModuleTabs";
 
 const TIPOS = [
   "TELEMETRIA",
@@ -540,7 +541,7 @@ export default function EmbarcadosCentral() {
 
   function abrirNovo() {
     setExpandedId(null);
-    setModoNovo((prev) => !prev);
+    setModoNovo(true);
   }
 
   function abrirEdicao(id) {
@@ -574,10 +575,12 @@ export default function EmbarcadosCentral() {
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700"
           >
             <FaPlus />
-            {modoNovo ? "Fechar novo" : "Novo embarcado"}
+            Novo embarcado
           </button>
         </div>
       </div>
+
+      <EmbarcadosModuleTabs />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
@@ -659,22 +662,36 @@ export default function EmbarcadosCentral() {
       </div>
 
         {modoNovo && (
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b bg-slate-900 text-white">
-              <div className="text-[11px] font-black uppercase tracking-[0.15em] opacity-80">
-                Novo embarcado
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
+            <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+              <div className="flex items-start justify-between gap-4 border-b bg-slate-900 px-5 py-4 text-white">
+                <div>
+                  <div className="text-[11px] font-black uppercase tracking-[0.15em] opacity-80">
+                    Novo embarcado
+                  </div>
+                  <div className="text-lg font-black">Cadastro de ativo</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModoNovo(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20"
+                  title="Fechar"
+                >
+                  <FaTimes />
+                </button>
               </div>
-              <div className="text-lg font-black">Cadastro de ativo</div>
-            </div>
 
-            <InlineEditor
-              registro={null}
-              saving={saving}
-              isNovo
-              ultimaManutencaoMap={ultimaManutencaoMap}
-              onCancel={() => setModoNovo(false)}
-              onSave={(payload) => salvar(payload, null)}
-            />
+              <div className="overflow-y-auto">
+                <InlineEditor
+                  registro={null}
+                  saving={saving}
+                  isNovo
+                  ultimaManutencaoMap={ultimaManutencaoMap}
+                  onCancel={() => setModoNovo(false)}
+                  onSave={(payload) => salvar(payload, null)}
+                />
+              </div>
+            </div>
           </div>
         )}
 

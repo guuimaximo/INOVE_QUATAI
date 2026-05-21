@@ -12,6 +12,7 @@ import {
   FaClock,
   FaExclamationTriangle,
 } from "react-icons/fa";
+import EmbarcadosModuleTabs from "../../components/embarcados/EmbarcadosModuleTabs";
 import ReparoSolicitacaoNovaModal from "../../components/embarcados/ReparoSolicitacaoNovaModal";
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
@@ -193,6 +194,8 @@ export default function EmbarcadosReparos() {
             </button>
           </div>
         </div>
+
+        <EmbarcadosModuleTabs />
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">

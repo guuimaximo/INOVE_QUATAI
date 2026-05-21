@@ -3,8 +3,8 @@ import { supabase } from "../../supabase";
 import * as XLSX from "xlsx";
 import {
   ResponsiveContainer,
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -58,6 +58,14 @@ function endOfMonthISO(iso) {
   return toISODateOnly(new Date(y, m, 0));
 }
 
+function startOfYearISO(year) {
+  return `${year}-01-01`;
+}
+
+function startOfNextYearISO(year) {
+  return `${Number(year) + 1}-01-01`;
+}
+
 function addDays(dateStr, days) {
   const d = new Date(`${dateStr}T00:00:00`);
   d.setDate(d.getDate() + days);
@@ -78,6 +86,11 @@ function ilikeContains(hay, needle) {
 
 function fmtInt(v) {
   return Math.round(Number(v || 0)).toLocaleString("pt-BR");
+}
+
+function fmtChartLabel(v) {
+  const n = Number(v || 0);
+  return n > 0 ? fmtInt(n) : "";
 }
 
 function formatDateBR(v) {
@@ -128,6 +141,44 @@ function countBy(arr, keyFn) {
 
 function sortMapDesc(m) {
   return [...m.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), "pt-BR"));
+}
+
+function normalizePrioridade(v) {
+  const raw = normStr(v);
+  if (!raw) return "Sem prioridade";
+
+  const key = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+
+  if (key.includes("GRAV")) return "Gravíssima";
+  if (key.includes("CRIT")) return "Crítica";
+  if (key.includes("URG")) return "Urgente";
+  if (key.includes("ALT")) return "Alta";
+  if (key.includes("MED")) return "Média";
+  if (key.includes("BAIX")) return "Baixa";
+
+  return raw;
+}
+
+function prioridadeSortValue(v) {
+  const ordem = {
+    "Gravíssima": 1,
+    "Crítica": 2,
+    "Urgente": 3,
+    Alta: 4,
+    Média: 5,
+    Baixa: 6,
+    "Sem prioridade": 99,
+  };
+  return ordem[v] ?? 50;
+}
+
+function filtrarPorPrioridades(list, prioridades) {
+  if (!prioridades?.length) return list;
+  const selected = new Set(prioridades);
+  return list.filter((t) => selected.has(normalizePrioridade(t.prioridade)));
 }
 
 function isPendente(status) {
@@ -342,7 +393,7 @@ function ExplicacaoModal({ onClose }) {
 
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
             <h3 className="font-black text-blue-900 mb-2 flex items-center gap-2"><FaChartLine className="text-blue-600" /> Evolução mensal</h3>
-            <p>O gráfico mensal considera a data de criação da tratativa (<strong>created_at</strong>) e separa total, pendentes, concluídas e atrasadas.</p>
+            <p>O gráfico mensal considera o ano selecionado pela data de criação da tratativa (<strong>created_at</strong>) e separa total, pendentes, concluídas e atrasadas. O filtro de período fica reservado para os cards e rankings.</p>
           </div>
 
           <div className="bg-violet-50 p-4 rounded-xl border border-violet-200">
@@ -458,12 +509,18 @@ export default function TratativasResumo() {
   const hojeISO = useMemo(() => toISODateOnly(new Date()), []);
   const mesAtualIni = useMemo(() => startOfMonthISO(hojeISO), [hojeISO]);
   const mesAtualFim = useMemo(() => endOfMonthISO(hojeISO), [hojeISO]);
+  const anoAtual = useMemo(() => hojeISO.slice(0, 4), [hojeISO]);
+  const anosEvolucaoDisponiveis = useMemo(() => {
+    const anoBase = Number(anoAtual);
+    return Array.from({ length: 6 }, (_, idx) => String(anoBase - idx));
+  }, [anoAtual]);
 
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState("");
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState("GERAL");
   const [modalRecorte, setModalRecorte] = useState(null);
+  const [anoEvolucao, setAnoEvolucao] = useState(anoAtual);
 
   const [filtros, setFiltros] = useState({
     dataInicio: mesAtualIni,
@@ -471,52 +528,67 @@ export default function TratativasResumo() {
     busca: "",
     setor: "",
     status: "",
+    prioridades: [],
   });
 
   const [setoresDisponiveis, setSetoresDisponiveis] = useState([]);
+  const [prioridadesDisponiveis, setPrioridadesDisponiveis] = useState([]);
   const [tratativas, setTratativas] = useState([]);
+  const [tratativasEvolucao, setTratativasEvolucao] = useState([]);
   const [detalhes, setDetalhes] = useState([]);
 
   async function carregarSetores() {
-    const { data } = await supabase.from("tratativas").select("setor_origem");
-    const unicos = [...new Set((data || []).map((d) => d.setor_origem).filter(Boolean))];
-    setSetoresDisponiveis(unicos.sort((a, b) => String(a).localeCompare(String(b), "pt-BR")));
+    const { data } = await supabase.from("tratativas").select("setor_origem, prioridade");
+    const setores = [...new Set((data || []).map((d) => d.setor_origem).filter(Boolean))];
+    const prioridades = [...new Set((data || []).map((d) => normalizePrioridade(d.prioridade)))];
+
+    setSetoresDisponiveis(setores.sort((a, b) => String(a).localeCompare(String(b), "pt-BR")));
+    setPrioridadesDisponiveis(
+      prioridades
+        .filter(Boolean)
+        .sort((a, b) => prioridadeSortValue(a) - prioridadeSortValue(b) || String(a).localeCompare(String(b), "pt-BR"))
+    );
   }
 
-  async function carregar() {
+  async function carregar(overrides = {}) {
     setLoading(true);
     setErrMsg("");
 
     try {
       const LINHA_FIELD = "linha";
+      const filtrosAtuais = overrides.filtros || filtros;
+      const anoAtualGrafico = overrides.anoEvolucao || anoEvolucao;
+      const selectTratativas = `
+        id,
+        motorista_id,
+        motorista_nome,
+        motorista_chapa,
+        tipo_ocorrencia,
+        setor_origem,
+        prioridade,
+        status,
+        descricao,
+        ${LINHA_FIELD},
+        created_at
+      `;
 
-      let q = supabase.from("tratativas").select(
-        `
-          id,
-          motorista_id,
-          motorista_nome,
-          motorista_chapa,
-          tipo_ocorrencia,
-          setor_origem,
-          prioridade,
-          status,
-          descricao,
-          ${LINHA_FIELD},
-          created_at
-        `
-      );
+      const aplicarFiltrosComuns = (query) => {
+        if (filtrosAtuais.busca) {
+          const b = filtrosAtuais.busca.trim();
+          query = query.or(
+            `motorista_nome.ilike.%${b}%,motorista_chapa.ilike.%${b}%,descricao.ilike.%${b}%,tipo_ocorrencia.ilike.%${b}%,${LINHA_FIELD}.ilike.%${b}%`
+          );
+        }
 
-      if (filtros.busca) {
-        const b = filtros.busca.trim();
-        q = q.or(
-          `motorista_nome.ilike.%${b}%,motorista_chapa.ilike.%${b}%,descricao.ilike.%${b}%,tipo_ocorrencia.ilike.%${b}%,${LINHA_FIELD}.ilike.%${b}%`
-        );
-      }
+        if (filtrosAtuais.setor) query = query.eq("setor_origem", filtrosAtuais.setor);
+        if (filtrosAtuais.status) query = query.ilike("status", `%${filtrosAtuais.status}%`);
+        return query;
+      };
 
-      if (filtros.setor) q = q.eq("setor_origem", filtros.setor);
-      if (filtros.status) q = q.ilike("status", `%${filtros.status}%`);
-      if (filtros.dataInicio) q = q.gte("created_at", filtros.dataInicio);
-      if (filtros.dataFim) q = q.lt("created_at", addDays(filtros.dataFim, 1));
+      let q = aplicarFiltrosComuns(supabase.from("tratativas").select(selectTratativas));
+
+      if (filtrosAtuais.dataInicio) q = q.gte("created_at", filtrosAtuais.dataInicio);
+      if (filtrosAtuais.dataFim) q = q.lt("created_at", addDays(filtrosAtuais.dataFim, 1));
 
       const { data: tData, error: tErr } = await q
         .order("created_at", { ascending: false })
@@ -524,8 +596,20 @@ export default function TratativasResumo() {
 
       if (tErr) throw tErr;
 
-      const list = tData || [];
+      const list = filtrarPorPrioridades(tData || [], filtrosAtuais.prioridades);
       setTratativas(list);
+
+      let qEvolucao = aplicarFiltrosComuns(supabase.from("tratativas").select(selectTratativas));
+      qEvolucao = qEvolucao
+        .gte("created_at", startOfYearISO(anoAtualGrafico))
+        .lt("created_at", startOfNextYearISO(anoAtualGrafico));
+
+      const { data: evolucaoData, error: evolucaoErr } = await qEvolucao
+        .order("created_at", { ascending: true })
+        .limit(100000);
+
+      if (evolucaoErr) throw evolucaoErr;
+      setTratativasEvolucao(filtrarPorPrioridades(evolucaoData || [], filtrosAtuais.prioridades));
 
       const ids = list.map((x) => x.id).filter(Boolean);
       if (!ids.length) {
@@ -562,10 +646,24 @@ export default function TratativasResumo() {
       console.error("Erro ao carregar resumo de tratativas:", error);
       setErrMsg(error.message || "Erro ao carregar dados.");
       setTratativas([]);
+      setTratativasEvolucao([]);
       setDetalhes([]);
     } finally {
       setLoading(false);
     }
+  }
+
+  function aplicarFiltrosRapidos(nextFiltros) {
+    setFiltros(nextFiltros);
+    carregar({ filtros: nextFiltros });
+  }
+
+  function togglePrioridade(prioridade) {
+    const atuais = filtros.prioridades || [];
+    const nextPrioridades = atuais.includes(prioridade)
+      ? atuais.filter((p) => p !== prioridade)
+      : [...atuais, prioridade];
+    aplicarFiltrosRapidos({ ...filtros, prioridades: nextPrioridades });
   }
 
   useEffect(() => {
@@ -615,11 +713,17 @@ export default function TratativasResumo() {
 
   const chartData = useMemo(() => {
     const map = new Map();
+    const year = Number(anoEvolucao);
 
-    for (const t of tratativas) {
+    for (let month = 1; month <= 12; month += 1) {
+      const key = `${year}-${String(month).padStart(2, "0")}`;
+      map.set(key, { mes: key, total: 0, pendentes: 0, concluidas: 0, atrasadas: 0 });
+    }
+
+    for (const t of tratativasEvolucao) {
       const key = monthKeyFromDate(t.created_at);
       if (!key) continue;
-      if (!map.has(key)) map.set(key, { mes: key, total: 0, pendentes: 0, concluidas: 0, atrasadas: 0 });
+      if (!map.has(key)) continue;
 
       const item = map.get(key);
       item.total += 1;
@@ -631,7 +735,7 @@ export default function TratativasResumo() {
     return [...map.values()]
       .sort((a, b) => String(a.mes).localeCompare(String(b.mes)))
       .map((x) => ({ ...x, mesLabel: monthLabel(x.mes) }));
-  }, [tratativas]);
+  }, [tratativasEvolucao, anoEvolucao]);
 
   const topMotoristas = useMemo(() => {
     const map = new Map();
@@ -778,7 +882,7 @@ export default function TratativasResumo() {
             </button>
 
             <button
-              onClick={carregar}
+              onClick={() => carregar()}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-800 bg-slate-800 text-white font-black hover:bg-slate-700 transition"
             >
               <FaRedo /> Atualizar
@@ -847,25 +951,48 @@ export default function TratativasResumo() {
               <option value="Concluída">Concluída</option>
             </select>
           </div>
+          <div className="md:col-span-2 xl:col-span-6">
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Prioridade</label>
+            <div className="flex flex-wrap gap-2">
+              {(prioridadesDisponiveis.length ? prioridadesDisponiveis : ["Gravíssima", "Crítica", "Urgente", "Alta", "Média", "Baixa", "Sem prioridade"]).map((prioridade) => {
+                const active = (filtros.prioridades || []).includes(prioridade);
+                return (
+                  <button
+                    key={prioridade}
+                    type="button"
+                    onClick={() => togglePrioridade(prioridade)}
+                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition ${
+                      active
+                        ? "border-violet-600 bg-violet-600 text-white shadow-sm"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-violet-200 hover:bg-violet-50"
+                    }`}
+                  >
+                    <FaFilter className={active ? "text-white" : "text-violet-500"} />
+                    {prioridade}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button
-            onClick={() => setFiltros({ dataInicio: mesAtualIni, dataFim: mesAtualFim, busca: "", setor: "", status: "" })}
+            onClick={() => aplicarFiltrosRapidos({ dataInicio: mesAtualIni, dataFim: mesAtualFim, busca: "", setor: "", status: "", prioridades: [] })}
             className="px-4 py-2.5 rounded-xl font-black text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 transition shadow-sm border border-blue-200"
           >
             Mês Atual
           </button>
 
           <button
-            onClick={() => setFiltros({ dataInicio: "", dataFim: "", busca: "", setor: "", status: "" })}
+            onClick={() => aplicarFiltrosRapidos({ dataInicio: "", dataFim: "", busca: "", setor: "", status: "", prioridades: [] })}
             className="px-4 py-2.5 rounded-xl font-black text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
           >
             Limpar filtros
           </button>
 
           <button
-            onClick={carregar}
+            onClick={() => carregar()}
             disabled={loading}
             className="px-4 py-2.5 rounded-xl font-black text-sm bg-violet-600 text-white hover:bg-violet-700 transition disabled:bg-slate-300"
           >
@@ -899,31 +1026,54 @@ export default function TratativasResumo() {
       {abaAtiva === "GERAL" && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm xl:col-span-3">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
               <div>
                 <h3 className="text-lg font-black text-slate-800">Evolução Mensal de Tratativas</h3>
-                <p className="text-xs text-slate-500 font-semibold">Total, pendentes, concluídas e atrasadas.</p>
+                <p className="text-xs text-slate-500 font-semibold">Histórico anual em linhas. Os cards continuam seguindo o período filtrado.</p>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Ano do histórico</label>
+                <select
+                  value={anoEvolucao}
+                  onChange={(e) => {
+                    const nextAno = e.target.value;
+                    setAnoEvolucao(nextAno);
+                    carregar({ anoEvolucao: nextAno });
+                  }}
+                  className="border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none bg-white"
+                >
+                  {anosEvolucaoDisponiveis.map((ano) => (
+                    <option key={ano} value={ano}>{ano}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            {tratativas.length === 0 && !loading ? (
-              <div className="h-72 flex items-center justify-center text-sm font-bold text-slate-400">Nenhum dado encontrado para o período.</div>
+            {tratativasEvolucao.length === 0 && !loading ? (
+              <div className="h-72 flex items-center justify-center text-sm font-bold text-slate-400">Nenhum dado encontrado para o ano selecionado.</div>
             ) : (
               <div className="h-80 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 25, right: 10, left: 0, bottom: 0 }}>
+                  <LineChart data={chartData} margin={{ top: 35, right: 24, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="mesLabel" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} />
                     <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: "20px", fontSize: "12px", fontWeight: "bold" }} />
-                    <Bar dataKey="total" name="Total" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={28}>
-                      <LabelList dataKey="total" position="top" style={{ fill: "#3b82f6", fontSize: 11, fontWeight: "bold" }} />
-                    </Bar>
-                    <Bar dataKey="pendentes" name="Pendentes" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={28} />
-                    <Bar dataKey="concluidas" name="Concluídas" fill="#10b981" radius={[4, 4, 0, 0]} barSize={28} />
-                    <Bar dataKey="atrasadas" name="Atrasadas" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={28} />
-                  </BarChart>
+                    <Line type="monotone" dataKey="total" name="Total" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }}>
+                      <LabelList dataKey="total" position="top" formatter={fmtChartLabel} style={{ fill: "#2563eb", fontSize: 10, fontWeight: 900 }} />
+                    </Line>
+                    <Line type="monotone" dataKey="pendentes" name="Pendentes" stroke="#f59e0b" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }}>
+                      <LabelList dataKey="pendentes" position="bottom" formatter={fmtChartLabel} style={{ fill: "#b45309", fontSize: 10, fontWeight: 900 }} />
+                    </Line>
+                    <Line type="monotone" dataKey="concluidas" name="Concluídas" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }}>
+                      <LabelList dataKey="concluidas" position="top" formatter={fmtChartLabel} style={{ fill: "#047857", fontSize: 10, fontWeight: 900 }} />
+                    </Line>
+                    <Line type="monotone" dataKey="atrasadas" name="Atrasadas" stroke="#ef4444" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }}>
+                      <LabelList dataKey="atrasadas" position="bottom" formatter={fmtChartLabel} style={{ fill: "#dc2626", fontSize: 10, fontWeight: 900 }} />
+                    </Line>
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             )}

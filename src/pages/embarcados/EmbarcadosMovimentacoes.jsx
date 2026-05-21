@@ -16,6 +16,7 @@ import {
   FaTools,
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
+import EmbarcadosModuleTabs from "../../components/embarcados/EmbarcadosModuleTabs";
 
 const TIPOS_EMBARCADOS = [
   "TELEMETRIA",
@@ -471,6 +472,8 @@ export default function EmbarcadosMovimentacoes() {
         </div>
 
         {/* RESUMO GLOBAL — KPI grid no padrão Pessoas */}
+        <EmbarcadosModuleTabs />
+
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">Total instalados</div>

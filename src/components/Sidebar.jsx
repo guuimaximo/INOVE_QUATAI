@@ -27,7 +27,6 @@ import {
   FaChartPie,
   FaMicrochip,
   FaExchangeAlt,
-  FaFileInvoice,
   FaBuilding,
   FaIdBadge,
   FaShieldAlt,
@@ -80,7 +79,6 @@ const EMBARCADOS_ROUTES = {
   central: "/embarcados-central",
   movimentacoes: "/embarcados-movimentacoes",
   reparos: "/embarcados-reparos",
-  envioManutencao: "/embarcados-envio-manutencao",
 };
 
 const ESTRUTURA_FISICA_ROUTES = {
@@ -173,7 +171,6 @@ export default function Sidebar() {
           { path: EMBARCADOS_ROUTES.central, label: "Central", icon: <FaListAlt /> },
           { path: EMBARCADOS_ROUTES.movimentacoes, label: "Movimentações", icon: <FaExchangeAlt /> },
           { path: EMBARCADOS_ROUTES.reparos, label: "Reparos", icon: <FaTools /> },
-          { path: EMBARCADOS_ROUTES.envioManutencao, label: "Envio Manutenção", icon: <FaFileInvoice /> },
         ],
       },
 

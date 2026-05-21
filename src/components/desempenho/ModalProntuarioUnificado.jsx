@@ -113,57 +113,11 @@ function isCheckpointFinal30(tipo) {
   return String(tipo || "").toUpperCase() === "PRONTUARIO_30";
 }
 
-function getNotaInstrutorValue(nota) {
-  if (nota == null || nota === "") return null;
-  const valor = Number(nota);
-  if (!Number.isFinite(valor)) return null;
-  return Math.max(0, Math.min(100, valor));
-}
-
-function getNotaInstrutorColors(nota) {
-  const valor = getNotaInstrutorValue(nota);
-
-  if (valor == null) {
-    return {
-      box: "bg-slate-50 border-slate-200",
-      text: "text-slate-700",
-      badge: "bg-slate-100 text-slate-700 border-slate-200",
-      label: "text-slate-500",
-    };
-  }
-
-  if (valor < 50) {
-    return {
-      box: "bg-rose-50 border-rose-200",
-      text: "text-rose-700",
-      badge: "bg-rose-100 text-rose-700 border-rose-200",
-      label: "text-rose-600",
-    };
-  }
-
-  if (valor < 80) {
-    return {
-      box: "bg-amber-50 border-amber-200",
-      text: "text-amber-700",
-      badge: "bg-amber-100 text-amber-700 border-amber-200",
-      label: "text-amber-600",
-    };
-  }
-
-  return {
-    box: "bg-emerald-50 border-emerald-200",
-    text: "text-emerald-700",
-    badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    label: "text-emerald-600",
-  };
-}
-
-function getNotaInstrutorFaixa(nota) {
-  const valor = getNotaInstrutorValue(nota);
-  if (valor == null) return "Sem nota";
-  if (valor < 50) return "Crítica";
-  if (valor < 80) return "Atenção";
-  return "Boa";
+function getSessaoReferenceTimestamp(sessao) {
+  if (!sessao) return 0;
+  const ref = sessao.encerrado_em || sessao.iniciado_em || sessao.created_at || sessao.data_sessao;
+  const stamp = new Date(String(ref || "")).getTime();
+  return Number.isNaN(stamp) ? 0 : stamp;
 }
 
 export default function ModalProntuarioUnificado({
@@ -174,6 +128,7 @@ export default function ModalProntuarioUnificado({
 }) {
   const [historico, setHistorico] = useState([]);
   const [loadingHist, setLoadingHist] = useState(false);
+  const [sessoesAcompanhamento, setSessoesAcompanhamento] = useState([]);
 
   useEffect(() => {
     async function carregarHistorico() {
@@ -201,22 +156,23 @@ export default function ModalProntuarioUnificado({
 
   const statusAtual = normalizeStatus(item?.status_ciclo || item?.status);
   const checkpointDecisao = useMemo(() => getCheckpointDecisao(item), [item]);
+  const ultimaSessaoInstrutor = useMemo(() => {
+    return [...(sessoesAcompanhamento || [])].sort(
+      (a, b) => getSessaoReferenceTimestamp(b) - getSessaoReferenceTimestamp(a)
+    )[0] || null;
+  }, [sessoesAcompanhamento]);
+  const instrutorAcompanhamento = useMemo(() => {
+    return (
+      item?.instrutor_nome ||
+      item?.instrutor_login ||
+      ultimaSessaoInstrutor?.instrutor_nome ||
+      ultimaSessaoInstrutor?.instrutor_login ||
+      "-"
+    );
+  }, [item, ultimaSessaoInstrutor]);
 
   const isAnaliseFinal = ["EM_ANALISE", "OK", "ENCERRADO", "ATAS"].includes(
     statusAtual
-  );
-
-  const notaInstrutor = useMemo(
-    () => getNotaInstrutorValue(item?.intervencao_nota),
-    [item]
-  );
-  const notaColors = useMemo(
-    () => getNotaInstrutorColors(item?.intervencao_nota),
-    [item]
-  );
-  const notaFaixa = useMemo(
-    () => getNotaInstrutorFaixa(item?.intervencao_nota),
-    [item]
   );
 
   const decisaoInfo = useMemo(() => {
@@ -246,9 +202,9 @@ export default function ModalProntuarioUnificado({
 
     if (checkpointDecisao) {
       return {
-        titulo: "Checkpoint disponÃ­vel apenas para consulta",
+        titulo: "Checkpoint disponível apenas para consulta",
         texto:
-          "Checkpoints de 10 e 20 dias continuam servindo para leitura da evoluÃ§Ã£o do motorista, mas a decisÃ£o final de encerrar ou enviar para tratativa sÃ³ acontece no checkpoint de 30 dias.",
+          "Checkpoints de 10 e 20 dias continuam servindo para leitura da evolução do motorista, mas a decisão final de encerrar ou enviar para tratativa só acontece no checkpoint de 30 dias.",
         classe: "bg-slate-50 border-slate-200 text-slate-700",
         icon: <FaInfoCircle className="text-slate-500" />,
         cta: null,
@@ -271,7 +227,7 @@ export default function ModalProntuarioUnificado({
       return;
     }
     if (!isCheckpointFinal30(checkpointDecisao)) {
-      alert("A decisÃ£o final sÃ³ fica disponÃ­vel quando o checkpoint de 30 dias existir.");
+      alert("A decisão final só fica disponível quando o checkpoint de 30 dias existir.");
       return;
     }
     onOpenCheckpoint?.(item, checkpointDecisao);
@@ -303,7 +259,16 @@ export default function ModalProntuarioUnificado({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full lg:w-auto">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 w-full lg:w-auto">
+              <div className="bg-white rounded-lg border px-3 py-2">
+                <div className="text-[10px] font-bold text-slate-500 uppercase">
+                  Instrutor
+                </div>
+                <div className="text-sm font-black text-slate-700">
+                  {instrutorAcompanhamento}
+                </div>
+              </div>
+
               <div className="bg-white rounded-lg border px-3 py-2">
                 <div className="text-[10px] font-bold text-slate-500 uppercase">
                   Foco
@@ -348,57 +313,14 @@ export default function ModalProntuarioUnificado({
                 <FaEye className="text-blue-600" /> Resumo da Ordem Atual
               </h4>
 
-              {statusAtual === "EM_MONITORAMENTO" ? (
-                <ResumoLancamentoInstrutor item={item} />
-              ) : (
-                <ResumoAnalise item={item} />
-              )}
+              <ResumoLancamentoInstrutor item={item} />
 
               {isAnaliseFinal && (
-                <div className="mt-5 border rounded-xl p-4 bg-slate-50 border-slate-200">
+                <div className="mt-5">
                   <div className="font-black text-sm uppercase tracking-wider mb-3 text-slate-700">
-                    Parecer do Instrutor
+                    Resultado do Monitoramento
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div className={`rounded-lg border p-3 ${notaColors.box}`}>
-                      <div
-                        className={`text-xs font-bold uppercase tracking-wider mb-2 ${notaColors.label}`}
-                      >
-                        Nota do Instrutor (0 a 100)
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className={`text-2xl font-black ${notaColors.text}`}>
-                          {notaInstrutor != null ? `${notaInstrutor}/100` : "-"}
-                        </div>
-
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-black border ${notaColors.badge}`}
-                        >
-                          {notaFaixa}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-lg border p-3">
-                      <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                        Tipo do Checkpoint para Decisão
-                      </div>
-                      <div className="text-lg font-black text-slate-800">
-                        {checkpointDecisao || "-"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Parecer do Instrutor
-                    </div>
-                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-line bg-white border rounded-lg p-3">
-                      {item?.intervencao_obs || "Sem parecer do instrutor registrado."}
-                    </div>
-                  </div>
+                  <ResumoAnalise item={item} />
                 </div>
               )}
 
@@ -441,7 +363,7 @@ export default function ModalProntuarioUnificado({
                         Regras
                       </div>
                       <div>
-                        A intervenÃ§Ã£o tÃ©cnica e as sessÃµes do instrutor alimentam o acompanhamento pai. O checkpoint organiza a anÃ¡lise, mas a decisÃ£o de <strong>OK</strong> ou <strong>ATAS</strong> sÃ³ fica disponÃ­vel quando o checkpoint de 30 dias existir.
+                        A intervenção técnica e as sessões do instrutor alimentam o acompanhamento pai. O checkpoint organiza a análise, mas a decisão de <strong>OK</strong> ou <strong>ATAS</strong> só fica disponível quando o checkpoint de 30 dias existir.
                       </div>
                     </div>
                   </div>
@@ -490,6 +412,7 @@ export default function ModalProntuarioUnificado({
 
           <PainelSessoesAcompanhamento
             item={item}
+            onSessionsLoaded={setSessoesAcompanhamento}
             onSessionSaved={onSessionSaved}
           />
 

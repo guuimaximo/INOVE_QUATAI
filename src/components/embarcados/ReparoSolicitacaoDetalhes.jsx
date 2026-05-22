@@ -15,6 +15,7 @@ import {
   FaTrash,
   FaLock,
 } from "react-icons/fa";
+import MediaPreviewModal from "../MediaPreviewModal";
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
 const STATUS = ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS", "CONCLUIDA", "CANCELADA"];
@@ -212,6 +213,7 @@ export default function ReparoSolicitacaoDetalhes() {
   const [showSenhaEditar, setShowSenhaEditar] = useState(false);
   const [showSenhaExcluir, setShowSenhaExcluir] = useState(false);
   const [validandoSenha, setValidandoSenha] = useState(false);
+  const [previewMedia, setPreviewMedia] = useState(null);
 
   const [form, setForm] = useState({
     veiculo: "",
@@ -468,6 +470,7 @@ export default function ReparoSolicitacaoDetalhes() {
   }
 
   const podeEditar = ["CONCLUIDA", "CANCELADA"].includes(row.status);
+  const evidenciaPdf = String(row.foto_url || "").toLowerCase().includes(".pdf");
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -744,7 +747,8 @@ export default function ReparoSolicitacaoDetalhes() {
               <img
                 src={row.foto_url}
                 alt="Evidência"
-                className="w-full h-80 object-cover rounded-2xl border bg-white"
+                onClick={() => setPreviewMedia({ url: row.foto_url, title: "Evidencia da solicitacao" })}
+                className="w-full h-80 object-cover rounded-2xl border bg-white cursor-pointer"
               />
             ) : (
               <EmptyPhoto />
@@ -771,6 +775,12 @@ export default function ReparoSolicitacaoDetalhes() {
         description="Digite sua senha para excluir esta solicitação. A exclusão será lógica e ficará no histórico."
         confirmLabel="Excluir solicitação"
         loading={validandoSenha}
+      />
+      <MediaPreviewModal
+        open={!!previewMedia}
+        url={previewMedia?.url}
+        title={previewMedia?.title}
+        onClose={() => setPreviewMedia(null)}
       />
     </div>
   );

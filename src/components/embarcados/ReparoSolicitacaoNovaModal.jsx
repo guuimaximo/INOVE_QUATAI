@@ -13,7 +13,9 @@ import {
   FaImage,
   FaSearch,
   FaTrash,
+  FaCamera,
 } from "react-icons/fa";
+import { captureNativePhotoFile, isNativeCameraAvailable } from "../../utils/deviceMedia";
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "CRITICA"];
 const TIPOS = [
@@ -325,6 +327,18 @@ export default function ReparoSolicitacaoNovaModal({
     }
   }
 
+  async function handleCameraEvidencia() {
+    try {
+      const file = await captureNativePhotoFile({
+        fileNamePrefix: `evidencia_solicitacao_${Date.now()}`,
+        promptLabelHeader: "Evidencia da solicitacao",
+      });
+      if (file) processarArquivo(file);
+    } catch (error) {
+      alert(error?.message || "Nao foi possivel abrir a camera.");
+    }
+  }
+
   function removerEvidencia() {
     if (previewEvidencia) {
       URL.revokeObjectURL(previewEvidencia);
@@ -614,17 +628,31 @@ export default function ReparoSolicitacaoNovaModal({
                   </div>
                 </div>
 
-                <label className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-black cursor-pointer">
-                  <FaImage />
-                  Selecionar arquivo
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
-                    className="hidden"
-                    onChange={handleArquivoChange}
-                  />
-                </label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {isNativeCameraAvailable() ? (
+                    <button
+                      type="button"
+                      onClick={handleCameraEvidencia}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 hover:bg-black text-white text-sm font-black"
+                    >
+                      <FaCamera />
+                      Abrir camera
+                    </button>
+                  ) : null}
+
+                  <label className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-black cursor-pointer">
+                    <FaImage />
+                    Selecionar arquivo
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                      capture="environment"
+                      className="hidden"
+                      onChange={handleArquivoChange}
+                    />
+                  </label>
+                </div>
               </div>
 
               {arquivoEvidencia && (

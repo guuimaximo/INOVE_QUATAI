@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { supabase } from "../../supabase";
 import {
   FaPlus,
@@ -19,6 +20,7 @@ import {
   FaEdit,
 } from "react-icons/fa";
 import EmbarcadosModuleTabs from "../../components/embarcados/EmbarcadosModuleTabs";
+import { captureNativePhotoFile, isNativeCameraAvailable } from "../../utils/deviceMedia";
 
 const TIPOS = [
   "TELEMETRIA",
@@ -171,8 +173,7 @@ function InlineEditor({
     }
   }, [registro]);
 
-  async function handleUploadFoto(e) {
-    const file = e.target.files?.[0];
+  async function uploadFotoFile(file) {
     if (!file) return;
 
     try {
@@ -204,7 +205,24 @@ function InlineEditor({
       }));
     } finally {
       setUploading(false);
-      if (e.target) e.target.value = "";
+    }
+  }
+
+  async function handleUploadFoto(e) {
+    const file = e.target.files?.[0];
+    await uploadFotoFile(file);
+    if (e.target) e.target.value = "";
+  }
+
+  async function handleCameraFoto() {
+    try {
+      const file = await captureNativePhotoFile({
+        fileNamePrefix: `embarcado_${form.tipo}_${Date.now()}`,
+        promptLabelHeader: "Foto do embarcado",
+      });
+      await uploadFotoFile(file);
+    } catch (error) {
+      alert(error?.message || "Nao foi possivel abrir a camera.");
     }
   }
 
@@ -254,6 +272,18 @@ function InlineEditor({
           )}
 
           <div className="flex flex-wrap gap-2">
+            {isNativeCameraAvailable() ? (
+              <button
+                type="button"
+                onClick={handleCameraFoto}
+                disabled={uploading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-black text-white hover:bg-black disabled:opacity-60"
+              >
+                <FaCamera />
+                Camera
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -279,6 +309,7 @@ function InlineEditor({
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            capture="environment"
             className="hidden"
             onChange={handleUploadFoto}
           />
@@ -400,6 +431,14 @@ export default function EmbarcadosCentral() {
 
   const [expandedId, setExpandedId] = useState(null);
   const [modoNovo, setModoNovo] = useState(false);
+
+  const isNativeShell = Capacitor.isNativePlatform();
+  const nativePageStyle = isNativeShell
+    ? {
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.75rem)",
+      }
+    : undefined;
 
   async function carregar() {
     setLoading(true);
@@ -550,7 +589,7 @@ export default function EmbarcadosCentral() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6 p-4 md:p-6" style={nativePageStyle}>
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Embarcados · Central</div>
@@ -580,7 +619,7 @@ export default function EmbarcadosCentral() {
         </div>
       </div>
 
-      <EmbarcadosModuleTabs />
+      {!isNativeShell && <EmbarcadosModuleTabs />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
@@ -695,7 +734,103 @@ export default function EmbarcadosCentral() {
           </div>
         )}
 
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="space-y-3 lg:hidden">
+          {loading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center font-black text-slate-500 shadow-sm">
+              Carregando embarcados...
+            </div>
+          ) : filtrados.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center font-black text-slate-500 shadow-sm">
+              Nenhum embarcado encontrado.
+            </div>
+          ) : (
+            filtrados.map((item) => {
+              const valorAutomatico = getValorAutomatico(item, ultimaManutencaoMap);
+              const aberto = expandedId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                >
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
+                          {tipoIcon(item.tipo)}
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                            {item.tipo}
+                          </div>
+                          <div className="text-base font-black text-slate-900">
+                            {item.numero_equipamento}
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`inline-flex shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black uppercase ${statusClass(
+                          item.status_atual
+                        )}`}
+                      >
+                        {statusLabel(item.status_atual)}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                          Localização atual
+                        </div>
+                        <div className="mt-0.5 font-semibold text-slate-700">
+                          {valorAutomatico}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                          Observação
+                        </div>
+                        <div className="mt-0.5 text-sm font-semibold text-slate-700">
+                          {item.observacao || "Sem observações."}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <button className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-black text-white hover:bg-blue-500">
+                        <FaExchangeAlt />
+                        Mover
+                      </button>
+                      <button className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-2 py-2.5 text-xs font-black text-white hover:bg-amber-500">
+                        <FaTools />
+                        Reparo
+                      </button>
+                      <button
+                        onClick={() => abrirEdicao(item.id)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-2 py-2.5 text-xs font-black text-white hover:bg-black"
+                      >
+                        <FaEdit />
+                        Editar
+                      </button>
+                    </div>
+                  </div>
+
+                  {aberto && (
+                    <InlineEditor
+                      registro={item}
+                      saving={saving}
+                      ultimaManutencaoMap={ultimaManutencaoMap}
+                      onCancel={() => setExpandedId(null)}
+                      onSave={(payload) => salvar(payload, item)}
+                    />
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden lg:block">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-100 border-b border-slate-200">

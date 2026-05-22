@@ -7,6 +7,7 @@ import {
   FaClipboardCheck,
   FaClipboardList,
   FaCog,
+  FaExchangeAlt,
   FaExclamationTriangle,
   FaGasPump,
   FaHome,
@@ -73,6 +74,8 @@ function getIconForNav(key) {
       return FaGasPump;
     case "embarcados":
       return FaMicrochip;
+    case "embarcados_mov":
+      return FaExchangeAlt;
     case "km":
       return FaMapMarkedAlt;
     default:
@@ -143,7 +146,9 @@ export default function Layout() {
   const isNativeShell = Capacitor.isNativePlatform();
   const isInTrocaPneus = location.pathname === "/pcm-troca-pneus";
   const isInControleFichas = location.pathname === "/pcm-controle-fichas";
-  const isLockedMobileModule = isNativeShell && (isInTrocaPneus || isInControleFichas);
+  const isInEmbarcados = location.pathname.startsWith("/embarcados");
+  const isLockedMobileModule =
+    isNativeShell && (isInTrocaPneus || isInControleFichas || isInEmbarcados);
 
   const pageTitle = getPageTitle(location.pathname);
   const mobileNavItems = useMemo(() => {
@@ -164,10 +169,17 @@ export default function Layout() {
           { key: "pcm", label: "PCM", path: "/pcm-controle-fichas?aba=pcm", badge: badges.pcm },
         ];
       }
+      if (isInEmbarcados) {
+        return [
+          { key: "embarcados", label: "Central", path: "/embarcados-central" },
+          { key: "embarcados_mov", label: "Movimentacoes", path: "/embarcados-movimentacoes" },
+          { key: "reparos", label: "Reparos", path: "/embarcados-reparos" },
+        ];
+      }
       return [];
     }
     return getMobileNavItems(user, profileMap).slice(0, 3);
-  }, [isNativeShell, isInTrocaPneus, isInControleFichas, profileMap, user, badges]);
+  }, [isNativeShell, isInTrocaPneus, isInControleFichas, isInEmbarcados, profileMap, user, badges]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);

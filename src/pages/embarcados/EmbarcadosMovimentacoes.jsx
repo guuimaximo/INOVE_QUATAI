@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { supabase } from "../../supabase";
 import {
   FaCar,
@@ -7,6 +8,7 @@ import {
   FaExchangeAlt,
   FaFileExcel,
   FaHistory,
+  FaImage,
   FaPlus,
   FaSave,
   FaSync,
@@ -34,6 +36,14 @@ export default function EmbarcadosMovimentacoes() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("PAINEL");
 
+  const isNativeShell = Capacitor.isNativePlatform();
+  const nativePageStyle = isNativeShell
+    ? {
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.75rem)",
+      }
+    : undefined;
+
   // Dados globais
   const [prefixos, setPrefixos] = useState([]);
   const [disponiveisGlobais, setDisponiveisGlobais] = useState([]);
@@ -58,6 +68,7 @@ export default function EmbarcadosMovimentacoes() {
   const [modalAcao, setModalAcao] = useState(null); // 'INSTALAR', 'MOVIMENTAR', 'HISTORICO'
   const [tipoSelecionado, setTipoSelecionado] = useState("");
   const [deviceSelecionado, setDeviceSelecionado] = useState(null);
+  const [detalheEmbarcado, setDetalheEmbarcado] = useState(null);
 
   // Formulários
   const [formInstalar, setFormInstalar] = useState({ embarcado_id: "", observacao: "" });
@@ -106,7 +117,7 @@ export default function EmbarcadosMovimentacoes() {
         supabase.from("prefixos").select("codigo, cluster").order("codigo"),
         supabase
           .from("embarcados")
-          .select("id, tipo, numero_equipamento, localizacao_tipo, localizacao_valor, ativo")
+          .select("id, tipo, numero_equipamento, foto_url, status_atual, localizacao_tipo, localizacao_valor, observacao, ativo")
           .eq("ativo", true)
           .eq("localizacao_tipo", "VEICULO"),
       ]);
@@ -146,6 +157,7 @@ export default function EmbarcadosMovimentacoes() {
 
         mapaVeiculos[veiculo][item.tipo] = true;
         mapaVeiculos[veiculo][`${item.tipo}_NUMERO`] = item.numero_equipamento || "";
+        mapaVeiculos[veiculo][`${item.tipo}_ITEM`] = item;
       });
 
       const rows = Object.values(mapaVeiculos).map((row) => {
@@ -432,13 +444,51 @@ export default function EmbarcadosMovimentacoes() {
     }
   }
 
-  function renderIconStatus(ok, numero) {
+  async function abrirDetalheEmbarcado(embarcado, veiculo = "") {
+    if (!embarcado?.id) return;
+
+    setDetalheEmbarcado({ embarcado, veiculo, loading: true, historico: [], reparos: [] });
+
+    const [resHist, resRep] = await Promise.all([
+      supabase
+        .from("embarcados_movimentacoes")
+        .select("*")
+        .eq("embarcado_id", embarcado.id)
+        .order("data_movimentacao", { ascending: false })
+        .limit(80),
+      supabase
+        .from("embarcados_solicitacoes_reparo")
+        .select("id, created_at, veiculo, tipo_embarcado, problema, status, prioridade, executado_por")
+        .eq("tipo_embarcado", embarcado.tipo)
+        .eq("veiculo", veiculo || embarcado.localizacao_valor || "")
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]);
+
+    setDetalheEmbarcado({
+      embarcado,
+      veiculo,
+      loading: false,
+      historico: resHist.data || [],
+      reparos: resRep.data || [],
+    });
+  }
+
+  function renderIconStatus(ok, numero, embarcado, veiculo, tipo) {
     if (ok) {
       return (
-        <div className="flex flex-col items-center justify-center">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            abrirDetalheEmbarcado(embarcado, veiculo);
+          }}
+          className="flex w-full flex-col items-center justify-center rounded-xl px-2 py-1 hover:bg-blue-50"
+          title={`Abrir ${tipo}`}
+        >
           <FaCheckCircle className="text-emerald-600 text-lg" />
           {numero ? <span className="text-[10px] mt-1 font-bold text-slate-500">{numero}</span> : null}
-        </div>
+        </button>
       );
     }
 
@@ -446,7 +496,7 @@ export default function EmbarcadosMovimentacoes() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6 font-sans text-slate-900">
+    <div className="space-y-6 p-4 md:p-6 font-sans text-slate-900" style={nativePageStyle}>
         {/* HEADER */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -472,7 +522,7 @@ export default function EmbarcadosMovimentacoes() {
         </div>
 
         {/* RESUMO GLOBAL — KPI grid no padrão Pessoas */}
-        <EmbarcadosModuleTabs />
+        {!isNativeShell && <EmbarcadosModuleTabs />}
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
@@ -633,6 +683,12 @@ export default function EmbarcadosMovimentacoes() {
                               Atenção: Existe uma OS aberta para este equipamento. Verifique antes de movimentar.
                             </div>
                             <button
+                              onClick={() => abrirDetalheEmbarcado(embarcado, veiculoSelecionado)}
+                              className="mb-2 w-full px-5 py-3 rounded-xl bg-amber-900 text-white font-black text-sm shadow-sm hover:bg-amber-800 flex items-center justify-center gap-2 transition-colors"
+                            >
+                              <FaHistory /> Consultar vida do embarcado
+                            </button>
+                            <button
                               onClick={() => {
                                 setDeviceSelecionado(embarcado);
                                 setFormMovimentar({
@@ -669,6 +725,12 @@ export default function EmbarcadosMovimentacoes() {
                           <div className="text-xs font-bold text-emerald-700 bg-emerald-100/50 rounded-lg p-3 border border-emerald-200/50 mb-5 opacity-80">
                             Nenhuma falha relatada. Operando normalmente.
                           </div>
+                          <button
+                            onClick={() => abrirDetalheEmbarcado(embarcado, veiculoSelecionado)}
+                            className="mb-2 w-full px-5 py-3 rounded-xl bg-emerald-900 text-white font-black text-sm shadow-sm hover:bg-emerald-800 flex items-center justify-center gap-2 transition-colors"
+                          >
+                            <FaHistory /> Consultar vida do embarcado
+                          </button>
                           <button
                             onClick={() => {
                               setDeviceSelecionado(embarcado);
@@ -747,7 +809,61 @@ export default function EmbarcadosMovimentacoes() {
               })}
             </div>
 
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="space-y-3 lg:hidden">
+              {loadingAnalitico ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center font-black text-slate-400 shadow-sm">
+                  Carregando visão analítica...
+                </div>
+              ) : analiticoFiltrado.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center font-black text-slate-400 shadow-sm">
+                  Nenhum registro encontrado.
+                </div>
+              ) : (
+                analiticoFiltrado.map((row) => (
+                  <div
+                    key={row.carro}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-black text-slate-900">{row.carro}</div>
+                        <div className="text-xs font-bold text-slate-500">{row.cluster || "-"}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="inline-flex min-w-[36px] items-center justify-center rounded-xl bg-blue-100 px-2 py-1 font-black text-blue-700">
+                          {row.totalInstalados}
+                        </span>
+                        <span
+                          className={`inline-flex min-w-[36px] items-center justify-center rounded-xl px-2 py-1 font-black ${
+                            row.pendencias > 0
+                              ? "bg-red-100 text-red-700"
+                              : "bg-emerald-100 text-emerald-700"
+                          }`}
+                        >
+                          {row.pendencias}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {TIPOS_EMBARCADOS.map((tipo) => (
+                        <div
+                          key={tipo}
+                          className="flex flex-col items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5"
+                        >
+                          <div className="text-[9px] font-black uppercase tracking-wide text-slate-500">
+                            {tipo}
+                          </div>
+                          {renderIconStatus(row[tipo], row[`${tipo}_NUMERO`], row[`${tipo}_ITEM`], row.carro, tipo)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="hidden bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden lg:block">
               <div className="overflow-auto">
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-100">
@@ -790,12 +906,12 @@ export default function EmbarcadosMovimentacoes() {
                           <td className="px-4 py-4 font-black text-slate-900">{row.carro}</td>
                           <td className="px-4 py-4 font-bold text-slate-600">{row.cluster || "-"}</td>
 
-                          <td className="px-4 py-4 text-center">{renderIconStatus(row.TELEMETRIA, row.TELEMETRIA_NUMERO)}</td>
-                          <td className="px-4 py-4 text-center">{renderIconStatus(row.CAMERAS, row.CAMERAS_NUMERO)}</td>
-                          <td className="px-4 py-4 text-center">{renderIconStatus(row.VISION, row.VISION_NUMERO)}</td>
-                          <td className="px-4 py-4 text-center">{renderIconStatus(row.VALIDADOR, row.VALIDADOR_NUMERO)}</td>
-                          <td className="px-4 py-4 text-center">{renderIconStatus(row.CHIP_VALIDADOR, row.CHIP_VALIDADOR_NUMERO)}</td>
-                          <td className="px-4 py-4 text-center">{renderIconStatus(row.GPS, row.GPS_NUMERO)}</td>
+                          <td className="px-4 py-4 text-center">{renderIconStatus(row.TELEMETRIA, row.TELEMETRIA_NUMERO, row.TELEMETRIA_ITEM, row.carro, "TELEMETRIA")}</td>
+                          <td className="px-4 py-4 text-center">{renderIconStatus(row.CAMERAS, row.CAMERAS_NUMERO, row.CAMERAS_ITEM, row.carro, "CAMERAS")}</td>
+                          <td className="px-4 py-4 text-center">{renderIconStatus(row.VISION, row.VISION_NUMERO, row.VISION_ITEM, row.carro, "VISION")}</td>
+                          <td className="px-4 py-4 text-center">{renderIconStatus(row.VALIDADOR, row.VALIDADOR_NUMERO, row.VALIDADOR_ITEM, row.carro, "VALIDADOR")}</td>
+                          <td className="px-4 py-4 text-center">{renderIconStatus(row.CHIP_VALIDADOR, row.CHIP_VALIDADOR_NUMERO, row.CHIP_VALIDADOR_ITEM, row.carro, "CHIP_VALIDADOR")}</td>
+                          <td className="px-4 py-4 text-center">{renderIconStatus(row.GPS, row.GPS_NUMERO, row.GPS_ITEM, row.carro, "GPS")}</td>
 
                           <td className="px-4 py-4 text-center">
                             <span className="inline-flex items-center justify-center min-w-[36px] px-2 py-1 rounded-xl bg-blue-100 text-blue-700 font-black">
@@ -1131,6 +1247,120 @@ export default function EmbarcadosMovimentacoes() {
                     );
                   })
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+        {detalheEmbarcado && (
+          <div className="fixed inset-0 bg-slate-900/60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[92vh] shadow-2xl overflow-hidden flex flex-col">
+              <div className="bg-slate-900 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                    <FaHistory /> Vida do embarcado
+                  </h2>
+                  <p className="text-xs font-semibold text-slate-300">
+                    {detalheEmbarcado.embarcado?.tipo} · {detalheEmbarcado.embarcado?.numero_equipamento}
+                  </p>
+                </div>
+                <button onClick={() => setDetalheEmbarcado(null)} className="text-white/70 hover:text-white transition-colors">
+                  <FaTimes size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 bg-slate-50 space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    {detalheEmbarcado.embarcado?.foto_url ? (
+                      <img
+                        src={detalheEmbarcado.embarcado.foto_url}
+                        alt="Foto do embarcado"
+                        className="h-56 w-full rounded-xl object-cover border"
+                      />
+                    ) : (
+                      <div className="h-56 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-400">
+                        <FaImage className="text-2xl" />
+                        <span className="mt-2 text-sm font-bold">Sem foto no cadastro</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Número</div>
+                      <div className="mt-1 text-xl font-black text-slate-900">{detalheEmbarcado.embarcado?.numero_equipamento || "-"}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Status atual</div>
+                      <div className="mt-1 text-xl font-black text-slate-900">{detalheEmbarcado.embarcado?.status_atual || "-"}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Local atual</div>
+                      <div className="mt-1 text-xl font-black text-blue-700">{detalheEmbarcado.veiculo || detalheEmbarcado.embarcado?.localizacao_valor || "-"}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Reparos consultados</div>
+                      <div className="mt-1 text-xl font-black text-amber-700">{detalheEmbarcado.reparos?.length || 0}</div>
+                    </div>
+                    <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Observação do cadastro</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-700 whitespace-pre-wrap">{detalheEmbarcado.embarcado?.observacao || "-"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="mb-3 text-sm font-black uppercase tracking-wide text-slate-700">
+                      Carros e movimentações
+                    </div>
+                    {detalheEmbarcado.loading ? (
+                      <div className="py-8 text-center text-slate-400 font-black">Carregando...</div>
+                    ) : detalheEmbarcado.historico?.length ? (
+                      <div className="space-y-3">
+                        {detalheEmbarcado.historico.map((h) => (
+                          <div key={h.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-xs font-black text-slate-900">{h.tipo_movimentacao || "-"}</div>
+                            <div className="mt-1 text-[11px] font-semibold text-slate-500">{new Date(h.data_movimentacao || h.created_at).toLocaleString("pt-BR")}</div>
+                            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                              <div><strong>Origem:</strong> {h.origem_tipo || "-"} · {h.origem_valor || "-"}</div>
+                              <div><strong>Destino:</strong> {h.destino_tipo || "-"} · {h.destino_valor || "-"}</div>
+                            </div>
+                            {h.observacao ? <div className="mt-2 text-xs text-slate-600">{h.observacao}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-slate-400 font-black">Sem movimentações.</div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="mb-3 text-sm font-black uppercase tracking-wide text-slate-700">
+                      Manutenções e solicitações
+                    </div>
+                    {detalheEmbarcado.loading ? (
+                      <div className="py-8 text-center text-slate-400 font-black">Carregando...</div>
+                    ) : detalheEmbarcado.reparos?.length ? (
+                      <div className="space-y-3">
+                        {detalheEmbarcado.reparos.map((r) => (
+                          <div key={r.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-xs font-black text-slate-900">{r.problema || "-"}</div>
+                                <div className="mt-1 text-[11px] font-semibold text-slate-500">{new Date(r.created_at).toLocaleString("pt-BR")}</div>
+                              </div>
+                              <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">{r.status || "-"}</span>
+                            </div>
+                            <div className="mt-2 text-xs text-slate-600">Executado por: <strong>{r.executado_por || "-"}</strong></div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-slate-400 font-black">Sem solicitações para este veículo/tipo.</div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

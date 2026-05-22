@@ -2,6 +2,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import {
   FaCamera,
   FaCheckCircle,
@@ -19,6 +20,7 @@ import {
 import { AuthContext } from "../../context/AuthContext";
 import { useMobileTabBadges } from "../../context/MobileTabBadgesContext";
 import { supabase } from "../../supabase";
+import MediaPreviewModal from "../../components/MediaPreviewModal";
 
 const TAB_LANCAMENTO = "lancamento";
 const TAB_SUPERVISOR = "supervisor";
@@ -106,6 +108,49 @@ function base64ToUint8Array(base64) {
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+function buildNotificationId(seed = "") {
+  let hash = 0;
+  const text = String(seed || Date.now());
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) % 2147483647;
+  }
+  return Math.max(1, hash);
+}
+
+async function notifyDevice({ title, body, seed }) {
+  if (!title || !body) return;
+
+  if (isNativeShell) {
+    try {
+      const permissions = await LocalNotifications.requestPermissions();
+      if (permissions.display !== "granted") return;
+
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: buildNotificationId(seed),
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 1000) },
+          },
+        ],
+      });
+      return;
+    } catch (error) {
+      console.error("Erro ao agendar notificacao local:", error);
+    }
+  }
+
+  if (typeof window !== "undefined" && "Notification" in window) {
+    try {
+      if (Notification.permission === "default") await Notification.requestPermission();
+      if (Notification.permission === "granted") new Notification(title, { body });
+    } catch (error) {
+      console.error("Erro ao emitir notificacao web:", error);
+    }
+  }
 }
 
 async function captureNativePhoto(fileNamePrefix) {
@@ -352,6 +397,8 @@ export default function PCMControleFichas() {
 
   const [consultaOpen, setConsultaOpen] = useState(false);
   const [consultaRow, setConsultaRow] = useState(null);
+  const [consultaItemId, setConsultaItemId] = useState(null);
+  const [previewMedia, setPreviewMedia] = useState(null);
 
   async function carregar() {
     setLoading(true);
@@ -591,6 +638,14 @@ export default function PCMControleFichas() {
         .eq("id", row.id);
       if (error) throw error;
 
+      if (tipo === "supervisor_recusar" || tipo === "pcm_recusar") {
+        await notifyDevice({
+          title: tipo === "supervisor_recusar" ? "Ficha recusada pelo supervisor" : "Ficha devolvida pelo PCM",
+          body: `${item.numero_ficha || row.ficha_controle} foi recusada. Motivo: ${motivo}`,
+          seed: `controle-ficha-recusa-${row.id}-${item.id}-${tipo}`,
+        });
+      }
+
       // sincroniza consultaRow para o popup continuar aberto com dados frescos
       setConsultaRow((current) =>
         current && current.id === row.id ? { ...current, itens: novosItens, status: novoStatus } : current
@@ -610,8 +665,9 @@ export default function PCMControleFichas() {
     }
   }
 
-  function abrirConsulta(row) {
+  function abrirConsulta(row, item = null) {
     setConsultaRow(row);
+    setConsultaItemId(item?.id || null);
     setConsultaOpen(true);
   }
 
@@ -628,6 +684,23 @@ export default function PCMControleFichas() {
       return todos.some((v) => v.toLowerCase().includes(termo));
     });
   }, [activeTab, rows, supervisorPendentes, pcmPendentes, filtro]);
+
+  const fichasFiltradas = useMemo(() => {
+    return linhasFiltradas.flatMap((row) => {
+      const itens = Array.isArray(row.itens) ? row.itens : [];
+      if (!itens.length) {
+        return [{ row, item: null, key: row.id, numero: row.ficha_controle, status: row.status }];
+      }
+
+      return itens.map((item, index) => ({
+        row,
+        item,
+        key: `${row.id}-${item.id || index}`,
+        numero: item.numero_ficha || `${row.ficha_controle}-${index + 1}`,
+        status: item.status || row.status,
+      }));
+    });
+  }, [linhasFiltradas]);
 
   const acaoLabels = {
     supervisor_receber: { title: "Supervisor recebeu as fichas", nome: "Nome do supervisor", cor: "bg-emerald-600 hover:bg-emerald-700" },
@@ -701,29 +774,31 @@ export default function PCMControleFichas() {
             <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-slate-500 shadow-sm">
               Carregando...
             </div>
-          ) : linhasFiltradas.length === 0 ? (
+          ) : fichasFiltradas.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-slate-500 shadow-sm">
-              Nenhum lancamento encontrado.
+              Nenhuma ficha encontrada.
             </div>
           ) : (
-            linhasFiltradas.map((row) => {
-              const totalFichas = Array.isArray(row.itens) ? row.itens.length : (row.quantidade_fichas || 0);
+            fichasFiltradas.map(({ row, item, key, numero, status }) => {
+              const recusada = status === STATUS_RECUSADO_SUPERVISOR || status === STATUS_RECUSADO_PCM;
               return (
                 <button
-                  key={row.id}
+                  key={key}
                   type="button"
-                  onClick={() => abrirConsulta(row)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm active:bg-slate-50"
+                  onClick={() => abrirConsulta(row, item)}
+                  className={`w-full rounded-2xl border px-4 py-3 text-left shadow-sm active:bg-slate-50 ${
+                    recusada ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white"
+                  }`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold uppercase tracking-wide text-blue-700">{row.ficha_controle}</div>
+                      <div className={`text-xs font-bold uppercase tracking-wide ${recusada ? "text-rose-700" : "text-blue-700"}`}>{numero}</div>
                       <div className="truncate text-sm font-semibold text-slate-900">
-                        {totalFichas} ficha{totalFichas !== 1 ? "s" : ""}
+                        Lote {row.ficha_controle}
                       </div>
                       <div className="text-[11px] text-slate-500">{formatDate(row.data_entrega || row.created_at)}</div>
                     </div>
-                    <StatusBadge status={row.status} />
+                    <StatusBadge status={status} />
                   </div>
                 </button>
               );
@@ -736,10 +811,10 @@ export default function PCMControleFichas() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Lote</th>
+                  <th className="px-4 py-3">Ficha</th>
                   <th className="px-4 py-3">Data</th>
                   <th className="px-4 py-3">Quem entregou</th>
-                  <th className="px-4 py-3">Fichas</th>
+                  <th className="px-4 py-3">Lote</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Acoes</th>
                 </tr>
@@ -751,26 +826,26 @@ export default function PCMControleFichas() {
                       Carregando...
                     </td>
                   </tr>
-                ) : linhasFiltradas.length === 0 ? (
+                ) : fichasFiltradas.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                      Nenhum lancamento encontrado.
+                      Nenhuma ficha encontrada.
                     </td>
                   </tr>
                 ) : (
-                  linhasFiltradas.map((row) => {
-                    const totalFichas = Array.isArray(row.itens) ? row.itens.length : (row.quantidade_fichas || 0);
+                  fichasFiltradas.map(({ row, item, key, numero, status }) => {
+                    const recusada = status === STATUS_RECUSADO_SUPERVISOR || status === STATUS_RECUSADO_PCM;
                     return (
                       <tr
-                        key={row.id}
-                        onClick={() => abrirConsulta(row)}
-                        className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                        key={key}
+                        onClick={() => abrirConsulta(row, item)}
+                        className={`cursor-pointer transition-colors hover:bg-slate-50/80 ${recusada ? "bg-rose-50" : ""}`}
                       >
-                        <td className="px-4 py-3 font-bold text-blue-700">{row.ficha_controle}</td>
+                        <td className={`px-4 py-3 font-bold ${recusada ? "text-rose-700" : "text-blue-700"}`}>{numero}</td>
                         <td className="px-4 py-3 text-slate-600">{formatDate(row.data_entrega || row.created_at)}</td>
                         <td className="px-4 py-3 text-slate-600">{row.criado_por_nome || row.criado_por_login || "-"}</td>
-                        <td className="px-4 py-3 text-slate-600">{totalFichas}</td>
-                        <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
+                        <td className="px-4 py-3 text-slate-600">{row.ficha_controle}</td>
+                        <td className="px-4 py-3"><StatusBadge status={status} /></td>
                         <td className="px-4 py-3 text-right text-xs text-slate-500">Clique para abrir</td>
                       </tr>
                     );
@@ -932,7 +1007,7 @@ export default function PCMControleFichas() {
 
       {consultaOpen && consultaRow ? (
         <ModalShell
-          title={`Lote ${consultaRow.ficha_controle}`}
+          title={consultaItemId ? `Ficha ${(consultaRow.itens || []).find((it) => it.id === consultaItemId)?.numero_ficha || consultaRow.ficha_controle}` : `Lote ${consultaRow.ficha_controle}`}
           subtitle="PCM · Controle"
           maxWidth="max-w-4xl"
           onClose={() => setConsultaOpen(false)}
@@ -1004,16 +1079,17 @@ export default function PCMControleFichas() {
             {Array.isArray(consultaRow.itens) && consultaRow.itens.length ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="mb-3 text-sm font-black uppercase tracking-wide text-slate-700">
-                  Fichas
+                  {consultaItemId ? "Ficha" : "Fichas"}
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {consultaRow.itens.map((it, idx) => {
+                  {consultaRow.itens.filter((it) => !consultaItemId || it.id === consultaItemId).map((it, idx) => {
                     const itemStatus = it.status || STATUS_AGUARDANDO_SUPERVISOR;
                     const podeSupervisor = activeTab === TAB_SUPERVISOR && itemStatus === STATUS_AGUARDANDO_SUPERVISOR;
                     const podePCM = activeTab === TAB_PCM && itemStatus === STATUS_AGUARDANDO_PCM;
                     const podeTransnet = activeTab === TAB_PCM && itemStatus === STATUS_AGUARDANDO_TRANSNET;
+                    const recusada = itemStatus === STATUS_RECUSADO_SUPERVISOR || itemStatus === STATUS_RECUSADO_PCM;
                     return (
-                      <div key={it.id || idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div key={it.id || idx} className={`rounded-2xl border p-3 ${recusada ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-slate-50"}`}>
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
                             Ficha {idx + 1}{it.numero_ficha ? ` · OS ${it.numero_ficha}` : ""}
@@ -1026,7 +1102,8 @@ export default function PCMControleFichas() {
                           <img
                             src={it.foto_url}
                             alt={`Ficha ${idx + 1}`}
-                            className="mt-2 h-56 w-full rounded-lg object-contain"
+                            onClick={() => setPreviewMedia({ url: it.foto_url, title: `Ficha ${it.numero_ficha || idx + 1}` })}
+                            className="mt-2 h-56 w-full cursor-pointer rounded-lg object-contain"
                           />
                         ) : (
                           <div className="mt-2 rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
@@ -1116,6 +1193,12 @@ export default function PCMControleFichas() {
           </div>
         </ModalShell>
       ) : null}
+      <MediaPreviewModal
+        open={!!previewMedia}
+        url={previewMedia?.url}
+        title={previewMedia?.title}
+        onClose={() => setPreviewMedia(null)}
+      />
     </div>
   );
 }

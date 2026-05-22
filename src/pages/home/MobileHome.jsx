@@ -1,6 +1,6 @@
 import { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { FaClipboardList, FaTools, FaSignOutAlt, FaLock } from "react-icons/fa";
+import { FaClipboardList, FaTools, FaSignOutAlt, FaLock, FaMicrochip } from "react-icons/fa";
 
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
@@ -23,17 +23,45 @@ const MOBILE_MODULES = [
     icon: <FaClipboardList />,
     gradient: "from-amber-500 to-amber-700",
   },
+  {
+    key: "embarcados_central",
+    title: "Embarcados",
+    description: "Central, movimentacoes e reparos dos equipamentos embarcados.",
+    path: "/embarcados-central",
+    icon: <FaMicrochip />,
+    gradient: "from-slate-700 to-slate-900",
+  },
 ];
 
-// Detecta se a pessoa tem qualquer indicio de acesso a um modulo PCM
-function hasMobileFallback(user) {
+function normalizeAccessText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function userPages(user) {
+  return Array.isArray(user?.paginas_liberadas) ? user.paginas_liberadas.map((p) => String(p)) : [];
+}
+
+function hasModuleFallback(user, moduleKey) {
   try {
-    const nivel = String(user?.nivel || "").toLowerCase();
-    if (["manutencao", "manutenção", "gestor", "administrador", "admin"].some((n) => nivel.includes(n))) {
+    const nivel = normalizeAccessText(user?.nivel);
+    const paginas = userPages(user);
+    const isGestao = ["gestor", "administrador", "admin"].some((n) => nivel.includes(n));
+
+    if (String(moduleKey).startsWith("embarcados_")) {
+      return Boolean(user);
+    }
+
+    if (String(moduleKey).startsWith("pcm_")) {
+      return isGestao || nivel.includes("manutencao") || paginas.some((p) => p.startsWith("pcm_"));
+    }
+
+    if (isGestao) {
       return true;
     }
-    const paginas = Array.isArray(user?.paginas_liberadas) ? user.paginas_liberadas : [];
-    if (paginas.some((p) => String(p).startsWith("pcm_"))) return true;
+
   } catch {
     /* ignore */
   }
@@ -54,19 +82,19 @@ export default function MobileHome() {
 
   const liberacoes = useMemo(() => {
     return MOBILE_MODULES.map((m) => {
-      let liberado = false;
+      let permissaoPerfil = false;
       try {
-        liberado = canUserAccessPageKey(user, m.key, profileMap);
+        permissaoPerfil = canUserAccessPageKey(user, m.key, profileMap);
       } catch {
-        liberado = false;
+        permissaoPerfil = false;
       }
-      return { ...m, liberado };
+      const fallbackLiberado = hasModuleFallback(user, m.key);
+      return { ...m, permissaoPerfil, fallbackLiberado, liberado: permissaoPerfil || fallbackLiberado };
     });
   }, [user, profileMap]);
 
-  const fallback = useMemo(() => hasMobileFallback(user), [user]);
   const algumLiberado = liberacoes.some((m) => m.liberado);
-  const usarFallback = !algumLiberado && fallback;
+  const fallbackAtivo = liberacoes.some((m) => m.fallbackLiberado && !m.permissaoPerfil);
 
   const nivelLabel = user?.nivel || "(sem nivel)";
 
@@ -97,7 +125,7 @@ export default function MobileHome() {
 
         <div className="grid grid-cols-1 gap-4">
           {liberacoes.map((m) => {
-            const ativo = m.liberado || usarFallback;
+            const ativo = m.liberado;
             if (ativo) {
               return (
                 <Link
@@ -135,16 +163,16 @@ export default function MobileHome() {
           })}
         </div>
 
-        {!algumLiberado && !usarFallback ? (
+        {!algumLiberado ? (
           <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
             <strong className="block text-sm">Sem permissoes para os modulos do app.</strong>
-            Peca ao gestor para liberar <em>Troca de pneus</em> ou <em>Controle de fichas</em> no nivel <strong>{nivelLabel}</strong>.
+            Peca ao gestor para liberar <em>Troca de pneus</em>, <em>Controle de fichas</em> ou <em>Embarcados</em> no nivel <strong>{nivelLabel}</strong>.
           </div>
         ) : null}
 
-        {usarFallback ? (
+        {fallbackAtivo ? (
           <div className="rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-[11px] text-blue-800">
-            Modo permissivo: seu nivel ({nivelLabel}) costuma usar PCM, entao liberamos os modulos no app. Se algo nao abrir, peca ao gestor para revisar as paginas do nivel.
+            Modo permissivo: liberamos os modulos compativeis com seu nivel ({nivelLabel}) no app. Se algo nao abrir, peca ao gestor para revisar as paginas do nivel.
           </div>
         ) : null}
       </div>

@@ -15,6 +15,7 @@ export default function RequireAuth({ children }) {
     "/pcm-controle-fichas",
     "/atualizar-perfil",
   ]);
+  const allowedNativePrefixes = ["/embarcados"];
 
   if (loading || accessLoading) {
     return (
@@ -32,7 +33,16 @@ export default function RequireAuth({ children }) {
     return <Navigate to="/atualizar-perfil" replace state={{ from: location }} />;
   }
 
-  if (isNativeShell && !allowedNativePaths.has(location.pathname)) {
+  const isAllowedNativePath =
+    allowedNativePaths.has(location.pathname) ||
+    allowedNativePrefixes.some(
+      (prefix) =>
+        location.pathname === prefix ||
+        location.pathname.startsWith(`${prefix}-`) ||
+        location.pathname.startsWith(`${prefix}/`)
+    );
+
+  if (isNativeShell && !isAllowedNativePath) {
     return <Navigate to="/" replace state={{ from: location }} />;
   }
 

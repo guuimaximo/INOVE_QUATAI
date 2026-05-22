@@ -22,17 +22,15 @@ export default function UpdateAppPrompt() {
       setVisible(true);
     }
 
-    function handleControllerChange() {
-      window.location.reload();
-    }
-
+    // Importante: NAO recarregar automaticamente em controllerchange.
+    // Se o SW novo assumir em background, o popup deve continuar visivel ate
+    // o usuario escolher "Atualizar agora". O reload no clique e garantido
+    // pelo fluxo de applyUpdateNow (registerServiceWorker).
     window.addEventListener("inove:update-available", handleUpdateAvailable);
-    navigator.serviceWorker?.addEventListener("controllerchange", handleControllerChange);
 
     return () => {
       window.__INOVE_REACT_UPDATE_PROMPT_VISIBLE__ = false;
       window.removeEventListener("inove:update-available", handleUpdateAvailable);
-      navigator.serviceWorker?.removeEventListener("controllerchange", handleControllerChange);
     };
   }, []);
 
@@ -44,11 +42,8 @@ export default function UpdateAppPrompt() {
     setRefreshing(true);
 
     try {
-      if (registration?.waiting) {
-        registration.waiting.postMessage({ type: "SKIP_WAITING" });
-        return;
-      }
-
+      // hardRefreshApp aplica o SW que estiver aguardando (com fallback de
+      // reload garantido) ou limpa o cache e recarrega.
       await hardRefreshApp();
     } catch (error) {
       console.error("Falha ao atualizar o Inove:", error);

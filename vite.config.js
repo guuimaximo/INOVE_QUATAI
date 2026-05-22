@@ -22,12 +22,14 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("install", (event) => {
+  // Sem skipWaiting automatico: o SW novo fica "aguardando" ate o usuario
+  // clicar em "Atualizar agora" (que envia SKIP_WAITING). Assim mostramos o
+  // popup de atualizacao em vez de recarregar a pagina sozinho.
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSET_PATHS);
     }),
   );
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {

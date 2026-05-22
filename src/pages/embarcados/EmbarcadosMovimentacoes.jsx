@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "../../supabase";
 import {
@@ -32,6 +33,8 @@ const TIPOS_EMBARCADOS = [
 const DESTINOS = ["VEICULO", "ESTOQUE", "MANUTENCAO", "SUCATA", "RESERVA", "EXTERNO"];
 
 export default function EmbarcadosMovimentacoes() {
+  const [searchParams] = useSearchParams();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("PAINEL");
@@ -39,7 +42,7 @@ export default function EmbarcadosMovimentacoes() {
   const isNativeShell = Capacitor.isNativePlatform();
   const nativePageStyle = isNativeShell
     ? {
-        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
+        paddingTop: "0.85rem",
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.75rem)",
       }
     : undefined;
@@ -219,6 +222,14 @@ export default function EmbarcadosMovimentacoes() {
     carregarIniciais();
     carregarAnalitico();
   }, []);
+
+  useEffect(() => {
+    const veiculoParam = searchParams.get("veiculo");
+    if (veiculoParam) {
+      setActiveTab("PAINEL");
+      setVeiculoSelecionado(veiculoParam);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     carregarDadosVeiculo(veiculoSelecionado);

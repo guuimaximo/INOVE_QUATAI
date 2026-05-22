@@ -48,6 +48,13 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
+  // Nunca cachear o controle de versao nem o proprio service worker:
+  // precisam vir sempre da rede para detectar novos deploys.
+  if (url.pathname === "/version.json" || url.pathname === "/sw.js") {
+    event.respondWith(fetch(request, { cache: "no-store" }).catch(() => fetch(request)));
+    return;
+  }
+
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(async () => {

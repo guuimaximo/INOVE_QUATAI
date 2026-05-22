@@ -154,8 +154,8 @@ export default function ReparoSolicitacaoExecucao() {
       ...prev,
       status_evento: data?.status || "EM_ANALISE",
       executado_por: nomeUsuario || "",
-      foto_url: data?.foto_url || "",
-      foto_tipo: data?.foto_url?.toLowerCase().includes(".pdf") ? "application/pdf" : "",
+      foto_url: data?.foto_conclusao_url || "",
+      foto_tipo: data?.foto_conclusao_url?.toLowerCase().includes(".pdf") ? "application/pdf" : "",
       foto_nome: "",
     }));
 
@@ -354,7 +354,7 @@ export default function ReparoSolicitacaoExecucao() {
         observacao_execucao: safeText(form.observacao),
         executado_por: executadoPorFinal,
         data_execucao: new Date().toISOString(),
-        foto_url: safeText(form.foto_url),
+        foto_conclusao_url: safeText(form.foto_url),
       };
 
       if (form.status_evento === "CONCLUIDA" || form.status_evento === "CANCELADA") {
@@ -415,13 +415,13 @@ export default function ReparoSolicitacaoExecucao() {
 
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
           <div className="mb-4 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-            SolicitaÃ§Ã£o
+            Solicitação
           </div>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
             <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-[10px] font-black uppercase text-slate-500">VeÃ­culo</div>
+                  <div className="text-[10px] font-black uppercase text-slate-500">Veículo</div>
                   <div className="mt-1 text-sm font-black text-slate-900">{row.veiculo || "-"}</div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -434,22 +434,22 @@ export default function ReparoSolicitacaoExecucao() {
                 </div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-[10px] font-black uppercase text-slate-500">DescriÃ§Ã£o</div>
+                <div className="text-[10px] font-black uppercase text-slate-500">Descrição</div>
                 <div className="mt-2 min-h-[90px] whitespace-pre-wrap text-sm font-semibold text-slate-700">
-                  {row.descricao || row.problema || "Sem descriÃ§Ã£o."}
+                  {row.descricao || row.problema || "Sem descrição."}
                 </div>
               </div>
             </div>
 
             <div>
-              <div className="mb-2 text-[10px] font-black uppercase text-slate-500">EvidÃªncia da solicitaÃ§Ã£o</div>
+              <div className="mb-2 text-[10px] font-black uppercase text-slate-500">Evidência da solicitação</div>
               {row.foto_url ? (
                 <button
                   type="button"
-                  onClick={() => setPreviewMedia({ url: row.foto_url, title: "Evidencia da solicitacao" })}
+                  onClick={() => setPreviewMedia({ url: row.foto_url, title: "Evidência da solicitação" })}
                   className="group relative block w-full overflow-hidden rounded-2xl border border-slate-200 bg-white"
                 >
-                  <img src={row.foto_url} alt="EvidÃªncia da solicitaÃ§Ã£o" className="h-52 w-full object-cover" />
+                  <img src={row.foto_url} alt="Evidência da solicitação" className="h-52 w-full object-cover" />
                   <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100">
                     <FaEye />
                   </span>
@@ -463,7 +463,7 @@ export default function ReparoSolicitacaoExecucao() {
 
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="lg:col-span-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-            ExecuÃ§Ã£o
+            Execução
           </div>
           <div>
             <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
@@ -564,7 +564,7 @@ export default function ReparoSolicitacaoExecucao() {
                       <img
                         src={form.foto_url}
                         alt="Evidência"
-                        onClick={() => setPreviewMedia({ url: form.foto_url, title: "Evidencia da execucao" })}
+                        onClick={() => setPreviewMedia({ url: form.foto_url, title: "Evidência da conclusão" })}
                         className="w-full h-48 object-cover rounded-2xl border bg-white cursor-pointer"
                       />
                     )

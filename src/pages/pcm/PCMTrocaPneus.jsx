@@ -3974,7 +3974,7 @@ export default function PCMTrocaPneus() {
           : "Lancar pneu riscado";
   const nativePageStyle = isNativeShell
     ? {
-        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
+        paddingTop: "0.85rem",
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.75rem)",
       }
     : undefined;

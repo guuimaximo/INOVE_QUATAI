@@ -121,6 +121,12 @@ function notifyUpdateAvailable({ registration = null, version = null } = {}) {
   }, 250);
 }
 
+function forceReloadOnce() {
+  if (window.__INOVE_UPDATE_RELOADING__) return;
+  window.__INOVE_UPDATE_RELOADING__ = true;
+  window.location.reload();
+}
+
 function applyUpdateNow(registration) {
   if (!registration?.waiting || updateInFlight) return;
 
@@ -131,12 +137,16 @@ function applyUpdateNow(registration) {
   navigator.serviceWorker?.addEventListener(
     "controllerchange",
     () => {
-      window.location.reload();
+      forceReloadOnce();
     },
     { once: true },
   );
 
   registration.waiting.postMessage({ type: "SKIP_WAITING" });
+
+  // Fallback: se o controllerchange nao disparar (ou chegar tarde), garante o
+  // reload mesmo assim para nao deixar o popup preso na tela.
+  window.setTimeout(forceReloadOnce, 1500);
 }
 
 async function checkVersionUpdate() {

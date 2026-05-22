@@ -80,12 +80,29 @@ export default function PCM_Preventivas() {
 
     setPrefixos(prefixosData || []);
 
-    const { data: prevData } = await supabase
-      .from("preventivas")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const pageSize = 1000;
+    let start = 0;
+    let todasPreventivas = [];
 
-    setListaPreventivas(prevData || []);
+    while (true) {
+      const { data: chunkData, error: chunkError } = await supabase
+        .from("preventivas")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(start, start + pageSize - 1);
+
+      if (chunkError) {
+        console.error(chunkError);
+        break;
+      }
+
+      const chunk = chunkData || [];
+      todasPreventivas = todasPreventivas.concat(chunk);
+      if (chunk.length < pageSize) break;
+      start += pageSize;
+    }
+
+    setListaPreventivas(todasPreventivas);
   }
 
   function resetForm() {

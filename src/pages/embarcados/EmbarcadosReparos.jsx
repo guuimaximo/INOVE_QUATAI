@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { supabase } from "../../supabase";
 import {
   FaPlus,
@@ -106,6 +107,14 @@ export default function EmbarcadosReparos() {
   const [filtroPrioridade, setFiltroPrioridade] = useState("");
   const [showNovaSolicitacao, setShowNovaSolicitacao] = useState(false);
 
+  const isNativeShell = Capacitor.isNativePlatform();
+  const nativePageStyle = isNativeShell
+    ? {
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.75rem)",
+      }
+    : undefined;
+
   async function carregar() {
     setLoading(true);
 
@@ -167,7 +176,7 @@ export default function EmbarcadosReparos() {
   }, [filtrados]);
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6 p-4 md:p-6" style={nativePageStyle}>
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Embarcados · Reparos</div>
@@ -195,7 +204,7 @@ export default function EmbarcadosReparos() {
           </div>
         </div>
 
-        <EmbarcadosModuleTabs />
+        {!isNativeShell && <EmbarcadosModuleTabs />}
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
@@ -276,7 +285,86 @@ export default function EmbarcadosReparos() {
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="space-y-3 lg:hidden">
+          {loading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center font-black text-slate-500 shadow-sm">
+              Carregando solicitações...
+            </div>
+          ) : filtrados.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center font-black text-slate-500 shadow-sm">
+              Nenhuma solicitação encontrada.
+            </div>
+          ) : (
+            filtrados.map((r) => {
+              const finalizada = ["CONCLUIDA", "CANCELADA"].includes(r.status);
+
+              return (
+                <div
+                  key={r.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-black text-slate-900">{r.veiculo || "-"}</div>
+                      <div className="text-xs font-bold text-slate-500">
+                        {r.tipo_embarcado || "-"} · {formatDateTimeBR(r.created_at)}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black uppercase ${statusClass(
+                        r.status
+                      )}`}
+                    >
+                      {statusLabel(r.status)}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="font-semibold text-slate-800">{r.problema || "-"}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {r.local_problema || "Sem local informado"}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1.5 text-[10px] font-black uppercase ${prioridadeClass(
+                        r.prioridade
+                      )}`}
+                    >
+                      {prioridadeLabel(r.prioridade)}
+                    </span>
+                    <div className="text-xs font-semibold text-slate-500">
+                      {r.solicitante || "-"}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => navigate(`/embarcados-reparos/${r.id}`)}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black text-white hover:bg-blue-500"
+                    >
+                      <FaEye />
+                      Detalhes
+                    </button>
+
+                    {!finalizada && (
+                      <button
+                        onClick={() => navigate(`/embarcados-reparos/${r.id}/executar`)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-3 py-2.5 text-xs font-black text-white hover:bg-green-500"
+                      >
+                        <FaWrench />
+                        Executar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden lg:block">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1250px] text-sm">
               <thead className="bg-slate-100 border-b border-slate-200">

@@ -1,6 +1,6 @@
 import { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { FaClipboardList, FaTools, FaSignOutAlt, FaLock } from "react-icons/fa";
+import { FaClipboardList, FaTools, FaSignOutAlt, FaLock, FaMicrochip } from "react-icons/fa";
 
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
@@ -22,6 +22,14 @@ const MOBILE_MODULES = [
     path: "/pcm-controle-fichas",
     icon: <FaClipboardList />,
     gradient: "from-amber-500 to-amber-700",
+  },
+  {
+    key: "embarcados_central",
+    title: "Embarcados",
+    description: "Central, movimentacoes e reparos dos equipamentos embarcados.",
+    path: "/embarcados-central",
+    icon: <FaMicrochip />,
+    gradient: "from-slate-700 to-slate-900",
   },
 ];
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { supabase } from "../../supabase";
 import {
   FaCar,
@@ -33,6 +34,14 @@ export default function EmbarcadosMovimentacoes() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("PAINEL");
+
+  const isNativeShell = Capacitor.isNativePlatform();
+  const nativePageStyle = isNativeShell
+    ? {
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.75rem)",
+      }
+    : undefined;
 
   // Dados globais
   const [prefixos, setPrefixos] = useState([]);
@@ -446,7 +455,7 @@ export default function EmbarcadosMovimentacoes() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6 font-sans text-slate-900">
+    <div className="space-y-6 p-4 md:p-6 font-sans text-slate-900" style={nativePageStyle}>
         {/* HEADER */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -472,7 +481,7 @@ export default function EmbarcadosMovimentacoes() {
         </div>
 
         {/* RESUMO GLOBAL — KPI grid no padrão Pessoas */}
-        <EmbarcadosModuleTabs />
+        {!isNativeShell && <EmbarcadosModuleTabs />}
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
@@ -747,7 +756,61 @@ export default function EmbarcadosMovimentacoes() {
               })}
             </div>
 
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="space-y-3 lg:hidden">
+              {loadingAnalitico ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center font-black text-slate-400 shadow-sm">
+                  Carregando visão analítica...
+                </div>
+              ) : analiticoFiltrado.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center font-black text-slate-400 shadow-sm">
+                  Nenhum registro encontrado.
+                </div>
+              ) : (
+                analiticoFiltrado.map((row) => (
+                  <div
+                    key={row.carro}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-black text-slate-900">{row.carro}</div>
+                        <div className="text-xs font-bold text-slate-500">{row.cluster || "-"}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="inline-flex min-w-[36px] items-center justify-center rounded-xl bg-blue-100 px-2 py-1 font-black text-blue-700">
+                          {row.totalInstalados}
+                        </span>
+                        <span
+                          className={`inline-flex min-w-[36px] items-center justify-center rounded-xl px-2 py-1 font-black ${
+                            row.pendencias > 0
+                              ? "bg-red-100 text-red-700"
+                              : "bg-emerald-100 text-emerald-700"
+                          }`}
+                        >
+                          {row.pendencias}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {TIPOS_EMBARCADOS.map((tipo) => (
+                        <div
+                          key={tipo}
+                          className="flex flex-col items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5"
+                        >
+                          <div className="text-[9px] font-black uppercase tracking-wide text-slate-500">
+                            {tipo}
+                          </div>
+                          {renderIconStatus(row[tipo], row[`${tipo}_NUMERO`])}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="hidden bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden lg:block">
               <div className="overflow-auto">
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-100">

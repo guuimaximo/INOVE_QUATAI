@@ -79,6 +79,8 @@ export default function ReparoSolicitacaoNovaModal({
   open,
   onClose,
   onSuccess,
+  initialVeiculo = "",
+  initialTipo = "",
 }) {
   const { user } = useContext(AuthContext);
   const fileInputRef = useRef(null);
@@ -153,18 +155,18 @@ export default function ReparoSolicitacaoNovaModal({
     if (!open) return;
 
     setForm({
-      tipo_embarcado: "TELEMETRIA",
+      tipo_embarcado: TIPOS.includes(initialTipo) ? initialTipo : "TELEMETRIA",
       problema: "",
       descricao: "",
       local_problema: "",
       prioridade: "MEDIA",
     });
     setBuscaVeiculo("");
-    setVeiculoSelecionado("");
+    setVeiculoSelecionado(initialVeiculo || "");
     setArquivoEvidencia(null);
     setPreviewEvidencia("");
     setDragAtivo(false);
-  }, [open]);
+  }, [open, initialVeiculo, initialTipo]);
 
   useEffect(() => {
     if (!open) return;

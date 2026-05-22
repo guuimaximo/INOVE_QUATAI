@@ -69,11 +69,11 @@ export default function UpdateAppPrompt() {
               <RefreshCw size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900">Atualizacao disponivel</h2>
+              <h2 className="text-lg font-black text-slate-900">Atualização disponível</h2>
               <p className="mt-1 text-sm text-slate-500">
                 {refreshing
-                  ? "Aplicando a versao mais recente do Inove neste navegador."
-                  : "Uma nova versao acabou de ser publicada e ja pode ser carregada agora."}
+                  ? "Aplicando a versão mais recente do Inove neste navegador."
+                  : "Uma nova versão foi publicada. Por favor, atualize a página."}
               </p>
             </div>
           </div>
@@ -91,11 +91,11 @@ export default function UpdateAppPrompt() {
 
         <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           {refreshing ? (
-            <>Aguarde alguns segundos enquanto a pagina recarrega com o build mais recente.</>
+            <>Aguarde alguns segundos enquanto a página recarrega com a versão mais recente.</>
           ) : (
             <>
-              Clique em <span className="font-bold">Atualizar</span> para resetar a pagina e carregar o build mais
-              recente do Render.
+              Clique em <span className="font-bold">Atualizar agora</span> para recarregar a página com a versão mais
+              recente.
             </>
           )}
         </div>
@@ -107,7 +107,7 @@ export default function UpdateAppPrompt() {
             disabled={refreshing}
             className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Depois
+            Atualizar depois
           </button>
           <button
             type="button"
@@ -116,7 +116,7 @@ export default function UpdateAppPrompt() {
             className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
-            {refreshing ? "Atualizando..." : "Atualizar"}
+            {refreshing ? "Atualizando..." : "Atualizar agora"}
           </button>
         </div>
       </div>

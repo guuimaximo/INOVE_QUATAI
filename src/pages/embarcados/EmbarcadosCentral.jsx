@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "../../supabase";
 import {
@@ -15,9 +16,10 @@ import {
   FaTools,
   FaExchangeAlt,
   FaUpload,
-  FaChevronDown,
-  FaChevronRight,
   FaEdit,
+  FaEye,
+  FaHistory,
+  FaImage,
 } from "react-icons/fa";
 import EmbarcadosModuleTabs from "../../components/embarcados/EmbarcadosModuleTabs";
 import { captureNativePhotoFile, isNativeCameraAvailable } from "../../utils/deviceMedia";
@@ -419,8 +421,11 @@ function InlineEditor({
 }
 
 export default function EmbarcadosCentral() {
+  const navigate = useNavigate();
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [detalheEmbarcado, setDetalheEmbarcado] = useState(null);
 
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
@@ -429,13 +434,13 @@ export default function EmbarcadosCentral() {
   const [saving, setSaving] = useState(false);
   const [ultimaManutencaoMap, setUltimaManutencaoMap] = useState(new Map());
 
-  const [expandedId, setExpandedId] = useState(null);
   const [modoNovo, setModoNovo] = useState(false);
+  const [registroEdicao, setRegistroEdicao] = useState(null);
 
   const isNativeShell = Capacitor.isNativePlatform();
   const nativePageStyle = isNativeShell
     ? {
-        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
+        paddingTop: "0.85rem",
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.75rem)",
       }
     : undefined;
@@ -528,11 +533,11 @@ export default function EmbarcadosCentral() {
     return { total, disponiveis, emVeiculo, manutencao, sucata };
   }, [filtrados]);
 
-  async function salvar(payload, registroEdicao = null) {
+  async function salvar(payload, registro = null) {
     try {
       setSaving(true);
 
-      if (registroEdicao?.id) {
+      if (registro?.id) {
         const { error } = await supabase
           .from("embarcados")
           .update({
@@ -542,7 +547,7 @@ export default function EmbarcadosCentral() {
             observacao: payload.observacao,
             ativo: payload.ativo,
           })
-          .eq("id", registroEdicao.id);
+          .eq("id", registro.id);
 
         if (error) {
           console.error(error);
@@ -570,7 +575,7 @@ export default function EmbarcadosCentral() {
         }
       }
 
-      setExpandedId(null);
+      setRegistroEdicao(null);
       setModoNovo(false);
       await carregar();
     } finally {
@@ -579,13 +584,58 @@ export default function EmbarcadosCentral() {
   }
 
   function abrirNovo() {
-    setExpandedId(null);
+    setRegistroEdicao(null);
     setModoNovo(true);
   }
 
-  function abrirEdicao(id) {
+  function abrirEdicao(item) {
     setModoNovo(false);
-    setExpandedId((prev) => (prev === id ? null : id));
+    setRegistroEdicao(item);
+  }
+
+  function irParaMovimentacao(item) {
+    const veiculo = item?.veiculo || item?.localizacao_valor || "";
+    const qs = veiculo ? `?veiculo=${encodeURIComponent(veiculo)}` : "";
+    navigate(`/embarcados-movimentacoes${qs}`);
+  }
+
+  function irParaReparo(item) {
+    const params = new URLSearchParams({ nova: "1" });
+    const veiculo = item?.veiculo || item?.localizacao_valor || "";
+    if (veiculo) params.set("veiculo", veiculo);
+    if (item?.tipo) params.set("tipo", item.tipo);
+    navigate(`/embarcados-reparos?${params.toString()}`);
+  }
+
+  async function abrirDetalhe(item) {
+    if (!item?.id) return;
+
+    const veiculo = item?.veiculo || item?.localizacao_valor || "";
+    setDetalheEmbarcado({ embarcado: item, veiculo, loading: true, historico: [], reparos: [] });
+
+    const [resHist, resRep] = await Promise.all([
+      supabase
+        .from("embarcados_movimentacoes")
+        .select("*")
+        .eq("embarcado_id", item.id)
+        .order("data_movimentacao", { ascending: false })
+        .limit(80),
+      supabase
+        .from("embarcados_solicitacoes_reparo")
+        .select("id, created_at, veiculo, tipo_embarcado, problema, status, prioridade, executado_por")
+        .eq("tipo_embarcado", item.tipo)
+        .eq("veiculo", veiculo)
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]);
+
+    setDetalheEmbarcado({
+      embarcado: item,
+      veiculo,
+      loading: false,
+      historico: resHist.data || [],
+      reparos: resRep.data || [],
+    });
   }
 
   return (
@@ -595,7 +645,7 @@ export default function EmbarcadosCentral() {
           <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Embarcados · Central</div>
           <h1 className="text-2xl font-black text-slate-900 md:text-3xl">Cadastro de embarcados</h1>
           <p className="text-sm text-slate-500">
-            Base completa dos ativos embarcados — pesquise, filtre por tipo/status e edite inline.
+            Base completa dos ativos embarcados — pesquise, filtre por tipo/status e edite em janela.
           </p>
         </div>
 
@@ -700,19 +750,26 @@ export default function EmbarcadosCentral() {
         </div>
       </div>
 
-        {modoNovo && (
+        {(modoNovo || registroEdicao) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
             <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex items-start justify-between gap-4 border-b bg-slate-900 px-5 py-4 text-white">
                 <div>
                   <div className="text-[11px] font-black uppercase tracking-[0.15em] opacity-80">
-                    Novo embarcado
+                    {modoNovo ? "Novo embarcado" : "Editar embarcado"}
                   </div>
-                  <div className="text-lg font-black">Cadastro de ativo</div>
+                  <div className="text-lg font-black">
+                    {modoNovo
+                      ? "Cadastro de ativo"
+                      : `${registroEdicao?.tipo || ""} · ${registroEdicao?.numero_equipamento || ""}`}
+                  </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setModoNovo(false)}
+                  onClick={() => {
+                    setModoNovo(false);
+                    setRegistroEdicao(null);
+                  }}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20"
                   title="Fechar"
                 >
@@ -722,12 +779,15 @@ export default function EmbarcadosCentral() {
 
               <div className="overflow-y-auto">
                 <InlineEditor
-                  registro={null}
+                  registro={modoNovo ? null : registroEdicao}
                   saving={saving}
-                  isNovo
+                  isNovo={modoNovo}
                   ultimaManutencaoMap={ultimaManutencaoMap}
-                  onCancel={() => setModoNovo(false)}
-                  onSave={(payload) => salvar(payload, null)}
+                  onCancel={() => {
+                    setModoNovo(false);
+                    setRegistroEdicao(null);
+                  }}
+                  onSave={(payload) => salvar(payload, modoNovo ? null : registroEdicao)}
                 />
               </div>
             </div>
@@ -746,7 +806,6 @@ export default function EmbarcadosCentral() {
           ) : (
             filtrados.map((item) => {
               const valorAutomatico = getValorAutomatico(item, ultimaManutencaoMap);
-              const aberto = expandedId === item.id;
 
               return (
                 <div
@@ -796,17 +855,30 @@ export default function EmbarcadosCentral() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 pt-1">
-                      <button className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-black text-white hover:bg-blue-500">
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        onClick={() => irParaMovimentacao(item)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-black text-white hover:bg-blue-500"
+                      >
                         <FaExchangeAlt />
                         Mover
                       </button>
-                      <button className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-2 py-2.5 text-xs font-black text-white hover:bg-amber-500">
+                      <button
+                        onClick={() => irParaReparo(item)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-2 py-2.5 text-xs font-black text-white hover:bg-amber-500"
+                      >
                         <FaTools />
                         Reparo
                       </button>
                       <button
-                        onClick={() => abrirEdicao(item.id)}
+                        onClick={() => abrirDetalhe(item)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-50 px-2 py-2.5 text-xs font-black text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100"
+                      >
+                        <FaEye />
+                        Detalhes
+                      </button>
+                      <button
+                        onClick={() => abrirEdicao(item)}
                         className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-2 py-2.5 text-xs font-black text-white hover:bg-black"
                       >
                         <FaEdit />
@@ -814,16 +886,6 @@ export default function EmbarcadosCentral() {
                       </button>
                     </div>
                   </div>
-
-                  {aberto && (
-                    <InlineEditor
-                      registro={item}
-                      saving={saving}
-                      ultimaManutencaoMap={ultimaManutencaoMap}
-                      onCancel={() => setExpandedId(null)}
-                      onSave={(payload) => salvar(payload, item)}
-                    />
-                  )}
                 </div>
               );
             })
@@ -835,7 +897,6 @@ export default function EmbarcadosCentral() {
             <table className="min-w-full text-sm">
               <thead className="bg-slate-100 border-b border-slate-200">
                 <tr className="text-left">
-                  <th className="px-4 py-3 w-[56px]"></th>
                   <th className="px-4 py-3 font-black uppercase text-[11px] text-slate-600">Tipo</th>
                   <th className="px-4 py-3 font-black uppercase text-[11px] text-slate-600">Equipamento</th>
                   <th className="px-4 py-3 font-black uppercase text-[11px] text-slate-600">Status</th>
@@ -849,7 +910,7 @@ export default function EmbarcadosCentral() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={6}
                       className="px-4 py-12 text-center font-black text-slate-500"
                     >
                       Carregando embarcados...
@@ -858,7 +919,7 @@ export default function EmbarcadosCentral() {
                 ) : filtrados.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={6}
                       className="px-4 py-12 text-center font-black text-slate-500"
                     >
                       Nenhum embarcado encontrado.
@@ -867,26 +928,12 @@ export default function EmbarcadosCentral() {
                 ) : (
                   filtrados.map((item) => {
                     const valorAutomatico = getValorAutomatico(item, ultimaManutencaoMap);
-                    const aberto = expandedId === item.id;
 
                     return (
-                      <>
                         <tr
                           key={item.id}
-                          className={`border-b border-slate-200 hover:bg-slate-50 transition ${
-                            aberto ? "bg-slate-50" : "bg-white"
-                          }`}
+                          className="border-b border-slate-200 hover:bg-slate-50 transition bg-white"
                         >
-                          <td className="px-4 py-3 align-middle">
-                            <button
-                              onClick={() => abrirEdicao(item.id)}
-                              className="w-8 h-8 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-700"
-                              title={aberto ? "Fechar" : "Abrir detalhes"}
-                            >
-                              {aberto ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />}
-                            </button>
-                          </td>
-
                           <td className="px-4 py-3 align-middle">
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-sm">
@@ -926,18 +973,32 @@ export default function EmbarcadosCentral() {
 
                           <td className="px-4 py-3 align-middle">
                             <div className="flex flex-wrap justify-end gap-2">
-                              <button className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center gap-2">
+                              <button
+                                onClick={() => irParaMovimentacao(item)}
+                                className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center gap-2"
+                              >
                                 <FaExchangeAlt />
                                 Movimentar
                               </button>
 
-                              <button className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-black flex items-center gap-2">
+                              <button
+                                onClick={() => irParaReparo(item)}
+                                className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-black flex items-center gap-2"
+                              >
                                 <FaTools />
                                 Reparo
                               </button>
 
                               <button
-                                onClick={() => abrirEdicao(item.id)}
+                                onClick={() => abrirDetalhe(item)}
+                                className="px-3 py-2 rounded-xl bg-blue-50 ring-1 ring-blue-200 text-blue-700 hover:bg-blue-100 text-xs font-black flex items-center gap-2"
+                              >
+                                <FaEye />
+                                Detalhes
+                              </button>
+
+                              <button
+                                onClick={() => abrirEdicao(item)}
                                 className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center gap-2"
                               >
                                 <FaEdit />
@@ -946,21 +1007,6 @@ export default function EmbarcadosCentral() {
                             </div>
                           </td>
                         </tr>
-
-                        {aberto && (
-                          <tr className="border-b border-slate-200">
-                            <td colSpan={7} className="p-0">
-                              <InlineEditor
-                                registro={item}
-                                saving={saving}
-                                ultimaManutencaoMap={ultimaManutencaoMap}
-                                onCancel={() => setExpandedId(null)}
-                                onSave={(payload) => salvar(payload, item)}
-                              />
-                            </td>
-                          </tr>
-                        )}
-                      </>
                     );
                   })
                 )}
@@ -968,6 +1014,124 @@ export default function EmbarcadosCentral() {
             </table>
           </div>
         </div>
+
+        {detalheEmbarcado && (
+          <div className="fixed inset-0 bg-slate-900/60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[92vh] shadow-2xl overflow-hidden flex flex-col">
+              <div className="bg-slate-900 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                    <FaHistory /> Vida do embarcado
+                  </h2>
+                  <p className="text-xs font-semibold text-slate-300">
+                    {detalheEmbarcado.embarcado?.tipo} · {detalheEmbarcado.embarcado?.numero_equipamento}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDetalheEmbarcado(null)}
+                  className="text-white/70 hover:text-white transition-colors"
+                >
+                  <FaTimes size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 bg-slate-50 space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    {detalheEmbarcado.embarcado?.foto_url ? (
+                      <img
+                        src={detalheEmbarcado.embarcado.foto_url}
+                        alt="Foto do embarcado"
+                        className="h-56 w-full rounded-xl object-cover border"
+                      />
+                    ) : (
+                      <div className="h-56 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-400">
+                        <FaImage className="text-2xl" />
+                        <span className="mt-2 text-sm font-bold">Sem foto no cadastro</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Número</div>
+                      <div className="mt-1 text-xl font-black text-slate-900">{detalheEmbarcado.embarcado?.numero_equipamento || "-"}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Status atual</div>
+                      <div className="mt-1 text-xl font-black text-slate-900">{statusLabel(detalheEmbarcado.embarcado?.status_atual)}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Local atual</div>
+                      <div className="mt-1 text-xl font-black text-blue-700">{detalheEmbarcado.veiculo || detalheEmbarcado.embarcado?.localizacao_valor || "-"}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Reparos consultados</div>
+                      <div className="mt-1 text-xl font-black text-amber-700">{detalheEmbarcado.reparos?.length || 0}</div>
+                    </div>
+                    <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Observação do cadastro</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-700 whitespace-pre-wrap">{detalheEmbarcado.embarcado?.observacao || "-"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="mb-3 text-sm font-black uppercase tracking-wide text-slate-700">
+                      Carros e movimentações
+                    </div>
+                    {detalheEmbarcado.loading ? (
+                      <div className="py-8 text-center text-slate-400 font-black">Carregando...</div>
+                    ) : detalheEmbarcado.historico?.length ? (
+                      <div className="space-y-3">
+                        {detalheEmbarcado.historico.map((h) => (
+                          <div key={h.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-xs font-black text-slate-900">{h.tipo_movimentacao || "-"}</div>
+                            <div className="mt-1 text-[11px] font-semibold text-slate-500">{formatDateTimeBR(h.data_movimentacao || h.created_at)}</div>
+                            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                              <div><strong>Origem:</strong> {h.origem_tipo || "-"} · {h.origem_valor || "-"}</div>
+                              <div><strong>Destino:</strong> {h.destino_tipo || "-"} · {h.destino_valor || "-"}</div>
+                            </div>
+                            {h.observacao ? <div className="mt-2 text-xs text-slate-600">{h.observacao}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-slate-400 font-black">Sem movimentações.</div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="mb-3 text-sm font-black uppercase tracking-wide text-slate-700">
+                      Manutenções e solicitações
+                    </div>
+                    {detalheEmbarcado.loading ? (
+                      <div className="py-8 text-center text-slate-400 font-black">Carregando...</div>
+                    ) : detalheEmbarcado.reparos?.length ? (
+                      <div className="space-y-3">
+                        {detalheEmbarcado.reparos.map((r) => (
+                          <div key={r.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-xs font-black text-slate-900">{r.problema || "-"}</div>
+                                <div className="mt-1 text-[11px] font-semibold text-slate-500">{formatDateTimeBR(r.created_at)}</div>
+                              </div>
+                              <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">{statusLabel(r.status)}</span>
+                            </div>
+                            <div className="mt-2 text-xs text-slate-600">Executado por: <strong>{r.executado_por || "-"}</strong></div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-slate-400 font-black">Sem solicitações para este veículo/tipo.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

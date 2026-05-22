@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "../../supabase";
 import {
@@ -98,6 +98,7 @@ function countAbertas(rows) {
 
 export default function EmbarcadosReparos() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -106,11 +107,12 @@ export default function EmbarcadosReparos() {
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroPrioridade, setFiltroPrioridade] = useState("");
   const [showNovaSolicitacao, setShowNovaSolicitacao] = useState(false);
+  const [prefillNova, setPrefillNova] = useState({ veiculo: "", tipo: "" });
 
   const isNativeShell = Capacitor.isNativePlatform();
   const nativePageStyle = isNativeShell
     ? {
-        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.85rem)",
+        paddingTop: "0.85rem",
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.75rem)",
       }
     : undefined;
@@ -137,6 +139,22 @@ export default function EmbarcadosReparos() {
   useEffect(() => {
     carregar();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("nova") === "1") {
+      setPrefillNova({
+        veiculo: searchParams.get("veiculo") || "",
+        tipo: searchParams.get("tipo") || "",
+      });
+      setShowNovaSolicitacao(true);
+
+      const next = new URLSearchParams(searchParams);
+      next.delete("nova");
+      next.delete("veiculo");
+      next.delete("tipo");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const filtrados = useMemo(() => {
     const txt = busca.trim().toLowerCase();
@@ -500,8 +518,13 @@ export default function EmbarcadosReparos() {
 
         <ReparoSolicitacaoNovaModal
           open={showNovaSolicitacao}
-          onClose={() => setShowNovaSolicitacao(false)}
+          onClose={() => {
+            setShowNovaSolicitacao(false);
+            setPrefillNova({ veiculo: "", tipo: "" });
+          }}
           onSuccess={carregar}
+          initialVeiculo={prefillNova.veiculo}
+          initialTipo={prefillNova.tipo}
         />
     </div>
   );

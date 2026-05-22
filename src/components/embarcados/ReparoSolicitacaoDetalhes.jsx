@@ -737,22 +737,42 @@ export default function ReparoSolicitacaoDetalhes() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <div className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2 mb-3">
-              <FaImage />
-              Evidência
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <div className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2 mb-3">
+                <FaImage />
+                Evidência da solicitação
+              </div>
+
+              {row.foto_url ? (
+                <img
+                  src={row.foto_url}
+                  alt="Evidência da solicitação"
+                  onClick={() => setPreviewMedia({ url: row.foto_url, title: "Evidência da solicitação" })}
+                  className="w-full h-80 object-cover rounded-2xl border bg-white cursor-pointer"
+                />
+              ) : (
+                <EmptyPhoto />
+              )}
             </div>
 
-            {row.foto_url ? (
-              <img
-                src={row.foto_url}
-                alt="Evidência"
-                onClick={() => setPreviewMedia({ url: row.foto_url, title: "Evidencia da solicitacao" })}
-                className="w-full h-80 object-cover rounded-2xl border bg-white cursor-pointer"
-              />
-            ) : (
-              <EmptyPhoto />
-            )}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <div className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2 mb-3">
+                <FaImage />
+                Evidência da conclusão
+              </div>
+
+              {row.foto_conclusao_url ? (
+                <img
+                  src={row.foto_conclusao_url}
+                  alt="Evidência da conclusão"
+                  onClick={() => setPreviewMedia({ url: row.foto_conclusao_url, title: "Evidência da conclusão" })}
+                  className="w-full h-80 object-cover rounded-2xl border bg-white cursor-pointer"
+                />
+              ) : (
+                <EmptyPhoto />
+              )}
+            </div>
           </div>
         </div>
       </div>

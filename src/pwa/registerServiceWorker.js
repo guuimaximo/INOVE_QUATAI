@@ -68,9 +68,9 @@ function showFallbackPrompt() {
   card.innerHTML = `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
       <div>
-        <div style="font-size:20px;font-weight:800;color:#0f172a;">Atualizacao disponivel</div>
+        <div style="font-size:20px;font-weight:800;color:#0f172a;">Atualização disponível</div>
         <div style="margin-top:8px;font-size:14px;line-height:1.5;color:#475569;">
-          Uma nova versao do Inove foi publicada. Clique em <strong>Atualizar</strong> para recarregar a pagina com o build mais recente.
+          Uma nova versão do Inove foi publicada. Por favor, atualize a página: clique em <strong>Atualizar agora</strong> para carregar a versão mais recente.
         </div>
       </div>
       <button type="button" data-role="close" style="border:none;background:transparent;color:#64748b;font-size:18px;font-weight:700;cursor:pointer;">×</button>
@@ -79,8 +79,8 @@ function showFallbackPrompt() {
       Se a tela ficou aberta durante o deploy, este aviso aparece para evitar que a pessoa precise sair e entrar de novo.
     </div>
     <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:12px;">
-      <button type="button" data-role="later" style="border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:16px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;">Depois</button>
-      <button type="button" data-role="refresh" style="border:none;background:#059669;color:#fff;border-radius:16px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;">Atualizar</button>
+      <button type="button" data-role="later" style="border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:16px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;">Atualizar depois</button>
+      <button type="button" data-role="refresh" style="border:none;background:#059669;color:#fff;border-radius:16px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;">Atualizar agora</button>
     </div>
   `;
 

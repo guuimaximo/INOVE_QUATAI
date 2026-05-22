@@ -3375,8 +3375,18 @@ export default function PCMTrocaPneus() {
 
       if (mode === "offline" || !window.navigator.onLine) {
         await queueTrocaSubmission(payload);
+        await notifyDevice({
+          title: "Troca de pneus registrada offline",
+          body: `${ficha} foi salva no aparelho e sera enviada quando a internet voltar.`,
+          seed: `troca-pneus-offline-${payload.id}`,
+        });
       } else {
         await submitTrocaPayload(payload);
+        await notifyDevice({
+          title: "Troca de pneus registrada",
+          body: `${ficha}: ${numeroFogoRetirado} -> ${numeroFogoColocado} no carro ${prefixoInstalacao}.`,
+          seed: `troca-pneus-${payload.id}`,
+        });
       }
 
       setTrocaOpen(false);

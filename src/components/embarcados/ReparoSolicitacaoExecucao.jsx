@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
-import { FaArrowLeft, FaSave, FaUpload, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaCamera, FaEye, FaSave, FaUpload, FaTrash } from "react-icons/fa";
+import MediaPreviewModal from "../MediaPreviewModal";
+import { captureNativePhotoFile, isNativeCameraAvailable } from "../../utils/deviceMedia";
 
 const STATUS = ["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS", "CONCLUIDA", "CANCELADA"];
 const BUCKET_FOTOS = "embarcados";
@@ -77,6 +79,7 @@ export default function ReparoSolicitacaoExecucao() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragAtivo, setDragAtivo] = useState(false);
+  const [previewMedia, setPreviewMedia] = useState(null);
 
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [loginUsuario, setLoginUsuario] = useState("");
@@ -261,6 +264,18 @@ export default function ReparoSolicitacaoExecucao() {
     processarArquivo(file);
   }
 
+  async function handleCameraEvidencia() {
+    try {
+      const file = await captureNativePhotoFile({
+        fileNamePrefix: `execucao_${row?.id || Date.now()}`,
+        promptLabelHeader: "Evidencia da execucao",
+      });
+      if (file) await processarArquivo(file);
+    } catch (error) {
+      alert(error?.message || "Nao foi possivel abrir a camera.");
+    }
+  }
+
   function removerArquivo() {
     setForm((prev) => ({
       ...prev,
@@ -398,7 +413,58 @@ export default function ReparoSolicitacaoExecucao() {
           </p>
         </div>
 
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+          <div className="mb-4 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+            SolicitaÃ§Ã£o
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500">VeÃ­culo</div>
+                  <div className="mt-1 text-sm font-black text-slate-900">{row.veiculo || "-"}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500">Tipo</div>
+                  <div className="mt-1 text-sm font-black text-slate-900">{row.tipo_embarcado || "-"}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500">Solicitante</div>
+                  <div className="mt-1 text-sm font-black text-slate-900">{row.solicitante || "-"}</div>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-black uppercase text-slate-500">DescriÃ§Ã£o</div>
+                <div className="mt-2 min-h-[90px] whitespace-pre-wrap text-sm font-semibold text-slate-700">
+                  {row.descricao || row.problema || "Sem descriÃ§Ã£o."}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-[10px] font-black uppercase text-slate-500">EvidÃªncia da solicitaÃ§Ã£o</div>
+              {row.foto_url ? (
+                <button
+                  type="button"
+                  onClick={() => setPreviewMedia({ url: row.foto_url, title: "Evidencia da solicitacao" })}
+                  className="group relative block w-full overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                >
+                  <img src={row.foto_url} alt="EvidÃªncia da solicitaÃ§Ã£o" className="h-52 w-full object-cover" />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100">
+                    <FaEye />
+                  </span>
+                </button>
+              ) : (
+                <EmptyPhoto />
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="lg:col-span-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+            ExecuÃ§Ã£o
+          </div>
           <div>
             <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">
               Novo status
@@ -498,7 +564,8 @@ export default function ReparoSolicitacaoExecucao() {
                       <img
                         src={form.foto_url}
                         alt="Evidência"
-                        className="w-full h-48 object-cover rounded-2xl border bg-white"
+                        onClick={() => setPreviewMedia({ url: form.foto_url, title: "Evidencia da execucao" })}
+                        className="w-full h-48 object-cover rounded-2xl border bg-white cursor-pointer"
                       />
                     )
                   ) : (
@@ -507,6 +574,18 @@ export default function ReparoSolicitacaoExecucao() {
                 </div>
 
                 <div className="flex flex-col gap-2">
+                  {isNativeCameraAvailable() ? (
+                    <button
+                      type="button"
+                      onClick={handleCameraEvidencia}
+                      disabled={uploading}
+                      className="px-4 py-3 rounded-2xl bg-slate-900 hover:bg-black text-white text-sm font-black flex items-center gap-2 disabled:opacity-60"
+                    >
+                      <FaCamera />
+                      Abrir camera
+                    </button>
+                  ) : null}
+
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -540,6 +619,7 @@ export default function ReparoSolicitacaoExecucao() {
               ref={fileInputRef}
               type="file"
               accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+              capture="environment"
               className="hidden"
               onChange={handleUploadFoto}
             />
@@ -557,6 +637,12 @@ export default function ReparoSolicitacaoExecucao() {
           </div>
         </div>
       </div>
+      <MediaPreviewModal
+        open={!!previewMedia}
+        url={previewMedia?.url}
+        title={previewMedia?.title}
+        onClose={() => setPreviewMedia(null)}
+      />
     </div>
   );
 }

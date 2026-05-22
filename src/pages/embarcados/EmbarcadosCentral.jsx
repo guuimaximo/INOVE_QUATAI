@@ -20,6 +20,7 @@ import {
   FaEdit,
 } from "react-icons/fa";
 import EmbarcadosModuleTabs from "../../components/embarcados/EmbarcadosModuleTabs";
+import { captureNativePhotoFile, isNativeCameraAvailable } from "../../utils/deviceMedia";
 
 const TIPOS = [
   "TELEMETRIA",
@@ -172,8 +173,7 @@ function InlineEditor({
     }
   }, [registro]);
 
-  async function handleUploadFoto(e) {
-    const file = e.target.files?.[0];
+  async function uploadFotoFile(file) {
     if (!file) return;
 
     try {
@@ -205,7 +205,24 @@ function InlineEditor({
       }));
     } finally {
       setUploading(false);
-      if (e.target) e.target.value = "";
+    }
+  }
+
+  async function handleUploadFoto(e) {
+    const file = e.target.files?.[0];
+    await uploadFotoFile(file);
+    if (e.target) e.target.value = "";
+  }
+
+  async function handleCameraFoto() {
+    try {
+      const file = await captureNativePhotoFile({
+        fileNamePrefix: `embarcado_${form.tipo}_${Date.now()}`,
+        promptLabelHeader: "Foto do embarcado",
+      });
+      await uploadFotoFile(file);
+    } catch (error) {
+      alert(error?.message || "Nao foi possivel abrir a camera.");
     }
   }
 
@@ -255,6 +272,18 @@ function InlineEditor({
           )}
 
           <div className="flex flex-wrap gap-2">
+            {isNativeCameraAvailable() ? (
+              <button
+                type="button"
+                onClick={handleCameraFoto}
+                disabled={uploading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-black text-white hover:bg-black disabled:opacity-60"
+              >
+                <FaCamera />
+                Camera
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -280,6 +309,7 @@ function InlineEditor({
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            capture="environment"
             className="hidden"
             onChange={handleUploadFoto}
           />

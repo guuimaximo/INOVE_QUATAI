@@ -534,10 +534,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
     const realizedDay = Boolean(actual);
 
     if (realizedDay) {
-      const saldoPlanejado = safeNumber(
-        actual?.saldoAnterior ?? actual?.medicaoD1 ?? runningBalance,
-        runningBalance
-      );
+      const saldoPlanejado = safeNumber(runningBalance, 0);
 
       const entradaReal = safeNumber(
         actual?.entradaDiesel ??
@@ -2219,29 +2216,47 @@ export default function EstoqueDieselPlanejamentoControle() {
 
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-500">
+              <thead className="text-xs font-black uppercase tracking-wider text-slate-500">
+                <tr className="text-[11px] text-slate-700">
+                  {[
+                    { label: "Identificação", span: 2, className: "rounded-l-2xl border-slate-200 bg-slate-100" },
+                    { label: "Saldo Projetado", span: 1, className: "border-sky-200 bg-sky-50 text-sky-700" },
+                    { label: "Compra de Diesel", span: 2, className: "border-blue-200 bg-blue-50 text-blue-700" },
+                    { label: "Recebimento", span: 2, className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+                    { label: "Saída", span: 2, className: "border-amber-200 bg-amber-50 text-amber-700" },
+                    { label: "Saldo Final", span: 1, className: "border-cyan-200 bg-cyan-50 text-cyan-700" },
+                    { label: "Indicador", span: 1, className: "rounded-r-2xl border-slate-200 bg-slate-100 text-slate-700" },
+                  ].map((cluster) => (
+                    <th
+                      key={cluster.label}
+                      colSpan={cluster.span}
+                      className={`border px-4 py-2 text-center ${cluster.className}`}
+                    >
+                      {cluster.label}
+                    </th>
+                  ))}
+                </tr>
                 <tr>
                   {[
-                    "Data",
-                    "Dia",
-                    "Fornecedor",
-                    "Preço Diesel",
-                    "Defasagem (CBIE)",
-                    "Saldo Planejado",
-                    "Entrega",
-                    "Pós Entrega",
-                    "Saída Prevista",
-                    "Saldo Projetado",
-                    "Saída Real",
-                    "Indicador",
+                    { label: "Data", className: "bg-slate-50 border-r border-slate-200" },
+                    { label: "Dia", className: "bg-slate-50 border-r border-slate-200" },
+                    { label: "Saldo Projetado", className: "bg-sky-50/70 border-r border-sky-200 text-sky-800" },
+                    { label: "Fornecedor", className: "bg-blue-50/70 text-blue-800" },
+                    { label: "Preço Diesel", className: "bg-blue-50/70 border-r border-blue-200 text-blue-800" },
+                    { label: "Recebimento", className: "bg-emerald-50/70 text-emerald-800" },
+                    { label: "Saldo Pós Entrega", className: "bg-emerald-50/70 border-r border-emerald-200 text-emerald-800" },
+                    { label: "Saída Prevista", className: "bg-amber-50/70 text-amber-800" },
+                    { label: "Saída Real", className: "bg-amber-50/70 border-r border-amber-200 text-amber-800" },
+                    { label: "Saldo Final Projetado", className: "bg-cyan-50/70 border-r border-cyan-200 text-cyan-800" },
+                    { label: "Indicador", className: "bg-slate-50" },
                   ].map((header, index, array) => (
                     <th
-                      key={header}
-                      className={`px-4 py-3 ${index === 0 ? "rounded-l-2xl" : ""} ${
+                      key={header.label}
+                      className={`px-4 py-3 ${header.className} ${index === 0 ? "rounded-l-2xl" : ""} ${
                         index === array.length - 1 ? "rounded-r-2xl" : ""
                       }`}
                     >
-                      {header}
+                      {header.label}
                     </th>
                   ))}
                 </tr>
@@ -2264,8 +2279,11 @@ export default function EstoqueDieselPlanejamentoControle() {
                       <td className="px-4 py-3 font-black text-slate-800">
                         {formatDateBR(row.date)}
                       </td>
-                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
+                      <td className={`border-r border-slate-200 px-4 py-3 ${emphasizedCellClass}`}>
                         {row.weekday}
+                      </td>
+                      <td className={`border-r border-sky-100 px-4 py-3 ${emphasizedCellClass}`}>
+                        {formatLiters(row.saldoPlanejado)}
                       </td>
                       <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         <div>{row.displaySupplier || row.supplier || "--"}</div>
@@ -2281,14 +2299,8 @@ export default function EstoqueDieselPlanejamentoControle() {
                           </div>
                         ) : null}
                       </td>
-                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
+                      <td className={`border-r border-blue-100 px-4 py-3 ${emphasizedCellClass}`}>
                         {formatMoney(row.displayDieselPrice ?? row.dieselPrice)}
-                      </td>
-                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
-                        {formatPct(row.cbieGap)}
-                      </td>
-                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
-                        {formatLiters(row.saldoPlanejado)}
                       </td>
                       <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         <div>{getReceiptValueText(row)}</div>
@@ -2298,17 +2310,17 @@ export default function EstoqueDieselPlanejamentoControle() {
                           </div>
                         ) : null}
                       </td>
-                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
+                      <td className={`border-r border-emerald-100 px-4 py-3 ${emphasizedCellClass}`}>
                         {formatLiters(row.saldoPosEntrega)}
                       </td>
                       <td className={`px-4 py-3 ${emphasizedCellClass}`}>
                         {formatLiters(row.plannedOutput)}
                       </td>
-                      <td className="px-4 py-3 font-black text-slate-800">
-                        {formatLiters(row.saldoProjetado)}
-                      </td>
-                      <td className={`px-4 py-3 ${emphasizedCellClass}`}>
+                      <td className={`border-r border-amber-100 px-4 py-3 ${emphasizedCellClass}`}>
                         {formatLiters(row.actualOutput)}
+                      </td>
+                      <td className="border-r border-cyan-100 px-4 py-3 font-black text-slate-800">
+                        {formatLiters(row.saldoProjetado)}
                       </td>
                       <td className="px-4 py-3">
                         <span

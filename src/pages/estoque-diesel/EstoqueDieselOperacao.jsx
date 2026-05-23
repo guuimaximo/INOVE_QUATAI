@@ -392,9 +392,10 @@ function buildCascadeMonthlyEntries(entries, receipts, productParams) {
     const inlineReceived = safeNumber(entry.receiptMeasuredLiters ?? entry.entradaRecebimentos, 0);
     const totalNf = safeNumber(receiptTotals?.nfVolumeLitros, 0) + inlineNf;
     const totalReceived = safeNumber(receiptTotals?.volumeRecebidoLitros, 0) + inlineReceived;
+    const recebidoDiesel = totalReceived > 0 ? totalReceived : entradaDiesel;
     const saldoInicialDia = roundNumber(saldoAnterior - saidaTanque);
     const pctDiffNF =
-      totalNf > 0 ? calculatePctDifference(totalNf, totalReceived) : entry.pctDiffNF ?? null;
+      totalNf > 0 ? calculatePctDifference(totalNf, recebidoDiesel) : entry.pctDiffNF ?? null;
 
     const pctDiffTankBombas = calculatePctDifference(saidaTanque, saidaTotalBombas);
     const pctDiffTransnet = calculatePctDifference(saidaTanque, saidaTransnet);
@@ -406,6 +407,7 @@ function buildCascadeMonthlyEntries(entries, receipts, productParams) {
       saldoFinal,
       nfVolumeLitros: totalNf,
       entradaDiesel,
+      recebidoDiesel,
       saidaTanque,
       pctDiffNF,
       pctDiffTankBombas,
@@ -1220,6 +1222,13 @@ export default function EstoqueDieselOperacao() {
     }));
   }
 
+  function openReceiptConsultation() {
+    if (!selectedReceiptId && dailyReceipts[0]?.id) {
+      setSelectedReceiptId(dailyReceipts[0].id);
+    }
+    setShowReceiptModal(true);
+  }
+
   return (
     <EstoqueDieselPageShell
       title="Medicao de Diesel"
@@ -1451,7 +1460,7 @@ export default function EstoqueDieselOperacao() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowReceiptModal(true)}
+                  onClick={openReceiptConsultation}
                   className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
                 >
                   Consultar recebimentos
@@ -2033,7 +2042,7 @@ export default function EstoqueDieselOperacao() {
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTransnet)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parsePct(entry.pctDiffTransnet)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoInicialDia)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.entradaDiesel)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.recebidoDiesel ?? entry.entradaDiesel)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.nfVolumeLitros)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoFinal)}</td>
                     <td className="px-4 py-3">

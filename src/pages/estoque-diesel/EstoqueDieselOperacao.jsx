@@ -1991,28 +1991,47 @@ export default function EstoqueDieselOperacao() {
 
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-500">
+            <thead className="text-xs font-black uppercase tracking-wider text-slate-500">
+              <tr className="text-[11px] text-slate-700">
+                {[
+                  { label: "Dia", span: 1, className: "rounded-l-2xl border-slate-200 bg-slate-100" },
+                  { label: "Saldo", span: 1, className: "border-blue-200 bg-blue-50 text-blue-700" },
+                  { label: "Saidas", span: 3, className: "border-amber-200 bg-amber-50 text-amber-700" },
+                  { label: "Comparativo", span: 1, className: "border-cyan-200 bg-cyan-50 text-cyan-700" },
+                  { label: "Saldo do dia", span: 1, className: "border-sky-200 bg-sky-50 text-sky-700" },
+                  { label: "Recebimento", span: 2, className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+                  { label: "Fechamento", span: 2, className: "rounded-r-2xl border-slate-200 bg-slate-100 text-slate-700" },
+                ].map((cluster) => (
+                  <th
+                    key={cluster.label}
+                    colSpan={cluster.span}
+                    className={`border px-4 py-2 text-center ${cluster.className}`}
+                  >
+                    {cluster.label}
+                  </th>
+                ))}
+              </tr>
               <tr>
                 {[
-                  "Data",
-                  "Saldo anterior",
-                  "Saida tanque",
-                  "Bombas",
-                  "Transnet",
-                  "% Tanque x Transnet",
-                  "Saldo inicial do dia",
-                  "Recebido de Diesel",
-                  "Planejado de Diesel",
-                  "Saldo final",
-                  "Status",
+                  { label: "Data", className: "bg-slate-50 border-r border-slate-200" },
+                  { label: "Saldo anterior", className: "bg-blue-50/70 border-r border-blue-100 text-blue-800" },
+                  { label: "Saida tanque", className: "bg-amber-50/70 text-amber-800" },
+                  { label: "Bombas", className: "bg-amber-50/70 text-amber-800" },
+                  { label: "Transnet", className: "bg-amber-50/70 border-r border-amber-200 text-amber-800" },
+                  { label: "% Tanque x Transnet", className: "bg-cyan-50/70 border-r border-cyan-200 text-cyan-800" },
+                  { label: "Saldo inicial do dia", className: "bg-sky-50/70 border-r border-sky-200 text-sky-800" },
+                  { label: "Recebido de Diesel", className: "bg-emerald-50/70 text-emerald-800" },
+                  { label: "Planejado de Diesel", className: "bg-emerald-50/70 border-r border-emerald-200 text-emerald-800" },
+                  { label: "Saldo final", className: "bg-slate-50" },
+                  { label: "Status", className: "bg-slate-50" },
                 ].map((header, index, array) => (
                   <th
-                    key={header}
-                    className={`px-4 py-3 ${index === 0 ? "rounded-l-2xl" : ""} ${
+                    key={header.label}
+                    className={`px-4 py-3 ${header.className} ${index === 0 ? "rounded-l-2xl" : ""} ${
                       index === array.length - 1 ? "rounded-r-2xl" : ""
                     }`}
                   >
-                    {header}
+                    {header.label}
                   </th>
                 ))}
               </tr>
@@ -2033,19 +2052,19 @@ export default function EstoqueDieselOperacao() {
                     onClick={() => handleSelectEntry(entry)}
                     className={`cursor-pointer transition hover:bg-slate-50 ${isSelected ? "bg-blue-50/60" : ""}`}
                   >
-                    <td className={`px-4 py-3 font-black ${isSelected ? "text-blue-700" : "text-slate-800"}`}>
+                    <td className={`border-r border-slate-100 bg-slate-50/60 px-4 py-3 font-black ${isSelected ? "text-blue-700" : "text-slate-800"}`}>
                       {new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoAnterior)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTanque)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTotalBombas)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTransnet)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parsePct(entry.pctDiffTransnet)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoInicialDia)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.recebidoDiesel ?? entry.entradaDiesel)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.nfVolumeLitros)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoFinal)}</td>
-                    <td className="px-4 py-3">
+                    <td className="border-r border-blue-100 bg-blue-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saldoAnterior)}</td>
+                    <td className="bg-amber-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saidaTanque)}</td>
+                    <td className="bg-amber-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saidaTotalBombas)}</td>
+                    <td className="border-r border-amber-100 bg-amber-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saidaTransnet)}</td>
+                    <td className="border-r border-cyan-100 bg-cyan-50/30 px-4 py-3 font-semibold text-slate-700">{parsePct(entry.pctDiffTransnet)}</td>
+                    <td className="border-r border-sky-100 bg-sky-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saldoInicialDia)}</td>
+                    <td className="bg-emerald-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.recebidoDiesel ?? entry.entradaDiesel)}</td>
+                    <td className="border-r border-emerald-100 bg-emerald-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.nfVolumeLitros)}</td>
+                    <td className="bg-slate-50/50 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saldoFinal)}</td>
+                    <td className="bg-slate-50/50 px-4 py-3">
                       <span
                         className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${
                           entry.status === "Critico"

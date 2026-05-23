@@ -15,6 +15,7 @@ import {
 import EstoqueDieselPageShell, {
   EstoqueDieselPanel,
 } from "../../components/estoque-diesel/EstoqueDieselPageShell";
+import MediaPreviewModal from "../../components/MediaPreviewModal";
 import {
   DEFAULT_PARAMS,
   MONTHS_2026,
@@ -250,6 +251,37 @@ function SummaryCard({ title, value, sub, tone = "slate" }) {
   );
 }
 
+function ReceiptPhotoCard({ label, url, onOpen }) {
+  const hasPhoto = Boolean(url);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</div>
+      {hasPhoto ? (
+        <button
+          type="button"
+          onClick={() => onOpen(url, label)}
+          className="mt-3 block w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-left transition hover:border-blue-300 hover:bg-blue-50"
+        >
+          <img
+            src={url}
+            alt={label}
+            className="h-40 w-full object-cover"
+          />
+          <div className="flex items-center gap-2 px-3 py-2 text-xs font-black uppercase tracking-wider text-blue-700">
+            <FaCamera />
+            Abrir foto
+          </div>
+        </button>
+      ) : (
+        <div className="mt-3 flex h-40 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 text-center text-xs font-black uppercase tracking-wider text-slate-400">
+          Sem foto
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getStatusDescription(label) {
   if (label === "Critico") {
     return "Diferenca de planejado, recebido ou Transnet acima do limite critico configurado.";
@@ -463,6 +495,7 @@ export default function EstoqueDieselOperacao() {
   const [deletingReceipt, setDeletingReceipt] = useState(false);
   const [showPumpConfig, setShowPumpConfig] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState(null);
   const [pumpConfigDrafts, setPumpConfigDrafts] = useState({});
   const [savingPumpConfigId, setSavingPumpConfigId] = useState(null);
   const launchPanelRef = useRef(null);
@@ -631,6 +664,22 @@ export default function EstoqueDieselOperacao() {
     () => dailyReceipts.find((receipt) => receipt.id === selectedReceiptId) || null,
     [dailyReceipts, selectedReceiptId]
   );
+  const selectedReceiptFallbackEntry = useMemo(() => {
+    if (!selectedDailyReceipt) return null;
+
+    return (
+      monthlyEntries.find((entry) => {
+        if (entry.date !== selectedDailyReceipt.date) return false;
+        if (!entry.receiptPhotoBeforeUrl && !entry.receiptPhotoAfterUrl) return false;
+        if (!selectedDailyReceipt.nfNumero || !entry.nfNumero) return true;
+        return String(entry.nfNumero) === String(selectedDailyReceipt.nfNumero);
+      }) || null
+    );
+  }, [monthlyEntries, selectedDailyReceipt]);
+  const selectedReceiptPhotoBeforeUrl =
+    selectedDailyReceipt?.fotoAntesUrl || selectedReceiptFallbackEntry?.receiptPhotoBeforeUrl || "";
+  const selectedReceiptPhotoAfterUrl =
+    selectedDailyReceipt?.fotoDepoisUrl || selectedReceiptFallbackEntry?.receiptPhotoAfterUrl || "";
 
   const computed = useMemo(
     () =>
@@ -1671,6 +1720,18 @@ export default function EstoqueDieselOperacao() {
                         <div className="mt-2 text-lg font-black text-slate-800">{selectedDailyReceipt.reguaDepoisCm ?? "--"} cm</div>
                       </div>
                     </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <ReceiptPhotoCard
+                        label="Foto da regua antes"
+                        url={selectedReceiptPhotoBeforeUrl}
+                        onOpen={(url, title) => setReceiptPreview({ url, title })}
+                      />
+                      <ReceiptPhotoCard
+                        label="Foto da regua depois"
+                        url={selectedReceiptPhotoAfterUrl}
+                        onOpen={(url, title) => setReceiptPreview({ url, title })}
+                      />
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -1996,6 +2057,12 @@ export default function EstoqueDieselOperacao() {
           </table>
         </div>
       </EstoqueDieselPanel>
+      <MediaPreviewModal
+        open={Boolean(receiptPreview?.url)}
+        url={receiptPreview?.url}
+        title={receiptPreview?.title || "Foto do recebimento"}
+        onClose={() => setReceiptPreview(null)}
+      />
     </EstoqueDieselPageShell>
   );
 }

@@ -11,6 +11,7 @@ import {
   FaSave,
   FaTint,
   FaTrash,
+  FaTimes,
 } from "react-icons/fa";
 import EstoqueDieselPageShell, {
   EstoqueDieselPanel,
@@ -803,6 +804,11 @@ export default function EstoqueDieselOperacao() {
     });
   }
 
+  function handleHideDailyLaunch() {
+    setShowDailyLaunch(false);
+    setShowPumpConfig(false);
+  }
+
   function handleSelectEntry(entry) {
     setShowDailyLaunch(true);
     setForm(buildFormFromEntry(entry, product, year, month));
@@ -1298,18 +1304,28 @@ export default function EstoqueDieselOperacao() {
                 O operador informa a medicao atual, a saida do Transnet e, se houver, o recebimento do diesel. O restante vem do D-1 e dos calculos automaticos.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowPumpConfig((current) => !current)}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-black transition ${
-                showPumpConfig
-                  ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              <FaCog />
-              Configuracao
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleHideDailyLaunch}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+              >
+                <FaTimes />
+                Ocultar lançamento
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPumpConfig((current) => !current)}
+                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-black transition ${
+                  showPumpConfig
+                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <FaCog />
+                Configuracao
+              </button>
+            </div>
           </div>
 
           {showPumpConfig ? (

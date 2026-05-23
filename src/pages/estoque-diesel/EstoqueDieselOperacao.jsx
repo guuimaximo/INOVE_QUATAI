@@ -462,6 +462,7 @@ export default function EstoqueDieselOperacao() {
   const [editingReceiptId, setEditingReceiptId] = useState(null);
   const [deletingReceipt, setDeletingReceipt] = useState(false);
   const [showPumpConfig, setShowPumpConfig] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [pumpConfigDrafts, setPumpConfigDrafts] = useState({});
   const [savingPumpConfigId, setSavingPumpConfigId] = useState(null);
   const launchPanelRef = useRef(null);
@@ -705,6 +706,7 @@ export default function EstoqueDieselOperacao() {
   function handleEditReceipt(receipt) {
     if (!receipt) return;
 
+    setShowReceiptModal(true);
     setEditingReceiptId(receipt.id);
     setSelectedReceiptId(receipt.id);
     setReceiptFiles({ before: null, after: null });
@@ -937,6 +939,7 @@ export default function EstoqueDieselOperacao() {
           ? "Recebimento atualizado e somado automaticamente no dia."
           : "Recebimento salvo e somado automaticamente no dia.",
       });
+      setShowReceiptModal(false);
     } catch (error) {
       console.error("Falha ao salvar recebimento:", error);
       setFeedback({
@@ -1146,6 +1149,7 @@ export default function EstoqueDieselOperacao() {
   }
 
   function prepareNewReceipt() {
+    setShowReceiptModal(true);
     setSelectedReceiptId(null);
     setEditingReceiptId(null);
     setReceiptFiles({ before: null, after: null });
@@ -1385,21 +1389,83 @@ export default function EstoqueDieselOperacao() {
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider text-emerald-700">Recebimento de diesel</h3>
                 <p className="mt-1 text-sm font-semibold text-emerald-700">
-                  Se houve recebimento, informe o planejado de diesel, fornecedor, regua antes e depois, e anexe as fotos. O volume recebido entra automaticamente na conta do dia.
+                  Cadastre, consulte ou edite os recebimentos em uma janela separada. O recebido entra automaticamente no fechamento do dia.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => updateField("hasReceipt", !form.hasReceipt)}
-                className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-black transition ${
-                  form.hasReceipt
-                    ? "bg-emerald-700 text-white hover:bg-emerald-800"
-                    : "border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
-                }`}
-              >
-                {form.hasReceipt ? "Recebimento ativo" : "Sem recebimento"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={prepareNewReceipt}
+                  className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-800"
+                >
+                  Novo recebimento
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReceiptModal(true)}
+                  className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
+                >
+                  Consultar recebimentos
+                </button>
+              </div>
             </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3">
+                <div className="text-xs font-black uppercase tracking-wider text-slate-500">Recebimentos do dia</div>
+                <div className="mt-2 text-xl font-black text-slate-800">{dailyReceipts.length}</div>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3">
+                <div className="text-xs font-black uppercase tracking-wider text-slate-500">Recebido de Diesel</div>
+                <div className="mt-2 text-xl font-black text-slate-800">{parseLiters(computed.entradaDiesel)}</div>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3">
+                <div className="text-xs font-black uppercase tracking-wider text-slate-500">Planejado de Diesel</div>
+                <div className="mt-2 text-xl font-black text-slate-800">{parseLiters(plannedDieselLiters)}</div>
+              </div>
+            </div>
+          </div>
+
+          {showReceiptModal ? (
+            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+              <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800">Recebimento de diesel</h3>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">
+                      Informe o planejado, regua antes/depois e fotos. O volume recebido entra no dia selecionado.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowReceiptModal(false)}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                <div className="overflow-y-auto p-5">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h4 className="text-sm font-black uppercase tracking-wider text-emerald-700">Dados do recebimento</h4>
+                        <p className="mt-1 text-sm font-semibold text-emerald-700">
+                          Se houve recebimento, informe o planejado de diesel, fornecedor, regua antes e depois, e anexe as fotos.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateField("hasReceipt", !form.hasReceipt)}
+                        className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-black transition ${
+                          form.hasReceipt
+                            ? "bg-emerald-700 text-white hover:bg-emerald-800"
+                            : "border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
+                        }`}
+                      >
+                        {form.hasReceipt ? "Recebimento ativo" : "Sem recebimento"}
+                      </button>
+                    </div>
 
             {form.hasReceipt ? (
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -1634,6 +1700,10 @@ export default function EstoqueDieselOperacao() {
               </div>
             ) : null}
           </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

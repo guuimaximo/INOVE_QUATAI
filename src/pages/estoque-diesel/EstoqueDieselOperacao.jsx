@@ -495,6 +495,7 @@ export default function EstoqueDieselOperacao() {
   const [selectedReceiptId, setSelectedReceiptId] = useState(null);
   const [editingReceiptId, setEditingReceiptId] = useState(null);
   const [deletingReceipt, setDeletingReceipt] = useState(false);
+  const [showDailyLaunch, setShowDailyLaunch] = useState(false);
   const [showPumpConfig, setShowPumpConfig] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState(null);
@@ -591,6 +592,7 @@ export default function EstoqueDieselOperacao() {
         setReceiptFiles({ before: null, after: null });
         setCustomSupplierMode(false);
         setSelectedReceiptId(null);
+        setShowDailyLaunch(false);
       } catch (error) {
         if (!active) return;
         console.error("Falha ao carregar medição de diesel:", error);
@@ -793,7 +795,16 @@ export default function EstoqueDieselOperacao() {
     setFeedback(null);
   }
 
+  function handleStartDailyLaunch() {
+    resetFormForNewEntry();
+    setShowDailyLaunch(true);
+    window.requestAnimationFrame(() => {
+      launchPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   function handleSelectEntry(entry) {
+    setShowDailyLaunch(true);
     setForm(buildFormFromEntry(entry, product, year, month));
     setReceiptFiles({ before: null, after: null });
     setCustomSupplierMode(Boolean(entry?.supplier && !supplierOptions.includes(entry.supplier)));
@@ -1260,6 +1271,14 @@ export default function EstoqueDieselOperacao() {
             <p className="mt-1 text-sm font-semibold text-slate-500">
               O mes fica fixo aqui em cima. Dentro da pagina, o lancamento do dia ja vem com a data de hoje quando ela pertence a este mes.
             </p>
+            <button
+              type="button"
+              onClick={handleStartDailyLaunch}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-emerald-800"
+            >
+              <FaGasPump />
+              Iniciar lançamento do dia
+            </button>
           </div>
           <div className="space-y-3">
             <MonthNavigation month={month} product={product} />
@@ -1268,6 +1287,7 @@ export default function EstoqueDieselOperacao() {
         </div>
       </EstoqueDieselPanel>
 
+      {showDailyLaunch ? (
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div ref={launchPanelRef} className="xl:col-span-2">
         <EstoqueDieselPanel className="p-5">
@@ -1974,6 +1994,7 @@ export default function EstoqueDieselOperacao() {
           </div>
         </EstoqueDieselPanel>
       </div>
+      ) : null}
 
       <EstoqueDieselPanel className="p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

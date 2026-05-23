@@ -252,12 +252,12 @@ function SummaryCard({ title, value, sub, tone = "slate" }) {
 
 function getStatusDescription(label) {
   if (label === "Critico") {
-    return "Diferenca de NF ou de Transnet acima do limite critico configurado.";
+    return "Diferenca de planejado, recebido ou Transnet acima do limite critico configurado.";
   }
   if (label === "Atencao") {
     return "Existe divergencia acima da faixa de atencao e o dia pede conferencia.";
   }
-  return "Dia dentro da faixa esperada para NF, tanque, bombas e Transnet.";
+  return "Dia dentro da faixa esperada para planejado, recebido, tanque, bombas e Transnet.";
 }
 
 function getPctTone(value, warn = 0.01, critical = 0.03) {
@@ -272,6 +272,12 @@ function safeNumber(value, fallback = 0) {
   if (value === null || value === undefined || value === "") return fallback;
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function roundNumber(value, decimals = 2) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Number(number.toFixed(decimals));
 }
 
 function calculatePctDifference(reference, compared) {
@@ -354,6 +360,7 @@ function buildCascadeMonthlyEntries(entries, receipts, productParams) {
     const inlineReceived = safeNumber(entry.receiptMeasuredLiters ?? entry.entradaRecebimentos, 0);
     const totalNf = safeNumber(receiptTotals?.nfVolumeLitros, 0) + inlineNf;
     const totalReceived = safeNumber(receiptTotals?.volumeRecebidoLitros, 0) + inlineReceived;
+    const saldoInicialDia = roundNumber(saldoAnterior - saidaTanque);
     const pctDiffNF =
       totalNf > 0 ? calculatePctDifference(totalNf, totalReceived) : entry.pctDiffNF ?? null;
 
@@ -363,6 +370,7 @@ function buildCascadeMonthlyEntries(entries, receipts, productParams) {
     const nextEntry = {
       ...entry,
       saldoAnterior,
+      saldoInicialDia,
       saldoFinal,
       nfVolumeLitros: totalNf,
       entradaDiesel,
@@ -610,6 +618,14 @@ export default function EstoqueDieselOperacao() {
     () => getDailyReceipts(receipts, product, form.date),
     [form.date, product, receipts]
   );
+  const plannedDieselLiters = useMemo(() => {
+    const inlinePlanned = form.hasReceipt ? safeNumber(form.nfVolumeLitros, 0) : 0;
+    const externalPlanned = dailyReceipts.reduce(
+      (sum, receipt) => sum + safeNumber(receipt.nfVolumeLitros, 0),
+      0
+    );
+    return roundNumber(inlinePlanned + externalPlanned) ?? 0;
+  }, [dailyReceipts, form.hasReceipt, form.nfVolumeLitros]);
   const selectedDailyReceipt = useMemo(
     () => dailyReceipts.find((receipt) => receipt.id === selectedReceiptId) || null,
     [dailyReceipts, selectedReceiptId]
@@ -1342,24 +1358,24 @@ export default function EstoqueDieselOperacao() {
 
           <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">Medicao D-1</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">Saldo anterior</h3>
               <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoD1)}</p>
               <p className="mt-1 text-sm font-semibold text-slate-500">
                 Vem automaticamente do ultimo saldo final salvo para {product}.
               </p>
             </div>
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-blue-700">Medicao inicial</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-blue-700">Saldo inicial do dia</h3>
               <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoInicial)}</p>
               <p className="mt-1 text-sm font-semibold text-blue-700">
-                Leitura realizada pela regua atual T1 e T2 no inicio do dia.
+                Saldo apurado pela regua depois das saidas do dia.
               </p>
             </div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-amber-700">Medicao atual</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-amber-700">Saldo final</h3>
               <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoAtual)}</p>
               <p className="mt-1 text-sm font-semibold text-amber-700">
-                Soma da medicao inicial com o recebimento considerado no dia.
+                Soma do saldo inicial do dia com o recebido de diesel.
               </p>
             </div>
           </div>
@@ -1369,7 +1385,7 @@ export default function EstoqueDieselOperacao() {
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider text-emerald-700">Recebimento de diesel</h3>
                 <p className="mt-1 text-sm font-semibold text-emerald-700">
-                  Se houve recebimento, informe NF, fornecedor, regua antes e depois, e anexe as fotos. O volume entra automaticamente na conta do dia.
+                  Se houve recebimento, informe o planejado de diesel, fornecedor, regua antes e depois, e anexe as fotos. O volume recebido entra automaticamente na conta do dia.
                 </p>
               </div>
               <button
@@ -1387,7 +1403,7 @@ export default function EstoqueDieselOperacao() {
 
             {form.hasReceipt ? (
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <FormInput label="Volume NF (litros)" value={form.nfVolumeLitros} onChange={(value) => updateField("nfVolumeLitros", value)} required />
+                <FormInput label="Planejado de Diesel (litros)" value={form.nfVolumeLitros} onChange={(value) => updateField("nfVolumeLitros", value)} required />
                 <div className="space-y-2">
                   <SelectInput
                     label="Fornecedor"
@@ -1555,7 +1571,7 @@ export default function EstoqueDieselOperacao() {
                     </div>
                     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Volume NF</div>
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Planejado de Diesel</div>
                         <div className="mt-2 text-lg font-black text-slate-800">{parseLiters(selectedDailyReceipt.nfVolumeLitros)}</div>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -1698,7 +1714,7 @@ export default function EstoqueDieselOperacao() {
               />
 
               <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
-                Medicao D-1 considerada: <span className="font-black">{parseLiters(computed.medicaoD1)}</span>
+                Saldo anterior considerado: <span className="font-black">{parseLiters(computed.medicaoD1)}</span>
               </div>
 
               {dailyReceipts.length > 0 ? (
@@ -1801,31 +1817,20 @@ export default function EstoqueDieselOperacao() {
         <EstoqueDieselPanel className="p-5">
           <h2 className="text-lg font-black text-slate-800">Resumo calculado</h2>
           <div className="mt-4 space-y-3">
-            <SummaryCard title="Medicao D-1" value={parseLiters(computed.medicaoD1)} tone="slate" />
-            <SummaryCard title="Medicao inicial" value={parseLiters(computed.medicaoInicial)} tone="blue" />
-            <SummaryCard title="Medicao atual" value={parseLiters(computed.medicaoAtual)} tone="blue" />
-            <SummaryCard
-              title="Recebimento considerado"
-              value={parseLiters(computed.entradaDiesel)}
-              tone={form.hasReceipt || dailyReceipts.length > 0 ? "emerald" : "slate"}
-            />
+            <SummaryCard title="Saldo anterior" value={parseLiters(computed.medicaoD1)} sub="Mesmo saldo final do D-1" tone="slate" />
             <SummaryCard title="Saida tanque" value={parseLiters(computed.saidaTanque)} tone="amber" />
             <SummaryCard title="Saida total bombas" value={parseLiters(computed.saidaTotalBombas)} tone="amber" />
             <SummaryCard title="Saida Transnet" value={parseLiters(computed.saidaTransnet)} tone="amber" />
+            <SummaryCard title="% Tanque x Transnet" value={parsePct(computed.pctDiffTransnet)} tone={getPctTone(computed.pctDiffTransnet, productParams.transnetWarnPct || 0.02, productParams.transnetCriticalPct || 0.03)} />
+            <SummaryCard title="Saldo inicial do dia" value={parseLiters(computed.medicaoInicial)} sub="Saldo depois das saidas" tone="blue" />
             <SummaryCard
-              title="Recebimento medido"
-              value={parseLiters(computed.receiptMeasuredLiters)}
-              tone={
-                computed.receiptBelowExpected
-                  ? "rose"
-                  : computed.receiptWithinTolerance === false
-                  ? "amber"
-                  : "emerald"
-              }
+              title="Recebido de Diesel"
+              value={parseLiters(computed.entradaDiesel)}
+              tone={form.hasReceipt || dailyReceipts.length > 0 ? "emerald" : "slate"}
             />
-            <SummaryCard title="% Dif NF x Recebido" value={parsePct(computed.pctDiffNF)} tone={computed.receiptBelowExpected ? "rose" : getPctTone(computed.pctDiffNF, productParams.nfDiffWarnPct || 0.01, productParams.nfDiffCriticalPct || 0.03)} />
-            <SummaryCard title="% Dif Tanque x Bombas" value={parsePct(computed.pctDiffTankBombas)} tone={getPctTone(computed.pctDiffTankBombas, productParams.transnetWarnPct || 0.02, productParams.transnetCriticalPct || 0.03)} />
-            <SummaryCard title="% Dif Tanque x Transnet" value={parsePct(computed.pctDiffTransnet)} tone={getPctTone(computed.pctDiffTransnet, productParams.transnetWarnPct || 0.02, productParams.transnetCriticalPct || 0.03)} />
+            <SummaryCard title="Planejado de Diesel" value={parseLiters(plannedDieselLiters)} tone={plannedDieselLiters > 0 ? "emerald" : "slate"} />
+            <SummaryCard title="Saldo final" value={parseLiters(computed.saldoFinal)} tone="blue" />
+            <SummaryCard title="Status" value={status.label} sub={getStatusDescription(status.label)} tone={status.tone} />
           </div>
         </EstoqueDieselPanel>
       </div>
@@ -1850,15 +1855,15 @@ export default function EstoqueDieselOperacao() {
               <tr>
                 {[
                   "Data",
-                  "Saldo ant.",
-                  "NF",
-                  "Entrada diesel",
-                  "Saldo final",
+                  "Saldo anterior",
                   "Saida tanque",
                   "Bombas",
                   "Transnet",
-                  "% NF",
                   "% Tanque x Transnet",
+                  "Saldo inicial do dia",
+                  "Recebido de Diesel",
+                  "Planejado de Diesel",
+                  "Saldo final",
                   "Status",
                 ].map((header, index, array) => (
                   <th
@@ -1892,14 +1897,14 @@ export default function EstoqueDieselOperacao() {
                       {new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")}
                     </td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoAnterior)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.nfVolumeLitros)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.entradaDiesel)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoFinal)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTanque)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTotalBombas)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTransnet)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parsePct(entry.pctDiffNF)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-600">{parsePct(entry.pctDiffTransnet)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoInicialDia)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.entradaDiesel)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.nfVolumeLitros)}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoFinal)}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${

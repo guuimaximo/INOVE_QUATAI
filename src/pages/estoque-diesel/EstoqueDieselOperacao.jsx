@@ -11,10 +11,12 @@ import {
   FaSave,
   FaTint,
   FaTrash,
+  FaTimes,
 } from "react-icons/fa";
 import EstoqueDieselPageShell, {
   EstoqueDieselPanel,
 } from "../../components/estoque-diesel/EstoqueDieselPageShell";
+import MediaPreviewModal from "../../components/MediaPreviewModal";
 import {
   DEFAULT_PARAMS,
   MONTHS_2026,
@@ -250,14 +252,45 @@ function SummaryCard({ title, value, sub, tone = "slate" }) {
   );
 }
 
+function ReceiptPhotoCard({ label, url, onOpen }) {
+  const hasPhoto = Boolean(url);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</div>
+      {hasPhoto ? (
+        <button
+          type="button"
+          onClick={() => onOpen(url, label)}
+          className="mt-3 block w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-left transition hover:border-blue-300 hover:bg-blue-50"
+        >
+          <img
+            src={url}
+            alt={label}
+            className="h-40 w-full object-cover"
+          />
+          <div className="flex items-center gap-2 px-3 py-2 text-xs font-black uppercase tracking-wider text-blue-700">
+            <FaCamera />
+            Abrir foto
+          </div>
+        </button>
+      ) : (
+        <div className="mt-3 flex h-40 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 text-center text-xs font-black uppercase tracking-wider text-slate-400">
+          Sem foto
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getStatusDescription(label) {
   if (label === "Critico") {
-    return "Diferenca de NF ou de Transnet acima do limite critico configurado.";
+    return "Diferenca de planejado, recebido ou Transnet acima do limite critico configurado.";
   }
   if (label === "Atencao") {
     return "Existe divergencia acima da faixa de atencao e o dia pede conferencia.";
   }
-  return "Dia dentro da faixa esperada para NF, tanque, bombas e Transnet.";
+  return "Dia dentro da faixa esperada para planejado, recebido, tanque, bombas e Transnet.";
 }
 
 function getPctTone(value, warn = 0.01, critical = 0.03) {
@@ -272,6 +305,12 @@ function safeNumber(value, fallback = 0) {
   if (value === null || value === undefined || value === "") return fallback;
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function roundNumber(value, decimals = 2) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Number(number.toFixed(decimals));
 }
 
 function calculatePctDifference(reference, compared) {
@@ -354,8 +393,10 @@ function buildCascadeMonthlyEntries(entries, receipts, productParams) {
     const inlineReceived = safeNumber(entry.receiptMeasuredLiters ?? entry.entradaRecebimentos, 0);
     const totalNf = safeNumber(receiptTotals?.nfVolumeLitros, 0) + inlineNf;
     const totalReceived = safeNumber(receiptTotals?.volumeRecebidoLitros, 0) + inlineReceived;
+    const recebidoDiesel = totalReceived > 0 ? totalReceived : entradaDiesel;
+    const saldoInicialDia = roundNumber(saldoAnterior - saidaTanque);
     const pctDiffNF =
-      totalNf > 0 ? calculatePctDifference(totalNf, totalReceived) : entry.pctDiffNF ?? null;
+      totalNf > 0 ? calculatePctDifference(totalNf, recebidoDiesel) : entry.pctDiffNF ?? null;
 
     const pctDiffTankBombas = calculatePctDifference(saidaTanque, saidaTotalBombas);
     const pctDiffTransnet = calculatePctDifference(saidaTanque, saidaTransnet);
@@ -363,9 +404,11 @@ function buildCascadeMonthlyEntries(entries, receipts, productParams) {
     const nextEntry = {
       ...entry,
       saldoAnterior,
+      saldoInicialDia,
       saldoFinal,
       nfVolumeLitros: totalNf,
       entradaDiesel,
+      recebidoDiesel,
       saidaTanque,
       pctDiffNF,
       pctDiffTankBombas,
@@ -453,7 +496,10 @@ export default function EstoqueDieselOperacao() {
   const [selectedReceiptId, setSelectedReceiptId] = useState(null);
   const [editingReceiptId, setEditingReceiptId] = useState(null);
   const [deletingReceipt, setDeletingReceipt] = useState(false);
+  const [showDailyLaunch, setShowDailyLaunch] = useState(false);
   const [showPumpConfig, setShowPumpConfig] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState(null);
   const [pumpConfigDrafts, setPumpConfigDrafts] = useState({});
   const [savingPumpConfigId, setSavingPumpConfigId] = useState(null);
   const launchPanelRef = useRef(null);
@@ -547,6 +593,7 @@ export default function EstoqueDieselOperacao() {
         setReceiptFiles({ before: null, after: null });
         setCustomSupplierMode(false);
         setSelectedReceiptId(null);
+        setShowDailyLaunch(false);
       } catch (error) {
         if (!active) return;
         console.error("Falha ao carregar medição de diesel:", error);
@@ -610,10 +657,34 @@ export default function EstoqueDieselOperacao() {
     () => getDailyReceipts(receipts, product, form.date),
     [form.date, product, receipts]
   );
+  const plannedDieselLiters = useMemo(() => {
+    const inlinePlanned = form.hasReceipt ? safeNumber(form.nfVolumeLitros, 0) : 0;
+    const externalPlanned = dailyReceipts.reduce(
+      (sum, receipt) => sum + safeNumber(receipt.nfVolumeLitros, 0),
+      0
+    );
+    return roundNumber(inlinePlanned + externalPlanned) ?? 0;
+  }, [dailyReceipts, form.hasReceipt, form.nfVolumeLitros]);
   const selectedDailyReceipt = useMemo(
     () => dailyReceipts.find((receipt) => receipt.id === selectedReceiptId) || null,
     [dailyReceipts, selectedReceiptId]
   );
+  const selectedReceiptFallbackEntry = useMemo(() => {
+    if (!selectedDailyReceipt) return null;
+
+    return (
+      monthlyEntries.find((entry) => {
+        if (entry.date !== selectedDailyReceipt.date) return false;
+        if (!entry.receiptPhotoBeforeUrl && !entry.receiptPhotoAfterUrl) return false;
+        if (!selectedDailyReceipt.nfNumero || !entry.nfNumero) return true;
+        return String(entry.nfNumero) === String(selectedDailyReceipt.nfNumero);
+      }) || null
+    );
+  }, [monthlyEntries, selectedDailyReceipt]);
+  const selectedReceiptPhotoBeforeUrl =
+    selectedDailyReceipt?.fotoAntesUrl || selectedReceiptFallbackEntry?.receiptPhotoBeforeUrl || "";
+  const selectedReceiptPhotoAfterUrl =
+    selectedDailyReceipt?.fotoDepoisUrl || selectedReceiptFallbackEntry?.receiptPhotoAfterUrl || "";
 
   const computed = useMemo(
     () =>
@@ -689,6 +760,7 @@ export default function EstoqueDieselOperacao() {
   function handleEditReceipt(receipt) {
     if (!receipt) return;
 
+    setShowReceiptModal(true);
     setEditingReceiptId(receipt.id);
     setSelectedReceiptId(receipt.id);
     setReceiptFiles({ before: null, after: null });
@@ -724,7 +796,29 @@ export default function EstoqueDieselOperacao() {
     setFeedback(null);
   }
 
+  function handleStartDailyLaunch() {
+    const defaultLaunchDate = buildDefaultForm(product, year, month).date;
+    const existingDailyEntry = monthlyEntries.find((entry) => entry.date === defaultLaunchDate);
+
+    if (existingDailyEntry) {
+      handleSelectEntry(existingDailyEntry);
+      return;
+    }
+
+    resetFormForNewEntry();
+    setShowDailyLaunch(true);
+    window.requestAnimationFrame(() => {
+      launchPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function handleHideDailyLaunch() {
+    setShowDailyLaunch(false);
+    setShowPumpConfig(false);
+  }
+
   function handleSelectEntry(entry) {
+    setShowDailyLaunch(true);
     setForm(buildFormFromEntry(entry, product, year, month));
     setReceiptFiles({ before: null, after: null });
     setCustomSupplierMode(Boolean(entry?.supplier && !supplierOptions.includes(entry.supplier)));
@@ -921,6 +1015,7 @@ export default function EstoqueDieselOperacao() {
           ? "Recebimento atualizado e somado automaticamente no dia."
           : "Recebimento salvo e somado automaticamente no dia.",
       });
+      setShowReceiptModal(false);
     } catch (error) {
       console.error("Falha ao salvar recebimento:", error);
       setFeedback({
@@ -1130,6 +1225,7 @@ export default function EstoqueDieselOperacao() {
   }
 
   function prepareNewReceipt() {
+    setShowReceiptModal(true);
     setSelectedReceiptId(null);
     setEditingReceiptId(null);
     setReceiptFiles({ before: null, after: null });
@@ -1149,6 +1245,13 @@ export default function EstoqueDieselOperacao() {
       receiptPhotoBeforeUrl: "",
       receiptPhotoAfterUrl: "",
     }));
+  }
+
+  function openReceiptConsultation() {
+    if (!selectedReceiptId && dailyReceipts[0]?.id) {
+      setSelectedReceiptId(dailyReceipts[0].id);
+    }
+    setShowReceiptModal(true);
   }
 
   return (
@@ -1183,13 +1286,48 @@ export default function EstoqueDieselOperacao() {
               O mes fica fixo aqui em cima. Dentro da pagina, o lancamento do dia ja vem com a data de hoje quando ela pertence a este mes.
             </p>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 xl:min-w-[420px]">
             <MonthNavigation month={month} product={product} />
             <ProductSwitcher product={product} onChange={handleProductChange} />
+            <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
+              <button
+                type="button"
+                onClick={handleStartDailyLaunch}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-emerald-800"
+              >
+                <FaGasPump />
+                Iniciar lançamento do dia
+              </button>
+              {showDailyLaunch ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleHideDailyLaunch}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <FaTimes />
+                    Ocultar lançamento
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPumpConfig((current) => !current)}
+                    className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-black transition ${
+                      showPumpConfig
+                        ? "border-blue-300 bg-blue-50 text-blue-700"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <FaCog />
+                    Configuracao
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       </EstoqueDieselPanel>
 
+      {showDailyLaunch ? (
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div ref={launchPanelRef} className="xl:col-span-2">
         <EstoqueDieselPanel className="p-5">
@@ -1200,18 +1338,6 @@ export default function EstoqueDieselOperacao() {
                 O operador informa a medicao atual, a saida do Transnet e, se houver, o recebimento do diesel. O restante vem do D-1 e dos calculos automaticos.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowPumpConfig((current) => !current)}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-black transition ${
-                showPumpConfig
-                  ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              <FaCog />
-              Configuracao
-            </button>
           </div>
 
           {showPumpConfig ? (
@@ -1342,24 +1468,24 @@ export default function EstoqueDieselOperacao() {
 
           <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">Medicao D-1</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">Saldo anterior</h3>
               <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoD1)}</p>
               <p className="mt-1 text-sm font-semibold text-slate-500">
                 Vem automaticamente do ultimo saldo final salvo para {product}.
               </p>
             </div>
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-blue-700">Medicao inicial</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-blue-700">Saldo inicial do dia</h3>
               <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoInicial)}</p>
               <p className="mt-1 text-sm font-semibold text-blue-700">
-                Leitura realizada pela regua atual T1 e T2 no inicio do dia.
+                Saldo apurado pela regua depois das saidas do dia.
               </p>
             </div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-amber-700">Medicao atual</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-amber-700">Saldo final</h3>
               <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoAtual)}</p>
               <p className="mt-1 text-sm font-semibold text-amber-700">
-                Soma da medicao inicial com o recebimento considerado no dia.
+                Soma do saldo inicial do dia com o recebido de diesel.
               </p>
             </div>
           </div>
@@ -1369,25 +1495,87 @@ export default function EstoqueDieselOperacao() {
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider text-emerald-700">Recebimento de diesel</h3>
                 <p className="mt-1 text-sm font-semibold text-emerald-700">
-                  Se houve recebimento, informe NF, fornecedor, regua antes e depois, e anexe as fotos. O volume entra automaticamente na conta do dia.
+                  Cadastre, consulte ou edite os recebimentos em uma janela separada. O recebido entra automaticamente no fechamento do dia.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => updateField("hasReceipt", !form.hasReceipt)}
-                className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-black transition ${
-                  form.hasReceipt
-                    ? "bg-emerald-700 text-white hover:bg-emerald-800"
-                    : "border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
-                }`}
-              >
-                {form.hasReceipt ? "Recebimento ativo" : "Sem recebimento"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={prepareNewReceipt}
+                  className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-800"
+                >
+                  Novo recebimento
+                </button>
+                <button
+                  type="button"
+                  onClick={openReceiptConsultation}
+                  className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
+                >
+                  Consultar recebimentos
+                </button>
+              </div>
             </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3">
+                <div className="text-xs font-black uppercase tracking-wider text-slate-500">Recebimentos do dia</div>
+                <div className="mt-2 text-xl font-black text-slate-800">{dailyReceipts.length}</div>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3">
+                <div className="text-xs font-black uppercase tracking-wider text-slate-500">Recebido de Diesel</div>
+                <div className="mt-2 text-xl font-black text-slate-800">{parseLiters(computed.entradaDiesel)}</div>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3">
+                <div className="text-xs font-black uppercase tracking-wider text-slate-500">Planejado de Diesel</div>
+                <div className="mt-2 text-xl font-black text-slate-800">{parseLiters(plannedDieselLiters)}</div>
+              </div>
+            </div>
+          </div>
+
+          {showReceiptModal ? (
+            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+              <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800">Recebimento de diesel</h3>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">
+                      Informe o planejado, regua antes/depois e fotos. O volume recebido entra no dia selecionado.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowReceiptModal(false)}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                <div className="overflow-y-auto p-5">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h4 className="text-sm font-black uppercase tracking-wider text-emerald-700">Dados do recebimento</h4>
+                        <p className="mt-1 text-sm font-semibold text-emerald-700">
+                          Se houve recebimento, informe o planejado de diesel, fornecedor, regua antes e depois, e anexe as fotos.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateField("hasReceipt", !form.hasReceipt)}
+                        className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-black transition ${
+                          form.hasReceipt
+                            ? "bg-emerald-700 text-white hover:bg-emerald-800"
+                            : "border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
+                        }`}
+                      >
+                        {form.hasReceipt ? "Recebimento ativo" : "Sem recebimento"}
+                      </button>
+                    </div>
 
             {form.hasReceipt ? (
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <FormInput label="Volume NF (litros)" value={form.nfVolumeLitros} onChange={(value) => updateField("nfVolumeLitros", value)} required />
+                <FormInput label="Planejado de Diesel (litros)" value={form.nfVolumeLitros} onChange={(value) => updateField("nfVolumeLitros", value)} required />
                 <div className="space-y-2">
                   <SelectInput
                     label="Fornecedor"
@@ -1555,7 +1743,7 @@ export default function EstoqueDieselOperacao() {
                     </div>
                     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Volume NF</div>
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Planejado de Diesel</div>
                         <div className="mt-2 text-lg font-black text-slate-800">{parseLiters(selectedDailyReceipt.nfVolumeLitros)}</div>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -1589,6 +1777,18 @@ export default function EstoqueDieselOperacao() {
                         <div className="mt-2 text-lg font-black text-slate-800">{selectedDailyReceipt.reguaDepoisCm ?? "--"} cm</div>
                       </div>
                     </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <ReceiptPhotoCard
+                        label="Foto da regua antes"
+                        url={selectedReceiptPhotoBeforeUrl}
+                        onOpen={(url, title) => setReceiptPreview({ url, title })}
+                      />
+                      <ReceiptPhotoCard
+                        label="Foto da regua depois"
+                        url={selectedReceiptPhotoAfterUrl}
+                        onOpen={(url, title) => setReceiptPreview({ url, title })}
+                      />
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -1618,6 +1818,10 @@ export default function EstoqueDieselOperacao() {
               </div>
             ) : null}
           </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1698,7 +1902,7 @@ export default function EstoqueDieselOperacao() {
               />
 
               <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
-                Medicao D-1 considerada: <span className="font-black">{parseLiters(computed.medicaoD1)}</span>
+                Saldo anterior considerado: <span className="font-black">{parseLiters(computed.medicaoD1)}</span>
               </div>
 
               {dailyReceipts.length > 0 ? (
@@ -1801,34 +2005,24 @@ export default function EstoqueDieselOperacao() {
         <EstoqueDieselPanel className="p-5">
           <h2 className="text-lg font-black text-slate-800">Resumo calculado</h2>
           <div className="mt-4 space-y-3">
-            <SummaryCard title="Medicao D-1" value={parseLiters(computed.medicaoD1)} tone="slate" />
-            <SummaryCard title="Medicao inicial" value={parseLiters(computed.medicaoInicial)} tone="blue" />
-            <SummaryCard title="Medicao atual" value={parseLiters(computed.medicaoAtual)} tone="blue" />
-            <SummaryCard
-              title="Recebimento considerado"
-              value={parseLiters(computed.entradaDiesel)}
-              tone={form.hasReceipt || dailyReceipts.length > 0 ? "emerald" : "slate"}
-            />
+            <SummaryCard title="Saldo anterior" value={parseLiters(computed.medicaoD1)} sub="Mesmo saldo final do D-1" tone="slate" />
             <SummaryCard title="Saida tanque" value={parseLiters(computed.saidaTanque)} tone="amber" />
             <SummaryCard title="Saida total bombas" value={parseLiters(computed.saidaTotalBombas)} tone="amber" />
             <SummaryCard title="Saida Transnet" value={parseLiters(computed.saidaTransnet)} tone="amber" />
+            <SummaryCard title="% Tanque x Transnet" value={parsePct(computed.pctDiffTransnet)} tone={getPctTone(computed.pctDiffTransnet, productParams.transnetWarnPct || 0.02, productParams.transnetCriticalPct || 0.03)} />
+            <SummaryCard title="Saldo inicial do dia" value={parseLiters(computed.medicaoInicial)} sub="Saldo depois das saidas" tone="blue" />
             <SummaryCard
-              title="Recebimento medido"
-              value={parseLiters(computed.receiptMeasuredLiters)}
-              tone={
-                computed.receiptBelowExpected
-                  ? "rose"
-                  : computed.receiptWithinTolerance === false
-                  ? "amber"
-                  : "emerald"
-              }
+              title="Recebido de Diesel"
+              value={parseLiters(computed.entradaDiesel)}
+              tone={form.hasReceipt || dailyReceipts.length > 0 ? "emerald" : "slate"}
             />
-            <SummaryCard title="% Dif NF x Recebido" value={parsePct(computed.pctDiffNF)} tone={computed.receiptBelowExpected ? "rose" : getPctTone(computed.pctDiffNF, productParams.nfDiffWarnPct || 0.01, productParams.nfDiffCriticalPct || 0.03)} />
-            <SummaryCard title="% Dif Tanque x Bombas" value={parsePct(computed.pctDiffTankBombas)} tone={getPctTone(computed.pctDiffTankBombas, productParams.transnetWarnPct || 0.02, productParams.transnetCriticalPct || 0.03)} />
-            <SummaryCard title="% Dif Tanque x Transnet" value={parsePct(computed.pctDiffTransnet)} tone={getPctTone(computed.pctDiffTransnet, productParams.transnetWarnPct || 0.02, productParams.transnetCriticalPct || 0.03)} />
+            <SummaryCard title="Planejado de Diesel" value={parseLiters(plannedDieselLiters)} tone={plannedDieselLiters > 0 ? "emerald" : "slate"} />
+            <SummaryCard title="Saldo final" value={parseLiters(computed.saldoFinal)} tone="blue" />
+            <SummaryCard title="Status" value={status.label} sub={getStatusDescription(status.label)} tone={status.tone} />
           </div>
         </EstoqueDieselPanel>
       </div>
+      ) : null}
 
       <EstoqueDieselPanel className="p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1846,28 +2040,47 @@ export default function EstoqueDieselOperacao() {
 
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-500">
+            <thead className="text-xs font-black uppercase tracking-wider text-slate-500">
+              <tr className="text-[11px] text-slate-700">
+                {[
+                  { label: "Dia", span: 1, className: "rounded-l-2xl border-slate-200 bg-slate-100" },
+                  { label: "Saldo", span: 1, className: "border-blue-200 bg-blue-50 text-blue-700" },
+                  { label: "Saidas", span: 3, className: "border-amber-200 bg-amber-50 text-amber-700" },
+                  { label: "Comparativo", span: 1, className: "border-cyan-200 bg-cyan-50 text-cyan-700" },
+                  { label: "Saldo do dia", span: 1, className: "border-sky-200 bg-sky-50 text-sky-700" },
+                  { label: "Recebimento", span: 2, className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+                  { label: "Fechamento", span: 2, className: "rounded-r-2xl border-slate-200 bg-slate-100 text-slate-700" },
+                ].map((cluster) => (
+                  <th
+                    key={cluster.label}
+                    colSpan={cluster.span}
+                    className={`border px-4 py-2 text-center ${cluster.className}`}
+                  >
+                    {cluster.label}
+                  </th>
+                ))}
+              </tr>
               <tr>
                 {[
-                  "Data",
-                  "Saldo ant.",
-                  "NF",
-                  "Entrada diesel",
-                  "Saldo final",
-                  "Saida tanque",
-                  "Bombas",
-                  "Transnet",
-                  "% NF",
-                  "% Tanque x Transnet",
-                  "Status",
+                  { label: "Data", className: "bg-slate-50 border-r border-slate-200" },
+                  { label: "Saldo anterior", className: "bg-blue-50/70 border-r border-blue-100 text-blue-800" },
+                  { label: "Saida tanque", className: "bg-amber-50/70 text-amber-800" },
+                  { label: "Bombas", className: "bg-amber-50/70 text-amber-800" },
+                  { label: "Transnet", className: "bg-amber-50/70 border-r border-amber-200 text-amber-800" },
+                  { label: "% Tanque x Transnet", className: "bg-cyan-50/70 border-r border-cyan-200 text-cyan-800" },
+                  { label: "Saldo inicial do dia", className: "bg-sky-50/70 border-r border-sky-200 text-sky-800" },
+                  { label: "Recebido de Diesel", className: "bg-emerald-50/70 text-emerald-800" },
+                  { label: "Planejado de Diesel", className: "bg-emerald-50/70 border-r border-emerald-200 text-emerald-800" },
+                  { label: "Saldo final", className: "bg-slate-50" },
+                  { label: "Status", className: "bg-slate-50" },
                 ].map((header, index, array) => (
                   <th
-                    key={header}
-                    className={`px-4 py-3 ${index === 0 ? "rounded-l-2xl" : ""} ${
+                    key={header.label}
+                    className={`px-4 py-3 ${header.className} ${index === 0 ? "rounded-l-2xl" : ""} ${
                       index === array.length - 1 ? "rounded-r-2xl" : ""
                     }`}
                   >
-                    {header}
+                    {header.label}
                   </th>
                 ))}
               </tr>
@@ -1888,19 +2101,19 @@ export default function EstoqueDieselOperacao() {
                     onClick={() => handleSelectEntry(entry)}
                     className={`cursor-pointer transition hover:bg-slate-50 ${isSelected ? "bg-blue-50/60" : ""}`}
                   >
-                    <td className={`px-4 py-3 font-black ${isSelected ? "text-blue-700" : "text-slate-800"}`}>
+                    <td className={`border-r border-slate-100 bg-slate-50/60 px-4 py-3 font-black ${isSelected ? "text-blue-700" : "text-slate-800"}`}>
                       {new Date(`${entry.date}T00:00:00`).toLocaleDateString("pt-BR")}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoAnterior)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.nfVolumeLitros)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.entradaDiesel)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saldoFinal)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTanque)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTotalBombas)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parseLiters(entry.saidaTransnet)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parsePct(entry.pctDiffNF)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{parsePct(entry.pctDiffTransnet)}</td>
-                    <td className="px-4 py-3">
+                    <td className="border-r border-blue-100 bg-blue-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saldoAnterior)}</td>
+                    <td className="bg-amber-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saidaTanque)}</td>
+                    <td className="bg-amber-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saidaTotalBombas)}</td>
+                    <td className="border-r border-amber-100 bg-amber-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saidaTransnet)}</td>
+                    <td className="border-r border-cyan-100 bg-cyan-50/30 px-4 py-3 font-semibold text-slate-700">{parsePct(entry.pctDiffTransnet)}</td>
+                    <td className="border-r border-sky-100 bg-sky-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saldoInicialDia)}</td>
+                    <td className="bg-emerald-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.recebidoDiesel ?? entry.entradaDiesel)}</td>
+                    <td className="border-r border-emerald-100 bg-emerald-50/30 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.nfVolumeLitros)}</td>
+                    <td className="bg-slate-50/50 px-4 py-3 font-semibold text-slate-700">{parseLiters(entry.saldoFinal)}</td>
+                    <td className="bg-slate-50/50 px-4 py-3">
                       <span
                         className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${
                           entry.status === "Critico"
@@ -1921,6 +2134,12 @@ export default function EstoqueDieselOperacao() {
           </table>
         </div>
       </EstoqueDieselPanel>
+      <MediaPreviewModal
+        open={Boolean(receiptPreview?.url)}
+        url={receiptPreview?.url}
+        title={receiptPreview?.title || "Foto do recebimento"}
+        onClose={() => setReceiptPreview(null)}
+      />
     </EstoqueDieselPageShell>
   );
 }

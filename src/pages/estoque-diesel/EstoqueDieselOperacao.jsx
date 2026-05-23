@@ -797,6 +797,14 @@ export default function EstoqueDieselOperacao() {
   }
 
   function handleStartDailyLaunch() {
+    const defaultLaunchDate = buildDefaultForm(product, year, month).date;
+    const existingDailyEntry = monthlyEntries.find((entry) => entry.date === defaultLaunchDate);
+
+    if (existingDailyEntry) {
+      handleSelectEntry(existingDailyEntry);
+      return;
+    }
+
     resetFormForNewEntry();
     setShowDailyLaunch(true);
     window.requestAnimationFrame(() => {
@@ -1277,18 +1285,44 @@ export default function EstoqueDieselOperacao() {
             <p className="mt-1 text-sm font-semibold text-slate-500">
               O mes fica fixo aqui em cima. Dentro da pagina, o lancamento do dia ja vem com a data de hoje quando ela pertence a este mes.
             </p>
-            <button
-              type="button"
-              onClick={handleStartDailyLaunch}
-              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-emerald-800"
-            >
-              <FaGasPump />
-              Iniciar lançamento do dia
-            </button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 xl:min-w-[420px]">
             <MonthNavigation month={month} product={product} />
             <ProductSwitcher product={product} onChange={handleProductChange} />
+            <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
+              <button
+                type="button"
+                onClick={handleStartDailyLaunch}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-emerald-800"
+              >
+                <FaGasPump />
+                Iniciar lançamento do dia
+              </button>
+              {showDailyLaunch ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleHideDailyLaunch}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <FaTimes />
+                    Ocultar lançamento
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPumpConfig((current) => !current)}
+                    className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-black transition ${
+                      showPumpConfig
+                        ? "border-blue-300 bg-blue-50 text-blue-700"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <FaCog />
+                    Configuracao
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       </EstoqueDieselPanel>
@@ -1303,28 +1337,6 @@ export default function EstoqueDieselOperacao() {
               <p className="mt-1 text-sm font-semibold text-slate-500">
                 O operador informa a medicao atual, a saida do Transnet e, se houver, o recebimento do diesel. O restante vem do D-1 e dos calculos automaticos.
               </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleHideDailyLaunch}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
-              >
-                <FaTimes />
-                Ocultar lançamento
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowPumpConfig((current) => !current)}
-                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-black transition ${
-                  showPumpConfig
-                    ? "border-blue-300 bg-blue-50 text-blue-700"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                <FaCog />
-                Configuracao
-              </button>
             </div>
           </div>
 

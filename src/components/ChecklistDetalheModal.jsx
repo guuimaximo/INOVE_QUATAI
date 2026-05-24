@@ -245,6 +245,34 @@ export default function ChecklistDetalheModal({ open, onClose, row }) {
   const algumaCoisa = parsed.grupos.length > 0 || parsed.observacoes.length > 0 || parsed.avarias;
 
   return (
+    <>
+      <ChecklistRelatorioModal
+        open={open}
+        onClose={onClose}
+        row={row}
+        fotos={fotos}
+        parsed={parsed}
+        prefixo={prefixo}
+        motorista={motorista}
+        chapa={chapa}
+        dataBR={dataBR}
+        horaBR={horaBR}
+        totalNC={totalNC}
+        totalOK={totalOK}
+        temVideo={temVideo}
+        onOpenFile={setViewerFile}
+      />
+
+      <FileViewerModal
+        open={Boolean(viewerFile?.url)}
+        url={viewerFile?.url || ""}
+        name={viewerFile?.name || ""}
+        onClose={() => setViewerFile(null)}
+      />
+    </>
+  );
+
+  return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm">
       <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         {/* HEADER */}
@@ -481,6 +509,7 @@ function ChecklistRelatorioModal({
   totalNC,
   totalOK,
   temVideo,
+  onOpenFile,
 }) {
   const [salvandoPDF, setSalvandoPDF] = useState(false);
 
@@ -662,7 +691,14 @@ function ChecklistRelatorioModal({
               <div className="mt-3 grid gap-4 md:grid-cols-2">
                 {fotos.map((url, idx) => (
                   <figure key={`${url}-${idx}`} className="checklist-report-photo overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                    <img src={url} alt={`Foto ${idx + 1}`} className="max-h-[360px] w-full bg-white object-contain" />
+                    <button
+                      type="button"
+                      onClick={() => onOpenFile?.({ url, name: fileNameFromUrl(url) })}
+                      className="block w-full bg-white"
+                      title="Abrir foto"
+                    >
+                      <img src={url} alt={`Foto ${idx + 1}`} className="max-h-[360px] w-full object-contain" />
+                    </button>
                     <figcaption className="border-t border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">
                       Foto {idx + 1}
                     </figcaption>

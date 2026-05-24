@@ -402,7 +402,16 @@ export default function ChecklistCentral() {
               : "-";
 
             return (
-              <div key={r.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div
+                key={r.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => abrirDetalhes(r)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") abrirDetalhes(r);
+                }}
+                className="cursor-pointer rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/30"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-black text-slate-900">{r?.nome_motorista || "-"}</div>
@@ -427,7 +436,10 @@ export default function ChecklistCentral() {
                 </div>
 
                 <button
-                  onClick={() => abrirDetalhes(r)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    abrirDetalhes(r);
+                  }}
                   className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
                   type="button"
                 >
@@ -473,7 +485,11 @@ export default function ChecklistCentral() {
                   : "-";
 
                 return (
-                  <tr key={r.id} className="transition-colors hover:bg-slate-50">
+                  <tr
+                    key={r.id}
+                    onClick={() => abrirDetalhes(r)}
+                    className="cursor-pointer transition-colors hover:bg-blue-50/40"
+                  >
                     <td className="whitespace-nowrap px-4 py-4 font-mono text-sm text-slate-500">{dataBR}</td>
                     <td className="whitespace-nowrap px-4 py-4 font-mono text-sm text-slate-500">{horaBR}</td>
                     <td className="px-4 py-4">
@@ -492,7 +508,10 @@ export default function ChecklistCentral() {
                     <td className="px-4 py-4">{midiasBadges(r)}</td>
                     <td className="px-4 py-4">
                       <button
-                        onClick={() => abrirDetalhes(r)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          abrirDetalhes(r);
+                        }}
                         className="flex items-center gap-1.5 whitespace-nowrap rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"
                         type="button"
                       >

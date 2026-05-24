@@ -544,14 +544,12 @@ function ChecklistRelatorioModal({
       }
 
       function addFooter() {
-        const current = pdf.getCurrentPageInfo().pageNumber;
         pdf.setDrawColor(...colors.line);
         pdf.line(margin, pageH - 12, pageW - margin, pageH - 12);
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(8);
         setText(colors.muted);
         pdf.text(`Checklist ${prefixo} - ${motorista}`, margin, pageH - 7);
-        pdf.text(`Pagina ${current}`, pageW - margin, pageH - 7, { align: "right" });
       }
 
       function addPage() {
@@ -590,45 +588,45 @@ function ChecklistRelatorioModal({
       function infoBox(x, top, w, h, label, value, fill = colors.blueSoft) {
         pdf.setFillColor(...fill);
         pdf.setDrawColor(...colors.line);
-        pdf.roundedRect(x, top, w, h, 3, 3, "FD");
+        pdf.roundedRect(x, top, w, h, 2, 2, "FD");
         pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(7);
+        pdf.setFontSize(6.5);
         setText(colors.muted);
-        pdf.text(String(label || "").toUpperCase(), x + 4, top + 6);
-        pdf.setFontSize(13);
+        pdf.text(String(label || "").toUpperCase(), x + 3, top + 5);
+        pdf.setFontSize(10.5);
         setText(colors.ink);
-        const lines = wrapped(value, w - 8, 13).slice(0, 2);
-        pdf.text(lines, x + 4, top + 14);
+        const lines = wrapped(value, w - 6, 10.5).slice(0, 2);
+        pdf.text(lines, x + 3, top + 12);
       }
 
       function metricBox(x, top, w, label, value, fill, textColor) {
         pdf.setFillColor(...fill);
         pdf.setDrawColor(...colors.line);
-        pdf.roundedRect(x, top, w, 22, 3, 3, "FD");
+        pdf.roundedRect(x, top, w, 16, 2, 2, "FD");
         pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(7);
+        pdf.setFontSize(6.5);
         setText(colors.muted);
-        pdf.text(String(label || "").toUpperCase(), x + 4, top + 6);
-        pdf.setFontSize(16);
+        pdf.text(String(label || "").toUpperCase(), x + 3, top + 5);
+        pdf.setFontSize(12);
         setText(textColor);
-        pdf.text(String(value ?? "-"), x + 4, top + 16);
+        pdf.text(String(value ?? "-"), x + 3, top + 12);
       }
 
       function paragraphBox(title, text, fill, textColor) {
         const lines = wrapped(text, contentW - 8, 10);
-        const h = Math.max(20, lines.length * 5 + 15);
+        const h = Math.max(16, lines.length * 4.5 + 12);
         ensureSpace(h + 6);
         pdf.setFillColor(...fill);
         pdf.setDrawColor(...colors.line);
-        pdf.roundedRect(margin, y, contentW, h, 3, 3, "FD");
+        pdf.roundedRect(margin, y, contentW, h, 2, 2, "FD");
         pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(9);
+        pdf.setFontSize(8);
         setText(textColor);
-        pdf.text(String(title || "").toUpperCase(), margin + 4, y + 7);
+        pdf.text(String(title || "").toUpperCase(), margin + 4, y + 6);
         pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(10);
+        pdf.setFontSize(9);
         setText(colors.ink);
-        pdf.text(lines, margin + 4, y + 14);
+        pdf.text(lines, margin + 4, y + 12);
         y += h + 6;
       }
 
@@ -706,17 +704,17 @@ function ChecklistRelatorioModal({
       sectionTitle("Identificacao");
       const colGap = 5;
       const colW = (contentW - colGap * 2) / 3;
-      infoBox(margin, y, colW * 1.4, 26, "Motorista", `${motorista}${chapa ? `\nChapa ${chapa}` : ""}`, colors.blueSoft);
-      infoBox(margin + colW * 1.4 + colGap, y, colW * 0.8, 26, "Data", dataBR, [248, 250, 252]);
-      infoBox(margin + colW * 2.2 + colGap * 2, y, colW * 0.8, 26, "Hora", horaBR, [248, 250, 252]);
-      y += 34;
+      infoBox(margin, y, colW * 1.4, 20, "Motorista", `${motorista}${chapa ? `\nChapa ${chapa}` : ""}`, colors.blueSoft);
+      infoBox(margin + colW * 1.4 + colGap, y, colW * 0.8, 20, "Data", dataBR, [248, 250, 252]);
+      infoBox(margin + colW * 2.2 + colGap * 2, y, colW * 0.8, 20, "Hora", horaBR, [248, 250, 252]);
+      y += 27;
 
       const metricW = (contentW - colGap * 3) / 4;
       metricBox(margin, y, metricW, "Nao conformidades", totalNC, colors.roseSoft, colors.rose);
       metricBox(margin + metricW + colGap, y, metricW, "Itens OK", totalOK, colors.greenSoft, colors.green);
       metricBox(margin + (metricW + colGap) * 2, y, metricW, "Fotos", fotos.length, colors.blueSoft, colors.blue);
       metricBox(margin + (metricW + colGap) * 3, y, metricW, "Video", temVideo ? "Sim" : "Nao", [248, 250, 252], colors.ink);
-      y += 32;
+      y += 25;
 
       if (parsed.avarias) paragraphBox("Avarias relatadas", parsed.avarias, colors.amberSoft, colors.amber);
 
@@ -730,18 +728,18 @@ function ChecklistRelatorioModal({
       sectionTitle("Itens do checklist");
       if (parsed.grupos.length) {
         parsed.grupos.forEach((grupo) => {
-          ensureSpace(18);
+          ensureSpace(28);
           pdf.setFillColor(255, 255, 255);
           pdf.setDrawColor(...colors.line);
-          pdf.roundedRect(margin, y, contentW, 12, 3, 3, "FD");
+          pdf.roundedRect(margin, y, contentW, 10, 2, 2, "FD");
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(10);
+          pdf.setFontSize(9);
           setText(colors.ink);
-          pdf.text(grupo.nome || "Grupo", margin + 4, y + 8);
+          pdf.text(grupo.nome || "Grupo", margin + 4, y + 7);
           pdf.setFontSize(8);
           setText(colors.muted);
-          pdf.text(`${grupo.NC.length} NC - ${grupo.OK.length} OK`, pageW - margin - 4, y + 8, { align: "right" });
-          y += 17;
+          pdf.text(`${grupo.NC.length} NC - ${grupo.OK.length} OK`, pageW - margin - 4, y + 7, { align: "right" });
+          y += 14;
           listBlock("Nao conformidades", grupo.NC, colors.rose);
           listBlock("Itens OK", grupo.OK, colors.green);
         });
@@ -753,7 +751,7 @@ function ChecklistRelatorioModal({
         sectionTitle("Fotos do checklist");
         for (let idx = 0; idx < fotos.length; idx += 1) {
           const prepared = await imageToJpeg(fotos[idx]);
-          ensureSpace(86);
+          ensureSpace(72);
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(9);
           setText(colors.ink);
@@ -762,7 +760,7 @@ function ChecklistRelatorioModal({
 
           if (prepared?.dataUrl) {
             const imgMaxW = contentW;
-            const imgMaxH = 92;
+            const imgMaxH = 78;
             const ratio = Math.min(imgMaxW / prepared.width, imgMaxH / prepared.height);
             const w = prepared.width * ratio;
             const h = prepared.height * ratio;

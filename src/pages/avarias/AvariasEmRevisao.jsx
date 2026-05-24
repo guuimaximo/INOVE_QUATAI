@@ -572,17 +572,31 @@ export default function AvariasEmRevisao() {
   const [avarias, setAvarias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [erro, setErro] = useState('');
 
   async function carregar() {
     setLoading(true);
-    const { data } = await supabase
-      .from('avarias')
-      .select('*')
-      .eq('status', 'Reprovado')
-      .order('aprovado_em', { ascending: false });
+    setErro('');
 
-    setAvarias(data || []);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('avarias')
+        .select('*')
+        .eq('status', 'Reprovado')
+        .order('aprovado_em', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      setAvarias(data || []);
+    } catch (error) {
+      console.error('Falha ao carregar avarias em revisao:', error);
+      setAvarias([]);
+      setErro(error?.message || 'Nao foi possivel carregar as pendencias de revisao.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -598,6 +612,12 @@ export default function AvariasEmRevisao() {
           Trate reprovações e ajustes com o mesmo padrão visual do resumo e das centrais mais novas.
         </p>
       </div>
+
+      {erro ? (
+        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700 shadow-sm">
+          Erro ao carregar pendencias de revisao: {erro}
+        </div>
+      ) : null}
 
       <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full">
@@ -674,13 +694,6 @@ export default function AvariasEmRevisao() {
           onAtualizarLista={carregar}
         />
       )}
-
-      <FileViewerModal
-        open={Boolean(viewerFile?.url)}
-        url={viewerFile?.url || ''}
-        name={viewerFile?.name || ''}
-        onClose={() => setViewerFile(null)}
-      />
     </div>
   );
 }

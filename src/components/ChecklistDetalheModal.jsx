@@ -514,40 +514,294 @@ function ChecklistRelatorioModal({
   const [salvandoPDF, setSalvandoPDF] = useState(false);
 
   async function salvarPDF() {
-    const element = document.getElementById("checklist-report-page-content");
-    if (!element) return;
-
     setSalvandoPDF(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
       const { jsPDF } = await import("jspdf");
-      const canvas = await html2canvas(element, {
-        backgroundColor: "#ffffff",
-        scale: 2,
-        useCORS: true,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 12;
+      const contentW = pageW - margin * 2;
+      let y = 0;
+
+      const colors = {
+        ink: [15, 23, 42],
+        muted: [100, 116, 139],
+        line: [226, 232, 240],
+        blue: [37, 99, 235],
+        blueSoft: [239, 246, 255],
+        greenSoft: [236, 253, 245],
+        green: [4, 120, 87],
+        roseSoft: [255, 241, 242],
+        rose: [190, 18, 60],
+        amberSoft: [255, 251, 235],
+        amber: [146, 64, 14],
+      };
+
+      function setText(color = colors.ink) {
+        pdf.setTextColor(...color);
+      }
+
+      function addFooter() {
+        const current = pdf.getCurrentPageInfo().pageNumber;
+        pdf.setDrawColor(...colors.line);
+        pdf.line(margin, pageH - 12, pageW - margin, pageH - 12);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        setText(colors.muted);
+        pdf.text(`Checklist ${prefixo} - ${motorista}`, margin, pageH - 7);
+        pdf.text(`Pagina ${current}`, pageW - margin, pageH - 7, { align: "right" });
+      }
+
+      function addPage() {
+        addFooter();
+        pdf.addPage();
+        y = 18;
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        setText(colors.blue);
+        pdf.text("RELATORIO DO CHECKLIST", margin, 10);
+        pdf.setDrawColor(...colors.line);
+        pdf.line(margin, 13, pageW - margin, 13);
+      }
+
+      function ensureSpace(needed) {
+        if (y + needed > pageH - 18) addPage();
+      }
+
+      function wrapped(text, width, size = 10) {
+        pdf.setFontSize(size);
+        return pdf.splitTextToSize(String(text || "-"), width);
+      }
+
+      function sectionTitle(title) {
+        ensureSpace(14);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(10);
+        setText(colors.ink);
+        pdf.text(String(title || "").toUpperCase(), margin, y);
+        y += 4;
+        pdf.setDrawColor(...colors.line);
+        pdf.line(margin, y, pageW - margin, y);
+        y += 6;
+      }
+
+      function infoBox(x, top, w, h, label, value, fill = colors.blueSoft) {
+        pdf.setFillColor(...fill);
+        pdf.setDrawColor(...colors.line);
+        pdf.roundedRect(x, top, w, h, 3, 3, "FD");
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7);
+        setText(colors.muted);
+        pdf.text(String(label || "").toUpperCase(), x + 4, top + 6);
+        pdf.setFontSize(13);
+        setText(colors.ink);
+        const lines = wrapped(value, w - 8, 13).slice(0, 2);
+        pdf.text(lines, x + 4, top + 14);
+      }
+
+      function metricBox(x, top, w, label, value, fill, textColor) {
+        pdf.setFillColor(...fill);
+        pdf.setDrawColor(...colors.line);
+        pdf.roundedRect(x, top, w, 22, 3, 3, "FD");
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7);
+        setText(colors.muted);
+        pdf.text(String(label || "").toUpperCase(), x + 4, top + 6);
+        pdf.setFontSize(16);
+        setText(textColor);
+        pdf.text(String(value ?? "-"), x + 4, top + 16);
+      }
+
+      function paragraphBox(title, text, fill, textColor) {
+        const lines = wrapped(text, contentW - 8, 10);
+        const h = Math.max(20, lines.length * 5 + 15);
+        ensureSpace(h + 6);
+        pdf.setFillColor(...fill);
+        pdf.setDrawColor(...colors.line);
+        pdf.roundedRect(margin, y, contentW, h, 3, 3, "FD");
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        setText(textColor);
+        pdf.text(String(title || "").toUpperCase(), margin + 4, y + 7);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+        setText(colors.ink);
+        pdf.text(lines, margin + 4, y + 14);
+        y += h + 6;
+      }
+
+      function listBlock(title, items, toneColor) {
+        if (!items?.length) return;
+        const itemLines = items.flatMap((item) => wrapped(`- ${item}`, contentW - 14, 9));
+        const h = itemLines.length * 4.2 + 12;
+        ensureSpace(h + 3);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8);
+        setText(toneColor);
+        pdf.text(String(title || "").toUpperCase(), margin + 4, y);
+        y += 5;
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9);
+        setText(colors.ink);
+        pdf.text(itemLines, margin + 4, y);
+        y += itemLines.length * 4.2 + 5;
+      }
+
+      async function imageToJpeg(url) {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error("Imagem indisponivel");
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          try {
+            const img = await new Promise((resolve, reject) => {
+              const image = new Image();
+              image.onload = () => resolve(image);
+              image.onerror = reject;
+              image.src = objectUrl;
+            });
+            const maxW = 1400;
+            const scale = Math.min(1, maxW / img.naturalWidth);
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            return {
+              dataUrl: canvas.toDataURL("image/jpeg", 0.86),
+              width: canvas.width,
+              height: canvas.height,
+            };
+          } finally {
+            URL.revokeObjectURL(objectUrl);
+          }
+        } catch (error) {
+          console.warn("Falha ao preparar foto para PDF:", error);
+          return null;
+        }
+      }
+
+      pdf.setProperties({
+        title: `Checklist ${prefixo}`,
+        subject: "Relatorio de checklist",
+        creator: "Portal Inove",
       });
 
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
-      const imgWidth = pageWidth - margin * 2;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const pageBodyHeight = pageHeight - margin * 2;
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      pdf.setFillColor(...colors.blue);
+      pdf.rect(0, 0, pageW, 30, "F");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(18);
+      setText([255, 255, 255]);
+      pdf.text("CHECKLIST COMPLETO", margin, 13);
+      pdf.setFontSize(10);
+      pdf.text(`Veiculo ${prefixo}`, margin, 22);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, pageW - margin, 13, { align: "right" });
+      y = 42;
 
-      let heightLeft = imgHeight;
-      let position = margin;
-      pdf.addImage(imgData, "JPEG", margin, position, imgWidth, imgHeight);
-      heightLeft -= pageBodyHeight;
+      sectionTitle("Identificacao");
+      const colGap = 5;
+      const colW = (contentW - colGap * 2) / 3;
+      infoBox(margin, y, colW * 1.4, 26, "Motorista", `${motorista}${chapa ? `\nChapa ${chapa}` : ""}`, colors.blueSoft);
+      infoBox(margin + colW * 1.4 + colGap, y, colW * 0.8, 26, "Data", dataBR, [248, 250, 252]);
+      infoBox(margin + colW * 2.2 + colGap * 2, y, colW * 0.8, 26, "Hora", horaBR, [248, 250, 252]);
+      y += 34;
 
-      while (heightLeft > 0) {
-        position = margin - (imgHeight - heightLeft);
-        pdf.addPage();
-        pdf.addImage(imgData, "JPEG", margin, position, imgWidth, imgHeight);
-        heightLeft -= pageBodyHeight;
+      const metricW = (contentW - colGap * 3) / 4;
+      metricBox(margin, y, metricW, "Nao conformidades", totalNC, colors.roseSoft, colors.rose);
+      metricBox(margin + metricW + colGap, y, metricW, "Itens OK", totalOK, colors.greenSoft, colors.green);
+      metricBox(margin + (metricW + colGap) * 2, y, metricW, "Fotos", fotos.length, colors.blueSoft, colors.blue);
+      metricBox(margin + (metricW + colGap) * 3, y, metricW, "Video", temVideo ? "Sim" : "Nao", [248, 250, 252], colors.ink);
+      y += 32;
+
+      if (parsed.avarias) paragraphBox("Avarias relatadas", parsed.avarias, colors.amberSoft, colors.amber);
+
+      if (parsed.observacoes.length) {
+        sectionTitle("Observacoes");
+        parsed.observacoes.forEach((o) => {
+          paragraphBox(o.label || "Observacao", o.valor, [248, 250, 252], colors.blue);
+        });
+      }
+
+      sectionTitle("Itens do checklist");
+      if (parsed.grupos.length) {
+        parsed.grupos.forEach((grupo) => {
+          ensureSpace(18);
+          pdf.setFillColor(255, 255, 255);
+          pdf.setDrawColor(...colors.line);
+          pdf.roundedRect(margin, y, contentW, 12, 3, 3, "FD");
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(10);
+          setText(colors.ink);
+          pdf.text(grupo.nome || "Grupo", margin + 4, y + 8);
+          pdf.setFontSize(8);
+          setText(colors.muted);
+          pdf.text(`${grupo.NC.length} NC - ${grupo.OK.length} OK`, pageW - margin - 4, y + 8, { align: "right" });
+          y += 17;
+          listBlock("Nao conformidades", grupo.NC, colors.rose);
+          listBlock("Itens OK", grupo.OK, colors.green);
+        });
+      } else {
+        paragraphBox("Resumo", "Resumo estruturado nao disponivel para este checklist.", [248, 250, 252], colors.blue);
+      }
+
+      if (fotos.length) {
+        sectionTitle("Fotos do checklist");
+        for (let idx = 0; idx < fotos.length; idx += 1) {
+          const prepared = await imageToJpeg(fotos[idx]);
+          ensureSpace(86);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(9);
+          setText(colors.ink);
+          pdf.text(`Foto ${idx + 1}`, margin, y);
+          y += 4;
+
+          if (prepared?.dataUrl) {
+            const imgMaxW = contentW;
+            const imgMaxH = 92;
+            const ratio = Math.min(imgMaxW / prepared.width, imgMaxH / prepared.height);
+            const w = prepared.width * ratio;
+            const h = prepared.height * ratio;
+            ensureSpace(h + 12);
+            const x = margin + (contentW - w) / 2;
+            pdf.setDrawColor(...colors.line);
+            pdf.roundedRect(x - 1, y - 1, w + 2, h + 2, 2, 2, "S");
+            pdf.addImage(prepared.dataUrl, "JPEG", x, y, w, h);
+            y += h + 8;
+          } else {
+            const lines = wrapped(fotos[idx], contentW, 8);
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(8);
+            setText(colors.blue);
+            pdf.text(lines, margin, y);
+            y += lines.length * 4 + 6;
+          }
+        }
+      }
+
+      if (temVideo) {
+        sectionTitle("Video");
+        const lines = wrapped(row.video_url, contentW, 8);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        setText(colors.blue);
+        pdf.text(lines, margin, y);
+        y += lines.length * 4 + 4;
+      }
+
+      addFooter();
+
+      const pageCount = pdf.getNumberOfPages();
+      for (let page = 1; page <= pageCount; page += 1) {
+        pdf.setPage(page);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        setText(colors.muted);
+        pdf.text(`Pagina ${page} de ${pageCount}`, pageW - margin, pageH - 7, { align: "right" });
       }
 
       const dataArquivo = String(dataBR || "").replace(/\D/g, "") || "checklist";

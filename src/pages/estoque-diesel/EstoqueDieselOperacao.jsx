@@ -1251,7 +1251,14 @@ export default function EstoqueDieselOperacao() {
     if (!selectedReceiptId && dailyReceipts[0]?.id) {
       setSelectedReceiptId(dailyReceipts[0].id);
     }
+    setForm((current) => ({ ...current, hasReceipt: true }));
     setShowReceiptModal(true);
+  }
+
+  function closeReceiptModal() {
+    // Descarta o que foi digitado e nao salvo, para nao "vazar" no calculo do dia.
+    clearReceiptFields();
+    setShowReceiptModal(false);
   }
 
   return (
@@ -1544,7 +1551,7 @@ export default function EstoqueDieselOperacao() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowReceiptModal(false)}
+                    onClick={closeReceiptModal}
                     className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
                   >
                     Fechar
@@ -1553,24 +1560,11 @@ export default function EstoqueDieselOperacao() {
 
                 <div className="overflow-y-auto p-5">
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <h4 className="text-sm font-black uppercase tracking-wider text-emerald-700">Dados do recebimento</h4>
-                        <p className="mt-1 text-sm font-semibold text-emerald-700">
-                          Se houve recebimento, informe o planejado de diesel, fornecedor, regua antes e depois, e anexe as fotos.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => updateField("hasReceipt", !form.hasReceipt)}
-                        className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-black transition ${
-                          form.hasReceipt
-                            ? "bg-emerald-700 text-white hover:bg-emerald-800"
-                            : "border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
-                        }`}
-                      >
-                        {form.hasReceipt ? "Recebimento ativo" : "Sem recebimento"}
-                      </button>
+                    <div>
+                      <h4 className="text-sm font-black uppercase tracking-wider text-emerald-700">Dados do recebimento</h4>
+                      <p className="mt-1 text-sm font-semibold text-emerald-700">
+                        Informe o planejado de diesel, fornecedor, regua antes e depois, e anexe as fotos.
+                      </p>
                     </div>
 
             {form.hasReceipt ? (
@@ -1649,6 +1643,39 @@ export default function EstoqueDieselOperacao() {
                   <div className="mt-2 text-lg font-black text-slate-800">
                     {parseCurrency((Number(form.unitPrice || 0) || 0) * (Number(form.nfVolumeLitros || 0) || 0))}
                   </div>
+                </div>
+              </div>
+            ) : null}
+            {form.hasReceipt ? (
+              <div
+                className={`mt-4 rounded-xl border px-4 py-3 text-sm font-semibold ${
+                  computed.receiptBelowExpected
+                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                    : computed.receiptWithinTolerance === false
+                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                }`}
+              >
+                <div className="text-xs font-black uppercase tracking-wider">Calculo pela regua</div>
+                <div className="mt-2">
+                  Recebido pela regua: <span className="font-black">{parseLiters(computed.receiptMeasuredLiters)}</span>
+                  <br />
+                  Planejado (NF): <span className="font-black">{parseLiters(Number(form.nfVolumeLitros || 0) || 0)}</span>
+                  <br />
+                  Diferenca p/ NF: <span className="font-black">{parseLiters(computed.diffRecebimento)}</span>
+                  <br />
+                  Tolerancia da faixa: <span className="font-black">{parseLiters(computed.receiptToleranceLiters)}</span>
+                  <br />
+                  Situacao:{" "}
+                  <span className="font-black">
+                    {computed.receiptWithinTolerance === null
+                      ? "Aguardando dados"
+                      : computed.receiptBelowExpected
+                      ? "Abaixo do esperado"
+                      : computed.receiptWithinTolerance
+                      ? "Dentro da tolerancia"
+                      : "Acima da tolerancia"}
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -1793,30 +1820,35 @@ export default function EstoqueDieselOperacao() {
                 ) : null}
               </div>
             ) : null}
-            {form.hasReceipt ? (
-              <div className="mt-4 flex flex-wrap justify-end gap-3">
-                {isEditingReceipt ? (
-                  <div className="inline-flex items-center rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700">
-                    Editando recebimento selecionado
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={handleSaveReceipt}
-                  disabled={savingReceipt}
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
-                >
-                  <FaSave />
-                  {savingReceipt
-                    ? isEditingReceipt
-                      ? "Atualizando recebimento..."
-                      : "Salvando recebimento..."
-                    : isEditingReceipt
-                    ? "Atualizar recebimento"
-                    : "Salvar recebimento"}
-                </button>
-              </div>
-            ) : null}
+            <div className="sticky bottom-0 -mx-5 mt-4 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white px-5 py-4">
+              {isEditingReceipt ? (
+                <div className="inline-flex items-center rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700">
+                  Editando recebimento selecionado
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={closeReceiptModal}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveReceipt}
+                disabled={savingReceipt}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-800 disabled:opacity-60"
+              >
+                <FaSave />
+                {savingReceipt
+                  ? isEditingReceipt
+                    ? "Atualizando recebimento..."
+                    : "Salvando recebimento..."
+                  : isEditingReceipt
+                  ? "Atualizar recebimento"
+                  : "Salvar recebimento"}
+              </button>
+            </div>
           </div>
                 </div>
               </div>

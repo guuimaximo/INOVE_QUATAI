@@ -304,11 +304,32 @@ export default function ChecklistDetalheModal({ open, onClose, row }) {
             Fotos {fotos.length ? `(${fotos.length})` : ""}
           </TabBtn>
           <TabBtn active={tab === "video"} onClick={() => setTab("video")} disabled={!temVideo}>Video</TabBtn>
-          <TabBtn active={tab === "raw"} onClick={() => setTab("raw")}>Texto bruto</TabBtn>
         </div>
 
         {/* BODY */}
         <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4">
+          <div className="mb-4 grid gap-3 md:grid-cols-[1.4fr_1fr_1fr]">
+            <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
+                <FaUser /> Motorista
+              </div>
+              <div className="mt-2 text-2xl font-black text-slate-900">{motorista}</div>
+              {chapa ? <div className="mt-1 text-sm font-bold text-slate-500">Chapa {chapa}</div> : null}
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                <FaCalendarAlt /> Data
+              </div>
+              <div className="mt-2 text-2xl font-black text-slate-900">{dataBR}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                <FaClock /> Hora
+              </div>
+              <div className="mt-2 text-2xl font-black text-slate-900">{horaBR}</div>
+            </div>
+          </div>
+
           {tab === "resumo" ? (
             <div className="space-y-3">
               {parsed.avarias ? (
@@ -343,7 +364,7 @@ export default function ChecklistDetalheModal({ open, onClose, row }) {
 
               {!algumaCoisa ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
-                  Nao foi possivel extrair o resumo estruturado. Veja a aba "Texto bruto" para o conteudo original.
+                  Nao foi possivel extrair o resumo estruturado deste checklist.
                 </div>
               ) : null}
 
@@ -403,14 +424,6 @@ export default function ChecklistDetalheModal({ open, onClose, row }) {
             </div>
           ) : null}
 
-          {tab === "raw" ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-3">
-              <div className="mb-2 text-sm font-black uppercase tracking-wide text-slate-700">Texto bruto</div>
-              <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
-                {row?.resumo_texto || row?.resposta_texto || "-"}
-              </pre>
-            </div>
-          ) : null}
         </div>
 
         {/* FOOTER */}
@@ -469,6 +482,56 @@ function ChecklistRelatorioModal({
   totalOK,
   temVideo,
 }) {
+  const [salvandoPDF, setSalvandoPDF] = useState(false);
+
+  async function salvarPDF() {
+    const element = document.getElementById("checklist-report-page-content");
+    if (!element) return;
+
+    setSalvandoPDF(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+      const canvas = await html2canvas(element, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+      });
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 8;
+      const imgWidth = pageWidth - margin * 2;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const pageBodyHeight = pageHeight - margin * 2;
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
+      let heightLeft = imgHeight;
+      let position = margin;
+      pdf.addImage(imgData, "JPEG", margin, position, imgWidth, imgHeight);
+      heightLeft -= pageBodyHeight;
+
+      while (heightLeft > 0) {
+        position = margin - (imgHeight - heightLeft);
+        pdf.addPage();
+        pdf.addImage(imgData, "JPEG", margin, position, imgWidth, imgHeight);
+        heightLeft -= pageBodyHeight;
+      }
+
+      const dataArquivo = String(dataBR || "").replace(/\D/g, "") || "checklist";
+      const prefixoArquivo = String(prefixo || "veiculo").replace(/[^\w-]+/g, "-");
+      pdf.save(`checklist-${prefixoArquivo}-${dataArquivo}.pdf`);
+    } catch (error) {
+      console.error("Erro ao salvar PDF do checklist:", error);
+      alert("Nao foi possivel salvar o PDF automaticamente. Use o botao Imprimir e escolha Salvar como PDF.");
+    } finally {
+      setSalvandoPDF(false);
+    }
+  }
+
   if (!open) return null;
 
   return (
@@ -495,15 +558,23 @@ function ChecklistRelatorioModal({
         <div className="checklist-report-actions flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Relatorio do Checklist</div>
-            <div className="mt-1 text-lg font-black text-slate-900">Veiculo {prefixo} · {dataBR}</div>
+            <div className="mt-1 text-lg font-black text-slate-900">Veiculo {prefixo} - {motorista}</div>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50"
             >
-              <FaPrint /> Imprimir / Salvar PDF
+              <FaPrint /> Imprimir
+            </button>
+            <button
+              type="button"
+              onClick={salvarPDF}
+              disabled={salvandoPDF}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-wait disabled:bg-blue-400"
+            >
+              <FaFilePdf /> {salvandoPDF ? "Gerando..." : "Salvar PDF"}
             </button>
             <button
               type="button"
@@ -515,12 +586,24 @@ function ChecklistRelatorioModal({
           </div>
         </div>
 
-        <div className="checklist-report-page flex-1 overflow-y-auto bg-white p-6 text-slate-900">
-          <div className="border-b-4 border-blue-700 pb-4">
+        <div id="checklist-report-page-content" className="checklist-report-page flex-1 overflow-y-auto bg-white p-6 text-slate-900">
+          <div className="border-b-4 border-blue-700 pb-5">
             <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-700">Checklist completo</div>
-            <div className="mt-2 text-3xl font-black">Veiculo {prefixo}</div>
-            <div className="mt-1 text-sm font-semibold text-slate-600">
-              {motorista}{chapa ? ` · Chapa ${chapa}` : ""} · {dataBR} as {horaBR}
+            <div className="mt-2 text-4xl font-black">Veiculo {prefixo}</div>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1.5fr_1fr_1fr]">
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">Motorista</div>
+                <div className="mt-1 text-2xl font-black text-slate-950">{motorista}</div>
+                {chapa ? <div className="mt-1 text-base font-bold text-slate-600">Chapa {chapa}</div> : null}
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Data</div>
+                <div className="mt-1 text-2xl font-black text-slate-950">{dataBR}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Hora</div>
+                <div className="mt-1 text-2xl font-black text-slate-950">{horaBR}</div>
+              </div>
             </div>
           </div>
 
@@ -569,7 +652,7 @@ function ChecklistRelatorioModal({
             </section>
           ) : (
             <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-              Resumo estruturado nao disponivel. O texto bruto esta no fim do relatorio.
+              Resumo estruturado nao disponivel para este checklist.
             </section>
           )}
 
@@ -598,12 +681,6 @@ function ChecklistRelatorioModal({
             </section>
           ) : null}
 
-          <section className="mt-6">
-            <h2 className="text-sm font-black uppercase tracking-wide text-slate-800">Texto bruto</h2>
-            <pre className="mt-2 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-              {row?.resumo_texto || row?.resposta_texto || "-"}
-            </pre>
-          </section>
         </div>
       </div>
     </div>

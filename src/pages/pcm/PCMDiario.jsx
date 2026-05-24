@@ -22,7 +22,8 @@ import {
   FaClock,
   FaChartPie,
   FaChartLine,
-  FaRedo
+  FaRedo,
+  FaExchangeAlt
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -71,6 +72,21 @@ function formatBRDate(dt) {
   }
 }
 
+function formatBRDateTime(dt) {
+  try {
+    if (!dt) return "-";
+    return new Date(dt).toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "-";
+  }
+}
+
 function daysBetween(inicioISO) {
   try {
     if (!inicioISO) return 0;
@@ -79,6 +95,21 @@ function daysBetween(inicioISO) {
     return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
   } catch {
     return 0;
+  }
+}
+
+function elapsedLabel(inicioISO, fimISO) {
+  try {
+    if (!inicioISO || !fimISO) return "-";
+    const diffMs = new Date(fimISO).getTime() - new Date(inicioISO).getTime();
+    if (!Number.isFinite(diffMs) || diffMs < 0) return "-";
+    const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    if (days <= 0) return `${hours}h`;
+    return `${days}d ${hours}h`;
+  } catch {
+    return "-";
   }
 }
 
@@ -311,6 +342,7 @@ export default function PCMDiario() {
   const { user } = useContext(AuthContext);
 
   const [veiculos, setVeiculos] = useState([]);
+  const [movimentacoes, setMovimentacoes] = useState([]);
   const [prefixos, setPrefixos] = useState([]);
   const [pcmInfo, setPcmInfo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -327,6 +359,7 @@ export default function PCMDiario() {
   const [filtroTurnos, setFiltroTurnos] = useState([]);
   const [filtroCluster, setFiltroCluster] = useState([]);
   const [abaAtiva, setAbaAtiva] = useState("TODOS");
+  const [visaoPCM, setVisaoPCM] = useState("ABERTOS");
 
   const reportRef = useRef(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -340,9 +373,10 @@ export default function PCMDiario() {
   const buscarDados = useCallback(async () => {
     setLoading(true);
     try {
-      const [resPcm, resVeiculos, resPrefixos] = await Promise.all([
+      const [resPcm, resVeiculos, resMovimentacoes, resPrefixos] = await Promise.all([
         supabase.from("pcm_diario").select("*").eq("id", id).maybeSingle(),
         supabase.from("veiculos_pcm").select("*").eq("pcm_id", id).is("data_saida", null).order("data_entrada", { ascending: true }),
+        supabase.from("veiculos_pcm").select("*").eq("pcm_id", id).not("data_saida", "is", null).order("data_saida", { ascending: false }),
         supabase.from("prefixos").select("codigo, cluster").order("codigo"),
       ]);
 
@@ -359,8 +393,13 @@ export default function PCMDiario() {
         ...v,
         cluster: mapClusterByCodigo.get(String(v?.frota || "").trim()) || "",
       }));
+      const movimentacoesComCluster = (resMovimentacoes?.data || []).map((v) => ({
+        ...v,
+        cluster: mapClusterByCodigo.get(String(v?.frota || "").trim()) || "",
+      }));
 
       setVeiculos(veicsComCluster);
+      setMovimentacoes(movimentacoesComCluster);
     } catch (error) {
       console.error("Erro ao carregar dados do PCM:", error);
     } finally {
@@ -404,9 +443,13 @@ export default function PCMDiario() {
     if (!pcmEditavel) return alert("PCM fechado: não é permitido liberar veículos.");
     if (!confirm(`Confirmar liberação da frota ${v.frota}?`)) return;
 
-    await supabase.from("veiculos_pcm").update({ data_saida: new Date().toISOString(), liberado_por: user?.nome || "Sistema" }).eq("id", v.id);
+    const saidaEm = new Date().toISOString();
+    const { error } = await supabase.from("veiculos_pcm").update({ data_saida: saidaEm, liberado_por: user?.nome || "Sistema" }).eq("id", v.id);
+    if (error) return alert("Erro ao liberar veículo.");
+
     await gravarHistorico({ veiculo_pcm_id: v.id, pcm_id: id, frota: v.frota, acao: "LIBERAR", de_categoria: v.categoria, para_categoria: v.categoria, alteracoes: { liberado_por: user?.nome || "Sistema" }});
-    buscarDados();
+    await buscarDados();
+    setVisaoPCM("MOVIMENTACOES");
   }
 
   async function salvarEdicaoVeiculo(payloadUpdate, acao, deCat, paraCat, diff) {
@@ -450,6 +493,20 @@ export default function PCMDiario() {
       return daysBetween(b.data_mudanca_categoria || b.data_entrada) - daysBetween(a.data_mudanca_categoria || a.data_entrada);
     });
   }, [veiculos, filtroTexto, filtroCategorias, filtroSetores, filtroTurnos, filtroCluster, abaAtiva]);
+
+  const movimentacoesFiltradas = useMemo(() => {
+    const txt = filtroTexto.trim().toLowerCase();
+
+    return (movimentacoes || []).filter((v) => {
+      if (abaAtiva !== "TODOS" && v.categoria !== abaAtiva) return false;
+      if (filtroCategorias.length && !filtroCategorias.includes(v.categoria)) return false;
+      if (filtroSetores.length && !filtroSetores.includes(v.setor)) return false;
+      if (filtroTurnos.length && !filtroTurnos.includes(v.lancado_no_turno)) return false;
+      if (filtroCluster.length && !filtroCluster.includes(String(v.cluster || ""))) return false;
+      if (!txt) return true;
+      return [v.frota, v.descricao, v.ordem_servico, v.setor, v.lancado_por, v.liberado_por, v.observacao, v.cluster].filter(Boolean).join(" ").toLowerCase().includes(txt);
+    }).sort((a, b) => new Date(b.data_saida || 0).getTime() - new Date(a.data_saida || 0).getTime());
+  }, [movimentacoes, filtroTexto, filtroCategorias, filtroSetores, filtroTurnos, filtroCluster, abaAtiva]);
 
   const resumo = useMemo(() => {
     const base = veiculosFiltrados.length ? veiculosFiltrados : veiculos;
@@ -626,6 +683,21 @@ export default function PCMDiario() {
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-2 border-t pt-4 pb-4">
+          <button
+            className={`px-5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${visaoPCM === "ABERTOS" ? "bg-blue-600 text-white shadow-md" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+            onClick={() => setVisaoPCM("ABERTOS")}
+          >
+            <FaBus /> Em aberto ({veiculos.length})
+          </button>
+          <button
+            className={`px-5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${visaoPCM === "MOVIMENTACOES" ? "bg-emerald-600 text-white shadow-md" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+            onClick={() => setVisaoPCM("MOVIMENTACOES")}
+          >
+            <FaExchangeAlt /> Movimentacoes feitas ({movimentacoes.length})
+          </button>
+        </div>
+
         <div className="flex flex-wrap gap-2 border-t pt-4">
           <button className={`px-5 py-2 rounded-xl text-xs font-black transition ${abaAtiva === "TODOS" ? "bg-slate-800 text-white shadow-md" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`} onClick={() => setAbaAtiva("TODOS")}>TODOS</button>
           {CATEGORIAS.map(c => (
@@ -637,10 +709,17 @@ export default function PCMDiario() {
       {/* RELATÓRIO VISUAL (TABELA NA TELA) */}
       <div className="bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
         <div className="p-4 border-b bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-2">
-          <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">Lista de Veículos Abertos</h2>
-          <p className="text-[10px] font-bold text-slate-500 uppercase">Ordenação: Categorias Ofensoras e Maior Tempo na Categoria</p>
+          <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+            {visaoPCM === "MOVIMENTACOES" ? "Movimentacoes feitas" : "Lista de Veiculos Abertos"}
+          </h2>
+          <p className="text-[10px] font-bold text-slate-500 uppercase">
+            {visaoPCM === "MOVIMENTACOES"
+              ? "Carros liberados e saidas registradas neste PCM"
+              : "Ordenacao: Categorias Ofensoras e Maior Tempo na Categoria"}
+          </p>
         </div>
         
+        {visaoPCM === "ABERTOS" ? (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse min-w-[1200px]">
             <thead className="bg-white border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
@@ -718,6 +797,66 @@ export default function PCMDiario() {
             </tbody>
           </table>
         </div>
+        ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm border-collapse min-w-[1200px]">
+            <thead className="bg-white border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
+              <tr>
+                <th className="p-4 font-black">Frota</th>
+                <th className="p-4 font-black">Saida</th>
+                <th className="p-4 text-center font-black">Tempo PCM</th>
+                <th className="p-4 font-black">Categoria</th>
+                <th className="p-4 font-black w-[280px]">Defeito Reportado</th>
+                <th className="p-4 font-black">OS</th>
+                <th className="p-4 font-black">Setor</th>
+                <th className="p-4 font-black">Turno</th>
+                <th className="p-4 font-black">Liberado por</th>
+                <th className="p-4 font-black w-[180px]">Observacao</th>
+              </tr>
+            </thead>
+            <tbody className="bg-slate-50/30">
+              {loading ? (
+                <tr><td colSpan={10} className="p-8 text-center text-slate-400 font-bold">Carregando movimentacoes...</td></tr>
+              ) : movimentacoesFiltradas.length === 0 ? (
+                <tr><td colSpan={10} className="p-8 text-center text-slate-400 font-bold">Nenhuma movimentacao feita neste PCM.</td></tr>
+              ) : (
+                movimentacoesFiltradas.map((v) => {
+                  const catStyle = getCategoriaStyle(v.categoria);
+
+                  return (
+                    <tr key={v.id} className="border-b border-slate-200 hover:bg-emerald-50/60 transition-colors">
+                      <td className="p-4">
+                        <div className="text-lg font-black text-slate-800">{v.frota}</div>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase">{v.cluster || "Sem Cluster"}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="text-xs font-black text-slate-800">{formatBRDateTime(v.data_saida)}</div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">Entrada: {formatBRDateTime(v.data_entrada)}</div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className="inline-flex items-center justify-center min-w-16 rounded-xl bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-700">
+                          {elapsedLabel(v.data_entrada, v.data_saida)}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm ${catStyle.badge}`}>
+                          {catStyle.label}
+                        </span>
+                      </td>
+                      <td className="p-4 text-[11px] font-semibold text-slate-600 uppercase">{v.descricao || "-"}</td>
+                      <td className="p-4 font-bold text-slate-700">{v.ordem_servico || "-"}</td>
+                      <td className="p-4 text-[10px] font-black text-slate-600 uppercase">{v.setor || "-"}</td>
+                      <td className="p-4 text-[10px] font-black text-slate-600"><span className="bg-slate-200/50 px-2 py-1 rounded">{v.lancado_no_turno || "-"}</span></td>
+                      <td className="p-4 text-[10px] font-bold text-emerald-700">{v.liberado_por || "-"}</td>
+                      <td className="p-4 text-[10px] font-bold text-slate-600 uppercase">{v.observacao || "-"}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        )}
       </div>
 
       {/* BLOCO INVISÍVEL PARA IMPRESSÃO DO PDF */}

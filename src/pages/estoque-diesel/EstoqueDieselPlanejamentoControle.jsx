@@ -23,6 +23,7 @@ const PROGRAMMING_RULES = {
   S500: {
     minimum: 14000,
     highReference: 29000,
+    capacity: 30000,
     defaultWeekdayOutput: 4200,
     defaultSaturdayOutput: 2500,
     defaultSundayOutput: 1500,
@@ -33,6 +34,7 @@ const PROGRAMMING_RULES = {
   S10: {
     minimum: 10000,
     highReference: 29000,
+    capacity: 30000,
     defaultWeekdayOutput: 4200,
     defaultSaturdayOutput: 2500,
     defaultSundayOutput: 1500,
@@ -177,6 +179,11 @@ function getDefaultPlannedOutput(product, date) {
 function getIndicator(product, liters) {
   const rules = PROGRAMMING_RULES[product] || PROGRAMMING_RULES.S500;
   const level = Number(liters || 0);
+  const capacity = rules.capacity ?? 30000;
+
+  if (level > capacity) {
+    return { label: "Não cabe", tone: "rose" };
+  }
 
   if (level <= rules.minimum) {
     return { label: rules.lowLabel, tone: "rose" };
@@ -495,8 +502,9 @@ async function savePlanningRow({ form, product, metadata, userId = null }) {
   if (error) throw error;
 }
 
-function buildMonthRows({ year, month, product, measurements, planningRows }) {
+function buildMonthRows({ year, month, product, measurements, planningRows, receipts = [] }) {
   const cascadedMeasurements = buildMeasurementCascadeRows({ measurements, product });
+  const receiptByDate = buildReceiptSummaryMap(receipts);
 
   const monthPlanning = [...(planningRows || [])]
     .filter((entry) => entry.product === product)
@@ -533,8 +541,31 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
     const plan = planningByDate[planningSourceDate] || null;
     const realizedDay = Boolean(actual);
 
+    // Recebimento na data REAL (medicao do mesmo dia, com fallback p/ tabela de recebimentos),
+    // em vez de herdar a entrada do dia D+1 da medicao.
+    const sameDayMeasurement = measurementByDate[date] || null;
+    const sameDayEntrada = safeNumber(
+      sameDayMeasurement?.entradaDiesel ??
+        sameDayMeasurement?.entradaRecebimentos ??
+        sameDayMeasurement?.receiptMeasuredLiters ??
+        0,
+      0
+    );
+    const recebidoReal =
+      sameDayEntrada > 0
+        ? sameDayEntrada
+        : safeNumber(receiptByDate.get(date)?.receivedLiters ?? 0, 0);
+
     if (realizedDay) {
-      const saldoPlanejado = safeNumber(runningBalance, 0);
+      // Saldo anterior medido (vem da tabela de medicao) ja inclui o recebimento do dia embutido
+      // no saldo final. Removemos o recebimento da abertura para ele ser contado uma unica vez
+      // (na coluna Recebimento) e manter a cascata continua.
+      const saldoAnteriorMedido = safeNumber(
+        actual?.saldoAnterior ?? actual?.medicaoD1 ?? runningBalance,
+        runningBalance
+      );
+      const saldoPlanejado =
+        round(saldoAnteriorMedido - recebidoReal, 2) ?? saldoAnteriorMedido;
 
       const entradaReal = safeNumber(
         actual?.entradaDiesel ??
@@ -553,18 +584,13 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
         0
       );
 
-      const saldoFinal = safeNumber(
-        actual?.saldoFinal ?? actual?.medicaoAtual ?? saldoPlanejado + entradaReal - saidaTanque,
-        saldoPlanejado + entradaReal - saidaTanque
-      );
-
       const saidaTransnet = safeNumber(
         actual?.saidaTransnet ?? actual?.transnetOutput ?? 0,
         0
       );
 
-      const saldoPosEntrega = round(saldoPlanejado + entradaReal, 2) ?? saldoPlanejado;
-      const saldoProjetado = round(saldoFinal, 2) ?? saldoFinal;
+      const saldoPosEntrega = round(saldoPlanejado + recebidoReal, 2) ?? saldoPlanejado;
+      const saldoProjetado = round(saldoPosEntrega - saidaTanque, 2) ?? saldoPosEntrega;
       const indicator = getIndicator(product, saldoPosEntrega);
 
       runningBalance = saldoProjetado;
@@ -577,7 +603,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
         weekday: getWeekdayShort(date),
         actual,
         actualOutput: saidaTransnet,
-        actualBalance: saldoFinal,
+        actualBalance: saldoProjetado,
         saldoPlanejado,
         supplier: plan?.supplier || "",
         dieselPrice: plan?.dieselPrice ?? null,
@@ -589,7 +615,7 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
           plan?.cbieGap !== undefined
             ? round((Number(plan.cbieGap) * Number(plan.dieselPrice)) / 100, 4)
             : null,
-        plannedReceipt: entradaReal,
+        plannedReceipt: recebidoReal,
         saldoPosEntrega,
         plannedOutput: saidaTanque,
         saldoProjetado,
@@ -599,7 +625,8 @@ function buildMonthRows({ year, month, product, measurements, planningRows }) {
     }
 
     const saldoPlanejado = safeNumber(runningBalance, 0);
-    const plannedReceipt = safeNumber(plan?.plannedReceipt ?? 0, 0);
+    const plannedReceipt =
+      recebidoReal > 0 ? recebidoReal : safeNumber(plan?.plannedReceipt ?? 0, 0);
     const plannedOutput = safeNumber(
       plan?.plannedOutput ?? getDefaultPlannedOutput(product, date),
       0
@@ -1375,7 +1402,16 @@ export default function EstoqueDieselPlanejamentoControle() {
   const monthRows = useMemo(
     () =>
       decorateReceiptHighlightRows(
-        buildMonthRows({ year, month, product, measurements, planningRows }),
+        buildMonthRows({
+          year,
+          month,
+          product,
+          measurements,
+          planningRows,
+          receipts: receipts.filter(
+            (receipt) => normalizeProductCode(receipt.product) === product
+          ),
+        }),
         receipts.filter((receipt) => normalizeProductCode(receipt.product) === product)
       ),
     [measurements, month, planningRows, product, receipts, year]

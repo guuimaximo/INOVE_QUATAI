@@ -513,7 +513,7 @@ function ChecklistRelatorioModal({
 }) {
   const [salvandoPDF, setSalvandoPDF] = useState(false);
 
-  async function salvarPDF() {
+  async function salvarPDF(modo = "salvar") {
     setSalvandoPDF(true);
     try {
       const { jsPDF } = await import("jspdf");
@@ -804,12 +804,37 @@ function ChecklistRelatorioModal({
         pdf.text(`Pagina ${page} de ${pageCount}`, pageW - margin, pageH - 7, { align: "right" });
       }
 
-      const dataArquivo = String(dataBR || "").replace(/\D/g, "") || "checklist";
       const prefixoArquivo = String(prefixo || "veiculo").replace(/[^\w-]+/g, "-");
-      pdf.save(`checklist-${prefixoArquivo}-${dataArquivo}.pdf`);
+      const dataArquivo = String(dataBR || "").replace(/\D/g, "") || "checklist";
+      const fileName = `checklist-${prefixoArquivo}-${dataArquivo}.pdf`;
+
+      if (modo === "imprimir") {
+        const blob = pdf.output("blob");
+        const blobUrl = URL.createObjectURL(blob);
+        const iframe = document.createElement("iframe");
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0";
+        iframe.style.height = "0";
+        iframe.style.border = "0";
+        iframe.src = blobUrl;
+        iframe.onload = () => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+            iframe.remove();
+          }, 30000);
+        };
+        document.body.appendChild(iframe);
+        return;
+      }
+
+      pdf.save(fileName);
     } catch (error) {
       console.error("Erro ao salvar PDF do checklist:", error);
-      alert("Nao foi possivel salvar o PDF automaticamente. Use o botao Imprimir e escolha Salvar como PDF.");
+      alert("Nao foi possivel gerar o PDF profissional.");
     } finally {
       setSalvandoPDF(false);
     }
@@ -846,8 +871,9 @@ function ChecklistRelatorioModal({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50"
+              onClick={() => salvarPDF("imprimir")}
+              disabled={salvandoPDF}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
             >
               <FaPrint /> Imprimir
             </button>

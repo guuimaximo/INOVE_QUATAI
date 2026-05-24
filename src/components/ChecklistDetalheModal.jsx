@@ -16,7 +16,10 @@ import {
   FaInfoCircle,
   FaChevronDown,
   FaChevronRight,
+  FaFilePdf,
+  FaPrint,
 } from "react-icons/fa";
+import FileViewerModal from "./FileViewerModal";
 
 function norm(s) {
   return String(s || "").trim();
@@ -38,6 +41,17 @@ function parseFileUrls(fileurls) {
     .map((x) => x.trim())
     .filter(Boolean)
     .filter((x) => x.startsWith("http"));
+}
+
+function fileNameFromUrl(url) {
+  try {
+    const raw = String(url || "");
+    const noHash = raw.split("#")[0];
+    const noQuery = noHash.split("?")[0];
+    return decodeURIComponent(noQuery.split("/").filter(Boolean).pop() || "foto-checklist");
+  } catch {
+    return "foto-checklist";
+  }
 }
 
 /**
@@ -203,11 +217,15 @@ export default function ChecklistDetalheModal({ open, onClose, row }) {
 
   const [tab, setTab] = useState("resumo");
   const [respostasOpen, setRespostasOpen] = useState(false);
+  const [viewerFile, setViewerFile] = useState(null);
+  const [relatorioOpen, setRelatorioOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
       setTab("resumo");
       setRespostasOpen(false);
+      setViewerFile(null);
+      setRelatorioOpen(false);
     }
   }, [open]);
 
@@ -228,23 +246,32 @@ export default function ChecklistDetalheModal({ open, onClose, row }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         {/* HEADER */}
-        <div className="border-b border-slate-200 bg-gradient-to-br from-blue-600 to-blue-800 px-5 py-4 text-white">
+        <div className="border-b border-slate-200 bg-gradient-to-br from-blue-700 via-blue-600 to-cyan-700 px-5 py-4 text-white">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-200">Checklists · Detalhe</div>
               <div className="text-xl font-black">Checklist do veiculo {prefixo}</div>
               <div className="mt-1 text-sm text-blue-100">{motorista}{chapa ? ` · Chapa ${chapa}` : ""}</div>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl bg-white/15 p-2 text-white hover:bg-white/25"
-              aria-label="Fechar"
-            >
-              <FaTimes />
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setRelatorioOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-black text-blue-700 shadow-sm hover:bg-blue-50"
+              >
+                <FaFilePdf /> Relatorio / PDF
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl bg-white/15 p-2 text-white hover:bg-white/25"
+                aria-label="Fechar"
+              >
+                <FaTimes />
+              </button>
+            </div>
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -346,11 +373,21 @@ export default function ChecklistDetalheModal({ open, onClose, row }) {
                 <div className="text-sm font-black uppercase tracking-wide text-slate-700">Fotos do checklist</div>
                 <Badge tone="green">{fotos.length} foto(s)</Badge>
               </div>
-              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 {fotos.map((url, idx) => (
-                  <a key={`${url}-${idx}`} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-slate-200 hover:opacity-90" title="Abrir imagem">
-                    <img src={url} alt={`Foto ${idx + 1}`} className="h-32 w-full object-cover" loading="lazy" />
-                  </a>
+                  <button
+                    key={`${url}-${idx}`}
+                    type="button"
+                    onClick={() => setViewerFile({ url, name: fileNameFromUrl(url) })}
+                    className="group overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm hover:border-blue-300"
+                    title="Abrir foto"
+                  >
+                    <img src={url} alt={`Foto ${idx + 1}`} className="h-36 w-full object-cover transition group-hover:scale-[1.02]" loading="lazy" />
+                    <div className="flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700">
+                      <span>Foto {idx + 1}</span>
+                      <FaExternalLinkAlt className="text-blue-600" />
+                    </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -378,11 +415,227 @@ export default function ChecklistDetalheModal({ open, onClose, row }) {
 
         {/* FOOTER */}
         <div className="flex items-center justify-end border-t border-slate-200 bg-white px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setRelatorioOpen(true)}
+            className="mr-2 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"
+          >
+            <FaFilePdf /> Relatorio / PDF
+          </button>
           <button type="button" onClick={onClose} className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700">
             Fechar
           </button>
         </div>
       </div>
+
+      <ChecklistRelatorioModal
+        open={relatorioOpen}
+        onClose={() => setRelatorioOpen(false)}
+        row={row}
+        fotos={fotos}
+        parsed={parsed}
+        prefixo={prefixo}
+        motorista={motorista}
+        chapa={chapa}
+        dataBR={dataBR}
+        horaBR={horaBR}
+        totalNC={totalNC}
+        totalOK={totalOK}
+        temVideo={temVideo}
+      />
+
+      <FileViewerModal
+        open={Boolean(viewerFile?.url)}
+        url={viewerFile?.url || ""}
+        name={viewerFile?.name || ""}
+        onClose={() => setViewerFile(null)}
+      />
+    </div>
+  );
+}
+
+function ChecklistRelatorioModal({
+  open,
+  onClose,
+  row,
+  fotos,
+  parsed,
+  prefixo,
+  motorista,
+  chapa,
+  dataBR,
+  horaBR,
+  totalNC,
+  totalOK,
+  temVideo,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm">
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #checklist-report-print, #checklist-report-print * { visibility: visible !important; }
+          #checklist-report-print {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+            max-width: none !important;
+            border: 0 !important;
+            box-shadow: none !important;
+          }
+          .checklist-report-actions { display: none !important; }
+          .checklist-report-page { padding: 14mm !important; }
+          .checklist-report-photo { break-inside: avoid; page-break-inside: avoid; }
+        }
+      `}</style>
+
+      <div id="checklist-report-print" className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="checklist-report-actions flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Relatorio do Checklist</div>
+            <div className="mt-1 text-lg font-black text-slate-900">Veiculo {prefixo} · {dataBR}</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700"
+            >
+              <FaPrint /> Imprimir / Salvar PDF
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"
+            >
+              <FaTimes /> Fechar
+            </button>
+          </div>
+        </div>
+
+        <div className="checklist-report-page flex-1 overflow-y-auto bg-white p-6 text-slate-900">
+          <div className="border-b-4 border-blue-700 pb-4">
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-700">Checklist completo</div>
+            <div className="mt-2 text-3xl font-black">Veiculo {prefixo}</div>
+            <div className="mt-1 text-sm font-semibold text-slate-600">
+              {motorista}{chapa ? ` · Chapa ${chapa}` : ""} · {dataBR} as {horaBR}
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <ReportMetric label="Nao conformidades" value={totalNC} tone={totalNC > 0 ? "rose" : "green"} />
+            <ReportMetric label="Itens OK" value={totalOK} tone="green" />
+            <ReportMetric label="Fotos" value={fotos.length} tone="blue" />
+            <ReportMetric label="Video" value={temVideo ? "Sim" : "Nao"} tone={temVideo ? "blue" : "slate"} />
+          </div>
+
+          {parsed.avarias ? (
+            <section className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4">
+              <h2 className="text-sm font-black uppercase tracking-wide text-amber-900">Avarias relatadas</h2>
+              <p className="mt-2 text-sm text-amber-950">{parsed.avarias}</p>
+            </section>
+          ) : null}
+
+          {parsed.observacoes.length ? (
+            <section className="mt-5">
+              <h2 className="text-sm font-black uppercase tracking-wide text-slate-800">Observacoes</h2>
+              <div className="mt-2 grid gap-2">
+                {parsed.observacoes.map((o, idx) => (
+                  <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                    <strong>{o.label}:</strong> {o.valor}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {parsed.grupos.length ? (
+            <section className="mt-5">
+              <h2 className="text-sm font-black uppercase tracking-wide text-slate-800">Itens do checklist</h2>
+              <div className="mt-2 grid gap-3 md:grid-cols-2">
+                {parsed.grupos.map((grupo) => (
+                  <div key={grupo.nome} className="rounded-xl border border-slate-200 p-3">
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                      <h3 className="text-sm font-black text-slate-900">{grupo.nome}</h3>
+                      <span className="text-xs font-bold text-slate-500">{grupo.NC.length} NC · {grupo.OK.length} OK</span>
+                    </div>
+                    <ReportList title="Nao conformidades" items={grupo.NC} tone="rose" />
+                    <ReportList title="Itens OK" items={grupo.OK} tone="green" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : (
+            <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              Resumo estruturado nao disponivel. O texto bruto esta no fim do relatorio.
+            </section>
+          )}
+
+          {fotos.length ? (
+            <section className="mt-6">
+              <h2 className="text-sm font-black uppercase tracking-wide text-slate-800">Fotos do checklist</h2>
+              <div className="mt-3 grid gap-4 md:grid-cols-2">
+                {fotos.map((url, idx) => (
+                  <figure key={`${url}-${idx}`} className="checklist-report-photo overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    <img src={url} alt={`Foto ${idx + 1}`} className="max-h-[360px] w-full bg-white object-contain" />
+                    <figcaption className="border-t border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">
+                      Foto {idx + 1}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {temVideo ? (
+            <section className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm">
+              <h2 className="text-sm font-black uppercase tracking-wide text-blue-900">Video</h2>
+              <a href={row.video_url} target="_blank" rel="noreferrer" className="mt-2 inline-block break-all font-bold text-blue-700">
+                {row.video_url}
+              </a>
+            </section>
+          ) : null}
+
+          <section className="mt-6">
+            <h2 className="text-sm font-black uppercase tracking-wide text-slate-800">Texto bruto</h2>
+            <pre className="mt-2 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+              {row?.resumo_texto || row?.resposta_texto || "-"}
+            </pre>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportMetric({ label, value, tone = "slate" }) {
+  const tones = {
+    slate: "border-slate-200 bg-slate-50 text-slate-800",
+    blue: "border-blue-200 bg-blue-50 text-blue-800",
+    green: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    rose: "border-rose-200 bg-rose-50 text-rose-800",
+  };
+  return (
+    <div className={`rounded-xl border p-3 ${tones[tone]}`}>
+      <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-75">{label}</div>
+      <div className="mt-1 text-2xl font-black">{value}</div>
+    </div>
+  );
+}
+
+function ReportList({ title, items, tone }) {
+  const color = tone === "rose" ? "text-rose-800" : "text-emerald-800";
+  if (!items.length) return null;
+  return (
+    <div className="mt-3">
+      <div className={`text-xs font-black uppercase tracking-wide ${color}`}>{title}</div>
+      <ul className="mt-1 list-inside list-disc space-y-1 text-sm text-slate-800">
+        {items.map((item, idx) => (
+          <li key={`${item}-${idx}`}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }

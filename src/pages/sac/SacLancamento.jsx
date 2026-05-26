@@ -3,6 +3,7 @@ import { FaClipboardList, FaFileUpload, FaSave, FaSyncAlt } from "react-icons/fa
 import { supabase } from "../../supabase";
 import CampoMotorista from "../../components/CampoMotorista";
 import CampoPrefixo from "../../components/CampoPrefixo";
+import { InovePageHeader } from "../../components/InovePage";
 import { AuthContext } from "../../context/AuthContext";
 import {
   SAC_ACOES,
@@ -164,16 +165,12 @@ export default function SacLancamento() {
 
   return (
     <div className="min-h-screen space-y-5 bg-slate-50 p-4 text-slate-800 md:p-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">SAC</div>
-        <h1 className="mt-3 flex items-center gap-3 text-3xl font-black text-slate-900">
-          <span className="rounded-2xl bg-blue-50 p-3 text-blue-600"><FaClipboardList /></span>
-          Lan√ßamento de atendimento
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Registre o atendimento, vincule operador, linha, veiculo e, se necessario, abra a tratativa automaticamente.
-        </p>
-      </div>
+      <InovePageHeader
+        eyebrow="SAC"
+        title="LanÁamento de atendimento"
+        icon={<FaClipboardList />}
+        description="Registre o atendimento, vincule operador, linha, veÌculo e, se necess·rio, abra a tratativa automaticamente."
+      />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
@@ -288,3 +285,5 @@ export default function SacLancamento() {
     </div>
   );
 }
+
+

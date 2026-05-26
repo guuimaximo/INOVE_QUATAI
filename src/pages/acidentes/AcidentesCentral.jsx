@@ -124,7 +124,7 @@ function AcidenteModal({ row, onClose, onChanged }) {
       <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 p-5">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.22em] text-rose-600">Ocorrência #{row.numero_ocorrencia}</div>
+            <div className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">Ocorrência #{row.numero_ocorrencia}</div>
             <h2 className="mt-2 text-2xl font-black text-slate-900">{row.prefixo} - {row.linha || "Sem linha"}</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">{formatDateBR(row.data_ocorrencia)} às {formatTimeBR(row.hora_ocorrencia)} · {row.local}</p>
           </div>
@@ -174,7 +174,7 @@ function AcidenteModal({ row, onClose, onChanged }) {
           <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <section className="rounded-3xl border border-slate-200 p-4">
               <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Nova tratativa</h3>
-              <textarea rows={4} value={descricao} onChange={(e) => setDescricao(e.target.value)} className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold outline-none focus:border-rose-400" placeholder="Contato com terceiro, orientação, encaminhamento..." />
+              <textarea rows={4} value={descricao} onChange={(e) => setDescricao(e.target.value)} className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold outline-none focus:border-blue-400" placeholder="Contato com terceiro, orientação, encaminhamento..." />
               <input type="file" multiple accept="image/*,video/*,application/pdf" onChange={(e) => setFiles(Array.from(e.target.files || []))} className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm" />
               <button disabled={saving} onClick={adicionarTratativa} className="mt-3 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:bg-slate-400">
                 Adicionar tratativa
@@ -274,14 +274,14 @@ export default function AcidentesCentral() {
     <div className="min-h-screen space-y-5 bg-slate-50 p-4 text-slate-800 md:p-6">
       <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="text-xs font-black uppercase tracking-[0.24em] text-rose-600">Acidentes</div>
+          <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Acidentes</div>
           <h1 className="mt-3 flex items-center gap-3 text-3xl font-black text-slate-900">
-            <span className="rounded-2xl bg-rose-50 p-3 text-rose-600"><FaClipboardList /></span>
+            <span className="rounded-2xl bg-blue-50 p-3 text-blue-600"><FaClipboardList /></span>
             Central de Acidentes
           </h1>
           <p className="mt-2 text-sm text-slate-600">Tratativas, imagens e encerramento das ocorrências.</p>
         </div>
-        <Link to="/acidentes/lancamento" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white hover:bg-rose-700">
+        <Link to="/acidentes/lancamento" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700">
           <FaPlus /> Nova ocorrência
         </Link>
       </div>
@@ -324,7 +324,7 @@ export default function AcidentesCentral() {
             ) : filtrados.length === 0 ? (
               <tr><td colSpan={7} className="p-8 text-center text-slate-400">Nenhum acidente encontrado.</td></tr>
             ) : filtrados.map((r) => (
-              <tr key={r.id} onClick={() => setSelected(r)} className="cursor-pointer hover:bg-rose-50/30">
+              <tr key={r.id} onClick={() => setSelected(r)} className="cursor-pointer hover:bg-blue-50/40">
                 <td className="p-4 font-black text-slate-900">#{r.numero_ocorrencia}</td>
                 <td className="p-4 text-sm font-semibold text-slate-600">{formatDateBR(r.data_ocorrencia)}<br />{formatTimeBR(r.hora_ocorrencia)}</td>
                 <td className="p-4"><div className="font-black">{r.prefixo}</div><div className="text-xs text-slate-500">{r.linha || "-"}</div></td>
@@ -347,3 +347,4 @@ export default function AcidentesCentral() {
     </div>
   );
 }
+

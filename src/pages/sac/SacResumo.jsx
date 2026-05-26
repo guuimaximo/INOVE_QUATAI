@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, LabelList } from "recharts";
 import { FaChartLine, FaDownload, FaFilter, FaHeadset } from "react-icons/fa";
 import { supabase } from "../../supabase";
+import { InoveStatCard } from "../../components/InovePage";
 import { formatDateBR, SAC_STATUS, statusTone, todayISO } from "./SacCommon";
 
 function startOfMonthISO(iso) {
@@ -170,11 +171,13 @@ export default function SacResumo() {
       </section>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        {cards.map(([label, value]) => (
-          <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-black uppercase text-slate-400">{label}</div>
-            <div className="mt-2 text-3xl font-black text-slate-900">{fmtInt(value)}</div>
-          </div>
+        {cards.map(([label, value], index) => (
+          <InoveStatCard
+            key={label}
+            title={label}
+            value={fmtInt(value)}
+            tone={index === 1 ? "amber" : index === 2 ? "emerald" : index === 3 ? "rose" : "blue"}
+          />
         ))}
       </div>
 

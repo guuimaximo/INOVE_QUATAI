@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { isSupabaseBCNTConfigured, supabaseBCNT } from "../../supabaseBCNT";
 import ChecklistDetalheModal from "../../components/ChecklistDetalheModal";
+import { listarFuncionariosAtivos } from "../../utils/funcionariosBCNT";
 import {
   FaCalendarAlt,
   FaClipboardCheck,
@@ -15,6 +16,60 @@ import {
 
 function norm(s) {
   return String(s || "").trim();
+}
+
+function chapaKeys(value) {
+  const raw = norm(value);
+  if (!raw) return [];
+
+  const semDecimal = raw.replace(/\.0+$/, "");
+  const somenteDigitos = semDecimal.replace(/\D/g, "");
+  const semZeros = somenteDigitos.replace(/^0+/, "") || somenteDigitos;
+
+  return Array.from(new Set([raw, semDecimal, somenteDigitos, semZeros].filter(Boolean).map((x) => x.toUpperCase())));
+}
+
+let funcionariosChecklistCache = null;
+
+async function carregarMapaFuncionariosChecklist() {
+  if (funcionariosChecklistCache) return funcionariosChecklistCache;
+
+  const funcionarios = await listarFuncionariosAtivos({
+    columns: "id_funcionario, nr_cracha, nm_funcionario, status",
+    from: 0,
+    to: 99999,
+  });
+
+  const mapa = new Map();
+  (funcionarios || []).forEach((funcionario) => {
+    if (!funcionario?.chapa || !funcionario?.nome) return;
+    chapaKeys(funcionario.chapa).forEach((key) => {
+      if (!mapa.has(key)) mapa.set(key, funcionario);
+    });
+  });
+
+  funcionariosChecklistCache = mapa;
+  return mapa;
+}
+
+function buscarFuncionarioPorChapa(mapa, chapa) {
+  for (const key of chapaKeys(chapa)) {
+    if (mapa.has(key)) return mapa.get(key);
+  }
+  return null;
+}
+
+function aplicarNomeFuncionario(row, mapaFuncionarios) {
+  const funcionario = buscarFuncionarioPorChapa(mapaFuncionarios, row?.chapa_motorista);
+  if (!funcionario?.nome) return row;
+
+  return {
+    ...row,
+    nome_motorista_original: row?.nome_motorista || "",
+    nome_motorista: funcionario.nome,
+    funcionario_id: funcionario.id || null,
+    nome_motorista_fonte: "funcionarios_atualizada",
+  };
 }
 
 function onlyDateISO(d) {
@@ -165,7 +220,13 @@ export default function ChecklistCentral() {
       return;
     }
 
-    setRows(data || []);
+    try {
+      const mapaFuncionarios = await carregarMapaFuncionariosChecklist();
+      setRows((data || []).map((row) => aplicarNomeFuncionario(row, mapaFuncionarios)));
+    } catch (funcError) {
+      console.warn("Nao foi possivel cruzar checklists com funcionarios_atualizada:", funcError);
+      setRows(data || []);
+    }
   }
 
   async function carregarContadoresHead() {

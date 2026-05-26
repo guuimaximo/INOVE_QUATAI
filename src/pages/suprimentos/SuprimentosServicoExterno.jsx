@@ -1,13 +1,15 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  FaArrowLeft,
   FaBan,
   FaBoxOpen,
+  FaCamera,
+  FaCheckCircle,
   FaClipboardList,
+  FaEdit,
   FaEye,
   FaFileAlt,
-  FaFilter,
-  FaPencilAlt,
+  FaHistory,
+  FaList,
   FaPlus,
   FaPrint,
   FaRedo,
@@ -20,20 +22,12 @@ import {
 } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
-import {
-  ActionButton,
-  EmptyState,
-  KpiCard,
-  PageHero,
-  Panel,
-  StatusChip,
-} from "./SuprimentosUI";
-import { formatDateBR, formatDateTimeBR, todayISO } from "./suprimentosShared";
+import { EmptyState, KpiCard, PageHero, Panel, StatusChip } from "./SuprimentosUI";
+import { formatDateBR, formatDateTimeBR, todayISO, uploadSuprimentosFiles } from "./suprimentosShared";
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 const inputClass =
   "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
-
 const textareaClass =
   "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 resize-none";
 
@@ -41,8 +35,7 @@ function Field({ label, required = false, children, className = "" }) {
   return (
     <div className={className}>
       <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-slate-500">
-        {label}
-        {required && <span className="ml-1 text-rose-500">*</span>}
+        {label}{required && <span className="ml-1 text-rose-500">*</span>}
       </label>
       {children}
     </div>
@@ -50,78 +43,177 @@ function Field({ label, required = false, children, className = "" }) {
 }
 
 function statusMeta(status) {
-  if (status === "Retornado") return { tone: "emerald", label: "Retornado" };
-  if (status === "Cancelado") return { tone: "rose", label: "Cancelado" };
-  return { tone: "amber", label: "Em posse do terceiro" };
+  if (status === "Retornado")          return { tone: "emerald", label: "Retornado" };
+  if (status === "Cancelado")          return { tone: "rose",    label: "Cancelado" };
+  return                                      { tone: "amber",   label: "Em posse do terceiro" };
 }
 
-const EMPTY_ITEM = { descricao: "", quantidade: "1", unidade: "un", numero_serie: "", obs: "" };
+const EMPTY_ITEM = { peca_id: "", codigo: "", descricao: "", quantidade: "1", unidade: "un", obs: "", fotos_urls: [] };
 
-function ItemRow({ item, index, onChange, onRemove, readOnly }) {
+/* ─── upload fotos (reutiliza bucket suprimentos) ─────────────── */
+async function uploadFotos(files) {
+  if (!files || files.length === 0) return [];
+  const urls = await uploadSuprimentosFiles(Array.from(files));
+  return urls;
+}
+
+/* ─── PecasCatalogPicker ──────────────────────────────────────── */
+function PecasCatalogPicker({ onSelect, onClose }) {
+  const [pecas, setPecas] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.from("suprimentos_pecas").select("*").eq("ativo", true).order("descricao").then(({ data }) => {
+      setPecas(data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return pecas.filter((p) => !q || p.descricao.toLowerCase().includes(q) || (p.codigo || "").toLowerCase().includes(q));
+  }, [pecas, search]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[28px] bg-white shadow-2xl border border-slate-200">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h3 className="text-base font-black text-slate-900">Selecionar Peça do Catálogo</h3>
+          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
+        </div>
+        <div className="px-4 py-3 border-b border-slate-100">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2">
+            <FaSearch className="text-slate-400 text-xs" />
+            <input autoFocus className="bg-transparent outline-none text-sm font-semibold text-slate-700 placeholder:text-slate-400 w-full" placeholder="Buscar peça…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+        </div>
+        <div className="max-h-72 overflow-y-auto">
+          {loading ? (
+            <p className="py-8 text-center text-sm text-slate-400">Carregando…</p>
+          ) : filtered.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">Nenhuma peça encontrada.</p>
+          ) : (
+            filtered.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => onSelect(p)}
+                className="flex w-full items-start gap-3 px-5 py-3 text-left hover:bg-blue-50 border-b border-slate-50 last:border-0"
+              >
+                <span className="mt-0.5 rounded-lg bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500">{p.codigo || "—"}</span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{p.descricao}</p>
+                  <p className="text-xs text-slate-400">{p.unidade_padrao}</p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ItemRow ─────────────────────────────────────────────────── */
+function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
+  const fileRef = useRef();
+  const [uploading, setUploading] = useState(false);
+
   function handle(field) {
     return (e) => onChange(index, { ...item, [field]: e.target.value });
   }
+
+  async function handleFotos(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploading(true);
+    const urls = await uploadFotos(files);
+    onChange(index, { ...item, fotos_urls: [...(item.fotos_urls || []), ...urls] });
+    setUploading(false);
+    e.target.value = "";
+  }
+
+  function removeFoto(url) {
+    onChange(index, { ...item, fotos_urls: (item.fotos_urls || []).filter((u) => u !== url) });
+  }
+
   return (
-    <tr className="border-b border-slate-100 last:border-0">
-      <td className="py-2 pr-2">
-        <input
-          className={inputClass + " min-w-[160px]"}
-          placeholder="Descrição do item"
-          value={item.descricao}
-          onChange={handle("descricao")}
-          disabled={readOnly}
-        />
-      </td>
-      <td className="py-2 pr-2 w-20">
-        <input
-          className={inputClass}
-          type="number"
-          min="1"
-          placeholder="Qtd"
-          value={item.quantidade}
-          onChange={handle("quantidade")}
-          disabled={readOnly}
-        />
-      </td>
-      <td className="py-2 pr-2 w-24">
-        <input
-          className={inputClass}
-          placeholder="un"
-          value={item.unidade}
-          onChange={handle("unidade")}
-          disabled={readOnly}
-        />
-      </td>
-      <td className="py-2 pr-2 w-40">
-        <input
-          className={inputClass}
-          placeholder="Nº série / patrimônio"
-          value={item.numero_serie}
-          onChange={handle("numero_serie")}
-          disabled={readOnly}
-        />
-      </td>
-      <td className="py-2 pr-2">
-        <input
-          className={inputClass}
-          placeholder="Obs."
-          value={item.obs}
-          onChange={handle("obs")}
-          disabled={readOnly}
-        />
-      </td>
-      {!readOnly && (
-        <td className="py-2 w-8">
+    <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 space-y-3">
+      <div className="flex items-start gap-2">
+        {!readOnly && (
           <button
             type="button"
-            onClick={() => onRemove(index)}
-            className="rounded-xl p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600"
+            onClick={() => onPickCatalog(index)}
+            className="mt-0.5 flex-shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-blue-700 hover:bg-blue-100"
+            title="Selecionar do catálogo"
           >
+            <FaList />
+          </button>
+        )}
+        <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
+          <div>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Código</p>
+            <input className={inputClass + " text-xs"} placeholder="Código" value={item.codigo} onChange={handle("codigo")} disabled={readOnly} />
+          </div>
+          <div className="sm:col-span-2">
+            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição *</p>
+            <input className={inputClass + " text-xs"} placeholder="Descrição da peça" value={item.descricao} onChange={handle("descricao")} disabled={readOnly} />
+          </div>
+          <div>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Qtd</p>
+            <div className="flex gap-1">
+              <input className={inputClass + " text-xs"} type="number" min="0" value={item.quantidade} onChange={handle("quantidade")} disabled={readOnly} />
+              <input className={inputClass + " text-xs w-16"} placeholder="un" value={item.unidade} onChange={handle("unidade")} disabled={readOnly} />
+            </div>
+          </div>
+        </div>
+        {!readOnly && (
+          <button type="button" onClick={() => onRemove(index)} className="mt-0.5 flex-shrink-0 rounded-xl p-2 text-rose-400 hover:bg-rose-50">
             <FaTimes />
           </button>
-        </td>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Observação</p>
+        <input className={inputClass + " text-xs"} placeholder="Observação sobre este item…" value={item.obs} onChange={handle("obs")} disabled={readOnly} />
+      </div>
+
+      {/* fotos */}
+      {!readOnly && (
+        <div>
+          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Fotos (opcional)</p>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+          >
+            <FaCamera /> {uploading ? "Enviando…" : "Adicionar foto"}
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFotos} />
+        </div>
       )}
-    </tr>
+
+      {(item.fotos_urls || []).length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {(item.fotos_urls || []).map((url, i) => (
+            <div key={i} className="group relative">
+              <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200" />
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => removeFoto(url)}
+                  className="absolute -right-1 -top-1 hidden rounded-full bg-rose-500 p-0.5 text-[10px] text-white group-hover:flex"
+                >
+                  <FaTimes />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -129,98 +221,62 @@ function ItemRow({ item, index, onChange, onRemove, readOnly }) {
 function printFicha(record) {
   const itensHtml = (record.itens || [])
     .map(
-      (it, i) => `
-    <tr>
-      <td>${i + 1}</td>
-      <td>${it.descricao || ""}</td>
-      <td>${it.quantidade || ""} ${it.unidade || ""}</td>
-      <td>${it.numero_serie || ""}</td>
-      <td>${it.obs || ""}</td>
-    </tr>`
-    )
-    .join("");
+      (it, i) => `<tr>
+        <td>${i + 1}</td>
+        <td>${it.codigo || "—"}</td>
+        <td>${it.descricao || ""}</td>
+        <td>${it.quantidade || ""} ${it.unidade || ""}</td>
+        <td>${it.obs || ""}</td>
+      </tr>`
+    ).join("");
 
-  const html = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8"/>
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/>
 <title>Serviço Externo ${record.numero_saida}</title>
 <style>
-  * { box-sizing: border-box; font-family: Arial, sans-serif; }
-  body { margin: 0; padding: 24px; font-size: 13px; color: #1e293b; }
-  h1 { font-size: 20px; font-weight: 900; margin: 0 0 2px; }
-  .sub { font-size: 11px; color: #64748b; margin-bottom: 16px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin-bottom: 16px; }
-  .field label { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
-  .field p { margin: 2px 0 0; font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-  thead tr { background: #f1f5f9; }
-  th { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 8px; text-align: left; border: 1px solid #e2e8f0; }
-  td { padding: 5px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
-  .sig { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-  .sig-block { border-top: 1.5px solid #1e293b; padding-top: 6px; font-size: 11px; }
-  .sig-block p { margin: 2px 0; }
-  .badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 900; }
-  .badge-amber { background: #fef3c7; color: #92400e; }
-  .badge-emerald { background: #d1fae5; color: #065f46; }
-  .badge-rose { background: #ffe4e6; color: #9f1239; }
-  @media print { body { padding: 10mm 14mm; } }
-</style>
-</head>
-<body>
+  *{box-sizing:border-box;font-family:Arial,sans-serif;}
+  body{margin:0;padding:24px;font-size:13px;color:#1e293b;}
+  h1{font-size:20px;font-weight:900;margin:0 0 2px;}
+  .sub{font-size:11px;color:#64748b;margin-bottom:16px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:16px;}
+  .field label{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;}
+  .field p{margin:2px 0 0;font-weight:700;}
+  table{width:100%;border-collapse:collapse;margin-bottom:24px;}
+  thead tr{background:#f1f5f9;}
+  th{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;padding:6px 8px;text-align:left;border:1px solid #e2e8f0;}
+  td{padding:5px 8px;border:1px solid #e2e8f0;vertical-align:top;}
+  .sig{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px;}
+  .sig-block{border-top:1.5px solid #1e293b;padding-top:6px;font-size:11px;}
+  @media print{body{padding:10mm 14mm;}}
+</style></head><body>
   <h1>Serviço Externo — Ficha de Saída</h1>
   <p class="sub">Gerado em ${new Date().toLocaleString("pt-BR")}</p>
-
   <div class="grid">
-    <div class="field"><label>Número</label><p>${record.numero_saida || "—"}</p></div>
-    <div class="field"><label>Status</label><p><span class="badge badge-${statusMeta(record.status).tone}">${record.status}</span></p></div>
-    <div class="field"><label>Nota de Saída (Simples Remessa)</label><p>${record.nota_saida_numero || "—"} ${record.nota_saida_data ? "· " + formatDateBR(record.nota_saida_data) : ""}</p></div>
-    <div class="field"><label>Nota de Retorno</label><p>${record.nota_retorno_numero || "—"} ${record.nota_retorno_data ? "· " + formatDateBR(record.nota_retorno_data) : ""}</p></div>
-    <div class="field"><label>Terceiro</label><p>${record.terceiro_nome || "—"}</p></div>
-    <div class="field"><label>CPF / CNPJ</label><p>${record.terceiro_cpf_cnpj || "—"}</p></div>
-    <div class="field"><label>Telefone</label><p>${record.terceiro_telefone || "—"}</p></div>
-    <div class="field"><label>Endereço</label><p>${record.terceiro_endereco || "—"}</p></div>
-    <div class="field" style="grid-column:1/-1"><label>Motivo / Serviço</label><p>${record.motivo || "—"}</p></div>
-    ${record.observacao ? `<div class="field" style="grid-column:1/-1"><label>Observações</label><p>${record.observacao}</p></div>` : ""}
+    <div class="field"><label>Número</label><p>${record.numero_saida||"—"}</p></div>
+    <div class="field"><label>Status</label><p>${record.status}</p></div>
+    <div class="field"><label>Nota de Saída</label><p>${record.nota_saida_numero||"—"} ${record.nota_saida_data?"· "+formatDateBR(record.nota_saida_data):""}</p></div>
+    <div class="field"><label>Nota de Retorno</label><p>${record.nota_retorno_numero||"—"} ${record.nota_retorno_data?"· "+formatDateBR(record.nota_retorno_data):""}</p></div>
+    <div class="field"><label>Terceiro</label><p>${record.terceiro_nome||"—"}</p></div>
+    <div class="field"><label>CPF/CNPJ</label><p>${record.terceiro_cpf_cnpj||"—"}</p></div>
+    <div class="field"><label>Telefone</label><p>${record.terceiro_telefone||"—"}</p></div>
+    <div class="field"><label>Endereço</label><p>${record.terceiro_endereco||"—"}</p></div>
+    <div class="field" style="grid-column:1/-1"><label>Motivo / Serviço</label><p>${record.motivo||"—"}</p></div>
+    ${record.observacao?`<div class="field" style="grid-column:1/-1"><label>Observações</label><p>${record.observacao}</p></div>`:""}
   </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Descrição</th>
-        <th>Qtd / Un.</th>
-        <th>Nº série / Patrimônio</th>
-        <th>Obs.</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${itensHtml || '<tr><td colspan="5">Nenhum item.</td></tr>'}
-    </tbody>
-  </table>
-
+  <table><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd/Un</th><th>Obs.</th></tr></thead>
+  <tbody>${itensHtml||'<tr><td colspan="5">Nenhum item.</td></tr>'}</tbody></table>
   <div class="sig">
-    <div class="sig-block">
-      <p><strong>Responsável pela entrega</strong></p>
-      <p style="margin-top:4px; font-size:11px; color:#64748b">${record.criado_por_nome || "—"}</p>
-      <p style="margin-top:4px; font-size:11px; color:#64748b">Data: _____ / _____ / ________</p>
-    </div>
-    <div class="sig-block">
-      <p><strong>Assinatura do Terceiro (recebimento)</strong></p>
-      <p style="margin-top:4px; font-size:11px; color:#64748b">${record.terceiro_nome || "—"}</p>
-      <p style="margin-top:4px; font-size:11px; color:#64748b">Data: _____ / _____ / ________</p>
-    </div>
-    <div class="sig-block" style="margin-top:32px">
-      <p><strong>Responsável pelo recebimento (retorno)</strong></p>
-      <p style="margin-top:4px; font-size:11px; color:#64748b">Data: _____ / _____ / ________</p>
-    </div>
-    <div class="sig-block" style="margin-top:32px">
-      <p><strong>Assinatura do Terceiro (devolução)</strong></p>
-      <p style="margin-top:4px; font-size:11px; color:#64748b">Data: _____ / _____ / ________</p>
-    </div>
+    <div class="sig-block"><p><strong>Responsável pela entrega</strong></p>
+      <p style="margin-top:4px;font-size:11px;color:#64748b">${record.criado_por_nome||"—"}</p>
+      <p style="margin-top:4px;font-size:11px;color:#64748b">Data: ___/___/______</p></div>
+    <div class="sig-block"><p><strong>Assinatura do Terceiro (recebimento)</strong></p>
+      <p style="margin-top:4px;font-size:11px;color:#64748b">${record.terceiro_nome||"—"}</p>
+      <p style="margin-top:4px;font-size:11px;color:#64748b">Data: ___/___/______</p></div>
+    <div class="sig-block" style="margin-top:32px"><p><strong>Responsável pelo recebimento (retorno)</strong></p>
+      <p style="margin-top:4px;font-size:11px;color:#64748b">Data: ___/___/______</p></div>
+    <div class="sig-block" style="margin-top:32px"><p><strong>Assinatura do Terceiro (devolução)</strong></p>
+      <p style="margin-top:4px;font-size:11px;color:#64748b">Data: ___/___/______</p></div>
   </div>
-</body>
-</html>`;
+</body></html>`;
 
   const w = window.open("", "_blank", "width=900,height=700");
   w.document.write(html);
@@ -229,7 +285,7 @@ function printFicha(record) {
   w.print();
 }
 
-/* ─── initial form state ──────────────────────────────────────── */
+/* ─── emptyForm ───────────────────────────────────────────────── */
 function emptyForm() {
   return {
     nota_saida_numero: "",
@@ -247,16 +303,32 @@ function emptyForm() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   MODAL — NOVO REGISTRO
+   MODAL — NOVO / EDITAR
 ═══════════════════════════════════════════════════════════════════ */
-function NovoModal({ onClose, onSaved, userInfo }) {
-  const [form, setForm] = useState(emptyForm());
+function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
+  const isEdit = !!editRecord;
+  const [form, setForm] = useState(
+    isEdit
+      ? {
+          nota_saida_numero: editRecord.nota_saida_numero || "",
+          nota_saida_data: editRecord.nota_saida_data || todayISO(),
+          nota_retorno_numero: editRecord.nota_retorno_numero || "",
+          nota_retorno_data: editRecord.nota_retorno_data || "",
+          terceiro_nome: editRecord.terceiro_nome || "",
+          terceiro_cpf_cnpj: editRecord.terceiro_cpf_cnpj || "",
+          terceiro_telefone: editRecord.terceiro_telefone || "",
+          terceiro_endereco: editRecord.terceiro_endereco || "",
+          motivo: editRecord.motivo || "",
+          observacao: editRecord.observacao || "",
+          itens: editRecord.itens?.length ? editRecord.itens : [{ ...EMPTY_ITEM }],
+        }
+      : emptyForm()
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [catalogTarget, setCatalogTarget] = useState(null); // index or null
 
-  function setF(key, value) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
+  function setF(key, value) { setForm((f) => ({ ...f, [key]: value })); }
 
   function handleItemChange(index, newItem) {
     const updated = [...form.itens];
@@ -272,16 +344,27 @@ function NovoModal({ onClose, onSaved, userInfo }) {
     setForm((f) => ({ ...f, itens: f.itens.filter((_, i) => i !== index) }));
   }
 
+  function handleCatalogSelect(peca) {
+    if (catalogTarget === null) return;
+    handleItemChange(catalogTarget, {
+      ...form.itens[catalogTarget],
+      peca_id: peca.id,
+      codigo: peca.codigo || "",
+      descricao: peca.descricao,
+      unidade: peca.unidade_padrao || "un",
+    });
+    setCatalogTarget(null);
+  }
+
   async function handleSave() {
     if (!form.terceiro_nome.trim()) { setError("Informe o nome do terceiro."); return; }
     if (!form.motivo.trim()) { setError("Informe o motivo / serviço."); return; }
     const validItens = form.itens.filter((it) => it.descricao.trim());
     if (validItens.length === 0) { setError("Adicione ao menos um item."); return; }
 
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
 
-    const { error: err } = await supabase.from("suprimentos_servico_externo").insert({
+    const payload = {
       nota_saida_numero: form.nota_saida_numero || null,
       nota_saida_data: form.nota_saida_data || null,
       terceiro_nome: form.terceiro_nome.trim(),
@@ -291,193 +374,270 @@ function NovoModal({ onClose, onSaved, userInfo }) {
       motivo: form.motivo.trim(),
       observacao: form.observacao || null,
       itens: validItens,
-      criado_por_id: userInfo?.id || null,
-      criado_por_login: userInfo?.login || null,
-      criado_por_nome: userInfo?.nome || null,
-    });
+    };
+
+    let err;
+    if (isEdit) {
+      ({ error: err } = await supabase.from("suprimentos_servico_externo").update(payload).eq("id", editRecord.id));
+    } else {
+      payload.criado_por_id = userInfo?.id || null;
+      payload.criado_por_login = userInfo?.login || null;
+      payload.criado_por_nome = userInfo?.nome || null;
+      ({ error: err } = await supabase.from("suprimentos_servico_externo").insert(payload));
+    }
 
     setSaving(false);
     if (err) { setError(err.message); return; }
+
+    // auto-insert movimentação de saída se novo
+    if (!isEdit) {
+      const { data: novo } = await supabase.from("suprimentos_servico_externo").select("id").order("created_at", { ascending: false }).limit(1).single();
+      if (novo) {
+        await supabase.from("suprimentos_se_movimentacoes").insert({
+          se_id: novo.id,
+          tipo: "Saída",
+          descricao: `Saída registrada. Motivo: ${payload.motivo}`,
+          criado_por_id: userInfo?.id || null,
+          criado_por_login: userInfo?.login || null,
+          criado_por_nome: userInfo?.nome || null,
+        });
+      }
+    }
     onSaved();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
-      <div className="my-8 w-full max-w-3xl rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-        {/* header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Serviço Externo</p>
-            <h2 className="mt-1 text-xl font-black text-slate-900">Nova Saída</h2>
-          </div>
-          <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-            <FaTimes />
-          </button>
-        </div>
-
-        <div className="px-6 py-5 space-y-6">
-          {/* Nota de saída */}
-          <div>
-            <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Nota Fiscal de Saída (Simples Remessa)</p>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Número da NF">
-                <input className={inputClass} placeholder="ex.: 001234" value={form.nota_saida_numero} onChange={(e) => setF("nota_saida_numero", e.target.value)} />
-              </Field>
-              <Field label="Data de Emissão">
-                <input type="date" className={inputClass} value={form.nota_saida_data} onChange={(e) => setF("nota_saida_data", e.target.value)} />
-              </Field>
+    <>
+      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
+        <div className="my-8 w-full max-w-3xl rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Serviço Externo</p>
+              <h2 className="mt-1 text-xl font-black text-slate-900">{isEdit ? "Editar Saída" : "Nova Saída"}</h2>
             </div>
+            <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
           </div>
 
-          {/* Terceiro */}
-          <div>
-            <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Dados do Terceiro</p>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Nome / Razão Social" required className="col-span-2">
-                <input className={inputClass} placeholder="Nome completo ou razão social" value={form.terceiro_nome} onChange={(e) => setF("terceiro_nome", e.target.value)} />
-              </Field>
-              <Field label="CPF / CNPJ">
-                <input className={inputClass} placeholder="000.000.000-00" value={form.terceiro_cpf_cnpj} onChange={(e) => setF("terceiro_cpf_cnpj", e.target.value)} />
-              </Field>
-              <Field label="Telefone">
-                <input className={inputClass} placeholder="(00) 00000-0000" value={form.terceiro_telefone} onChange={(e) => setF("terceiro_telefone", e.target.value)} />
-              </Field>
-              <Field label="Endereço" className="col-span-2">
-                <input className={inputClass} placeholder="Rua, número, cidade..." value={form.terceiro_endereco} onChange={(e) => setF("terceiro_endereco", e.target.value)} />
-              </Field>
+          <div className="px-6 py-5 space-y-6">
+            {/* Nota de Saída */}
+            <div>
+              <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Nota Fiscal de Saída (Simples Remessa)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Número da NF de Saída" required>
+                  <input className={inputClass} placeholder="ex.: 001234" value={form.nota_saida_numero} onChange={(e) => setF("nota_saida_numero", e.target.value)} />
+                </Field>
+                <Field label="Data de Emissão" required>
+                  <input type="date" className={inputClass} value={form.nota_saida_data} onChange={(e) => setF("nota_saida_data", e.target.value)} />
+                </Field>
+              </div>
             </div>
+
+            {/* Terceiro */}
+            <div>
+              <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Dados do Terceiro</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Nome / Razão Social" required className="col-span-2">
+                  <input className={inputClass} placeholder="Nome completo ou razão social" value={form.terceiro_nome} onChange={(e) => setF("terceiro_nome", e.target.value)} />
+                </Field>
+                <Field label="CPF / CNPJ">
+                  <input className={inputClass} placeholder="000.000.000-00" value={form.terceiro_cpf_cnpj} onChange={(e) => setF("terceiro_cpf_cnpj", e.target.value)} />
+                </Field>
+                <Field label="Telefone">
+                  <input className={inputClass} placeholder="(00) 00000-0000" value={form.terceiro_telefone} onChange={(e) => setF("terceiro_telefone", e.target.value)} />
+                </Field>
+                <Field label="Endereço" className="col-span-2">
+                  <input className={inputClass} placeholder="Rua, número, cidade…" value={form.terceiro_endereco} onChange={(e) => setF("terceiro_endereco", e.target.value)} />
+                </Field>
+              </div>
+            </div>
+
+            {/* Motivo */}
+            <div>
+              <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Motivo / Serviço</p>
+              <div className="space-y-3">
+                <Field label="Descrição do serviço" required>
+                  <textarea rows={2} className={textareaClass} placeholder="Descreva o serviço a ser realizado…" value={form.motivo} onChange={(e) => setF("motivo", e.target.value)} />
+                </Field>
+                <Field label="Observações internas">
+                  <textarea rows={2} className={textareaClass} placeholder="Informações adicionais…" value={form.observacao} onChange={(e) => setF("observacao", e.target.value)} />
+                </Field>
+              </div>
+            </div>
+
+            {/* Itens */}
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-black uppercase tracking-widest text-slate-400">Itens enviados</p>
+                <button type="button" onClick={addItem} className="flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-1.5 text-xs font-black text-white hover:bg-blue-700">
+                  <FaPlus /> Adicionar item
+                </button>
+              </div>
+              <div className="space-y-3">
+                {form.itens.map((item, i) => (
+                  <ItemRow
+                    key={i}
+                    item={item}
+                    index={i}
+                    onChange={handleItemChange}
+                    onRemove={removeItem}
+                    onPickCatalog={(idx) => setCatalogTarget(idx)}
+                    readOnly={false}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>
+            )}
           </div>
 
-          {/* Motivo */}
-          <div>
-            <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Motivo / Serviço</p>
-            <div className="grid grid-cols-1 gap-4">
-              <Field label="Descrição do serviço" required>
-                <textarea rows={2} className={textareaClass} placeholder="Descreva o motivo da saída / serviço a ser realizado..." value={form.motivo} onChange={(e) => setF("motivo", e.target.value)} />
-              </Field>
-              <Field label="Observações internas">
-                <textarea rows={2} className={textareaClass} placeholder="Informações adicionais..." value={form.observacao} onChange={(e) => setF("observacao", e.target.value)} />
-              </Field>
-            </div>
+          <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4 rounded-b-[28px]">
+            <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">Cancelar</button>
+            <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50">
+              <FaTruckLoading /> {saving ? "Salvando…" : isEdit ? "Salvar alterações" : "Registrar saída"}
+            </button>
           </div>
-
-          {/* Itens */}
-          <div>
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-black uppercase tracking-widest text-slate-400">Itens enviados</p>
-              <button
-                type="button"
-                onClick={addItem}
-                className="flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-1.5 text-xs font-black text-white hover:bg-blue-700"
-              >
-                <FaPlus /> Adicionar item
-              </button>
-            </div>
-            <div className="overflow-x-auto rounded-2xl border border-slate-100">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 text-xs font-black uppercase tracking-widest text-slate-500">
-                    <th className="px-3 py-2 text-left">Descrição</th>
-                    <th className="px-3 py-2 text-left w-20">Qtd</th>
-                    <th className="px-3 py-2 text-left w-24">Un.</th>
-                    <th className="px-3 py-2 text-left w-40">Nº série / Pat.</th>
-                    <th className="px-3 py-2 text-left">Obs.</th>
-                    <th className="px-3 py-2 w-8" />
-                  </tr>
-                </thead>
-                <tbody className="px-3">
-                  {form.itens.map((item, i) => (
-                    <ItemRow
-                      key={i}
-                      item={item}
-                      index={i}
-                      onChange={handleItemChange}
-                      onRemove={removeItem}
-                      readOnly={false}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {error && (
-            <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">
-              {error}
-            </div>
-          )}
-        </div>
-
-        {/* sticky footer */}
-        <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4 rounded-b-[28px]">
-          <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            <FaTruckLoading /> {saving ? "Salvando…" : "Registrar saída"}
-          </button>
         </div>
       </div>
-    </div>
+
+      {catalogTarget !== null && (
+        <PecasCatalogPicker onSelect={handleCatalogSelect} onClose={() => setCatalogTarget(null)} />
+      )}
+    </>
   );
 }
 
 /* ════════════════════════════════════════════════════════════════
-   MODAL — DETALHES / AÇÕES
+   MODAL — DETALHE + RASTREIO
 ═══════════════════════════════════════════════════════════════════ */
-function DetalheModal({ record, onClose, onUpdated }) {
-  const [tab, setTab] = useState("detalhes"); // detalhes | retorno | cancelar
+function DetalheModal({ record, onClose, onUpdated, userInfo }) {
+  const [tab, setTab] = useState("detalhes");
+  const [movs, setMovs] = useState([]);
+  const [loadingMovs, setLoadingMovs] = useState(true);
+
+  // retorno form
   const [retornoForm, setRetornoForm] = useState({
     nota_retorno_numero: record.nota_retorno_numero || "",
     nota_retorno_data: record.nota_retorno_data || todayISO(),
-    retornado_obs: record.retornado_obs || "",
+    descricao: "",
+    valor: "",
+    qtd_retornada: "",
+    fotos: [],
   });
+  const retornoFotoRef = useRef();
+  const [uploadingRetornoFotos, setUploadingRetornoFotos] = useState(false);
+
+  // observação form
+  const [obsForm, setObsForm] = useState({ descricao: "" });
+
+  // cancelar form
   const [cancelarMotivo, setCancelarMotivo] = useState(record.cancelado_motivo || "");
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const meta = statusMeta(record.status);
+  const canAct = record.status === "Em posse do terceiro";
+
+  async function loadMovs() {
+    setLoadingMovs(true);
+    const { data } = await supabase
+      .from("suprimentos_se_movimentacoes")
+      .select("*")
+      .eq("se_id", record.id)
+      .order("created_at", { ascending: true });
+    setMovs(data || []);
+    setLoadingMovs(false);
+  }
+
+  useEffect(() => { loadMovs(); }, []);
+
+  async function addRetornoFotos(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploadingRetornoFotos(true);
+    const urls = await uploadFotos(files);
+    setRetornoForm((f) => ({ ...f, fotos: [...f.fotos, ...urls] }));
+    setUploadingRetornoFotos(false);
+    e.target.value = "";
+  }
 
   async function registrarRetorno() {
-    setSaving(true);
-    setError("");
-    const { error: err } = await supabase
-      .from("suprimentos_servico_externo")
-      .update({
-        status: "Retornado",
-        nota_retorno_numero: retornoForm.nota_retorno_numero || null,
-        nota_retorno_data: retornoForm.nota_retorno_data || null,
-        retornado_obs: retornoForm.retornado_obs || null,
-        retornado_em: new Date().toISOString(),
-      })
-      .eq("id", record.id);
+    setSaving(true); setError("");
+    const { error: err } = await supabase.from("suprimentos_servico_externo").update({
+      status: "Retornado",
+      nota_retorno_numero: retornoForm.nota_retorno_numero || null,
+      nota_retorno_data: retornoForm.nota_retorno_data || null,
+      retornado_em: new Date().toISOString(),
+      retornado_obs: retornoForm.descricao || null,
+    }).eq("id", record.id);
+    if (err) { setError(err.message); setSaving(false); return; }
+    await supabase.from("suprimentos_se_movimentacoes").insert({
+      se_id: record.id,
+      tipo: "Retorno",
+      descricao: retornoForm.descricao || "Retorno registrado.",
+      fotos_urls: retornoForm.fotos,
+      valor: retornoForm.valor ? Number(retornoForm.valor) : null,
+      qtd_retornada: retornoForm.qtd_retornada ? Number(retornoForm.qtd_retornada) : null,
+      criado_por_id: userInfo?.id || null,
+      criado_por_login: userInfo?.login || null,
+      criado_por_nome: userInfo?.nome || null,
+    });
+    setSaving(false);
+    onUpdated();
+  }
+
+  async function registrarObservacao() {
+    if (!obsForm.descricao.trim()) { setError("Informe a observação."); return; }
+    setSaving(true); setError("");
+    const { error: err } = await supabase.from("suprimentos_se_movimentacoes").insert({
+      se_id: record.id,
+      tipo: "Observação",
+      descricao: obsForm.descricao.trim(),
+      criado_por_id: userInfo?.id || null,
+      criado_por_login: userInfo?.login || null,
+      criado_por_nome: userInfo?.nome || null,
+    });
     setSaving(false);
     if (err) { setError(err.message); return; }
-    onUpdated();
+    setObsForm({ descricao: "" });
+    setTab("rastreio");
+    loadMovs();
   }
 
   async function cancelar() {
     if (!cancelarMotivo.trim()) { setError("Informe o motivo do cancelamento."); return; }
-    setSaving(true);
-    setError("");
-    const { error: err } = await supabase
-      .from("suprimentos_servico_externo")
-      .update({
-        status: "Cancelado",
-        cancelado_motivo: cancelarMotivo.trim(),
-        cancelado_em: new Date().toISOString(),
-      })
-      .eq("id", record.id);
+    setSaving(true); setError("");
+    const { error: err } = await supabase.from("suprimentos_servico_externo").update({
+      status: "Cancelado",
+      cancelado_motivo: cancelarMotivo.trim(),
+      cancelado_em: new Date().toISOString(),
+    }).eq("id", record.id);
+    if (err) { setError(err.message); setSaving(false); return; }
+    await supabase.from("suprimentos_se_movimentacoes").insert({
+      se_id: record.id,
+      tipo: "Cancelamento",
+      descricao: `Cancelado. Motivo: ${cancelarMotivo.trim()}`,
+      criado_por_id: userInfo?.id || null,
+      criado_por_login: userInfo?.login || null,
+      criado_por_nome: userInfo?.nome || null,
+    });
     setSaving(false);
-    if (err) { setError(err.message); return; }
     onUpdated();
   }
 
-  const canAct = record.status === "Em posse do terceiro";
+  const MOV_TONE = { "Saída": "blue", "Observação": "slate", "Retorno": "emerald", "Cancelamento": "rose" };
+
+  const TABS_LIST = [
+    { key: "detalhes", label: "Detalhes", icon: <FaClipboardList /> },
+    { key: "rastreio", label: "Rastreio", icon: <FaHistory /> },
+    ...(canAct ? [
+      { key: "obs", label: "Observação", icon: <FaFileAlt /> },
+      { key: "retorno", label: "Registrar Retorno", icon: <FaUndoAlt /> },
+      { key: "cancelar", label: "Cancelar", icon: <FaBan /> },
+    ] : []),
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
@@ -490,57 +650,45 @@ function DetalheModal({ record, onClose, onUpdated }) {
               <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
             </div>
             <h2 className="mt-1 text-xl font-black text-slate-900">{record.numero_saida}</h2>
-            <p className="mt-0.5 text-sm font-semibold text-slate-500">{record.terceiro_nome}</p>
+            <p className="text-sm font-semibold text-slate-500">{record.terceiro_nome}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => printFicha(record)}
-              className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
-            >
+            <button onClick={() => printFicha(record)} className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
               <FaPrint /> Imprimir
             </button>
-            <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-              <FaTimes />
-            </button>
+            <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
           </div>
         </div>
 
-        {/* tabs */}
-        {canAct && (
-          <div className="flex gap-1 border-b border-slate-100 px-6 pt-3">
-            {[["detalhes", <FaClipboardList />, "Detalhes"], ["retorno", <FaUndoAlt />, "Registrar Retorno"], ["cancelar", <FaBan />, "Cancelar"]].map(
-              ([key, icon, label]) => (
-                <button
-                  key={key}
-                  onClick={() => { setTab(key); setError(""); }}
-                  className={`flex items-center gap-1.5 rounded-t-2xl px-4 py-2 text-xs font-black transition ${
-                    tab === key
-                      ? "bg-blue-600 text-white"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                  }`}
-                >
-                  {icon} {label}
-                </button>
-              )
-            )}
-          </div>
-        )}
+        {/* tab bar */}
+        <div className="flex flex-wrap gap-1 border-b border-slate-100 px-6 pt-3">
+          {TABS_LIST.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => { setTab(t.key); setError(""); }}
+              className={`flex items-center gap-1.5 rounded-t-2xl px-3 py-2 text-xs font-black transition mb-0 ${
+                tab === t.key ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100"
+              }`}
+            >
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
 
         <div className="px-6 py-5 space-y-5">
           {/* ── DETALHES ── */}
-          {(tab === "detalhes" || !canAct) && (
+          {tab === "detalhes" && (
             <>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <InfoField label="Nota de Saída" value={`${record.nota_saida_numero || "—"} ${record.nota_saida_data ? "· " + formatDateBR(record.nota_saida_data) : ""}`} />
-                <InfoField label="Nota de Retorno" value={`${record.nota_retorno_numero || "—"} ${record.nota_retorno_data ? "· " + formatDateBR(record.nota_retorno_data) : ""}`} />
+                <InfoField label="Nota de Saída" value={`${record.nota_saida_numero || "—"}${record.nota_saida_data ? " · " + formatDateBR(record.nota_saida_data) : ""}`} />
+                <InfoField label="Nota de Retorno" value={`${record.nota_retorno_numero || "—"}${record.nota_retorno_data ? " · " + formatDateBR(record.nota_retorno_data) : ""}`} />
                 <InfoField label="Terceiro" value={record.terceiro_nome} />
                 <InfoField label="CPF / CNPJ" value={record.terceiro_cpf_cnpj} />
                 <InfoField label="Telefone" value={record.terceiro_telefone} />
                 <InfoField label="Endereço" value={record.terceiro_endereco} />
                 <InfoField label="Motivo / Serviço" value={record.motivo} className="col-span-2" />
-                {record.observacao && <InfoField label="Observações" value={record.observacao} className="col-span-2" />}
-                {record.retornado_obs && <InfoField label="Obs. do retorno" value={record.retornado_obs} className="col-span-2" />}
-                {record.cancelado_motivo && <InfoField label="Motivo do cancelamento" value={record.cancelado_motivo} className="col-span-2" />}
+                {record.observacao && <InfoField label="Observações internas" value={record.observacao} className="col-span-2" />}
+                {record.cancelado_motivo && <InfoField label="Motivo cancelamento" value={record.cancelado_motivo} className="col-span-2" />}
                 <InfoField label="Criado por" value={record.criado_por_nome} />
                 <InfoField label="Criado em" value={formatDateTimeBR(record.created_at)} />
                 {record.retornado_em && <InfoField label="Retornado em" value={formatDateTimeBR(record.retornado_em)} />}
@@ -549,49 +697,115 @@ function DetalheModal({ record, onClose, onUpdated }) {
 
               {/* itens */}
               <div>
-                <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-400">Itens</p>
-                <div className="overflow-x-auto rounded-2xl border border-slate-100">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 text-xs font-black uppercase tracking-widest text-slate-500">
-                        <th className="px-3 py-2 text-left">#</th>
-                        <th className="px-3 py-2 text-left">Descrição</th>
-                        <th className="px-3 py-2 text-left">Qtd</th>
-                        <th className="px-3 py-2 text-left">Nº série / Pat.</th>
-                        <th className="px-3 py-2 text-left">Obs.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(record.itens || []).map((it, i) => (
-                        <tr key={i} className="border-t border-slate-100">
-                          <td className="px-3 py-2 font-semibold text-slate-400">{i + 1}</td>
-                          <td className="px-3 py-2 font-semibold">{it.descricao}</td>
-                          <td className="px-3 py-2 text-slate-600">{it.quantidade} {it.unidade}</td>
-                          <td className="px-3 py-2 text-slate-600">{it.numero_serie || "—"}</td>
-                          <td className="px-3 py-2 text-slate-500">{it.obs || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Itens</p>
+                <div className="space-y-3">
+                  {(record.itens || []).map((it, i) => (
+                    <ItemRow key={i} item={it} index={i} onChange={() => {}} onRemove={() => {}} onPickCatalog={() => {}} readOnly />
+                  ))}
                 </div>
               </div>
             </>
           )}
 
+          {/* ── RASTREIO ── */}
+          {tab === "rastreio" && (
+            <div>
+              {loadingMovs ? (
+                <p className="py-8 text-center text-sm text-slate-400">Carregando…</p>
+              ) : movs.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">Nenhuma movimentação registrada.</p>
+              ) : (
+                <div className="relative pl-4">
+                  <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-slate-200" />
+                  <div className="space-y-5">
+                    {movs.map((m) => {
+                      const tone = MOV_TONE[m.tipo] || "slate";
+                      return (
+                        <div key={m.id} className="relative">
+                          <div className={`absolute -left-2.5 top-1 h-4 w-4 rounded-full border-2 border-white ${tone === "blue" ? "bg-blue-500" : tone === "emerald" ? "bg-emerald-500" : tone === "rose" ? "bg-rose-500" : "bg-slate-400"}`} />
+                          <div className="ml-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-1">
+                              <StatusChip tone={tone}>{m.tipo}</StatusChip>
+                              <span className="text-xs text-slate-400">{formatDateTimeBR(m.created_at)}</span>
+                              {m.criado_por_nome && <span className="text-xs font-semibold text-slate-500">· {m.criado_por_nome}</span>}
+                            </div>
+                            {m.descricao && <p className="text-sm font-semibold text-slate-800">{m.descricao}</p>}
+                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                              {m.valor != null && <span>💰 R$ {Number(m.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>}
+                              {m.qtd_retornada != null && <span>📦 {m.qtd_retornada} un. retornadas</span>}
+                            </div>
+                            {(m.fotos_urls || []).length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {m.fotos_urls.map((url, i) => (
+                                  <a key={i} href={url} target="_blank" rel="noreferrer">
+                                    <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200 hover:opacity-80" />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── OBSERVAÇÃO ── */}
+          {tab === "obs" && canAct && (
+            <div className="space-y-4">
+              <p className="text-sm font-semibold text-slate-600">Adicione uma observação ao rastreio desta saída.</p>
+              <Field label="Observação" required>
+                <textarea rows={4} className={textareaClass} placeholder="Descreva a atualização…" value={obsForm.descricao} onChange={(e) => setObsForm({ descricao: e.target.value })} />
+              </Field>
+            </div>
+          )}
+
           {/* ── RETORNO ── */}
           {tab === "retorno" && canAct && (
             <div className="space-y-4">
-              <p className="text-sm font-semibold text-slate-600">Informe os dados da nota de retorno para confirmar que os itens foram devolvidos.</p>
+              <p className="text-sm font-semibold text-slate-600">Registre o retorno dos itens e informe o que foi realizado.</p>
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Nº da Nota de Retorno">
+                <Field label="Nº Nota de Retorno">
                   <input className={inputClass} placeholder="ex.: 005678" value={retornoForm.nota_retorno_numero} onChange={(e) => setRetornoForm((f) => ({ ...f, nota_retorno_numero: e.target.value }))} />
                 </Field>
                 <Field label="Data da Nota de Retorno">
                   <input type="date" className={inputClass} value={retornoForm.nota_retorno_data} onChange={(e) => setRetornoForm((f) => ({ ...f, nota_retorno_data: e.target.value }))} />
                 </Field>
-                <Field label="Observações do retorno" className="col-span-2">
-                  <textarea rows={3} className={textareaClass} placeholder="Condições dos itens, observações..." value={retornoForm.retornado_obs} onChange={(e) => setRetornoForm((f) => ({ ...f, retornado_obs: e.target.value }))} />
+                <Field label="Valor (R$)">
+                  <input className={inputClass} type="number" placeholder="0,00" value={retornoForm.valor} onChange={(e) => setRetornoForm((f) => ({ ...f, valor: e.target.value }))} />
                 </Field>
+                <Field label="Qtd. retornada">
+                  <input className={inputClass} type="number" placeholder="1" value={retornoForm.qtd_retornada} onChange={(e) => setRetornoForm((f) => ({ ...f, qtd_retornada: e.target.value }))} />
+                </Field>
+              </div>
+              <Field label="O que foi feito / condição dos itens" required>
+                <textarea rows={3} className={textareaClass} placeholder="Descreva o que foi realizado, condições de retorno…" value={retornoForm.descricao} onChange={(e) => setRetornoForm((f) => ({ ...f, descricao: e.target.value }))} />
+              </Field>
+              <div>
+                <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-400">Fotos do retorno (opcional)</p>
+                <button type="button" onClick={() => retornoFotoRef.current?.click()} disabled={uploadingRetornoFotos} className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+                  <FaCamera /> {uploadingRetornoFotos ? "Enviando…" : "Adicionar foto"}
+                </button>
+                <input ref={retornoFotoRef} type="file" accept="image/*" multiple className="hidden" onChange={addRetornoFotos} />
+                {retornoForm.fotos.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {retornoForm.fotos.map((url, i) => (
+                      <div key={i} className="group relative">
+                        <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200" />
+                        <button
+                          type="button"
+                          onClick={() => setRetornoForm((f) => ({ ...f, fotos: f.fotos.filter((u) => u !== url) }))}
+                          className="absolute -right-1 -top-1 hidden rounded-full bg-rose-500 p-0.5 text-[10px] text-white group-hover:flex"
+                        >
+                          <FaTimes />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -599,40 +813,31 @@ function DetalheModal({ record, onClose, onUpdated }) {
           {/* ── CANCELAR ── */}
           {tab === "cancelar" && canAct && (
             <div className="space-y-4">
-              <p className="text-sm font-semibold text-slate-600">Informe o motivo do cancelamento desta saída.</p>
-              <Field label="Motivo do cancelamento" required>
-                <textarea rows={3} className={textareaClass} placeholder="Descreva o motivo..." value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)} />
+              <p className="text-sm font-semibold text-slate-600">Informe o motivo do cancelamento.</p>
+              <Field label="Motivo" required>
+                <textarea rows={3} className={textareaClass} placeholder="Descreva o motivo…" value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)} />
               </Field>
             </div>
           )}
 
-          {error && (
-            <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">
-              {error}
-            </div>
-          )}
+          {error && <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
         </div>
 
         {/* footer */}
         <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4 rounded-b-[28px]">
-          <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">
-            Fechar
-          </button>
+          <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">Fechar</button>
+          {tab === "obs" && canAct && (
+            <button onClick={registrarObservacao} disabled={saving} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50">
+              <FaCheckCircle /> {saving ? "Salvando…" : "Salvar observação"}
+            </button>
+          )}
           {tab === "retorno" && canAct && (
-            <button
-              onClick={registrarRetorno}
-              disabled={saving}
-              className="flex items-center gap-2 rounded-2xl bg-emerald-700 px-5 py-2.5 text-sm font-black text-white hover:bg-emerald-800 disabled:opacity-50"
-            >
+            <button onClick={registrarRetorno} disabled={saving} className="flex items-center gap-2 rounded-2xl bg-emerald-700 px-5 py-2.5 text-sm font-black text-white hover:bg-emerald-800 disabled:opacity-50">
               <FaUndoAlt /> {saving ? "Salvando…" : "Confirmar retorno"}
             </button>
           )}
           {tab === "cancelar" && canAct && (
-            <button
-              onClick={cancelar}
-              disabled={saving}
-              className="flex items-center gap-2 rounded-2xl bg-rose-600 px-5 py-2.5 text-sm font-black text-white hover:bg-rose-700 disabled:opacity-50"
-            >
+            <button onClick={cancelar} disabled={saving} className="flex items-center gap-2 rounded-2xl bg-rose-600 px-5 py-2.5 text-sm font-black text-white hover:bg-rose-700 disabled:opacity-50">
               <FaBan /> {saving ? "Salvando…" : "Cancelar saída"}
             </button>
           )}
@@ -654,7 +859,7 @@ function InfoField({ label, value, className = "" }) {
 /* ════════════════════════════════════════════════════════════════
    MAIN PAGE
 ═══════════════════════════════════════════════════════════════════ */
-const STATUS_FILTER_OPTIONS = ["Todos", "Em posse do terceiro", "Retornado", "Cancelado"];
+const STATUS_OPTIONS = ["Todos", "Em posse do terceiro", "Retornado", "Cancelado"];
 
 export default function SuprimentosServicoExterno() {
   const { user } = useContext(AuthContext);
@@ -667,52 +872,36 @@ export default function SuprimentosServicoExterno() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-
   const [statusFilter, setStatusFilter] = useState("Todos");
   const [search, setSearch] = useState("");
 
   const [showNovo, setShowNovo] = useState(false);
+  const [editRecord, setEditRecord] = useState(null);
   const [selected, setSelected] = useState(null);
 
   async function carregar() {
-    setLoading(true);
-    setErrorMsg("");
-    const { data, error } = await supabase
-      .from("suprimentos_servico_externo")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      setErrorMsg(error.message);
-      setRecords([]);
-    } else {
-      setRecords(data || []);
-    }
+    setLoading(true); setErrorMsg("");
+    const { data, error } = await supabase.from("suprimentos_servico_externo").select("*").order("created_at", { ascending: false });
+    if (error) { setErrorMsg(error.message); setRecords([]); }
+    else { setRecords(data || []); }
     setLoading(false);
   }
-
   useEffect(() => { carregar(); }, []);
 
   const filtered = useMemo(() => {
     return records.filter((r) => {
       const matchStatus = statusFilter === "Todos" || r.status === statusFilter;
       const q = search.toLowerCase();
-      const matchSearch =
-        !q ||
-        (r.numero_saida || "").toLowerCase().includes(q) ||
-        (r.terceiro_nome || "").toLowerCase().includes(q) ||
-        (r.motivo || "").toLowerCase().includes(q) ||
-        (r.nota_saida_numero || "").toLowerCase().includes(q);
+      const matchSearch = !q || [r.numero_saida, r.terceiro_nome, r.motivo, r.nota_saida_numero].some((v) => (v || "").toLowerCase().includes(q));
       return matchStatus && matchSearch;
     });
   }, [records, statusFilter, search]);
 
-  const kpis = useMemo(() => {
-    const total = records.length;
-    const emPosse = records.filter((r) => r.status === "Em posse do terceiro").length;
-    const retornados = records.filter((r) => r.status === "Retornado").length;
-    return { total, emPosse, retornados };
-  }, [records]);
+  const kpis = useMemo(() => ({
+    total: records.length,
+    emPosse: records.filter((r) => r.status === "Em posse do terceiro").length,
+    retornados: records.filter((r) => r.status === "Retornado").length,
+  }), [records]);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -721,10 +910,7 @@ export default function SuprimentosServicoExterno() {
         title="Serviço Externo"
         description="Rastreie tudo que sai da empresa para terceiros — nota de saída (simples remessa), nota de retorno e ficha para assinatura."
         actions={
-          <button
-            onClick={() => setShowNovo(true)}
-            className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow hover:bg-blue-700"
-          >
+          <button onClick={() => setShowNovo(true)} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow hover:bg-blue-700">
             <FaPlus /> Nova saída
           </button>
         }
@@ -741,52 +927,25 @@ export default function SuprimentosServicoExterno() {
       <Panel>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2">
-            {STATUS_FILTER_OPTIONS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`rounded-2xl px-3 py-1.5 text-xs font-black transition ${
-                  statusFilter === s
-                    ? "bg-blue-600 text-white"
-                    : "border border-slate-200 text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                {s}
-              </button>
+            {STATUS_OPTIONS.map((s) => (
+              <button key={s} onClick={() => setStatusFilter(s)} className={`rounded-2xl px-3 py-1.5 text-xs font-black transition ${statusFilter === s ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-100"}`}>{s}</button>
             ))}
           </div>
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm">
-            <FaSearch className="text-slate-400" />
-            <input
-              className="bg-transparent outline-none text-sm font-semibold text-slate-700 placeholder:text-slate-400 w-48"
-              placeholder="Buscar…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && (
-              <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-700">
-                <FaTimesCircle />
-              </button>
-            )}
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+            <FaSearch className="text-slate-400 text-xs" />
+            <input className="bg-transparent outline-none text-sm font-semibold text-slate-700 placeholder:text-slate-400 w-44" placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            {search && <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600"><FaTimesCircle /></button>}
           </div>
         </div>
       </Panel>
 
       {/* tabela */}
       <Panel>
-        {errorMsg && (
-          <div className="mb-4 rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">
-            {errorMsg}
-          </div>
-        )}
+        {errorMsg && <div className="mb-4 rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">{errorMsg}</div>}
         {loading ? (
           <div className="py-16 text-center text-sm font-semibold text-slate-400">Carregando…</div>
         ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={<FaBoxOpen />}
-            title="Nenhum registro encontrado"
-            description="Registre uma nova saída para começar a rastrear."
-          />
+          <EmptyState icon={<FaBoxOpen />} title="Nenhum registro encontrado" description="Registre uma nova saída para começar a rastrear." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -806,30 +965,26 @@ export default function SuprimentosServicoExterno() {
                 {filtered.map((r) => {
                   const meta = statusMeta(r.status);
                   return (
-                    <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                    <tr
+                      key={r.id}
+                      className="border-b border-slate-50 hover:bg-slate-50/60 cursor-pointer"
+                      onClick={() => setSelected(r)}
+                    >
                       <td className="py-3 pr-4 font-black text-blue-700">{r.numero_saida}</td>
-                      <td className="py-3 pr-4">
-                        <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
-                      </td>
+                      <td className="py-3 pr-4"><StatusChip tone={meta.tone}>{meta.label}</StatusChip></td>
                       <td className="py-3 pr-4 font-semibold">{r.terceiro_nome}</td>
-                      <td className="py-3 pr-4 text-slate-600 max-w-[200px] truncate">{r.motivo}</td>
+                      <td className="py-3 pr-4 text-slate-600 max-w-[180px] truncate">{r.motivo}</td>
                       <td className="py-3 pr-4 text-slate-600">{r.nota_saida_numero || "—"}</td>
                       <td className="py-3 pr-4 text-slate-600">{formatDateBR(r.nota_saida_data)}</td>
-                      <td className="py-3 pr-4 text-slate-600">{(r.itens || []).length} item(s)</td>
-                      <td className="py-3 text-center">
+                      <td className="py-3 pr-4 text-slate-600">{(r.itens || []).length}</td>
+                      <td className="py-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => setSelected(r)}
-                            className="rounded-xl p-2 text-blue-600 hover:bg-blue-50"
-                            title="Ver detalhes"
-                          >
-                            <FaEye />
-                          </button>
-                          <button
-                            onClick={() => printFicha(r)}
-                            className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"
-                            title="Imprimir ficha"
-                          >
+                          {r.status === "Em posse do terceiro" && (
+                            <button onClick={() => setEditRecord(r)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Editar">
+                              <FaEdit />
+                            </button>
+                          )}
+                          <button onClick={() => printFicha(r)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Imprimir ficha">
                             <FaPrint />
                           </button>
                         </div>
@@ -844,19 +999,13 @@ export default function SuprimentosServicoExterno() {
       </Panel>
 
       {showNovo && (
-        <NovoModal
-          onClose={() => setShowNovo(false)}
-          onSaved={() => { setShowNovo(false); carregar(); }}
-          userInfo={userInfo}
-        />
+        <SaidaModal onClose={() => setShowNovo(false)} onSaved={() => { setShowNovo(false); carregar(); }} userInfo={userInfo} />
       )}
-
+      {editRecord && (
+        <SaidaModal editRecord={editRecord} onClose={() => setEditRecord(null)} onSaved={() => { setEditRecord(null); carregar(); }} userInfo={userInfo} />
+      )}
       {selected && (
-        <DetalheModal
-          record={selected}
-          onClose={() => setSelected(null)}
-          onUpdated={() => { setSelected(null); carregar(); }}
-        />
+        <DetalheModal record={selected} onClose={() => setSelected(null)} onUpdated={() => { setSelected(null); carregar(); }} userInfo={userInfo} />
       )}
     </div>
   );

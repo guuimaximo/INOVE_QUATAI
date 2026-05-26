@@ -1,4 +1,28 @@
 import { useContext, useEffect, useMemo, useState } from "react";
+import { supabase as _supabase } from "../../supabase";
+
+function useFornecedoresList() {
+  const [list, setList] = useState([]);
+  useEffect(() => {
+    _supabase.from("suprimentos_fornecedores").select("id, nome").eq("ativo", true).order("nome")
+      .then(({ data }) => setList(data || []));
+  }, []);
+  return list;
+}
+const _inputClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
+function FornecedorSelect({ value, onChange }) {
+  const list = useFornecedoresList();
+  const isFromList = list.some((f) => f.nome === value);
+  return (
+    <div className="space-y-1">
+      <select className={_inputClass} value={isFromList ? value : "__outro__"} onChange={(e) => { if (e.target.value !== "__outro__") onChange(e.target.value); else onChange(""); }}>
+        <option value="__outro__">— Digite ou selecione —</option>
+        {list.map((f) => <option key={f.id} value={f.nome}>{f.nome}</option>)}
+      </select>
+      {!isFromList && <input className={_inputClass} placeholder="Nome do fornecedor" value={value} onChange={(e) => onChange(e.target.value)} />}
+    </div>
+  );
+}
 import {
   FaCheckCircle,
   FaExclamationTriangle,
@@ -243,12 +267,7 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
           </Field>
 
           <Field label="Fornecedor / marca" required>
-            <input
-              value={form.fornecedor}
-              onChange={(e) => setForm((prev) => ({ ...prev, fornecedor: e.target.value }))}
-              className={inputClass}
-              required
-            />
+            <FornecedorSelect value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))} />
           </Field>
 
           <Field label="Prefixo" required>
@@ -524,12 +543,7 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
             </Field>
 
             <Field label="Fornecedor / marca" required className="xl:col-span-2">
-              <input
-                value={form.fornecedor}
-                onChange={(e) => setForm((prev) => ({ ...prev, fornecedor: e.target.value }))}
-                className={inputClass}
-                required
-              />
+              <FornecedorSelect value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))} />
             </Field>
 
             <Field label="Prefixo" required>

@@ -96,6 +96,7 @@ import EstruturaFisicaTratar from "./pages/estrutura-fisica/EstruturaFisicaTrata
 import SuprimentosResumo from "./pages/suprimentos/SuprimentosResumo";
 import SuprimentosGarantias from "./pages/suprimentos/SuprimentosGarantias";
 import SuprimentosTestes from "./pages/suprimentos/SuprimentosTestes";
+import SuprimentosServicoExterno from "./pages/suprimentos/SuprimentosServicoExterno";
 
 function HomeDecider() {
   const { user } = useContext(AuthContext);
@@ -284,6 +285,7 @@ export default function App() {
               <Route path="/suprimentos/resumo" element={<SuprimentosResumo />} />
               <Route path="/suprimentos/garantias" element={<SuprimentosGarantias />} />
               <Route path="/suprimentos/testes" element={<SuprimentosTestes />} />
+              <Route path="/suprimentos/servico-externo" element={<SuprimentosServicoExterno />} />
               <Route path="/suprimentos" element={<Navigate to="/suprimentos/resumo" replace />} />
 
               {/* Avarias */}

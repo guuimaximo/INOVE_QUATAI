@@ -40,6 +40,7 @@ import {
   FaBoxes,
   FaFlask,
   FaExclamationTriangle,
+  FaTruck,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -227,6 +228,7 @@ export default function Sidebar() {
           { path: "/suprimentos/resumo", label: "Resumo", icon: <FaChartPie /> },
           { path: "/suprimentos/garantias", label: "Garantias", icon: <FaShieldAlt /> },
           { path: "/suprimentos/testes", label: "Testes", icon: <FaFlask /> },
+          { path: "/suprimentos/servico-externo", label: "Serviço Externo", icon: <FaTruck /> },
         ],
       },
 

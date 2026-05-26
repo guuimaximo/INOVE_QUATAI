@@ -162,8 +162,13 @@ export default function AcidentesLancamento() {
                   <FaSyncAlt /> Usar agora
                 </button>
               </div>
-              <Field label="Prefixo" className="md:col-span-2">
-                <CampoPrefixo value={form.prefixo} onChange={(value) => setForm({ ...form, prefixo: value })} label="" />
+              <Field label="Carro / Prefixo" className="md:col-span-2">
+                <CampoPrefixo
+                  value={form.prefixo}
+                  onChange={(value) => setForm({ ...form, prefixo: value })}
+                  label=""
+                  placeholder="Digite o carro ou prefixo..."
+                />
               </Field>
               <Field label="Motorista" className="md:col-span-2">
                 <CampoMotorista value={motorista} onChange={setMotorista} label="" />

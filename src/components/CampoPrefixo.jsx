@@ -6,6 +6,7 @@ export default function CampoPrefixo({
   onChange,
   onChangeCluster,
   label = "Prefixo",
+  placeholder = "Digite o prefixo...",
   inputMode = "text",
   pattern,
 }) {
@@ -22,8 +23,17 @@ export default function CampoPrefixo({
     const normalized = normalizePrefixSearch(text);
     if (!normalized || !Array.isArray(rows)) return [];
 
-    return rows
-      .filter((p) => normalizePrefixSearch(p.codigo).startsWith(normalized))
+    const starts = [];
+    const contains = [];
+
+    rows.forEach((p) => {
+      const codigo = normalizePrefixSearch(p.codigo);
+      if (!codigo) return;
+      if (codigo.startsWith(normalized)) starts.push(p);
+      else if (codigo.includes(normalized)) contains.push(p);
+    });
+
+    return [...starts, ...contains]
       .slice(0, 8);
   }
 
@@ -60,8 +70,8 @@ export default function CampoPrefixo({
   }, [todos]);
 
   useEffect(() => {
-    setQ(String(value || ""));
-    setOpen(false);
+    const nextValue = String(value || "");
+    setQ((current) => (current === nextValue ? current : nextValue));
   }, [value]);
 
   function aplicar(prefixo) {
@@ -96,7 +106,7 @@ export default function CampoPrefixo({
 
       <input
         className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        placeholder={errorLoading ? "Erro ao carregar" : "Digite o prefixo..."}
+        placeholder={errorLoading ? "Erro ao carregar" : placeholder}
         value={q}
         inputMode={inputMode}
         pattern={pattern}
@@ -112,15 +122,16 @@ export default function CampoPrefixo({
       {errorLoading ? <div className="mt-1 text-xs text-red-600">{errorLoading}</div> : null}
 
       {open && filtrados.length > 0 ? (
-        <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow">
+        <div className="absolute z-50 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">
           {filtrados.map((prefixo) => (
             <button
               key={prefixo.id}
               type="button"
               onMouseDown={() => aplicar(prefixo)}
-              className="block w-full px-3 py-2 text-left hover:bg-gray-100"
+              className="block w-full px-3 py-2 text-left hover:bg-blue-50"
             >
-              <div className="text-sm font-medium">{prefixo.codigo}</div>
+              <div className="text-sm font-bold text-slate-800">{prefixo.codigo}</div>
+              {prefixo.cluster ? <div className="text-xs font-semibold text-slate-500">Cluster: {prefixo.cluster}</div> : null}
             </button>
           ))}
         </div>

@@ -36,6 +36,9 @@ import AvariasResumo from "./pages/avarias/AvariasResumo";
 import AcidentesLancamento from "./pages/acidentes/AcidentesLancamento";
 import AcidentesImagens from "./pages/acidentes/AcidentesImagens";
 import AcidentesCentral from "./pages/acidentes/AcidentesCentral";
+import SacLancamento from "./pages/sac/SacLancamento";
+import SacCentral from "./pages/sac/SacCentral";
+import SacResumo from "./pages/sac/SacResumo";
 
 import SolicitacaoSOS from "./pages/intervencoes/SolicitacaoSOS";
 import SOSFechamento from "./pages/intervencoes/SOSFechamento";
@@ -295,6 +298,12 @@ export default function App() {
               <Route path="/acidentes/imagens" element={<AcidentesImagens />} />
               <Route path="/acidentes/central" element={<AcidentesCentral />} />
               <Route path="/acidentes" element={<Navigate to="/acidentes/central" replace />} />
+
+              {/* SAC */}
+              <Route path="/sac/lancamento" element={<SacLancamento />} />
+              <Route path="/sac/central" element={<SacCentral />} />
+              <Route path="/sac/resumo" element={<SacResumo />} />
+              <Route path="/sac" element={<Navigate to="/sac/central" replace />} />
 
               {/* Intervenções / SOS */}
               <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />

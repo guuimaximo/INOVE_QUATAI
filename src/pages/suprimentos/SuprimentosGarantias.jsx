@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState, useCallback } from "react";
 import {
   FaCheckCircle,
   FaCoins,
@@ -44,6 +44,45 @@ import {
   todayISO,
   uploadSuprimentosFiles,
 } from "./suprimentosShared";
+
+/* hook para carregar fornecedores do cadastro */
+function useFornecedores() {
+  const [fornecedores, setFornecedores] = useState([]);
+  useEffect(() => {
+    supabase.from("suprimentos_fornecedores").select("id, nome").eq("ativo", true).order("nome")
+      .then(({ data }) => setFornecedores(data || []));
+  }, []);
+  return fornecedores;
+}
+
+/* select de fornecedor com opção de digitar livremente */
+function FornecedorSelect({ value, onChange, className }) {
+  const fornecedores = useFornecedores();
+  const isFromList = fornecedores.some((f) => f.nome === value);
+  return (
+    <div className="space-y-1">
+      <select
+        className={className}
+        value={isFromList ? value : "__outro__"}
+        onChange={(e) => {
+          if (e.target.value !== "__outro__") onChange(e.target.value);
+          else onChange("");
+        }}
+      >
+        <option value="__outro__">— Digite ou selecione —</option>
+        {fornecedores.map((f) => <option key={f.id} value={f.nome}>{f.nome}</option>)}
+      </select>
+      {!isFromList && (
+        <input
+          className={className}
+          placeholder="Nome do fornecedor"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </div>
+  );
+}
 
 const QUICK_FORM = {
   peca: "",
@@ -208,11 +247,10 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
             />
           </Field>
           <Field label="Fornecedor" required>
-            <input
+            <FornecedorSelect
               value={form.fornecedor}
-              onChange={(e) => setForm((prev) => ({ ...prev, fornecedor: e.target.value }))}
+              onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))}
               className={inputClass}
-              required
             />
           </Field>
           <Field label="Data da compra">

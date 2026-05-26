@@ -3,6 +3,8 @@ import { FaCamera, FaClipboard, FaCopy, FaSave, FaSyncAlt } from "react-icons/fa
 import { supabase } from "../../supabase";
 import CampoMotorista from "../../components/CampoMotorista";
 import CampoPrefixo from "../../components/CampoPrefixo";
+import { InovePageHeader } from "../../components/InovePage";
+import PasteEvidenceBox from "../../components/PasteEvidenceBox";
 import { AuthContext } from "../../context/AuthContext";
 import {
   buildMensagemWhatsApp,
@@ -127,16 +129,12 @@ export default function AcidentesLancamento() {
 
   return (
     <div className="min-h-screen space-y-5 bg-slate-50 p-4 text-slate-800 md:p-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="text-xs font-black uppercase tracking-[0.24em] text-rose-600">Acidentes</div>
-        <h1 className="mt-3 flex items-center gap-3 text-3xl font-black text-slate-900">
-          <span className="rounded-2xl bg-rose-50 p-3 text-rose-600"><FaClipboard /></span>
-          Lançamento de Acidente
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Abra a ocorrência, copie a mensagem para WhatsApp e deixe o status seguir automaticamente no fluxo.
-        </p>
-      </div>
+      <InovePageHeader
+        eyebrow="Acidentes"
+        title="Lançamento de Acidente"
+        icon={<FaClipboard />}
+        description="Abra a ocorrência, copie a mensagem para WhatsApp e deixe o status seguir automaticamente no fluxo."
+      />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
         <div className="space-y-5">
@@ -144,13 +142,13 @@ export default function AcidentesLancamento() {
             <h2 className="text-lg font-black text-slate-900">Dados automáticos da ocorrência</h2>
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
               <Field label="Data">
-                <input type="date" value={form.data_ocorrencia} onChange={(e) => setForm({ ...form, data_ocorrencia: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" />
+                <input type="date" value={form.data_ocorrencia} onChange={(e) => setForm({ ...form, data_ocorrencia: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
               <Field label="Hora">
-                <input type="time" value={form.hora_ocorrencia} onChange={(e) => setForm({ ...form, hora_ocorrencia: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" />
+                <input type="time" value={form.hora_ocorrencia} onChange={(e) => setForm({ ...form, hora_ocorrencia: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
               <Field label="Linha">
-                <select value={form.linha} onChange={(e) => setForm({ ...form, linha: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400">
+                <select value={form.linha} onChange={(e) => setForm({ ...form, linha: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400">
                   <option value="">Selecione</option>
                   {linhas.map((linha) => (
                     <option key={linha.id} value={linha.codigo}>{linha.codigo} - {linha.descricao}</option>
@@ -162,14 +160,19 @@ export default function AcidentesLancamento() {
                   <FaSyncAlt /> Usar agora
                 </button>
               </div>
-              <Field label="Prefixo" className="md:col-span-2">
-                <CampoPrefixo value={form.prefixo} onChange={(value) => setForm({ ...form, prefixo: value })} label="" />
+              <Field label="Carro / Prefixo" className="md:col-span-2">
+                <CampoPrefixo
+                  value={form.prefixo}
+                  onChange={(value) => setForm({ ...form, prefixo: value })}
+                  label=""
+                  placeholder="Digite o carro ou prefixo..."
+                />
               </Field>
               <Field label="Motorista" className="md:col-span-2">
                 <CampoMotorista value={motorista} onChange={setMotorista} label="" />
               </Field>
               <Field label="Local" className="md:col-span-4">
-                <input value={form.local} onChange={(e) => setForm({ ...form, local: e.target.value })} placeholder="Ex: Av. Itaquaquecetuba" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" />
+                <input value={form.local} onChange={(e) => setForm({ ...form, local: e.target.value })} placeholder="Ex: Av. Itaquaquecetuba" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
             </div>
           </section>
@@ -178,22 +181,22 @@ export default function AcidentesLancamento() {
             <h2 className="text-lg font-black text-slate-900">Terceiro e descrição</h2>
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
               <Field label="Tipo" className="md:col-span-2">
-                <input value={form.tipo_acidente} onChange={(e) => setForm({ ...form, tipo_acidente: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" />
+                <input value={form.tipo_acidente} onChange={(e) => setForm({ ...form, tipo_acidente: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
               <Field label="Veículo terceiro" className="md:col-span-2">
-                <input value={form.veiculo_terceiro} onChange={(e) => setForm({ ...form, veiculo_terceiro: e.target.value })} placeholder="Sandero Branco" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" />
+                <input value={form.veiculo_terceiro} onChange={(e) => setForm({ ...form, veiculo_terceiro: e.target.value })} placeholder="Sandero Branco" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
               <Field label="Placa">
-                <input value={form.placa_terceiro} onChange={(e) => setForm({ ...form, placa_terceiro: e.target.value.toUpperCase() })} placeholder="SEC3111" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold uppercase outline-none focus:border-rose-400" />
+                <input value={form.placa_terceiro} onChange={(e) => setForm({ ...form, placa_terceiro: e.target.value.toUpperCase() })} placeholder="SEC3111" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold uppercase outline-none focus:border-blue-400" />
               </Field>
               <Field label="Condutor">
-                <input value={form.condutor_terceiro} onChange={(e) => setForm({ ...form, condutor_terceiro: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" />
+                <input value={form.condutor_terceiro} onChange={(e) => setForm({ ...form, condutor_terceiro: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
               <Field label="Telefone terceiro" className="md:col-span-2">
-                <input value={form.telefone_terceiro} onChange={(e) => setForm({ ...form, telefone_terceiro: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" />
+                <input value={form.telefone_terceiro} onChange={(e) => setForm({ ...form, telefone_terceiro: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
               <Field label="Descrição" className="md:col-span-4">
-                <textarea rows={5} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" />
+                <textarea rows={5} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
             </div>
           </section>
@@ -206,7 +209,7 @@ export default function AcidentesLancamento() {
                   key={situacao}
                   type="button"
                   onClick={() => setForm({ ...form, situacao_operacional: situacao })}
-                  className={`rounded-2xl border px-4 py-3 text-sm font-black transition ${form.situacao_operacional === situacao ? "border-rose-300 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-black transition ${form.situacao_operacional === situacao ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
                   {situacao}
                 </button>
@@ -224,15 +227,16 @@ export default function AcidentesLancamento() {
                 Dano no terceiro
               </label>
               <Field label="Observação dos registros" className="md:col-span-3">
-                <input value={form.registros_observacao} onChange={(e) => setForm({ ...form, registros_observacao: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" />
+                <input value={form.registros_observacao} onChange={(e) => setForm({ ...form, registros_observacao: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
-              <Field label="Fotos e anexos iniciais" className="md:col-span-3">
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center hover:border-rose-300 hover:bg-rose-50/40">
-                  <FaCamera className="mb-2 text-2xl text-slate-400" />
-                  <span className="text-sm font-black text-slate-700">Inserir fotos, vídeos ou PDF</span>
-                  <span className="mt-1 text-xs text-slate-500">{files.length ? `${files.length} arquivo(s) selecionado(s)` : "No celular, o seletor pode abrir a câmera."}</span>
-                  <input type="file" multiple accept="image/*,video/*,application/pdf" className="hidden" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
-                </label>
+              <Field label="Prints, fotos e anexos iniciais" className="md:col-span-3">
+                <PasteEvidenceBox
+                  files={files}
+                  onFilesChange={setFiles}
+                  icon={<FaCamera />}
+                  title="Clique aqui ou cole o print"
+                  hint="Clique na caixa e use Ctrl+V para colar prints. Também aceita fotos, vídeos e PDF."
+                />
               </Field>
             </div>
           </section>
@@ -248,7 +252,7 @@ export default function AcidentesLancamento() {
               <button type="button" onClick={copiarMensagem} className="flex items-center justify-center gap-2 rounded-2xl bg-slate-800 px-4 py-3 text-sm font-black text-white hover:bg-slate-700">
                 <FaCopy /> Copiar mensagem WhatsApp
               </button>
-              <button type="button" disabled={saving} onClick={salvarOcorrencia} className="flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-rose-700 disabled:bg-slate-400">
+              <button type="button" disabled={saving} onClick={salvarOcorrencia} className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:bg-slate-400">
                 <FaSave /> {saving ? "Salvando..." : "Salvar ocorrência"}
               </button>
             </div>
@@ -261,3 +265,8 @@ export default function AcidentesLancamento() {
     </div>
   );
 }
+
+
+
+
+

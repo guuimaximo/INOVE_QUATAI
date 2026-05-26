@@ -2,6 +2,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FaCheckCircle, FaClipboardList, FaExternalLinkAlt, FaPaperclip, FaPlus, FaSearch, FaTimesCircle } from "react-icons/fa";
 import { supabase } from "../../supabase";
+import { InoveStatCard } from "../../components/InovePage";
 import { AuthContext } from "../../context/AuthContext";
 import {
   SAC_STATUS,
@@ -273,11 +274,13 @@ export default function SacCentral() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        {cards.map(([label, value]) => (
-          <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-black uppercase text-slate-400">{label}</div>
-            <div className="mt-2 text-3xl font-black text-slate-900">{value}</div>
-          </div>
+        {cards.map(([label, value], index) => (
+          <InoveStatCard
+            key={label}
+            title={label}
+            value={value}
+            tone={index === 2 ? "amber" : index === 3 ? "emerald" : index === 4 ? "rose" : "blue"}
+          />
         ))}
       </div>
 

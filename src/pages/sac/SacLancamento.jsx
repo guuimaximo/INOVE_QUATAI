@@ -4,6 +4,7 @@ import { supabase } from "../../supabase";
 import CampoMotorista from "../../components/CampoMotorista";
 import CampoPrefixo from "../../components/CampoPrefixo";
 import { InovePageHeader } from "../../components/InovePage";
+import PasteEvidenceBox from "../../components/PasteEvidenceBox";
 import { AuthContext } from "../../context/AuthContext";
 import {
   SAC_ACOES,
@@ -167,9 +168,9 @@ export default function SacLancamento() {
     <div className="min-h-screen space-y-5 bg-slate-50 p-4 text-slate-800 md:p-6">
       <InovePageHeader
         eyebrow="SAC"
-        title="Lan�amento de atendimento"
+        title="Lançamento de atendimento"
         icon={<FaClipboardList />}
-        description="Registre o atendimento, vincule operador, linha, ve�culo e, se necess�rio, abra a tratativa automaticamente."
+        description="Registre o atendimento, vincule operador, linha, veículo e, se necessário, abra a tratativa automaticamente."
       />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_360px]">
@@ -208,8 +209,13 @@ export default function SacLancamento() {
               <Field label="Telefone" className="md:col-span-2">
                 <input value={form.cliente_telefone} onChange={(e) => setForm({ ...form, cliente_telefone: e.target.value })} placeholder="Telefone para reincidencia" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
-              <Field label="Veiculo" className="md:col-span-2">
-                <CampoPrefixo value={form.carro_prefixo} onChange={(value) => setForm({ ...form, carro_prefixo: value })} label="" />
+              <Field label="Carro / Prefixo" className="md:col-span-2">
+                <CampoPrefixo
+                  value={form.carro_prefixo}
+                  onChange={(value) => setForm({ ...form, carro_prefixo: value })}
+                  label=""
+                  placeholder="Digite o carro ou prefixo..."
+                />
               </Field>
               <Field label="Linha" className="md:col-span-2">
                 <select value={form.linha} onChange={(e) => setForm({ ...form, linha: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400">
@@ -250,13 +256,14 @@ export default function SacLancamento() {
               <Field label="Detalhamento" className="md:col-span-4">
                 <textarea rows={6} value={form.detalhamento} onChange={(e) => setForm({ ...form, detalhamento: e.target.value })} placeholder="Descreva o atendimento, a reclamacao, informacao ou denuncia." className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
-              <Field label="Prints e evidencias" className="md:col-span-4">
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center hover:border-blue-300 hover:bg-blue-50/40">
-                  <FaFileUpload className="mb-2 text-2xl text-slate-400" />
-                  <span className="text-sm font-black text-slate-700">Inserir prints, fotos, videos ou PDF</span>
-                  <span className="mt-1 text-xs text-slate-500">{files.length ? `${files.length} arquivo(s) selecionado(s)` : "Anexe as evidencias do atendimento"}</span>
-                  <input type="file" multiple accept="image/*,video/*,application/pdf" className="hidden" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
-                </label>
+              <Field label="Prints e evidências" className="md:col-span-4">
+                <PasteEvidenceBox
+                  files={files}
+                  onFilesChange={setFiles}
+                  icon={<FaFileUpload />}
+                  title="Clique aqui ou cole o print"
+                  hint="Clique na caixa e use Ctrl+V para colar prints. Também aceita fotos, vídeos e PDF."
+                />
               </Field>
             </div>
           </section>
@@ -285,5 +292,6 @@ export default function SacLancamento() {
     </div>
   );
 }
+
 
 

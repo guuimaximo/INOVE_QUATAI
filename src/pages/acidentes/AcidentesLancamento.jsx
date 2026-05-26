@@ -4,6 +4,7 @@ import { supabase } from "../../supabase";
 import CampoMotorista from "../../components/CampoMotorista";
 import CampoPrefixo from "../../components/CampoPrefixo";
 import { InovePageHeader } from "../../components/InovePage";
+import PasteEvidenceBox from "../../components/PasteEvidenceBox";
 import { AuthContext } from "../../context/AuthContext";
 import {
   buildMensagemWhatsApp,
@@ -130,9 +131,9 @@ export default function AcidentesLancamento() {
     <div className="min-h-screen space-y-5 bg-slate-50 p-4 text-slate-800 md:p-6">
       <InovePageHeader
         eyebrow="Acidentes"
-        title="Lan�amento de Acidente"
+        title="Lançamento de Acidente"
         icon={<FaClipboard />}
-        description="Abra a ocorr�ncia, copie a mensagem para WhatsApp e deixe o status seguir automaticamente no fluxo."
+        description="Abra a ocorrência, copie a mensagem para WhatsApp e deixe o status seguir automaticamente no fluxo."
       />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
@@ -228,13 +229,14 @@ export default function AcidentesLancamento() {
               <Field label="Observação dos registros" className="md:col-span-3">
                 <input value={form.registros_observacao} onChange={(e) => setForm({ ...form, registros_observacao: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-400" />
               </Field>
-              <Field label="Fotos e anexos iniciais" className="md:col-span-3">
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center hover:border-blue-300 hover:bg-blue-50/40">
-                  <FaCamera className="mb-2 text-2xl text-slate-400" />
-                  <span className="text-sm font-black text-slate-700">Inserir fotos, vídeos ou PDF</span>
-                  <span className="mt-1 text-xs text-slate-500">{files.length ? `${files.length} arquivo(s) selecionado(s)` : "No celular, o seletor pode abrir a câmera."}</span>
-                  <input type="file" multiple accept="image/*,video/*,application/pdf" className="hidden" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
-                </label>
+              <Field label="Prints, fotos e anexos iniciais" className="md:col-span-3">
+                <PasteEvidenceBox
+                  files={files}
+                  onFilesChange={setFiles}
+                  icon={<FaCamera />}
+                  title="Clique aqui ou cole o print"
+                  hint="Clique na caixa e use Ctrl+V para colar prints. Também aceita fotos, vídeos e PDF."
+                />
               </Field>
             </div>
           </section>
@@ -263,6 +265,8 @@ export default function AcidentesLancamento() {
     </div>
   );
 }
+
+
 
 
 

@@ -36,6 +36,7 @@ function getPageTitle(pathname) {
   if (pathname.startsWith("/central") || pathname.startsWith("/tratativas")) return "Tratativas";
   if (pathname.startsWith("/sos") || pathname.startsWith("/km-rodado")) return "Intervencoes";
   if (pathname.startsWith("/checklists")) return "Checklists";
+  if (pathname.startsWith("/acidentes")) return "Acidentes";
   if (pathname.startsWith("/avarias") || pathname.startsWith("/cobrancas")) return "Avarias";
   if (pathname.startsWith("/funcionarios")) return "Funcionários";
   if (pathname.startsWith("/ferias")) return "Ferias";
@@ -65,6 +66,7 @@ function getIconForNav(key) {
     case "tratativas":
       return FaClipboardList;
     case "avarias":
+    case "acidentes":
     case "cobrancas":
     case "reparos":
       return FaCarCrash;

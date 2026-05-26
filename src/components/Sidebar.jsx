@@ -34,10 +34,12 @@ import {
   FaUsers,
   FaWarehouse,
   FaCalendarAlt,
+  FaCamera,
   FaSitemap,
   FaBriefcase,
   FaBoxes,
   FaFlask,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
@@ -99,6 +101,7 @@ export default function Sidebar() {
   const [estoqueDieselOpen, setEstoqueDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
+  const [acidentesOpen, setAcidentesOpen] = useState(false);
   const [checklistsOpen, setChecklistsOpen] = useState(false);
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
   const [embarcadosOpen, setEmbarcadosOpen] = useState(false);
@@ -241,6 +244,12 @@ export default function Sidebar() {
         { path: "/cobrancas", label: "Cobranças", icon: <FaMoneyBill /> },
       ],
 
+      acidentes: [
+        { path: "/acidentes/lancamento", label: "Lançamento", icon: <FaPenSquare /> },
+        { path: "/acidentes/imagens", label: "Imagens", icon: <FaCamera /> },
+        { path: "/acidentes/central", label: "Central", icon: <FaListAlt /> },
+      ],
+
       checklists: [{ path: "/checklists", label: "Central", icon: <FaClipboardCheck /> }],
 
       sos: [
@@ -275,6 +284,7 @@ export default function Sidebar() {
     if (path.startsWith("/estoque-diesel")) setEstoqueDieselOpen(true);
     if (path.startsWith("/tratativas") || path.startsWith("/central") || path.startsWith("/solicitar")) setTratativasOpen(true);
     if (path.startsWith("/avarias") || path.startsWith("/lancar-avaria") || path.startsWith("/aprovar-avarias") || path.startsWith("/cobrancas")) setAvariasOpen(true);
+    if (path.startsWith("/acidentes")) setAcidentesOpen(true);
     if (path.startsWith("/checklists")) setChecklistsOpen(true);
     if (path.startsWith("/sos") || path.startsWith("/km-rodado")) setIntervencoesOpen(true);
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
@@ -303,6 +313,7 @@ export default function Sidebar() {
   const showPessoas = links.pessoas.tabs.some((t) => canSee(t.path));
   const showTratativas = links.tratativas.some((l) => canSee(l.path));
   const showAvarias = links.avarias.some((l) => canSee(l.path));
+  const showAcidentes = links.acidentes.some((l) => canSee(l.path));
   const showChecklists = links.checklists.some((l) => canSee(l.path));
   const showSOS = links.sos.some((l) => canSee(l.path));
   const showConfig = links.configuracoes.some((l) => canSee(l.path));
@@ -592,6 +603,33 @@ export default function Sidebar() {
             {avariasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.avarias.map((link) =>
+                  canSee(link.path) ? (
+                    <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
+                      {link.icon} <span>{link.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {showAcidentes && (
+          <>
+            <button
+              onClick={() => setAcidentesOpen(!acidentesOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3">
+                <FaExclamationTriangle /> <span>Acidentes</span>
+              </div>
+              {acidentesOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {acidentesOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.acidentes.map((link) =>
                   canSee(link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>

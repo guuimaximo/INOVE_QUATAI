@@ -100,6 +100,7 @@ export default function Sidebar() {
   const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
   const [estoqueDieselOpen, setEstoqueDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
+  const [sacOpen, setSacOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
   const [acidentesOpen, setAcidentesOpen] = useState(false);
   const [checklistsOpen, setChecklistsOpen] = useState(false);
@@ -236,6 +237,12 @@ export default function Sidebar() {
         { path: "/tratativas-rh", label: "Tratativas RH", icon: <FaUserCog /> },
       ],
 
+      sac: [
+        { path: "/sac/resumo", label: "Resumo", icon: <FaChartPie /> },
+        { path: "/sac/lancamento", label: "Lançamento", icon: <FaPenSquare /> },
+        { path: "/sac/central", label: "Central", icon: <FaListAlt /> },
+      ],
+
       avarias: [
         { path: "/avarias-resumo", label: "Resumo", icon: <FaChartPie /> },
         { path: "/lancar-avaria", label: "Lançamento", icon: <FaWrench /> },
@@ -283,6 +290,7 @@ export default function Sidebar() {
     if (path.startsWith("/desempenho") || path.startsWith("/diesel")) setDesempenhoDieselOpen(true);
     if (path.startsWith("/estoque-diesel")) setEstoqueDieselOpen(true);
     if (path.startsWith("/tratativas") || path.startsWith("/central") || path.startsWith("/solicitar")) setTratativasOpen(true);
+    if (path.startsWith("/sac")) setSacOpen(true);
     if (path.startsWith("/avarias") || path.startsWith("/lancar-avaria") || path.startsWith("/aprovar-avarias") || path.startsWith("/cobrancas")) setAvariasOpen(true);
     if (path.startsWith("/acidentes")) setAcidentesOpen(true);
     if (path.startsWith("/checklists")) setChecklistsOpen(true);
@@ -312,6 +320,7 @@ export default function Sidebar() {
   const showSuprimentos = links.suprimentos.tabs.some((t) => canSee(t.path));
   const showPessoas = links.pessoas.tabs.some((t) => canSee(t.path));
   const showTratativas = links.tratativas.some((l) => canSee(l.path));
+  const showSac = links.sac.some((l) => canSee(l.path));
   const showAvarias = links.avarias.some((l) => canSee(l.path));
   const showAcidentes = links.acidentes.some((l) => canSee(l.path));
   const showChecklists = links.checklists.some((l) => canSee(l.path));
@@ -576,6 +585,33 @@ export default function Sidebar() {
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
                 {links.tratativas.map((link) =>
+                  canSee(link.path) ? (
+                    <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
+                      {link.icon} <span>{link.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {showSac && (
+          <>
+            <button
+              onClick={() => setSacOpen(!sacOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3">
+                <FaClipboardList /> <span>SAC</span>
+              </div>
+              {sacOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {sacOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
+                {links.sac.map((link) =>
                   canSee(link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>

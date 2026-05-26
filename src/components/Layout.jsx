@@ -34,6 +34,7 @@ function getPageTitle(pathname) {
   if (pathname.startsWith("/pcm-troca-pneus")) return "Troca de pneus";
   if (pathname.startsWith("/pcm")) return "PCM";
   if (pathname.startsWith("/central") || pathname.startsWith("/tratativas")) return "Tratativas";
+  if (pathname.startsWith("/sac")) return "SAC";
   if (pathname.startsWith("/sos") || pathname.startsWith("/km-rodado")) return "Intervencoes";
   if (pathname.startsWith("/checklists")) return "Checklists";
   if (pathname.startsWith("/acidentes")) return "Acidentes";
@@ -64,6 +65,7 @@ function getIconForNav(key) {
     case "riscado":
       return FaExclamationTriangle;
     case "tratativas":
+    case "sac":
       return FaClipboardList;
     case "avarias":
     case "acidentes":

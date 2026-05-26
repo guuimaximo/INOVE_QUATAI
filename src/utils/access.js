@@ -190,6 +190,8 @@ const ACCESS_FALLBACK_PRIORITY = [
   "/inicio-rapido",
   "/central",
   "/tratativas-resumo",
+  "/sac/central",
+  "/sac/resumo",
   "/cobrancas",
   "/sos-resumo",
   "/sos-solicitacao",

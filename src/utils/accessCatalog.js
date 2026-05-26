@@ -10,6 +10,10 @@ export const APP_ACCESS_PAGES = [
   { key: "tratativas_tratar", label: "Tratativas Tratar", category: "Tratativas", path: "/tratar/:id", patterns: ["/tratar/:id"] },
   { key: "tratativas_rh", label: "Tratativas RH", category: "Tratativas", path: "/tratativas-rh", patterns: ["/tratativas-rh"] },
 
+  { key: "sac_resumo", label: "SAC Resumo", category: "SAC", path: "/sac/resumo", patterns: ["/sac/resumo"] },
+  { key: "sac_lancamento", label: "SAC Lancamento", category: "SAC", path: "/sac/lancamento", patterns: ["/sac/lancamento"] },
+  { key: "sac_central", label: "SAC Central", category: "SAC", path: "/sac/central", patterns: ["/sac", "/sac/central"] },
+
   { key: "avarias_lancamento", label: "Avarias Lancamento", category: "Avarias", path: "/lancar-avaria", patterns: ["/lancar-avaria"] },
   { key: "avarias_aprovacao", label: "Avarias Aprovacoes", category: "Avarias", path: "/aprovar-avarias", patterns: ["/aprovar-avarias"] },
   { key: "avarias_revisao", label: "Avarias Em Revisao", category: "Avarias", path: "/avarias-em-revisao", patterns: ["/avarias-em-revisao"] },
@@ -80,6 +84,8 @@ export const MOBILE_NAV_PRIORITY = [
   "home",
   "painel",
   "tratativas_central",
+  "sac_central",
+  "sac_lancamento",
   "avarias_resumo",
   "avarias_cobrancas",
   "acidentes_central",
@@ -101,6 +107,8 @@ export const MOBILE_QUICK_LINK_PRIORITY = [
   "painel",
   "tratativas_central",
   "tratativas_resumo",
+  "sac_central",
+  "sac_resumo",
   "avarias_resumo",
   "avarias_cobrancas",
   "acidentes_central",
@@ -130,7 +138,7 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "CCO",
     descricao: "Operacao e atendimento SOS.",
     ativo: true,
-    paginas: ["inicio_rapido", "tratativas_solicitacao", "acidentes_lancamento", "acidentes_central", "sos_solicitacao", "sos_fechamento", "sos_dashboard", "km_rodado", "embarcados_reparos"],
+    paginas: ["inicio_rapido", "tratativas_solicitacao", "sac_lancamento", "sac_central", "acidentes_lancamento", "acidentes_central", "sos_solicitacao", "sos_fechamento", "sos_dashboard", "km_rodado", "embarcados_reparos"],
     farol_liberado: false,
   },
   {
@@ -176,7 +184,7 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "Tratativa",
     descricao: "Central de tratativas e cobrancas.",
     ativo: true,
-    paginas: ["inicio_rapido", "tratativas_solicitacao", "tratativas_central", "tratativas_consultar", "tratativas_tratar", "avarias_cobrancas", "acidentes_imagens", "acidentes_central", "embarcados_reparos", "embarcados_reparo_detalhe", "embarcados_reparo_execucao"],
+    paginas: ["inicio_rapido", "tratativas_solicitacao", "tratativas_central", "tratativas_consultar", "tratativas_tratar", "sac_resumo", "sac_lancamento", "sac_central", "avarias_cobrancas", "acidentes_imagens", "acidentes_central", "embarcados_reparos", "embarcados_reparo_detalhe", "embarcados_reparo_execucao"],
     farol_liberado: false,
   },
   {
@@ -225,7 +233,7 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "RH",
     descricao: "Tratativas RH e visao resumida.",
     ativo: true,
-    paginas: ["home", "tratativas_resumo", "tratativas_central", "tratativas_consultar", "tratativas_rh", "avarias_resumo", "avarias_cobrancas", "acidentes_imagens", "acidentes_central", "diesel_tratativas_central", "estrutura_fisica_solicitacao", "estrutura_fisica_central", "pessoas_funcionarios", "pessoas_ferias", "pessoas_organograma"],
+    paginas: ["home", "tratativas_resumo", "tratativas_central", "tratativas_consultar", "tratativas_rh", "sac_resumo", "sac_lancamento", "sac_central", "avarias_resumo", "avarias_cobrancas", "acidentes_imagens", "acidentes_central", "diesel_tratativas_central", "estrutura_fisica_solicitacao", "estrutura_fisica_central", "pessoas_funcionarios", "pessoas_ferias", "pessoas_organograma"],
     farol_liberado: true,
   },
   {

@@ -29,46 +29,76 @@ function chapaKeys(value) {
   return Array.from(new Set([raw, semDecimal, somenteDigitos, semZeros].filter(Boolean).map((x) => x.toUpperCase())));
 }
 
+function telefoneKeys(value) {
+  const digits = norm(value).replace(/\D/g, "");
+  if (!digits) return [];
+
+  const semPais = digits.startsWith("55") && digits.length > 11 ? digits.slice(2) : digits;
+  const semZero = semPais.replace(/^0+/, "");
+  const ultimos11 = digits.length >= 11 ? digits.slice(-11) : "";
+  const ultimos10 = digits.length >= 10 ? digits.slice(-10) : "";
+
+  return Array.from(new Set([digits, semPais, semZero, ultimos11, ultimos10].filter(Boolean)));
+}
+
 let funcionariosChecklistCache = null;
 
 async function carregarMapaFuncionariosChecklist() {
   if (funcionariosChecklistCache) return funcionariosChecklistCache;
 
   const funcionarios = await listarFuncionariosAtivos({
-    columns: "id_funcionario, nr_cracha, nm_funcionario, status",
+    columns: "id_funcionario, nr_cracha, nm_funcionario, nr_telefone_celular, status",
     from: 0,
     to: 99999,
   });
 
-  const mapa = new Map();
+  const mapaChapa = new Map();
+  const mapaTelefone = new Map();
   (funcionarios || []).forEach((funcionario) => {
-    if (!funcionario?.chapa || !funcionario?.nome) return;
+    if (!funcionario?.nome) return;
+
     chapaKeys(funcionario.chapa).forEach((key) => {
-      if (!mapa.has(key)) mapa.set(key, funcionario);
+      if (!mapaChapa.has(key)) mapaChapa.set(key, funcionario);
+    });
+
+    telefoneKeys(funcionario.telefone).forEach((key) => {
+      if (!mapaTelefone.has(key)) mapaTelefone.set(key, funcionario);
     });
   });
 
-  funcionariosChecklistCache = mapa;
-  return mapa;
+  funcionariosChecklistCache = { chapa: mapaChapa, telefone: mapaTelefone };
+  return funcionariosChecklistCache;
 }
 
-function buscarFuncionarioPorChapa(mapa, chapa) {
+function buscarFuncionarioPorChapa(mapaFuncionarios, chapa) {
   for (const key of chapaKeys(chapa)) {
-    if (mapa.has(key)) return mapa.get(key);
+    if (mapaFuncionarios.chapa.has(key)) return mapaFuncionarios.chapa.get(key);
+  }
+  return null;
+}
+
+function buscarFuncionarioPorTelefone(mapaFuncionarios, telefone) {
+  for (const key of telefoneKeys(telefone)) {
+    if (mapaFuncionarios.telefone.has(key)) return mapaFuncionarios.telefone.get(key);
   }
   return null;
 }
 
 function aplicarNomeFuncionario(row, mapaFuncionarios) {
-  const funcionario = buscarFuncionarioPorChapa(mapaFuncionarios, row?.chapa_motorista);
+  const funcionario =
+    buscarFuncionarioPorChapa(mapaFuncionarios, row?.chapa_motorista) ||
+    buscarFuncionarioPorTelefone(mapaFuncionarios, row?.telefone);
+
   if (!funcionario?.nome) return row;
 
   return {
     ...row,
+    chapa_motorista_original: row?.chapa_motorista || "",
     nome_motorista_original: row?.nome_motorista || "",
+    chapa_motorista: row?.chapa_motorista || funcionario.chapa || "",
     nome_motorista: funcionario.nome,
     funcionario_id: funcionario.id || null,
-    nome_motorista_fonte: "funcionarios_atualizada",
+    nome_motorista_fonte: row?.chapa_motorista ? "funcionarios_atualizada_chapa" : "funcionarios_atualizada_telefone",
   };
 }
 
@@ -201,6 +231,7 @@ export default function ChecklistCentral() {
           "numero_veiculo",
           "nome_motorista",
           "chapa_motorista",
+          "telefone",
           "video_url",
           "fileurls",
           "resumo_texto",

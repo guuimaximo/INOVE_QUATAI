@@ -92,10 +92,21 @@ function Field({ label, required = false, children, className = "" }) {
 
 function Detail({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-900">{label}</p>
-      <p className="mt-2 text-sm font-black text-slate-950">{value || "--"}</p>
+    <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
+      <p className="mt-1.5 text-sm font-black text-slate-950">{value || "--"}</p>
     </div>
+  );
+}
+
+function SectionBlock({ title, children, className = "" }) {
+  return (
+    <section className={`rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
+      <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 className="text-base font-black text-slate-950">{title}</h3>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -106,17 +117,17 @@ function ModalShell({ onClose, title, eyebrow, subtitle = null, actions = null, 
       onClick={onClose}
     >
       <div
-        className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-[32px] border border-slate-200 bg-white shadow-2xl"
+        className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[34px] border border-slate-200 bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="border-b border-slate-100 px-5 py-4">
+        <div className="shrink-0 border-b border-slate-100 bg-white px-5 py-4">
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-black uppercase tracking-[0.34em] text-blue-600">{eyebrow}</p>
-              <h2 className="mt-3 text-2xl font-black text-slate-900">{title}</h2>
+              <h2 className="mt-3 truncate text-2xl font-black text-slate-900">{title}</h2>
               {subtitle ? <p className="mt-2 text-sm font-medium text-slate-500">{subtitle}</p> : null}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               {actions}
               <button
                 type="button"
@@ -130,7 +141,7 @@ function ModalShell({ onClose, title, eyebrow, subtitle = null, actions = null, 
           </div>
         </div>
 
-        <div className="p-5">{children}</div>
+        <div className="overflow-y-auto bg-slate-50 p-5">{children}</div>
       </div>
     </div>
   );
@@ -423,8 +434,9 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <SectionBlock title="Resumo">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <Detail label="Controle" value={item.numero_controle} />
           <Detail label="Tipo da garantia" value={item.tipo_garantia || "Peca comprada"} />
           <Detail label="Peca" value={item.peca} />
@@ -435,7 +447,9 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
           <Detail label="KM falha" value={formatKm(item.km_falha)} />
           <Detail label="Solicitacao" value={item.tipo_solicitacao} />
         </div>
+        </SectionBlock>
 
+        <SectionBlock title="Andamento">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Protocolo / RMA">
             <input
@@ -444,7 +458,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               className={inputClass}
             />
           </Field>
-          <Field label="Enviado ao fornecedor em">
+          <Field label="Enviado em">
             <input
               type="date"
               value={form.enviado_fornecedor_em}
@@ -452,7 +466,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               className={inputClass}
             />
           </Field>
-          <Field label="Fornecedor retirou a peca em">
+          <Field label="Retirada da peca">
             <input
               type="date"
               value={form.retirada_fornecedor_em}
@@ -460,7 +474,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               className={inputClass}
             />
           </Field>
-          <Field label="Prazo de retorno (dias)">
+          <Field label="Prazo (dias)">
             <input
               type="number"
               min="0"
@@ -470,7 +484,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               className={inputClass}
             />
           </Field>
-          <Field label="Data limite do retorno">
+          <Field label="Limite do retorno">
             <input
               type="date"
               value={prazoRetornoData || ""}
@@ -499,7 +513,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               ))}
             </select>
           </Field>
-          <Field label="Data do retorno">
+          <Field label="Data retorno">
             <input
               type="date"
               value={form.retorno_fornecedor_em}
@@ -533,7 +547,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
                   className={inputClass}
                 />
               </Field>
-              <Field label="Previsao de recebimento">
+              <Field label="Previsao recebimento">
                 <input
                   type="date"
                   value={form.previsao_recebimento}
@@ -541,7 +555,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
                   className={inputClass}
                 />
               </Field>
-              <Field label="Data do recebimento">
+              <Field label="Recebida em">
                 <input
                   type="date"
                   value={form.recebida_em}
@@ -551,7 +565,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               </Field>
             </>
           ) : null}
-          <Field label="Data de encerramento">
+          <Field label="Encerramento">
             <input
               type="date"
               value={form.encerrada_em}
@@ -560,16 +574,17 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
             />
           </Field>
         </div>
+        </SectionBlock>
 
         <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-          <Field label="Observacao">
+          <SectionBlock title="Observacao">
             <textarea
               value={form.observacao}
               onChange={(e) => setForm((prev) => ({ ...prev, observacao: e.target.value }))}
-              className={`${inputClass} min-h-[150px]`}
+              className={`${inputClass} min-h-[190px]`}
             />
-          </Field>
-        <Panel title="Anexos" className="h-full">
+          </SectionBlock>
+        <SectionBlock title="Anexos" className="h-full">
             <AttachmentInput
               existingUrls={existingAttachments}
               onExistingUrlsChange={setExistingAttachments}
@@ -577,10 +592,10 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               onNewFilesChange={setNewFiles}
               helperText=""
             />
-          </Panel>
+          </SectionBlock>
         </div>
 
-        <Panel title="Laudo do fornecedor">
+        <SectionBlock title="Laudo do fornecedor">
           <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
             <AttachmentInput
               existingUrls={existingLaudoUrls}
@@ -592,13 +607,13 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
             />
             <AttachmentGallery urls={existingLaudoUrls} />
           </div>
-        </Panel>
+        </SectionBlock>
 
-        <Panel title="Arquivos salvos">
+        <SectionBlock title="Arquivos salvos">
           <AttachmentGallery urls={existingAttachments} />
-        </Panel>
+        </SectionBlock>
 
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+        <div className="sticky bottom-0 -mx-5 -mb-5 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
           <ActionButton onClick={onClose}>Fechar</ActionButton>
           <ActionButton type="submit" tone="blue" disabled={saving} className={saving ? "opacity-60" : ""}>
             {saving ? "Salvando..." : "Salvar detalhes"}

@@ -21,7 +21,7 @@ import {
 } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
-import { EmptyState, KpiCard, PageHero, Panel, StatusChip } from "./SuprimentosUI";
+import { EmptyState, KpiCard, PageHero, Panel, PartAutocomplete, StatusChip, SupplierAutocomplete } from "./SuprimentosUI";
 import { formatDateBR, formatDateTimeBR, todayISO, uploadSuprimentosFiles } from "./suprimentosShared";
 
 /* ─── helpers ─────────────────────────────────────────────────── */
@@ -33,7 +33,7 @@ const textareaClass =
 function Field({ label, required = false, children, className = "" }) {
   return (
     <div className={className}>
-      <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-slate-500">
+      <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.16em] text-blue-950">
         {label}{required && <span className="ml-1 text-rose-500">*</span>}
       </label>
       {children}
@@ -250,16 +250,24 @@ function PecasCatalogPicker({ onSelect, onClose }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from("suprimentos_pecas").select("*").eq("ativo", true).order("descricao").then(({ data }) => {
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      const q = search.trim().replace(/[,%]/g, " ");
+      let request = supabase
+        .from("suprimentos_pecas")
+        .select("*")
+        .eq("ativo", true)
+        .order("descricao")
+        .limit(20);
+
+      if (q) request = request.or(`descricao.ilike.%${q}%,codigo.ilike.%${q}%`);
+
+      const { data } = await request;
       setPecas(data || []);
       setLoading(false);
-    });
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return pecas.filter((p) => !q || p.descricao.toLowerCase().includes(q) || (p.codigo || "").toLowerCase().includes(q));
-  }, [pecas, search]);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
@@ -277,10 +285,10 @@ function PecasCatalogPicker({ onSelect, onClose }) {
         <div className="max-h-72 overflow-y-auto">
           {loading ? (
             <p className="py-8 text-center text-sm text-slate-400">Carregando…</p>
-          ) : filtered.length === 0 ? (
+          ) : pecas.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">Nenhuma peça encontrada.</p>
           ) : (
-            filtered.map((p) => (
+            pecas.map((p) => (
               <button
                 key={p.id}
                 onClick={() => onSelect(p)}
@@ -338,10 +346,25 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
             </div>
             <div className="sm:col-span-2">
               <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição *</p>
-              <input className={inputClass + " text-xs"} placeholder="Descrição da peça" value={item.descricao} onChange={handle("descricao")} disabled={readOnly} />
+              <PartAutocomplete
+                className={inputClass + " text-xs"}
+                placeholder="Descricao da peca"
+                value={item.descricao}
+                onChange={(value) => onChange(index, { ...item, descricao: value })}
+                onSelect={(peca) =>
+                  onChange(index, {
+                    ...item,
+                    peca_id: peca.id,
+                    codigo: peca.codigo || item.codigo,
+                    descricao: peca.descricao || item.descricao,
+                    unidade: peca.unidade_padrao || item.unidade,
+                  })
+                }
+                disabled={readOnly}
+              />
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Qtd</p>
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-blue-900">Qtd</p>
               <div className="flex gap-1">
                 <input className={inputClass + " text-xs"} type="number" min="0" value={item.quantidade} onChange={handle("quantidade")} disabled={readOnly} />
                 <input className={inputClass + " text-xs w-16"} placeholder="un" value={item.unidade} onChange={handle("unidade")} disabled={readOnly} />
@@ -362,7 +385,7 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
 
         {!readOnly && (
           <div>
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Fotos (opcional)</p>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-blue-900">Fotos (opcional)</p>
             <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
               className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50">
               📷 {uploading ? "Enviando…" : "Adicionar foto"}
@@ -621,10 +644,13 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
             {/* Terceiro com autocomplete */}
             <div className="grid grid-cols-2 gap-4">
               <Field label="Nome / Razão Social" required className="col-span-2">
-                <TerceiroAutocomplete
+                <SupplierAutocomplete
+                  className={inputClass}
                   value={form.terceiro_nome}
                   onChange={(v) => setF("terceiro_nome", v)}
                   onSelect={handleTerceiroSelect}
+                  placeholder="Nome ou razao social do terceiro"
+                  required
                 />
               </Field>
               <Field label="CPF / CNPJ">
@@ -643,7 +669,7 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
             {/* Itens */}
             <div>
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-black uppercase tracking-widest text-slate-400">Itens enviados</p>
+                <p className="text-xs font-black uppercase tracking-widest text-blue-900">Itens enviados</p>
                 <button type="button" onClick={addItem} className="flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-1.5 text-xs font-black text-white hover:bg-blue-700">
                   <FaPlus /> Adicionar item
                 </button>
@@ -974,7 +1000,7 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
                 <textarea rows={3} className={textareaClass} placeholder="Descreva o que foi realizado, condições de retorno…" value={retornoForm.descricao} onChange={(e) => setRetornoForm((f) => ({ ...f, descricao: e.target.value }))} />
               </Field>
               <div>
-                <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-400">Fotos do retorno (opcional)</p>
+                <p className="mb-2 text-xs font-black uppercase tracking-widest text-blue-900">Fotos do retorno (opcional)</p>
                 <button type="button" onClick={() => retornoFotoRef.current?.click()} disabled={uploadingRetornoFotos} className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50">
                   <FaCamera /> {uploadingRetornoFotos ? "Enviando…" : "Adicionar foto"}
                 </button>
@@ -1095,7 +1121,7 @@ export default function SuprimentosServicoExterno() {
       <PageHero
         eyebrow="Suprimentos · Serviço Externo"
         title="Serviço Externo"
-        description="Rastreie tudo que sai da empresa para terceiros — nota de saída (simples remessa), nota de retorno e ficha para assinatura."
+        description=""
         actions={
           <button onClick={() => setShowNovo(true)} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow hover:bg-blue-700">
             <FaPlus /> Nova saída

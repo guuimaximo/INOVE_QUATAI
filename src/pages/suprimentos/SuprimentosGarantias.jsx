@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   FaCheckCircle,
   FaCoins,
@@ -24,6 +24,8 @@ import {
   KpiCard,
   PageHero,
   Panel,
+  PartAutocomplete,
+  SupplierAutocomplete,
   StatusChip,
 } from "./SuprimentosUI";
 import {
@@ -44,52 +46,6 @@ import {
   todayISO,
   uploadSuprimentosFiles,
 } from "./suprimentosShared";
-
-/* select de fornecedor com autocomplete */
-function FornecedorSelect({ value, onChange, className }) {
-  const [list, setList] = useState([]);
-  const [show, setShow] = useState(false);
-  const ref = useCallback((node) => {
-    if (!node) return;
-    function handler(e) { if (!node.contains(e.target)) setShow(false); }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-  useEffect(() => {
-    supabase.from("suprimentos_fornecedores").select("id, nome, cnpj, telefone").eq("ativo", true).order("nome")
-      .then(({ data }) => setList(data || []));
-  }, []);
-  const filtered = useMemo(() => {
-    const q = (value || "").toLowerCase();
-    return !q ? list.slice(0, 8) : list.filter((f) => f.nome.toLowerCase().includes(q)).slice(0, 8);
-  }, [list, value]);
-  return (
-    <div ref={ref} className="relative">
-      <input
-        className={className}
-        value={value}
-        autoComplete="off"
-        onChange={(e) => { onChange(e.target.value); setShow(true); }}
-        onFocus={() => setShow(true)}
-        placeholder="Fornecedor"
-      />
-      {show && filtered.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
-          {filtered.map((f) => (
-            <button key={f.id} type="button"
-              onMouseDown={(e) => { e.preventDefault(); onChange(f.nome); setShow(false); }}
-              className="flex w-full items-start gap-2 px-4 py-2.5 text-left hover:bg-blue-50 border-b border-slate-50 last:border-0">
-              <div>
-                <p className="text-sm font-bold text-slate-800">{f.nome}</p>
-                {f.cnpj && <p className="text-xs text-slate-400">{f.cnpj}</p>}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const QUICK_FORM = {
   peca: "",
@@ -126,7 +82,7 @@ const inputClass =
 function Field({ label, required = false, children, className = "" }) {
   return (
     <label className={`block ${className}`}>
-      <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+      <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.16em] text-blue-950">
         {label} {required ? "*" : ""}
       </span>
       {children}
@@ -136,9 +92,9 @@ function Field({ label, required = false, children, className = "" }) {
 
 function Detail({ label, value }) {
   return (
-    <div className="rounded-[20px] border border-slate-200 bg-white p-4">
-      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-800">{value || "--"}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-900">{label}</p>
+      <p className="mt-2 text-sm font-black text-slate-950">{value || "--"}</p>
     </div>
   );
 }
@@ -239,9 +195,17 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Peca" required>
-            <input
+            <PartAutocomplete
               value={form.peca}
-              onChange={(e) => setForm((prev) => ({ ...prev, peca: e.target.value }))}
+              onChange={(value) => setForm((prev) => ({ ...prev, peca: value }))}
+              onSelect={(peca) =>
+                setForm((prev) => ({
+                  ...prev,
+                  peca: peca.descricao || prev.peca,
+                  codigo_peca: peca.codigo || prev.codigo_peca,
+                  fornecedor: peca.fornecedor_nome || prev.fornecedor,
+                }))
+              }
               className={inputClass}
               required
             />
@@ -254,10 +218,11 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
             />
           </Field>
           <Field label="Fornecedor" required>
-            <FornecedorSelect
+            <SupplierAutocomplete
               value={form.fornecedor}
               onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))}
               className={inputClass}
+              required
             />
           </Field>
           <Field label="Data da compra">
@@ -342,13 +307,13 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
           </Field>
         </div>
 
-        <Panel title="Anexos iniciais" subtitle="Se ja tiver fotos ou videos da garantia, pode incluir na abertura.">
+        <Panel title="Anexos iniciais">
           <AttachmentInput
             existingUrls={[]}
             onExistingUrlsChange={() => {}}
             newFiles={newFiles}
             onNewFilesChange={setNewFiles}
-            helperText="Pode anexar varias fotos e varios videos ja na criacao."
+            helperText=""
           />
         </Panel>
 
@@ -604,18 +569,18 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               className={`${inputClass} min-h-[150px]`}
             />
           </Field>
-          <Panel title="Anexos" subtitle="Adicione mais fotos e videos conforme a garantia evolui." className="h-full">
+        <Panel title="Anexos" className="h-full">
             <AttachmentInput
               existingUrls={existingAttachments}
               onExistingUrlsChange={setExistingAttachments}
               newFiles={newFiles}
               onNewFilesChange={setNewFiles}
-              helperText="Pode anexar varias fotos e varios videos."
+              helperText=""
             />
           </Panel>
         </div>
 
-        <Panel title="Laudo do fornecedor" subtitle="Arquive aqui o laudo ou parecer formal da suposta garantia.">
+        <Panel title="Laudo do fornecedor">
           <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
             <AttachmentInput
               existingUrls={existingLaudoUrls}
@@ -623,13 +588,13 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               newFiles={newLaudoFiles}
               onNewFilesChange={setNewLaudoFiles}
               accept="image/*,application/pdf,video/*"
-              helperText="Pode anexar PDF, foto ou video do laudo do fornecedor."
+              helperText=""
             />
             <AttachmentGallery urls={existingLaudoUrls} />
           </div>
         </Panel>
 
-        <Panel title="Arquivos ja salvos" subtitle="Tudo o que ja foi anexado nessa garantia.">
+        <Panel title="Arquivos salvos">
           <AttachmentGallery urls={existingAttachments} />
         </Panel>
 
@@ -724,7 +689,7 @@ export default function SuprimentosGarantias() {
       <PageHero
         eyebrow="Suprimentos"
         title="Garantias"
-        description="Crie a garantia com cadastro rapido e complemente as informacoes depois no popup de detalhes."
+        description=""
         actions={
           <>
             <ActionButton onClick={carregar}>
@@ -746,7 +711,7 @@ export default function SuprimentosGarantias() {
         <KpiCard title="Valor recuperado" value={formatCurrencyBR(cards.valorRecuperado)} subtitle="Credito ou valor reconhecido" icon={<FaTools />} tone="violet" />
       </section>
 
-      <Panel title="Central de garantias" subtitle="Clique na linha para abrir o popup de detalhes e complementar a garantia.">
+      <Panel title="Central de garantias">
         <div className="grid gap-3 border-b border-slate-100 pb-4 lg:grid-cols-[1.2fr_0.45fr_0.25fr]">
           <label className="relative block">
             <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />

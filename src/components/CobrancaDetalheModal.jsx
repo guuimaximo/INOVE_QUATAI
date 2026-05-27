@@ -435,32 +435,80 @@ export default function CobrancaDetalheModal({
     printWindow.document.write(`
       <html>
         <head>
-          <title>Imprimir Cobrança - ${avaria.prefixo || ""}</title>
+          <title>Laudo de Cobrança de Avaria - ${avaria.prefixo || ""}</title>
           ${styles}
           <style>
-            @page { margin: 16mm; }
-            body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            @page { margin: 14mm; }
+            body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff; }
+            img { max-width: 100%; }
           </style>
         </head>
-        <body class="bg-gray-100 p-8">
-          <div class="max-w-4xl mx-auto bg-white p-12 shadow-lg rounded-lg">
+        <body class="bg-white p-0">
+          <div class="max-w-4xl mx-auto bg-white p-8">
             ${printContents}
           </div>
         </body>
       </html>
     `);
     printWindow.document.close();
-    setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-      printWindow.close();
-    }, 500);
+
+    const doPrint = () => {
+      const imgs = Array.from(printWindow.document.images || []);
+      const pending = imgs.filter((img) => !img.complete);
+      if (pending.length === 0) {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+        return;
+      }
+      let remaining = pending.length;
+      const done = () => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          printWindow.focus();
+          printWindow.print();
+          printWindow.close();
+        }
+      };
+      pending.forEach((img) => {
+        img.addEventListener("load", done);
+        img.addEventListener("error", done);
+      });
+      // Fallback se algo travar
+      setTimeout(() => {
+        try {
+          printWindow.focus();
+          printWindow.print();
+          printWindow.close();
+        } catch {}
+      }, 8000);
+    };
+
+    if (printWindow.document.readyState === "complete") {
+      doPrint();
+    } else {
+      printWindow.addEventListener("load", doPrint);
+      setTimeout(doPrint, 600);
+    }
   };
+
+  const isImageUrl = (u) => /\.(jpe?g|png|gif|webp|bmp)$/i.test(u || "");
+  const isVideoUrl = (u) => /\.(mp4|mov|webm)$/i.test(u || "");
+  const isPdfUrl = (u) => /\.pdf$/i.test(u || "");
 
   const tratativaUrls = tratativaTexto
     .split("\n")
     .map((u) => u.trim())
     .filter(Boolean);
+
+  const subtotalPecas = pecas.reduce((a, i) => a + (i.qtd || 0) * (i.valorUnitario || 0), 0);
+  const subtotalServicos = servicos.reduce((a, i) => a + (i.qtd || 0) * (i.valorUnitario || 0), 0);
+  const valorCobradoNum = parseCurrency(valorCobrado) ?? 0;
+  const dataEmissao = new Date().toLocaleDateString("pt-BR");
+  const statusAtual = avaria.status_cobranca || "Pendente";
+  const tratativaImagens = tratativaUrls.filter(isImageUrl);
+  const tratativaOutros = tratativaUrls.filter((u) => !isImageUrl(u));
+  const evidenciasImagens = urlsEvidencias.filter((u) => !isVideoUrl(u));
 
   // Pode editar origem enquanto pendente (ou em edição)
   const podeEditarOrigem = podeEditarBasico || isEditing;
@@ -986,64 +1034,247 @@ export default function CobrancaDetalheModal({
         onClose={() => setViewerFile(null)}
       />
 
-      <div id="printable-area" className="hidden font-sans text-[11px] leading-tight text-gray-900">
+      <div id="printable-area" className="hidden font-sans text-[11px] leading-snug text-gray-900">
         <style>{`
-          @page { margin: 12mm; }
-          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .compact th, .compact td { padding: 4px 6px; }
-          .nobreak { break-inside: avoid; page-break-inside: avoid; }
-          h1, h2 { margin: 0; padding: 0; }
+          @page { margin: 14mm; }
+          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
+          #printable-area .compact th, #printable-area .compact td { padding: 4px 6px; border: 1px solid #cbd5e1; }
+          #printable-area .compact thead th { background: #1e3a8a; color: #fff; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+          #printable-area .compact tbody tr:nth-child(even) td { background: #f8fafc; }
+          #printable-area .nobreak { break-inside: avoid; page-break-inside: avoid; }
+          #printable-area h1, #printable-area h2, #printable-area h3 { margin: 0; padding: 0; }
+          #printable-area .section-title {
+            background: #1e3a8a; color: #fff; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            padding: 4px 8px; margin-bottom: 6px; border-radius: 2px;
+          }
+          #printable-area .field-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 12px;
+            border: 1px solid #cbd5e1; padding: 8px 10px; border-radius: 3px; background: #f8fafc;
+          }
+          #printable-area .field-grid .full { grid-column: 1 / -1; }
+          #printable-area .field-label {
+            font-size: 9px; color: #475569; text-transform: uppercase;
+            letter-spacing: 0.05em; font-weight: 600; display: block;
+          }
+          #printable-area .field-value { font-size: 11px; color: #0f172a; font-weight: 600; }
+          #printable-area .doc-header {
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 3px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 12px;
+          }
+          #printable-area .doc-title { font-size: 16px; font-weight: 800; color: #1e3a8a; letter-spacing: 0.02em; }
+          #printable-area .doc-subtitle { font-size: 10px; color: #475569; }
+          #printable-area .doc-meta { text-align: right; font-size: 9.5px; color: #475569; }
+          #printable-area .status-pill {
+            display: inline-block; padding: 2px 10px; border-radius: 999px;
+            font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+          }
+          #printable-area .status-Pendente { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+          #printable-area .status-Cobrada  { background: #dcfce7; color: #166534; border: 1px solid #22c55e; }
+          #printable-area .status-Cancelada{ background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+          #printable-area .photo-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+          }
+          #printable-area .photo-card {
+            border: 1px solid #cbd5e1; border-radius: 3px; overflow: hidden; background: #fff;
+          }
+          #printable-area .photo-card img {
+            width: 100%; height: 150px; object-fit: cover; display: block;
+          }
+          #printable-area .photo-caption {
+            font-size: 9px; color: #475569; text-align: center; padding: 3px 4px;
+            background: #f1f5f9; border-top: 1px solid #e2e8f0;
+          }
+          #printable-area .totals-box {
+            width: 320px; border: 1px solid #cbd5e1; border-radius: 3px; overflow: hidden;
+          }
+          #printable-area .totals-box .row {
+            display: flex; justify-content: space-between; padding: 5px 10px;
+            border-bottom: 1px solid #e2e8f0; font-size: 11px;
+          }
+          #printable-area .totals-box .row:last-child { border-bottom: none; }
+          #printable-area .totals-box .row.highlight {
+            background: #1e3a8a; color: #fff; font-weight: 700;
+          }
+          #printable-area .signature-box {
+            text-align: center;
+          }
+          #printable-area .signature-line {
+            border-top: 1px solid #0f172a; margin: 40px 8px 4px 8px; padding-top: 3px;
+            font-size: 10px; font-weight: 600;
+          }
+          #printable-area .signature-role { font-size: 9px; color: #475569; }
+          #printable-area .note-box {
+            border: 1px solid #cbd5e1; border-radius: 3px; padding: 8px 10px;
+            background: #f8fafc; min-height: 42px; font-size: 11px; white-space: pre-wrap;
+          }
+          #printable-area .footer-disclaimer {
+            margin-top: 12px; font-size: 8.5px; color: #64748b; text-align: justify;
+            border-top: 1px dashed #cbd5e1; padding-top: 6px;
+          }
         `}</style>
 
-        <header className="mb-2">
-          <h1 className="text-center text-[14px] font-extrabold">ORÇAMENTO PARA COBRANÇA DE AVARIA</h1>
+        {/* CABEÇALHO */}
+        <header className="doc-header nobreak">
+          <div>
+            <h1 className="doc-title">LAUDO DE COBRANÇA DE AVARIA</h1>
+            <div className="doc-subtitle">Documento técnico de apuração e cobrança</div>
+          </div>
+          <div className="doc-meta">
+            <div><strong>Nº Avaria:</strong> {avaria.numero_da_avaria || "-"}</div>
+            <div><strong>Emissão:</strong> {dataEmissao}</div>
+            <div>
+              <span className={`status-pill status-${statusAtual}`}>{statusAtual}</span>
+            </div>
+          </div>
         </header>
 
-        <section className="mb-2">
-          <div className="grid grid-cols-3 gap-2">
+        {/* 1. IDENTIFICAÇÃO */}
+        <section className="mb-3 nobreak">
+          <div className="section-title">1. Identificação</div>
+          <div className="field-grid">
             <div>
-              <span className="text-gray-600">Prefixo:</span> <strong>{avaria.prefixo}</strong>
+              <span className="field-label">Prefixo</span>
+              <span className="field-value">{avaria.prefixo || "-"}</span>
             </div>
             <div>
-              <span className="text-gray-600">Nº Avaria:</span> <strong>{avaria.numero_da_avaria || "-"}</strong>
+              <span className="field-label">Nº da Avaria</span>
+              <span className="field-value">{avaria.numero_da_avaria || "-"}</span>
             </div>
             <div>
-              <span className="text-gray-600">Motorista:</span> <strong>{motoristaAtual().nome || "N/A"}</strong>
+              <span className="field-label">Data da Avaria</span>
+              <span className="field-value">{dataAvariaFmt}</span>
             </div>
             <div>
-              <span className="text-gray-600">Data Avaria:</span> <strong>{dataAvariaFmt}</strong>
+              <span className="field-label">Origem</span>
+              <span className="field-value">{origem}</span>
             </div>
-            <div className="col-span-3">
-              <span className="text-gray-600">Descrição:</span> <strong>{avaria.descricao || "Não informada"}</strong>
+            <div className="full" style={{ gridColumn: "1 / span 2" }}>
+              <span className="field-label">Motorista</span>
+              <span className="field-value">
+                {motoristaAtual().chapa
+                  ? `${motoristaAtual().chapa} — ${motoristaAtual().nome || "N/A"}`
+                  : motoristaAtual().nome || "N/A"}
+              </span>
+            </div>
+            <div style={{ gridColumn: "3 / span 2" }}>
+              <span className="field-label">Status da Cobrança</span>
+              <span className="field-value">{statusAtual}</span>
+            </div>
+            <div className="full">
+              <span className="field-label">Descrição da Avaria</span>
+              <span className="field-value" style={{ fontWeight: 500 }}>
+                {avaria.descricao || "Não informada"}
+              </span>
             </div>
           </div>
         </section>
 
-        <section className="mb-2 nobreak">
-          <h2 className="text-[12px] font-bold mb-1">Peças</h2>
-          <table className="w-full border border-gray-300 border-collapse compact">
+        {/* 2. TERCEIRO (somente se Externo) */}
+        {origem === "Externo" && (
+          <section className="mb-3 nobreak">
+            <div className="section-title">2. Dados do Terceiro Envolvido</div>
+            <div className="field-grid">
+              <div style={{ gridColumn: "1 / span 2" }}>
+                <span className="field-label">Nome / Razão Social</span>
+                <span className="field-value">{terceiroNome || "—"}</span>
+              </div>
+              <div>
+                <span className="field-label">CPF / CNPJ</span>
+                <span className="field-value">{terceiroDocumento || "—"}</span>
+              </div>
+              <div>
+                <span className="field-label">Telefone</span>
+                <span className="field-value">{terceiroTelefone || "—"}</span>
+              </div>
+              <div className="full">
+                <span className="field-label">E-mail</span>
+                <span className="field-value">{terceiroEmail || "—"}</span>
+              </div>
+              <div>
+                <span className="field-label">Placa</span>
+                <span className="field-value">{terceiroPlaca || "—"}</span>
+              </div>
+              <div style={{ gridColumn: "2 / span 2" }}>
+                <span className="field-label">Modelo</span>
+                <span className="field-value">{terceiroModelo || "—"}</span>
+              </div>
+              <div>
+                <span className="field-label">Cor</span>
+                <span className="field-value">{terceiroCor || "—"}</span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* 3. EVIDÊNCIAS FOTOGRÁFICAS */}
+        <section className="mb-3">
+          <div className="section-title">
+            {origem === "Externo" ? "3" : "2"}. Evidências Fotográficas da Avaria
+          </div>
+          {evidenciasImagens.length === 0 ? (
+            <div className="note-box">Nenhuma evidência fotográfica anexada à avaria.</div>
+          ) : (
+            <div className="photo-grid">
+              {evidenciasImagens.map((url, i) => (
+                <div key={`ev-${i}`} className="photo-card nobreak">
+                  <img src={url} alt={`Evidência ${i + 1}`} crossOrigin="anonymous" />
+                  <div className="photo-caption">Evidência {i + 1}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* 4. FOTOS DO TERCEIRO */}
+        {origem === "Externo" && (
+          <section className="mb-3">
+            <div className="section-title">4. Registros Fotográficos do Terceiro</div>
+            {fotosTerceiro.length === 0 ? (
+              <div className="note-box">Nenhuma foto do terceiro anexada.</div>
+            ) : (
+              <div className="photo-grid">
+                {fotosTerceiro.map((url, i) => (
+                  <div key={`tf-${i}`} className="photo-card nobreak">
+                    <img src={url} alt={`Foto Terceiro ${i + 1}`} crossOrigin="anonymous" />
+                    <div className="photo-caption">Terceiro {i + 1}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 5. ORÇAMENTO - PEÇAS */}
+        <section className="mb-3 nobreak">
+          <div className="section-title">
+            {origem === "Externo" ? "5" : "3"}. Orçamento — Peças
+          </div>
+          <table className="w-full compact" style={{ borderCollapse: "collapse", width: "100%" }}>
             <thead>
-              <tr className="bg-gray-100">
-                <th>Descrição</th>
-                <th>Qtd</th>
-                <th>V. Unit.</th>
-                <th>Total</th>
+              <tr>
+                <th style={{ textAlign: "left" }}>Descrição</th>
+                <th style={{ width: "60px" }}>Qtd</th>
+                <th style={{ width: "110px" }}>V. Unitário</th>
+                <th style={{ width: "110px" }}>Total</th>
               </tr>
             </thead>
             <tbody>
               {pecas.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="border p-2 text-center">
+                  <td colSpan="4" style={{ textAlign: "center", padding: 6 }}>
                     Sem peças
                   </td>
                 </tr>
               ) : (
                 pecas.map((i) => (
                   <tr key={i.id}>
-                    <td className="border">{i.descricao}</td>
-                    <td className="border text-center">{i.qtd}</td>
-                    <td className="border text-right">{formatCurrency(i.valorUnitario)}</td>
-                    <td className="border text-right">{formatCurrency(i.qtd * i.valorUnitario)}</td>
+                    <td>{i.descricao}</td>
+                    <td style={{ textAlign: "center" }}>{i.qtd}</td>
+                    <td style={{ textAlign: "right" }}>{formatCurrency(i.valorUnitario)}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {formatCurrency((i.qtd || 0) * (i.valorUnitario || 0))}
+                    </td>
                   </tr>
                 ))
               )}
@@ -1051,31 +1282,36 @@ export default function CobrancaDetalheModal({
           </table>
         </section>
 
-        <section className="mb-2 nobreak">
-          <h2 className="text-[12px] font-bold mb-1">Serviços</h2>
-          <table className="w-full border border-gray-300 border-collapse compact">
+        {/* 6. ORÇAMENTO - SERVIÇOS */}
+        <section className="mb-3 nobreak">
+          <div className="section-title">
+            {origem === "Externo" ? "6" : "4"}. Orçamento — Serviços
+          </div>
+          <table className="w-full compact" style={{ borderCollapse: "collapse", width: "100%" }}>
             <thead>
-              <tr className="bg-gray-100">
-                <th>Descrição</th>
-                <th>Qtd</th>
-                <th>V. Unit.</th>
-                <th>Total</th>
+              <tr>
+                <th style={{ textAlign: "left" }}>Descrição</th>
+                <th style={{ width: "60px" }}>Qtd</th>
+                <th style={{ width: "110px" }}>V. Unitário</th>
+                <th style={{ width: "110px" }}>Total</th>
               </tr>
             </thead>
             <tbody>
               {servicos.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="border p-2 text-center">
+                  <td colSpan="4" style={{ textAlign: "center", padding: 6 }}>
                     Sem serviços
                   </td>
                 </tr>
               ) : (
                 servicos.map((i) => (
                   <tr key={i.id}>
-                    <td className="border">{i.descricao}</td>
-                    <td className="border text-center">{i.qtd}</td>
-                    <td className="border text-right">{formatCurrency(i.valorUnitario)}</td>
-                    <td className="border text-right">{formatCurrency(i.qtd * i.valorUnitario)}</td>
+                    <td>{i.descricao}</td>
+                    <td style={{ textAlign: "center" }}>{i.qtd}</td>
+                    <td style={{ textAlign: "right" }}>{formatCurrency(i.valorUnitario)}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {formatCurrency((i.qtd || 0) * (i.valorUnitario || 0))}
+                    </td>
                   </tr>
                 ))
               )}
@@ -1083,61 +1319,102 @@ export default function CobrancaDetalheModal({
           </table>
         </section>
 
-        <section className="mb-2 nobreak">
-          <div className="w-full flex justify-end">
-            <div className="w-[260px]">
-              <div className="flex justify-between border-b py-1">
-                <span>Subtotal Peças</span>
-                <span>{formatCurrency(pecas.reduce((a, i) => a + i.qtd * i.valorUnitario, 0))}</span>
-              </div>
-              <div className="flex justify-between border-b py-1">
-                <span>Subtotal Serviços</span>
-                <span>{formatCurrency(servicos.reduce((a, i) => a + i.qtd * i.valorUnitario, 0))}</span>
-              </div>
-              <div className="flex justify-between border-b py-1">
-                <span>Valor Total</span>
-                <span>{formatCurrency(avaria.valor_total_orcamento)}</span>
-              </div>
-              <div className="flex justify-between py-1 font-bold">
-                <span>Valor Cobrado</span>
-                <span>{formatCurrency(parseCurrency(valorCobrado) ?? 0)}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span>Parcelas</span>
-                <span>{numParcelas}</span>
-              </div>
+        {/* 7. RESUMO FINANCEIRO */}
+        <section className="mb-3 nobreak" style={{ display: "flex", justifyContent: "flex-end" }}>
+          <div className="totals-box">
+            <div className="row">
+              <span>Subtotal Peças</span>
+              <span>{formatCurrency(subtotalPecas)}</span>
+            </div>
+            <div className="row">
+              <span>Subtotal Serviços</span>
+              <span>{formatCurrency(subtotalServicos)}</span>
+            </div>
+            <div className="row">
+              <span>Valor Total do Orçamento</span>
+              <span>{formatCurrency(avaria.valor_total_orcamento)}</span>
+            </div>
+            <div className="row highlight">
+              <span>Valor Cobrado</span>
+              <span>{formatCurrency(valorCobradoNum)}</span>
+            </div>
+            <div className="row">
+              <span>Nº de Parcelas</span>
+              <span>{numParcelas}</span>
             </div>
           </div>
         </section>
 
-        <section className="mb-2 nobreak">
-          <span>Observações:</span>
-          <div className="border rounded p-2 min-h-[40px]">{observacaoOperacao}</div>
-        </section>
-
+        {/* 8. OBSERVAÇÕES E TRATATIVA */}
         <section className="mb-3 nobreak">
-          <span>Tratativa (links/anexos):</span>
-          <div className="border rounded p-2 min-h-[40px]">
-            {tratativaUrls.length ? tratativaUrls.map((linha, idx) => <div key={idx}>{linha}</div>) : "—"}
+          <div className="section-title">
+            {origem === "Externo" ? "8" : "6"}. Observações da Operação
+          </div>
+          <div className="note-box">{observacaoOperacao || "—"}</div>
+        </section>
+
+        {statusAtual === "Cancelada" && (
+          <section className="mb-3 nobreak">
+            <div className="section-title">Motivo do Cancelamento</div>
+            <div className="note-box">{motivoCancelamento || "—"}</div>
+          </section>
+        )}
+
+        <section className="mb-3">
+          <div className="section-title">
+            {origem === "Externo" ? "9" : "7"}. Tratativa — Anexos e Evidências Complementares
+          </div>
+          {tratativaImagens.length > 0 && (
+            <div className="photo-grid" style={{ marginBottom: 6 }}>
+              {tratativaImagens.map((url, i) => (
+                <div key={`tt-${i}`} className="photo-card nobreak">
+                  <img src={url} alt={`Tratativa ${i + 1}`} crossOrigin="anonymous" />
+                  <div className="photo-caption">Tratativa {i + 1}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {tratativaOutros.length > 0 && (
+            <div className="note-box">
+              {tratativaOutros.map((linha, idx) => (
+                <div key={idx} style={{ wordBreak: "break-all" }}>• {linha}</div>
+              ))}
+            </div>
+          )}
+          {tratativaImagens.length === 0 && tratativaOutros.length === 0 && (
+            <div className="note-box">Nenhum anexo de tratativa registrado.</div>
+          )}
+        </section>
+
+        {/* 9. ASSINATURAS */}
+        <section className="mt-4 nobreak">
+          <div className="section-title">
+            {origem === "Externo" ? "10" : "8"}. Assinaturas
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginTop: 8 }}>
+            <div className="signature-box">
+              <div className="signature-line">Gerente de Manutenção</div>
+              <div className="signature-role">Responsável técnico</div>
+            </div>
+            <div className="signature-box">
+              <div className="signature-line">Responsável pela Cobrança</div>
+              <div className="signature-role">Setor Financeiro / Operação</div>
+            </div>
+            <div className="signature-box">
+              <div className="signature-line">{motoristaAtual().nome || "Motorista"}</div>
+              <div className="signature-role">
+                {origem === "Externo" ? "Terceiro / Responsável" : "Ciente da cobrança"}
+              </div>
+            </div>
           </div>
         </section>
 
-        <section className="mt-4 nobreak">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="h-12" />
-              <div className="border-t pt-1">Gerente de Manutenção</div>
-            </div>
-            <div>
-              <div className="h-12" />
-              <div className="border-t pt-1">Responsável pela Cobrança</div>
-            </div>
-            <div>
-              <div className="h-12" />
-              <div className="border-t pt-1">{motoristaAtual().nome || "Motorista"}</div>
-            </div>
-          </div>
-        </section>
+        <div className="footer-disclaimer">
+          Este laudo é emitido para fins de apuração e cobrança da avaria identificada acima, com base nas
+          evidências, no orçamento técnico e na tratativa registrados no sistema. As partes signatárias
+          declaram estar cientes do conteúdo e dos valores apresentados, ficando a cobrança vinculada ao
+          status indicado no cabeçalho deste documento.
+        </div>
       </div>
     </>
   );

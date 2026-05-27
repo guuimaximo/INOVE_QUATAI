@@ -8,6 +8,7 @@ import {
   FaPlus,
   FaSearch,
   FaShieldAlt,
+  FaSync,
   FaTimes,
   FaTimesCircle,
   FaToggleOff,
@@ -34,15 +35,87 @@ function Field({ label, required = false, children, className = "" }) {
   );
 }
 
+function onlyDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function formatBrasilApiAddress(data) {
+  const street = [data.descricao_tipo_de_logradouro, data.logradouro].filter(Boolean).join(" ");
+  const city = [data.municipio, data.uf].filter(Boolean).join("/");
+  return [
+    [street, data.numero].filter(Boolean).join(", "),
+    data.complemento,
+    data.bairro,
+    city,
+    data.cep ? `CEP ${data.cep}` : "",
+  ]
+    .filter(Boolean)
+    .join(" - ");
+}
+
+function mergeBrasilApiObs(currentObs, data) {
+  const baseObs = String(currentObs || "").split("Consulta BrasilAPI:")[0].trim();
+  const address = formatBrasilApiAddress(data);
+  const details = [
+    data.descricao_situacao_cadastral ? `Situacao cadastral: ${data.descricao_situacao_cadastral}` : null,
+    data.cnae_fiscal_descricao ? `CNAE: ${data.cnae_fiscal_descricao}` : null,
+    address ? `Endereco: ${address}` : null,
+  ].filter(Boolean);
+
+  return [baseObs, details.length ? `Consulta BrasilAPI:\n${details.join("\n")}` : ""].filter(Boolean).join("\n\n");
+}
+
+async function fetchBrasilApiCnpj(cnpjValue) {
+  const cnpj = onlyDigits(cnpjValue);
+  if (cnpj.length !== 14) throw new Error("Informe um CNPJ valido com 14 digitos para consultar na BrasilAPI.");
+
+  const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+  if (!response.ok) throw new Error("CNPJ nao encontrado na BrasilAPI.");
+  return response.json();
+}
+
+function buildFornecedorPatchFromBrasilApi(current, data) {
+  return {
+    nome: data.razao_social || current.nome,
+    cnpj: data.cnpj || current.cnpj,
+    telefone: data.ddd_telefone_1 || current.telefone,
+    telefone2: data.ddd_telefone_2 || current.telefone2,
+    email: data.email || current.email,
+    uf: data.uf || current.uf,
+    tipo: data.descricao_identificador_matriz_filial || data.porte || current.tipo,
+    obs: mergeBrasilApiObs(current.obs, data),
+  };
+}
+
 /* ─── FORNECEDOR MODAL ───────────────────────────────────────── */
 function FornecedorModal({ initial = null, onClose, onSaved }) {
   const [form, setForm] = useState(
     initial || { nome: "", cnpj: "", telefone: "", telefone2: "", email: "", contato: "", uf: "", tipo_fornecedor: "", tipo: "", obs: "" }
   );
   const [saving, setSaving] = useState(false);
+  const [consultingCnpj, setConsultingCnpj] = useState(false);
   const [error, setError] = useState("");
 
   function setF(k, v) { setForm((f) => ({ ...f, [k]: v })); }
+
+  async function handleConsultCnpj() {
+    const cnpj = onlyDigits(form.cnpj);
+    if (cnpj.length !== 14) {
+      setError("Informe um CNPJ valido com 14 digitos para consultar na BrasilAPI.");
+      return;
+    }
+
+    setConsultingCnpj(true);
+    setError("");
+    try {
+      const data = await fetchBrasilApiCnpj(cnpj);
+      setForm((current) => ({ ...current, ...buildFornecedorPatchFromBrasilApi(current, data) }));
+    } catch (err) {
+      setError(err.message || "Nao foi possivel consultar o CNPJ na BrasilAPI.");
+    } finally {
+      setConsultingCnpj(false);
+    }
+  }
 
   async function handleSave() {
     if (!form.nome.trim()) { setError("Informe o nome do fornecedor."); return; }
@@ -84,7 +157,19 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="CNPJ / CPF">
-              <input className={inputClass} placeholder="00.000.000/0000-00" value={form.cnpj} onChange={(e) => setF("cnpj", e.target.value)} />
+              <div className="flex gap-2">
+                <input className={inputClass} placeholder="00.000.000/0000-00" value={form.cnpj} onChange={(e) => setF("cnpj", e.target.value)} />
+                <button
+                  type="button"
+                  onClick={handleConsultCnpj}
+                  disabled={consultingCnpj}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                  title="Consultar CNPJ na BrasilAPI"
+                >
+                  <FaSearch />
+                  {consultingCnpj ? "Buscando" : "Buscar"}
+                </button>
+              </div>
             </Field>
             <Field label="UF">
               <input className={inputClass} placeholder="ex.: RS" maxLength={2} value={form.uf} onChange={(e) => setF("uf", e.target.value.toUpperCase())} />
@@ -267,6 +352,9 @@ function FornecedoresTab() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null);
+  const [updatingBrasilApi, setUpdatingBrasilApi] = useState(false);
+  const [updatingIds, setUpdatingIds] = useState(() => new Set());
+  const [updateMessage, setUpdateMessage] = useState("");
   const debounceRef = useRef(null);
 
   async function buscar(q) {
@@ -297,6 +385,58 @@ function FornecedoresTab() {
     buscar(search);
   }
 
+  async function updateFornecedorBrasilApi(f) {
+    const cnpj = onlyDigits(f.cnpj);
+    if (cnpj.length !== 14) {
+      setUpdateMessage("Esse fornecedor nao tem CNPJ valido para consultar na BrasilAPI.");
+      return false;
+    }
+
+    setUpdatingIds((current) => new Set(current).add(f.id));
+    setUpdateMessage("");
+    try {
+      const data = await fetchBrasilApiCnpj(cnpj);
+      const patch = buildFornecedorPatchFromBrasilApi(f, data);
+      const { error: err } = await supabase.from("suprimentos_fornecedores").update(patch).eq("id", f.id);
+      if (err) throw err;
+      setRows((current) => current.map((row) => (row.id === f.id ? { ...row, ...patch } : row)));
+      setUpdateMessage(`Fornecedor "${patch.nome}" atualizado pela BrasilAPI.`);
+      return true;
+    } catch (err) {
+      setUpdateMessage(err.message || "Nao foi possivel atualizar esse fornecedor pela BrasilAPI.");
+      return false;
+    } finally {
+      setUpdatingIds((current) => {
+        const next = new Set(current);
+        next.delete(f.id);
+        return next;
+      });
+    }
+  }
+
+  async function updateVisibleBrasilApi() {
+    const targets = rows.filter((f) => onlyDigits(f.cnpj).length === 14);
+    if (!targets.length) {
+      setUpdateMessage("Nenhum fornecedor visivel tem CNPJ valido para consultar.");
+      return;
+    }
+
+    const ok = window.confirm(`Atualizar ${targets.length} fornecedor(es) visiveis pela BrasilAPI?`);
+    if (!ok) return;
+
+    setUpdatingBrasilApi(true);
+    setUpdateMessage(`Atualizando ${targets.length} fornecedor(es) pela BrasilAPI...`);
+    let updated = 0;
+    let failed = 0;
+    for (const fornecedor of targets) {
+      const success = await updateFornecedorBrasilApi(fornecedor);
+      if (success) updated += 1;
+      else failed += 1;
+    }
+    setUpdatingBrasilApi(false);
+    setUpdateMessage(`${updated} fornecedor(es) atualizado(s).${failed ? ` ${failed} com erro.` : ""}`);
+  }
+
   return (
     <div className="space-y-4">
       {/* barra topo */}
@@ -315,12 +455,21 @@ function FornecedoresTab() {
             </button>
           )}
         </div>
-        <button
-          onClick={() => setModal({})}
-          className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700"
-        >
-          <FaPlus /> Novo Fornecedor
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={updateVisibleBrasilApi}
+            disabled={updatingBrasilApi || loading || rows.length === 0}
+            className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-black text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-50"
+          >
+            <FaSync className={updatingBrasilApi ? "animate-spin" : ""} /> Atualizar CNPJs visiveis
+          </button>
+          <button
+            onClick={() => setModal({})}
+            className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700"
+          >
+            <FaPlus /> Novo Fornecedor
+          </button>
+        </div>
       </div>
 
       {/* hint */}
@@ -335,6 +484,11 @@ function FornecedoresTab() {
           {rows.length === PAGE_SIZE
             ? `Mostrando os primeiros ${PAGE_SIZE} resultados para "${search}".`
             : `${rows.length} resultado(s) para "${search}".`}
+        </p>
+      )}
+      {updateMessage && (
+        <p className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">
+          {updateMessage}
         </p>
       )}
 
@@ -380,6 +534,14 @@ function FornecedoresTab() {
                         title="Editar"
                       >
                         <FaEdit />
+                      </button>
+                      <button
+                        onClick={() => updateFornecedorBrasilApi(f)}
+                        disabled={updatingIds.has(f.id) || updatingBrasilApi || onlyDigits(f.cnpj).length !== 14}
+                        className="rounded-xl p-2 text-cyan-700 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                        title="Atualizar pela BrasilAPI"
+                      >
+                        <FaSync className={updatingIds.has(f.id) ? "animate-spin" : ""} />
                       </button>
                       <button
                         onClick={() => toggleAtivo(f)}

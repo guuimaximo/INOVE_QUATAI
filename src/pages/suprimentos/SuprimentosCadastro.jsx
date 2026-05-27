@@ -87,6 +87,38 @@ function buildFornecedorPatchFromBrasilApi(current, data) {
   };
 }
 
+function normalizeCatalogValue(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+function pecaUniqueKey(peca) {
+  const codigo = normalizeCatalogValue(peca.codigo);
+  if (codigo) return `codigo:${codigo}`;
+  return [
+    "descricao",
+    normalizeCatalogValue(peca.descricao),
+    normalizeCatalogValue(peca.unidade_padrao),
+    peca.fornecedor_id || "",
+  ].join(":");
+}
+
+function dedupePecas(rows) {
+  const byKey = new Map();
+  rows.forEach((peca) => {
+    const key = pecaUniqueKey(peca);
+    const current = byKey.get(key);
+    if (!current) {
+      byKey.set(key, peca);
+      return;
+    }
+
+    const currentScore = Number(Boolean(current.ativo)) + Number(Boolean(current.fornecedor_id));
+    const nextScore = Number(Boolean(peca.ativo)) + Number(Boolean(peca.fornecedor_id));
+    if (nextScore > currentScore) byKey.set(key, peca);
+  });
+  return Array.from(byKey.values());
+}
+
 /* ─── FORNECEDOR MODAL ───────────────────────────────────────── */
 function FornecedorModal({ initial = null, onClose, onSaved }) {
   const [form, setForm] = useState(
@@ -247,12 +279,31 @@ function PecaModal({ initial = null, onClose, onSaved }) {
     if (!form.descricao.trim()) { setError("Informe a descrição da peça."); return; }
     setSaving(true); setError("");
     const payload = {
-      codigo: form.codigo || null,
+      codigo: form.codigo?.trim() || null,
       descricao: form.descricao.trim(),
       unidade_padrao: form.unidade_padrao || "un",
       fornecedor_id: form.fornecedor_id || null,
       obs: form.obs || null,
     };
+    if (payload.codigo) {
+      let duplicateQuery = supabase
+        .from("suprimentos_pecas")
+        .select("id, descricao")
+        .eq("codigo", payload.codigo)
+        .limit(1);
+      if (initial?.id) duplicateQuery = duplicateQuery.neq("id", initial.id);
+      const { data: duplicate, error: duplicateError } = await duplicateQuery;
+      if (duplicateError) {
+        setSaving(false);
+        setError(duplicateError.message);
+        return;
+      }
+      if (duplicate?.length) {
+        setSaving(false);
+        setError(`Codigo ja cadastrado em: ${duplicate[0].descricao}. Edite a peca existente.`);
+        return;
+      }
+    }
     const op = initial?.id
       ? supabase.from("suprimentos_pecas").update(payload).eq("id", initial.id)
       : supabase.from("suprimentos_pecas").insert(payload);
@@ -346,6 +397,11 @@ function PecaModal({ initial = null, onClose, onSaved }) {
 /* ─── FORNECEDORES TAB ───────────────────────────────────────── */
 // Busca server-side: 75k registros — nunca carrega tudo de uma vez
 const PAGE_SIZE = 50;
+const CNPJ_BULK_PAGE_SIZE = 100;
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function FornecedoresTab() {
   const [rows, setRows] = useState([]);
@@ -355,7 +411,10 @@ function FornecedoresTab() {
   const [updatingBrasilApi, setUpdatingBrasilApi] = useState(false);
   const [updatingIds, setUpdatingIds] = useState(() => new Set());
   const [updateMessage, setUpdateMessage] = useState("");
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(null);
   const debounceRef = useRef(null);
+  const bulkCancelRef = useRef(false);
 
   async function buscar(q) {
     setLoading(true);
@@ -437,6 +496,82 @@ function FornecedoresTab() {
     setUpdateMessage(`${updated} fornecedor(es) atualizado(s).${failed ? ` ${failed} com erro.` : ""}`);
   }
 
+  async function updateAllBrasilApi() {
+    const ok = window.confirm(
+      "Atualizar todos os fornecedores com CNPJ pela BrasilAPI? Esse processo consulta em lotes e pode demorar bastante para 75 mil cadastros."
+    );
+    if (!ok) return;
+
+    bulkCancelRef.current = false;
+    setBulkUpdating(true);
+    setUpdateMessage("");
+    setBulkProgress({ total: 0, processed: 0, updated: 0, failed: 0, skipped: 0 });
+
+    let offset = 0;
+    let total = 0;
+    let processed = 0;
+    let updated = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    try {
+      while (!bulkCancelRef.current) {
+        const { data, count, error: fetchError } = await supabase
+          .from("suprimentos_fornecedores")
+          .select("id, nome, cnpj, telefone, telefone2, email, uf, tipo, obs", { count: "exact" })
+          .not("cnpj", "is", null)
+          .order("id", { ascending: true })
+          .range(offset, offset + CNPJ_BULK_PAGE_SIZE - 1);
+
+        if (fetchError) throw fetchError;
+        if (typeof count === "number") total = count;
+        if (!data?.length) break;
+
+        for (const fornecedor of data) {
+          if (bulkCancelRef.current) break;
+          processed += 1;
+
+          if (onlyDigits(fornecedor.cnpj).length !== 14) {
+            skipped += 1;
+            setBulkProgress({ total, processed, updated, failed, skipped });
+            continue;
+          }
+
+          try {
+            const brasilApiData = await fetchBrasilApiCnpj(fornecedor.cnpj);
+            const patch = buildFornecedorPatchFromBrasilApi(fornecedor, brasilApiData);
+            const { error: updateError } = await supabase
+              .from("suprimentos_fornecedores")
+              .update(patch)
+              .eq("id", fornecedor.id);
+            if (updateError) throw updateError;
+
+            updated += 1;
+            setRows((current) => current.map((row) => (row.id === fornecedor.id ? { ...row, ...patch } : row)));
+          } catch {
+            failed += 1;
+          }
+
+          setBulkProgress({ total, processed, updated, failed, skipped });
+          await wait(80);
+        }
+
+        offset += CNPJ_BULK_PAGE_SIZE;
+      }
+
+      setUpdateMessage(
+        bulkCancelRef.current
+          ? `Atualizacao pausada: ${updated} atualizado(s), ${failed} erro(s), ${skipped} ignorado(s).`
+          : `Atualizacao concluida: ${updated} atualizado(s), ${failed} erro(s), ${skipped} ignorado(s).`
+      );
+    } catch (err) {
+      setUpdateMessage(err.message || "Nao foi possivel atualizar todos os fornecedores pela BrasilAPI.");
+    } finally {
+      setBulkUpdating(false);
+      bulkCancelRef.current = false;
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* barra topo */}
@@ -458,13 +593,29 @@ function FornecedoresTab() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={updateVisibleBrasilApi}
-            disabled={updatingBrasilApi || loading || rows.length === 0}
+            disabled={updatingBrasilApi || bulkUpdating || loading || rows.length === 0}
             className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-black text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-50"
           >
             <FaSync className={updatingBrasilApi ? "animate-spin" : ""} /> Atualizar CNPJs visiveis
           </button>
           <button
+            onClick={updateAllBrasilApi}
+            disabled={bulkUpdating || updatingBrasilApi || loading}
+            className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-700 hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-50"
+          >
+            <FaSync className={bulkUpdating ? "animate-spin" : ""} /> Atualizar todos CNPJs
+          </button>
+          {bulkUpdating && (
+            <button
+              onClick={() => { bulkCancelRef.current = true; }}
+              className="flex items-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2.5 text-sm font-black text-rose-700 hover:bg-rose-100"
+            >
+              <FaTimes /> Pausar
+            </button>
+          )}
+          <button
             onClick={() => setModal({})}
+            disabled={bulkUpdating}
             className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700"
           >
             <FaPlus /> Novo Fornecedor
@@ -490,6 +641,26 @@ function FornecedoresTab() {
         <p className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">
           {updateMessage}
         </p>
+      )}
+      {bulkProgress && (
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              BrasilAPI: {bulkProgress.processed.toLocaleString("pt-BR")} / {bulkProgress.total ? bulkProgress.total.toLocaleString("pt-BR") : "..."} processado(s)
+            </span>
+            <span>
+              {bulkProgress.updated.toLocaleString("pt-BR")} atualizado(s) · {bulkProgress.failed.toLocaleString("pt-BR")} erro(s) · {bulkProgress.skipped.toLocaleString("pt-BR")} ignorado(s)
+            </span>
+          </div>
+          {bulkProgress.total > 0 && (
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all"
+                style={{ width: `${Math.min(100, (bulkProgress.processed / bulkProgress.total) * 100)}%` }}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {/* tabela */}
@@ -576,6 +747,7 @@ function PecasTab() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null);
+  const [rawCount, setRawCount] = useState(0);
   const debounceRef = useRef(null);
 
   async function buscar(q) {
@@ -584,12 +756,13 @@ function PecasTab() {
       .from("suprimentos_pecas")
       .select("*, suprimentos_fornecedores(nome)")
       .order("descricao")
-      .limit(PAGE_SIZE);
+      .limit(PAGE_SIZE * 4);
     if (q.trim()) {
       query = query.or(`descricao.ilike.%${q.trim()}%,codigo.ilike.%${q.trim()}%`);
     }
     const { data } = await query;
-    setPecas(data || []);
+    setRawCount(data?.length || 0);
+    setPecas(dedupePecas(data || []).slice(0, PAGE_SIZE));
     setLoading(false);
   }
 
@@ -632,14 +805,14 @@ function PecasTab() {
 
       {!search && (
         <p className="text-xs text-slate-400 font-semibold">
-          Mostrando os primeiros {PAGE_SIZE} itens. Use a busca para filtrar entre os{" "}
+          Mostrando os primeiros {PAGE_SIZE} itens unicos. Use a busca para filtrar entre os{" "}
           <span className="font-black text-slate-600">17.954</span> cadastrados.
         </p>
       )}
       {search && !loading && (
         <p className="text-xs text-slate-400 font-semibold">
-          {filtered.length === PAGE_SIZE
-            ? `Primeiros ${PAGE_SIZE} resultados para "${search}".`
+          {rawCount > filtered.length
+            ? `${filtered.length} item(ns) unico(s) para "${search}" (${rawCount - filtered.length} duplicado(s) oculto(s) neste lote).`
             : `${filtered.length} resultado(s) para "${search}".`}
         </p>
       )}

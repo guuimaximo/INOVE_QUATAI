@@ -1,46 +1,4 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { supabase as _supabase } from "../../supabase";
-
-const _inputClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
-function FornecedorSelect({ value, onChange }) {
-  const [list, setList] = useState([]);
-  const [show, setShow] = useState(false);
-  const ref = useRef();
-  useEffect(() => {
-    _supabase.from("suprimentos_fornecedores").select("id, nome, cnpj").eq("ativo", true).order("nome")
-      .then(({ data }) => setList(data || []));
-  }, []);
-  useEffect(() => {
-    function h(e) { if (ref.current && !ref.current.contains(e.target)) setShow(false); }
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-  const filtered = useMemo(() => {
-    const q = (value || "").toLowerCase();
-    return !q ? list.slice(0, 8) : list.filter((f) => f.nome.toLowerCase().includes(q)).slice(0, 8);
-  }, [list, value]);
-  return (
-    <div ref={ref} className="relative">
-      <input className={_inputClass} value={value} autoComplete="off" placeholder="Fornecedor / marca"
-        onChange={(e) => { onChange(e.target.value); setShow(true); }}
-        onFocus={() => setShow(true)} />
-      {show && filtered.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
-          {filtered.map((f) => (
-            <button key={f.id} type="button"
-              onMouseDown={(e) => { e.preventDefault(); onChange(f.nome); setShow(false); }}
-              className="flex w-full items-start px-4 py-2.5 text-left hover:bg-blue-50 border-b border-slate-50 last:border-0">
-              <div>
-                <p className="text-sm font-bold text-slate-800">{f.nome}</p>
-                {f.cnpj && <p className="text-xs text-slate-400">{f.cnpj}</p>}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   FaCheckCircle,
   FaExclamationTriangle,
@@ -66,7 +24,9 @@ import {
   KpiCard,
   PageHero,
   Panel,
+  PartAutocomplete,
   StatusChip,
+  SupplierAutocomplete,
 } from "./SuprimentosUI";
 import {
   TESTE_RESULTADOS,
@@ -149,7 +109,7 @@ function ModalShell({ open, onClose, children }) {
 
 function Label({ children }) {
   return (
-    <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
+    <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-blue-950">
       {children}
     </span>
   );
@@ -157,9 +117,9 @@ function Label({ children }) {
 
 function StaticInfoCard({ label, value }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4">
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
       <Label>{label}</Label>
-      <p className="text-base font-black text-slate-900">{value || "--"}</p>
+      <p className="text-base font-black text-slate-950">{value || "--"}</p>
     </div>
   );
 }
@@ -268,9 +228,17 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
           </Field>
 
           <Field label="Peca" required>
-            <input
+            <PartAutocomplete
               value={form.peca}
-              onChange={(e) => setForm((prev) => ({ ...prev, peca: e.target.value }))}
+              onChange={(value) => setForm((prev) => ({ ...prev, peca: value }))}
+              onSelect={(peca) =>
+                setForm((prev) => ({
+                  ...prev,
+                  peca: peca.descricao || prev.peca,
+                  codigo_peca: peca.codigo || prev.codigo_peca,
+                  fornecedor: peca.fornecedor_nome || prev.fornecedor,
+                }))
+              }
               className={inputClass}
               required
             />
@@ -285,7 +253,7 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
           </Field>
 
           <Field label="Fornecedor / marca" required>
-            <FornecedorSelect value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))} />
+            <SupplierAutocomplete value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))} className={inputClass} required />
           </Field>
 
           <Field label="Prefixo" required>
@@ -319,13 +287,13 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
           </Field>
         </div>
 
-        <Panel title="Anexos iniciais" subtitle="Se ja tiver fotos ou videos, pode incluir na abertura do teste.">
+        <Panel title="Anexos iniciais">
           <AttachmentInput
             existingUrls={[]}
             onExistingUrlsChange={() => {}}
             newFiles={newFiles}
             onNewFilesChange={setNewFiles}
-            helperText="Pode anexar varias fotos e varios videos ja na criacao."
+            helperText=""
           />
         </Panel>
 
@@ -524,7 +492,6 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
       <form onSubmit={handleSubmit} className="space-y-5 p-6">
         <Panel
           title="Dados iniciais do teste"
-          subtitle="Base principal do teste no mesmo padrao de leitura da programacao de diesel."
         >
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StaticInfoCard label="Controle" value={item.numero_controle} />
@@ -544,9 +511,17 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
             </Field>
 
             <Field label="Peca" required>
-              <input
+              <PartAutocomplete
                 value={form.peca}
-                onChange={(e) => setForm((prev) => ({ ...prev, peca: e.target.value }))}
+                onChange={(value) => setForm((prev) => ({ ...prev, peca: value }))}
+                onSelect={(peca) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    peca: peca.descricao || prev.peca,
+                    codigo_peca: peca.codigo || prev.codigo_peca,
+                    fornecedor: peca.fornecedor_nome || prev.fornecedor,
+                  }))
+                }
                 className={inputClass}
                 required
               />
@@ -561,7 +536,7 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
             </Field>
 
             <Field label="Fornecedor / marca" required className="xl:col-span-2">
-              <FornecedorSelect value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))} />
+              <SupplierAutocomplete value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))} className={inputClass} required />
             </Field>
 
             <Field label="Prefixo" required>
@@ -618,7 +593,6 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
 
         <Panel
           title="Intercorrencias durante o teste"
-          subtitle="Se houve problema, registre cada intercorrencia com data, km e descricao."
           actions={
             <ActionButton tone="amber" onClick={() => setIntercorrencias((current) => [...current, createIntercorrencia()])}>
               <FaPlus />
@@ -649,7 +623,6 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
 
         <Panel
           title="Finalizacao do teste"
-          subtitle="Quando encerrar, registre data, km final, descricao final e o parecer tecnico."
         >
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Field label="KM atual / final">
@@ -709,14 +682,14 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
           </div>
         </Panel>
 
-        <Panel title="Anexos do teste" subtitle="Fotos e videos podem ser adicionados ao longo de todo o acompanhamento.">
+        <Panel title="Anexos do teste">
           <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
             <AttachmentInput
               existingUrls={existingAttachments}
               onExistingUrlsChange={setExistingAttachments}
               newFiles={newFiles}
               onNewFilesChange={setNewFiles}
-              helperText="Pode anexar varias fotos e varios videos."
+              helperText=""
             />
             <AttachmentGallery urls={existingAttachments} />
           </div>
@@ -813,7 +786,7 @@ export default function SuprimentosTestes() {
       <PageHero
         eyebrow="Suprimentos"
         title="Testes"
-        description="Controle os testes de pecas com abertura rapida, leitura mensal e detalhamento por popup quando precisar atualizar o acompanhamento."
+        description=""
         actions={
           <>
             <ActionButton onClick={carregar}>
@@ -835,7 +808,7 @@ export default function SuprimentosTestes() {
         <KpiCard title="KM em teste" value={`${cards.kmTotal.toLocaleString("pt-BR")} km`} subtitle="Rodagem acumulada dos ativos" icon={<FaRoute />} tone="blue" />
       </section>
 
-      <Panel title="Leitura mensal dos testes" subtitle="Clique na linha para abrir o popup e alimentar intercorrencias ou a finalizacao do teste.">
+      <Panel title="Leitura mensal dos testes">
         <div className="grid gap-3 border-b border-slate-100 pb-4 lg:grid-cols-[1.2fr_0.45fr_0.25fr]">
           <label className="relative block">
             <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />

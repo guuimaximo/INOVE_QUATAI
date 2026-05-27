@@ -131,7 +131,7 @@ export default function SuprimentosResumo() {
       <PageHero
         eyebrow="Suprimentos"
         title="Resumo Suprimentos"
-        description="Visão conjunta das garantias e dos testes de peças, com foco em carteira aberta, retorno financeiro, peças em acompanhamento e alertas operacionais."
+        description=""
         actions={<ActionButton onClick={carregar}><FaRedo /> Atualizar resumo</ActionButton>}
       />
 
@@ -151,7 +151,7 @@ export default function SuprimentosResumo() {
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Panel
           title="Radar de garantias"
-          subtitle="As últimas garantias abertas ou atualizadas ficam aqui para a gestão rápida da carteira."
+          subtitle=""
           actions={<StatusChip label={`${garantias.length} registros`} tone="blue" />}
         >
           {loading ? (
@@ -193,7 +193,7 @@ export default function SuprimentosResumo() {
 
         <Panel
           title="Alertas"
-          subtitle="Pontos que merecem atenção da manutenção e do suprimentos."
+          subtitle=""
           actions={<StatusChip label={`${alertas.length} alertas`} tone={alertas.length ? "amber" : "emerald"} />}
         >
           {loading ? (
@@ -222,7 +222,7 @@ export default function SuprimentosResumo() {
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel
           title="Testes em andamento"
-          subtitle="Leitura rápida da base ativa para saber o que está rodando em campo."
+          subtitle=""
           actions={<StatusChip label={`${resumo.testesAtivos.length} ativos`} tone="violet" />}
         >
           {loading ? (
@@ -265,7 +265,7 @@ export default function SuprimentosResumo() {
 
         <Panel
           title="Pulso do cluster"
-          subtitle="Resumo cruzado para o gestor entender rápido o tamanho da carteira e do acompanhamento."
+          subtitle=""
         >
           <div className="grid gap-4 md:grid-cols-2">
             <PulseCard

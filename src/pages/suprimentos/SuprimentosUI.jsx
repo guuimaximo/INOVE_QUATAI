@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FaBoxOpen,
   FaDownload,
@@ -7,6 +7,7 @@ import {
   FaTimes,
 } from "react-icons/fa";
 import FileViewerModal from "../../components/FileViewerModal";
+import { supabase } from "../../supabase";
 import { fileNameFromUrl } from "./suprimentosShared";
 
 function isImageUrl(url) {
@@ -129,6 +130,258 @@ export function ActionButton({ children, tone = "slate", className = "", type = 
     >
       {children}
     </button>
+  );
+}
+
+function normalizeSearch(value = "") {
+  return String(value || "").trim().replace(/[,%]/g, " ");
+}
+
+function supplierNameFromPart(part) {
+  const relation = part?.suprimentos_fornecedores;
+  if (Array.isArray(relation)) return relation[0]?.nome || "";
+  return relation?.nome || "";
+}
+
+function uniqueSuppliers(rows = []) {
+  const map = new Map();
+  rows.forEach((row) => {
+    const key = String(row?.id || row?.nome || "").trim().toLowerCase();
+    if (!key || map.has(key)) return;
+    map.set(key, row);
+  });
+  return Array.from(map.values());
+}
+
+function uniqueParts(rows = []) {
+  const map = new Map();
+  rows.forEach((row) => {
+    const code = String(row?.codigo || "").trim().toLowerCase();
+    const description = String(row?.descricao || "").trim().toLowerCase();
+    const key = `${code}|${description}`;
+    if (!description) return;
+
+    const current = map.get(key);
+    if (!current || (!supplierNameFromPart(current) && supplierNameFromPart(row))) {
+      map.set(key, row);
+    }
+  });
+  return Array.from(map.values());
+}
+
+function useClickOutside(close) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handler(event) {
+      if (ref.current && !ref.current.contains(event.target)) close?.();
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [close]);
+
+  return ref;
+}
+
+export function SupplierAutocomplete({
+  value,
+  onChange,
+  onSelect,
+  className = "",
+  placeholder = "Fornecedor",
+  limit = 20,
+  disabled = false,
+  required = false,
+}) {
+  const [options, setOptions] = useState([]);
+  const [show, setShow] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef(null);
+  const wrapperRef = useClickOutside(() => setShow(false));
+
+  async function search(rawValue = "") {
+    const query = normalizeSearch(rawValue);
+    setLoading(true);
+    let request = supabase
+      .from("suprimentos_fornecedores")
+      .select("id, nome, cnpj, telefone, email, contato")
+      .eq("ativo", true)
+      .order("nome")
+      .limit(limit);
+
+    if (query) {
+      request = request.or(`nome.ilike.%${query}%,cnpj.ilike.%${query}%,telefone.ilike.%${query}%`);
+    }
+
+    const { data } = await request;
+    setOptions(uniqueSuppliers(data || []));
+    setLoading(false);
+  }
+
+  function scheduleSearch(nextValue) {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => void search(nextValue), 250);
+  }
+
+  function selectOption(option) {
+    onChange?.(option.nome || "");
+    onSelect?.(option);
+    setShow(false);
+  }
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        className={className}
+        value={value || ""}
+        autoComplete="off"
+        placeholder={placeholder}
+        disabled={disabled}
+        required={required}
+        onChange={(event) => {
+          onChange?.(event.target.value);
+          setShow(true);
+          scheduleSearch(event.target.value);
+        }}
+        onFocus={() => {
+          setShow(true);
+          void search(value);
+        }}
+      />
+
+      {show ? (
+        <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+          {loading ? (
+            <div className="px-4 py-3 text-sm font-semibold text-slate-400">Buscando...</div>
+          ) : options.length > 0 ? (
+            options.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectOption(option);
+                }}
+                className="flex w-full items-start gap-3 border-b border-slate-50 px-4 py-3 text-left last:border-0 hover:bg-blue-50"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">{option.nome}</p>
+                  <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                    {[option.cnpj, option.telefone].filter(Boolean).join(" - ") || "Fornecedor cadastrado"}
+                  </p>
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="px-4 py-3 text-sm font-semibold text-slate-400">Nenhum fornecedor encontrado.</div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function PartAutocomplete({
+  value,
+  onChange,
+  onSelect,
+  className = "",
+  placeholder = "Peca",
+  limit = 30,
+  disabled = false,
+  required = false,
+}) {
+  const [options, setOptions] = useState([]);
+  const [show, setShow] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef(null);
+  const wrapperRef = useClickOutside(() => setShow(false));
+
+  async function search(rawValue = "") {
+    const query = normalizeSearch(rawValue);
+    setLoading(true);
+    let request = supabase
+      .from("suprimentos_pecas")
+      .select("id, codigo, descricao, unidade_padrao, fornecedor_id, suprimentos_fornecedores(nome, cnpj, telefone)")
+      .eq("ativo", true)
+      .order("descricao")
+      .limit(limit);
+
+    if (query) {
+      request = request.or(`descricao.ilike.%${query}%,codigo.ilike.%${query}%`);
+    }
+
+    const { data } = await request;
+    setOptions(uniqueParts(data || []));
+    setLoading(false);
+  }
+
+  function scheduleSearch(nextValue) {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => void search(nextValue), 250);
+  }
+
+  function selectOption(option) {
+    onChange?.(option.descricao || "");
+    onSelect?.({
+      ...option,
+      fornecedor_nome: supplierNameFromPart(option),
+    });
+    setShow(false);
+  }
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        className={className}
+        value={value || ""}
+        autoComplete="off"
+        placeholder={placeholder}
+        disabled={disabled}
+        required={required}
+        onChange={(event) => {
+          onChange?.(event.target.value);
+          setShow(true);
+          scheduleSearch(event.target.value);
+        }}
+        onFocus={() => {
+          setShow(true);
+          void search(value);
+        }}
+      />
+
+      {show ? (
+        <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+          {loading ? (
+            <div className="px-4 py-3 text-sm font-semibold text-slate-400">Buscando...</div>
+          ) : options.length > 0 ? (
+            options.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectOption(option);
+                }}
+                className="flex w-full items-start gap-3 border-b border-slate-50 px-4 py-3 text-left last:border-0 hover:bg-blue-50"
+              >
+                <span className="mt-0.5 shrink-0 rounded-lg bg-blue-50 px-2 py-0.5 font-mono text-xs font-black text-blue-800">
+                  {option.codigo || "--"}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">{option.descricao}</p>
+                  <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                    {[supplierNameFromPart(option), option.unidade_padrao].filter(Boolean).join(" - ") || "Catalogo"}
+                  </p>
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="px-4 py-3 text-sm font-semibold text-slate-400">Nenhuma peca encontrada.</div>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

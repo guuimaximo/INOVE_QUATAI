@@ -25,7 +25,7 @@ const textareaClass =
 function Field({ label, required = false, children, className = "" }) {
   return (
     <div className={className}>
-      <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-slate-500">
+      <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.16em] text-blue-950">
         {label}
         {required && <span className="ml-1 text-rose-500">*</span>}
       </label>
@@ -557,7 +557,7 @@ export default function SuprimentosCadastro() {
       <PageHero
         eyebrow="Suprimentos · Cadastro"
         title="Cadastro"
-        description="Gerencie o cadastro de fornecedores e o catálogo de peças utilizados em Garantias, Testes e Serviço Externo."
+        description=""
       />
 
       <Panel>

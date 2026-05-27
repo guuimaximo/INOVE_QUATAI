@@ -1,18 +1,15 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   FaBan,
   FaBoxOpen,
-  FaCamera,
   FaCheckCircle,
   FaClipboardList,
   FaEdit,
-  FaEye,
   FaFileAlt,
   FaHistory,
   FaList,
   FaPlus,
   FaPrint,
-  FaRedo,
   FaSearch,
   FaTimes,
   FaTimesCircle,
@@ -38,6 +35,149 @@ function Field({ label, required = false, children, className = "" }) {
         {label}{required && <span className="ml-1 text-rose-500">*</span>}
       </label>
       {children}
+    </div>
+  );
+}
+
+/* ─── Autocomplete terceiro (busca em suprimentos_fornecedores) ── */
+function TerceiroAutocomplete({ value, onChange, onSelect }) {
+  const [fornecedores, setFornecedores] = useState([]);
+  const [show, setShow] = useState(false);
+  const ref = useRef();
+
+  useEffect(() => {
+    supabase.from("suprimentos_fornecedores").select("*").eq("ativo", true).order("nome")
+      .then(({ data }) => setFornecedores(data || []));
+  }, []);
+
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setShow(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!value.trim()) return fornecedores.slice(0, 8);
+    const q = value.toLowerCase();
+    return fornecedores.filter((f) => f.nome.toLowerCase().includes(q) || (f.cnpj || "").includes(q)).slice(0, 8);
+  }, [fornecedores, value]);
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        className={inputClass}
+        placeholder="Nome ou razão social do terceiro"
+        value={value}
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setShow(true); }}
+        onFocus={() => setShow(true)}
+      />
+      {show && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          {filtered.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); onSelect(f); setShow(false); }}
+              className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-blue-50 border-b border-slate-50 last:border-0"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-800">{f.nome}</p>
+                {(f.cnpj || f.telefone) && (
+                  <p className="text-xs text-slate-400">{[f.cnpj, f.telefone].filter(Boolean).join(" · ")}</p>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── EvidenciasDropzone (estilo SAC) ────────────────────────── */
+const ACCEPT_MIME = ["image/png", "image/jpeg", "image/webp", "image/heic", "video/mp4", "video/quicktime", "application/pdf"];
+
+function EvidenciasDropzone({ files, setFiles }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const fileRef = useRef();
+
+  function keyFile(f) { return `${f.name}-${f.size}-${f.lastModified}`; }
+
+  function addFiles(list) {
+    const incoming = Array.from(list || []).filter((f) => ACCEPT_MIME.includes(f.type));
+    const existing = new Set(files.map(keyFile));
+    const deduped = incoming.filter((f) => !existing.has(keyFile(f)));
+    if (deduped.length) setFiles((prev) => [...prev, ...deduped]);
+  }
+
+  function onPaste(e) {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imgs = items.filter((it) => it.kind === "file" && it.type.startsWith("image/")).map((it) => it.getAsFile()).filter(Boolean);
+    if (!imgs.length) return;
+    e.preventDefault();
+    addFiles(imgs.map((f) => new File([f], `print_${Date.now()}.${f.type.includes("png") ? "png" : "jpg"}`, { type: f.type, lastModified: Date.now() })));
+  }
+
+  function badgeLabel(f) {
+    if (f.type.startsWith("image/")) return "Imagem";
+    if (f.type.startsWith("video/")) return "Vídeo";
+    if (f.type === "application/pdf") return "PDF";
+    return "Arquivo";
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* dropzone */}
+        <div
+          tabIndex={0}
+          onPaste={onPaste}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}
+          onClick={() => fileRef.current?.click()}
+          className={`flex min-h-[140px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDragging ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"}`}
+        >
+          <p className="text-sm font-semibold text-slate-700">Clique para enviar <span className="font-normal">ou arraste</span></p>
+          <p className="mt-1 text-xs text-slate-400">PNG, JPG, MP4, MOV ou PDF</p>
+          <input ref={fileRef} type="file" accept={ACCEPT_MIME.join(",")} multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
+        </div>
+        {/* paste box */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div
+            tabIndex={0}
+            onPaste={onPaste}
+            className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <p>Clique aqui e cole seu print.</p>
+            <p className="mt-1 text-xs text-slate-400">Somente imagens do clipboard.</p>
+          </div>
+          <p className="mt-3 text-xs text-slate-400">
+            {files.length > 0 ? <><b>{files.length}</b> arquivo(s) anexado(s)</> : "Nenhum arquivo ainda"}
+          </p>
+        </div>
+      </div>
+
+      {files.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Arquivos anexados</p>
+            <button type="button" onClick={() => setFiles([])} className="text-xs font-semibold text-rose-500 hover:underline">remover tudo</button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {files.map((f, i) => (
+              <div key={`${f.name}-${i}`} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 flex-shrink-0">{badgeLabel(f)}</span>
+                  <span className="truncate text-xs font-semibold text-slate-700">{f.name}</span>
+                </div>
+                <button type="button" onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))} className="ml-2 flex-shrink-0 text-rose-400 hover:text-rose-600"><FaTimes /></button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -312,8 +452,6 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
       ? {
           nota_saida_numero: editRecord.nota_saida_numero || "",
           nota_saida_data: editRecord.nota_saida_data || todayISO(),
-          nota_retorno_numero: editRecord.nota_retorno_numero || "",
-          nota_retorno_data: editRecord.nota_retorno_data || "",
           terceiro_nome: editRecord.terceiro_nome || "",
           terceiro_cpf_cnpj: editRecord.terceiro_cpf_cnpj || "",
           terceiro_telefone: editRecord.terceiro_telefone || "",
@@ -324,11 +462,22 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
         }
       : emptyForm()
   );
+  const [files, setFiles] = useState([]); // evidências gerais da saída
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [catalogTarget, setCatalogTarget] = useState(null); // index or null
+  const [catalogTarget, setCatalogTarget] = useState(null);
 
   function setF(key, value) { setForm((f) => ({ ...f, [key]: value })); }
+
+  function handleTerceiroSelect(fornecedor) {
+    setForm((f) => ({
+      ...f,
+      terceiro_nome: fornecedor.nome,
+      terceiro_cpf_cnpj: fornecedor.cnpj || f.terceiro_cpf_cnpj,
+      terceiro_telefone: fornecedor.telefone || f.terceiro_telefone,
+      terceiro_endereco: fornecedor.terceiro_endereco || f.terceiro_endereco,
+    }));
+  }
 
   function handleItemChange(index, newItem) {
     const updated = [...form.itens];
@@ -364,6 +513,12 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
 
     setSaving(true); setError("");
 
+    // upload evidências gerais
+    let evidencias_urls = [];
+    if (files.length > 0) {
+      evidencias_urls = await uploadSuprimentosFiles(files, `servico-externo/${Date.now()}`);
+    }
+
     const payload = {
       nota_saida_numero: form.nota_saida_numero || null,
       nota_saida_data: form.nota_saida_data || null,
@@ -374,6 +529,7 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
       motivo: form.motivo.trim(),
       observacao: form.observacao || null,
       itens: validItens,
+      ...(evidencias_urls.length > 0 ? { evidencias_urls } : {}),
     };
 
     let err;
@@ -413,56 +569,43 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Serviço Externo</p>
-              <h2 className="mt-1 text-xl font-black text-slate-900">{isEdit ? "Editar Saída" : "Nova Saída"}</h2>
+              <h2 className="mt-1 text-xl font-black text-blue-900">{isEdit ? "Editar Saída" : "Nova Saída"}</h2>
             </div>
             <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
           </div>
 
-          <div className="px-6 py-5 space-y-6">
-            {/* Nota de Saída */}
-            <div>
-              <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Nota Fiscal de Saída (Simples Remessa)</p>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Número da NF de Saída" required>
-                  <input className={inputClass} placeholder="ex.: 001234" value={form.nota_saida_numero} onChange={(e) => setF("nota_saida_numero", e.target.value)} />
-                </Field>
-                <Field label="Data de Emissão" required>
-                  <input type="date" className={inputClass} value={form.nota_saida_data} onChange={(e) => setF("nota_saida_data", e.target.value)} />
-                </Field>
-              </div>
+          <div className="px-6 py-5 space-y-5">
+            {/* NF + Terceiro — linha compacta */}
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="NF de Saída" required>
+                <input className={inputClass} placeholder="ex.: 001234" value={form.nota_saida_numero} onChange={(e) => setF("nota_saida_numero", e.target.value)} />
+              </Field>
+              <Field label="Data de emissão">
+                <input type="date" className={inputClass} value={form.nota_saida_data} onChange={(e) => setF("nota_saida_data", e.target.value)} />
+              </Field>
             </div>
 
-            {/* Terceiro */}
-            <div>
-              <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Dados do Terceiro</p>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Nome / Razão Social" required className="col-span-2">
-                  <input className={inputClass} placeholder="Nome completo ou razão social" value={form.terceiro_nome} onChange={(e) => setF("terceiro_nome", e.target.value)} />
-                </Field>
-                <Field label="CPF / CNPJ">
-                  <input className={inputClass} placeholder="000.000.000-00" value={form.terceiro_cpf_cnpj} onChange={(e) => setF("terceiro_cpf_cnpj", e.target.value)} />
-                </Field>
-                <Field label="Telefone">
-                  <input className={inputClass} placeholder="(00) 00000-0000" value={form.terceiro_telefone} onChange={(e) => setF("terceiro_telefone", e.target.value)} />
-                </Field>
-                <Field label="Endereço" className="col-span-2">
-                  <input className={inputClass} placeholder="Rua, número, cidade…" value={form.terceiro_endereco} onChange={(e) => setF("terceiro_endereco", e.target.value)} />
-                </Field>
-              </div>
+            {/* Terceiro com autocomplete */}
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Nome / Razão Social" required className="col-span-2">
+                <TerceiroAutocomplete
+                  value={form.terceiro_nome}
+                  onChange={(v) => setF("terceiro_nome", v)}
+                  onSelect={handleTerceiroSelect}
+                />
+              </Field>
+              <Field label="CPF / CNPJ">
+                <input className={inputClass} placeholder="000.000.000-00" value={form.terceiro_cpf_cnpj} onChange={(e) => setF("terceiro_cpf_cnpj", e.target.value)} />
+              </Field>
+              <Field label="Telefone">
+                <input className={inputClass} placeholder="(00) 00000-0000" value={form.terceiro_telefone} onChange={(e) => setF("terceiro_telefone", e.target.value)} />
+              </Field>
             </div>
 
             {/* Motivo */}
-            <div>
-              <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Motivo / Serviço</p>
-              <div className="space-y-3">
-                <Field label="Descrição do serviço" required>
-                  <textarea rows={2} className={textareaClass} placeholder="Descreva o serviço a ser realizado…" value={form.motivo} onChange={(e) => setF("motivo", e.target.value)} />
-                </Field>
-                <Field label="Observações internas">
-                  <textarea rows={2} className={textareaClass} placeholder="Informações adicionais…" value={form.observacao} onChange={(e) => setF("observacao", e.target.value)} />
-                </Field>
-              </div>
-            </div>
+            <Field label="Motivo / Serviço" required>
+              <textarea rows={2} className={textareaClass} placeholder="Descreva o serviço a ser realizado…" value={form.motivo} onChange={(e) => setF("motivo", e.target.value)} />
+            </Field>
 
             {/* Itens */}
             <div>
@@ -485,6 +628,12 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
                   />
                 ))}
               </div>
+            </div>
+
+            {/* Evidências */}
+            <div>
+              <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-400">Evidências (fotos, vídeos, PDF)</p>
+              <EvidenciasDropzone files={files} setFiles={setFiles} />
             </div>
 
             {error && (

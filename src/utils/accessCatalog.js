@@ -64,8 +64,10 @@ export const APP_ACCESS_PAGES = [
   { key: "estoque_diesel_parametros", label: "Parametros de Diesel", category: "Estoque de Diesel", path: "/estoque-diesel/parametros", patterns: ["/estoque-diesel/parametros"] },
 
   { key: "suprimentos_resumo", label: "Suprimentos Resumo", category: "Suprimentos", path: "/suprimentos/resumo", patterns: ["/suprimentos/resumo", "/suprimentos"] },
+  { key: "suprimentos_cadastro", label: "Suprimentos Cadastro", category: "Suprimentos", path: "/suprimentos/cadastro", patterns: ["/suprimentos/cadastro"] },
   { key: "suprimentos_garantias", label: "Suprimentos Garantias", category: "Suprimentos", path: "/suprimentos/garantias", patterns: ["/suprimentos/garantias"] },
   { key: "suprimentos_testes", label: "Suprimentos Testes", category: "Suprimentos", path: "/suprimentos/testes", patterns: ["/suprimentos/testes"] },
+  { key: "suprimentos_servico_externo", label: "Suprimentos Servico Externo", category: "Suprimentos", path: "/suprimentos/servico-externo", patterns: ["/suprimentos/servico-externo"] },
 
   { key: "estrutura_fisica_solicitacao", label: "Estrutura Fisica Solicitacao", category: "Estrutura Fisica", path: "/estrutura-fisica/solicitacao", patterns: ["/estrutura-fisica/solicitacao"] },
   { key: "estrutura_fisica_central", label: "Estrutura Fisica Central", category: "Estrutura Fisica", path: "/estrutura-fisica/central", patterns: ["/estrutura-fisica/central", "/estrutura-fisica"] },
@@ -172,8 +174,10 @@ export const DEFAULT_LEVEL_PROFILES = [
       "embarcados_reparo_detalhe",
       "embarcados_reparo_execucao",
       "suprimentos_resumo",
+      "suprimentos_cadastro",
       "suprimentos_garantias",
       "suprimentos_testes",
+      "suprimentos_servico_externo",
       "pessoas_funcionarios",
       "pessoas_ferias",
       "pessoas_organograma",

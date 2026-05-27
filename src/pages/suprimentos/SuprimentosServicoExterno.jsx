@@ -1,4 +1,5 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
+import FileViewerModal from "../../components/FileViewerModal";
 import {
   FaBan,
   FaBoxOpen,
@@ -90,6 +91,43 @@ function TerceiroAutocomplete({ value, onChange, onSelect }) {
             </button>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── MediaViewer hook ────────────────────────────────────────── */
+function useMediaViewer() {
+  const [viewer, setViewer] = useState({ open: false, url: "", name: "" });
+  const open = useCallback((url, name = "arquivo") => setViewer({ open: true, url, name }), []);
+  const close = useCallback(() => setViewer({ open: false, url: "", name: "" }), []);
+  return { viewer, openViewer: open, closeViewer: close };
+}
+
+function isVideoUrl(url) {
+  return /\.(mp4|mov|webm|ogg)(\?|#|$)/i.test(url || "");
+}
+
+/* thumbnail clicável que abre o viewer */
+function MediaThumb({ url, onOpen, onRemove }) {
+  const isVid = isVideoUrl(url);
+  return (
+    <div className="group relative">
+      {isVid ? (
+        <button type="button" onClick={() => onOpen(url, "vídeo")}
+          className="flex h-16 w-16 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200">
+          <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.841z" /></svg>
+        </button>
+      ) : (
+        <button type="button" onClick={() => onOpen(url, "imagem")} className="block">
+          <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200 hover:opacity-80 transition" />
+        </button>
+      )}
+      {onRemove && (
+        <button type="button" onClick={() => onRemove(url)}
+          className="absolute -right-1 -top-1 hidden rounded-full bg-rose-500 p-0.5 text-[10px] text-white group-hover:flex">
+          <FaTimes />
+        </button>
       )}
     </div>
   );
@@ -258,6 +296,7 @@ function PecasCatalogPicker({ onSelect, onClose }) {
 function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
   const fileRef = useRef();
   const [uploading, setUploading] = useState(false);
+  const { viewer, openViewer, closeViewer } = useMediaViewer();
 
   function handle(field) {
     return (e) => onChange(index, { ...item, [field]: e.target.value });
@@ -273,87 +312,73 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
     e.target.value = "";
   }
 
-  function removeFoto(url) {
-    onChange(index, { ...item, fotos_urls: (item.fotos_urls || []).filter((u) => u !== url) });
-  }
-
   return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 space-y-3">
-      <div className="flex items-start gap-2">
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={() => onPickCatalog(index)}
-            className="mt-0.5 flex-shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-blue-700 hover:bg-blue-100"
-            title="Selecionar do catálogo"
-          >
-            <FaList />
-          </button>
-        )}
-        <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
-          <div>
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Código</p>
-            <input className={inputClass + " text-xs"} placeholder="Código" value={item.codigo} onChange={handle("codigo")} disabled={readOnly} />
-          </div>
-          <div className="sm:col-span-2">
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição *</p>
-            <input className={inputClass + " text-xs"} placeholder="Descrição da peça" value={item.descricao} onChange={handle("descricao")} disabled={readOnly} />
-          </div>
-          <div>
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Qtd</p>
-            <div className="flex gap-1">
-              <input className={inputClass + " text-xs"} type="number" min="0" value={item.quantidade} onChange={handle("quantidade")} disabled={readOnly} />
-              <input className={inputClass + " text-xs w-16"} placeholder="un" value={item.unidade} onChange={handle("unidade")} disabled={readOnly} />
+    <>
+      <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 space-y-3">
+        <div className="flex items-start gap-2">
+          {!readOnly && (
+            <button type="button" onClick={() => onPickCatalog(index)}
+              className="mt-0.5 flex-shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-blue-700 hover:bg-blue-100"
+              title="Selecionar do catálogo">
+              <FaList />
+            </button>
+          )}
+          <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
+            <div>
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Código</p>
+              <input className={inputClass + " text-xs"} placeholder="Código" value={item.codigo} onChange={handle("codigo")} disabled={readOnly} />
+            </div>
+            <div className="sm:col-span-2">
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição *</p>
+              <input className={inputClass + " text-xs"} placeholder="Descrição da peça" value={item.descricao} onChange={handle("descricao")} disabled={readOnly} />
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Qtd</p>
+              <div className="flex gap-1">
+                <input className={inputClass + " text-xs"} type="number" min="0" value={item.quantidade} onChange={handle("quantidade")} disabled={readOnly} />
+                <input className={inputClass + " text-xs w-16"} placeholder="un" value={item.unidade} onChange={handle("unidade")} disabled={readOnly} />
+              </div>
             </div>
           </div>
+          {!readOnly && (
+            <button type="button" onClick={() => onRemove(index)} className="mt-0.5 flex-shrink-0 rounded-xl p-2 text-rose-400 hover:bg-rose-50">
+              <FaTimes />
+            </button>
+          )}
         </div>
-        {!readOnly && (
-          <button type="button" onClick={() => onRemove(index)} className="mt-0.5 flex-shrink-0 rounded-xl p-2 text-rose-400 hover:bg-rose-50">
-            <FaTimes />
-          </button>
-        )}
-      </div>
 
-      <div>
-        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Observação</p>
-        <input className={inputClass + " text-xs"} placeholder="Observação sobre este item…" value={item.obs} onChange={handle("obs")} disabled={readOnly} />
-      </div>
-
-      {/* fotos */}
-      {!readOnly && (
         <div>
-          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Fotos (opcional)</p>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-          >
-            <FaCamera /> {uploading ? "Enviando…" : "Adicionar foto"}
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFotos} />
+          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Observação</p>
+          <input className={inputClass + " text-xs"} placeholder="Observação sobre este item…" value={item.obs} onChange={handle("obs")} disabled={readOnly} />
         </div>
-      )}
 
-      {(item.fotos_urls || []).length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {(item.fotos_urls || []).map((url, i) => (
-            <div key={i} className="group relative">
-              <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200" />
-              {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => removeFoto(url)}
-                  className="absolute -right-1 -top-1 hidden rounded-full bg-rose-500 p-0.5 text-[10px] text-white group-hover:flex"
-                >
-                  <FaTimes />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+        {!readOnly && (
+          <div>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Fotos (opcional)</p>
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+              📷 {uploading ? "Enviando…" : "Adicionar foto"}
+            </button>
+            <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFotos} />
+          </div>
+        )}
+
+        {(item.fotos_urls || []).length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {(item.fotos_urls || []).map((url, i) => (
+              <MediaThumb
+                key={i}
+                url={url}
+                onOpen={openViewer}
+                onRemove={!readOnly ? (u) => onChange(index, { ...item, fotos_urls: item.fotos_urls.filter((x) => x !== u) }) : null}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <FileViewerModal open={viewer.open} url={viewer.url} name={viewer.name} onClose={closeViewer} />
+    </>
   );
 }
 
@@ -664,6 +689,7 @@ function DetalheModal({ record, onClose, onUpdated, userInfo }) {
   const [tab, setTab] = useState("detalhes");
   const [movs, setMovs] = useState([]);
   const [loadingMovs, setLoadingMovs] = useState(true);
+  const { viewer, openViewer, closeViewer } = useMediaViewer();
 
   // retorno form
   const [retornoForm, setRetornoForm] = useState({
@@ -886,9 +912,7 @@ function DetalheModal({ record, onClose, onUpdated, userInfo }) {
                             {(m.fotos_urls || []).length > 0 && (
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {m.fotos_urls.map((url, i) => (
-                                  <a key={i} href={url} target="_blank" rel="noreferrer">
-                                    <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200 hover:opacity-80" />
-                                  </a>
+                                  <MediaThumb key={i} url={url} onOpen={openViewer} />
                                 ))}
                               </div>
                             )}
@@ -942,16 +966,12 @@ function DetalheModal({ record, onClose, onUpdated, userInfo }) {
                 {retornoForm.fotos.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {retornoForm.fotos.map((url, i) => (
-                      <div key={i} className="group relative">
-                        <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200" />
-                        <button
-                          type="button"
-                          onClick={() => setRetornoForm((f) => ({ ...f, fotos: f.fotos.filter((u) => u !== url) }))}
-                          className="absolute -right-1 -top-1 hidden rounded-full bg-rose-500 p-0.5 text-[10px] text-white group-hover:flex"
-                        >
-                          <FaTimes />
-                        </button>
-                      </div>
+                      <MediaThumb
+                        key={i}
+                        url={url}
+                        onOpen={openViewer}
+                        onRemove={(u) => setRetornoForm((f) => ({ ...f, fotos: f.fotos.filter((x) => x !== u) }))}
+                      />
                     ))}
                   </div>
                 )}
@@ -992,6 +1012,8 @@ function DetalheModal({ record, onClose, onUpdated, userInfo }) {
           )}
         </div>
       </div>
+
+      <FileViewerModal open={viewer.open} url={viewer.url} name={viewer.name} onClose={closeViewer} />
     </div>
   );
 }

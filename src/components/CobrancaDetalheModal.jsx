@@ -12,6 +12,7 @@ import JSZip from "jszip";
 import CampoMotorista from "./CampoMotorista";
 import ChamadosMotoristasModal from "./ChamadosMotoristasModal";
 import FileViewerModal from "./FileViewerModal";
+import logoInove from "../assets/logoInovaQuatai.png";
 
 // Helper para converter string (BRL ou US) para número
 const parseCurrency = (value) => {
@@ -502,32 +503,48 @@ export default function CobrancaDetalheModal({
     // Clona printable-area para pegar a árvore de seções
     const fullClone = source.cloneNode(true);
 
+    // Helper: cria uma linha (par de fotos) como div próprio
+    const makePhotoRow = (card1, card2) => {
+      const row = document.createElement("div");
+      row.className = "photo-grid";
+      row.style.display = "grid";
+      row.style.gridTemplateColumns = "repeat(2, 1fr)";
+      row.style.gap = "8px";
+      row.style.marginBottom = "8px";
+      row.appendChild(card1.cloneNode(true));
+      if (card2) row.appendChild(card2.cloneNode(true));
+      return row;
+    };
+
     // Monta lista de blocos a renderizar (cada um nunca quebra ao meio)
+    // Título de seção SEMPRE acompanha pelo menos as 2 primeiras fotos.
     const blocks = [];
     Array.from(fullClone.children).forEach((child) => {
       if (child.tagName === "STYLE") return;
-      // Para sections com photo-grid, separar o título do grid e quebrar em linhas de 2 fotos
       const grid = child.querySelector ? child.querySelector(".photo-grid") : null;
       if (grid && child.tagName === "SECTION") {
-        // Bloco "título da seção" (sem o grid)
+        const cards = Array.from(grid.querySelectorAll(".photo-card"));
+
+        // Cabeçalho da seção (clone sem o grid)
         const titulo = child.cloneNode(true);
         const g = titulo.querySelector(".photo-grid");
         if (g) g.remove();
-        // Só adiciona se sobrou algo significativo (title, etc.)
-        if (titulo.textContent.trim().length > 0) blocks.push(titulo);
 
-        // Cada par de fotos vira um bloco
-        const cards = Array.from(grid.querySelectorAll(".photo-card"));
-        for (let i = 0; i < cards.length; i += 2) {
-          const row = document.createElement("div");
-          row.className = "photo-grid";
-          row.style.display = "grid";
-          row.style.gridTemplateColumns = "repeat(2, 1fr)";
-          row.style.gap = "8px";
-          row.style.marginBottom = "8px";
-          row.appendChild(cards[i].cloneNode(true));
-          if (cards[i + 1]) row.appendChild(cards[i + 1].cloneNode(true));
-          blocks.push(row);
+        if (cards.length === 0) {
+          // Só o título + nota "Nenhuma evidência..." — vai como bloco único
+          blocks.push(titulo);
+          return;
+        }
+
+        // Primeiro bloco: título + primeira linha (até 2 fotos)
+        const firstWrap = document.createElement("div");
+        firstWrap.appendChild(titulo);
+        firstWrap.appendChild(makePhotoRow(cards[0], cards[1]));
+        blocks.push(firstWrap);
+
+        // Linhas restantes (cada par é um bloco)
+        for (let i = 2; i < cards.length; i += 2) {
+          blocks.push(makePhotoRow(cards[i], cards[i + 1]));
         }
       } else {
         blocks.push(child.cloneNode(true));
@@ -1251,8 +1268,8 @@ export default function CobrancaDetalheModal({
           #printable-area .section-title {
             background: #1e3a8a; color: #fff; font-size: 11px; font-weight: 700;
             text-transform: uppercase; letter-spacing: 0.04em;
-            padding: 0 10px; margin-bottom: 6px; border-radius: 2px;
-            display: flex; align-items: center; min-height: 26px; line-height: 1;
+            padding: 8px 10px; margin-bottom: 6px; border-radius: 2px;
+            line-height: 1;
           }
           #printable-area .field-grid {
             display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 12px;
@@ -1265,12 +1282,18 @@ export default function CobrancaDetalheModal({
           }
           #printable-area .field-value { font-size: 11px; color: #0f172a; font-weight: 600; }
           #printable-area .doc-header {
-            display: flex; align-items: center; justify-content: space-between;
-            border-bottom: 3px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 12px;
+            display: flex; align-items: stretch; justify-content: space-between; gap: 16px;
+            border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 12px;
           }
-          #printable-area .doc-title { font-size: 16px; font-weight: 800; color: #1e3a8a; letter-spacing: 0.02em; }
-          #printable-area .doc-subtitle { font-size: 10px; color: #475569; }
-          #printable-area .doc-meta { text-align: right; font-size: 9.5px; color: #475569; }
+          #printable-area .doc-title-block { flex: 1; text-align: center; align-self: center; }
+          #printable-area .doc-title { font-size: 18px; font-weight: 800; color: #1e3a8a; letter-spacing: 0.04em; line-height: 1.15; }
+          #printable-area .doc-subtitle { font-size: 10px; color: #475569; margin-top: 2px; }
+          #printable-area .doc-meta {
+            text-align: right; font-size: 9.5px; color: #475569;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+            min-width: 140px; align-self: center;
+          }
+          #printable-area .doc-meta .pill-wrap { margin-top: 4px; }
           #printable-area .status-pill {
             display: inline-block; padding: 2px 10px; border-radius: 999px;
             font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
@@ -1338,41 +1361,37 @@ export default function CobrancaDetalheModal({
             border-top: 1px dashed #cbd5e1; padding-top: 6px;
           }
           #printable-area .brand {
-            display: inline-flex; align-items: center; gap: 8px;
+            display: flex; align-items: center; gap: 10px; min-width: 140px; align-self: center;
           }
-          #printable-area .brand-logo {
-            width: 44px; height: 44px; border-radius: 8px;
-            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
-            color: #fff; font-weight: 800; font-size: 14px;
-            display: flex; align-items: center; justify-content: center;
-            letter-spacing: 0.04em; box-shadow: 0 2px 4px rgba(30,58,138,0.25);
+          #printable-area .brand img {
+            width: 48px; height: 48px; object-fit: contain; display: block;
           }
           #printable-area .brand-text { line-height: 1.1; }
           #printable-area .brand-text .brand-name {
-            font-size: 18px; font-weight: 800; color: #1e3a8a; letter-spacing: 0.08em;
+            font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: 0.12em;
           }
           #printable-area .brand-text .brand-sub {
-            font-size: 9px; color: #64748b; letter-spacing: 0.18em; text-transform: uppercase;
+            font-size: 8.5px; color: #64748b; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 2px;
           }
         `}</style>
 
         {/* CABEÇALHO */}
         <header className="doc-header nobreak">
           <div className="brand">
-            <div className="brand-logo">IQ</div>
+            <img src={logoInove} alt="INOVE" crossOrigin="anonymous" />
             <div className="brand-text">
-              <div className="brand-name">INOVE QUATAÍ</div>
-              <div className="brand-sub">Gestão de Frota · Manutenção</div>
+              <div className="brand-name">INOVE</div>
+              <div className="brand-sub">Gestão de Frota</div>
             </div>
           </div>
-          <div style={{ textAlign: "center", flex: 1 }}>
+          <div className="doc-title-block">
             <h1 className="doc-title">LAUDO DE COBRANÇA DE AVARIA</h1>
             <div className="doc-subtitle">Documento técnico de apuração e cobrança</div>
           </div>
           <div className="doc-meta">
             <div><strong>Nº Avaria:</strong> {avaria.numero_da_avaria || "-"}</div>
             <div><strong>Emissão:</strong> {dataEmissao}</div>
-            <div>
+            <div className="pill-wrap">
               <span className={`status-pill status-${statusAtual}`}>{statusAtual}</span>
             </div>
           </div>

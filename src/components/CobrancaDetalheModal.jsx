@@ -6,6 +6,9 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import { FaTimes } from "react-icons/fa";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+import JSZip from "jszip";
 import CampoMotorista from "./CampoMotorista";
 import ChamadosMotoristasModal from "./ChamadosMotoristasModal";
 import FileViewerModal from "./FileViewerModal";
@@ -50,6 +53,7 @@ export default function CobrancaDetalheModal({
   const [tratativaTexto, setTratativaTexto] = useState("");
   const [salvandoInfo, setSalvandoInfo] = useState(false);
   const [viewerFile, setViewerFile] = useState(null);
+  const [baixandoZip, setBaixandoZip] = useState(false);
 
   // ✅ NOVO: modal de chamados
   const [openChamados, setOpenChamados] = useState(false);
@@ -439,12 +443,14 @@ export default function CobrancaDetalheModal({
           ${styles}
           <style>
             @page { margin: 14mm; }
-            body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff; }
+            html, body { background: #fff; }
+            body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #0f172a; margin: 0; padding: 0; }
             img { max-width: 100%; }
+            #printable-area { display: block !important; visibility: visible !important; max-width: 200mm; margin: 0 auto; padding: 0; }
           </style>
         </head>
-        <body class="bg-white p-0">
-          <div class="max-w-4xl mx-auto bg-white p-8">
+        <body>
+          <div id="printable-area">
             ${printContents}
           </div>
         </body>
@@ -512,6 +518,172 @@ export default function CobrancaDetalheModal({
 
   // Pode editar origem enquanto pendente (ou em edição)
   const podeEditarOrigem = podeEditarBasico || isEditing;
+
+  // Geração de PDF do laudo (mesma estrutura visual da impressão)
+  const gerarPdfLaudoBlob = async () => {
+    const source = document.getElementById("printable-area");
+    if (!source) throw new Error("Área imprimível não encontrada");
+
+    // Cria container offscreen com tamanho fixo (A4 a ~96dpi) para o render
+    const container = document.createElement("div");
+    container.id = "printable-area";
+    container.style.position = "fixed";
+    container.style.left = "-10000px";
+    container.style.top = "0";
+    container.style.width = "794px"; // ~A4 width em 96dpi
+    container.style.background = "#ffffff";
+    container.style.padding = "24px";
+    container.style.fontFamily = "'Inter','Segoe UI',Arial,sans-serif";
+    container.style.color = "#0f172a";
+    container.innerHTML = source.innerHTML;
+    document.body.appendChild(container);
+
+    // Aguarda imagens carregarem dentro do container
+    const imgs = Array.from(container.querySelectorAll("img"));
+    await Promise.all(
+      imgs.map(
+        (img) =>
+          new Promise((resolve) => {
+            if (img.complete && img.naturalWidth > 0) return resolve();
+            img.addEventListener("load", () => resolve());
+            img.addEventListener("error", () => resolve());
+            setTimeout(resolve, 6000);
+          })
+      )
+    );
+
+    try {
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+
+      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight, undefined, "FAST");
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight, undefined, "FAST");
+        heightLeft -= pageHeight;
+      }
+
+      return pdf.output("blob");
+    } finally {
+      container.remove();
+    }
+  };
+
+  const sanitizeFilename = (s) =>
+    String(s || "")
+      .replace(/[\\/:*?"<>|]/g, "_")
+      .replace(/\s+/g, " ")
+      .trim() || "arquivo";
+
+  const fetchAsBlob = async (url) => {
+    try {
+      const resp = await fetch(url, { mode: "cors" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.blob();
+    } catch (err) {
+      console.warn("Falha ao baixar anexo:", url, err.message);
+      return null;
+    }
+  };
+
+  const handleBaixarAvariaZip = async () => {
+    if (baixandoZip) return;
+    setBaixandoZip(true);
+    try {
+      const zip = new JSZip();
+      const prefixoLabel = sanitizeFilename(avaria.prefixo || "avaria");
+      const numLabel = sanitizeFilename(avaria.numero_da_avaria || avaria.id || "");
+      const pastaBase = `Avaria_${prefixoLabel}${numLabel ? "_" + numLabel : ""}`;
+      const root = zip.folder(pastaBase);
+
+      // 1) PDF do laudo
+      const pdfBlob = await gerarPdfLaudoBlob();
+      root.file(`Laudo_${prefixoLabel}.pdf`, pdfBlob);
+
+      // 2) Evidências
+      if (urlsEvidencias.length > 0) {
+        const evFolder = root.folder("Evidencias_Avaria");
+        for (let i = 0; i < urlsEvidencias.length; i++) {
+          const url = urlsEvidencias[i];
+          const blob = await fetchAsBlob(url);
+          if (blob) {
+            const name = sanitizeFilename(fileNameFromUrl(url)) || `evidencia_${i + 1}`;
+            evFolder.file(`${String(i + 1).padStart(2, "0")}_${name}`, blob);
+          }
+        }
+      }
+
+      // 3) Fotos do terceiro
+      if (origem === "Externo" && fotosTerceiro.length > 0) {
+        const tFolder = root.folder("Fotos_Terceiro");
+        for (let i = 0; i < fotosTerceiro.length; i++) {
+          const url = fotosTerceiro[i];
+          const blob = await fetchAsBlob(url);
+          if (blob) {
+            const name = sanitizeFilename(fileNameFromUrl(url)) || `terceiro_${i + 1}`;
+            tFolder.file(`${String(i + 1).padStart(2, "0")}_${name}`, blob);
+          }
+        }
+      }
+
+      // 4) Anexos da tratativa
+      if (tratativaUrls.length > 0) {
+        const trFolder = root.folder("Tratativa");
+        const linksTxt = [];
+        let idx = 0;
+        for (const url of tratativaUrls) {
+          if (/^https?:\/\//i.test(url) && (isImageUrl(url) || isVideoUrl(url) || isPdfUrl(url))) {
+            idx += 1;
+            const blob = await fetchAsBlob(url);
+            if (blob) {
+              const name = sanitizeFilename(fileNameFromUrl(url)) || `tratativa_${idx}`;
+              trFolder.file(`${String(idx).padStart(2, "0")}_${name}`, blob);
+            } else {
+              linksTxt.push(url);
+            }
+          } else {
+            linksTxt.push(url);
+          }
+        }
+        if (linksTxt.length > 0) {
+          trFolder.file("links.txt", linksTxt.join("\n"));
+        }
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      const objectUrl = URL.createObjectURL(zipBlob);
+      a.href = objectUrl;
+      a.download = `${pastaBase}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao gerar o ZIP da avaria: " + err.message);
+    } finally {
+      setBaixandoZip(false);
+    }
+  };
 
   return (
     <>
@@ -904,12 +1076,24 @@ export default function CobrancaDetalheModal({
 
           {/* Rodapé */}
           <div className="flex justify-between items-center p-4 border-t bg-gray-50">
-            <button
-              onClick={handlePrint}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md flex items-center gap-2"
-            >
-              🖨️ Imprimir
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePrint}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md flex items-center gap-2"
+              >
+                🖨️ Imprimir
+              </button>
+              <button
+                onClick={handleBaixarAvariaZip}
+                disabled={baixandoZip}
+                title="Gera um ZIP com o PDF do laudo + todos os anexos (evidências, fotos do terceiro e tratativa)"
+                className={`px-4 py-2 rounded-md flex items-center gap-2 text-white ${
+                  baixandoZip ? "bg-emerald-300 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {baixandoZip ? "⏳ Gerando ZIP..." : "📦 Baixar Avaria (ZIP)"}
+              </button>
+            </div>
 
             <div className="flex gap-3 flex-wrap justify-end">
               {podeEditarBasico && (
@@ -1073,18 +1257,24 @@ export default function CobrancaDetalheModal({
           #printable-area .status-Cobrada  { background: #dcfce7; color: #166534; border: 1px solid #22c55e; }
           #printable-area .status-Cancelada{ background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
           #printable-area .photo-grid {
-            display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
           }
           #printable-area .photo-card {
             border: 1px solid #cbd5e1; border-radius: 3px; overflow: hidden; background: #fff;
+            break-inside: avoid; page-break-inside: avoid;
           }
           #printable-area .photo-card img {
-            width: 100%; height: 150px; object-fit: cover; display: block;
+            width: 100%; height: 75mm; object-fit: cover; display: block;
           }
           #printable-area .photo-caption {
-            font-size: 9px; color: #475569; text-align: center; padding: 3px 4px;
-            background: #f1f5f9; border-top: 1px solid #e2e8f0;
+            font-size: 9px; color: #475569; text-align: center; padding: 4px 4px;
+            background: #f1f5f9; border-top: 1px solid #e2e8f0; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
           }
+          #printable-area .section-title { break-after: avoid-page; page-break-after: avoid; }
+          #printable-area table { break-inside: auto; }
+          #printable-area tr { break-inside: avoid; page-break-inside: avoid; }
+          #printable-area thead { display: table-header-group; }
           #printable-area .totals-box {
             width: 320px; border: 1px solid #cbd5e1; border-radius: 3px; overflow: hidden;
           }

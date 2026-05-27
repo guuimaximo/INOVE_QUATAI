@@ -61,8 +61,8 @@ export function PageHero({ eyebrow, title, description, actions = null }) {
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-3xl">
           <p className="text-xs font-black uppercase tracking-[0.35em] text-blue-600">{eyebrow}</p>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900">{title}</h1>
-          <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-600">{description}</p>
+          <h1 className="mt-3 text-3xl font-black tracking-tight text-blue-900">{title}</h1>
+          {description ? <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">{description}</p> : null}
         </div>
 
         {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}

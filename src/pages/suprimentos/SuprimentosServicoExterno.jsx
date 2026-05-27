@@ -1,18 +1,16 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
+import FileViewerModal from "../../components/FileViewerModal";
 import {
   FaBan,
   FaBoxOpen,
-  FaCamera,
   FaCheckCircle,
   FaClipboardList,
   FaEdit,
-  FaEye,
   FaFileAlt,
   FaHistory,
   FaList,
   FaPlus,
   FaPrint,
-  FaRedo,
   FaSearch,
   FaTimes,
   FaTimesCircle,
@@ -38,6 +36,186 @@ function Field({ label, required = false, children, className = "" }) {
         {label}{required && <span className="ml-1 text-rose-500">*</span>}
       </label>
       {children}
+    </div>
+  );
+}
+
+/* ─── Autocomplete terceiro (busca em suprimentos_fornecedores) ── */
+function TerceiroAutocomplete({ value, onChange, onSelect }) {
+  const [fornecedores, setFornecedores] = useState([]);
+  const [show, setShow] = useState(false);
+  const ref = useRef();
+
+  useEffect(() => {
+    supabase.from("suprimentos_fornecedores").select("*").eq("ativo", true).order("nome")
+      .then(({ data }) => setFornecedores(data || []));
+  }, []);
+
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setShow(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!value.trim()) return fornecedores.slice(0, 8);
+    const q = value.toLowerCase();
+    return fornecedores.filter((f) => f.nome.toLowerCase().includes(q) || (f.cnpj || "").includes(q)).slice(0, 8);
+  }, [fornecedores, value]);
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        className={inputClass}
+        placeholder="Nome ou razão social do terceiro"
+        value={value}
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setShow(true); }}
+        onFocus={() => setShow(true)}
+      />
+      {show && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          {filtered.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); onSelect(f); setShow(false); }}
+              className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-blue-50 border-b border-slate-50 last:border-0"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-800">{f.nome}</p>
+                {(f.cnpj || f.telefone) && (
+                  <p className="text-xs text-slate-400">{[f.cnpj, f.telefone].filter(Boolean).join(" · ")}</p>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── MediaViewer hook ────────────────────────────────────────── */
+function useMediaViewer() {
+  const [viewer, setViewer] = useState({ open: false, url: "", name: "" });
+  const open = useCallback((url, name = "arquivo") => setViewer({ open: true, url, name }), []);
+  const close = useCallback(() => setViewer({ open: false, url: "", name: "" }), []);
+  return { viewer, openViewer: open, closeViewer: close };
+}
+
+function isVideoUrl(url) {
+  return /\.(mp4|mov|webm|ogg)(\?|#|$)/i.test(url || "");
+}
+
+/* thumbnail clicável que abre o viewer */
+function MediaThumb({ url, onOpen, onRemove }) {
+  const isVid = isVideoUrl(url);
+  return (
+    <div className="group relative">
+      {isVid ? (
+        <button type="button" onClick={() => onOpen(url, "vídeo")}
+          className="flex h-16 w-16 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200">
+          <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.841z" /></svg>
+        </button>
+      ) : (
+        <button type="button" onClick={() => onOpen(url, "imagem")} className="block">
+          <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200 hover:opacity-80 transition" />
+        </button>
+      )}
+      {onRemove && (
+        <button type="button" onClick={() => onRemove(url)}
+          className="absolute -right-1 -top-1 hidden rounded-full bg-rose-500 p-0.5 text-[10px] text-white group-hover:flex">
+          <FaTimes />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ─── EvidenciasDropzone (estilo SAC) ────────────────────────── */
+const ACCEPT_MIME = ["image/png", "image/jpeg", "image/webp", "image/heic", "video/mp4", "video/quicktime", "application/pdf"];
+
+function EvidenciasDropzone({ files, setFiles }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const fileRef = useRef();
+
+  function keyFile(f) { return `${f.name}-${f.size}-${f.lastModified}`; }
+
+  function addFiles(list) {
+    const incoming = Array.from(list || []).filter((f) => ACCEPT_MIME.includes(f.type));
+    const existing = new Set(files.map(keyFile));
+    const deduped = incoming.filter((f) => !existing.has(keyFile(f)));
+    if (deduped.length) setFiles((prev) => [...prev, ...deduped]);
+  }
+
+  function onPaste(e) {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imgs = items.filter((it) => it.kind === "file" && it.type.startsWith("image/")).map((it) => it.getAsFile()).filter(Boolean);
+    if (!imgs.length) return;
+    e.preventDefault();
+    addFiles(imgs.map((f) => new File([f], `print_${Date.now()}.${f.type.includes("png") ? "png" : "jpg"}`, { type: f.type, lastModified: Date.now() })));
+  }
+
+  function badgeLabel(f) {
+    if (f.type.startsWith("image/")) return "Imagem";
+    if (f.type.startsWith("video/")) return "Vídeo";
+    if (f.type === "application/pdf") return "PDF";
+    return "Arquivo";
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* dropzone */}
+        <div
+          tabIndex={0}
+          onPaste={onPaste}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}
+          onClick={() => fileRef.current?.click()}
+          className={`flex min-h-[140px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDragging ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"}`}
+        >
+          <p className="text-sm font-semibold text-slate-700">Clique para enviar <span className="font-normal">ou arraste</span></p>
+          <p className="mt-1 text-xs text-slate-400">PNG, JPG, MP4, MOV ou PDF</p>
+          <input ref={fileRef} type="file" accept={ACCEPT_MIME.join(",")} multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
+        </div>
+        {/* paste box */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div
+            tabIndex={0}
+            onPaste={onPaste}
+            className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <p>Clique aqui e cole seu print.</p>
+            <p className="mt-1 text-xs text-slate-400">Somente imagens do clipboard.</p>
+          </div>
+          <p className="mt-3 text-xs text-slate-400">
+            {files.length > 0 ? <><b>{files.length}</b> arquivo(s) anexado(s)</> : "Nenhum arquivo ainda"}
+          </p>
+        </div>
+      </div>
+
+      {files.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Arquivos anexados</p>
+            <button type="button" onClick={() => setFiles([])} className="text-xs font-semibold text-rose-500 hover:underline">remover tudo</button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {files.map((f, i) => (
+              <div key={`${f.name}-${i}`} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 flex-shrink-0">{badgeLabel(f)}</span>
+                  <span className="truncate text-xs font-semibold text-slate-700">{f.name}</span>
+                </div>
+                <button type="button" onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))} className="ml-2 flex-shrink-0 text-rose-400 hover:text-rose-600"><FaTimes /></button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -118,6 +296,7 @@ function PecasCatalogPicker({ onSelect, onClose }) {
 function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
   const fileRef = useRef();
   const [uploading, setUploading] = useState(false);
+  const { viewer, openViewer, closeViewer } = useMediaViewer();
 
   function handle(field) {
     return (e) => onChange(index, { ...item, [field]: e.target.value });
@@ -133,87 +312,73 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
     e.target.value = "";
   }
 
-  function removeFoto(url) {
-    onChange(index, { ...item, fotos_urls: (item.fotos_urls || []).filter((u) => u !== url) });
-  }
-
   return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 space-y-3">
-      <div className="flex items-start gap-2">
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={() => onPickCatalog(index)}
-            className="mt-0.5 flex-shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-blue-700 hover:bg-blue-100"
-            title="Selecionar do catálogo"
-          >
-            <FaList />
-          </button>
-        )}
-        <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
-          <div>
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Código</p>
-            <input className={inputClass + " text-xs"} placeholder="Código" value={item.codigo} onChange={handle("codigo")} disabled={readOnly} />
-          </div>
-          <div className="sm:col-span-2">
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição *</p>
-            <input className={inputClass + " text-xs"} placeholder="Descrição da peça" value={item.descricao} onChange={handle("descricao")} disabled={readOnly} />
-          </div>
-          <div>
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Qtd</p>
-            <div className="flex gap-1">
-              <input className={inputClass + " text-xs"} type="number" min="0" value={item.quantidade} onChange={handle("quantidade")} disabled={readOnly} />
-              <input className={inputClass + " text-xs w-16"} placeholder="un" value={item.unidade} onChange={handle("unidade")} disabled={readOnly} />
+    <>
+      <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 space-y-3">
+        <div className="flex items-start gap-2">
+          {!readOnly && (
+            <button type="button" onClick={() => onPickCatalog(index)}
+              className="mt-0.5 flex-shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-blue-700 hover:bg-blue-100"
+              title="Selecionar do catálogo">
+              <FaList />
+            </button>
+          )}
+          <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
+            <div>
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Código</p>
+              <input className={inputClass + " text-xs"} placeholder="Código" value={item.codigo} onChange={handle("codigo")} disabled={readOnly} />
+            </div>
+            <div className="sm:col-span-2">
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição *</p>
+              <input className={inputClass + " text-xs"} placeholder="Descrição da peça" value={item.descricao} onChange={handle("descricao")} disabled={readOnly} />
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Qtd</p>
+              <div className="flex gap-1">
+                <input className={inputClass + " text-xs"} type="number" min="0" value={item.quantidade} onChange={handle("quantidade")} disabled={readOnly} />
+                <input className={inputClass + " text-xs w-16"} placeholder="un" value={item.unidade} onChange={handle("unidade")} disabled={readOnly} />
+              </div>
             </div>
           </div>
+          {!readOnly && (
+            <button type="button" onClick={() => onRemove(index)} className="mt-0.5 flex-shrink-0 rounded-xl p-2 text-rose-400 hover:bg-rose-50">
+              <FaTimes />
+            </button>
+          )}
         </div>
-        {!readOnly && (
-          <button type="button" onClick={() => onRemove(index)} className="mt-0.5 flex-shrink-0 rounded-xl p-2 text-rose-400 hover:bg-rose-50">
-            <FaTimes />
-          </button>
-        )}
-      </div>
 
-      <div>
-        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Observação</p>
-        <input className={inputClass + " text-xs"} placeholder="Observação sobre este item…" value={item.obs} onChange={handle("obs")} disabled={readOnly} />
-      </div>
-
-      {/* fotos */}
-      {!readOnly && (
         <div>
-          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Fotos (opcional)</p>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-          >
-            <FaCamera /> {uploading ? "Enviando…" : "Adicionar foto"}
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFotos} />
+          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Observação</p>
+          <input className={inputClass + " text-xs"} placeholder="Observação sobre este item…" value={item.obs} onChange={handle("obs")} disabled={readOnly} />
         </div>
-      )}
 
-      {(item.fotos_urls || []).length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {(item.fotos_urls || []).map((url, i) => (
-            <div key={i} className="group relative">
-              <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200" />
-              {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => removeFoto(url)}
-                  className="absolute -right-1 -top-1 hidden rounded-full bg-rose-500 p-0.5 text-[10px] text-white group-hover:flex"
-                >
-                  <FaTimes />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+        {!readOnly && (
+          <div>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Fotos (opcional)</p>
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+              📷 {uploading ? "Enviando…" : "Adicionar foto"}
+            </button>
+            <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFotos} />
+          </div>
+        )}
+
+        {(item.fotos_urls || []).length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {(item.fotos_urls || []).map((url, i) => (
+              <MediaThumb
+                key={i}
+                url={url}
+                onOpen={openViewer}
+                onRemove={!readOnly ? (u) => onChange(index, { ...item, fotos_urls: item.fotos_urls.filter((x) => x !== u) }) : null}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <FileViewerModal open={viewer.open} url={viewer.url} name={viewer.name} onClose={closeViewer} />
+    </>
   );
 }
 
@@ -312,8 +477,6 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
       ? {
           nota_saida_numero: editRecord.nota_saida_numero || "",
           nota_saida_data: editRecord.nota_saida_data || todayISO(),
-          nota_retorno_numero: editRecord.nota_retorno_numero || "",
-          nota_retorno_data: editRecord.nota_retorno_data || "",
           terceiro_nome: editRecord.terceiro_nome || "",
           terceiro_cpf_cnpj: editRecord.terceiro_cpf_cnpj || "",
           terceiro_telefone: editRecord.terceiro_telefone || "",
@@ -324,11 +487,22 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
         }
       : emptyForm()
   );
+  const [files, setFiles] = useState([]); // evidências gerais da saída
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [catalogTarget, setCatalogTarget] = useState(null); // index or null
+  const [catalogTarget, setCatalogTarget] = useState(null);
 
   function setF(key, value) { setForm((f) => ({ ...f, [key]: value })); }
+
+  function handleTerceiroSelect(fornecedor) {
+    setForm((f) => ({
+      ...f,
+      terceiro_nome: fornecedor.nome,
+      terceiro_cpf_cnpj: fornecedor.cnpj || f.terceiro_cpf_cnpj,
+      terceiro_telefone: fornecedor.telefone || f.terceiro_telefone,
+      terceiro_endereco: fornecedor.terceiro_endereco || f.terceiro_endereco,
+    }));
+  }
 
   function handleItemChange(index, newItem) {
     const updated = [...form.itens];
@@ -364,6 +538,12 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
 
     setSaving(true); setError("");
 
+    // upload evidências gerais
+    let evidencias_urls = [];
+    if (files.length > 0) {
+      evidencias_urls = await uploadSuprimentosFiles(files, `servico-externo/${Date.now()}`);
+    }
+
     const payload = {
       nota_saida_numero: form.nota_saida_numero || null,
       nota_saida_data: form.nota_saida_data || null,
@@ -374,6 +554,7 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
       motivo: form.motivo.trim(),
       observacao: form.observacao || null,
       itens: validItens,
+      ...(evidencias_urls.length > 0 ? { evidencias_urls } : {}),
     };
 
     let err;
@@ -413,56 +594,43 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Serviço Externo</p>
-              <h2 className="mt-1 text-xl font-black text-slate-900">{isEdit ? "Editar Saída" : "Nova Saída"}</h2>
+              <h2 className="mt-1 text-xl font-black text-blue-900">{isEdit ? "Editar Saída" : "Nova Saída"}</h2>
             </div>
             <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
           </div>
 
-          <div className="px-6 py-5 space-y-6">
-            {/* Nota de Saída */}
-            <div>
-              <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Nota Fiscal de Saída (Simples Remessa)</p>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Número da NF de Saída" required>
-                  <input className={inputClass} placeholder="ex.: 001234" value={form.nota_saida_numero} onChange={(e) => setF("nota_saida_numero", e.target.value)} />
-                </Field>
-                <Field label="Data de Emissão" required>
-                  <input type="date" className={inputClass} value={form.nota_saida_data} onChange={(e) => setF("nota_saida_data", e.target.value)} />
-                </Field>
-              </div>
+          <div className="px-6 py-5 space-y-5">
+            {/* NF + Terceiro — linha compacta */}
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="NF de Saída" required>
+                <input className={inputClass} placeholder="ex.: 001234" value={form.nota_saida_numero} onChange={(e) => setF("nota_saida_numero", e.target.value)} />
+              </Field>
+              <Field label="Data de emissão">
+                <input type="date" className={inputClass} value={form.nota_saida_data} onChange={(e) => setF("nota_saida_data", e.target.value)} />
+              </Field>
             </div>
 
-            {/* Terceiro */}
-            <div>
-              <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Dados do Terceiro</p>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Nome / Razão Social" required className="col-span-2">
-                  <input className={inputClass} placeholder="Nome completo ou razão social" value={form.terceiro_nome} onChange={(e) => setF("terceiro_nome", e.target.value)} />
-                </Field>
-                <Field label="CPF / CNPJ">
-                  <input className={inputClass} placeholder="000.000.000-00" value={form.terceiro_cpf_cnpj} onChange={(e) => setF("terceiro_cpf_cnpj", e.target.value)} />
-                </Field>
-                <Field label="Telefone">
-                  <input className={inputClass} placeholder="(00) 00000-0000" value={form.terceiro_telefone} onChange={(e) => setF("terceiro_telefone", e.target.value)} />
-                </Field>
-                <Field label="Endereço" className="col-span-2">
-                  <input className={inputClass} placeholder="Rua, número, cidade…" value={form.terceiro_endereco} onChange={(e) => setF("terceiro_endereco", e.target.value)} />
-                </Field>
-              </div>
+            {/* Terceiro com autocomplete */}
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Nome / Razão Social" required className="col-span-2">
+                <TerceiroAutocomplete
+                  value={form.terceiro_nome}
+                  onChange={(v) => setF("terceiro_nome", v)}
+                  onSelect={handleTerceiroSelect}
+                />
+              </Field>
+              <Field label="CPF / CNPJ">
+                <input className={inputClass} placeholder="000.000.000-00" value={form.terceiro_cpf_cnpj} onChange={(e) => setF("terceiro_cpf_cnpj", e.target.value)} />
+              </Field>
+              <Field label="Telefone">
+                <input className={inputClass} placeholder="(00) 00000-0000" value={form.terceiro_telefone} onChange={(e) => setF("terceiro_telefone", e.target.value)} />
+              </Field>
             </div>
 
             {/* Motivo */}
-            <div>
-              <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Motivo / Serviço</p>
-              <div className="space-y-3">
-                <Field label="Descrição do serviço" required>
-                  <textarea rows={2} className={textareaClass} placeholder="Descreva o serviço a ser realizado…" value={form.motivo} onChange={(e) => setF("motivo", e.target.value)} />
-                </Field>
-                <Field label="Observações internas">
-                  <textarea rows={2} className={textareaClass} placeholder="Informações adicionais…" value={form.observacao} onChange={(e) => setF("observacao", e.target.value)} />
-                </Field>
-              </div>
-            </div>
+            <Field label="Motivo / Serviço" required>
+              <textarea rows={2} className={textareaClass} placeholder="Descreva o serviço a ser realizado…" value={form.motivo} onChange={(e) => setF("motivo", e.target.value)} />
+            </Field>
 
             {/* Itens */}
             <div>
@@ -485,6 +653,12 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
                   />
                 ))}
               </div>
+            </div>
+
+            {/* Evidências */}
+            <div>
+              <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-400">Evidências (fotos, vídeos, PDF)</p>
+              <EvidenciasDropzone files={files} setFiles={setFiles} />
             </div>
 
             {error && (
@@ -515,6 +689,7 @@ function DetalheModal({ record, onClose, onUpdated, userInfo }) {
   const [tab, setTab] = useState("detalhes");
   const [movs, setMovs] = useState([]);
   const [loadingMovs, setLoadingMovs] = useState(true);
+  const { viewer, openViewer, closeViewer } = useMediaViewer();
 
   // retorno form
   const [retornoForm, setRetornoForm] = useState({
@@ -737,9 +912,7 @@ function DetalheModal({ record, onClose, onUpdated, userInfo }) {
                             {(m.fotos_urls || []).length > 0 && (
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {m.fotos_urls.map((url, i) => (
-                                  <a key={i} href={url} target="_blank" rel="noreferrer">
-                                    <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200 hover:opacity-80" />
-                                  </a>
+                                  <MediaThumb key={i} url={url} onOpen={openViewer} />
                                 ))}
                               </div>
                             )}
@@ -793,16 +966,12 @@ function DetalheModal({ record, onClose, onUpdated, userInfo }) {
                 {retornoForm.fotos.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {retornoForm.fotos.map((url, i) => (
-                      <div key={i} className="group relative">
-                        <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover border border-slate-200" />
-                        <button
-                          type="button"
-                          onClick={() => setRetornoForm((f) => ({ ...f, fotos: f.fotos.filter((u) => u !== url) }))}
-                          className="absolute -right-1 -top-1 hidden rounded-full bg-rose-500 p-0.5 text-[10px] text-white group-hover:flex"
-                        >
-                          <FaTimes />
-                        </button>
-                      </div>
+                      <MediaThumb
+                        key={i}
+                        url={url}
+                        onOpen={openViewer}
+                        onRemove={(u) => setRetornoForm((f) => ({ ...f, fotos: f.fotos.filter((x) => x !== u) }))}
+                      />
                     ))}
                   </div>
                 )}
@@ -843,6 +1012,8 @@ function DetalheModal({ record, onClose, onUpdated, userInfo }) {
           )}
         </div>
       </div>
+
+      <FileViewerModal open={viewer.open} url={viewer.url} name={viewer.name} onClose={closeViewer} />
     </div>
   );
 }

@@ -1,25 +1,43 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase as _supabase } from "../../supabase";
 
-function useFornecedoresList() {
-  const [list, setList] = useState([]);
-  useEffect(() => {
-    _supabase.from("suprimentos_fornecedores").select("id, nome").eq("ativo", true).order("nome")
-      .then(({ data }) => setList(data || []));
-  }, []);
-  return list;
-}
 const _inputClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
 function FornecedorSelect({ value, onChange }) {
-  const list = useFornecedoresList();
-  const isFromList = list.some((f) => f.nome === value);
+  const [list, setList] = useState([]);
+  const [show, setShow] = useState(false);
+  const ref = useRef();
+  useEffect(() => {
+    _supabase.from("suprimentos_fornecedores").select("id, nome, cnpj").eq("ativo", true).order("nome")
+      .then(({ data }) => setList(data || []));
+  }, []);
+  useEffect(() => {
+    function h(e) { if (ref.current && !ref.current.contains(e.target)) setShow(false); }
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  const filtered = useMemo(() => {
+    const q = (value || "").toLowerCase();
+    return !q ? list.slice(0, 8) : list.filter((f) => f.nome.toLowerCase().includes(q)).slice(0, 8);
+  }, [list, value]);
   return (
-    <div className="space-y-1">
-      <select className={_inputClass} value={isFromList ? value : "__outro__"} onChange={(e) => { if (e.target.value !== "__outro__") onChange(e.target.value); else onChange(""); }}>
-        <option value="__outro__">— Digite ou selecione —</option>
-        {list.map((f) => <option key={f.id} value={f.nome}>{f.nome}</option>)}
-      </select>
-      {!isFromList && <input className={_inputClass} placeholder="Nome do fornecedor" value={value} onChange={(e) => onChange(e.target.value)} />}
+    <div ref={ref} className="relative">
+      <input className={_inputClass} value={value} autoComplete="off" placeholder="Fornecedor / marca"
+        onChange={(e) => { onChange(e.target.value); setShow(true); }}
+        onFocus={() => setShow(true)} />
+      {show && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          {filtered.map((f) => (
+            <button key={f.id} type="button"
+              onMouseDown={(e) => { e.preventDefault(); onChange(f.nome); setShow(false); }}
+              className="flex w-full items-start px-4 py-2.5 text-left hover:bg-blue-50 border-b border-slate-50 last:border-0">
+              <div>
+                <p className="text-sm font-bold text-slate-800">{f.nome}</p>
+                {f.cnpj && <p className="text-xs text-slate-400">{f.cnpj}</p>}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -45,40 +45,47 @@ import {
   uploadSuprimentosFiles,
 } from "./suprimentosShared";
 
-/* hook para carregar fornecedores do cadastro */
-function useFornecedores() {
-  const [fornecedores, setFornecedores] = useState([]);
-  useEffect(() => {
-    supabase.from("suprimentos_fornecedores").select("id, nome").eq("ativo", true).order("nome")
-      .then(({ data }) => setFornecedores(data || []));
-  }, []);
-  return fornecedores;
-}
-
-/* select de fornecedor com opção de digitar livremente */
+/* select de fornecedor com autocomplete */
 function FornecedorSelect({ value, onChange, className }) {
-  const fornecedores = useFornecedores();
-  const isFromList = fornecedores.some((f) => f.nome === value);
+  const [list, setList] = useState([]);
+  const [show, setShow] = useState(false);
+  const ref = useCallback((node) => {
+    if (!node) return;
+    function handler(e) { if (!node.contains(e.target)) setShow(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  useEffect(() => {
+    supabase.from("suprimentos_fornecedores").select("id, nome, cnpj, telefone").eq("ativo", true).order("nome")
+      .then(({ data }) => setList(data || []));
+  }, []);
+  const filtered = useMemo(() => {
+    const q = (value || "").toLowerCase();
+    return !q ? list.slice(0, 8) : list.filter((f) => f.nome.toLowerCase().includes(q)).slice(0, 8);
+  }, [list, value]);
   return (
-    <div className="space-y-1">
-      <select
+    <div ref={ref} className="relative">
+      <input
         className={className}
-        value={isFromList ? value : "__outro__"}
-        onChange={(e) => {
-          if (e.target.value !== "__outro__") onChange(e.target.value);
-          else onChange("");
-        }}
-      >
-        <option value="__outro__">— Digite ou selecione —</option>
-        {fornecedores.map((f) => <option key={f.id} value={f.nome}>{f.nome}</option>)}
-      </select>
-      {!isFromList && (
-        <input
-          className={className}
-          placeholder="Nome do fornecedor"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
+        value={value}
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setShow(true); }}
+        onFocus={() => setShow(true)}
+        placeholder="Fornecedor"
+      />
+      {show && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          {filtered.map((f) => (
+            <button key={f.id} type="button"
+              onMouseDown={(e) => { e.preventDefault(); onChange(f.nome); setShow(false); }}
+              className="flex w-full items-start gap-2 px-4 py-2.5 text-left hover:bg-blue-50 border-b border-slate-50 last:border-0">
+              <div>
+                <p className="text-sm font-bold text-slate-800">{f.nome}</p>
+                {f.cnpj && <p className="text-xs text-slate-400">{f.cnpj}</p>}
+              </div>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -817,10 +824,7 @@ export default function SuprimentosGarantias() {
                         </td>
                         <td className="px-4 py-3 font-semibold text-slate-700">{row.tipo_solicitacao || "--"}</td>
                         <td className="px-4 py-3">
-                          <div className="flex flex-col gap-2">
-                            <StatusChip label={meta.status} tone={meta.concluida ? "emerald" : "amber"} />
-                            <StatusChip label={meta.fase} tone={meta.tone} />
-                          </div>
+                          <StatusChip label={meta.fase} tone={meta.tone} />
                         </td>
                         <td className="px-4 py-3">
                           <p className="font-semibold text-slate-700">{row.aberto_por_nome || "--"}</p>

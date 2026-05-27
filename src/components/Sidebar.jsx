@@ -225,11 +225,10 @@ export default function Sidebar() {
         label: "Suprimentos",
         icon: <FaBoxes />,
         tabs: [
-          { path: "/suprimentos/resumo", label: "Resumo", icon: <FaChartPie /> },
+          { path: "/suprimentos/cadastro", label: "Cadastro", icon: <FaBoxes /> },
           { path: "/suprimentos/garantias", label: "Garantias", icon: <FaShieldAlt /> },
           { path: "/suprimentos/testes", label: "Testes", icon: <FaFlask /> },
           { path: "/suprimentos/servico-externo", label: "Serviço Externo", icon: <FaTruck /> },
-          { path: "/suprimentos/cadastro", label: "Cadastro", icon: <FaBoxes /> },
         ],
       },
 

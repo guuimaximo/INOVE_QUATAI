@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FaBoxOpen,
   FaBuilding,
@@ -37,7 +37,7 @@ function Field({ label, required = false, children, className = "" }) {
 /* ─── FORNECEDOR MODAL ───────────────────────────────────────── */
 function FornecedorModal({ initial = null, onClose, onSaved }) {
   const [form, setForm] = useState(
-    initial || { nome: "", cnpj: "", telefone: "", email: "", contato: "", obs: "" }
+    initial || { nome: "", cnpj: "", telefone: "", telefone2: "", email: "", contato: "", uf: "", tipo_fornecedor: "", tipo: "", obs: "" }
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -51,8 +51,12 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
       nome: form.nome.trim(),
       cnpj: form.cnpj || null,
       telefone: form.telefone || null,
+      telefone2: form.telefone2 || null,
       email: form.email || null,
       contato: form.contato || null,
+      uf: form.uf || null,
+      tipo_fornecedor: form.tipo_fornecedor || null,
+      tipo: form.tipo || null,
       obs: form.obs || null,
     };
     const op = initial?.id
@@ -65,10 +69,13 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
+      <div className="my-8 w-full max-w-lg rounded-[28px] border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
-          <h2 className="text-lg font-black text-slate-900">{initial ? "Editar Fornecedor" : "Novo Fornecedor"}</h2>
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Fornecedores</p>
+            <h2 className="mt-0.5 text-lg font-black text-slate-900">{initial ? "Editar Fornecedor" : "Novo Fornecedor"}</h2>
+          </div>
           <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
         </div>
         <div className="px-6 py-5 space-y-4">
@@ -76,17 +83,29 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
             <input className={inputClass} value={form.nome} onChange={(e) => setF("nome", e.target.value)} />
           </Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="CNPJ">
+            <Field label="CNPJ / CPF">
               <input className={inputClass} placeholder="00.000.000/0000-00" value={form.cnpj} onChange={(e) => setF("cnpj", e.target.value)} />
             </Field>
-            <Field label="Telefone">
+            <Field label="UF">
+              <input className={inputClass} placeholder="ex.: RS" maxLength={2} value={form.uf} onChange={(e) => setF("uf", e.target.value.toUpperCase())} />
+            </Field>
+            <Field label="Telefone 1">
               <input className={inputClass} placeholder="(00) 00000-0000" value={form.telefone} onChange={(e) => setF("telefone", e.target.value)} />
+            </Field>
+            <Field label="Telefone 2">
+              <input className={inputClass} placeholder="(00) 00000-0000" value={form.telefone2} onChange={(e) => setF("telefone2", e.target.value)} />
             </Field>
             <Field label="E-mail">
               <input className={inputClass} type="email" value={form.email} onChange={(e) => setF("email", e.target.value)} />
             </Field>
             <Field label="Contato (nome)">
               <input className={inputClass} value={form.contato} onChange={(e) => setF("contato", e.target.value)} />
+            </Field>
+            <Field label="Tipo de Fornecedor">
+              <input className={inputClass} placeholder="ex.: Fabricante, Distribuidor…" value={form.tipo_fornecedor} onChange={(e) => setF("tipo_fornecedor", e.target.value)} />
+            </Field>
+            <Field label="Tipo">
+              <input className={inputClass} placeholder="ex.: PJ, PF…" value={form.tipo} onChange={(e) => setF("tipo", e.target.value)} />
             </Field>
           </div>
           <Field label="Observações">
@@ -106,14 +125,38 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
 }
 
 /* ─── PEÇA MODAL ─────────────────────────────────────────────── */
-function PecaModal({ initial = null, fornecedores = [], onClose, onSaved }) {
+function PecaModal({ initial = null, onClose, onSaved }) {
   const [form, setForm] = useState(
-    initial || { codigo: "", descricao: "", unidade_padrao: "un", fornecedor_id: "", obs: "" }
+    initial
+      ? { ...initial, fornecedor_id: initial.fornecedor_id || "", fornecedor_nome: initial.suprimentos_fornecedores?.nome || "" }
+      : { codigo: "", descricao: "", unidade_padrao: "un", fornecedor_id: "", fornecedor_nome: "", obs: "" }
   );
+  const [fOptions, setFOptions] = useState([]);
+  const [showFDrop, setShowFDrop] = useState(false);
+  const fRef = useRef();
+  const fDebounce = useRef(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   function setF(k, v) { setForm((f) => ({ ...f, [k]: v })); }
+
+  async function searchFornecedor(q) {
+    if (!q.trim()) { setFOptions([]); return; }
+    const { data } = await supabase
+      .from("suprimentos_fornecedores")
+      .select("id, nome")
+      .ilike("nome", `%${q.trim()}%`)
+      .eq("ativo", true)
+      .order("nome")
+      .limit(10);
+    setFOptions(data || []);
+  }
+
+  useEffect(() => {
+    function handler(e) { if (fRef.current && !fRef.current.contains(e.target)) setShowFDrop(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   async function handleSave() {
     if (!form.descricao.trim()) { setError("Informe a descrição da peça."); return; }
@@ -154,12 +197,50 @@ function PecaModal({ initial = null, fornecedores = [], onClose, onSaved }) {
             <input className={inputClass} placeholder="Nome completo da peça" value={form.descricao} onChange={(e) => setF("descricao", e.target.value)} />
           </Field>
           <Field label="Fornecedor">
-            <select className={inputClass} value={form.fornecedor_id} onChange={(e) => setF("fornecedor_id", e.target.value)}>
-              <option value="">— Nenhum —</option>
-              {fornecedores.map((f) => (
-                <option key={f.id} value={f.id}>{f.nome}</option>
-              ))}
-            </select>
+            <div ref={fRef} className="relative">
+              <input
+                className={inputClass}
+                placeholder="Digite para buscar fornecedor…"
+                value={form.fornecedor_nome}
+                autoComplete="off"
+                onChange={(e) => {
+                  setF("fornecedor_nome", e.target.value);
+                  setF("fornecedor_id", "");
+                  setShowFDrop(true);
+                  clearTimeout(fDebounce.current);
+                  fDebounce.current = setTimeout(() => searchFornecedor(e.target.value), 300);
+                }}
+                onFocus={() => { if (fOptions.length > 0) setShowFDrop(true); }}
+              />
+              {form.fornecedor_id && (
+                <button
+                  type="button"
+                  onClick={() => { setF("fornecedor_id", ""); setF("fornecedor_nome", ""); setFOptions([]); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500"
+                >
+                  <FaTimes />
+                </button>
+              )}
+              {showFDrop && fOptions.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                  {fOptions.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setF("fornecedor_id", f.id);
+                        setF("fornecedor_nome", f.nome);
+                        setShowFDrop(false);
+                      }}
+                      className="flex w-full px-4 py-2.5 text-left text-sm font-semibold text-slate-800 hover:bg-blue-50 border-b border-slate-50 last:border-0"
+                    >
+                      {f.nome}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </Field>
           <Field label="Observações">
             <textarea rows={2} className={textareaClass} value={form.obs} onChange={(e) => setF("obs", e.target.value)} />
@@ -178,54 +259,103 @@ function PecaModal({ initial = null, fornecedores = [], onClose, onSaved }) {
 }
 
 /* ─── FORNECEDORES TAB ───────────────────────────────────────── */
+// Busca server-side: 75k registros — nunca carrega tudo de uma vez
+const PAGE_SIZE = 50;
+
 function FornecedoresTab() {
-  const [fornecedores, setFornecedores] = useState([]);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [modal, setModal] = useState(null); // null | {initial}
+  const [modal, setModal] = useState(null);
+  const debounceRef = useRef(null);
 
-  async function carregar() {
+  async function buscar(q) {
     setLoading(true);
-    const { data } = await supabase.from("suprimentos_fornecedores").select("*").order("nome");
-    setFornecedores(data || []);
+    let query = supabase
+      .from("suprimentos_fornecedores")
+      .select("*")
+      .order("nome")
+      .limit(PAGE_SIZE);
+    if (q.trim()) {
+      query = query.or(`nome.ilike.%${q.trim()}%,cnpj.ilike.%${q.trim()}%`);
+    }
+    const { data } = await query;
+    setRows(data || []);
     setLoading(false);
   }
-  useEffect(() => { carregar(); }, []);
+
+  useEffect(() => { buscar(""); }, []);
+
+  function handleSearch(val) {
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => buscar(val), 350);
+  }
 
   async function toggleAtivo(f) {
     await supabase.from("suprimentos_fornecedores").update({ ativo: !f.ativo }).eq("id", f.id);
-    carregar();
+    buscar(search);
   }
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return fornecedores.filter((f) => !q || f.nome.toLowerCase().includes(q) || (f.cnpj || "").includes(q));
-  }, [fornecedores, search]);
 
   return (
     <div className="space-y-4">
+      {/* barra topo */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
-          <FaSearch className="text-slate-400" />
-          <input className="bg-transparent text-sm font-semibold text-slate-700 placeholder:text-slate-400 outline-none w-48" placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          {search && <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600"><FaTimesCircle /></button>}
+        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 min-w-[260px]">
+          <FaSearch className="flex-shrink-0 text-slate-400 text-xs" />
+          <input
+            className="bg-transparent text-sm font-semibold text-slate-700 placeholder:text-slate-400 outline-none flex-1"
+            placeholder="Buscar por nome ou CNPJ…"
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+          />
+          {search && (
+            <button onClick={() => { setSearch(""); buscar(""); }} className="text-slate-400 hover:text-slate-600">
+              <FaTimesCircle />
+            </button>
+          )}
         </div>
-        <button onClick={() => setModal({})} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700">
+        <button
+          onClick={() => setModal({})}
+          className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700"
+        >
           <FaPlus /> Novo Fornecedor
         </button>
       </div>
 
+      {/* hint */}
+      {!search && (
+        <p className="text-xs text-slate-400 font-semibold">
+          Mostrando os primeiros {PAGE_SIZE} fornecedores. Use a busca para filtrar entre os{" "}
+          <span className="font-black text-slate-600">75.834</span> cadastrados.
+        </p>
+      )}
+      {search && !loading && (
+        <p className="text-xs text-slate-400 font-semibold">
+          {rows.length === PAGE_SIZE
+            ? `Mostrando os primeiros ${PAGE_SIZE} resultados para "${search}".`
+            : `${rows.length} resultado(s) para "${search}".`}
+        </p>
+      )}
+
+      {/* tabela */}
       {loading ? (
-        <p className="py-10 text-center text-sm font-semibold text-slate-400">Carregando…</p>
-      ) : filtered.length === 0 ? (
-        <EmptyState icon={<FaBuilding />} title="Nenhum fornecedor" description="Cadastre o primeiro fornecedor." />
+        <div className="flex items-center justify-center gap-2 py-12 text-sm font-semibold text-slate-400">
+          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+          Buscando…
+        </div>
+      ) : rows.length === 0 ? (
+        <EmptyState icon={<FaBuilding />} title="Nenhum fornecedor encontrado" description={search ? "Tente outro termo de busca." : "Cadastre o primeiro fornecedor."} />
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-100">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 text-xs font-black uppercase tracking-widest text-slate-400">
-                <th className="px-4 py-3 text-left">Nome</th>
-                <th className="px-4 py-3 text-left">CNPJ</th>
+              <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <th className="px-4 py-3 text-left">Nome / Razão Social</th>
+                <th className="px-4 py-3 text-left">CNPJ / CPF</th>
                 <th className="px-4 py-3 text-left">Telefone</th>
                 <th className="px-4 py-3 text-left">Contato</th>
                 <th className="px-4 py-3 text-left">Status</th>
@@ -233,10 +363,10 @@ function FornecedoresTab() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((f) => (
-                <tr key={f.id} className="border-t border-slate-100 hover:bg-slate-50/50">
-                  <td className="px-4 py-3 font-semibold">{f.nome}</td>
-                  <td className="px-4 py-3 text-slate-600">{f.cnpj || "—"}</td>
+              {rows.map((f) => (
+                <tr key={f.id} className="border-t border-slate-100 hover:bg-blue-50/30 transition">
+                  <td className="px-4 py-3 font-bold text-slate-800">{f.nome}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{f.cnpj || "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{f.telefone || "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{f.contato || "—"}</td>
                   <td className="px-4 py-3">
@@ -244,8 +374,18 @@ function FornecedoresTab() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => setModal({ initial: f })} className="rounded-xl p-2 text-blue-600 hover:bg-blue-50" title="Editar"><FaEdit /></button>
-                      <button onClick={() => toggleAtivo(f)} className={`rounded-xl p-2 ${f.ativo ? "text-slate-500 hover:bg-slate-100" : "text-emerald-600 hover:bg-emerald-50"}`} title={f.ativo ? "Inativar" : "Ativar"}>
+                      <button
+                        onClick={() => setModal({ initial: f })}
+                        className="rounded-xl p-2 text-blue-600 hover:bg-blue-50"
+                        title="Editar"
+                      >
+                        <FaEdit />
+                      </button>
+                      <button
+                        onClick={() => toggleAtivo(f)}
+                        className={`rounded-xl p-2 ${f.ativo ? "text-slate-400 hover:bg-slate-100" : "text-emerald-600 hover:bg-emerald-50"}`}
+                        title={f.ativo ? "Inativar" : "Ativar"}
+                      >
                         {f.ativo ? <FaToggleOn /> : <FaToggleOff />}
                       </button>
                     </div>
@@ -261,7 +401,7 @@ function FornecedoresTab() {
         <FornecedorModal
           initial={modal.initial || null}
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); carregar(); }}
+          onSaved={() => { setModal(null); buscar(search); }}
         />
       )}
     </div>
@@ -271,55 +411,87 @@ function FornecedoresTab() {
 /* ─── PEÇAS TAB ──────────────────────────────────────────────── */
 function PecasTab() {
   const [pecas, setPecas] = useState([]);
-  const [fornecedores, setFornecedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null);
+  const debounceRef = useRef(null);
 
-  async function carregar() {
+  async function buscar(q) {
     setLoading(true);
-    const [pResp, fResp] = await Promise.all([
-      supabase.from("suprimentos_pecas").select("*, suprimentos_fornecedores(nome)").order("descricao"),
-      supabase.from("suprimentos_fornecedores").select("id, nome").eq("ativo", true).order("nome"),
-    ]);
-    setPecas(pResp.data || []);
-    setFornecedores(fResp.data || []);
+    let query = supabase
+      .from("suprimentos_pecas")
+      .select("*, suprimentos_fornecedores(nome)")
+      .order("descricao")
+      .limit(PAGE_SIZE);
+    if (q.trim()) {
+      query = query.or(`descricao.ilike.%${q.trim()}%,codigo.ilike.%${q.trim()}%`);
+    }
+    const { data } = await query;
+    setPecas(data || []);
     setLoading(false);
   }
-  useEffect(() => { carregar(); }, []);
+
+  useEffect(() => { buscar(""); }, []);
+
+  function handleSearch(val) {
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => buscar(val), 350);
+  }
 
   async function toggleAtivo(p) {
     await supabase.from("suprimentos_pecas").update({ ativo: !p.ativo }).eq("id", p.id);
-    carregar();
+    buscar(search);
   }
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return pecas.filter(
-      (p) =>
-        !q ||
-        (p.descricao || "").toLowerCase().includes(q) ||
-        (p.codigo || "").toLowerCase().includes(q)
-    );
-  }, [pecas, search]);
+  const filtered = pecas;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
-          <FaSearch className="text-slate-400" />
-          <input className="bg-transparent text-sm font-semibold text-slate-700 placeholder:text-slate-400 outline-none w-48" placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          {search && <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600"><FaTimesCircle /></button>}
+        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 min-w-[260px]">
+          <FaSearch className="flex-shrink-0 text-slate-400 text-xs" />
+          <input
+            className="bg-transparent text-sm font-semibold text-slate-700 placeholder:text-slate-400 outline-none flex-1"
+            placeholder="Buscar por código ou descrição…"
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+          />
+          {search && (
+            <button onClick={() => { setSearch(""); buscar(""); }} className="text-slate-400 hover:text-slate-600">
+              <FaTimesCircle />
+            </button>
+          )}
         </div>
         <button onClick={() => setModal({})} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700">
           <FaPlus /> Nova Peça
         </button>
       </div>
 
+      {!search && (
+        <p className="text-xs text-slate-400 font-semibold">
+          Mostrando os primeiros {PAGE_SIZE} itens. Use a busca para filtrar entre os{" "}
+          <span className="font-black text-slate-600">17.954</span> cadastrados.
+        </p>
+      )}
+      {search && !loading && (
+        <p className="text-xs text-slate-400 font-semibold">
+          {filtered.length === PAGE_SIZE
+            ? `Primeiros ${PAGE_SIZE} resultados para "${search}".`
+            : `${filtered.length} resultado(s) para "${search}".`}
+        </p>
+      )}
+
       {loading ? (
-        <p className="py-10 text-center text-sm font-semibold text-slate-400">Carregando…</p>
+        <div className="flex items-center justify-center gap-2 py-12 text-sm font-semibold text-slate-400">
+          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+          Buscando…
+        </div>
       ) : filtered.length === 0 ? (
-        <EmptyState icon={<FaBoxOpen />} title="Nenhuma peça cadastrada" description="Cadastre a primeira peça do catálogo." />
+        <EmptyState icon={<FaBoxOpen />} title="Nenhuma peça encontrada" description={search ? "Tente outro termo de busca." : "Cadastre a primeira peça do catálogo."} />
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-100">
           <table className="w-full text-sm">
@@ -361,9 +533,8 @@ function PecasTab() {
       {modal !== null && (
         <PecaModal
           initial={modal.initial || null}
-          fornecedores={fornecedores}
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); carregar(); }}
+          onSaved={() => { setModal(null); buscar(search); }}
         />
       )}
     </div>

@@ -451,8 +451,10 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
       subtitle={`Aberto por ${item.aberto_por_nome || "--"} em ${formatDateTimeBR(item.created_at)}`}
       actions={
         <div className="flex flex-wrap gap-2">
-          <StatusChip label={meta.status} tone={meta.concluida ? "emerald" : "amber"} />
-          <StatusChip label={meta.fase} tone={meta.tone} />
+          {meta.concluida
+            ? <StatusChip label={meta.status} tone="emerald" />
+            : <StatusChip label={meta.fase} tone={meta.tone} />
+          }
         </div>
       }
     >

@@ -3,6 +3,7 @@ import FileViewerModal from "../../components/FileViewerModal";
 import {
   FaBan,
   FaBoxOpen,
+  FaCamera,
   FaCheckCircle,
   FaClipboardList,
   FaEdit,
@@ -40,28 +41,30 @@ function Field({ label, required = false, children, className = "" }) {
   );
 }
 
-/* ─── Autocomplete terceiro (busca em suprimentos_fornecedores) ── */
+/* ─── Autocomplete terceiro (busca server-side) ──────────────── */
 function TerceiroAutocomplete({ value, onChange, onSelect }) {
-  const [fornecedores, setFornecedores] = useState([]);
+  const [options, setOptions] = useState([]);
   const [show, setShow] = useState(false);
   const ref = useRef();
+  const debounce = useRef(null);
 
-  useEffect(() => {
-    supabase.from("suprimentos_fornecedores").select("*").eq("ativo", true).order("nome")
-      .then(({ data }) => setFornecedores(data || []));
-  }, []);
+  async function search(q) {
+    if (!q.trim()) { setOptions([]); return; }
+    const { data } = await supabase
+      .from("suprimentos_fornecedores")
+      .select("id, nome, cnpj, telefone")
+      .or(`nome.ilike.%${q.trim()}%,cnpj.ilike.%${q.trim()}%`)
+      .eq("ativo", true)
+      .order("nome")
+      .limit(8);
+    setOptions(data || []);
+  }
 
   useEffect(() => {
     function handler(e) { if (ref.current && !ref.current.contains(e.target)) setShow(false); }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
-
-  const filtered = useMemo(() => {
-    if (!value.trim()) return fornecedores.slice(0, 8);
-    const q = value.toLowerCase();
-    return fornecedores.filter((f) => f.nome.toLowerCase().includes(q) || (f.cnpj || "").includes(q)).slice(0, 8);
-  }, [fornecedores, value]);
 
   return (
     <div ref={ref} className="relative">
@@ -70,16 +73,21 @@ function TerceiroAutocomplete({ value, onChange, onSelect }) {
         placeholder="Nome ou razão social do terceiro"
         value={value}
         autoComplete="off"
-        onChange={(e) => { onChange(e.target.value); setShow(true); }}
-        onFocus={() => setShow(true)}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setShow(true);
+          clearTimeout(debounce.current);
+          debounce.current = setTimeout(() => search(e.target.value), 300);
+        }}
+        onFocus={() => { if (options.length > 0) setShow(true); }}
       />
-      {show && filtered.length > 0 && (
+      {show && options.length > 0 && (
         <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
-          {filtered.map((f) => (
+          {options.map((f) => (
             <button
               key={f.id}
               type="button"
-              onMouseDown={(e) => { e.preventDefault(); onSelect(f); setShow(false); }}
+              onMouseDown={(e) => { e.preventDefault(); onSelect(f); setShow(false); setOptions([]); }}
               className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-blue-50 border-b border-slate-50 last:border-0"
             >
               <div className="min-w-0">
@@ -685,7 +693,7 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
 /* ════════════════════════════════════════════════════════════════
    MODAL — DETALHE + RASTREIO
 ═══════════════════════════════════════════════════════════════════ */
-function DetalheModal({ record, onClose, onUpdated, userInfo }) {
+function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
   const [tab, setTab] = useState("detalhes");
   const [movs, setMovs] = useState([]);
   const [loadingMovs, setLoadingMovs] = useState(true);
@@ -828,6 +836,14 @@ function DetalheModal({ record, onClose, onUpdated, userInfo }) {
             <p className="text-sm font-semibold text-slate-500">{record.terceiro_nome}</p>
           </div>
           <div className="flex items-center gap-2">
+            {record.status === "Em posse do terceiro" && onEdit && (
+              <button
+                onClick={() => { onClose(); onEdit(record); }}
+                className="flex items-center gap-1.5 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100"
+              >
+                <FaEdit /> Editar
+              </button>
+            )}
             <button onClick={() => printFicha(record)} className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
               <FaPrint /> Imprimir
             </button>
@@ -1176,7 +1192,13 @@ export default function SuprimentosServicoExterno() {
         <SaidaModal editRecord={editRecord} onClose={() => setEditRecord(null)} onSaved={() => { setEditRecord(null); carregar(); }} userInfo={userInfo} />
       )}
       {selected && (
-        <DetalheModal record={selected} onClose={() => setSelected(null)} onUpdated={() => { setSelected(null); carregar(); }} userInfo={userInfo} />
+        <DetalheModal
+          record={selected}
+          onClose={() => setSelected(null)}
+          onUpdated={() => { setSelected(null); carregar(); }}
+          onEdit={(r) => setEditRecord(r)}
+          userInfo={userInfo}
+        />
       )}
     </div>
   );

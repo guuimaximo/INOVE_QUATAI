@@ -54,6 +54,7 @@ export default function CobrancaDetalheModal({
   const [salvandoInfo, setSalvandoInfo] = useState(false);
   const [viewerFile, setViewerFile] = useState(null);
   const [baixandoZip, setBaixandoZip] = useState(false);
+  const [baixandoPdf, setBaixandoPdf] = useState(false);
 
   // ✅ NOVO: modal de chamados
   const [openChamados, setOpenChamados] = useState(false);
@@ -427,77 +428,6 @@ export default function CobrancaDetalheModal({
     }
   };
 
-  // impressão
-  const handlePrint = () => {
-    const baseUrl = window.location.origin;
-    let printContents = document.getElementById("printable-area").innerHTML;
-    printContents = printContents.replace(/src="(\/[^\"]+)"/g, (_m, path) => `src="${baseUrl}${path}"`);
-    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-      .map((el) => el.outerHTML)
-      .join("\n");
-    const printWindow = window.open("", "_blank");
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Laudo de Cobrança de Avaria - ${avaria.prefixo || ""}</title>
-          ${styles}
-          <style>
-            @page { margin: 14mm; }
-            html, body { background: #fff; }
-            body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #0f172a; margin: 0; padding: 0; }
-            img { max-width: 100%; }
-            #printable-area { display: block !important; visibility: visible !important; max-width: 200mm; margin: 0 auto; padding: 0; }
-          </style>
-        </head>
-        <body>
-          <div id="printable-area">
-            ${printContents}
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-
-    const doPrint = () => {
-      const imgs = Array.from(printWindow.document.images || []);
-      const pending = imgs.filter((img) => !img.complete);
-      if (pending.length === 0) {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-        return;
-      }
-      let remaining = pending.length;
-      const done = () => {
-        remaining -= 1;
-        if (remaining <= 0) {
-          printWindow.focus();
-          printWindow.print();
-          printWindow.close();
-        }
-      };
-      pending.forEach((img) => {
-        img.addEventListener("load", done);
-        img.addEventListener("error", done);
-      });
-      // Fallback se algo travar
-      setTimeout(() => {
-        try {
-          printWindow.focus();
-          printWindow.print();
-          printWindow.close();
-        } catch {}
-      }, 8000);
-    };
-
-    if (printWindow.document.readyState === "complete") {
-      doPrint();
-    } else {
-      printWindow.addEventListener("load", doPrint);
-      setTimeout(doPrint, 600);
-    }
-  };
-
   const isImageUrl = (u) => /\.(jpe?g|png|gif|webp|bmp)$/i.test(u || "");
   const isVideoUrl = (u) => /\.(mp4|mov|webm)$/i.test(u || "");
   const isPdfUrl = (u) => /\.pdf$/i.test(u || "");
@@ -519,27 +449,9 @@ export default function CobrancaDetalheModal({
   // Pode editar origem enquanto pendente (ou em edição)
   const podeEditarOrigem = podeEditarBasico || isEditing;
 
-  // Geração de PDF do laudo (mesma estrutura visual da impressão)
-  const gerarPdfLaudoBlob = async () => {
-    const source = document.getElementById("printable-area");
-    if (!source) throw new Error("Área imprimível não encontrada");
-
-    // Cria container offscreen com tamanho fixo (A4 a ~96dpi) para o render
-    const container = document.createElement("div");
-    container.id = "printable-area";
-    container.style.position = "fixed";
-    container.style.left = "-10000px";
-    container.style.top = "0";
-    container.style.width = "794px"; // ~A4 width em 96dpi
-    container.style.background = "#ffffff";
-    container.style.padding = "24px";
-    container.style.fontFamily = "'Inter','Segoe UI',Arial,sans-serif";
-    container.style.color = "#0f172a";
-    container.innerHTML = source.innerHTML;
-    document.body.appendChild(container);
-
-    // Aguarda imagens carregarem dentro do container
-    const imgs = Array.from(container.querySelectorAll("img"));
+  // Aguarda todas as imagens dentro de um nó carregarem
+  const aguardarImagens = async (node) => {
+    const imgs = Array.from(node.querySelectorAll("img"));
     await Promise.all(
       imgs.map(
         (img) =>
@@ -551,39 +463,144 @@ export default function CobrancaDetalheModal({
           })
       )
     );
+  };
 
+  // Renderiza um nó isolado para canvas (offscreen)
+  const renderNodeToCanvas = async (node, width = 794) => {
+    const wrapper = document.createElement("div");
+    wrapper.id = "printable-area";
+    wrapper.style.position = "fixed";
+    wrapper.style.left = "-10000px";
+    wrapper.style.top = "0";
+    wrapper.style.width = width + "px";
+    wrapper.style.background = "#ffffff";
+    wrapper.style.padding = "0";
+    wrapper.style.fontFamily = "'Inter','Segoe UI',Arial,sans-serif";
+    wrapper.style.color = "#0f172a";
+    wrapper.appendChild(node);
+    document.body.appendChild(wrapper);
     try {
-      const canvas = await html2canvas(container, {
+      await aguardarImagens(wrapper);
+      const canvas = await html2canvas(wrapper, {
         scale: 2,
         useCORS: true,
         allowTaint: false,
         backgroundColor: "#ffffff",
         logging: false,
       });
+      return canvas;
+    } finally {
+      wrapper.remove();
+    }
+  };
 
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  // Geração de PDF bloco-a-bloco para evitar cortes no meio de fotos/seções
+  const gerarPdfLaudoBlob = async () => {
+    const source = document.getElementById("printable-area");
+    if (!source) throw new Error("Área imprimível não encontrada");
 
-      let heightLeft = imgHeight;
-      let position = 0;
+    // Clona printable-area para pegar a árvore de seções
+    const fullClone = source.cloneNode(true);
+
+    // Monta lista de blocos a renderizar (cada um nunca quebra ao meio)
+    const blocks = [];
+    Array.from(fullClone.children).forEach((child) => {
+      if (child.tagName === "STYLE") return;
+      // Para sections com photo-grid, separar o título do grid e quebrar em linhas de 2 fotos
+      const grid = child.querySelector ? child.querySelector(".photo-grid") : null;
+      if (grid && child.tagName === "SECTION") {
+        // Bloco "título da seção" (sem o grid)
+        const titulo = child.cloneNode(true);
+        const g = titulo.querySelector(".photo-grid");
+        if (g) g.remove();
+        // Só adiciona se sobrou algo significativo (title, etc.)
+        if (titulo.textContent.trim().length > 0) blocks.push(titulo);
+
+        // Cada par de fotos vira um bloco
+        const cards = Array.from(grid.querySelectorAll(".photo-card"));
+        for (let i = 0; i < cards.length; i += 2) {
+          const row = document.createElement("div");
+          row.className = "photo-grid";
+          row.style.display = "grid";
+          row.style.gridTemplateColumns = "repeat(2, 1fr)";
+          row.style.gap = "8px";
+          row.style.marginBottom = "8px";
+          row.appendChild(cards[i].cloneNode(true));
+          if (cards[i + 1]) row.appendChild(cards[i + 1].cloneNode(true));
+          blocks.push(row);
+        }
+      } else {
+        blocks.push(child.cloneNode(true));
+      }
+    });
+
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const usableW = pageW - 2 * margin;
+    const usableH = pageH - 2 * margin;
+
+    let cursorY = margin;
+    let firstOnPage = true;
+
+    for (const block of blocks) {
+      const canvas = await renderNodeToCanvas(block);
+      let imgH = (canvas.height * usableW) / canvas.width;
       const imgData = canvas.toDataURL("image/jpeg", 0.92);
 
-      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight, undefined, "FAST");
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight, undefined, "FAST");
-        heightLeft -= pageHeight;
+      // Se for maior que uma página inteira (foto enorme), reduz para caber
+      if (imgH > usableH) {
+        const scale = usableH / imgH;
+        const scaledW = usableW * scale;
+        if (!firstOnPage) {
+          pdf.addPage();
+          cursorY = margin;
+        }
+        pdf.addImage(imgData, "JPEG", margin + (usableW - scaledW) / 2, cursorY, scaledW, usableH, undefined, "FAST");
+        cursorY += usableH + 3;
+        firstOnPage = false;
+        continue;
       }
 
-      return pdf.output("blob");
+      // Se não cabe na página atual, abre nova
+      if (cursorY + imgH > pageH - margin && !firstOnPage) {
+        pdf.addPage();
+        cursorY = margin;
+        firstOnPage = true;
+      }
+
+      pdf.addImage(imgData, "JPEG", margin, cursorY, usableW, imgH, undefined, "FAST");
+      cursorY += imgH + 3;
+      firstOnPage = false;
+    }
+
+    return pdf.output("blob");
+  };
+
+  const triggerDownload = (blob, filename) => {
+    const a = document.createElement("a");
+    const objectUrl = URL.createObjectURL(blob);
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  };
+
+  const handleBaixarOrcamentoPdf = async () => {
+    if (baixandoPdf) return;
+    setBaixandoPdf(true);
+    try {
+      const prefixoLabel = sanitizeFilename(avaria.prefixo || "avaria");
+      const blob = await gerarPdfLaudoBlob();
+      triggerDownload(blob, `Orcamento_${prefixoLabel}.pdf`);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao gerar PDF: " + err.message);
     } finally {
-      container.remove();
+      setBaixandoPdf(false);
     }
   };
 
@@ -1078,10 +1095,14 @@ export default function CobrancaDetalheModal({
           <div className="flex justify-between items-center p-4 border-t bg-gray-50">
             <div className="flex gap-2">
               <button
-                onClick={handlePrint}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md flex items-center gap-2"
+                onClick={handleBaixarOrcamentoPdf}
+                disabled={baixandoPdf}
+                title="Baixa apenas o PDF do laudo/orçamento"
+                className={`px-4 py-2 rounded-md flex items-center gap-2 text-white ${
+                  baixandoPdf ? "bg-blue-300 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+                }`}
               >
-                🖨️ Imprimir
+                {baixandoPdf ? "⏳ Gerando PDF..." : "📄 Baixar Orçamento (PDF)"}
               </button>
               <button
                 onClick={handleBaixarAvariaZip}
@@ -1230,7 +1251,8 @@ export default function CobrancaDetalheModal({
           #printable-area .section-title {
             background: #1e3a8a; color: #fff; font-size: 11px; font-weight: 700;
             text-transform: uppercase; letter-spacing: 0.04em;
-            padding: 4px 8px; margin-bottom: 6px; border-radius: 2px;
+            padding: 0 10px; margin-bottom: 6px; border-radius: 2px;
+            display: flex; align-items: center; min-height: 26px; line-height: 1;
           }
           #printable-area .field-grid {
             display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 12px;
@@ -1276,16 +1298,29 @@ export default function CobrancaDetalheModal({
           #printable-area tr { break-inside: avoid; page-break-inside: avoid; }
           #printable-area thead { display: table-header-group; }
           #printable-area .totals-box {
-            width: 320px; border: 1px solid #cbd5e1; border-radius: 3px; overflow: hidden;
+            width: 360px; border: 1px solid #1e3a8a; border-radius: 4px; overflow: hidden;
+            box-shadow: 0 1px 2px rgba(15,23,42,0.06);
           }
           #printable-area .totals-box .row {
-            display: flex; justify-content: space-between; padding: 5px 10px;
-            border-bottom: 1px solid #e2e8f0; font-size: 11px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 6px 12px; border-bottom: 1px solid #e2e8f0; font-size: 11px;
           }
           #printable-area .totals-box .row:last-child { border-bottom: none; }
-          #printable-area .totals-box .row.highlight {
-            background: #1e3a8a; color: #fff; font-weight: 700;
+          #printable-area .totals-box .row .label { color: #475569; }
+          #printable-area .totals-box .row .val { font-weight: 600; color: #0f172a; }
+          #printable-area .totals-box .row.subtotal { background: #f8fafc; }
+          #printable-area .totals-box .row.total-orcamento {
+            background: #eef2ff; font-size: 12px;
           }
+          #printable-area .totals-box .row.total-orcamento .label,
+          #printable-area .totals-box .row.total-orcamento .val { color: #1e3a8a; font-weight: 700; }
+          #printable-area .totals-box .row.highlight {
+            background: #1e3a8a; color: #fff; font-weight: 800;
+            font-size: 14px; padding: 10px 12px;
+          }
+          #printable-area .totals-box .row.highlight .label,
+          #printable-area .totals-box .row.highlight .val { color: #fff; }
+          #printable-area .totals-box .row.parcelas { background: #f8fafc; font-size: 10px; color: #475569; }
           #printable-area .signature-box {
             text-align: center;
           }
@@ -1302,11 +1337,35 @@ export default function CobrancaDetalheModal({
             margin-top: 12px; font-size: 8.5px; color: #64748b; text-align: justify;
             border-top: 1px dashed #cbd5e1; padding-top: 6px;
           }
+          #printable-area .brand {
+            display: inline-flex; align-items: center; gap: 8px;
+          }
+          #printable-area .brand-logo {
+            width: 44px; height: 44px; border-radius: 8px;
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: #fff; font-weight: 800; font-size: 14px;
+            display: flex; align-items: center; justify-content: center;
+            letter-spacing: 0.04em; box-shadow: 0 2px 4px rgba(30,58,138,0.25);
+          }
+          #printable-area .brand-text { line-height: 1.1; }
+          #printable-area .brand-text .brand-name {
+            font-size: 18px; font-weight: 800; color: #1e3a8a; letter-spacing: 0.08em;
+          }
+          #printable-area .brand-text .brand-sub {
+            font-size: 9px; color: #64748b; letter-spacing: 0.18em; text-transform: uppercase;
+          }
         `}</style>
 
         {/* CABEÇALHO */}
         <header className="doc-header nobreak">
-          <div>
+          <div className="brand">
+            <div className="brand-logo">IQ</div>
+            <div className="brand-text">
+              <div className="brand-name">INOVE QUATAÍ</div>
+              <div className="brand-sub">Gestão de Frota · Manutenção</div>
+            </div>
+          </div>
+          <div style={{ textAlign: "center", flex: 1 }}>
             <h1 className="doc-title">LAUDO DE COBRANÇA DE AVARIA</h1>
             <div className="doc-subtitle">Documento técnico de apuração e cobrança</div>
           </div>
@@ -1509,28 +1568,32 @@ export default function CobrancaDetalheModal({
           </table>
         </section>
 
-        {/* 7. RESUMO FINANCEIRO */}
+        {/* RESUMO FINANCEIRO */}
         <section className="mb-3 nobreak" style={{ display: "flex", justifyContent: "flex-end" }}>
           <div className="totals-box">
-            <div className="row">
-              <span>Subtotal Peças</span>
-              <span>{formatCurrency(subtotalPecas)}</span>
+            <div className="row subtotal">
+              <span className="label">Subtotal Peças</span>
+              <span className="val">{formatCurrency(subtotalPecas)}</span>
             </div>
-            <div className="row">
-              <span>Subtotal Serviços</span>
-              <span>{formatCurrency(subtotalServicos)}</span>
+            <div className="row subtotal">
+              <span className="label">Subtotal Serviços</span>
+              <span className="val">{formatCurrency(subtotalServicos)}</span>
             </div>
-            <div className="row">
-              <span>Valor Total do Orçamento</span>
-              <span>{formatCurrency(avaria.valor_total_orcamento)}</span>
+            <div className="row total-orcamento">
+              <span className="label">Valor Total do Orçamento</span>
+              <span className="val">{formatCurrency(avaria.valor_total_orcamento)}</span>
             </div>
             <div className="row highlight">
-              <span>Valor Cobrado</span>
-              <span>{formatCurrency(valorCobradoNum)}</span>
+              <span className="label">VALOR COBRADO</span>
+              <span className="val">{formatCurrency(valorCobradoNum)}</span>
             </div>
-            <div className="row">
-              <span>Nº de Parcelas</span>
-              <span>{numParcelas}</span>
+            <div className="row parcelas">
+              <span className="label">
+                {numParcelas > 1
+                  ? `Parcelado em ${numParcelas}x de ${formatCurrency(valorCobradoNum / Math.max(1, Number(numParcelas)))}`
+                  : "Pagamento à vista"}
+              </span>
+              <span className="val">{numParcelas}x</span>
             </div>
           </div>
         </section>
@@ -1550,36 +1613,10 @@ export default function CobrancaDetalheModal({
           </section>
         )}
 
-        <section className="mb-3">
-          <div className="section-title">
-            {origem === "Externo" ? "9" : "7"}. Tratativa — Anexos e Evidências Complementares
-          </div>
-          {tratativaImagens.length > 0 && (
-            <div className="photo-grid" style={{ marginBottom: 6 }}>
-              {tratativaImagens.map((url, i) => (
-                <div key={`tt-${i}`} className="photo-card nobreak">
-                  <img src={url} alt={`Tratativa ${i + 1}`} crossOrigin="anonymous" />
-                  <div className="photo-caption">Tratativa {i + 1}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {tratativaOutros.length > 0 && (
-            <div className="note-box">
-              {tratativaOutros.map((linha, idx) => (
-                <div key={idx} style={{ wordBreak: "break-all" }}>• {linha}</div>
-              ))}
-            </div>
-          )}
-          {tratativaImagens.length === 0 && tratativaOutros.length === 0 && (
-            <div className="note-box">Nenhum anexo de tratativa registrado.</div>
-          )}
-        </section>
-
-        {/* 9. ASSINATURAS */}
+        {/* ASSINATURAS */}
         <section className="mt-4 nobreak">
           <div className="section-title">
-            {origem === "Externo" ? "10" : "8"}. Assinaturas
+            {origem === "Externo" ? "9" : "7"}. Assinaturas
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginTop: 8 }}>
             <div className="signature-box">

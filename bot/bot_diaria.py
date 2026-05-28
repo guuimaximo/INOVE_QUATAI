@@ -124,6 +124,14 @@ def _log(step: str, msg: str = ""):
     print(f"[diaria] {step:>10}  {msg}", flush=True)
 
 
+def _norm_codigo(raw) -> str:
+    """Normaliza codigo: pega so digitos e remove zeros a esquerda.
+    Assim '18180', '00000018180', '018180' viram todos '18180'.
+    """
+    digits = "".join(ch for ch in str(raw or "") if ch.isdigit())
+    return digits.lstrip("0") or ""
+
+
 def baixar_saldos_do_dia(data_alvo_iso: str) -> Dict[str, float]:
     d = datetime.strptime(data_alvo_iso, "%Y-%m-%d")
     ddmm = d.strftime("%d%m%Y")
@@ -138,12 +146,15 @@ def baixar_saldos_do_dia(data_alvo_iso: str) -> Dict[str, float]:
 
     saldos: Dict[str, float] = {}
     for _, row in df.iterrows():
-        cod = str(row["Codigo da peça"]).zfill(6)
-        if not cod or cod == "000000":
+        cod = _norm_codigo(row["Codigo da peça"])
+        if not cod:
             continue
         saldo = float(row.get("Saldo", 0) or 0)
         saldos[cod] = saldo
     _log("baixar", f"codigos unicos com saldo: {len(saldos)}")
+    if saldos:
+        amostra = list(saldos.items())[:3]
+        _log("baixar", f"amostra ERP: {amostra}")
     return saldos
 
 
@@ -153,19 +164,20 @@ def aplicar_resultado(contagens: list, saldos: Dict[str, float]) -> dict:
     sem_codigo_no_erp = 0
 
     for c in contagens:
-        cod = str(c.get("codigo") or "").strip()
+        cod = _norm_codigo(c.get("codigo"))
         if not cod:
             continue
-        cod = cod.zfill(6)
         qtd = float(c.get("quantidade") or 0)
         if cod not in saldos:
             sem_codigo_no_erp += 1
+            _log("comparar", f"sem ERP: codigo={cod} (original={c.get('codigo')})")
             payload = {"saldo_erp": None, "diferenca": None}
         else:
             saldo = saldos[cod]
             diff = qtd - saldo
             if abs(diff) > 1e-6:
                 divergencias += 1
+            _log("comparar", f"codigo={cod} contado={qtd} ERP={saldo} diff={diff}")
             payload = {"saldo_erp": saldo, "diferenca": diff}
         supa_patch("suprimentos_contagens", {"id": f"eq.{c['id']}"}, payload)
         atualizados += 1

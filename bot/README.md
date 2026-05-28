@@ -1,56 +1,35 @@
 # Bot Estoque (GitHub Actions)
 
-Dois workflows em `.github/workflows/`:
-
 | Workflow | Arquivo | Quando roda |
 |----------|---------|-------------|
-| Diário | `bot-estoque-diaria.yml` | A cada 5 min (poll na fila `suprimentos_bot_jobs`) + manual |
-| Semanal | `bot-estoque-semanal.yml` | Segunda 06:00 UTC (~03:00 BRT) + manual |
+| Diário | `.github/workflows/bot-estoque-diaria.yml` | Cron a cada 5 min + manual |
+| Semanal | `.github/workflows/bot-estoque-semanal.yml` | Segunda 06h UTC + manual |
 
-## Secrets a cadastrar em **Settings → Secrets and variables → Actions**
+Os dois leem **tudo do Supabase**. Nada de Google Sheets ou Base.xlsx.
 
-### Comuns aos dois workflows
-| Secret | Conteúdo |
-|--------|----------|
-| `SUPABASE_URL` | `https://wboelthngddvkgrvwkbu.supabase.co` |
-| `SUPABASE_SERVICE_KEY` | service_role key do projeto (usa pra `update` em `suprimentos_contagens` e `suprimentos_bot_jobs`) |
-| `TRANSNET_URL` | URL completa de login (já tem default no código) |
-| `TRANSNET_USER` | login TransNet |
-| `TRANSNET_PASSWORD` | senha TransNet |
-| `TRANSNET_ALMOXARIFADO` | código do almoxarifado (ex.: `046`) |
+## Secrets a cadastrar (Settings → Secrets and variables → Actions)
 
-### Só semanal
-| Secret | Conteúdo |
-|--------|----------|
-| `GOOGLE_CREDENTIALS_JSON` | JSON inteiro da service account do Google (mesmo arquivo `credenciais.json` que está em `C:\Projetos\Bot_Estoque_1`) |
-| `SHEET_REF` | URL da planilha de contagens |
-| `SHEET_TAB` | aba (ex.: `Contagem`) |
-| `TELEGRAM_TOKEN` | token do bot |
-| `TELEGRAM_CHAT_ID` | chat id pra onde manda o resumo |
-| `BASE_XLSX_B64` *(opcional)* | conteúdo do `Base.xlsx` em base64 (`base64 -w0 Base.xlsx`) |
+| Secret | Diário | Semanal | Conteúdo |
+|--------|:-:|:-:|---|
+| `SUPABASE_URL` | ✅ | ✅ | `https://wboelthngddvkgrvwkbu.supabase.co` |
+| `SUPABASE_SERVICE_KEY` | ✅ | ✅ | service_role do Supabase (Project Settings → API) |
+| `TRANSNET_URL` | opc | opc | URL completa de login (tem default) |
+| `TRANSNET_USER` | ✅ | ✅ | usuário TransNet |
+| `TRANSNET_PASSWORD` | ✅ | ✅ | senha |
+| `TRANSNET_ALMOXARIFADO` | ✅ | ✅ | ex.: `046` (QUATAÍ) |
+| `TELEGRAM_TOKEN` | — | opc | só se quiser receber resumo no Telegram |
+| `TELEGRAM_CHAT_ID` | — | opc | idem |
+
+## Saídas
+- **Diário**: atualiza `saldo_erp` + `diferenca` em cada linha de `suprimentos_contagens` do dia processado.
+- **Semanal**: salva `auditoria_por_item.xlsx` no Supabase Storage (`bucket=suprimentos`, pasta `auditorias/`) e cria uma linha em `suprimentos_auditorias` com o resumo e a URL pública. O app puxa essa lista direto.
+
+## Manual
+- Diário: Actions → **Bot Estoque · Conferência Diária** → Run workflow → opcional `data_alvo=YYYY-MM-DD`.
+- Semanal: Actions → **Bot Estoque · Auditoria Semanal** → Run workflow.
 
 ## Como funciona o diário
-1. Usuário aperta **Conferir com ERP** na Central de Contagens.
-2. App insere um job em `suprimentos_bot_jobs` (status=`pendente`, `data_alvo=YYYY-MM-DD`).
-3. Workflow agendado roda `bot/bot_diaria.py`:
-   - Pega até 5 jobs pendentes por execução.
-   - Para cada job: baixa o CSV "Entradas e Saídas Acumuladas" no dia `D→D` do TransNet, lê coluna `Saldo`, atualiza `suprimentos_contagens.saldo_erp` e `diferenca` em cada linha daquele dia, marca o job como `concluido`.
-4. App detecta `concluido` via polling e recarrega a Central.
-
-Disparo imediato: aba **Actions → Bot Estoque · Conferência Diária → Run workflow** (pode passar `data_alvo` no campo).
-
-## Como funciona o semanal
-- Igual ao `main.py` original: pega C1/C2 da planilha do Google, baixa EV1/EV2/EV3, aplica fórmula do Excel, gera `auditoria_por_item.xlsx`, manda no Telegram e sobe o Excel como **artifact** do run (`auditoria-semanal`, retém 14 dias).
-
-## Testando local (Windows)
-```powershell
-cd C:\...\INOVE_QUATAI\bot
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-$env:SUPABASE_URL="..."
-$env:SUPABASE_SERVICE_KEY="..."
-$env:TRANSNET_USER="..."
-$env:TRANSNET_PASSWORD="..."
-python bot_diaria.py --data-alvo 2026-05-27
-```
+1. Usuário aperta "Conferir com ERP" na app.
+2. App grava job em `suprimentos_bot_jobs` (`status=pendente`, `data_alvo=...`).
+3. O cron de 5 min lê o job, baixa o CSV do dia D→D, escreve `saldo_erp` e `diferenca` em cada contagem, marca `concluido`.
+4. App detecta `concluido` no polling e recarrega.

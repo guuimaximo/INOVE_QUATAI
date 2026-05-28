@@ -1,6 +1,6 @@
 import { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { FaClipboardList, FaTools, FaSignOutAlt, FaLock, FaMicrochip } from "react-icons/fa";
+import { FaBoxes, FaClipboardList, FaTools, FaSignOutAlt, FaLock, FaMicrochip } from "react-icons/fa";
 
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
@@ -30,6 +30,14 @@ const MOBILE_MODULES = [
     path: "/embarcados-central",
     icon: <FaMicrochip />,
     gradient: "from-slate-700 to-slate-900",
+  },
+  {
+    key: "suprimentos_contagem",
+    title: "Contagem",
+    description: "Conte itens, confira lotes e acompanhe apontamentos.",
+    path: "/suprimentos/contagem",
+    icon: <FaBoxes />,
+    gradient: "from-emerald-600 to-teal-800",
   },
 ];
 
@@ -166,7 +174,7 @@ export default function MobileHome() {
         {!algumLiberado ? (
           <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
             <strong className="block text-sm">Sem permissoes para os modulos do app.</strong>
-            Peca ao gestor para liberar <em>Troca de pneus</em>, <em>Controle de fichas</em> ou <em>Embarcados</em> no nivel <strong>{nivelLabel}</strong>.
+            Peca ao gestor para liberar <em>Troca de pneus</em>, <em>Controle de fichas</em>, <em>Embarcados</em> ou <em>Contagem</em> no nivel <strong>{nivelLabel}</strong>.
           </div>
         ) : null}
 

@@ -36,25 +36,23 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Materializa credenciais Google
-        working-directory: bot
+      - name: Sanity-check dos secrets
         env:
-          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TRANSNET_USER: ${{ secrets.TRANSNET_USER }}
+          TRANSNET_PASSWORD: ${{ secrets.TRANSNET_PASSWORD }}
         run: |
-          printf '%s' "$GOOGLE_CREDENTIALS_JSON" > credenciais.json
-          test -s credenciais.json || (echo "credenciais vazias" && exit 1)
-
-      - name: Materializa Base.xlsx (opcional)
-        working-directory: bot
-        env:
-          BASE_XLSX_B64: ${{ secrets.BASE_XLSX_B64 }}
-        run: |
-          if [ -n "$BASE_XLSX_B64" ]; then
-            echo "$BASE_XLSX_B64" | base64 -d > Base.xlsx
-            ls -lh Base.xlsx
-          else
-            echo "Base.xlsx não configurada (secret BASE_XLSX_B64). Vai auditar pelos itens contados."
-          fi
+          ok=true
+          for var in SUPABASE_URL SUPABASE_SERVICE_KEY TRANSNET_USER TRANSNET_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret $var está vazio."
+              ok=false
+            else
+              echo "$var: OK"
+            fi
+          done
+          $ok
 
       - name: Run bot semanal
         working-directory: bot
@@ -65,28 +63,20 @@ jobs:
           TRANSNET_USER: ${{ secrets.TRANSNET_USER }}
           TRANSNET_PASSWORD: ${{ secrets.TRANSNET_PASSWORD }}
           TRANSNET_ALMOXARIFADO: ${{ secrets.TRANSNET_ALMOXARIFADO }}
-          SHEET_REF: ${{ secrets.SHEET_REF }}
-          SHEET_TAB: ${{ secrets.SHEET_TAB }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
           HEADLESS: "true"
         run: python bot_semanal.py
 
-      - name: Upload artefatos
-        if: always()
+      - name: Sobe screenshots de erro
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: auditoria-semanal
+          name: bot-semanal-debug
           path: |
             bot/downloads/*.csv
+            bot/downloads/*.png
             bot/downloads/*.xlsx
-            bot/downloads/*.json
           if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Limpa segredos
-        if: always()
-        working-directory: bot
-        run: |
-          rm -f credenciais.json Base.xlsx
+          retention-days: 7

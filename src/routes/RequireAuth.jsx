@@ -13,9 +13,10 @@ export default function RequireAuth({ children }) {
     "/",
     "/pcm-troca-pneus",
     "/pcm-controle-fichas",
+    "/suprimentos/contagem",
     "/atualizar-perfil",
   ]);
-  const allowedNativePrefixes = ["/embarcados"];
+  const allowedNativePrefixes = ["/embarcados", "/suprimentos/contagem"];
 
   if (loading || accessLoading) {
     return (

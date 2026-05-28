@@ -1,13 +1,16 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import {
   FaBarcode,
   FaCamera,
   FaCheck,
+  FaChevronRight,
+  FaDownload,
   FaRedo,
   FaRobot,
   FaSearch,
   FaTimes,
-  FaTrashAlt,
 } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
@@ -19,7 +22,7 @@ import {
   Panel,
   StatusChip,
 } from "./SuprimentosUI";
-import { formatDateTimeBR } from "./suprimentosShared";
+import { formatDateBR, formatDateTimeBR } from "./suprimentosShared";
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
@@ -42,59 +45,189 @@ function diffTone(diff) {
   return Number(diff) > 0 ? "amber" : "rose";
 }
 
-function diffLabel(diff) {
-  if (diff === null || diff === undefined) return "Sem saldo ERP";
-  const n = Number(diff);
-  if (n === 0) return "Bate com ERP";
-  if (n > 0) return `+${n.toLocaleString("pt-BR")} (sobra)`;
-  return `${n.toLocaleString("pt-BR")} (falta)`;
-}
-
-/* ─── Scanner via @zxing/browser ─────────────────────────────── */
+/* ─── Scanner ─────────────────────────────────────────────── */
 function BarcodeScanner({ open, onClose, onScan }) {
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
+  const streamRef = useRef(null);
+  const detectorFrameRef = useRef(null);
+  const scanTimerRef = useRef(null);
+  const scanBoxRef = useRef(null);
+  const scannedRef = useRef(false);
   const [error, setError] = useState("");
+
+  function stopScanner() {
+    if (detectorFrameRef.current) {
+      cancelAnimationFrame(detectorFrameRef.current);
+      detectorFrameRef.current = null;
+    }
+    if (scanTimerRef.current) {
+      clearTimeout(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
+    try { controlsRef.current?.stop?.(); } catch {}
+    try { streamRef.current?.getTracks?.().forEach((track) => track.stop()); } catch {}
+    controlsRef.current = null;
+    streamRef.current = null;
+  }
+
+  function finishScan(text) {
+    const value = String(text || "").trim();
+    if (!value || scannedRef.current) return;
+    scannedRef.current = true;
+    stopScanner();
+    onScan(value);
+  }
+
+  async function tuneCamera() {
+    const stream = videoRef.current?.srcObject || streamRef.current;
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track?.getCapabilities || !track?.applyConstraints) return;
+
+    const caps = track.getCapabilities();
+    const advanced = [];
+    if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) {
+      advanced.push({ focusMode: "continuous" });
+    }
+    if (Array.isArray(caps.exposureMode) && caps.exposureMode.includes("continuous")) {
+      advanced.push({ exposureMode: "continuous" });
+    }
+    if (caps.zoom) {
+      const minZoom = Number(caps.zoom.min || 1);
+      const maxZoom = Number(caps.zoom.max || 1);
+      const zoom = Math.min(maxZoom, Math.max(minZoom, 1.6));
+      advanced.push({ zoom });
+    }
+    if (!advanced.length) return;
+
+    try { await track.applyConstraints({ advanced }); } catch {}
+  }
+
+  function drawScanArea(video, canvas) {
+    const box = scanBoxRef.current;
+    if (!box || !video?.videoWidth || !video?.videoHeight) return false;
+
+    const videoRect = video.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    const scale = Math.max(videoRect.width / video.videoWidth, videoRect.height / video.videoHeight);
+    const renderedWidth = video.videoWidth * scale;
+    const renderedHeight = video.videoHeight * scale;
+    const offsetX = (videoRect.width - renderedWidth) / 2;
+    const offsetY = (videoRect.height - renderedHeight) / 2;
+
+    const sourceX = (boxRect.left - videoRect.left - offsetX) / scale;
+    const sourceY = (boxRect.top - videoRect.top - offsetY) / scale;
+    const sourceW = boxRect.width / scale;
+    const sourceH = boxRect.height / scale;
+    const sx = Math.max(0, Math.min(video.videoWidth - 1, sourceX));
+    const sy = Math.max(0, Math.min(video.videoHeight - 1, sourceY));
+    const sw = Math.max(1, Math.min(video.videoWidth - sx, sourceW));
+    const sh = Math.max(1, Math.min(video.videoHeight - sy, sourceH));
+
+    canvas.width = Math.max(360, Math.round(sw));
+    canvas.height = Math.max(360, Math.round(sh));
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return false;
+    ctx.filter = "contrast(1.18) brightness(1.08) saturate(1.05)";
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return true;
+  }
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    setError("");
+    scannedRef.current = false;
 
     (async () => {
       try {
-        const { BrowserMultiFormatReader } = await import("@zxing/browser");
-        const reader = new BrowserMultiFormatReader();
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-        const back = devices.find((d) => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
-        const deviceId = back?.deviceId;
+        const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
+          import("@zxing/browser"),
+          import("@zxing/library"),
+        ]);
+        const hints = new Map();
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.ITF,
+          BarcodeFormat.CODABAR,
+        ]);
+        const reader = new BrowserMultiFormatReader(hints, {
+          delayBetweenScanAttempts: 70,
+          delayBetweenScanSuccess: 250,
+          tryPlayVideoTimeout: 5000,
+        });
         if (cancelled) return;
 
-        const controls = await reader.decodeFromVideoDevice(
-          deviceId,
-          videoRef.current,
-          (result, err, ctrl) => {
-            if (cancelled) return;
-            if (result) {
-              const text = result.getText();
-              ctrl.stop();
-              controlsRef.current = null;
-              onScan(text);
-            }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30, max: 60 },
+          },
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        streamRef.current = stream;
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        await tuneCamera();
+
+        const canvas = document.createElement("canvas");
+        let nativeDetector = null;
+        if ("BarcodeDetector" in window) {
+          try {
+            nativeDetector = new window.BarcodeDetector({
+              formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "itf", "codabar"],
+            });
+          } catch {}
+        }
+
+        const scanFrame = async () => {
+          if (cancelled || scannedRef.current) return;
+          const video = videoRef.current;
+          if (video?.readyState >= 2 && drawScanArea(video, canvas)) {
+            try {
+              const codes = nativeDetector ? await nativeDetector.detect(canvas) : [];
+              const rawValue = codes?.[0]?.rawValue;
+              if (rawValue) {
+                finishScan(rawValue);
+                return;
+              }
+            } catch {}
+
+            try {
+              const result = reader.decodeFromCanvas(canvas);
+              if (result) {
+                finishScan(result.getText());
+                return;
+              }
+            } catch {}
           }
-        );
-        controlsRef.current = controls;
+
+          scanTimerRef.current = setTimeout(scanFrame, 90);
+        };
+
+        scanFrame();
       } catch (err) {
-        setError(err?.message || "Não consegui acessar a câmera.");
+        setError(err?.message || "Nao consegui acessar a camera.");
       }
     })();
 
     return () => {
       cancelled = true;
-      try { controlsRef.current?.stop?.(); } catch {}
-      controlsRef.current = null;
+      stopScanner();
     };
   }, [open, onScan]);
-
   if (!open) return null;
 
   return (
@@ -105,19 +238,32 @@ function BarcodeScanner({ open, onClose, onScan }) {
           <h2 className="text-lg font-semibold">Apontar para o código de barras</h2>
         </div>
         <button
-          onClick={() => { try { controlsRef.current?.stop?.(); } catch {} onClose(); }}
+          onClick={() => { stopScanner(); onClose(); }}
           className="rounded-xl border border-white/20 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10"
         >
           <FaTimes className="inline" /> Fechar
         </button>
       </div>
       <div className="relative flex flex-1 items-center justify-center overflow-hidden">
-        <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
+        <video
+          ref={videoRef}
+          className="h-full w-full object-cover [filter:contrast(1.18)_brightness(1.08)_saturate(1.05)]"
+          muted
+          playsInline
+        />
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="h-32 w-72 rounded-2xl border-2 border-blue-400/80 shadow-[0_0_0_9999px_rgba(2,6,23,0.55)]" />
+          <div
+            ref={scanBoxRef}
+            className="relative h-[72vw] w-[72vw] max-h-80 max-w-80 rounded-[28px] border-[3px] border-blue-300/90 shadow-[0_0_0_9999px_rgba(2,6,23,0.52)]"
+          >
+            <div className="absolute left-8 right-8 top-1/2 h-0.5 rounded-full bg-blue-200/95 shadow-[0_0_18px_rgba(147,197,253,0.95)]" />
+          </div>
+        </div>
+        <div className="pointer-events-none absolute inset-x-5 bottom-6 rounded-2xl bg-slate-950/80 px-4 py-3 text-center text-sm font-semibold text-white">
+          Mantenha o codigo inteiro dentro da moldura.
         </div>
         {error ? (
-          <div className="absolute inset-x-4 bottom-6 rounded-xl bg-rose-500/90 px-4 py-3 text-sm font-semibold text-white">
+          <div className="absolute inset-x-4 bottom-24 rounded-xl bg-rose-500/90 px-4 py-3 text-sm font-semibold text-white">
             {error}
           </div>
         ) : null}
@@ -126,15 +272,18 @@ function BarcodeScanner({ open, onClose, onScan }) {
   );
 }
 
-/* ─── Página principal ───────────────────────────────────────── */
+/* ─── Página ──────────────────────────────────────────────── */
 export default function SuprimentosContagem() {
+  const navigate = useNavigate();
   const { user } = useContext(AuthContext);
+  const isNativeShell = Capacitor.isNativePlatform();
   const userInfo = useMemo(() => ({
     id: Number(user?.usuario_id || user?.id || 0) || null,
     login: user?.login || user?.email || null,
     nome: user?.nome || user?.nome_completo || user?.login || user?.email || "Usuario",
   }), [user]);
 
+  // ─── Form de novo apontamento ──────────────────────────────
   const [codigo, setCodigo] = useState("");
   const [peca, setPeca] = useState(null);
   const [naoCadastrado, setNaoCadastrado] = useState(false);
@@ -144,113 +293,68 @@ export default function SuprimentosContagem() {
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
-
-  const [contagens, setContagens] = useState([]);
-  const [loadingHist, setLoadingHist] = useState(true);
-  const [busca, setBusca] = useState("");
+  const [fluxoAtivo, setFluxoAtivo] = useState(false);
+  const [itensSessao, setItensSessao] = useState(0);
+  const [mobileCentralOpen, setMobileCentralOpen] = useState(false);
 
   const codigoInputRef = useRef(null);
   const qtdInputRef = useRef(null);
 
-  async function carregarContagens() {
-    setLoadingHist(true);
-    const { data } = await supabase
-      .from("suprimentos_contagens")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    setContagens(data || []);
-    setLoadingHist(false);
-  }
-
-  useEffect(() => { carregarContagens(); }, []);
-
-  // ─── Bot de conferência com ERP ─────────────────────────────
-  const [confDate, setConfDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [botJob, setBotJob] = useState(null);
-  const [botMsg, setBotMsg] = useState("");
-  const botPollRef = useRef(null);
-
-  async function dispararConferencia() {
-    if (!confDate) { setBotMsg("Selecione a data."); return; }
-    setBotMsg("");
-    const { data, error } = await supabase
-      .from("suprimentos_bot_jobs")
-      .insert({
-        tipo: "conferencia_dia",
-        data_alvo: confDate,
-        status: "pendente",
-        criado_por_id: userInfo.id,
-        criado_por_nome: userInfo.nome,
-      })
-      .select()
-      .single();
-    if (error) { setBotMsg(`Erro ao enfileirar: ${error.message}`); return; }
-    setBotJob(data);
-    setBotMsg("Job enviado. O bot vai puxar do TransNet — pode levar alguns minutos.");
-  }
-
-  useEffect(() => {
-    if (!botJob || botJob.status === "concluido" || botJob.status === "erro") {
-      clearInterval(botPollRef.current);
-      botPollRef.current = null;
-      return;
+  function montarCodigosBusca(valor) {
+    const raw = String(valor || "").trim();
+    const digits = raw.replace(/\D/g, "");
+    const codigos = new Set([raw]);
+    if (digits && digits === raw) {
+      const semZeros = digits.replace(/^0+/, "") || "0";
+      codigos.add(semZeros);
+      [8, 9, 10, 11, 12, 13, 14].forEach((size) => codigos.add(semZeros.padStart(size, "0")));
     }
-    botPollRef.current = setInterval(async () => {
-      const { data } = await supabase
-        .from("suprimentos_bot_jobs")
-        .select("*")
-        .eq("id", botJob.id)
-        .maybeSingle();
-      if (!data) return;
-      setBotJob(data);
-      if (data.status === "concluido") {
-        const r = data.resultado_json || {};
-        setBotMsg(`Conferência concluída: ${r.itens_atualizados ?? "?"} item(ns) atualizado(s), ${r.divergencias ?? "?"} divergência(s).`);
-        carregarContagens();
-      } else if (data.status === "erro") {
-        setBotMsg(`Bot falhou: ${data.erro || "erro desconhecido"}`);
-      }
-    }, 4000);
-    return () => clearInterval(botPollRef.current);
-  }, [botJob?.id, botJob?.status]);
+    return [...codigos].filter(Boolean);
+  }
 
   async function buscarPeca(codigoBusca) {
     const c = String(codigoBusca || "").trim();
     if (!c) { setPeca(null); setNaoCadastrado(false); return; }
     setBusy(true); setErro(""); setAviso("");
+    const candidatos = montarCodigosBusca(c);
+    const filtroCodigos = candidatos
+      .flatMap((codigoItem) => [`codigo.eq.${codigoItem}`, `ref_fabricante.eq.${codigoItem}`])
+      .join(",");
     const { data, error } = await supabase
       .from("suprimentos_pecas")
       .select("id, codigo, descricao, unidade_padrao, localizacao, estoque_min, estoque_max, saldo_erp")
-      .or(`codigo.eq.${c},ref_fabricante.eq.${c}`)
+      .or(filtroCodigos)
       .limit(1)
       .maybeSingle();
     setBusy(false);
     if (error) { setErro(error.message); setPeca(null); setNaoCadastrado(false); return; }
     if (!data) {
-      // Sem cadastro — deixa contar do mesmo jeito, marca para a central
       setPeca(null);
       setNaoCadastrado(true);
-      setAviso(`Código ${c} não está na base. Pode contar mesmo assim — vai aparecer na central como pendente de cadastro.`);
+      setAviso(`Código ${c} não está na base. Pode contar mesmo assim — vai aparecer como pendente.`);
       setTimeout(() => qtdInputRef.current?.focus(), 50);
       return;
     }
+    if (data.codigo && data.codigo !== c) setCodigo(data.codigo);
     setPeca(data);
     setNaoCadastrado(false);
     setTimeout(() => qtdInputRef.current?.focus(), 50);
   }
 
+  function limparApontamento() {
+    setCodigo("");
+    setPeca(null);
+    setNaoCadastrado(false);
+    setQuantidade("");
+    setObservacao("");
+    setErro("");
+    setAviso("");
+  }
+
   async function salvarContagem() {
     const codigoTrim = codigo.trim();
-    if (!peca && !naoCadastrado) {
-      // se o usuário só digitou e nem buscou ainda, tenta resolver agora
-      if (codigoTrim) await buscarPeca(codigoTrim);
-    }
     if (!codigoTrim) { setErro("Informe o código contado."); return; }
-    if (quantidade === "" || Number.isNaN(Number(quantidade))) {
-      setErro("Informe uma quantidade válida.");
-      return;
-    }
+    if (quantidade === "" || Number.isNaN(Number(quantidade))) { setErro("Informe uma quantidade válida."); return; }
     setBusy(true); setErro("");
     const qtd = Number(quantidade);
     const saldoErp = peca?.saldo_erp ?? null;
@@ -272,21 +376,62 @@ export default function SuprimentosContagem() {
     const { error } = await supabase.from("suprimentos_contagens").insert(payload);
     setBusy(false);
     if (error) { setErro(error.message); return; }
-    setCodigo("");
-    setPeca(null);
-    setNaoCadastrado(false);
-    setQuantidade("");
-    setObservacao("");
-    setAviso("");
+    setCodigo(""); setPeca(null); setNaoCadastrado(false); setQuantidade(""); setObservacao(""); setAviso("");
     setTimeout(() => codigoInputRef.current?.focus(), 50);
-    carregarContagens();
+    carregarLotes();
   }
 
-  async function excluir(id) {
-    if (!window.confirm("Remover esta contagem?")) return;
-    const { error } = await supabase.from("suprimentos_contagens").delete().eq("id", id);
-    if (error) { alert(error.message); return; }
-    carregarContagens();
+  async function salvarContagemFluxo() {
+    const codigoTrim = codigo.trim();
+    if (!codigoTrim) { setErro("Informe o codigo contado."); return false; }
+    if (quantidade === "" || Number.isNaN(Number(quantidade))) { setErro("Informe uma quantidade valida."); return false; }
+    setBusy(true);
+    setErro("");
+
+    const qtd = Number(quantidade);
+    const saldoErp = peca?.saldo_erp ?? null;
+    const diff = saldoErp !== null && saldoErp !== undefined ? qtd - Number(saldoErp) : null;
+    const payload = {
+      peca_id: peca?.id || null,
+      codigo: peca?.codigo || codigoTrim,
+      descricao: peca?.descricao || "Sem cadastro",
+      localizacao: peca?.localizacao || null,
+      unidade: peca?.unidade_padrao || null,
+      quantidade: qtd,
+      saldo_erp: saldoErp,
+      diferenca: diff,
+      observacao: observacao.trim() || null,
+      contado_por_id: userInfo.id,
+      contado_por_login: userInfo.login,
+      contado_por_nome: userInfo.nome,
+    };
+
+    const { error } = await supabase.from("suprimentos_contagens").insert(payload);
+    setBusy(false);
+    if (error) { setErro(error.message); return false; }
+    limparApontamento();
+    return true;
+  }
+
+  function iniciarFluxo() {
+    limparApontamento();
+    setItensSessao(0);
+    setFluxoAtivo(true);
+    setTimeout(() => setScannerOpen(true), 150);
+  }
+
+  async function proximoItem() {
+    const ok = await salvarContagemFluxo();
+    if (!ok) return;
+    setItensSessao((current) => current + 1);
+    setAviso("Item salvo. Aponte o proximo codigo.");
+    setTimeout(() => setScannerOpen(true), 250);
+  }
+
+  function finalizarFluxo() {
+    setScannerOpen(false);
+    setFluxoAtivo(false);
+    limparApontamento();
   }
 
   function handleScan(text) {
@@ -295,25 +440,244 @@ export default function SuprimentosContagem() {
     buscarPeca(text);
   }
 
-  const filtered = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    if (!q) return contagens;
-    return contagens.filter((c) =>
-      [c.codigo, c.descricao, c.localizacao, c.contado_por_nome].some((v) => String(v || "").toLowerCase().includes(q))
-    );
-  }, [contagens, busca]);
+  // ─── Lotes (Diária = dia / Semanal = par de domingos) ─────
+  const [tab, setTab] = useState("diaria");
+  const [lotesDiarios, setLotesDiarios] = useState([]);
+  const [lotesSemanais, setLotesSemanais] = useState([]);
+  const [loadingLotes, setLoadingLotes] = useState(true);
 
+  async function carregarLotes() {
+    setLoadingLotes(true);
+    const [contagensRes, auditoriasRes] = await Promise.all([
+      supabase.from("suprimentos_contagens")
+        .select("id,codigo,quantidade,saldo_erp,diferenca,peca_id,created_at,contado_por_nome")
+        .order("created_at", { ascending: false })
+        .limit(5000),
+      supabase.from("suprimentos_auditorias")
+        .select("*")
+        .eq("tipo", "semanal")
+        .order("data_fim", { ascending: false })
+        .limit(50),
+    ]);
+    const contagens = contagensRes.data || [];
+    setLotesSemanais(auditoriasRes.data || []);
+
+    // Agrupa por dia (YYYY-MM-DD em BRT — usando created_at)
+    const byDay = new Map();
+    contagens.forEach((c) => {
+      const d = new Date(c.created_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const cur = byDay.get(key) || { data: key, total: 0, divergencias: 0, sem_cadastro: 0, sem_conferir: 0, contadores: new Set() };
+      cur.total += 1;
+      if (!c.peca_id) cur.sem_cadastro += 1;
+      if (c.saldo_erp === null || c.saldo_erp === undefined) cur.sem_conferir += 1;
+      else if (Number(c.diferenca) !== 0) cur.divergencias += 1;
+      if (c.contado_por_nome) cur.contadores.add(c.contado_por_nome);
+      byDay.set(key, cur);
+    });
+    const lotes = Array.from(byDay.values()).map((l) => ({ ...l, contadores: Array.from(l.contadores) }));
+    lotes.sort((a, b) => (a.data < b.data ? 1 : -1));
+    setLotesDiarios(lotes);
+    setLoadingLotes(false);
+  }
+
+  useEffect(() => {
+    if (!isNativeShell) carregarLotes();
+    else setLoadingLotes(false);
+  }, [isNativeShell]);
+
+  // ─── KPIs ──────────────────────────────────────────────────
   const kpis = useMemo(() => {
-    const total = contagens.length;
-    const hoje = new Date().toDateString();
-    const hojeCount = contagens.filter((c) => new Date(c.created_at).toDateString() === hoje).length;
-    const divergencia = contagens.filter((c) => c.diferenca !== null && Number(c.diferenca) !== 0).length;
-    const semCadastro = contagens.filter((c) => !c.peca_id).length;
-    return { total, hojeCount, divergencia, semCadastro };
-  }, [contagens]);
+    const total = lotesDiarios.reduce((sum, l) => sum + l.total, 0);
+    const hoje = new Date();
+    const hojeKey = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+    const hojeLote = lotesDiarios.find((l) => l.data === hojeKey);
+    const divergencia = lotesDiarios.reduce((sum, l) => sum + l.divergencias, 0);
+    const sem_cadastro = lotesDiarios.reduce((sum, l) => sum + l.sem_cadastro, 0);
+    return { total, hojeCount: hojeLote?.total || 0, divergencia, sem_cadastro };
+  }, [lotesDiarios]);
 
-  const [filtroPendentes, setFiltroPendentes] = useState(false);
-  const visiveis = useMemo(() => filtroPendentes ? filtered.filter((c) => !c.peca_id) : filtered, [filtered, filtroPendentes]);
+  if (isNativeShell) {
+    return (
+      <div className="min-h-[calc(100vh-120px)] bg-slate-50 p-4 pb-24">
+        <div className="mx-auto flex max-w-md flex-col gap-4">
+          <header className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">Suprimentos</p>
+            <h1 className="mt-2 text-2xl font-black text-slate-950">Contagem</h1>
+            <p className="mt-2 text-sm font-semibold text-slate-500">
+              {fluxoAtivo ? `${itensSessao} item(ns) salvo(s) nesta sessao.` : "Inicie uma sessao para contar item por item."}
+            </p>
+          </header>
+
+          {!fluxoAtivo ? (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={iniciarFluxo}
+                className="flex min-h-[180px] w-full flex-col items-start justify-end rounded-[32px] bg-gradient-to-br from-emerald-600 to-teal-800 p-6 text-left text-white shadow-xl active:scale-[0.98]"
+              >
+                <span className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/15 text-3xl">
+                  <FaBarcode />
+                </span>
+                <span className="text-2xl font-black">Iniciar contagem</span>
+                <span className="mt-2 text-sm font-semibold text-white/80">Escaneie, informe a quantidade e avance para o proximo item.</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileCentralOpen((current) => {
+                    const next = !current;
+                    if (next && !lotesDiarios.length) carregarLotes();
+                    return next;
+                  });
+                }}
+                className="flex w-full items-center justify-between rounded-3xl border border-slate-200 bg-white px-5 py-4 text-left text-slate-950 shadow-sm active:scale-[0.98]"
+              >
+                <span>
+                  <span className="block text-base font-black">Central</span>
+                  <span className="mt-0.5 block text-xs font-semibold text-slate-500">Ver contagens, lotes e divergencias.</span>
+                </span>
+                <FaChevronRight className={`text-slate-400 transition ${mobileCentralOpen ? "rotate-90" : ""}`} />
+              </button>
+
+              {mobileCentralOpen ? (
+                <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Central</p>
+                      <h2 className="text-lg font-black text-slate-950">Contagens recentes</h2>
+                    </div>
+                    <span className="rounded-2xl bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{kpis.total}</span>
+                  </div>
+
+                  {loadingLotes ? (
+                    <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-500">Carregando...</p>
+                  ) : lotesDiarios.length ? (
+                    <div className="space-y-2">
+                      {lotesDiarios.slice(0, 12).map((lote) => (
+                        <button
+                          key={lote.data}
+                          type="button"
+                          onClick={() => navigate(`/suprimentos/contagem/dia/${lote.data}`)}
+                          className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-left active:scale-[0.99]"
+                        >
+                          <span>
+                            <span className="block text-sm font-black text-slate-950">{formatDateBR(lote.data)}</span>
+                            <span className="text-xs font-semibold text-slate-500">{lote.total} item(ns) · {lote.divergencias} divergencia(s)</span>
+                          </span>
+                          <FaChevronRight className="text-slate-400" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-500">Nenhuma contagem encontrada.</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Item atual</p>
+                  <h2 className="text-lg font-black text-slate-950">{codigo ? "Conferir quantidade" : "Aguardando codigo"}</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen(true)}
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm"
+                  aria-label="Escanear"
+                >
+                  <FaCamera />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <Field label="Codigo">
+                  <div className="flex gap-2">
+                    <input
+                      ref={codigoInputRef}
+                      className={inputClass}
+                      placeholder="Escaneie ou digite"
+                      value={codigo}
+                      onChange={(e) => setCodigo(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); buscarPeca(codigo); } }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => buscarPeca(codigo)}
+                      disabled={busy || !codigo.trim()}
+                      className="rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      <FaSearch />
+                    </button>
+                  </div>
+                </Field>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Peca</p>
+                  <p className="mt-2 text-base font-black text-slate-950">
+                    {peca?.descricao || (naoCadastrado ? "Sem cadastro" : "Aguardando leitura")}
+                  </p>
+                  {peca?.saldo_erp !== null && peca?.saldo_erp !== undefined ? (
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Saldo ERP: {peca.saldo_erp}</p>
+                  ) : null}
+                </div>
+
+                <Field label="Quantidade">
+                  <input
+                    ref={qtdInputRef}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className={`${inputClass} text-center text-2xl font-black`}
+                    placeholder="0"
+                    value={quantidade}
+                    onChange={(e) => setQuantidade(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); proximoItem(); } }}
+                    disabled={!peca && !naoCadastrado}
+                  />
+                </Field>
+
+                <Field label="Observacao">
+                  <input
+                    className={inputClass}
+                    placeholder="opcional"
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                  />
+                </Field>
+
+                {aviso ? <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">{aviso}</p> : null}
+                {erro ? <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{erro}</p> : null}
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={finalizarFluxo}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-black text-slate-700"
+                >
+                  Finalizar
+                </button>
+                <button
+                  type="button"
+                  onClick={proximoItem}
+                  disabled={busy || quantidade === "" || (!peca && !naoCadastrado)}
+                  className="rounded-2xl bg-emerald-600 px-4 py-4 text-sm font-black text-white shadow-sm disabled:opacity-50"
+                >
+                  Proximo
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onScan={handleScan} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -328,52 +692,14 @@ export default function SuprimentosContagem() {
         }
       />
 
-      <Panel
-        title="Conferir com o ERP"
-        subtitle="Roda o bot que entra no TransNet, lê o saldo do dia e atualiza as contagens daquela data."
-      >
-        <div className="flex flex-wrap items-end gap-3">
-          <Field label="Data da contagem">
-            <input
-              type="date"
-              className={inputClass}
-              value={confDate}
-              onChange={(e) => setConfDate(e.target.value)}
-              max={new Date().toISOString().slice(0, 10)}
-            />
-          </Field>
-          <ActionButton
-            tone="blue"
-            onClick={dispararConferencia}
-            disabled={Boolean(botJob && ["pendente", "processando"].includes(botJob.status))}
-          >
-            <FaRobot />
-            {botJob && botJob.status === "pendente" ? "Aguardando bot..." :
-             botJob && botJob.status === "processando" ? "Bot rodando..." :
-             "Conferir com ERP"}
-          </ActionButton>
-          {botJob ? (
-            <StatusChip
-              tone={botJob.status === "concluido" ? "emerald" : botJob.status === "erro" ? "rose" : "amber"}
-              label={botJob.status === "concluido" ? "Concluído" :
-                     botJob.status === "erro" ? "Erro" :
-                     botJob.status === "processando" ? "Em execução" : "Na fila"}
-            />
-          ) : null}
-        </div>
-        {botMsg ? (
-          <p className="mt-3 text-sm font-medium text-slate-600">{botMsg}</p>
-        ) : null}
-      </Panel>
-
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="Contagens totais" value={kpis.total} subtitle="Registradas no histórico" icon={<FaBarcode />} tone="blue" />
-        <KpiCard title="Contadas hoje" value={kpis.hojeCount} subtitle="Itens apontados nas últimas 24h" icon={<FaCheck />} tone="cyan" />
+        <KpiCard title="Contadas hoje" value={kpis.hojeCount} subtitle="Itens apontados no dia atual" icon={<FaCheck />} tone="cyan" />
         <KpiCard title="Com divergência" value={kpis.divergencia} subtitle="Quantidade diferente do ERP" icon={<FaRedo />} tone="amber" />
-        <KpiCard title="Sem cadastro" value={kpis.semCadastro} subtitle="Códigos contados que não estão na base" icon={<FaTimes />} tone="rose" />
+        <KpiCard title="Sem cadastro" value={kpis.sem_cadastro} subtitle="Códigos contados que não estão na base" icon={<FaTimes />} tone="rose" />
       </section>
 
-      <Panel title="Registrar contagem" subtitle="Cada apontamento gera um registro independente, sem alterar nada do que já existe.">
+      <Panel title="Registrar contagem" subtitle="Cada apontamento gera um registro independente.">
         <div className="grid gap-4 md:grid-cols-[1fr_1fr_0.6fr_1fr]">
           <Field label="Código" required>
             <div className="flex gap-2">
@@ -439,31 +765,6 @@ export default function SuprimentosContagem() {
           </Field>
         </div>
 
-        {peca ? (
-          <div className="mt-4 grid gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4 md:grid-cols-4">
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Localização</p>
-              <p className="mt-0.5 text-sm font-semibold text-slate-800">{peca.localizacao || "—"}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Estoque mín / máx</p>
-              <p className="mt-0.5 text-sm font-semibold text-slate-800">
-                {peca.estoque_min ?? "—"} / {peca.estoque_max ?? "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Saldo ERP</p>
-              <p className="mt-0.5 text-sm font-semibold text-slate-800">
-                {peca.saldo_erp !== null && peca.saldo_erp !== undefined ? Number(peca.saldo_erp).toLocaleString("pt-BR") : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Unidade</p>
-              <p className="mt-0.5 text-sm font-semibold text-slate-800">{peca.unidade_padrao || "un"}</p>
-            </div>
-          </div>
-        ) : null}
-
         {aviso ? (
           <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700">{aviso}</p>
         ) : null}
@@ -482,87 +783,122 @@ export default function SuprimentosContagem() {
       </Panel>
 
       <Panel
-        title="Central de contagens"
-        subtitle="Últimos 200 apontamentos. Itens sem cadastro ficam destacados para tratamento."
+        title="Lotes de contagem"
+        subtitle="Cada lote agrupa as contagens daquele período. Clique para ver o detalhe."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setFiltroPendentes((v) => !v)}
-              className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${filtroPendentes ? "border-rose-300 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}
-            >
-              {filtroPendentes ? "Mostrando só sem cadastro" : "Filtrar sem cadastro"}
-            </button>
-            <label className="relative block w-full sm:w-72">
-              <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar código, peça, usuário..."
-                className={`${inputClass} pl-11`}
-              />
-            </label>
+          <div className="flex gap-2">
+            {[
+              { key: "diaria", label: "Diária" },
+              { key: "semanal", label: "Semanal" },
+            ].map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${tab === t.key ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-100"}`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         }
       >
-        {loadingHist ? (
-          <p className="py-12 text-center text-sm font-semibold text-slate-400">Carregando histórico...</p>
-        ) : visiveis.length === 0 ? (
-          <EmptyState title="Sem contagens" subtitle={filtroPendentes ? "Nada pendente — todas as contagens estão com cadastro." : "Aponte o primeiro código de barras para começar."} />
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-3">Quando</th>
-                  <th className="px-4 py-3">Código</th>
-                  <th className="px-4 py-3">Peça</th>
-                  <th className="px-4 py-3">Localização</th>
-                  <th className="px-4 py-3 text-right">Qtd contada</th>
-                  <th className="px-4 py-3 text-right">Saldo ERP</th>
-                  <th className="px-4 py-3">Divergência</th>
-                  <th className="px-4 py-3">Contado por</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visiveis.map((c) => (
-                  <tr key={c.id} className={`border-t border-slate-100 hover:bg-slate-50/60 ${!c.peca_id ? "bg-rose-50/40" : ""}`}>
-                    <td className="px-4 py-3 text-xs font-medium text-slate-500">{formatDateTimeBR(c.created_at)}</td>
-                    <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{c.codigo || "—"}</td>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-900">{c.descricao || "—"}</p>
-                      {!c.peca_id ? (
-                        <span className="mt-1 inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700">
-                          Sem cadastro
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{c.localizacao || "—"}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                      {Number(c.quantidade || 0).toLocaleString("pt-BR")} {c.unidade || ""}
-                    </td>
-                    <td className="px-4 py-3 text-right text-slate-600">
-                      {c.saldo_erp !== null && c.saldo_erp !== undefined ? Number(c.saldo_erp).toLocaleString("pt-BR") : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusChip label={diffLabel(c.diferenca)} tone={diffTone(c.diferenca)} />
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">{c.contado_por_nome || "—"}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => excluir(c.id)}
-                        className="rounded-xl p-2 text-rose-500 hover:bg-rose-50"
-                        title="Remover"
-                      >
-                        <FaTrashAlt />
-                      </button>
-                    </td>
+        {loadingLotes ? (
+          <p className="py-12 text-center text-sm font-semibold text-slate-400">Carregando...</p>
+        ) : tab === "diaria" ? (
+          lotesDiarios.length === 0 ? (
+            <EmptyState title="Sem lotes diários" subtitle="Faça a primeira contagem para abrir um lote." />
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="px-4 py-3">Data</th>
+                    <th className="px-4 py-3 text-right">Itens contados</th>
+                    <th className="px-4 py-3 text-right">Divergências</th>
+                    <th className="px-4 py-3 text-right">Sem cadastro</th>
+                    <th className="px-4 py-3 text-right">Pendentes</th>
+                    <th className="px-4 py-3">Contadores</th>
+                    <th className="px-4 py-3 text-right"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {lotesDiarios.map((l) => (
+                    <tr
+                      key={l.data}
+                      onClick={() => navigate(`/suprimentos/contagem/dia/${l.data}`)}
+                      className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60"
+                    >
+                      <td className="px-4 py-3 font-semibold text-slate-900">{formatDateBR(l.data)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-slate-700">{l.total}</td>
+                      <td className="px-4 py-3 text-right">
+                        {l.divergencias > 0 ? <StatusChip label={String(l.divergencias)} tone="amber" /> : <span className="text-slate-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {l.sem_cadastro > 0 ? <StatusChip label={String(l.sem_cadastro)} tone="rose" /> : <span className="text-slate-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {l.sem_conferir > 0 ? <StatusChip label={String(l.sem_conferir)} tone="slate" /> : <StatusChip label="Conferido" tone="emerald" />}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        {l.contadores.slice(0, 3).join(", ")}{l.contadores.length > 3 ? ` +${l.contadores.length - 3}` : ""}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-400">
+                        <FaChevronRight />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
+          lotesSemanais.length === 0 ? (
+            <EmptyState title="Sem auditorias semanais" subtitle="O bot semanal roda toda segunda 03h. Você também pode disparar manual em GitHub Actions." />
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="px-4 py-3">Período</th>
+                    <th className="px-4 py-3 text-right">Itens</th>
+                    <th className="px-4 py-3 text-right">Corretos</th>
+                    <th className="px-4 py-3 text-right">Errados</th>
+                    <th className="px-4 py-3 text-right">Sem contagem</th>
+                    <th className="px-4 py-3">Quando</th>
+                    <th className="px-4 py-3 text-right"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lotesSemanais.map((a) => {
+                    const r = a.resumo_json || {};
+                    return (
+                      <tr
+                        key={a.id}
+                        onClick={() => navigate(`/suprimentos/contagem/semanal/${a.id}`)}
+                        className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60"
+                      >
+                        <td className="px-4 py-3 font-semibold text-slate-900">
+                          {formatDateBR(a.data_inicio)} → {formatDateBR(a.data_fim)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-700">{r.itens_total ?? "—"}</td>
+                        <td className="px-4 py-3 text-right text-emerald-700">{r.itens_corretos ?? "—"}</td>
+                        <td className="px-4 py-3 text-right text-rose-700">{r.itens_errados ?? "—"}</td>
+                        <td className="px-4 py-3 text-right text-slate-500">{r.itens_sem_contagem ?? "—"}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{formatDateTimeBR(a.created_at)}</td>
+                        <td className="px-4 py-3 text-right text-slate-400">
+                          {a.excel_url ? (
+                            <a href={a.excel_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-blue-600 hover:underline">
+                              <FaDownload /> Excel
+                            </a>
+                          ) : <FaChevronRight />}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </Panel>
 

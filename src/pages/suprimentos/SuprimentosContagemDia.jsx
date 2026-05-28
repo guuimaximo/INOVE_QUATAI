@@ -72,6 +72,7 @@ export default function SuprimentosContagemDia() {
       .from("suprimentos_bot_jobs")
       .insert({
         tipo: "conferencia_dia",
+        tipo_contagem: "diaria",
         data_alvo: data,
         status: "pendente",
         criado_por_id: userInfo.id,
@@ -82,18 +83,37 @@ export default function SuprimentosContagemDia() {
     setBotJob(job);
     setBotMsg("Job enfileirado. Disparando workflow no GitHub Actions...");
 
-    // dispara o workflow agora (não espera o cron de 5 min)
+    // Dispara o workflow imediatamente (GitHub workflow_dispatch)
     try {
-      const { data: r, error: fnErr } = await supabase.functions.invoke("dispatch-bot", {
-        body: { tipo: "diaria", data_alvo: data },
-      });
-      if (fnErr || (r && r.ok === false)) {
-        setBotMsg("Job enfileirado. Workflow imediato falhou — vai rodar no próximo cron (até 5 min).");
+      const token = import.meta.env.VITE_GITHUB_TOKEN_BOT;
+      if (!token) {
+        setBotMsg("Job enfileirado. Sem VITE_GITHUB_TOKEN_BOT — vai rodar no próximo cron (até 5 min).");
+        return;
+      }
+      const owner = import.meta.env.VITE_GITHUB_USER_BOT || "guuimaximo";
+      const repo = import.meta.env.VITE_GITHUB_REPO_BOT || "INOVE_QUATAI";
+      const ref = import.meta.env.VITE_GITHUB_REF_BOT || "main";
+      const r = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/actions/workflows/bot-estoque-diaria.yml/dispatches`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ref, inputs: { data_alvo: data } }),
+        }
+      );
+      if (!r.ok) {
+        const text = await r.text();
+        setBotMsg(`Job enfileirado. GitHub respondeu ${r.status}: ${text.slice(0, 120)}`);
       } else {
         setBotMsg("Job enfileirado e workflow disparado. Pode levar alguns minutos.");
       }
     } catch (e) {
-      setBotMsg("Job enfileirado. Workflow imediato falhou — vai rodar no próximo cron (até 5 min).");
+      setBotMsg(`Job enfileirado. Erro chamando GitHub: ${e?.message || e}`);
     }
   }
 

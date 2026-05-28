@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import PullToRefresh from "../../components/PullToRefresh";
 import { canUseAppResource } from "../../utils/appResources";
@@ -730,6 +730,9 @@ export default function SuprimentosContagem() {
   }, [lotesDiarios]);
 
   if (isNativeShell) {
+    if (!podeIniciar && !podeVerLotes) {
+      return <Navigate to="/" replace />;
+    }
     return (
       <PullToRefresh onRefresh={carregarLotes}>
       <div className="min-h-[calc(100vh-120px)] bg-slate-50 p-4 pb-24">
@@ -744,11 +747,6 @@ export default function SuprimentosContagem() {
 
           {!fluxoAtivo ? (
             <div className="space-y-3">
-              {!podeIniciar && !podeVerLotes ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
-                  Você ainda não tem permissão para usar a Contagem no app. Peça ao administrador.
-                </div>
-              ) : null}
               {podeIniciar ? (
               <>
                 <button

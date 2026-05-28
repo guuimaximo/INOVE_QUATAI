@@ -16,6 +16,7 @@ import {
   FaSearch,
   FaTimes,
   FaTimesCircle,
+  FaTrash,
   FaTruck,
   FaTruckLoading,
   FaUndoAlt,
@@ -912,7 +913,7 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
 /* ════════════════════════════════════════════════════════════════
    MODAL — DETALHE + RASTREIO
 ═══════════════════════════════════════════════════════════════════ */
-function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
+function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }) {
   const [tab, setTab] = useState("detalhes");
   const [movs, setMovs] = useState([]);
   const [loadingMovs, setLoadingMovs] = useState(true);
@@ -1067,6 +1068,15 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
             <button onClick={() => printFicha(record)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">
               <FaDownload /> Baixar PDF
             </button>
+            {onDelete && (
+              <button
+                onClick={() => { onClose(); onDelete(record); }}
+                className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                title="Excluir (Administrador)"
+              >
+                <FaTrash /> Excluir
+              </button>
+            )}
             <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
           </div>
         </div>
@@ -1261,6 +1271,7 @@ const STATUS_OPTIONS = ["Todos", "Em posse do terceiro", "Retornado", "Cancelado
 
 export default function SuprimentosServicoExterno() {
   const { user } = useContext(AuthContext);
+  const isAdmin = String(user?.nivel || "").trim().toLowerCase() === "administrador";
   const userInfo = useMemo(() => ({
     id: user?.id || null,
     login: user?.login || user?.usuario || null,
@@ -1285,6 +1296,20 @@ export default function SuprimentosServicoExterno() {
     setLoading(false);
   }
   useEffect(() => { carregar(); }, []);
+
+  async function excluirRegistro(record) {
+    if (!isAdmin) return;
+    const label = record?.numero_saida || record?.terceiro_nome || "este registro";
+    if (!window.confirm(`Excluir o servico externo "${label}"? Esta acao nao pode ser desfeita.`)) return;
+    const { error } = await supabase.from("suprimentos_servico_externo").delete().eq("id", record.id);
+    if (error) {
+      console.error("Erro ao excluir servico externo:", error);
+      window.alert(`Nao foi possivel excluir: ${error.message || error}`);
+      return;
+    }
+    if (selected?.id === record.id) setSelected(null);
+    await carregar();
+  }
 
   const filtered = useMemo(() => {
     return records.filter((r) => {
@@ -1385,6 +1410,15 @@ export default function SuprimentosServicoExterno() {
                           <button onClick={() => printFicha(r)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Baixar PDF">
                             <FaDownload />
                           </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => excluirRegistro(r)}
+                              className="rounded-xl p-2 text-rose-500 hover:bg-rose-50"
+                              title="Excluir (Administrador)"
+                            >
+                              <FaTrash />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1408,6 +1442,7 @@ export default function SuprimentosServicoExterno() {
           onClose={() => setSelected(null)}
           onUpdated={() => { setSelected(null); carregar(); }}
           onEdit={(r) => setEditRecord(r)}
+          onDelete={isAdmin ? excluirRegistro : null}
           userInfo={userInfo}
         />
       )}

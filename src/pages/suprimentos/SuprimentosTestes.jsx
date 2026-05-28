@@ -476,7 +476,6 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <StatusChip label={meta.status} tone={meta.concluido ? "emerald" : "amber"} />
             <StatusChip label={meta.fase} tone={meta.tone} />
             <button
               type="button"
@@ -900,10 +899,7 @@ export default function SuprimentosTestes() {
                           )}
                         </td>
                         <td className="px-4 py-4">
-                          <div className="flex flex-col gap-2">
-                            <StatusChip label={meta.status} tone={meta.concluido ? "emerald" : "amber"} />
-                            <StatusChip label={meta.fase} tone={meta.tone} />
-                          </div>
+                          <StatusChip label={meta.fase} tone={meta.tone} />
                         </td>
                         <td className="px-4 py-4">
                           <p className="font-semibold text-slate-700">{row.aberto_por_nome || "--"}</p>

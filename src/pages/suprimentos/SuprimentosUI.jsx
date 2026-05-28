@@ -105,11 +105,11 @@ export function Panel({ title, subtitle, actions = null, children, className = "
   );
 }
 
-export function StatusChip({ label, tone = "slate" }) {
+export function StatusChip({ label, tone = "slate", children }) {
   const chip = TONE_MAP[tone]?.chip || TONE_MAP.slate.chip;
   return (
     <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${chip}`}>
-      {label}
+      {label ?? children}
     </span>
   );
 }

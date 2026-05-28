@@ -175,19 +175,21 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
-      <div className="my-8 w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl">
+      <div className="my-8 w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-600">Fornecedores</p>
-            <h2 className="mt-0.5 text-lg font-semibold text-slate-900">{initial ? "Editar Fornecedor" : "Novo Fornecedor"}</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-500">Fornecedores</p>
+            <h2 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900">{initial ? "Editar Fornecedor" : "Novo Fornecedor"}</h2>
           </div>
           <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
         </div>
         <div className="px-6 py-5 space-y-4">
-          <Field label="Nome / Razão Social" required>
-            <input className={inputClass} value={form.nome} onChange={(e) => setF("nome", e.target.value)} />
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Field label="Nome / Razão Social" required className="md:col-span-3">
+              <input className={inputClass} value={form.nome} onChange={(e) => setF("nome", e.target.value)} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Field label="CNPJ / CPF">
               <div className="flex gap-2">
                 <input className={inputClass} placeholder="00.000.000/0000-00" value={form.cnpj} onChange={(e) => setF("cnpj", e.target.value)} />
@@ -623,20 +625,6 @@ function FornecedoresTab() {
         </div>
       </div>
 
-      {/* hint */}
-      {!search && (
-        <p className="text-xs text-slate-400 font-semibold">
-          Mostrando os primeiros {PAGE_SIZE} fornecedores. Use a busca para filtrar entre os{" "}
-          <span className="font-semibold text-slate-600">75.834</span> cadastrados.
-        </p>
-      )}
-      {search && !loading && (
-        <p className="text-xs text-slate-400 font-semibold">
-          {rows.length === PAGE_SIZE
-            ? `Mostrando os primeiros ${PAGE_SIZE} resultados para "${search}".`
-            : `${rows.length} resultado(s) para "${search}".`}
-        </p>
-      )}
       {updateMessage && (
         <p className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">
           {updateMessage}
@@ -802,20 +790,6 @@ function PecasTab() {
           <FaPlus /> Nova Peça
         </button>
       </div>
-
-      {!search && (
-        <p className="text-xs text-slate-400 font-semibold">
-          Mostrando os primeiros {PAGE_SIZE} itens unicos. Use a busca para filtrar entre os{" "}
-          <span className="font-semibold text-slate-600">17.954</span> cadastrados.
-        </p>
-      )}
-      {search && !loading && (
-        <p className="text-xs text-slate-400 font-semibold">
-          {rawCount > filtered.length
-            ? `${filtered.length} item(ns) unico(s) para "${search}" (${rawCount - filtered.length} duplicado(s) oculto(s) neste lote).`
-            : `${filtered.length} resultado(s) para "${search}".`}
-        </p>
-      )}
 
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-12 text-sm font-semibold text-slate-400">

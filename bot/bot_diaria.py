@@ -110,9 +110,22 @@ def carregar_contagens_do_dia(data_alvo: str) -> list:
     rows = supa_get(
         "suprimentos_contagens",
         {
-            "select": "id,codigo,quantidade,saldo_erp,diferenca",
+            "select": "id,codigo,quantidade,saldo_erp,diferenca,lote_id",
             "created_at": f"gte.{inicio}",
             "and": f"(created_at.lte.{fim})",
+            "order": "created_at.asc",
+            "limit": "10000",
+        },
+    )
+    return rows
+
+
+def carregar_contagens_do_lote(lote_id: str) -> list:
+    rows = supa_get(
+        "suprimentos_contagens",
+        {
+            "select": "id,codigo,quantidade,saldo_erp,diferenca,lote_id,created_at",
+            "lote_id": f"eq.{lote_id}",
             "order": "created_at.asc",
             "limit": "10000",
         },
@@ -192,23 +205,43 @@ def aplicar_resultado(contagens: list, saldos: Dict[str, float]) -> dict:
 def processar_job(job: dict):
     job_id = job["id"]
     data_alvo = job["data_alvo"]
-    _log("STEP 1", f"job id={job_id} data_alvo={data_alvo}")
+    lote_id = job.get("lote_id")
+    escopo = f"lote_id={lote_id}" if lote_id else f"dia_inteiro={data_alvo}"
+    _log("STEP 1", f"job id={job_id}  data_alvo={data_alvo}  escopo={escopo}")
     marcar_processando(job_id)
     _log("STEP 2", "marcado como 'processando' no Supabase")
 
-    contagens = carregar_contagens_do_dia(data_alvo)
-    _log("STEP 3", f"contagens carregadas do Supabase: {len(contagens)}")
+    if lote_id:
+        contagens = carregar_contagens_do_lote(lote_id)
+        # se o job tem lote_id mas data_alvo nao foi setado, descobre a partir da contagem
+        if contagens and not data_alvo:
+            data_alvo = contagens[0]["created_at"][:10]
+    else:
+        contagens = carregar_contagens_do_dia(data_alvo)
+    _log("STEP 3", f"contagens nesse escopo: {len(contagens)}")
     if not contagens:
-        marcar_concluido(job_id, {"itens_atualizados": 0, "divergencias": 0, "msg": "Sem contagens nesse dia."})
+        marcar_concluido(job_id, {
+            "itens_atualizados": 0,
+            "divergencias": 0,
+            "msg": "Sem contagens nesse lote." if lote_id else "Sem contagens nesse dia.",
+            "lote_id": lote_id,
+        })
         _log("STEP 3", "encerrando - nada pra processar.")
         return
 
-    _log("STEP 4", "iniciando download do saldo no TransNet")
+    if not data_alvo:
+        _log("ERRO ", "sem data_alvo definido — abortando.")
+        marcar_erro(job_id, "data_alvo nao definido no job.")
+        return
+
+    _log("STEP 4", f"baixando saldo do ERP em {data_alvo}")
     saldos = baixar_saldos_do_dia(data_alvo)
-    _log("STEP 5", f"comparando contagens x saldos ({len(saldos)} codigos no ERP)")
+    _log("STEP 5", f"comparando {len(contagens)} contagens x {len(saldos)} codigos no ERP")
     resultado = aplicar_resultado(contagens, saldos)
     resultado["codigos_unicos_no_erp"] = len(saldos)
     resultado["contagens_processadas"] = len(contagens)
+    resultado["lote_id"] = lote_id
+    resultado["escopo"] = escopo
     _log("STEP 6", "marcando job como 'concluido'")
     marcar_concluido(job_id, resultado)
     _log("STEP 7", f"OK: {resultado}")

@@ -365,11 +365,55 @@ export default function SuprimentosContagem() {
 
   async function dispararDispatchSilencioso(tipo, dataAlvo, loteIdParam) {
     try {
-      await supabase.functions.invoke("dispatch-bot", {
-        body: { tipo, data_alvo: dataAlvo, lote_id: loteIdParam || undefined },
+      // 1) Debounce — se já existe job pro mesmo lote, nem cria nem chama
+      if (loteIdParam) {
+        const { data: jaTem } = await supabase
+          .from("suprimentos_bot_jobs")
+          .select("id,status")
+          .eq("lote_id", loteIdParam)
+          .limit(1);
+        if (jaTem && jaTem.length > 0) return;
+      } else if (dataAlvo) {
+        const { data: jaTem } = await supabase
+          .from("suprimentos_bot_jobs")
+          .select("id,status")
+          .eq("data_alvo", dataAlvo)
+          .eq("tipo_contagem", tipo)
+          .in("status", ["pendente", "processando"])
+          .limit(1);
+        if (jaTem && jaTem.length > 0) return;
+      }
+
+      // 2) Insere o job (rede de segurança — o cron de 5 min pega mesmo sem GitHub)
+      await supabase.from("suprimentos_bot_jobs").insert({
+        tipo: "conferencia_dia",
+        tipo_contagem: tipo,
+        data_alvo: dataAlvo,
+        status: "pendente",
+        lote_id: loteIdParam || null,
+        criado_por_nome: userInfo.nome || "App",
+      });
+
+      // 3) Chama o GitHub Actions agora (workflow_dispatch)
+      const token = import.meta.env.VITE_GITHUB_TOKEN_BOT;
+      if (!token) return; // sem token, fica só o cron
+      const owner = import.meta.env.VITE_GITHUB_USER_BOT || "guuimaximo";
+      const repo = import.meta.env.VITE_GITHUB_REPO_BOT || "INOVE_QUATAI";
+      const ref = import.meta.env.VITE_GITHUB_REF_BOT || "main";
+      const workflow = tipo === "semanal" ? "bot-estoque-semanal.yml" : "bot-estoque-diaria.yml";
+
+      await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/dispatches`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ref, inputs: dataAlvo ? { data_alvo: dataAlvo } : {} }),
       });
     } catch (_) {
-      // ignora falhas — o cron de 5 min ainda pega
+      // ignora — cron de 5 min serve de fallback
     }
   }
 

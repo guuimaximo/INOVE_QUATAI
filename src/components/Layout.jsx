@@ -3,6 +3,9 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import {
+  FaBarcode,
+  FaCalendarAlt,
+  FaCalendarDay,
   FaCarCrash,
   FaBoxes,
   FaClipboardCheck,
@@ -14,7 +17,9 @@ import {
   FaHome,
   FaMapMarkedAlt,
   FaMicrochip,
+  FaOilCan,
   FaSignOutAlt,
+  FaThLarge,
   FaTools,
   FaWarehouse,
 } from "react-icons/fa";
@@ -49,14 +54,19 @@ function getPageTitle(pathname) {
 }
 
 function getIconForNav(key) {
-  const normalizedKey = String(key || "").toLowerCase();
-  if (normalizedKey.includes("estoque")) return FaWarehouse;
-  if (normalizedKey.includes("contagem")) return FaBoxes;
-  if (normalizedKey.includes("diesel")) return FaGasPump;
-
+  // Mapeamento explicito por chave (vem antes do match por substring)
   switch (key) {
+    case "contagem":
+      return FaBarcode;
+    case "diaria":
+      return FaCalendarDay;
+    case "semanal":
+      return FaCalendarAlt;
+    case "lubrificantes":
+      return FaOilCan;
+    case "menu":
+      return FaThLarge;
     case "pcm":
-      return FaClipboardList;
     case "troca":
       return FaClipboardList;
     case "auditoria":
@@ -86,8 +96,14 @@ function getIconForNav(key) {
     case "km":
       return FaMapMarkedAlt;
     default:
-      return FaHome;
+      break;
   }
+
+  const normalizedKey = String(key || "").toLowerCase();
+  if (normalizedKey.includes("estoque")) return FaWarehouse;
+  if (normalizedKey.includes("contagem")) return FaBoxes;
+  if (normalizedKey.includes("diesel")) return FaGasPump;
+  return FaHome;
 }
 
 function MobileBottomNav({ items, onOpenMenu, currentPath }) {

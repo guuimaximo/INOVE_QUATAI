@@ -15,6 +15,7 @@ import {
   FaRobot,
   FaSearch,
   FaTimes,
+  FaTrash,
 } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
@@ -292,6 +293,7 @@ export default function SuprimentosContagem() {
   }), [user]);
   const podeIniciar = canUseAppResource(user, "app.contagem.iniciar");
   const podeVerLotes = canUseAppResource(user, "app.contagem.ver_lotes");
+  const isAdmin = String(user?.nivel || "").trim().toLowerCase() === "administrador";
   const podeScanner = canUseAppResource(user, "app.contagem.scanner");
 
   // ─── Form de novo apontamento ──────────────────────────────
@@ -648,6 +650,38 @@ export default function SuprimentosContagem() {
   function abrirLote(lote) {
     if (lote.lote_id) navigate(`/suprimentos/contagem/lote/${lote.lote_id}`);
     else navigate(`/suprimentos/contagem/dia/${lote.data}`);
+  }
+
+  async function excluirLote(lote) {
+    if (!isAdmin) return;
+    const dataLabel = formatDateBR(lote.data);
+    const ok = window.confirm(
+      `Excluir lote de ${dataLabel}? Isso remove ${lote.total || 0} contagem(ns) e nao pode ser desfeito.`
+    );
+    if (!ok) return;
+    try {
+      if (lote.lote_id) {
+        const { error } = await supabase
+          .from("suprimentos_contagens")
+          .delete()
+          .eq("lote_id", lote.lote_id);
+        if (error) throw error;
+      } else if (lote.data) {
+        const dayStart = `${lote.data}T00:00:00`;
+        const dayEnd = `${lote.data}T23:59:59`;
+        const { error } = await supabase
+          .from("suprimentos_contagens")
+          .delete()
+          .is("lote_id", null)
+          .gte("created_at", dayStart)
+          .lte("created_at", dayEnd);
+        if (error) throw error;
+      }
+      await carregarLotes();
+    } catch (err) {
+      console.error("Erro ao excluir lote:", err);
+      window.alert(`Nao foi possivel excluir o lote: ${err?.message || err}`);
+    }
   }
 
   useEffect(() => {
@@ -1128,7 +1162,19 @@ export default function SuprimentosContagem() {
                         {l.contadores.slice(0, 3).join(", ")}{l.contadores.length > 3 ? ` +${l.contadores.length - 3}` : ""}
                       </td>
                       <td className="px-4 py-3 text-right text-slate-400">
-                        <FaChevronRight />
+                        <div className="inline-flex items-center gap-2">
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); excluirLote(l); }}
+                              title="Excluir lote"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 transition hover:bg-rose-50"
+                            >
+                              <FaTrash />
+                            </button>
+                          )}
+                          <FaChevronRight />
+                        </div>
                       </td>
                     </tr>
                     );

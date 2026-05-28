@@ -11,6 +11,7 @@ import {
   FaTimes,
   FaTimesCircle,
   FaTools,
+  FaTrash,
   FaTruckLoading,
 } from "react-icons/fa";
 import CampoPrefixo from "../../components/CampoPrefixo";
@@ -689,6 +690,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
 
 export default function SuprimentosGarantias() {
   const { user } = useContext(AuthContext);
+  const isAdmin = String(user?.nivel || "").trim().toLowerCase() === "administrador";
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -725,6 +727,19 @@ export default function SuprimentosGarantias() {
   useEffect(() => {
     carregar();
   }, []);
+
+  async function excluirGarantia(row) {
+    if (!isAdmin) return;
+    const label = row?.numero_controle || row?.peca || "garantia selecionada";
+    if (!window.confirm(`Excluir a garantia "${label}"? Esta acao nao pode ser desfeita.`)) return;
+    const { error } = await supabase.from("suprimentos_garantias").delete().eq("id", row.id);
+    if (error) {
+      console.error("Erro ao excluir garantia:", error);
+      window.alert(`Nao foi possivel excluir a garantia: ${error.message || error}`);
+      return;
+    }
+    await carregar();
+  }
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -876,10 +891,23 @@ export default function SuprimentosGarantias() {
                           <p className="mt-1 text-xs text-slate-500">{formatDateBR(row.created_at)}</p>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-                            <FaEye />
-                            Abrir
-                          </span>
+                          <div className="inline-flex items-center gap-2">
+                            <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                              <FaEye />
+                              Abrir
+                            </span>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); excluirGarantia(row); }}
+                                title="Excluir garantia"
+                                className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                              >
+                                <FaTrash />
+                                Excluir
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

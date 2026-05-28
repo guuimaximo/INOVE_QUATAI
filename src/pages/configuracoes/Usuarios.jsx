@@ -23,6 +23,7 @@ import { supabase } from "../../supabase";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { useAuth } from "../../context/AuthContext";
 import { APP_ACCESS_PAGES } from "../../utils/accessCatalog";
+import { APP_RESOURCES_POR_CATEGORIA, APP_RESOURCE_PRESETS } from "../../utils/appResources";
 import { formatPresenceTimestamp, isPresenceOnline } from "../../utils/presence";
 
 const FALLBACK_NIVEIS = [
@@ -383,12 +384,26 @@ function UsuarioDetalhesModal({ usuario, onClose, onResetSenha, saving }) {
 }
 
 function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
+  const [aba, setAba] = useState("web");
   const [paginasLiberadas, setPaginasLiberadas] = useState(
     Array.isArray(usuario?.paginas_liberadas) ? usuario.paginas_liberadas : []
   );
   const [paginasBloqueadas, setPaginasBloqueadas] = useState(
     Array.isArray(usuario?.paginas_bloqueadas) ? usuario.paginas_bloqueadas : []
   );
+  const [appRecursos, setAppRecursos] = useState(
+    Array.isArray(usuario?.app_recursos) ? usuario.app_recursos : []
+  );
+
+  function toggleAppRecurso(key) {
+    setAppRecursos((current) =>
+      current.includes(key) ? current.filter((k) => k !== key) : [...current, key]
+    );
+  }
+
+  function aplicarPreset(preset) {
+    setAppRecursos(preset.recursos);
+  }
 
   function getState(pageKey) {
     if (paginasLiberadas.includes(pageKey)) return "liberar";
@@ -428,12 +443,34 @@ function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
           </button>
         </div>
 
-        <div className="overflow-y-auto p-5 space-y-4 bg-slate-50/70">
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">
-            Use <strong>Herdar</strong> para seguir o nível. Use <strong>Liberar</strong> para abrir uma página só para esse usuário e <strong>Bloquear</strong> para esconder uma página mesmo que o nível permita.
-          </div>
+        {/* Abas Web | APP */}
+        <div className="flex gap-1 border-b border-slate-200 bg-white px-5">
+          {[
+            { key: "web", label: "Painel Web", icon: "🖥️" },
+            { key: "app", label: "Aplicativo Mobile", icon: "📱" },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setAba(t.key)}
+              className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition ${
+                aba === t.key
+                  ? "border-blue-600 text-blue-700"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <span>{t.icon}</span> {t.label}
+            </button>
+          ))}
+        </div>
 
-          {Object.entries(PAGINAS_POR_CATEGORIA).map(([categoria, paginas]) => (
+        <div className="overflow-y-auto p-5 space-y-4 bg-slate-50/70">
+          {aba === "web" ? (
+            <>
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">
+                Use <strong>Herdar</strong> para seguir o nível. Use <strong>Liberar</strong> para abrir uma página só para esse usuário e <strong>Bloquear</strong> para esconder uma página mesmo que o nível permita.
+              </div>
+
+              {Object.entries(PAGINAS_POR_CATEGORIA).map(([categoria, paginas]) => (
             <div key={categoria} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 mb-3">{categoria}</h3>
               <div className="space-y-3">
@@ -477,6 +514,65 @@ function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
               </div>
             </div>
           ))}
+            </>
+          ) : (
+            <>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+                Defina o que esse usuário pode fazer dentro do <strong>APP mobile</strong> (Capacitor). Administradores liberam tudo automaticamente.
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="mb-3 text-sm font-black uppercase tracking-wider text-slate-800">Atalhos rápidos</h3>
+                <div className="flex flex-wrap gap-2">
+                  {APP_RESOURCE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() => aplicarPreset(preset)}
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-blue-400 hover:bg-blue-50"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {Object.entries(APP_RESOURCES_POR_CATEGORIA).map(([categoria, recursos]) => (
+                <div key={categoria} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-3 text-sm font-black uppercase tracking-wider text-slate-800">{categoria}</h3>
+                  <div className="space-y-2">
+                    {recursos.map((r) => {
+                      const ativo = appRecursos.includes(r.key);
+                      return (
+                        <button
+                          key={r.key}
+                          type="button"
+                          onClick={() => toggleAppRecurso(r.key)}
+                          className={`flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition ${
+                            ativo
+                              ? "border-emerald-300 bg-emerald-50"
+                              : "border-slate-200 bg-slate-50 hover:bg-white"
+                          }`}
+                        >
+                          <div>
+                            <p className="text-sm font-black text-slate-800">{r.label}</p>
+                            <p className="mt-1 text-[11px] font-semibold text-slate-500">{r.description}</p>
+                          </div>
+                          <span
+                            className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
+                              ativo ? "bg-emerald-500 justify-end" : "bg-slate-300 justify-start"
+                            } px-1`}
+                          >
+                            <span className="h-4 w-4 rounded-full bg-white shadow" />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         <div className="px-5 py-4 border-t bg-white flex justify-end gap-3">
@@ -484,7 +580,7 @@ function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
             Cancelar
           </button>
           <button
-            onClick={() => onSave(usuario, paginasLiberadas, paginasBloqueadas)}
+            onClick={() => onSave(usuario, paginasLiberadas, paginasBloqueadas, appRecursos)}
             disabled={saving}
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60"
           >
@@ -674,7 +770,7 @@ export default function Usuarios() {
     setResetandoSenha(false);
   }
 
-  async function salvarPermissoesUsuario(usuario, paginasLiberadas, paginasBloqueadas) {
+  async function salvarPermissoesUsuario(usuario, paginasLiberadas, paginasBloqueadas, appRecursos) {
     if (!usuario?.id) return;
 
     setSavingId(usuario.id);
@@ -685,6 +781,7 @@ export default function Usuarios() {
       .update({
         paginas_liberadas: Array.isArray(paginasLiberadas) ? paginasLiberadas : [],
         paginas_bloqueadas: Array.isArray(paginasBloqueadas) ? paginasBloqueadas : [],
+        app_recursos: Array.isArray(appRecursos) ? appRecursos : [],
       })
       .eq("id", usuario.id)
       .select("*")

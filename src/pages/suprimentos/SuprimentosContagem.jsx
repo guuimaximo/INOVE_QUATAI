@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import PullToRefresh from "../../components/PullToRefresh";
+import { canUseAppResource } from "../../utils/appResources";
 import {
   FaBarcode,
   FaCamera,
@@ -288,6 +289,9 @@ export default function SuprimentosContagem() {
     login: user?.login || user?.email || null,
     nome: user?.nome || user?.nome_completo || user?.login || user?.email || "Usuario",
   }), [user]);
+  const podeIniciar = canUseAppResource(user, "app.contagem.iniciar");
+  const podeVerLotes = canUseAppResource(user, "app.contagem.ver_lotes");
+  const podeScanner = canUseAppResource(user, "app.contagem.scanner");
 
   // ─── Form de novo apontamento ──────────────────────────────
   const [codigo, setCodigo] = useState("");
@@ -686,6 +690,12 @@ export default function SuprimentosContagem() {
 
           {!fluxoAtivo ? (
             <div className="space-y-3">
+              {!podeIniciar && !podeVerLotes ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+                  Você ainda não tem permissão para usar a Contagem no app. Peça ao administrador.
+                </div>
+              ) : null}
+              {podeIniciar ? (
               <button
                 type="button"
                 onClick={iniciarFluxo}
@@ -697,7 +707,10 @@ export default function SuprimentosContagem() {
                 <span className="text-2xl font-black">Iniciar contagem</span>
                 <span className="mt-2 text-sm font-semibold text-white/80">Escaneie, informe a quantidade e avance para o proximo item.</span>
               </button>
+              ) : null}
 
+              {podeVerLotes ? (
+              <>
               <button
                 type="button"
                 onClick={() => {
@@ -756,6 +769,8 @@ export default function SuprimentosContagem() {
                   )}
                 </div>
               ) : null}
+              </>
+              ) : null}
             </div>
           ) : (
             <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -764,6 +779,7 @@ export default function SuprimentosContagem() {
                   <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Item atual</p>
                   <h2 className="text-lg font-black text-slate-950">{codigo ? "Conferir quantidade" : "Aguardando codigo"}</h2>
                 </div>
+                {podeScanner ? (
                 <button
                   type="button"
                   onClick={() => setScannerOpen(true)}
@@ -772,6 +788,7 @@ export default function SuprimentosContagem() {
                 >
                   <FaCamera />
                 </button>
+                ) : null}
               </div>
 
               <div className="space-y-4">

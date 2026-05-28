@@ -596,6 +596,7 @@ function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
 export default function Usuarios() {
   const { profiles } = useAccessGovernance();
   const { user: currentUser, login: persistCurrentUser } = useAuth();
+  const isAdminAtual = normalizeText(currentUser?.nivel) === "administrador";
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState(null);
@@ -955,24 +956,23 @@ export default function Usuarios() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse min-w-[1320px]">
+          <table className="w-full text-left text-sm border-collapse min-w-[1080px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
               <tr>
-                <th className="p-3 font-black">Usuário</th>
-                <th className="p-3 font-black">Login</th>
-                <th className="p-3 font-black">Contato</th>
-                <th className="p-3 font-black">Nível</th>
-                <th className="p-3 font-black">Status</th>
-                <th className="p-3 font-black">Sessao</th>
-                <th className="p-3 font-black text-right">Ações</th>
+                <th className="p-2 font-black">Usuário</th>
+                <th className="p-2 font-black">Login</th>
+                <th className="p-2 font-black">Nível</th>
+                <th className="p-2 font-black">Status</th>
+                <th className="p-2 font-black">Sessao</th>
+                <th className="p-2 font-black text-right">Ações</th>
               </tr>
             </thead>
 
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold">Atualizando base de usuários...</td></tr>
+                <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold">Atualizando base de usuários...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold">Nenhum usuário encontrado para o filtro aplicado.</td></tr>
+                <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold">Nenhum usuário encontrado para o filtro aplicado.</td></tr>
               ) : (
                 filtrados.map((usuario) => {
                   const isSaving = savingId === usuario.id;
@@ -987,31 +987,31 @@ export default function Usuarios() {
                       onClick={() => setUsuarioSelecionado(usuario)}
                       className="border-b border-slate-100 last:border-0 hover:bg-blue-50/60 transition-colors cursor-pointer"
                     >
-                      <td className="p-3">
-                        <div className="flex min-w-[260px] items-start gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-100">
+                      <td className="p-2">
+                        <div className="flex min-w-[220px] items-center gap-2">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 border border-blue-100">
                             <FaUsers />
                           </div>
                           <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-black text-slate-800">{usuario?.nome || "Sem nome"}</p>
-                              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600 border border-slate-200">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="font-black text-slate-800 leading-tight">{usuario?.nome || "Sem nome"}</p>
+                              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-600 border border-slate-200">
                                 ID {usuario.id}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-500 font-semibold">Setor: {setor}</p>
+                            <p className="text-[11px] text-slate-500 font-semibold leading-tight">{setor}</p>
                           </div>
                         </div>
                       </td>
 
-                      <td className="p-3">
-                        <p className="font-bold text-slate-800">{usuario?.login || "-"}</p>
+                      <td className="p-2">
+                        <p className="font-bold text-slate-800 leading-tight">{usuario?.login || "-"}</p>
                         <select
                           value={statusCadastro}
                           disabled={isSaving}
                           onClick={(event) => event.stopPropagation()}
                           onChange={(event) => atualizarStatusCadastro(usuario.id, event.target.value)}
-                          className={`mt-1 min-w-[120px] rounded-lg border px-2 py-1 text-[11px] font-bold outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:opacity-60 ${
+                          className={`mt-1 min-w-[110px] rounded-md border px-1.5 py-0.5 text-[10px] font-bold outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:opacity-60 ${
                             statusCadastro === "Aprovado"
                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                               : statusCadastro === "Recusado"
@@ -1025,14 +1025,9 @@ export default function Usuarios() {
                         </select>
                       </td>
 
-                      <td className="p-3">
-                        <p className="font-bold text-slate-700">{usuario?.email || "Sem e-mail"}</p>
-                        <p className="text-xs text-slate-500 font-semibold">{usuario?.migrado_auth ? "Vinculado ao Auth" : "Sem vínculo Auth"}</p>
-                      </td>
-
-                      <td className="p-3">
-                        <div className="flex items-center gap-3">
-                          <span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-black border ${getNivelTone(usuario?.nivel)}`}>
+                      <td className="p-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-black border ${getNivelTone(usuario?.nivel)}`}>
                             {usuario?.nivel || "Pendente"}
                           </span>
                           <select
@@ -1040,7 +1035,7 @@ export default function Usuarios() {
                             disabled={isSaving}
                             onClick={(event) => event.stopPropagation()}
                             onChange={(event) => atualizarNivel(usuario.id, event.target.value)}
-                            className="min-w-[160px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
+                            className="min-w-[140px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
                           >
                             {niveisDisponiveis.map((nivel) => (
                               <option key={nivel} value={nivel}>{nivel}</option>
@@ -1049,30 +1044,29 @@ export default function Usuarios() {
                         </div>
                       </td>
 
-                      <td className="p-3">
-                        <span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-black border ${getStatusTone(ativo)}`}>
+                      <td className="p-2">
+                        <span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-black border ${getStatusTone(ativo)}`}>
                           {ativo ? "Ativo" : "Inativo"}
                         </span>
-                        <div className="text-xs text-slate-500 font-semibold mt-1">{ativo ? "Acesso liberado" : "Acesso bloqueado"}</div>
                       </td>
 
-                      <td className="p-3">
-                        <span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-black border ${getPresenceTone(online)}`}>
+                      <td className="p-2">
+                        <span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-black border ${getPresenceTone(online)}`}>
                           {online ? "Online" : "Offline"}
                         </span>
-                        <div className="text-xs text-slate-500 font-semibold mt-1">
-                          {online ? "Ativo nos ultimos 2 min" : `Ultimo ping: ${formatPresenceTimestamp(usuario?.ultimo_ping_em)}`}
+                        <div className="text-[10px] text-slate-500 font-semibold mt-0.5 leading-tight">
+                          {online ? "2 min" : formatPresenceTimestamp(usuario?.ultimo_ping_em)}
                         </div>
                       </td>
 
-                      <td className="p-3">
-                        <div className="flex justify-end gap-2">
+                      <td className="p-2">
+                        <div className="flex justify-end gap-1.5">
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
                               setUsuarioSelecionado(usuario);
                             }}
-                            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700"
                           >
                             <FaEye />
                             Detalhes
@@ -1083,35 +1077,25 @@ export default function Usuarios() {
                               event.stopPropagation();
                               setUsuarioPermissoes(usuario);
                             }}
-                            className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-800"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800"
                           >
                             <FaShieldAlt />
                             Páginas
                           </button>
 
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              alternarAtivo(usuario.id, ativo);
-                            }}
-                            disabled={isSaving}
-                            className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white transition disabled:opacity-60 ${ativo ? "bg-rose-500 hover:bg-rose-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                          >
-                            {ativo ? <FaUserSlash /> : <FaCheckCircle />}
-                            {ativo ? "Desativar" : "Ativar"}
-                          </button>
-
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              atualizarNivel(usuario.id, "Administrador");
-                            }}
-                            disabled={isSaving}
-                            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-3 py-2 text-sm font-bold text-white transition hover:bg-amber-600 disabled:opacity-60"
-                          >
-                            <FaUserShield />
-                            Tornar admin
-                          </button>
+                          {isAdminAtual && (
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                alternarAtivo(usuario.id, ativo);
+                              }}
+                              disabled={isSaving}
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white transition disabled:opacity-60 ${ativo ? "bg-rose-500 hover:bg-rose-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                            >
+                              {ativo ? <FaUserSlash /> : <FaCheckCircle />}
+                              {ativo ? "Excluir" : "Reativar"}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

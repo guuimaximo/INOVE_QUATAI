@@ -1,5 +1,6 @@
 // Catálogo de recursos liberáveis dentro do APP (Capacitor).
-// Adicione novos itens aqui — eles aparecem automaticamente na tela de Usuários.
+// Adicione novos itens aqui — eles aparecem automaticamente na tela de Usuários
+// e podem ser checados em qualquer página com canUseAppResource(user, key).
 
 export const APP_RESOURCES = [
   // ─── Contagem ───────────────────────────────────────────────
@@ -39,6 +40,84 @@ export const APP_RESOURCES = [
     description: "Libera o botão da câmera. Sem isso, só digitação manual.",
     category: "Contagem",
   },
+
+  // ─── Troca de Pneus ─────────────────────────────────────────
+  {
+    key: "app.pneus.abrir",
+    label: "Abrir módulo Troca de Pneus",
+    description: "Tile da home mobile que entra no módulo.",
+    category: "Troca de Pneus",
+  },
+  {
+    key: "app.pneus.auditar",
+    label: "Auditar pneus",
+    description: "Permite registrar auditorias de pneus em frota.",
+    category: "Troca de Pneus",
+  },
+  {
+    key: "app.pneus.trocar",
+    label: "Lançar troca",
+    description: "Libera o registro de uma troca de pneus.",
+    category: "Troca de Pneus",
+  },
+  {
+    key: "app.pneus.estoque",
+    label: "Gerenciar estoque",
+    description: "Movimentar entradas, saídas e ajustes do estoque de pneus.",
+    category: "Troca de Pneus",
+  },
+  {
+    key: "app.pneus.conserto",
+    label: "Enviar para conserto",
+    description: "Manda pneus para borracharia/conserto externo.",
+    category: "Troca de Pneus",
+  },
+
+  // ─── Controle de Fichas ─────────────────────────────────────
+  {
+    key: "app.fichas.abrir",
+    label: "Abrir módulo Fichas",
+    description: "Tile da home mobile que entra em Controle de Fichas.",
+    category: "Controle de Fichas",
+  },
+  {
+    key: "app.fichas.entregar",
+    label: "Entregar fichas",
+    description: "Permite registrar a entrega de fichas para o supervisor.",
+    category: "Controle de Fichas",
+  },
+  {
+    key: "app.fichas.acompanhar",
+    label: "Acompanhar até o Transnet",
+    description: "Visualiza o histórico de cada ficha até o destino final.",
+    category: "Controle de Fichas",
+  },
+
+  // ─── Embarcados ─────────────────────────────────────────────
+  {
+    key: "app.embarcados.abrir",
+    label: "Abrir módulo Embarcados",
+    description: "Tile da home mobile que entra na Central de Embarcados.",
+    category: "Embarcados",
+  },
+  {
+    key: "app.embarcados.movimentacoes",
+    label: "Registrar movimentações",
+    description: "Lançar instalação, troca, retirada e remanejo de equipamento.",
+    category: "Embarcados",
+  },
+  {
+    key: "app.embarcados.reparos",
+    label: "Abrir / acompanhar reparos",
+    description: "Solicitar reparo e atualizar execução dos equipamentos.",
+    category: "Embarcados",
+  },
+  {
+    key: "app.embarcados.envio_manutencao",
+    label: "Enviar para manutenção",
+    description: "Despachar embarcados para a oficina externa.",
+    category: "Embarcados",
+  },
 ];
 
 export const APP_RESOURCES_POR_CATEGORIA = APP_RESOURCES.reduce((acc, r) => {
@@ -62,6 +141,36 @@ export const APP_RESOURCE_PRESETS = [
       "app.contagem.diaria",
       "app.contagem.scanner",
       "app.contagem.ver_lotes",
+    ],
+  },
+  {
+    key: "borracheiro_basico",
+    label: "Borracheiro",
+    recursos: [
+      "app.pneus.abrir",
+      "app.pneus.auditar",
+      "app.pneus.trocar",
+      "app.pneus.estoque",
+      "app.pneus.conserto",
+    ],
+  },
+  {
+    key: "fichas_supervisor",
+    label: "Supervisor de fichas",
+    recursos: [
+      "app.fichas.abrir",
+      "app.fichas.entregar",
+      "app.fichas.acompanhar",
+    ],
+  },
+  {
+    key: "embarcados_completo",
+    label: "Embarcados completo",
+    recursos: [
+      "app.embarcados.abrir",
+      "app.embarcados.movimentacoes",
+      "app.embarcados.reparos",
+      "app.embarcados.envio_manutencao",
     ],
   },
   {

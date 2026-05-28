@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { FaArrowLeft, FaCheck, FaRobot } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
@@ -162,35 +163,93 @@ export default function SuprimentosContagemDia() {
         <KpiCard title="Acuracidade" value={kpis.acuracidade !== null ? `${kpis.acuracidade}%` : "—"} subtitle="Corretos / Conferidos" icon={<FaCheck />} tone="emerald" />
       </section>
 
-      <Panel
-        title="Conferir com ERP"
-        subtitle="Dispara o bot que entra no TransNet, lê o saldo desse dia e atualiza as contagens."
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <ActionButton
-            tone="blue"
-            onClick={dispararConferencia}
-            disabled={Boolean(botJob && ["pendente", "processando"].includes(botJob.status))}
-          >
-            <FaRobot />
-            {botJob && ["pendente", "processando"].includes(botJob.status) ? "Bot rodando..." : "Conferir agora"}
-          </ActionButton>
-          {botStatusChip}
-          {botJob?.resultado_json ? (
-            <span className="text-xs font-medium text-slate-500">
-              Última execução: {formatDateTimeBR(botJob.concluido_em)}
-            </span>
-          ) : null}
-        </div>
-        {botMsg ? <p className="mt-3 text-sm font-medium text-slate-600">{botMsg}</p> : null}
-      </Panel>
+      {Capacitor?.isNativePlatform?.() ? (
+        // Mobile: só mostra o status, sem botão (dispatch automático após cada contagem)
+        botJob ? (
+          <Panel title="Conferência com ERP" subtitle="Disparada automaticamente após cada contagem.">
+            <div className="flex flex-wrap items-center gap-3">
+              {botStatusChip}
+              {botJob?.resultado_json ? (
+                <span className="text-xs font-medium text-slate-500">
+                  Última execução: {formatDateTimeBR(botJob.concluido_em)}
+                </span>
+              ) : null}
+            </div>
+          </Panel>
+        ) : null
+      ) : (
+        // Web: mantém o botão manual
+        <Panel
+          title="Conferir com ERP"
+          subtitle="Dispara o bot que entra no TransNet, lê o saldo desse dia e atualiza as contagens."
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <ActionButton
+              tone="blue"
+              onClick={dispararConferencia}
+              disabled={Boolean(botJob && ["pendente", "processando"].includes(botJob.status))}
+            >
+              <FaRobot />
+              {botJob && ["pendente", "processando"].includes(botJob.status) ? "Bot rodando..." : "Conferir agora"}
+            </ActionButton>
+            {botStatusChip}
+            {botJob?.resultado_json ? (
+              <span className="text-xs font-medium text-slate-500">
+                Última execução: {formatDateTimeBR(botJob.concluido_em)}
+              </span>
+            ) : null}
+          </div>
+          {botMsg ? <p className="mt-3 text-sm font-medium text-slate-600">{botMsg}</p> : null}
+        </Panel>
+      )}
 
       <Panel title="Itens deste lote">
         {loading ? (
           <p className="py-12 text-center text-sm font-semibold text-slate-400">Carregando...</p>
         ) : contagens.length === 0 ? (
           <EmptyState title="Nenhuma contagem nessa data" subtitle="Faça novas contagens na tela principal." />
+        ) : Capacitor?.isNativePlatform?.() ? (
+          // ─── Mobile: lista compacta Codigo / Fisico / Virtual + cor da linha ───
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1.4fr_0.8fr_0.8fr] gap-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <span>Código</span>
+              <span className="text-right">Saldo Físico</span>
+              <span className="text-right">Saldo Virtual</span>
+            </div>
+            {contagens.map((c) => {
+              const conferido = c.saldo_erp !== null && c.saldo_erp !== undefined;
+              const certo = conferido && Number(c.diferenca || 0) === 0;
+              const errado = conferido && Number(c.diferenca || 0) !== 0;
+              const bg = certo
+                ? "bg-emerald-50 border-emerald-200"
+                : errado
+                  ? "bg-rose-50 border-rose-200"
+                  : !c.peca_id
+                    ? "bg-rose-50/40 border-rose-200"
+                    : "bg-white border-slate-200";
+              return (
+                <div
+                  key={c.id}
+                  className={`grid grid-cols-[1.4fr_0.8fr_0.8fr] items-center gap-2 rounded-xl border px-3 py-3 ${bg}`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-sm font-semibold text-slate-900">{c.codigo || "—"}</p>
+                    {!c.peca_id ? (
+                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700">Sem cadastro</p>
+                    ) : null}
+                  </div>
+                  <span className="text-right text-sm font-semibold text-slate-900">
+                    {Number(c.quantidade || 0).toLocaleString("pt-BR")}
+                  </span>
+                  <span className="text-right text-sm font-semibold text-slate-700">
+                    {conferido ? Number(c.saldo_erp).toLocaleString("pt-BR") : "—"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         ) : (
+          // ─── Web: tabela completa ──────────────────────────────────────
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50">

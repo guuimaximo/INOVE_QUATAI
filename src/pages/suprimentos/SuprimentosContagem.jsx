@@ -295,6 +295,13 @@ export default function SuprimentosContagem() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [fluxoAtivo, setFluxoAtivo] = useState(false);
   const [itensSessao, setItensSessao] = useState(0);
+  const [loteId, setLoteId] = useState(null);
+
+  function novoLoteId() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    // fallback simples
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
   const [mobileCentralOpen, setMobileCentralOpen] = useState(false);
 
   const codigoInputRef = useRef(null);
@@ -351,6 +358,21 @@ export default function SuprimentosContagem() {
     setAviso("");
   }
 
+  function todayIsoBRT() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }
+
+  async function dispararDispatchSilencioso(tipo, dataAlvo, loteIdParam) {
+    try {
+      await supabase.functions.invoke("dispatch-bot", {
+        body: { tipo, data_alvo: dataAlvo, lote_id: loteIdParam || undefined },
+      });
+    } catch (_) {
+      // ignora falhas — o cron de 5 min ainda pega
+    }
+  }
+
   async function salvarContagem() {
     const codigoTrim = codigo.trim();
     if (!codigoTrim) { setErro("Informe o código contado."); return; }
@@ -373,6 +395,7 @@ export default function SuprimentosContagem() {
       contado_por_login: userInfo.login,
       contado_por_nome: userInfo.nome,
       origem: (typeof Capacitor !== "undefined" && Capacitor?.isNativePlatform?.()) ? "mobile" : "web",
+      lote_id: loteId || null,
     };
     const { error } = await supabase.from("suprimentos_contagens").insert(payload);
     setBusy(false);
@@ -380,6 +403,8 @@ export default function SuprimentosContagem() {
     setCodigo(""); setPeca(null); setNaoCadastrado(false); setQuantidade(""); setObservacao(""); setAviso("");
     setTimeout(() => codigoInputRef.current?.focus(), 50);
     carregarLotes();
+    // Mobile: dispara workflow automaticamente (Edge Function debouncia por lote_id)
+    if (isNativeShell) void dispararDispatchSilencioso("diaria", todayIsoBRT(), loteId);
   }
 
   async function salvarContagemFluxo() {
@@ -405,18 +430,23 @@ export default function SuprimentosContagem() {
       contado_por_id: userInfo.id,
       contado_por_login: userInfo.login,
       contado_por_nome: userInfo.nome,
+      origem: (typeof Capacitor !== "undefined" && Capacitor?.isNativePlatform?.()) ? "mobile" : "web",
+      lote_id: loteId || null,
     };
 
     const { error } = await supabase.from("suprimentos_contagens").insert(payload);
     setBusy(false);
     if (error) { setErro(error.message); return false; }
     limparApontamento();
+    // Mobile: dispara workflow automaticamente (Edge Function debouncia por lote_id)
+    if (isNativeShell) void dispararDispatchSilencioso("diaria", todayIsoBRT(), loteId);
     return true;
   }
 
   function iniciarFluxo() {
     limparApontamento();
     setItensSessao(0);
+    setLoteId(novoLoteId());
     setFluxoAtivo(true);
     setTimeout(() => setScannerOpen(true), 150);
   }
@@ -433,6 +463,11 @@ export default function SuprimentosContagem() {
     setScannerOpen(false);
     setFluxoAtivo(false);
     limparApontamento();
+    // Garantia adicional ao fim da sessão (debounce por lote_id na Edge Function evita re-disparo)
+    if (isNativeShell && itensSessao > 0 && loteId) {
+      void dispararDispatchSilencioso("diaria", todayIsoBRT(), loteId);
+    }
+    setLoteId(null);
   }
 
   function handleScan(text) {

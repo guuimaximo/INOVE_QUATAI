@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import {
   FaBarcode,
   FaCamera,
@@ -123,6 +124,7 @@ function BarcodeScanner({ open, onClose, onScan }) {
 export default function SuprimentosContagem() {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
+  const isNativeShell = Capacitor.isNativePlatform();
   const userInfo = useMemo(() => ({
     id: Number(user?.usuario_id || user?.id || 0) || null,
     login: user?.login || user?.email || null,
@@ -139,6 +141,8 @@ export default function SuprimentosContagem() {
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [fluxoAtivo, setFluxoAtivo] = useState(false);
+  const [itensSessao, setItensSessao] = useState(0);
 
   const codigoInputRef = useRef(null);
   const qtdInputRef = useRef(null);
@@ -165,6 +169,16 @@ export default function SuprimentosContagem() {
     setPeca(data);
     setNaoCadastrado(false);
     setTimeout(() => qtdInputRef.current?.focus(), 50);
+  }
+
+  function limparApontamento() {
+    setCodigo("");
+    setPeca(null);
+    setNaoCadastrado(false);
+    setQuantidade("");
+    setObservacao("");
+    setErro("");
+    setAviso("");
   }
 
   async function salvarContagem() {
@@ -195,6 +209,59 @@ export default function SuprimentosContagem() {
     setCodigo(""); setPeca(null); setNaoCadastrado(false); setQuantidade(""); setObservacao(""); setAviso("");
     setTimeout(() => codigoInputRef.current?.focus(), 50);
     carregarLotes();
+  }
+
+  async function salvarContagemFluxo() {
+    const codigoTrim = codigo.trim();
+    if (!codigoTrim) { setErro("Informe o codigo contado."); return false; }
+    if (quantidade === "" || Number.isNaN(Number(quantidade))) { setErro("Informe uma quantidade valida."); return false; }
+    setBusy(true);
+    setErro("");
+
+    const qtd = Number(quantidade);
+    const saldoErp = peca?.saldo_erp ?? null;
+    const diff = saldoErp !== null && saldoErp !== undefined ? qtd - Number(saldoErp) : null;
+    const payload = {
+      peca_id: peca?.id || null,
+      codigo: peca?.codigo || codigoTrim,
+      descricao: peca?.descricao || "Sem cadastro",
+      localizacao: peca?.localizacao || null,
+      unidade: peca?.unidade_padrao || null,
+      quantidade: qtd,
+      saldo_erp: saldoErp,
+      diferenca: diff,
+      observacao: observacao.trim() || null,
+      contado_por_id: userInfo.id,
+      contado_por_login: userInfo.login,
+      contado_por_nome: userInfo.nome,
+    };
+
+    const { error } = await supabase.from("suprimentos_contagens").insert(payload);
+    setBusy(false);
+    if (error) { setErro(error.message); return false; }
+    limparApontamento();
+    return true;
+  }
+
+  function iniciarFluxo() {
+    limparApontamento();
+    setItensSessao(0);
+    setFluxoAtivo(true);
+    setTimeout(() => setScannerOpen(true), 150);
+  }
+
+  async function proximoItem() {
+    const ok = await salvarContagemFluxo();
+    if (!ok) return;
+    setItensSessao((current) => current + 1);
+    setAviso("Item salvo. Aponte o proximo codigo.");
+    setTimeout(() => setScannerOpen(true), 250);
+  }
+
+  function finalizarFluxo() {
+    setScannerOpen(false);
+    setFluxoAtivo(false);
+    limparApontamento();
   }
 
   function handleScan(text) {
@@ -244,7 +311,10 @@ export default function SuprimentosContagem() {
     setLoadingLotes(false);
   }
 
-  useEffect(() => { carregarLotes(); }, []);
+  useEffect(() => {
+    if (!isNativeShell) carregarLotes();
+    else setLoadingLotes(false);
+  }, [isNativeShell]);
 
   // ─── KPIs ──────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -256,6 +326,133 @@ export default function SuprimentosContagem() {
     const sem_cadastro = lotesDiarios.reduce((sum, l) => sum + l.sem_cadastro, 0);
     return { total, hojeCount: hojeLote?.total || 0, divergencia, sem_cadastro };
   }, [lotesDiarios]);
+
+  if (isNativeShell) {
+    return (
+      <div className="min-h-[calc(100vh-120px)] bg-slate-50 p-4 pb-24">
+        <div className="mx-auto flex max-w-md flex-col gap-4">
+          <header className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">Suprimentos</p>
+            <h1 className="mt-2 text-2xl font-black text-slate-950">Contagem</h1>
+            <p className="mt-2 text-sm font-semibold text-slate-500">
+              {fluxoAtivo ? `${itensSessao} item(ns) salvo(s) nesta sessao.` : "Inicie uma sessao para contar item por item."}
+            </p>
+          </header>
+
+          {!fluxoAtivo ? (
+            <button
+              type="button"
+              onClick={iniciarFluxo}
+              className="flex min-h-[180px] flex-col items-start justify-end rounded-[32px] bg-gradient-to-br from-emerald-600 to-teal-800 p-6 text-left text-white shadow-xl active:scale-[0.98]"
+            >
+              <span className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/15 text-3xl">
+                <FaBarcode />
+              </span>
+              <span className="text-2xl font-black">Iniciar contagem</span>
+              <span className="mt-2 text-sm font-semibold text-white/80">Escaneie, informe a quantidade e avance para o proximo item.</span>
+            </button>
+          ) : (
+            <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Item atual</p>
+                  <h2 className="text-lg font-black text-slate-950">{codigo ? "Conferir quantidade" : "Aguardando codigo"}</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen(true)}
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm"
+                  aria-label="Escanear"
+                >
+                  <FaCamera />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <Field label="Codigo">
+                  <div className="flex gap-2">
+                    <input
+                      ref={codigoInputRef}
+                      className={inputClass}
+                      placeholder="Escaneie ou digite"
+                      value={codigo}
+                      onChange={(e) => setCodigo(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); buscarPeca(codigo); } }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => buscarPeca(codigo)}
+                      disabled={busy || !codigo.trim()}
+                      className="rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      <FaSearch />
+                    </button>
+                  </div>
+                </Field>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Peca</p>
+                  <p className="mt-2 text-base font-black text-slate-950">
+                    {peca?.descricao || (naoCadastrado ? "Sem cadastro" : "Aguardando leitura")}
+                  </p>
+                  {peca?.saldo_erp !== null && peca?.saldo_erp !== undefined ? (
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Saldo ERP: {peca.saldo_erp}</p>
+                  ) : null}
+                </div>
+
+                <Field label="Quantidade">
+                  <input
+                    ref={qtdInputRef}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className={`${inputClass} text-center text-2xl font-black`}
+                    placeholder="0"
+                    value={quantidade}
+                    onChange={(e) => setQuantidade(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); proximoItem(); } }}
+                    disabled={!peca && !naoCadastrado}
+                  />
+                </Field>
+
+                <Field label="Observacao">
+                  <input
+                    className={inputClass}
+                    placeholder="opcional"
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                  />
+                </Field>
+
+                {aviso ? <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">{aviso}</p> : null}
+                {erro ? <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{erro}</p> : null}
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={finalizarFluxo}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-black text-slate-700"
+                >
+                  Finalizar
+                </button>
+                <button
+                  type="button"
+                  onClick={proximoItem}
+                  disabled={busy || quantidade === "" || (!peca && !naoCadastrado)}
+                  className="rounded-2xl bg-emerald-600 px-4 py-4 text-sm font-black text-white shadow-sm disabled:opacity-50"
+                >
+                  Proximo
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onScan={handleScan} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 p-6">

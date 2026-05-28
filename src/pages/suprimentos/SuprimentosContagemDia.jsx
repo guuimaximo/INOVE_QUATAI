@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { FaArrowLeft, FaCheck, FaRobot } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
@@ -162,28 +163,45 @@ export default function SuprimentosContagemDia() {
         <KpiCard title="Acuracidade" value={kpis.acuracidade !== null ? `${kpis.acuracidade}%` : "—"} subtitle="Corretos / Conferidos" icon={<FaCheck />} tone="emerald" />
       </section>
 
-      <Panel
-        title="Conferir com ERP"
-        subtitle="Dispara o bot que entra no TransNet, lê o saldo desse dia e atualiza as contagens."
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <ActionButton
-            tone="blue"
-            onClick={dispararConferencia}
-            disabled={Boolean(botJob && ["pendente", "processando"].includes(botJob.status))}
-          >
-            <FaRobot />
-            {botJob && ["pendente", "processando"].includes(botJob.status) ? "Bot rodando..." : "Conferir agora"}
-          </ActionButton>
-          {botStatusChip}
-          {botJob?.resultado_json ? (
-            <span className="text-xs font-medium text-slate-500">
-              Última execução: {formatDateTimeBR(botJob.concluido_em)}
-            </span>
-          ) : null}
-        </div>
-        {botMsg ? <p className="mt-3 text-sm font-medium text-slate-600">{botMsg}</p> : null}
-      </Panel>
+      {Capacitor?.isNativePlatform?.() ? (
+        // Mobile: só mostra o status, sem botão (dispatch automático após cada contagem)
+        botJob ? (
+          <Panel title="Conferência com ERP" subtitle="Disparada automaticamente após cada contagem.">
+            <div className="flex flex-wrap items-center gap-3">
+              {botStatusChip}
+              {botJob?.resultado_json ? (
+                <span className="text-xs font-medium text-slate-500">
+                  Última execução: {formatDateTimeBR(botJob.concluido_em)}
+                </span>
+              ) : null}
+            </div>
+          </Panel>
+        ) : null
+      ) : (
+        // Web: mantém o botão manual
+        <Panel
+          title="Conferir com ERP"
+          subtitle="Dispara o bot que entra no TransNet, lê o saldo desse dia e atualiza as contagens."
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <ActionButton
+              tone="blue"
+              onClick={dispararConferencia}
+              disabled={Boolean(botJob && ["pendente", "processando"].includes(botJob.status))}
+            >
+              <FaRobot />
+              {botJob && ["pendente", "processando"].includes(botJob.status) ? "Bot rodando..." : "Conferir agora"}
+            </ActionButton>
+            {botStatusChip}
+            {botJob?.resultado_json ? (
+              <span className="text-xs font-medium text-slate-500">
+                Última execução: {formatDateTimeBR(botJob.concluido_em)}
+              </span>
+            ) : null}
+          </div>
+          {botMsg ? <p className="mt-3 text-sm font-medium text-slate-600">{botMsg}</p> : null}
+        </Panel>
+      )}
 
       <Panel title="Itens deste lote">
         {loading ? (

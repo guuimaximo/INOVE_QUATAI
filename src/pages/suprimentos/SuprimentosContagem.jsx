@@ -351,6 +351,19 @@ export default function SuprimentosContagem() {
     setAviso("");
   }
 
+  function todayIsoBRT() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }
+
+  async function dispararDispatchSilencioso(tipo, dataAlvo) {
+    try {
+      await supabase.functions.invoke("dispatch-bot", { body: { tipo, data_alvo: dataAlvo } });
+    } catch (_) {
+      // ignora falhas — o cron de 5 min ainda pega
+    }
+  }
+
   async function salvarContagem() {
     const codigoTrim = codigo.trim();
     if (!codigoTrim) { setErro("Informe o código contado."); return; }
@@ -380,6 +393,8 @@ export default function SuprimentosContagem() {
     setCodigo(""); setPeca(null); setNaoCadastrado(false); setQuantidade(""); setObservacao(""); setAviso("");
     setTimeout(() => codigoInputRef.current?.focus(), 50);
     carregarLotes();
+    // Mobile: dispara workflow automaticamente (Edge Function tem debounce)
+    if (isNativeShell) void dispararDispatchSilencioso("diaria", todayIsoBRT());
   }
 
   async function salvarContagemFluxo() {
@@ -411,6 +426,8 @@ export default function SuprimentosContagem() {
     setBusy(false);
     if (error) { setErro(error.message); return false; }
     limparApontamento();
+    // Mobile: dispara workflow automaticamente (Edge Function tem debounce)
+    if (isNativeShell) void dispararDispatchSilencioso("diaria", todayIsoBRT());
     return true;
   }
 
@@ -433,6 +450,10 @@ export default function SuprimentosContagem() {
     setScannerOpen(false);
     setFluxoAtivo(false);
     limparApontamento();
+    // Garantia adicional ao fim da sessão (debounce na Edge Function evita re-disparo)
+    if (isNativeShell && itensSessao > 0) {
+      void dispararDispatchSilencioso("diaria", todayIsoBRT());
+    }
   }
 
   function handleScan(text) {

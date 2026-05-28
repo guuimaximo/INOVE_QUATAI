@@ -339,6 +339,14 @@ export default function SuprimentosContagem() {
     return Boolean(item?.is_lubrificante) || grupo === "LUBRIFICANTE, GRAXA E ADITIVOS";
   }
 
+  function resolverTipoContagem(pecaItem) {
+    // Se o item esta no grupo de Lubrificantes, a contagem sempre vai
+    // para o tipo "lubrificantes", independente da aba que o operador
+    // tenha aberto (Diaria/Semanal).
+    if (isPecaLubrificante(pecaItem)) return "lubrificantes";
+    return tipoContagemAtual;
+  }
+
   async function buscarPeca(codigoBusca) {
     const c = String(codigoBusca || "").trim();
     if (!c) { setPeca(null); setNaoCadastrado(false); return; }
@@ -473,7 +481,7 @@ export default function SuprimentosContagem() {
       contado_por_nome: userInfo.nome,
       origem: (typeof Capacitor !== "undefined" && Capacitor?.isNativePlatform?.()) ? "mobile" : "web",
       lote_id: loteId || null,
-      tipo_contagem: tipoContagemAtual,
+      tipo_contagem: resolverTipoContagem(peca),
     };
     const { error } = await supabase.from("suprimentos_contagens").insert(payload);
     setBusy(false);
@@ -508,7 +516,7 @@ export default function SuprimentosContagem() {
       contado_por_nome: userInfo.nome,
       origem: (typeof Capacitor !== "undefined" && Capacitor?.isNativePlatform?.()) ? "mobile" : "web",
       lote_id: loteId || null,
-      tipo_contagem: tipoContagemAtual,
+      tipo_contagem: resolverTipoContagem(peca),
     };
 
     const { error } = await supabase.from("suprimentos_contagens").insert(payload);

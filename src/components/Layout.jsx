@@ -280,7 +280,17 @@ export default function Layout() {
       <MobileBottomNav
         items={mobileNavItems}
         currentPath={`${location.pathname}${location.search}`}
-        onOpenMenu={isNativeShell ? () => navigate("/") : isLockedMobileModule ? undefined : () => setMobileSidebarOpen(true)}
+        onOpenMenu={
+          // Se ja existe um item Menu na lista (ex.: Contagem), nao
+          // duplicar o botao automatico de Menu.
+          mobileNavItems.some((item) => item.key === "menu")
+            ? undefined
+            : isNativeShell
+              ? () => navigate("/")
+              : isLockedMobileModule
+                ? undefined
+                : () => setMobileSidebarOpen(true)
+        }
       />
     </div>
   );

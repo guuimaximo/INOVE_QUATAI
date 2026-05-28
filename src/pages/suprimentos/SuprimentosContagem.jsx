@@ -280,6 +280,72 @@ function BarcodeScanner({ open, onClose, onScan }) {
   return conteudo;
 }
 
+/* ─── Card de acuracidade do ultimo lote (home da Contagem mobile) ─────── */
+function UltimaAcuracidadeCard({ loading, lotesPorTipo, lotesSemanais }) {
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-500 shadow-sm">
+        Carregando ultima apuracao...
+      </div>
+    );
+  }
+
+  // Pega o lote mais recente entre diaria, lubrificantes e semanal
+  const candidatos = [];
+  for (const tipo of ["diaria", "lubrificantes"]) {
+    const lista = lotesPorTipo?.[tipo] || [];
+    if (lista[0]) candidatos.push({ tipo, data: lista[0].data, acuracidade: lista[0].acuracidade, total: lista[0].total, hora: lista[0].ultima || lista[0].primeira });
+  }
+  if (lotesSemanais?.[0]) {
+    const a = lotesSemanais[0];
+    const r = a.resumo_json || {};
+    const total = Number(r.itens_total || 0);
+    const corretos = Number(r.itens_corretos || 0);
+    const acuracidade = total > 0 ? Math.round((corretos / total) * 1000) / 10 : null;
+    candidatos.push({ tipo: "semanal", data: a.data_fim || a.data_inicio, acuracidade, total, hora: a.created_at });
+  }
+  candidatos.sort((a, b) => String(b.hora || b.data || "").localeCompare(String(a.hora || a.data || "")));
+  const ultimo = candidatos[0];
+
+  if (!ultimo) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-center text-sm font-semibold text-slate-500">
+        Ainda nao ha contagens apuradas.
+      </div>
+    );
+  }
+
+  const acuracidadeLabel = ultimo.acuracidade !== null ? `${ultimo.acuracidade}%` : "—";
+  const tone = ultimo.acuracidade === null
+    ? "slate"
+    : ultimo.acuracidade >= 95 ? "emerald"
+    : ultimo.acuracidade >= 80 ? "amber"
+    : "rose";
+  const toneClass = tone === "emerald"
+    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+    : tone === "amber" ? "bg-amber-50 text-amber-700 border-amber-200"
+    : tone === "rose" ? "bg-rose-50 text-rose-700 border-rose-200"
+    : "bg-slate-50 text-slate-700 border-slate-200";
+  const tipoLabel = ultimo.tipo === "lubrificantes" ? "Lubrificantes" : ultimo.tipo === "semanal" ? "Semanal" : "Diaria";
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${toneClass}`}>
+      <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-80">Ultima apuracao</p>
+      <div className="mt-1 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-3xl font-black leading-none">{acuracidadeLabel}</p>
+          <p className="mt-1 text-xs font-semibold opacity-90">
+            {tipoLabel} · {formatDateBR(ultimo.data)}
+          </p>
+        </div>
+        {ultimo.total ? (
+          <p className="text-xs font-semibold opacity-80">{ultimo.total} item(ns)</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Lista de lotes para as abas mobile (Diaria/Semanal/Lubrificantes) ── */
 function ListaLotesMobile({ aba, loading, lotesPorTipo, lotesSemanais, onAbrir, onAbrirSemanal }) {
   const titulo =
@@ -854,6 +920,14 @@ export default function SuprimentosContagem() {
                     Escaneie ou digite. Itens de lubrificantes vao automaticamente para a aba certa.
                   </span>
                 </button>
+              ) : null}
+
+              {abaAtiva === "contagem" ? (
+                <UltimaAcuracidadeCard
+                  loading={loadingLotes}
+                  lotesPorTipo={lotesPorTipo}
+                  lotesSemanais={lotesSemanais}
+                />
               ) : null}
 
               {abaAtiva !== "contagem" && podeVerLotes ? (

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import PullToRefresh from "../../components/PullToRefresh";
 import { canUseAppResource } from "../../utils/appResources";
@@ -10,7 +10,6 @@ import {
   FaCheck,
   FaChevronRight,
   FaDownload,
-  FaFlask,
   FaRedo,
   FaRobot,
   FaSearch,
@@ -281,9 +280,98 @@ function BarcodeScanner({ open, onClose, onScan }) {
   return conteudo;
 }
 
+/* ─── Lista de lotes para as abas mobile (Diaria/Semanal/Lubrificantes) ── */
+function ListaLotesMobile({ aba, loading, lotesPorTipo, lotesSemanais, onAbrir, onAbrirSemanal }) {
+  const titulo =
+    aba === "diaria" ? "Lotes diarios" :
+    aba === "semanal" ? "Auditorias semanais" :
+    aba === "lubrificantes" ? "Lotes de lubrificantes" : "Lotes";
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-500 shadow-sm">
+        Carregando...
+      </div>
+    );
+  }
+
+  if (aba === "semanal") {
+    if (!lotesSemanais.length) {
+      return (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm font-semibold text-slate-500">
+          Sem auditorias semanais.
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        <p className="px-1 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{titulo}</p>
+        {lotesSemanais.map((a) => {
+          const r = a.resumo_json || {};
+          return (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => onAbrirSemanal(a)}
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm active:scale-[0.99]"
+            >
+              <span>
+                <span className="block text-sm font-black text-slate-950">
+                  {formatDateBR(a.data_inicio)} → {formatDateBR(a.data_fim)}
+                </span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {r.itens_total ?? "?"} itens · {r.itens_corretos ?? "?"} corretos
+                </span>
+              </span>
+              <FaChevronRight className="text-slate-400" />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const tipo = aba === "lubrificantes" ? "lubrificantes" : "diaria";
+  const lista = lotesPorTipo?.[tipo] || [];
+  if (!lista.length) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm font-semibold text-slate-500">
+        Nenhum lote encontrado.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <p className="px-1 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{titulo}</p>
+      {lista.map((lote) => {
+        const hora = new Date(lote.ultima || lote.primeira).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        return (
+          <button
+            key={`${tipo}-${lote.key}`}
+            type="button"
+            onClick={() => onAbrir(lote)}
+            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm active:scale-[0.99]"
+          >
+            <span>
+              <span className="block text-sm font-black text-slate-950">{formatDateBR(lote.data)} · {hora}</span>
+              <span className="text-xs font-semibold text-slate-500">
+                {lote.total} item(ns) · {lote.divergencias} divergencia(s)
+                {lote.acuracidade !== null ? ` · ${lote.acuracidade}%` : ""}
+              </span>
+            </span>
+            <FaChevronRight className="text-slate-400" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── Página ──────────────────────────────────────────────── */
 export default function SuprimentosContagem() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const abaAtiva = searchParams.get("aba") || "contagem";
   const { user } = useContext(AuthContext);
   const isNativeShell = Capacitor.isNativePlatform();
   const userInfo = useMemo(() => ({
@@ -310,14 +398,12 @@ export default function SuprimentosContagem() {
   const [itensSessao, setItensSessao] = useState(0);
   const [loteId, setLoteId] = useState(null);
   const [tipoContagemAtual, setTipoContagemAtual] = useState("diaria");
-  const podeLubrificantes = canUseAppResource(user, "app.contagem.lubrificantes");
 
   function novoLoteId() {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
     // fallback simples
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
-  const [mobileCentralOpen, setMobileCentralOpen] = useState(false);
 
   const codigoInputRef = useRef(null);
   const qtdInputRef = useRef(null);
@@ -693,8 +779,7 @@ export default function SuprimentosContagem() {
   }
 
   useEffect(() => {
-    if (!isNativeShell) carregarLotes();
-    else setLoadingLotes(false);
+    carregarLotes();
   }, [isNativeShell]);
 
   // Realtime: atualiza a lista de lotes sem precisar dar F5.
@@ -755,8 +840,7 @@ export default function SuprimentosContagem() {
 
           {!fluxoAtivo ? (
             <div className="space-y-3">
-              {podeIniciar ? (
-              <>
+              {abaAtiva === "contagem" && podeIniciar ? (
                 <button
                   type="button"
                   onClick={() => iniciarFluxo("diaria")}
@@ -766,88 +850,27 @@ export default function SuprimentosContagem() {
                     <FaBarcode />
                   </span>
                   <span className="text-2xl font-black">Iniciar contagem</span>
-                  <span className="mt-2 text-sm font-semibold text-white/80">Escaneie, informe a quantidade e avance para o proximo item.</span>
+                  <span className="mt-2 text-sm font-semibold text-white/80">
+                    Escaneie ou digite. Itens de lubrificantes vao automaticamente para a aba certa.
+                  </span>
                 </button>
-
-                {podeLubrificantes ? (
-                  <button
-                    type="button"
-                    onClick={() => iniciarFluxo("lubrificantes")}
-                    className="flex w-full items-center gap-4 rounded-[28px] bg-gradient-to-br from-amber-500 to-orange-700 p-5 text-left text-white shadow-lg active:scale-[0.98]"
-                  >
-                    <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 text-2xl">
-                      <FaFlask />
-                    </span>
-                    <span>
-                      <span className="block text-lg font-black">Lubrificantes</span>
-                      <span className="mt-1 block text-xs font-semibold text-white/80">Somente LUBRIFICANTE, GRAXA E ADITIVOS.</span>
-                    </span>
-                  </button>
-                ) : null}
-              </>
               ) : null}
 
-              {podeVerLotes ? (
-              <>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileCentralOpen((current) => {
-                    const next = !current;
-                    if (next && !lotesDiarios.length) carregarLotes();
-                    return next;
-                  });
-                }}
-                className="flex w-full items-center justify-between rounded-3xl border border-slate-200 bg-white px-5 py-4 text-left text-slate-950 shadow-sm active:scale-[0.98]"
-              >
-                <span>
-                  <span className="block text-base font-black">Central</span>
-                  <span className="mt-0.5 block text-xs font-semibold text-slate-500">Ver contagens, lotes e divergencias.</span>
-                </span>
-                <FaChevronRight className={`text-slate-400 transition ${mobileCentralOpen ? "rotate-90" : ""}`} />
-              </button>
+              {abaAtiva !== "contagem" && podeVerLotes ? (
+                <ListaLotesMobile
+                  aba={abaAtiva}
+                  loading={loadingLotes}
+                  lotesPorTipo={lotesPorTipo}
+                  lotesSemanais={lotesSemanais}
+                  onAbrir={abrirLote}
+                  onAbrirSemanal={(a) => navigate(`/suprimentos/contagem/semanal/${a.id}`)}
+                />
+              ) : null}
 
-              {mobileCentralOpen ? (
-                <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Central</p>
-                      <h2 className="text-lg font-black text-slate-950">Contagens recentes</h2>
-                    </div>
-                    <span className="rounded-2xl bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{kpis.total}</span>
-                  </div>
-
-                  {loadingLotes ? (
-                    <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-500">Carregando...</p>
-                  ) : lotesDiarios.length ? (
-                    <div className="space-y-2">
-                      {lotesDiarios.slice(0, 12).map((lote) => {
-                        const hora = new Date(lote.ultima || lote.primeira).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-                        return (
-                          <button
-                            key={lote.key}
-                            type="button"
-                            onClick={() => abrirLote(lote)}
-                            className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-left active:scale-[0.99]"
-                          >
-                            <span>
-                              <span className="block text-sm font-black text-slate-950">{formatDateBR(lote.data)} · {hora}</span>
-                              <span className="text-xs font-semibold text-slate-500">
-                                {lote.total} item(ns) · {lote.divergencias} divergencia(s)
-                                {lote.acuracidade !== null ? ` · ${lote.acuracidade}%` : ""}
-                              </span>
-                            </span>
-                            <FaChevronRight className="text-slate-400" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-500">Nenhuma contagem encontrada.</p>
-                  )}
+              {abaAtiva === "contagem" && !podeIniciar && podeVerLotes ? (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">
+                  Use as abas abaixo para ver os lotes ja apurados.
                 </div>
-              ) : null}
-              </>
               ) : null}
             </div>
           ) : (

@@ -154,8 +154,9 @@ export default function Layout() {
   const isInTrocaPneus = location.pathname === "/pcm-troca-pneus";
   const isInControleFichas = location.pathname === "/pcm-controle-fichas";
   const isInEmbarcados = location.pathname.startsWith("/embarcados");
+  const isInContagem = location.pathname.startsWith("/suprimentos/contagem");
   const isLockedMobileModule =
-    isNativeShell && (isInTrocaPneus || isInControleFichas || isInEmbarcados);
+    isNativeShell && (isInTrocaPneus || isInControleFichas || isInEmbarcados || isInContagem);
 
   const pageTitle = getPageTitle(location.pathname);
   const mobileNavItems = useMemo(() => {
@@ -183,10 +184,19 @@ export default function Layout() {
           { key: "reparos", label: "Reparos", path: "/embarcados-reparos" },
         ];
       }
+      if (isInContagem) {
+        return [
+          { key: "contagem", label: "Contagem", path: "/suprimentos/contagem?aba=contagem" },
+          { key: "diaria", label: "Diaria", path: "/suprimentos/contagem?aba=diaria" },
+          { key: "semanal", label: "Semanal", path: "/suprimentos/contagem?aba=semanal" },
+          { key: "lubrificantes", label: "Lubrificantes", path: "/suprimentos/contagem?aba=lubrificantes" },
+          { key: "menu", label: "Menu", path: "/" },
+        ];
+      }
       return [];
     }
     return getMobileNavItems(user, profileMap).slice(0, 3);
-  }, [isNativeShell, isInTrocaPneus, isInControleFichas, isInEmbarcados, profileMap, user, badges]);
+  }, [isNativeShell, isInTrocaPneus, isInControleFichas, isInEmbarcados, isInContagem, profileMap, user, badges]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);

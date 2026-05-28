@@ -266,18 +266,37 @@ def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> 
         driver.quit()
 
 
+def _find_header_row(caminho_csv: str) -> int:
+    """Acha a linha (0-based) do cabecalho real do CSV TransNet.
+    Procura a primeira linha que contem 'Produtos' OU 'Codigo' E tem ';' e 'Saldo'.
+    """
+    with open(caminho_csv, "r", encoding="latin1", errors="ignore") as f:
+        for idx, line in enumerate(f):
+            s = line.strip().lower()
+            if ";" not in s:
+                continue
+            if "saldo" in s and ("produtos" in s or "codigo" in s or "código" in s):
+                return idx
+    raise ValueError(f"{caminho_csv}: não localizei o cabeçalho do relatório.")
+
+
 def tratar_estoque_virtual(caminho_csv: str) -> pd.DataFrame:
+    header_row = _find_header_row(caminho_csv)
+    _log("parse", f"cabecalho do CSV detectado na linha {header_row + 1}")
+
     raw = pd.read_csv(
         caminho_csv,
         sep=";",
         encoding="latin1",
         engine="python",
         header=0,
-        skiprows=SKIPROWS,
+        skiprows=header_row,
         dtype=str,
         on_bad_lines="skip",
     )
     raw.columns = raw.columns.str.strip()
+    _log("parse", f"colunas: {list(raw.columns)[:12]}")
+    _log("parse", f"linhas brutas: {len(raw)}")
 
     if "Produtos" in raw.columns and "Codigo da peça" not in raw.columns:
         extra = raw["Produtos"].astype(str).str.extract(r"(\d+)\s*-\s*(.*)")
@@ -287,14 +306,15 @@ def tratar_estoque_virtual(caminho_csv: str) -> pd.DataFrame:
     if "Codigo da peça" not in raw.columns and "Codigo" in raw.columns:
         raw.rename(columns={"Codigo": "Codigo da peça"}, inplace=True)
     if "Codigo da peça" not in raw.columns:
-        raise ValueError(f"{caminho_csv}: não encontrei coluna de código.")
+        raise ValueError(f"{caminho_csv}: não encontrei coluna de código (cols={list(raw.columns)})")
 
-    for col in ["Saldo Ant.", "Qtd. Entrada", "Qtd. Saída", "Qtd. Saida", "Saldo"]:
-        if col in raw.columns:
-            raw[col] = raw[col].apply(br_to_float)
-
+    # alguns cabecalhos vem com 'Qtd. Saida' (sem acento) ou 'Qtd. Saída'
     if "Qtd. Saída" not in raw.columns and "Qtd. Saida" in raw.columns:
         raw.rename(columns={"Qtd. Saida": "Qtd. Saída"}, inplace=True)
+
+    for col in ["Saldo Ant.", "Qtd. Entrada", "Qtd. Saída", "Saldo"]:
+        if col in raw.columns:
+            raw[col] = raw[col].apply(br_to_float)
 
     raw["Codigo da peça"] = (
         raw["Codigo da peça"]
@@ -304,9 +324,14 @@ def tratar_estoque_virtual(caminho_csv: str) -> pd.DataFrame:
         .apply(lambda x: x.zfill(6))
     )
 
+    # remove linhas de totalizacao (Total Grupo:, Total Subgrupo:, Total Geral, etc.)
     if "Produtos" in raw.columns:
-        raw = raw[~raw["Produtos"].astype(str).str.contains(r"(?i)total geral|^total:", regex=True, na=False)]
+        raw = raw[~raw["Produtos"].astype(str).str.contains(r"(?i)total\s+(geral|grupo|subgrupo)|^total:", regex=True, na=False)]
 
     keep = ["Codigo da peça", "Descricao", "Saldo Ant.", "Qtd. Entrada", "Qtd. Saída", "Saldo"]
     keep = [c for c in keep if c in raw.columns]
-    return raw[keep].dropna(subset=["Codigo da peça"])
+    out = raw[keep].dropna(subset=["Codigo da peça"])
+    # remove codigo vazio (linhas que cairam aqui mas nao eram produto)
+    out = out[out["Codigo da peça"].str.replace("0", "") != ""]
+    _log("parse", f"linhas validas apos limpeza: {len(out)}")
+    return out

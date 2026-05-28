@@ -279,6 +279,7 @@ export default function Login() {
       estrutura_fisica_liberada: legacyUser?.estrutura_fisica_liberada === true,
       paginas_liberadas: Array.isArray(legacyUser?.paginas_liberadas) ? legacyUser.paginas_liberadas : [],
       paginas_bloqueadas: Array.isArray(legacyUser?.paginas_bloqueadas) ? legacyUser.paginas_bloqueadas : [],
+      app_recursos: Array.isArray(legacyUser?.app_recursos) ? legacyUser.app_recursos : [],
       migrado_auth: !!legacyUser?.migrado_auth,
       legacy_user: legacyUser,
       profile: null,

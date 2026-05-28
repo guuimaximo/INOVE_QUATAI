@@ -129,6 +129,10 @@ export function canUserAccessPageKey(user, pageKey, accessProfileMap = {}) {
   if (!key) return false;
   if (!user?.nivel) return false;
 
+  // Administrador sempre vê tudo — não depende de profileMap nem DB.
+  const nivelNorm = normalizeText(user.nivel).toLowerCase();
+  if (nivelNorm === "administrador" || nivelNorm === "admin") return true;
+
   const explicitBlocked = new Set(normalizePageKeyArray(user?.paginas_bloqueadas));
   if (explicitBlocked.has(key)) return false;
 

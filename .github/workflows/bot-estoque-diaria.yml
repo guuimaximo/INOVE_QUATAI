@@ -91,13 +91,12 @@ jobs:
             python -u bot_diaria.py --max-jobs 5
           fi
 
-      - name: Sobe screenshots e CSVs (em caso de falha)
-        if: failure()
+      - name: Sobe screenshots e CSVs (sempre)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bot-diaria-debug
+          name: bot-diaria-debug-${{ github.run_attempt }}
           path: |
-            bot/downloads/*.csv
-            bot/downloads/*.png
+            bot/downloads/**
           if-no-files-found: ignore
           retention-days: 7

@@ -79,7 +79,21 @@ export default function SuprimentosContagemDia() {
       .select().single();
     if (error) { setBotMsg(`Erro: ${error.message}`); return; }
     setBotJob(job);
-    setBotMsg("Job enfileirado. O bot vai puxar do TransNet — pode levar até 5 min.");
+    setBotMsg("Job enfileirado. Disparando workflow no GitHub Actions...");
+
+    // dispara o workflow agora (não espera o cron de 5 min)
+    try {
+      const { data: r, error: fnErr } = await supabase.functions.invoke("dispatch-bot", {
+        body: { tipo: "diaria", data_alvo: data },
+      });
+      if (fnErr || (r && r.ok === false)) {
+        setBotMsg("Job enfileirado. Workflow imediato falhou — vai rodar no próximo cron (até 5 min).");
+      } else {
+        setBotMsg("Job enfileirado e workflow disparado. Pode levar alguns minutos.");
+      }
+    } catch (e) {
+      setBotMsg("Job enfileirado. Workflow imediato falhou — vai rodar no próximo cron (até 5 min).");
+    }
   }
 
   useEffect(() => {

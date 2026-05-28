@@ -35,8 +35,9 @@ TRANSNET_PASSWORD = _env("TRANSNET_PASSWORD", "")
 TRANSNET_ALMOXARIFADO = _env("TRANSNET_ALMOXARIFADO", "046")
 
 HEADLESS = _env("HEADLESS", "true").lower() not in ("0", "false", "no")
-TIMEOUT_SEC = int(_env("BOT_DOWNLOAD_TIMEOUT", "600"))
+TIMEOUT_SEC = int(_env("BOT_DOWNLOAD_TIMEOUT", "240"))  # 4 min — se passar disso, abortamos e subimos artefato
 POLL_INTERVAL = 0.5
+DEBUG_SHOT_EVERY = float(_env("DEBUG_SHOT_INTERVAL", "15"))
 
 
 def _log(step: str, msg: str = ""):
@@ -68,12 +69,28 @@ def _snapshot(dir_path: Path) -> dict:
     return {p.name: p.stat().st_size for p in dir_path.glob("*") if p.is_file()}
 
 
-def _wait_for_new_csv(dir_path: Path, before: dict, timeout: int = TIMEOUT_SEC) -> Path:
+def _wait_for_new_csv(dir_path: Path, before: dict, driver=None, timeout: int = TIMEOUT_SEC) -> Path:
     deadline = time.time() + timeout
     candidate = None
     last_size = -1
     stable = 0
+    last_shot = 0.0
     while time.time() < deadline:
+        # snapshot atual da pasta a cada 5s
+        if time.time() - last_shot >= DEBUG_SHOT_EVERY:
+            try:
+                files_dbg = [f"{p.name}({p.stat().st_size}b)" for p in dir_path.glob("*") if p.is_file()]
+                _log("wait", f"t={int(time.time() - (deadline - timeout))}s pasta={files_dbg}")
+                if driver is not None:
+                    shot = dir_path / f"wait_{int(time.time())}.png"
+                    driver.save_screenshot(str(shot))
+                    html = dir_path / f"wait_{int(time.time())}.html"
+                    html.write_text(driver.page_source or "", encoding="utf-8", errors="ignore")
+                    _log("wait", f"screenshot+html: {shot.name}")
+            except Exception as e:
+                _log("wait", f"erro snapshot: {e}")
+            last_shot = time.time()
+
         files = sorted(dir_path.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)
         for p in files:
             if p.name.endswith(".crdownload"):
@@ -184,6 +201,20 @@ def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> 
         time.sleep(5)
 
         _log("STEP 5", f"preenchendo formulário: almoxarifado={TRANSNET_ALMOXARIFADO} periodo={data_ini}->{data_fim}")
+
+        # Reafirma o download behavior após navegar para a tela do relatório
+        try:
+            driver.execute_cdp_cmd(
+                "Page.setDownloadBehavior",
+                {"behavior": "allow", "downloadPath": str(OUT_DIR)},
+            )
+            driver.execute_cdp_cmd(
+                "Browser.setDownloadBehavior",
+                {"behavior": "allow", "downloadPath": str(OUT_DIR)},
+            )
+        except Exception as e:
+            _log("STEP 5", f"setDownloadBehavior pós-nav ignorado: {e}")
+
         before = _snapshot(OUT_DIR)
         ac = ActionChains(driver)
         ac.send_keys(TRANSNET_ALMOXARIFADO)
@@ -196,15 +227,26 @@ def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> 
             + [data_ini, Keys.TAB, data_fim]
             + [Keys.TAB, Keys.ARROW_DOWN]
             + [Keys.TAB] * 7
-            + [Keys.ARROW_DOWN] * 3
+            + [Keys.ARROW_DOWN] * 4
+            + [Keys.ARROW_UP]
             + [Keys.ENTER] * 3
         )
         for key in seq:
             ac.send_keys(key)
         ac.perform()
 
-        _log("STEP 6", f"aguardando CSV em {OUT_DIR} (timeout {TIMEOUT_SEC}s)")
-        novo = _wait_for_new_csv(OUT_DIR, before)
+        # Screenshot + HTML pós-form pra você ver se a tela mudou
+        try:
+            shot = OUT_DIR / "pos_form.png"
+            driver.save_screenshot(str(shot))
+            html = OUT_DIR / "pos_form.html"
+            html.write_text(driver.page_source or "", encoding="utf-8", errors="ignore")
+            _log("STEP 5", f"snapshot pos-form salvo: {shot.name}, {html.name}")
+        except Exception as e:
+            _log("STEP 5", f"snapshot pos-form falhou: {e}")
+
+        _log("STEP 6", f"aguardando CSV em {OUT_DIR} (timeout {TIMEOUT_SEC}s, screenshots a cada {DEBUG_SHOT_EVERY}s)")
+        novo = _wait_for_new_csv(OUT_DIR, before, driver=driver)
         destino = OUT_DIR / nome_saida
         if destino.exists():
             destino.unlink()
@@ -224,18 +266,37 @@ def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> 
         driver.quit()
 
 
+def _find_header_row(caminho_csv: str) -> int:
+    """Acha a linha (0-based) do cabecalho real do CSV TransNet.
+    Procura a primeira linha que contem 'Produtos' OU 'Codigo' E tem ';' e 'Saldo'.
+    """
+    with open(caminho_csv, "r", encoding="latin1", errors="ignore") as f:
+        for idx, line in enumerate(f):
+            s = line.strip().lower()
+            if ";" not in s:
+                continue
+            if "saldo" in s and ("produtos" in s or "codigo" in s or "código" in s):
+                return idx
+    raise ValueError(f"{caminho_csv}: não localizei o cabeçalho do relatório.")
+
+
 def tratar_estoque_virtual(caminho_csv: str) -> pd.DataFrame:
+    header_row = _find_header_row(caminho_csv)
+    _log("parse", f"cabecalho do CSV detectado na linha {header_row + 1}")
+
     raw = pd.read_csv(
         caminho_csv,
         sep=";",
         encoding="latin1",
         engine="python",
         header=0,
-        skiprows=SKIPROWS,
+        skiprows=header_row,
         dtype=str,
         on_bad_lines="skip",
     )
     raw.columns = raw.columns.str.strip()
+    _log("parse", f"colunas: {list(raw.columns)[:12]}")
+    _log("parse", f"linhas brutas: {len(raw)}")
 
     if "Produtos" in raw.columns and "Codigo da peça" not in raw.columns:
         extra = raw["Produtos"].astype(str).str.extract(r"(\d+)\s*-\s*(.*)")
@@ -245,14 +306,15 @@ def tratar_estoque_virtual(caminho_csv: str) -> pd.DataFrame:
     if "Codigo da peça" not in raw.columns and "Codigo" in raw.columns:
         raw.rename(columns={"Codigo": "Codigo da peça"}, inplace=True)
     if "Codigo da peça" not in raw.columns:
-        raise ValueError(f"{caminho_csv}: não encontrei coluna de código.")
+        raise ValueError(f"{caminho_csv}: não encontrei coluna de código (cols={list(raw.columns)})")
 
-    for col in ["Saldo Ant.", "Qtd. Entrada", "Qtd. Saída", "Qtd. Saida", "Saldo"]:
-        if col in raw.columns:
-            raw[col] = raw[col].apply(br_to_float)
-
+    # alguns cabecalhos vem com 'Qtd. Saida' (sem acento) ou 'Qtd. Saída'
     if "Qtd. Saída" not in raw.columns and "Qtd. Saida" in raw.columns:
         raw.rename(columns={"Qtd. Saida": "Qtd. Saída"}, inplace=True)
+
+    for col in ["Saldo Ant.", "Qtd. Entrada", "Qtd. Saída", "Saldo"]:
+        if col in raw.columns:
+            raw[col] = raw[col].apply(br_to_float)
 
     raw["Codigo da peça"] = (
         raw["Codigo da peça"]
@@ -262,9 +324,14 @@ def tratar_estoque_virtual(caminho_csv: str) -> pd.DataFrame:
         .apply(lambda x: x.zfill(6))
     )
 
+    # remove linhas de totalizacao (Total Grupo:, Total Subgrupo:, Total Geral, etc.)
     if "Produtos" in raw.columns:
-        raw = raw[~raw["Produtos"].astype(str).str.contains(r"(?i)total geral|^total:", regex=True, na=False)]
+        raw = raw[~raw["Produtos"].astype(str).str.contains(r"(?i)total\s+(geral|grupo|subgrupo)|^total:", regex=True, na=False)]
 
     keep = ["Codigo da peça", "Descricao", "Saldo Ant.", "Qtd. Entrada", "Qtd. Saída", "Saldo"]
     keep = [c for c in keep if c in raw.columns]
-    return raw[keep].dropna(subset=["Codigo da peça"])
+    out = raw[keep].dropna(subset=["Codigo da peça"])
+    # remove codigo vazio (linhas que cairam aqui mas nao eram produto)
+    out = out[out["Codigo da peça"].str.replace("0", "") != ""]
+    _log("parse", f"linhas validas apos limpeza: {len(out)}")
+    return out

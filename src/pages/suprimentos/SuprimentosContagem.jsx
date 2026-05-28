@@ -51,6 +51,8 @@ function BarcodeScanner({ open, onClose, onScan }) {
   const controlsRef = useRef(null);
   const streamRef = useRef(null);
   const detectorFrameRef = useRef(null);
+  const scanTimerRef = useRef(null);
+  const scanBoxRef = useRef(null);
   const scannedRef = useRef(false);
   const [error, setError] = useState("");
 
@@ -58,6 +60,10 @@ function BarcodeScanner({ open, onClose, onScan }) {
     if (detectorFrameRef.current) {
       cancelAnimationFrame(detectorFrameRef.current);
       detectorFrameRef.current = null;
+    }
+    if (scanTimerRef.current) {
+      clearTimeout(scanTimerRef.current);
+      scanTimerRef.current = null;
     }
     try { controlsRef.current?.stop?.(); } catch {}
     try { streamRef.current?.getTracks?.().forEach((track) => track.stop()); } catch {}
@@ -97,42 +103,41 @@ function BarcodeScanner({ open, onClose, onScan }) {
     try { await track.applyConstraints({ advanced }); } catch {}
   }
 
+  function drawScanArea(video, canvas) {
+    const box = scanBoxRef.current;
+    if (!box || !video?.videoWidth || !video?.videoHeight) return false;
+
+    const videoRect = video.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    const scale = Math.max(videoRect.width / video.videoWidth, videoRect.height / video.videoHeight);
+    const renderedWidth = video.videoWidth * scale;
+    const renderedHeight = video.videoHeight * scale;
+    const offsetX = (videoRect.width - renderedWidth) / 2;
+    const offsetY = (videoRect.height - renderedHeight) / 2;
+
+    const sourceX = (boxRect.left - videoRect.left - offsetX) / scale;
+    const sourceY = (boxRect.top - videoRect.top - offsetY) / scale;
+    const sourceW = boxRect.width / scale;
+    const sourceH = boxRect.height / scale;
+    const sx = Math.max(0, Math.min(video.videoWidth - 1, sourceX));
+    const sy = Math.max(0, Math.min(video.videoHeight - 1, sourceY));
+    const sw = Math.max(1, Math.min(video.videoWidth - sx, sourceW));
+    const sh = Math.max(1, Math.min(video.videoHeight - sy, sourceH));
+
+    canvas.width = Math.max(360, Math.round(sw));
+    canvas.height = Math.max(360, Math.round(sh));
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return false;
+    ctx.filter = "contrast(1.18) brightness(1.08) saturate(1.05)";
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return true;
+  }
+
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setError("");
     scannedRef.current = false;
-
-    const startNativeDetector = () => {
-      const video = videoRef.current;
-      if (!video || !("BarcodeDetector" in window)) return;
-
-      let detector;
-      try {
-        detector = new window.BarcodeDetector({
-          formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "itf", "codabar"],
-        });
-      } catch {
-        return;
-      }
-
-      const scanFrame = async () => {
-        if (cancelled || scannedRef.current) return;
-        try {
-          if (video.readyState >= 2) {
-            const codes = await detector.detect(video);
-            const rawValue = codes?.[0]?.rawValue;
-            if (rawValue) {
-              finishScan(rawValue);
-              return;
-            }
-          }
-        } catch {}
-        detectorFrameRef.current = requestAnimationFrame(scanFrame);
-      };
-
-      detectorFrameRef.current = requestAnimationFrame(scanFrame);
-    };
 
     (async () => {
       try {
@@ -158,34 +163,63 @@ function BarcodeScanner({ open, onClose, onScan }) {
           tryPlayVideoTimeout: 5000,
         });
         if (cancelled) return;
-        const controls = await reader.decodeFromConstraints(
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              frameRate: { ideal: 30, max: 60 },
-            },
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30, max: 60 },
           },
-          videoRef.current,
-          (result, _err, ctrl) => {
-            if (cancelled) return;
-            controlsRef.current = ctrl;
-            if (result) {
-              finishScan(result.getText());
-            }
-          }
-        );
+        });
         if (cancelled) {
-          try { controls?.stop?.(); } catch {}
+          stream.getTracks().forEach((track) => track.stop());
           return;
         }
-        controlsRef.current = controls;
-        streamRef.current = videoRef.current?.srcObject || null;
-        setTimeout(() => { tuneCamera(); startNativeDetector(); }, 250);
+        streamRef.current = stream;
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        await tuneCamera();
+
+        const canvas = document.createElement("canvas");
+        let nativeDetector = null;
+        if ("BarcodeDetector" in window) {
+          try {
+            nativeDetector = new window.BarcodeDetector({
+              formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "itf", "codabar"],
+            });
+          } catch {}
+        }
+
+        const scanFrame = async () => {
+          if (cancelled || scannedRef.current) return;
+          const video = videoRef.current;
+          if (video?.readyState >= 2 && drawScanArea(video, canvas)) {
+            try {
+              const codes = nativeDetector ? await nativeDetector.detect(canvas) : [];
+              const rawValue = codes?.[0]?.rawValue;
+              if (rawValue) {
+                finishScan(rawValue);
+                return;
+              }
+            } catch {}
+
+            try {
+              const result = reader.decodeFromCanvas(canvas);
+              if (result) {
+                finishScan(result.getText());
+                return;
+              }
+            } catch {}
+          }
+
+          scanTimerRef.current = setTimeout(scanFrame, 90);
+        };
+
+        scanFrame();
       } catch (err) {
-        setError(err?.message || "Não consegui acessar a câmera.");
+        setError(err?.message || "Nao consegui acessar a camera.");
       }
     })();
 
@@ -194,7 +228,6 @@ function BarcodeScanner({ open, onClose, onScan }) {
       stopScanner();
     };
   }, [open, onScan]);
-
   if (!open) return null;
 
   return (
@@ -219,7 +252,10 @@ function BarcodeScanner({ open, onClose, onScan }) {
           playsInline
         />
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="relative h-44 w-[92vw] max-w-sm rounded-[28px] border-[3px] border-blue-300/90 shadow-[0_0_0_9999px_rgba(2,6,23,0.52)]">
+          <div
+            ref={scanBoxRef}
+            className="relative h-[72vw] w-[72vw] max-h-80 max-w-80 rounded-[28px] border-[3px] border-blue-300/90 shadow-[0_0_0_9999px_rgba(2,6,23,0.52)]"
+          >
             <div className="absolute left-8 right-8 top-1/2 h-0.5 rounded-full bg-blue-200/95 shadow-[0_0_18px_rgba(147,197,253,0.95)]" />
           </div>
         </div>
@@ -259,18 +295,35 @@ export default function SuprimentosContagem() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [fluxoAtivo, setFluxoAtivo] = useState(false);
   const [itensSessao, setItensSessao] = useState(0);
+  const [mobileCentralOpen, setMobileCentralOpen] = useState(false);
 
   const codigoInputRef = useRef(null);
   const qtdInputRef = useRef(null);
+
+  function montarCodigosBusca(valor) {
+    const raw = String(valor || "").trim();
+    const digits = raw.replace(/\D/g, "");
+    const codigos = new Set([raw]);
+    if (digits && digits === raw) {
+      const semZeros = digits.replace(/^0+/, "") || "0";
+      codigos.add(semZeros);
+      [8, 9, 10, 11, 12, 13, 14].forEach((size) => codigos.add(semZeros.padStart(size, "0")));
+    }
+    return [...codigos].filter(Boolean);
+  }
 
   async function buscarPeca(codigoBusca) {
     const c = String(codigoBusca || "").trim();
     if (!c) { setPeca(null); setNaoCadastrado(false); return; }
     setBusy(true); setErro(""); setAviso("");
+    const candidatos = montarCodigosBusca(c);
+    const filtroCodigos = candidatos
+      .flatMap((codigoItem) => [`codigo.eq.${codigoItem}`, `ref_fabricante.eq.${codigoItem}`])
+      .join(",");
     const { data, error } = await supabase
       .from("suprimentos_pecas")
       .select("id, codigo, descricao, unidade_padrao, localizacao, estoque_min, estoque_max, saldo_erp")
-      .or(`codigo.eq.${c},ref_fabricante.eq.${c}`)
+      .or(filtroCodigos)
       .limit(1)
       .maybeSingle();
     setBusy(false);
@@ -282,6 +335,7 @@ export default function SuprimentosContagem() {
       setTimeout(() => qtdInputRef.current?.focus(), 50);
       return;
     }
+    if (data.codigo && data.codigo !== c) setCodigo(data.codigo);
     setPeca(data);
     setNaoCadastrado(false);
     setTimeout(() => qtdInputRef.current?.focus(), 50);
@@ -456,17 +510,72 @@ export default function SuprimentosContagem() {
           </header>
 
           {!fluxoAtivo ? (
-            <button
-              type="button"
-              onClick={iniciarFluxo}
-              className="flex min-h-[180px] flex-col items-start justify-end rounded-[32px] bg-gradient-to-br from-emerald-600 to-teal-800 p-6 text-left text-white shadow-xl active:scale-[0.98]"
-            >
-              <span className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/15 text-3xl">
-                <FaBarcode />
-              </span>
-              <span className="text-2xl font-black">Iniciar contagem</span>
-              <span className="mt-2 text-sm font-semibold text-white/80">Escaneie, informe a quantidade e avance para o proximo item.</span>
-            </button>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={iniciarFluxo}
+                className="flex min-h-[180px] w-full flex-col items-start justify-end rounded-[32px] bg-gradient-to-br from-emerald-600 to-teal-800 p-6 text-left text-white shadow-xl active:scale-[0.98]"
+              >
+                <span className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/15 text-3xl">
+                  <FaBarcode />
+                </span>
+                <span className="text-2xl font-black">Iniciar contagem</span>
+                <span className="mt-2 text-sm font-semibold text-white/80">Escaneie, informe a quantidade e avance para o proximo item.</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileCentralOpen((current) => {
+                    const next = !current;
+                    if (next && !lotesDiarios.length) carregarLotes();
+                    return next;
+                  });
+                }}
+                className="flex w-full items-center justify-between rounded-3xl border border-slate-200 bg-white px-5 py-4 text-left text-slate-950 shadow-sm active:scale-[0.98]"
+              >
+                <span>
+                  <span className="block text-base font-black">Central</span>
+                  <span className="mt-0.5 block text-xs font-semibold text-slate-500">Ver contagens, lotes e divergencias.</span>
+                </span>
+                <FaChevronRight className={`text-slate-400 transition ${mobileCentralOpen ? "rotate-90" : ""}`} />
+              </button>
+
+              {mobileCentralOpen ? (
+                <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Central</p>
+                      <h2 className="text-lg font-black text-slate-950">Contagens recentes</h2>
+                    </div>
+                    <span className="rounded-2xl bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{kpis.total}</span>
+                  </div>
+
+                  {loadingLotes ? (
+                    <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-500">Carregando...</p>
+                  ) : lotesDiarios.length ? (
+                    <div className="space-y-2">
+                      {lotesDiarios.slice(0, 12).map((lote) => (
+                        <button
+                          key={lote.data}
+                          type="button"
+                          onClick={() => navigate(`/suprimentos/contagem/dia/${lote.data}`)}
+                          className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-left active:scale-[0.99]"
+                        >
+                          <span>
+                            <span className="block text-sm font-black text-slate-950">{formatDateBR(lote.data)}</span>
+                            <span className="text-xs font-semibold text-slate-500">{lote.total} item(ns) · {lote.divergencias} divergencia(s)</span>
+                          </span>
+                          <FaChevronRight className="text-slate-400" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-500">Nenhuma contagem encontrada.</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
           ) : (
             <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between gap-3">

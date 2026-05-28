@@ -501,10 +501,11 @@ function printFicha(record) {
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/>
 <title>Serviço Externo ${escapePrintHtml(record.numero_saida || "")}</title>
 <style>
-  @page { size: A4; margin: 16mm 14mm; }
+  @page { size: A4; margin: 0; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
-  body { margin: 0; padding: 16mm 14mm; font-family: Arial, sans-serif; font-size: 11px; line-height: 1.35; color: #0f172a; }
-  @media print { body { padding: 0; } }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11px; line-height: 1.35; color: #0f172a; }
+  .page-wrap { padding: 18mm 14mm; }
   h1, h2, h3, p { margin: 0; padding: 0; }
   .nobreak { break-inside: avoid; page-break-inside: avoid; }
   .mb-3 { margin-bottom: 12px; }
@@ -573,6 +574,7 @@ function printFicha(record) {
     border-top: 1px dashed #cbd5e1; padding-top: 6px;
   }
 </style></head><body>
+<div class="page-wrap">
   <header class="doc-header nobreak">
     <div class="brand">
       <img src="${logoInove}" alt="INOVE" />
@@ -655,6 +657,7 @@ function printFicha(record) {
     Este documento registra a saída de itens para serviço externo e seu controle de retorno, conforme dados
     lançados no sistema. As partes signatárias declaram ciência dos itens, quantidades e condições descritas.
   </div>
+</div>
 </body></html>`;
 
   const w = window.open("", "_blank", "width=900,height=700");

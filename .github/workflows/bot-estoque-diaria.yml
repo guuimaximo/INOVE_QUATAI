@@ -67,7 +67,9 @@ jobs:
 
       - name: Run bot diário
         working-directory: bot
+        timeout-minutes: 20
         env:
+          PYTHONUNBUFFERED: "1"
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           TRANSNET_URL: ${{ secrets.TRANSNET_URL }}
@@ -79,12 +81,14 @@ jobs:
           DATA_ALVO_INPUT: ${{ github.event.inputs.data_alvo }}
         run: |
           set -e
+          echo "Chrome em: $CHROME_BIN"
+          $CHROME_BIN --version || true
           if [ -n "$DATA_ALVO_INPUT" ]; then
             echo "Disparo manual com data_alvo=$DATA_ALVO_INPUT"
-            python bot_diaria.py --data-alvo "$DATA_ALVO_INPUT"
+            python -u bot_diaria.py --data-alvo "$DATA_ALVO_INPUT"
           else
             echo "Modo fila (cron)"
-            python bot_diaria.py --max-jobs 5
+            python -u bot_diaria.py --max-jobs 5
           fi
 
       - name: Sobe screenshots e CSVs (em caso de falha)

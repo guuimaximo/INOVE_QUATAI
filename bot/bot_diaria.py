@@ -15,18 +15,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict
 
+print("[diaria] boot do script", flush=True)
+
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+print("[diaria] importando transnet...", flush=True)
 from transnet import gerar_estoque_virtual_csv, tratar_estoque_virtual  # noqa: E402
+print("[diaria] transnet importado.", flush=True)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    print("[bot] SUPABASE_URL / SUPABASE_SERVICE_KEY ausentes.")
-    # não falha o workflow; só sai sem trabalho.
+    print("[diaria] SUPABASE_URL / SUPABASE_SERVICE_KEY ausentes.", flush=True)
     sys.exit(0)
+print(f"[diaria] supabase ok ({SUPABASE_URL[:40]}...)", flush=True)
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -199,6 +203,7 @@ def processar_job(job: dict):
 
 
 def main():
+    _log("main", "entrou em main()")
     parser = argparse.ArgumentParser()
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--interval", type=int, default=10)

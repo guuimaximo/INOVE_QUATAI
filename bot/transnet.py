@@ -17,7 +17,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 
 import pandas as pd
 
@@ -116,13 +115,23 @@ def _make_driver() -> webdriver.Chrome:
             "safebrowsing.enabled": True,
         },
     )
-    chrome_bin = os.environ.get("CHROME_BIN")
+    chrome_bin = _env("CHROME_BIN")
     if chrome_bin:
         options.binary_location = chrome_bin
+        _log("driver", f"binary_location={chrome_bin}")
 
-    chromedriver_path = os.environ.get("CHROMEDRIVER_PATH")
-    service = Service(chromedriver_path) if chromedriver_path else Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=options)
+    chromedriver_path = _env("CHROMEDRIVER_PATH")
+    if chromedriver_path:
+        _log("driver", f"usando chromedriver fornecido em {chromedriver_path}")
+        service = Service(chromedriver_path)
+    else:
+        _log("driver", "usando Selenium Manager (sem service explicito)")
+        service = None
+
+    _log("driver", "construindo webdriver.Chrome...")
+    driver = webdriver.Chrome(options=options, service=service) if service else webdriver.Chrome(options=options)
+    _log("driver", "Chrome iniciado.")
+    return driver
 
 
 def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> str:

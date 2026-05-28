@@ -65,7 +65,16 @@ export default function PullToRefresh({ onRefresh, children, threshold = 80 }) {
           </div>
         </div>
       ) : null}
-      <div style={{ transform: `translateY(${refreshing ? 50 : pullDistance * 0.5}px)`, transition: refreshing ? "transform .15s ease" : "none" }}>
+      <div
+        style={
+          pullDistance > 0 || refreshing
+            ? {
+                transform: `translateY(${refreshing ? 50 : pullDistance * 0.5}px)`,
+                transition: refreshing ? "transform .15s ease" : "none",
+              }
+            : undefined /* sem transform quando não estiver puxando — evita quebrar position:fixed dos filhos */
+        }
+      >
         {children}
       </div>
     </div>

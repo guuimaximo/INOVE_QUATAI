@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import PullToRefresh from "../../components/PullToRefresh";
@@ -231,7 +232,7 @@ function BarcodeScanner({ open, onClose, onScan }) {
   }, [open, onScan]);
   if (!open) return null;
 
-  return (
+  const conteudo = (
     <div className="fixed inset-0 z-[120] flex flex-col bg-slate-950/90">
       <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 text-white">
         <div>
@@ -271,6 +272,10 @@ function BarcodeScanner({ open, onClose, onScan }) {
       </div>
     </div>
   );
+
+  // Portal pro body — escapa de qualquer transform/overflow do ancestral
+  if (typeof document !== "undefined") return createPortal(conteudo, document.body);
+  return conteudo;
 }
 
 /* ─── Página ──────────────────────────────────────────────── */

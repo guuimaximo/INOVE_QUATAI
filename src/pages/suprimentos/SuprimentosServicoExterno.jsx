@@ -501,9 +501,10 @@ function printFicha(record) {
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/>
 <title>Serviço Externo ${escapePrintHtml(record.numero_saida || "")}</title>
 <style>
-  @page { margin: 14mm; }
+  @page { size: A4; margin: 16mm 14mm; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
-  body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 11px; line-height: 1.35; color: #0f172a; }
+  body { margin: 0; padding: 16mm 14mm; font-family: Arial, sans-serif; font-size: 11px; line-height: 1.35; color: #0f172a; }
+  @media print { body { padding: 0; } }
   h1, h2, h3, p { margin: 0; padding: 0; }
   .nobreak { break-inside: avoid; page-break-inside: avoid; }
   .mb-3 { margin-bottom: 12px; }

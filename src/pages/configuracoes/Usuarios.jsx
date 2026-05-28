@@ -582,6 +582,30 @@ export default function Usuarios() {
     setSavingId(null);
   }
 
+  async function atualizarStatusCadastro(id, statusCadastro) {
+    setSavingId(id);
+    setFeedback(null);
+
+    const { data, error } = await supabase
+      .from("usuarios_aprovadores")
+      .update({ status_cadastro: statusCadastro })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error(error.message);
+      setFeedback({ type: "error", text: "Erro ao atualizar o status do cadastro." });
+      setSavingId(null);
+      return;
+    }
+
+    setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? data : usuario)));
+    if (usuarioSelecionado?.id === id) setUsuarioSelecionado(data);
+    setFeedback({ type: "success", text: `Status do cadastro alterado para ${statusCadastro}.` });
+    setSavingId(null);
+  }
+
   async function alternarAtivo(id, atual) {
     const ativoAtual = isUsuarioAtivo(atual);
     const novoStatus = !ativoAtual;
@@ -885,7 +909,23 @@ export default function Usuarios() {
 
                       <td className="p-3">
                         <p className="font-bold text-slate-800">{usuario?.login || "-"}</p>
-                        <p className="text-xs text-slate-500 font-semibold">{statusCadastro}</p>
+                        <select
+                          value={statusCadastro}
+                          disabled={isSaving}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) => atualizarStatusCadastro(usuario.id, event.target.value)}
+                          className={`mt-1 min-w-[120px] rounded-lg border px-2 py-1 text-[11px] font-bold outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:opacity-60 ${
+                            statusCadastro === "Aprovado"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : statusCadastro === "Recusado"
+                                ? "border-rose-200 bg-rose-50 text-rose-700"
+                                : "border-amber-200 bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          <option value="Pendente">Pendente</option>
+                          <option value="Aprovado">Aprovado</option>
+                          <option value="Recusado">Recusado</option>
+                        </select>
                       </td>
 
                       <td className="p-3">

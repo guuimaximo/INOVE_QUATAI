@@ -21,17 +21,27 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 import pandas as pd
 
-TRANSNET_URL = os.environ.get(
+def _env(name: str, default: str = "") -> str:
+    """os.environ.get tratando string vazia como ausente (GitHub Actions seta '' quando o secret nao existe)."""
+    val = os.environ.get(name, "")
+    return val if val else default
+
+
+TRANSNET_URL = _env(
     "TRANSNET_URL",
     "https://transnet.grupocsc.com.br/sgtweb/index.php?c=controleAcesso.CLogin&m=verTelaLogin",
 )
-TRANSNET_USER = os.environ.get("TRANSNET_USER", "")
-TRANSNET_PASSWORD = os.environ.get("TRANSNET_PASSWORD", "")
-TRANSNET_ALMOXARIFADO = os.environ.get("TRANSNET_ALMOXARIFADO", "046")
+TRANSNET_USER = _env("TRANSNET_USER", "")
+TRANSNET_PASSWORD = _env("TRANSNET_PASSWORD", "")
+TRANSNET_ALMOXARIFADO = _env("TRANSNET_ALMOXARIFADO", "046")
 
-HEADLESS = os.environ.get("HEADLESS", "true").lower() not in ("0", "false", "no")
-TIMEOUT_SEC = int(os.environ.get("BOT_DOWNLOAD_TIMEOUT", "600"))
+HEADLESS = _env("HEADLESS", "true").lower() not in ("0", "false", "no")
+TIMEOUT_SEC = int(_env("BOT_DOWNLOAD_TIMEOUT", "600"))
 POLL_INTERVAL = 0.5
+
+
+def _log(step: str, msg: str = ""):
+    print(f"[transnet] {step:>10}  {msg}", flush=True)
 
 BASE_DIR = Path(__file__).resolve().parent
 OUT_DIR = (BASE_DIR / "downloads").resolve()
@@ -116,10 +126,17 @@ def _make_driver() -> webdriver.Chrome:
 
 
 def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> str:
-    """data_ini/data_fim no formato DDMMYYYY (igual main.py atual)."""
-    if not TRANSNET_USER or not TRANSNET_PASSWORD:
-        raise RuntimeError("TRANSNET_USER / TRANSNET_PASSWORD não definidos no ambiente.")
+    """data_ini/data_fim no formato DDMMYYYY."""
+    _log("STEP 0", f"data_ini={data_ini}  data_fim={data_fim}  arquivo_destino={nome_saida}")
+    _log("STEP 0", f"TRANSNET_URL={'<vazia>' if not TRANSNET_URL else TRANSNET_URL[:60]+'...'}")
+    _log("STEP 0", f"TRANSNET_USER={'<vazio>' if not TRANSNET_USER else '***' + TRANSNET_USER[-3:]}  almoxarifado={TRANSNET_ALMOXARIFADO}")
 
+    if not TRANSNET_URL:
+        raise RuntimeError("Secret TRANSNET_URL vazio. Cadastra a URL completa OU deixa em branco (sem secret).")
+    if not TRANSNET_USER or not TRANSNET_PASSWORD:
+        raise RuntimeError("Secrets TRANSNET_USER/TRANSNET_PASSWORD não definidos.")
+
+    _log("STEP 1", "abrindo Chrome (headless={})".format(HEADLESS))
     driver = _make_driver()
     wait = WebDriverWait(driver, 30)
     try:
@@ -128,29 +145,37 @@ def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> 
                 "Page.setDownloadBehavior",
                 {"behavior": "allow", "downloadPath": str(OUT_DIR)},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            _log("STEP 1", f"setDownloadBehavior ignorado: {e}")
 
+        _log("STEP 2", "navegando para a tela de login")
         driver.get(TRANSNET_URL)
+
+        _log("STEP 3", "preenchendo login")
         wait.until(EC.visibility_of_element_located((By.ID, "edtLogin"))).send_keys(TRANSNET_USER)
         wait.until(EC.visibility_of_element_located((By.ID, "edtSenha"))).send_keys(TRANSNET_PASSWORD)
         wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@value='ENTRAR']"))).click()
         time.sleep(2)
 
+        _log("STEP 4", "abrindo relatório 'Entradas e Saídas Acumuladas'")
         campo = wait.until(EC.visibility_of_element_located((By.ID, "pesquisaMenu")))
         campo.clear()
         campo.send_keys("Entradas e Saídas Acumuladas")
         time.sleep(2)
+        achou = False
         for item in driver.find_elements(By.CSS_SELECTOR, "li"):
             if "Suprimentos - Entradas e Saídas Acumuladas" in item.text:
                 driver.execute_script("arguments[0].scrollIntoView()", item)
                 item.click()
+                achou = True
                 break
+        if not achou:
+            raise RuntimeError("Não achei o item 'Suprimentos - Entradas e Saídas Acumuladas' no menu.")
         driver.switch_to.default_content()
         time.sleep(5)
 
+        _log("STEP 5", f"preenchendo formulário: almoxarifado={TRANSNET_ALMOXARIFADO} periodo={data_ini}->{data_fim}")
         before = _snapshot(OUT_DIR)
-
         ac = ActionChains(driver)
         ac.send_keys(TRANSNET_ALMOXARIFADO)
         ac.perform()
@@ -169,12 +194,23 @@ def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> 
             ac.send_keys(key)
         ac.perform()
 
+        _log("STEP 6", f"aguardando CSV em {OUT_DIR} (timeout {TIMEOUT_SEC}s)")
         novo = _wait_for_new_csv(OUT_DIR, before)
         destino = OUT_DIR / nome_saida
         if destino.exists():
             destino.unlink()
         shutil.move(str(novo), destino)
+        _log("STEP 7", f"CSV salvo: {destino}")
         return str(destino)
+    except Exception as e:
+        _log("ERRO ", f"falhou em {type(e).__name__}: {e}")
+        try:
+            shot = OUT_DIR / f"erro_{int(time.time())}.png"
+            driver.save_screenshot(str(shot))
+            _log("ERRO ", f"screenshot salvo em {shot}")
+        except Exception:
+            pass
+        raise
     finally:
         driver.quit()
 

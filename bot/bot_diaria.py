@@ -116,12 +116,19 @@ def carregar_contagens_do_dia(data_alvo: str) -> list:
     return rows
 
 
+def _log(step: str, msg: str = ""):
+    print(f"[diaria] {step:>10}  {msg}", flush=True)
+
+
 def baixar_saldos_do_dia(data_alvo_iso: str) -> Dict[str, float]:
     d = datetime.strptime(data_alvo_iso, "%Y-%m-%d")
     ddmm = d.strftime("%d%m%Y")
     nome = f"saldo_{d.strftime('%Y%m%d')}.csv"
+    _log("baixar", f"chamando TransNet para periodo {ddmm}->{ddmm}")
     arq = gerar_estoque_virtual_csv(ddmm, ddmm, nome)
+    _log("baixar", f"CSV recebido: {arq}")
     df = tratar_estoque_virtual(arq)
+    _log("baixar", f"linhas no CSV apos tratamento: {len(df)}")
     if "Saldo" not in df.columns:
         raise RuntimeError("CSV não trouxe coluna 'Saldo'.")
 
@@ -132,6 +139,7 @@ def baixar_saldos_do_dia(data_alvo_iso: str) -> Dict[str, float]:
             continue
         saldo = float(row.get("Saldo", 0) or 0)
         saldos[cod] = saldo
+    _log("baixar", f"codigos unicos com saldo: {len(saldos)}")
     return saldos
 
 
@@ -168,21 +176,26 @@ def aplicar_resultado(contagens: list, saldos: Dict[str, float]) -> dict:
 def processar_job(job: dict):
     job_id = job["id"]
     data_alvo = job["data_alvo"]
-    print(f"[bot] processando job {job_id} data_alvo={data_alvo}")
+    _log("STEP 1", f"job id={job_id} data_alvo={data_alvo}")
     marcar_processando(job_id)
+    _log("STEP 2", "marcado como 'processando' no Supabase")
 
     contagens = carregar_contagens_do_dia(data_alvo)
+    _log("STEP 3", f"contagens carregadas do Supabase: {len(contagens)}")
     if not contagens:
         marcar_concluido(job_id, {"itens_atualizados": 0, "divergencias": 0, "msg": "Sem contagens nesse dia."})
-        print("[bot] nada pra processar.")
+        _log("STEP 3", "encerrando - nada pra processar.")
         return
 
+    _log("STEP 4", "iniciando download do saldo no TransNet")
     saldos = baixar_saldos_do_dia(data_alvo)
+    _log("STEP 5", f"comparando contagens x saldos ({len(saldos)} codigos no ERP)")
     resultado = aplicar_resultado(contagens, saldos)
     resultado["codigos_unicos_no_erp"] = len(saldos)
     resultado["contagens_processadas"] = len(contagens)
+    _log("STEP 6", "marcando job como 'concluido'")
     marcar_concluido(job_id, resultado)
-    print(f"[bot] concluido: {resultado}")
+    _log("STEP 7", f"OK: {resultado}")
 
 
 def main():

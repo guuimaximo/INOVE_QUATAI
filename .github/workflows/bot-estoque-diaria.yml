@@ -43,6 +43,28 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Sanity-check dos secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TRANSNET_USER: ${{ secrets.TRANSNET_USER }}
+          TRANSNET_PASSWORD: ${{ secrets.TRANSNET_PASSWORD }}
+          TRANSNET_ALMOXARIFADO: ${{ secrets.TRANSNET_ALMOXARIFADO }}
+          TRANSNET_URL: ${{ secrets.TRANSNET_URL }}
+        run: |
+          ok=true
+          for var in SUPABASE_URL SUPABASE_SERVICE_KEY TRANSNET_USER TRANSNET_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret $var está vazio. Cadastre em Settings → Secrets and variables → Actions."
+              ok=false
+            else
+              echo "$var: OK"
+            fi
+          done
+          echo "TRANSNET_ALMOXARIFADO: ${TRANSNET_ALMOXARIFADO:-046 (default)}"
+          echo "TRANSNET_URL: ${TRANSNET_URL:-default do código}"
+          $ok
+
       - name: Run bot diário
         working-directory: bot
         env:
@@ -54,9 +76,24 @@ jobs:
           TRANSNET_ALMOXARIFADO: ${{ secrets.TRANSNET_ALMOXARIFADO }}
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
           HEADLESS: "true"
+          DATA_ALVO_INPUT: ${{ github.event.inputs.data_alvo }}
         run: |
-          if [ -n "${{ github.event.inputs.data_alvo }}" ]; then
-            python bot_diaria.py --data-alvo "${{ github.event.inputs.data_alvo }}"
+          set -e
+          if [ -n "$DATA_ALVO_INPUT" ]; then
+            echo "Disparo manual com data_alvo=$DATA_ALVO_INPUT"
+            python bot_diaria.py --data-alvo "$DATA_ALVO_INPUT"
           else
+            echo "Modo fila (cron)"
             python bot_diaria.py --max-jobs 5
           fi
+
+      - name: Sobe screenshots e CSVs (em caso de falha)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-diaria-debug
+          path: |
+            bot/downloads/*.csv
+            bot/downloads/*.png
+          if-no-files-found: ignore
+          retention-days: 7

@@ -36,6 +36,24 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Sanity-check dos secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TRANSNET_USER: ${{ secrets.TRANSNET_USER }}
+          TRANSNET_PASSWORD: ${{ secrets.TRANSNET_PASSWORD }}
+        run: |
+          ok=true
+          for var in SUPABASE_URL SUPABASE_SERVICE_KEY TRANSNET_USER TRANSNET_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret $var está vazio."
+              ok=false
+            else
+              echo "$var: OK"
+            fi
+          done
+          $ok
+
       - name: Run bot semanal
         working-directory: bot
         env:
@@ -50,3 +68,15 @@ jobs:
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
           HEADLESS: "true"
         run: python bot_semanal.py
+
+      - name: Sobe screenshots de erro
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-semanal-debug
+          path: |
+            bot/downloads/*.csv
+            bot/downloads/*.png
+            bot/downloads/*.xlsx
+          if-no-files-found: ignore
+          retention-days: 7

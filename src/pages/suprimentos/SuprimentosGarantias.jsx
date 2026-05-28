@@ -339,18 +339,17 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
   );
 }
 
-function GarantiaDetailModal({ open, item, onClose, onSaved }) {
+function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
   const [form, setForm] = useState(DETAIL_FORM);
   const [existingAttachments, setExistingAttachments] = useState([]);
   const [newFiles, setNewFiles] = useState([]);
-  const [existingLaudoUrls, setExistingLaudoUrls] = useState([]);
-  const [newLaudoFiles, setNewLaudoFiles] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [editingDatas, setEditingDatas] = useState(false);
+  const userName = user?.nome || user?.nome_completo || user?.login || user?.email || "Usuario";
 
   useEffect(() => {
     if (!open || !item) return;
     setForm({
-      protocolo_fornecedor: item.protocolo_fornecedor || "",
       enviado_fornecedor_em: item.enviado_fornecedor_em || "",
       retirada_fornecedor_em: item.retirada_fornecedor_em || "",
       prazo_retorno_dias: item.prazo_retorno_dias ?? "",
@@ -363,10 +362,12 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
       recebida_em: item.recebida_em || "",
       encerrada_em: item.encerrada_em || "",
     });
-    setExistingAttachments(Array.isArray(item.anexos) ? item.anexos : []);
+    // Junta laudo + anexos numa lista só (compat com registros antigos)
+    const anexos = Array.isArray(item.anexos) ? item.anexos : [];
+    const laudos = Array.isArray(item.laudo_urls) ? item.laudo_urls : [];
+    setExistingAttachments([...anexos, ...laudos]);
     setNewFiles([]);
-    setExistingLaudoUrls(Array.isArray(item.laudo_urls) ? item.laudo_urls : []);
-    setNewLaudoFiles([]);
+    setEditingDatas(false);
   }, [item, open]);
 
   if (!open || !item) return null;
@@ -380,13 +381,8 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
         newFiles,
         `garantias/${item.prefixo || "sem-prefixo"}`
       );
-      const uploadedLaudos = await uploadSuprimentosFiles(
-        newLaudoFiles,
-        `garantias/${item.prefixo || "sem-prefixo"}/laudos`
-      );
 
       const payload = {
-        protocolo_fornecedor: form.protocolo_fornecedor.trim() || null,
         enviado_fornecedor_em: form.enviado_fornecedor_em || null,
         retirada_fornecedor_em: form.retirada_fornecedor_em || null,
         prazo_retorno_dias: safeNumber(form.prazo_retorno_dias),
@@ -399,7 +395,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
         recebida_em: form.recebida_em || null,
         encerrada_em: form.encerrada_em || null,
         anexos: [...existingAttachments, ...uploaded],
-        laudo_urls: [...existingLaudoUrls, ...uploadedLaudos],
+        laudo_urls: [],
         updated_at: new Date().toISOString(),
       };
 
@@ -449,31 +445,72 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
         </div>
         </SectionBlock>
 
-        <SectionBlock title="Andamento">
+        <SectionBlock
+          title="Andamento"
+        >
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <ActionButton
+            tone={form.retirada_fornecedor_em ? "slate" : "amber"}
+            onClick={() => {
+              if (form.retirada_fornecedor_em && !editingDatas) return;
+              const now = new Date();
+              const stamp = `Peca retirada por ${userName} em ${now.toLocaleString("pt-BR")}.`;
+              setForm((prev) => ({
+                ...prev,
+                retirada_fornecedor_em: todayISO(),
+                observacao: prev.observacao
+                  ? (prev.observacao.includes(stamp) ? prev.observacao : `${prev.observacao}\n${stamp}`)
+                  : stamp,
+              }));
+            }}
+          >
+            {form.retirada_fornecedor_em
+              ? `Retirada em ${formatDateBR(form.retirada_fornecedor_em)}`
+              : "Marcar peca retirada"}
+          </ActionButton>
+          <ActionButton
+            tone={form.retorno_fornecedor_em ? "slate" : "emerald"}
+            onClick={() => {
+              if (form.retorno_fornecedor_em && !editingDatas) return;
+              const now = new Date();
+              const stamp = `Peca retornada por ${userName} em ${now.toLocaleString("pt-BR")}.`;
+              setForm((prev) => ({
+                ...prev,
+                retorno_fornecedor_em: todayISO(),
+                observacao: prev.observacao
+                  ? (prev.observacao.includes(stamp) ? prev.observacao : `${prev.observacao}\n${stamp}`)
+                  : stamp,
+              }));
+            }}
+          >
+            {form.retorno_fornecedor_em
+              ? `Retornada em ${formatDateBR(form.retorno_fornecedor_em)}`
+              : "Marcar peca retornada"}
+          </ActionButton>
+          <ActionButton onClick={() => setEditingDatas((v) => !v)}>
+            {editingDatas ? "Concluir edicao" : "Editar"}
+          </ActionButton>
+        </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Field label="Protocolo / RMA">
-            <input
-              value={form.protocolo_fornecedor}
-              onChange={(e) => setForm((prev) => ({ ...prev, protocolo_fornecedor: e.target.value }))}
-              className={inputClass}
-            />
-          </Field>
           <Field label="Enviado em">
             <input
               type="date"
               value={form.enviado_fornecedor_em}
               onChange={(e) => setForm((prev) => ({ ...prev, enviado_fornecedor_em: e.target.value }))}
               className={inputClass}
+              disabled={!editingDatas && Boolean(form.enviado_fornecedor_em)}
             />
           </Field>
-          <Field label="Retirada da peca">
-            <input
-              type="date"
-              value={form.retirada_fornecedor_em}
-              onChange={(e) => setForm((prev) => ({ ...prev, retirada_fornecedor_em: e.target.value }))}
-              className={inputClass}
-            />
-          </Field>
+          {editingDatas ? (
+            <Field label="Retirada da peca">
+              <input
+                type="date"
+                value={form.retirada_fornecedor_em}
+                onChange={(e) => setForm((prev) => ({ ...prev, retirada_fornecedor_em: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+          ) : null}
           <Field label="Prazo (dias)">
             <input
               type="number"
@@ -513,14 +550,16 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
               ))}
             </select>
           </Field>
-          <Field label="Data retorno">
-            <input
-              type="date"
-              value={form.retorno_fornecedor_em}
-              onChange={(e) => setForm((prev) => ({ ...prev, retorno_fornecedor_em: e.target.value }))}
-              className={inputClass}
-            />
-          </Field>
+          {editingDatas ? (
+            <Field label="Data retorno">
+              <input
+                type="date"
+                value={form.retorno_fornecedor_em}
+                onChange={(e) => setForm((prev) => ({ ...prev, retorno_fornecedor_em: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+          ) : null}
           {showApprovedFields ? (
             <>
               <Field label="Tipo de retorno">
@@ -594,20 +633,6 @@ function GarantiaDetailModal({ open, item, onClose, onSaved }) {
             />
           </SectionBlock>
         </div>
-
-        <SectionBlock title="Laudo do fornecedor">
-          <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-            <AttachmentInput
-              existingUrls={existingLaudoUrls}
-              onExistingUrlsChange={setExistingLaudoUrls}
-              newFiles={newLaudoFiles}
-              onNewFilesChange={setNewLaudoFiles}
-              accept="image/*,application/pdf,video/*"
-              helperText=""
-            />
-            <AttachmentGallery urls={existingLaudoUrls} />
-          </div>
-        </SectionBlock>
 
         <SectionBlock title="Arquivos salvos">
           <AttachmentGallery urls={existingAttachments} />
@@ -840,6 +865,7 @@ export default function SuprimentosGarantias() {
         item={detailItem}
         onClose={() => setDetailOpen(false)}
         onSaved={carregar}
+        user={user}
       />
     </div>
   );

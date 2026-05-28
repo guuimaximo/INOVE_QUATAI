@@ -92,8 +92,12 @@ export function sanitizeFileName(name) {
 }
 
 function parseControlNumber(value, prefix) {
-  const match = String(value || "").match(new RegExp(`^${prefix}-(\\d+)$`, "i"));
-  return match ? Number(match[1]) : 0;
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+  const prefixed = raw.match(new RegExp(`^${prefix}-(\\d+)$`, "i"));
+  if (prefixed) return Number(prefixed[1]);
+  const numeric = raw.match(/^(\d+)$/);
+  return numeric ? Number(numeric[1]) : 0;
 }
 
 export async function generateNextControlNumber(table, prefix) {
@@ -110,7 +114,7 @@ export async function generateNextControlNumber(table, prefix) {
     return current > max ? current : max;
   }, 0);
 
-  return `${prefix}-${String(maxValue + 1).padStart(5, "0")}`;
+  return String(maxValue + 1).padStart(5, "0");
 }
 
 export function buildOpenedBy(user) {

@@ -12,6 +12,7 @@ import {
   FaList,
   FaPlus,
   FaPrint,
+  FaDownload,
   FaSearch,
   FaTimes,
   FaTimesCircle,
@@ -383,17 +384,6 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
           <input className={inputClass + " text-xs"} placeholder="Observação sobre este item…" value={item.obs} onChange={handle("obs")} disabled={readOnly} />
         </div>
 
-        {!readOnly && (
-          <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-blue-900">Fotos (opcional)</p>
-            <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
-              📷 {uploading ? "Enviando…" : "Adicionar foto"}
-            </button>
-            <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFotos} />
-          </div>
-        )}
-
         {(item.fotos_urls || []).length > 0 && (
           <div className="flex flex-wrap gap-2">
             {(item.fotos_urls || []).map((url, i) => (
@@ -621,7 +611,7 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
-        <div className="my-8 w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="my-8 w-full max-w-5xl rounded-xl border border-slate-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-600">Serviço Externo</p>
@@ -732,10 +722,10 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
     descricao: "",
     valor: "",
     qtd_retornada: "",
+    aprovado: "Sim",
     fotos: [],
   });
-  const retornoFotoRef = useRef();
-  const [uploadingRetornoFotos, setUploadingRetornoFotos] = useState(false);
+  const [retornoFiles, setRetornoFiles] = useState([]);
 
   // observação form
   const [obsForm, setObsForm] = useState({ descricao: "" });
@@ -762,31 +752,32 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
 
   useEffect(() => { loadMovs(); }, []);
 
-  async function addRetornoFotos(e) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    setUploadingRetornoFotos(true);
-    const urls = await uploadFotos(files);
-    setRetornoForm((f) => ({ ...f, fotos: [...f.fotos, ...urls] }));
-    setUploadingRetornoFotos(false);
-    e.target.value = "";
-  }
-
   async function registrarRetorno() {
     setSaving(true); setError("");
+    let uploadedUrls = [];
+    if (retornoFiles.length > 0) {
+      uploadedUrls = await uploadSuprimentosFiles(retornoFiles, `servico-externo/${record.id}/retorno`);
+    }
+    const aprovado = retornoForm.aprovado === "Sim";
+    const descricaoMov = [
+      aprovado ? "Servico aprovado." : "Servico nao aprovado.",
+      retornoForm.descricao,
+    ].filter(Boolean).join(" ");
     const { error: err } = await supabase.from("suprimentos_servico_externo").update({
       status: "Retornado",
       nota_retorno_numero: retornoForm.nota_retorno_numero || null,
       nota_retorno_data: retornoForm.nota_retorno_data || null,
       retornado_em: new Date().toISOString(),
       retornado_obs: retornoForm.descricao || null,
+      servico_aprovado: aprovado,
+      valor_aprovado: retornoForm.valor ? Number(retornoForm.valor) : null,
     }).eq("id", record.id);
     if (err) { setError(err.message); setSaving(false); return; }
     await supabase.from("suprimentos_se_movimentacoes").insert({
       se_id: record.id,
       tipo: "Retorno",
-      descricao: retornoForm.descricao || "Retorno registrado.",
-      fotos_urls: retornoForm.fotos,
+      descricao: descricaoMov || "Retorno registrado.",
+      fotos_urls: uploadedUrls,
       valor: retornoForm.valor ? Number(retornoForm.valor) : null,
       qtd_retornada: retornoForm.qtd_retornada ? Number(retornoForm.qtd_retornada) : null,
       criado_por_id: userInfo?.id || null,
@@ -850,7 +841,7 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
-      <div className="my-8 w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl">
+      <div className="my-8 w-full max-w-5xl rounded-xl border border-slate-200 bg-white shadow-2xl">
         {/* header */}
         <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
           <div>
@@ -871,7 +862,7 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
               </button>
             )}
             <button onClick={() => printFicha(record)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-              <FaPrint /> Imprimir
+              <FaDownload /> Baixar PDF
             </button>
             <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
           </div>
@@ -989,7 +980,13 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
                 <Field label="Data da Nota de Retorno">
                   <input type="date" className={inputClass} value={retornoForm.nota_retorno_data} onChange={(e) => setRetornoForm((f) => ({ ...f, nota_retorno_data: e.target.value }))} />
                 </Field>
-                <Field label="Valor (R$)">
+                <Field label="Servico aprovado?" required>
+                  <select className={inputClass} value={retornoForm.aprovado} onChange={(e) => setRetornoForm((f) => ({ ...f, aprovado: e.target.value }))}>
+                    <option value="Sim">Sim</option>
+                    <option value="Nao">Nao</option>
+                  </select>
+                </Field>
+                <Field label="Valor aprovado (R$)">
                   <input className={inputClass} type="number" placeholder="0,00" value={retornoForm.valor} onChange={(e) => setRetornoForm((f) => ({ ...f, valor: e.target.value }))} />
                 </Field>
                 <Field label="Qtd. retornada">
@@ -1000,23 +997,8 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
                 <textarea rows={3} className={textareaClass} placeholder="Descreva o que foi realizado, condições de retorno…" value={retornoForm.descricao} onChange={(e) => setRetornoForm((f) => ({ ...f, descricao: e.target.value }))} />
               </Field>
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-blue-900">Fotos do retorno (opcional)</p>
-                <button type="button" onClick={() => retornoFotoRef.current?.click()} disabled={uploadingRetornoFotos} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
-                  <FaCamera /> {uploadingRetornoFotos ? "Enviando…" : "Adicionar foto"}
-                </button>
-                <input ref={retornoFotoRef} type="file" accept="image/*" multiple className="hidden" onChange={addRetornoFotos} />
-                {retornoForm.fotos.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {retornoForm.fotos.map((url, i) => (
-                      <MediaThumb
-                        key={i}
-                        url={url}
-                        onOpen={openViewer}
-                        onRemove={(u) => setRetornoForm((f) => ({ ...f, fotos: f.fotos.filter((x) => x !== u) }))}
-                      />
-                    ))}
-                  </div>
-                )}
+                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Evidências do retorno</p>
+                <EvidenciasDropzone files={retornoFiles} setFiles={setRetornoFiles} />
               </div>
             </div>
           )}
@@ -1197,8 +1179,8 @@ export default function SuprimentosServicoExterno() {
                               <FaEdit />
                             </button>
                           )}
-                          <button onClick={() => printFicha(r)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Imprimir ficha">
-                            <FaPrint />
+                          <button onClick={() => printFicha(r)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Baixar PDF">
+                            <FaDownload />
                           </button>
                         </div>
                       </td>

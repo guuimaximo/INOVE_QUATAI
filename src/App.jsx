@@ -98,6 +98,7 @@ import SuprimentosGarantias from "./pages/suprimentos/SuprimentosGarantias";
 import SuprimentosTestes from "./pages/suprimentos/SuprimentosTestes";
 import SuprimentosServicoExterno from "./pages/suprimentos/SuprimentosServicoExterno";
 import SuprimentosCadastro from "./pages/suprimentos/SuprimentosCadastro";
+import SuprimentosContagem from "./pages/suprimentos/SuprimentosContagem";
 
 function HomeDecider() {
   const { user } = useContext(AuthContext);
@@ -288,6 +289,7 @@ export default function App() {
               <Route path="/suprimentos/testes" element={<SuprimentosTestes />} />
               <Route path="/suprimentos/servico-externo" element={<SuprimentosServicoExterno />} />
               <Route path="/suprimentos/cadastro" element={<SuprimentosCadastro />} />
+              <Route path="/suprimentos/contagem" element={<SuprimentosContagem />} />
               <Route path="/suprimentos" element={<Navigate to="/suprimentos/resumo" replace />} />
 
               {/* Avarias */}

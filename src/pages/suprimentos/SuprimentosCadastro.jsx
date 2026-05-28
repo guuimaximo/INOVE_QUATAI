@@ -255,8 +255,11 @@ function PecaModal({ initial = null, onClose, onSaved }) {
           estoque_min: initial.estoque_min ?? "",
           estoque_max: initial.estoque_max ?? "",
           ref_fabricante: initial.ref_fabricante || "",
+          grupo: initial.grupo || "",
+          subgrupo: initial.subgrupo || "",
+          is_lubrificante: Boolean(initial.is_lubrificante),
         }
-      : { codigo: "", descricao: "", unidade_padrao: "un", fornecedor_id: "", fornecedor_nome: "", obs: "", localizacao: "", estoque_min: "", estoque_max: "", ref_fabricante: "" }
+      : { codigo: "", descricao: "", unidade_padrao: "un", fornecedor_id: "", fornecedor_nome: "", obs: "", localizacao: "", estoque_min: "", estoque_max: "", ref_fabricante: "", grupo: "", subgrupo: "", is_lubrificante: false }
   );
   const [fOptions, setFOptions] = useState([]);
   const [showFDrop, setShowFDrop] = useState(false);
@@ -297,6 +300,9 @@ function PecaModal({ initial = null, onClose, onSaved }) {
       obs: form.obs || null,
       localizacao: form.localizacao?.trim() || null,
       ref_fabricante: form.ref_fabricante?.trim() || null,
+      grupo: form.grupo?.trim() || null,
+      subgrupo: form.subgrupo?.trim() || null,
+      is_lubrificante: Boolean(form.is_lubrificante) || normalizeCatalogValue(form.grupo) === "LUBRIFICANTE, GRAXA E ADITIVOS",
       estoque_min: toNum(form.estoque_min),
       estoque_max: toNum(form.estoque_max),
     };
@@ -330,7 +336,7 @@ function PecaModal({ initial = null, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl">
+      <div className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
           <h2 className="text-lg font-semibold text-slate-900">{initial ? "Editar Peça" : "Nova Peça"}</h2>
           <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
@@ -354,6 +360,12 @@ function PecaModal({ initial = null, onClose, onSaved }) {
             <Field label="Ref. Fabricante">
               <input className={inputClass} placeholder="Código do fabricante" value={form.ref_fabricante} onChange={(e) => setF("ref_fabricante", e.target.value)} />
             </Field>
+            <Field label="Grupo">
+              <input className={inputClass} placeholder="ex.: LUBRIFICANTE, GRAXA E ADITIVOS" value={form.grupo} onChange={(e) => setF("grupo", e.target.value)} />
+            </Field>
+            <Field label="Subgrupo">
+              <input className={inputClass} placeholder="Subgrupo do ERP" value={form.subgrupo} onChange={(e) => setF("subgrupo", e.target.value)} />
+            </Field>
             <Field label="Estoque mínimo">
               <input className={inputClass} type="number" min="0" step="1" placeholder="0" value={form.estoque_min} onChange={(e) => setF("estoque_min", e.target.value)} />
             </Field>
@@ -361,6 +373,15 @@ function PecaModal({ initial = null, onClose, onSaved }) {
               <input className={inputClass} type="number" min="0" step="1" placeholder="0" value={form.estoque_max} onChange={(e) => setF("estoque_max", e.target.value)} />
             </Field>
           </div>
+          <label className="flex items-center gap-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-200"
+              checked={Boolean(form.is_lubrificante) || normalizeCatalogValue(form.grupo) === "LUBRIFICANTE, GRAXA E ADITIVOS"}
+              onChange={(e) => setF("is_lubrificante", e.target.checked)}
+            />
+            Item de lubrificante
+          </label>
           <Field label="Fornecedor">
             <div ref={fRef} className="relative">
               <input
@@ -773,7 +794,7 @@ function PecasTab() {
       .order("descricao")
       .limit(PAGE_SIZE * 4);
     if (q.trim()) {
-      query = query.or(`descricao.ilike.%${q.trim()}%,codigo.ilike.%${q.trim()}%`);
+      query = query.or(`descricao.ilike.%${q.trim()}%,codigo.ilike.%${q.trim()}%,grupo.ilike.%${q.trim()}%,subgrupo.ilike.%${q.trim()}%`);
     }
     const { data } = await query;
     setRawCount(data?.length || 0);
@@ -803,7 +824,7 @@ function PecasTab() {
           <FaSearch className="flex-shrink-0 text-slate-400 text-xs" />
           <input
             className="bg-transparent text-sm font-semibold text-slate-700 placeholder:text-slate-400 outline-none flex-1"
-            placeholder="Buscar por código ou descrição…"
+            placeholder="Buscar por codigo, descricao, grupo..."
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
           />
@@ -835,6 +856,8 @@ function PecasTab() {
               <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-widest text-slate-400">
                 <th className="px-4 py-3 text-left">Código</th>
                 <th className="px-4 py-3 text-left">Descrição</th>
+                <th className="px-4 py-3 text-left">Grupo</th>
+                <th className="px-4 py-3 text-left">Subgrupo</th>
                 <th className="px-4 py-3 text-left">Localização</th>
                 <th className="px-4 py-3 text-left">Unid.</th>
                 <th className="px-4 py-3 text-right">Mín.</th>
@@ -849,6 +872,8 @@ function PecasTab() {
                 <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50/50">
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-500">{p.codigo || "—"}</td>
                   <td className="px-4 py-3 font-semibold">{p.descricao}</td>
+                  <td className="px-4 py-3 text-xs font-bold uppercase text-blue-900">{p.grupo || "—"}</td>
+                  <td className="px-4 py-3 text-xs font-semibold text-slate-600">{p.subgrupo || "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{p.localizacao || "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{p.unidade_padrao}</td>
                   <td className="px-4 py-3 text-right text-slate-600">{p.estoque_min ?? "—"}</td>

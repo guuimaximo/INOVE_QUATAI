@@ -10,6 +10,7 @@ import {
   FaCheck,
   FaChevronRight,
   FaDownload,
+  FaFlask,
   FaRedo,
   FaRobot,
   FaSearch,
@@ -306,6 +307,8 @@ export default function SuprimentosContagem() {
   const [fluxoAtivo, setFluxoAtivo] = useState(false);
   const [itensSessao, setItensSessao] = useState(0);
   const [loteId, setLoteId] = useState(null);
+  const [tipoContagemAtual, setTipoContagemAtual] = useState("diaria");
+  const podeLubrificantes = canUseAppResource(user, "app.contagem.lubrificantes");
 
   function novoLoteId() {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -329,6 +332,11 @@ export default function SuprimentosContagem() {
     return [...codigos].filter(Boolean);
   }
 
+  function isPecaLubrificante(item) {
+    const grupo = String(item?.grupo || "").trim().toUpperCase();
+    return Boolean(item?.is_lubrificante) || grupo === "LUBRIFICANTE, GRAXA E ADITIVOS";
+  }
+
   async function buscarPeca(codigoBusca) {
     const c = String(codigoBusca || "").trim();
     if (!c) { setPeca(null); setNaoCadastrado(false); return; }
@@ -339,17 +347,29 @@ export default function SuprimentosContagem() {
       .join(",");
     const { data, error } = await supabase
       .from("suprimentos_pecas")
-      .select("id, codigo, descricao, unidade_padrao, localizacao, estoque_min, estoque_max, saldo_erp")
+      .select("id, codigo, descricao, unidade_padrao, localizacao, estoque_min, estoque_max, saldo_erp, grupo, subgrupo, is_lubrificante")
       .or(filtroCodigos)
       .limit(1)
       .maybeSingle();
     setBusy(false);
     if (error) { setErro(error.message); setPeca(null); setNaoCadastrado(false); return; }
     if (!data) {
+      if (tipoContagemAtual === "lubrificantes") {
+        setPeca(null);
+        setNaoCadastrado(false);
+        setErro(`Codigo ${c} nao esta na base de lubrificantes.`);
+        return;
+      }
       setPeca(null);
       setNaoCadastrado(true);
       setAviso(`Código ${c} não está na base. Pode contar mesmo assim — vai aparecer como pendente.`);
       setTimeout(() => qtdInputRef.current?.focus(), 50);
+      return;
+    }
+    if (tipoContagemAtual === "lubrificantes" && !isPecaLubrificante(data)) {
+      setPeca(null);
+      setNaoCadastrado(false);
+      setErro("Este codigo nao pertence ao grupo LUBRIFICANTE, GRAXA E ADITIVOS.");
       return;
     }
     if (data.codigo && data.codigo !== c) setCodigo(data.codigo);
@@ -451,6 +471,7 @@ export default function SuprimentosContagem() {
       contado_por_nome: userInfo.nome,
       origem: (typeof Capacitor !== "undefined" && Capacitor?.isNativePlatform?.()) ? "mobile" : "web",
       lote_id: loteId || null,
+      tipo_contagem: tipoContagemAtual,
     };
     const { error } = await supabase.from("suprimentos_contagens").insert(payload);
     setBusy(false);
@@ -485,6 +506,7 @@ export default function SuprimentosContagem() {
       contado_por_nome: userInfo.nome,
       origem: (typeof Capacitor !== "undefined" && Capacitor?.isNativePlatform?.()) ? "mobile" : "web",
       lote_id: loteId || null,
+      tipo_contagem: tipoContagemAtual,
     };
 
     const { error } = await supabase.from("suprimentos_contagens").insert(payload);
@@ -494,9 +516,10 @@ export default function SuprimentosContagem() {
     return true;
   }
 
-  function iniciarFluxo() {
+  function iniciarFluxo(tipo = "diaria") {
     limparApontamento();
     setItensSessao(0);
+    setTipoContagemAtual(tipo);
     setLoteId(novoLoteId());
     setFluxoAtivo(true);
     setTimeout(() => setScannerOpen(true), 150);
@@ -530,7 +553,7 @@ export default function SuprimentosContagem() {
     setFluxoAtivo(false);
     limparApontamento();
     if (isNativeShell && (itensSessao > 0 || podeSalvarPendente) && loteId) {
-      void dispararDispatchSilencioso("diaria", todayIsoBRT(), loteId);
+      void dispararDispatchSilencioso(tipoContagemAtual, todayIsoBRT(), loteId);
     }
     setLoteId(null);
   }
@@ -693,17 +716,35 @@ export default function SuprimentosContagem() {
                 </div>
               ) : null}
               {podeIniciar ? (
-              <button
-                type="button"
-                onClick={iniciarFluxo}
-                className="flex min-h-[180px] w-full flex-col items-start justify-end rounded-[32px] bg-gradient-to-br from-emerald-600 to-teal-800 p-6 text-left text-white shadow-xl active:scale-[0.98]"
-              >
-                <span className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/15 text-3xl">
-                  <FaBarcode />
-                </span>
-                <span className="text-2xl font-black">Iniciar contagem</span>
-                <span className="mt-2 text-sm font-semibold text-white/80">Escaneie, informe a quantidade e avance para o proximo item.</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => iniciarFluxo("diaria")}
+                  className="flex min-h-[180px] w-full flex-col items-start justify-end rounded-[32px] bg-gradient-to-br from-emerald-600 to-teal-800 p-6 text-left text-white shadow-xl active:scale-[0.98]"
+                >
+                  <span className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/15 text-3xl">
+                    <FaBarcode />
+                  </span>
+                  <span className="text-2xl font-black">Iniciar contagem</span>
+                  <span className="mt-2 text-sm font-semibold text-white/80">Escaneie, informe a quantidade e avance para o proximo item.</span>
+                </button>
+
+                {podeLubrificantes ? (
+                  <button
+                    type="button"
+                    onClick={() => iniciarFluxo("lubrificantes")}
+                    className="flex w-full items-center gap-4 rounded-[28px] bg-gradient-to-br from-amber-500 to-orange-700 p-5 text-left text-white shadow-lg active:scale-[0.98]"
+                  >
+                    <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 text-2xl">
+                      <FaFlask />
+                    </span>
+                    <span>
+                      <span className="block text-lg font-black">Lubrificantes</span>
+                      <span className="mt-1 block text-xs font-semibold text-white/80">Somente LUBRIFICANTE, GRAXA E ADITIVOS.</span>
+                    </span>
+                  </button>
+                ) : null}
+              </>
               ) : null}
 
               {podeVerLotes ? (
@@ -773,7 +814,9 @@ export default function SuprimentosContagem() {
             <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Item atual</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    {tipoContagemAtual === "lubrificantes" ? "Lubrificantes" : "Item atual"}
+                  </p>
                   <h2 className="text-lg font-black text-slate-950">{codigo ? "Conferir quantidade" : "Aguardando codigo"}</h2>
                 </div>
                 {podeScanner ? (
@@ -817,6 +860,9 @@ export default function SuprimentosContagem() {
                   </p>
                   {peca?.saldo_erp !== null && peca?.saldo_erp !== undefined ? (
                     <p className="mt-1 text-xs font-semibold text-slate-500">Saldo ERP: {peca.saldo_erp}</p>
+                  ) : null}
+                  {peca?.grupo ? (
+                    <p className="mt-2 inline-flex rounded-full bg-blue-100 px-3 py-1 text-[11px] font-black uppercase text-blue-800">{peca.grupo}</p>
                   ) : null}
                 </div>
 
@@ -896,7 +942,24 @@ export default function SuprimentosContagem() {
       </section>
 
       <Panel title="Registrar contagem" subtitle="Cada apontamento gera um registro independente.">
-        <div className="grid gap-4 md:grid-cols-[1fr_1fr_0.6fr_1fr]">
+        <div className="grid gap-4 md:grid-cols-[0.75fr_1fr_1fr_0.6fr_1fr]">
+          <Field label="Tipo">
+            <select
+              className={inputClass}
+              value={tipoContagemAtual}
+              onChange={(e) => {
+                setTipoContagemAtual(e.target.value);
+                setPeca(null);
+                setNaoCadastrado(false);
+                setErro("");
+                setAviso("");
+              }}
+            >
+              <option value="diaria">Diaria</option>
+              <option value="lubrificantes">Lubrificantes</option>
+            </select>
+          </Field>
+
           <Field label="Código" required>
             <div className="flex gap-2">
               <input
@@ -960,6 +1023,13 @@ export default function SuprimentosContagem() {
             />
           </Field>
         </div>
+
+        {peca?.grupo || peca?.subgrupo ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
+            {peca?.grupo ? <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-800">{peca.grupo}</span> : null}
+            {peca?.subgrupo ? <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">{peca.subgrupo}</span> : null}
+          </div>
+        ) : null}
 
         {aviso ? (
           <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700">{aviso}</p>

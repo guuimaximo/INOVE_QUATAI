@@ -34,8 +34,8 @@ export default function SuprimentosContagemSemanal() {
           const { data } = await supabase
             .from("suprimentos_contagens")
             .select("codigo,quantidade,descricao,created_at,contado_por_nome")
-            .gte("created_at", `${d}T00:00:00`)
-            .lte("created_at", `${d}T23:59:59.999`);
+            .gte("created_at", `${d}T00:00:00-03:00`)
+            .lte("created_at", `${d}T23:59:59.999-03:00`);
           return data || [];
         };
         const [d1Rows, d2Rows] = await Promise.all([fetchDay(a.data_inicio), fetchDay(a.data_fim)]);

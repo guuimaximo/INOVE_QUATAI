@@ -105,12 +105,14 @@ def marcar_erro(job_id: str, msg: str):
 
 
 def carregar_contagens_do_dia(data_alvo: str) -> list:
-    inicio = f"{data_alvo}T00:00:00"
-    fim = f"{data_alvo}T23:59:59.999"
+    # Usa TZ -03:00 (Brasilia) pra alinhar com o dia "civil" no Brasil.
+    # Sem isso, PostgREST trata as datas como UTC e mistura contagens de outros dias.
+    inicio = f"{data_alvo}T00:00:00-03:00"
+    fim = f"{data_alvo}T23:59:59.999-03:00"
     rows = supa_get(
         "suprimentos_contagens",
         {
-            "select": "id,codigo,quantidade,saldo_erp,diferenca,lote_id",
+            "select": "id,codigo,quantidade,saldo_erp,diferenca,lote_id,created_at",
             "created_at": f"gte.{inicio}",
             "and": f"(created_at.lte.{fim})",
             "order": "created_at.asc",

@@ -412,6 +412,9 @@ export default function SuprimentosContagem() {
       const ref = import.meta.env.VITE_GITHUB_REF_BOT || "main";
       const workflow = tipo === "semanal" ? "bot-estoque-semanal.yml" : "bot-estoque-diaria.yml";
 
+      // IMPORTANTE: não passa data_alvo como input — assim o bot entra no modo "queue"
+      // e pega o job que acabamos de inserir (com lote_id). Se passasse data_alvo,
+      // o bot ignoraria o lote e processaria o dia inteiro.
       await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/dispatches`, {
         method: "POST",
         headers: {
@@ -420,7 +423,7 @@ export default function SuprimentosContagem() {
           "X-GitHub-Api-Version": "2022-11-28",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ref, inputs: dataAlvo ? { data_alvo: dataAlvo } : {} }),
+        body: JSON.stringify({ ref, inputs: {} }),
       });
     } catch (_) {
       // ignora — cron de 5 min serve de fallback

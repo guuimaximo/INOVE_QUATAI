@@ -49,34 +49,142 @@ function diffTone(diff) {
 function BarcodeScanner({ open, onClose, onScan }) {
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
+  const streamRef = useRef(null);
+  const detectorFrameRef = useRef(null);
+  const scannedRef = useRef(false);
   const [error, setError] = useState("");
+
+  function stopScanner() {
+    if (detectorFrameRef.current) {
+      cancelAnimationFrame(detectorFrameRef.current);
+      detectorFrameRef.current = null;
+    }
+    try { controlsRef.current?.stop?.(); } catch {}
+    try { streamRef.current?.getTracks?.().forEach((track) => track.stop()); } catch {}
+    controlsRef.current = null;
+    streamRef.current = null;
+  }
+
+  function finishScan(text) {
+    const value = String(text || "").trim();
+    if (!value || scannedRef.current) return;
+    scannedRef.current = true;
+    stopScanner();
+    onScan(value);
+  }
+
+  async function tuneCamera() {
+    const stream = videoRef.current?.srcObject || streamRef.current;
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track?.getCapabilities || !track?.applyConstraints) return;
+
+    const caps = track.getCapabilities();
+    const advanced = [];
+    if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) {
+      advanced.push({ focusMode: "continuous" });
+    }
+    if (Array.isArray(caps.exposureMode) && caps.exposureMode.includes("continuous")) {
+      advanced.push({ exposureMode: "continuous" });
+    }
+    if (caps.zoom) {
+      const minZoom = Number(caps.zoom.min || 1);
+      const maxZoom = Number(caps.zoom.max || 1);
+      const zoom = Math.min(maxZoom, Math.max(minZoom, 1.6));
+      advanced.push({ zoom });
+    }
+    if (caps.torch) advanced.push({ torch: true });
+    if (!advanced.length) return;
+
+    try { await track.applyConstraints({ advanced }); } catch {}
+  }
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    setError("");
+    scannedRef.current = false;
+
+    const startNativeDetector = () => {
+      const video = videoRef.current;
+      if (!video || !("BarcodeDetector" in window)) return;
+
+      let detector;
+      try {
+        detector = new window.BarcodeDetector({
+          formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "itf", "codabar"],
+        });
+      } catch {
+        return;
+      }
+
+      const scanFrame = async () => {
+        if (cancelled || scannedRef.current) return;
+        try {
+          if (video.readyState >= 2) {
+            const codes = await detector.detect(video);
+            const rawValue = codes?.[0]?.rawValue;
+            if (rawValue) {
+              finishScan(rawValue);
+              return;
+            }
+          }
+        } catch {}
+        detectorFrameRef.current = requestAnimationFrame(scanFrame);
+      };
+
+      detectorFrameRef.current = requestAnimationFrame(scanFrame);
+    };
 
     (async () => {
       try {
-        const { BrowserMultiFormatReader } = await import("@zxing/browser");
-        const reader = new BrowserMultiFormatReader();
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-        const back = devices.find((d) => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
-        const deviceId = back?.deviceId;
+        const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
+          import("@zxing/browser"),
+          import("@zxing/library"),
+        ]);
+        const hints = new Map();
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.ITF,
+          BarcodeFormat.CODABAR,
+        ]);
+        const reader = new BrowserMultiFormatReader(hints, {
+          delayBetweenScanAttempts: 70,
+          delayBetweenScanSuccess: 250,
+          tryPlayVideoTimeout: 5000,
+        });
         if (cancelled) return;
-        const controls = await reader.decodeFromVideoDevice(
-          deviceId,
+        const controls = await reader.decodeFromConstraints(
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              frameRate: { ideal: 30, max: 60 },
+            },
+          },
           videoRef.current,
           (result, _err, ctrl) => {
             if (cancelled) return;
+            controlsRef.current = ctrl;
             if (result) {
-              const text = result.getText();
-              ctrl.stop();
-              controlsRef.current = null;
-              onScan(text);
+              finishScan(result.getText());
             }
           }
         );
+        if (cancelled) {
+          try { controls?.stop?.(); } catch {}
+          return;
+        }
         controlsRef.current = controls;
+        streamRef.current = videoRef.current?.srcObject || null;
+        setTimeout(() => { tuneCamera(); startNativeDetector(); }, 250);
       } catch (err) {
         setError(err?.message || "Não consegui acessar a câmera.");
       }
@@ -84,8 +192,7 @@ function BarcodeScanner({ open, onClose, onScan }) {
 
     return () => {
       cancelled = true;
-      try { controlsRef.current?.stop?.(); } catch {}
-      controlsRef.current = null;
+      stopScanner();
     };
   }, [open, onScan]);
 
@@ -99,19 +206,29 @@ function BarcodeScanner({ open, onClose, onScan }) {
           <h2 className="text-lg font-semibold">Apontar para o código de barras</h2>
         </div>
         <button
-          onClick={() => { try { controlsRef.current?.stop?.(); } catch {} onClose(); }}
+          onClick={() => { stopScanner(); onClose(); }}
           className="rounded-xl border border-white/20 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10"
         >
           <FaTimes className="inline" /> Fechar
         </button>
       </div>
       <div className="relative flex flex-1 items-center justify-center overflow-hidden">
-        <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
+        <video
+          ref={videoRef}
+          className="h-full w-full object-cover [filter:contrast(1.18)_brightness(1.08)_saturate(1.05)]"
+          muted
+          playsInline
+        />
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="h-32 w-72 rounded-2xl border-2 border-blue-400/80 shadow-[0_0_0_9999px_rgba(2,6,23,0.55)]" />
+          <div className="relative h-44 w-[92vw] max-w-sm rounded-[28px] border-[3px] border-blue-300/90 shadow-[0_0_0_9999px_rgba(2,6,23,0.52)]">
+            <div className="absolute left-8 right-8 top-1/2 h-0.5 rounded-full bg-blue-200/95 shadow-[0_0_18px_rgba(147,197,253,0.95)]" />
+          </div>
+        </div>
+        <div className="pointer-events-none absolute inset-x-5 bottom-6 rounded-2xl bg-slate-950/80 px-4 py-3 text-center text-sm font-semibold text-white">
+          Mantenha o codigo inteiro dentro da moldura.
         </div>
         {error ? (
-          <div className="absolute inset-x-4 bottom-6 rounded-xl bg-rose-500/90 px-4 py-3 text-sm font-semibold text-white">
+          <div className="absolute inset-x-4 bottom-24 rounded-xl bg-rose-500/90 px-4 py-3 text-sm font-semibold text-white">
             {error}
           </div>
         ) : null}

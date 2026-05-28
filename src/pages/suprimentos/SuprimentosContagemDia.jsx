@@ -69,8 +69,8 @@ export default function SuprimentosContagemDia() {
         setData(dataAlvo);
       }
     } else if (data) {
-      const inicio = `${data}T00:00:00`;
-      const fim = `${data}T23:59:59.999`;
+      const inicio = `${data}T00:00:00-03:00`;
+      const fim = `${data}T23:59:59.999-03:00`;
       const res = await supabase
         .from("suprimentos_contagens")
         .select("*")
@@ -126,8 +126,8 @@ export default function SuprimentosContagemDia() {
         () => debounceRecarregar()
       );
     } else {
-      const inicio = `${data}T00:00:00`;
-      const fim = `${data}T23:59:59.999`;
+      const inicio = `${data}T00:00:00-03:00`;
+      const fim = `${data}T23:59:59.999-03:00`;
       channel.on(
         "postgres_changes",
         { event: "*", schema: "public", table: "suprimentos_contagens" },

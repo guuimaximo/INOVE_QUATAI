@@ -402,7 +402,12 @@ function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
   }
 
   function aplicarPreset(preset) {
-    setAppRecursos(preset.recursos);
+    setAppRecursos((current) => {
+      // "Nenhum" / lista vazia limpa tudo. Os demais presets somam com
+      // o que ja estiver marcado, sem apagar configuracao manual previa.
+      if (!preset.recursos.length) return [];
+      return Array.from(new Set([...(current || []), ...preset.recursos]));
+    });
   }
 
   function getState(pageKey) {

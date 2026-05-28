@@ -17,6 +17,7 @@ function normalizeStoredAppUser(userData) {
 
   const paginasLiberadas = Array.isArray(userData.paginas_liberadas) ? userData.paginas_liberadas : [];
   const paginasBloqueadas = Array.isArray(userData.paginas_bloqueadas) ? userData.paginas_bloqueadas : [];
+  const appRecursos = Array.isArray(userData.app_recursos) ? userData.app_recursos : [];
 
   return {
     ...userData,
@@ -34,6 +35,7 @@ function normalizeStoredAppUser(userData) {
     estrutura_fisica_liberada: userData.estrutura_fisica_liberada === true,
     paginas_liberadas: paginasLiberadas,
     paginas_bloqueadas: paginasBloqueadas,
+    app_recursos: appRecursos,
     requires_profile_review: !!userData.requires_profile_review,
     profile_review_reasons: Array.isArray(userData.profile_review_reasons) ? userData.profile_review_reasons : [],
   };
@@ -141,7 +143,7 @@ export function AuthProvider({ children }) {
       const { data, error } = await supabase
         .from("usuarios_aprovadores")
         .select(
-          "id, auth_user_id, nome, login, email, nivel, setor, ativo, status_cadastro, estrutura_fisica_liberada, paginas_liberadas, paginas_bloqueadas, migrado_auth"
+          "id, auth_user_id, nome, login, email, nivel, setor, ativo, status_cadastro, estrutura_fisica_liberada, paginas_liberadas, paginas_bloqueadas, app_recursos, migrado_auth"
         )
         .eq("id", usuarioId)
         .maybeSingle();

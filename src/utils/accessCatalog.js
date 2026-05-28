@@ -68,7 +68,7 @@ export const APP_ACCESS_PAGES = [
   { key: "suprimentos_garantias", label: "Suprimentos Garantias", category: "Suprimentos", path: "/suprimentos/garantias", patterns: ["/suprimentos/garantias"] },
   { key: "suprimentos_testes", label: "Suprimentos Testes", category: "Suprimentos", path: "/suprimentos/testes", patterns: ["/suprimentos/testes"] },
   { key: "suprimentos_servico_externo", label: "Suprimentos Servico Externo", category: "Suprimentos", path: "/suprimentos/servico-externo", patterns: ["/suprimentos/servico-externo"] },
-  { key: "suprimentos_contagem", label: "Suprimentos Contagem", category: "Suprimentos", path: "/suprimentos/contagem", patterns: ["/suprimentos/contagem"] },
+  { key: "suprimentos_contagem", label: "Suprimentos Contagem", category: "Suprimentos", path: "/suprimentos/contagem", patterns: ["/suprimentos/contagem", "/suprimentos/contagem/dia/:data", "/suprimentos/contagem/semanal/:id"] },
 
   { key: "estrutura_fisica_solicitacao", label: "Estrutura Fisica Solicitacao", category: "Estrutura Fisica", path: "/estrutura-fisica/solicitacao", patterns: ["/estrutura-fisica/solicitacao"] },
   { key: "estrutura_fisica_central", label: "Estrutura Fisica Central", category: "Estrutura Fisica", path: "/estrutura-fisica/central", patterns: ["/estrutura-fisica/central", "/estrutura-fisica"] },

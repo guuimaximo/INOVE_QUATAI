@@ -36,26 +36,6 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Materializa credenciais Google
-        working-directory: bot
-        env:
-          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-        run: |
-          printf '%s' "$GOOGLE_CREDENTIALS_JSON" > credenciais.json
-          test -s credenciais.json || (echo "credenciais vazias" && exit 1)
-
-      - name: Materializa Base.xlsx (opcional)
-        working-directory: bot
-        env:
-          BASE_XLSX_B64: ${{ secrets.BASE_XLSX_B64 }}
-        run: |
-          if [ -n "$BASE_XLSX_B64" ]; then
-            echo "$BASE_XLSX_B64" | base64 -d > Base.xlsx
-            ls -lh Base.xlsx
-          else
-            echo "Base.xlsx não configurada (secret BASE_XLSX_B64). Vai auditar pelos itens contados."
-          fi
-
       - name: Run bot semanal
         working-directory: bot
         env:
@@ -65,28 +45,8 @@ jobs:
           TRANSNET_USER: ${{ secrets.TRANSNET_USER }}
           TRANSNET_PASSWORD: ${{ secrets.TRANSNET_PASSWORD }}
           TRANSNET_ALMOXARIFADO: ${{ secrets.TRANSNET_ALMOXARIFADO }}
-          SHEET_REF: ${{ secrets.SHEET_REF }}
-          SHEET_TAB: ${{ secrets.SHEET_TAB }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
           HEADLESS: "true"
         run: python bot_semanal.py
-
-      - name: Upload artefatos
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: auditoria-semanal
-          path: |
-            bot/downloads/*.csv
-            bot/downloads/*.xlsx
-            bot/downloads/*.json
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Limpa segredos
-        if: always()
-        working-directory: bot
-        run: |
-          rm -f credenciais.json Base.xlsx

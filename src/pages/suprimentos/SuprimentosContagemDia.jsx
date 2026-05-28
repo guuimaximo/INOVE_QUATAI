@@ -1,0 +1,237 @@
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { FaArrowLeft, FaCheck, FaRobot, FaTrashAlt } from "react-icons/fa";
+import { AuthContext } from "../../context/AuthContext";
+import { supabase } from "../../supabase";
+import {
+  ActionButton,
+  EmptyState,
+  KpiCard,
+  PageHero,
+  Panel,
+  StatusChip,
+} from "./SuprimentosUI";
+import { formatDateBR, formatDateTimeBR } from "./suprimentosShared";
+
+function diffTone(diff) {
+  if (diff === null || diff === undefined) return "slate";
+  if (Number(diff) === 0) return "emerald";
+  return Number(diff) > 0 ? "amber" : "rose";
+}
+function diffLabel(diff) {
+  if (diff === null || diff === undefined) return "Não conferido";
+  const n = Number(diff);
+  if (n === 0) return "Bate com ERP";
+  if (n > 0) return `+${n.toLocaleString("pt-BR")} (sobra)`;
+  return `${n.toLocaleString("pt-BR")} (falta)`;
+}
+
+export default function SuprimentosContagemDia() {
+  const { data } = useParams(); // YYYY-MM-DD
+  const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
+  const userInfo = useMemo(() => ({
+    id: Number(user?.usuario_id || user?.id || 0) || null,
+    nome: user?.nome || user?.nome_completo || user?.login || user?.email || "Usuario",
+  }), [user]);
+
+  const [contagens, setContagens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [botJob, setBotJob] = useState(null);
+  const [botMsg, setBotMsg] = useState("");
+  const botPollRef = useRef(null);
+
+  async function carregar() {
+    setLoading(true);
+    const inicio = `${data}T00:00:00`;
+    const fim = `${data}T23:59:59.999`;
+    const { data: rows } = await supabase
+      .from("suprimentos_contagens")
+      .select("*")
+      .gte("created_at", inicio)
+      .lte("created_at", fim)
+      .order("created_at", { ascending: false });
+    setContagens(rows || []);
+
+    // Pega o último job daquele dia
+    const { data: jobs } = await supabase
+      .from("suprimentos_bot_jobs")
+      .select("*")
+      .eq("data_alvo", data)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    setBotJob(jobs?.[0] || null);
+    setLoading(false);
+  }
+  useEffect(() => { carregar(); }, [data]);
+
+  async function dispararConferencia() {
+    setBotMsg("");
+    const { data: job, error } = await supabase
+      .from("suprimentos_bot_jobs")
+      .insert({
+        tipo: "conferencia_dia",
+        data_alvo: data,
+        status: "pendente",
+        criado_por_id: userInfo.id,
+        criado_por_nome: userInfo.nome,
+      })
+      .select().single();
+    if (error) { setBotMsg(`Erro: ${error.message}`); return; }
+    setBotJob(job);
+    setBotMsg("Job enfileirado. O bot vai puxar do TransNet — pode levar até 5 min.");
+  }
+
+  useEffect(() => {
+    if (!botJob || botJob.status === "concluido" || botJob.status === "erro") {
+      clearInterval(botPollRef.current);
+      botPollRef.current = null;
+      return;
+    }
+    botPollRef.current = setInterval(async () => {
+      const { data: j } = await supabase
+        .from("suprimentos_bot_jobs")
+        .select("*")
+        .eq("id", botJob.id)
+        .maybeSingle();
+      if (!j) return;
+      setBotJob(j);
+      if (j.status === "concluido") {
+        const r = j.resultado_json || {};
+        setBotMsg(`Conferência concluída: ${r.itens_atualizados ?? "?"} atualizados, ${r.divergencias ?? "?"} divergências.`);
+        carregar();
+      } else if (j.status === "erro") {
+        setBotMsg(`Bot falhou: ${j.erro || "?"}`);
+      }
+    }, 4000);
+    return () => clearInterval(botPollRef.current);
+  }, [botJob?.id, botJob?.status]);
+
+  async function excluir(id) {
+    if (!window.confirm("Remover esta contagem?")) return;
+    await supabase.from("suprimentos_contagens").delete().eq("id", id);
+    carregar();
+  }
+
+  const kpis = useMemo(() => {
+    const total = contagens.length;
+    const divergencias = contagens.filter((c) => c.diferenca !== null && Number(c.diferenca) !== 0).length;
+    const conferidos = contagens.filter((c) => c.saldo_erp !== null && c.saldo_erp !== undefined).length;
+    const sem_cadastro = contagens.filter((c) => !c.peca_id).length;
+    return { total, divergencias, conferidos, sem_cadastro };
+  }, [contagens]);
+
+  const botStatusChip = botJob ? (
+    <StatusChip
+      tone={botJob.status === "concluido" ? "emerald" : botJob.status === "erro" ? "rose" : "amber"}
+      label={
+        botJob.status === "concluido" ? "Concluído" :
+        botJob.status === "erro" ? "Erro" :
+        botJob.status === "processando" ? "Em execução" : "Na fila"
+      }
+    />
+  ) : null;
+
+  return (
+    <div className="flex flex-col gap-6 p-6">
+      <PageHero
+        eyebrow="Suprimentos · Contagem · Lote"
+        title={`Contagens de ${formatDateBR(data)}`}
+        description={`Todas as contagens feitas no dia ${formatDateBR(data)}.`}
+        actions={
+          <ActionButton onClick={() => navigate("/suprimentos/contagem")}>
+            <FaArrowLeft /> Voltar
+          </ActionButton>
+        }
+      />
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <KpiCard title="Itens contados" value={kpis.total} subtitle="No lote" icon={<FaCheck />} tone="blue" />
+        <KpiCard title="Conferidos com ERP" value={kpis.conferidos} subtitle="Já com saldo_erp" icon={<FaCheck />} tone="cyan" />
+        <KpiCard title="Divergências" value={kpis.divergencias} subtitle="Qtd diferente do ERP" icon={<FaCheck />} tone="amber" />
+        <KpiCard title="Sem cadastro" value={kpis.sem_cadastro} subtitle="Códigos pendentes" icon={<FaCheck />} tone="rose" />
+      </section>
+
+      <Panel
+        title="Conferir com ERP"
+        subtitle="Dispara o bot que entra no TransNet, lê o saldo desse dia e atualiza as contagens."
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <ActionButton
+            tone="blue"
+            onClick={dispararConferencia}
+            disabled={Boolean(botJob && ["pendente", "processando"].includes(botJob.status))}
+          >
+            <FaRobot />
+            {botJob && ["pendente", "processando"].includes(botJob.status) ? "Bot rodando..." : "Conferir agora"}
+          </ActionButton>
+          {botStatusChip}
+          {botJob?.resultado_json ? (
+            <span className="text-xs font-medium text-slate-500">
+              Última execução: {formatDateTimeBR(botJob.concluido_em)}
+            </span>
+          ) : null}
+        </div>
+        {botMsg ? <p className="mt-3 text-sm font-medium text-slate-600">{botMsg}</p> : null}
+      </Panel>
+
+      <Panel title="Itens deste lote">
+        {loading ? (
+          <p className="py-12 text-center text-sm font-semibold text-slate-400">Carregando...</p>
+        ) : contagens.length === 0 ? (
+          <EmptyState title="Nenhuma contagem nessa data" subtitle="Faça novas contagens na tela principal." />
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3">Quando</th>
+                  <th className="px-4 py-3">Código</th>
+                  <th className="px-4 py-3">Peça</th>
+                  <th className="px-4 py-3">Localização</th>
+                  <th className="px-4 py-3 text-right">Qtd contada</th>
+                  <th className="px-4 py-3 text-right">Saldo ERP</th>
+                  <th className="px-4 py-3">Divergência</th>
+                  <th className="px-4 py-3">Contado por</th>
+                  <th className="px-4 py-3 text-right"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {contagens.map((c) => (
+                  <tr key={c.id} className={`border-t border-slate-100 hover:bg-slate-50/60 ${!c.peca_id ? "bg-rose-50/40" : ""}`}>
+                    <td className="px-4 py-3 text-xs font-medium text-slate-500">{formatDateTimeBR(c.created_at)}</td>
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{c.codigo || "—"}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-900">{c.descricao || "—"}</p>
+                      {!c.peca_id ? (
+                        <span className="mt-1 inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700">
+                          Sem cadastro
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{c.localizacao || "—"}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                      {Number(c.quantidade || 0).toLocaleString("pt-BR")} {c.unidade || ""}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-600">
+                      {c.saldo_erp !== null && c.saldo_erp !== undefined ? Number(c.saldo_erp).toLocaleString("pt-BR") : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusChip label={diffLabel(c.diferenca)} tone={diffTone(c.diferenca)} />
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{c.contado_por_nome || "—"}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => excluir(c.id)} className="rounded-xl p-2 text-rose-500 hover:bg-rose-50" title="Remover">
+                        <FaTrashAlt />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}

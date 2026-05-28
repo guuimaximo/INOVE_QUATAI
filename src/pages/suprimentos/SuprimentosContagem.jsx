@@ -92,7 +92,6 @@ function BarcodeScanner({ open, onClose, onScan }) {
       const zoom = Math.min(maxZoom, Math.max(minZoom, 1.6));
       advanced.push({ zoom });
     }
-    if (caps.torch) advanced.push({ torch: true });
     if (!advanced.length) return;
 
     try { await track.applyConstraints({ advanced }); } catch {}

@@ -53,6 +53,11 @@ export function getDefaultLevelProfiles() {
   }));
 }
 
+// Perfis que NUNCA devem ser limitados pelo que está gravado no DB.
+// Sempre que adicionamos uma página nova, Administrador/Gestor passam a vê-la
+// imediatamente, sem depender de migration de access_sync.
+const FULL_ACCESS_PROFILES = new Set(["Administrador", "Gestor"]);
+
 export function buildAccessProfileMap(rows = []) {
   const defaults = getDefaultLevelProfiles();
   const defaultMap = defaults.reduce((acc, row) => {
@@ -65,11 +70,16 @@ export function buildAccessProfileMap(rows = []) {
     const nome = normalizeText(row?.nome);
     if (!nome) return;
 
+    const isFullAccess = FULL_ACCESS_PROFILES.has(nome);
+    const paginasFromRow = isFullAccess
+      ? defaultMap[nome]?.paginas
+      : (row?.paginas ?? defaultMap[nome]?.paginas);
+
     map[nome] = {
       ...defaultMap[nome],
       ...row,
       nome,
-      paginas: normalizePageKeyArray(row?.paginas ?? defaultMap[nome]?.paginas),
+      paginas: normalizePageKeyArray(paginasFromRow),
       farol_liberado:
         row?.farol_liberado === true || row?.farol_liberado === false
           ? row.farol_liberado

@@ -98,7 +98,7 @@ function ModalShell({ open, onClose, children }) {
       onClick={onClose}
     >
       <div
-        className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white shadow-2xl"
+        className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         {children}
@@ -109,7 +109,7 @@ function ModalShell({ open, onClose, children }) {
 
 function Label({ children }) {
   return (
-    <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-blue-950">
+    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-blue-950">
       {children}
     </span>
   );
@@ -117,9 +117,9 @@ function Label({ children }) {
 
 function StaticInfoCard({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
       <Label>{label}</Label>
-      <p className="text-base font-black text-slate-950">{value || "--"}</p>
+      <p className="text-base font-semibold text-slate-950">{value || "--"}</p>
     </div>
   );
 }
@@ -199,8 +199,8 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
       <div className="border-b border-slate-100 px-6 py-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.34em] text-blue-600">Suprimentos</p>
-            <h2 className="mt-3 text-2xl font-black text-slate-900">Novo teste</h2>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Suprimentos</p>
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900">Novo teste</h2>
             <p className="mt-2 text-sm font-medium text-slate-500">
               Cadastre o basico primeiro. O restante do acompanhamento fica no detalhe.
             </p>
@@ -209,7 +209,7 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-600 transition hover:bg-slate-50"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition hover:bg-slate-50"
           >
             Fechar
           </button>
@@ -310,10 +310,10 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
 
 function IntercorrenciaEditor({ item, onChange, onRemove }) {
   return (
-    <div className="rounded-3xl border border-rose-200 bg-rose-50/40 p-4">
+    <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-rose-600">Intercorrencia</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-rose-600">Intercorrencia</p>
           <p className="mt-1 text-sm font-semibold text-slate-600">
             Registre data, quilometragem e o que aconteceu.
           </p>
@@ -322,7 +322,7 @@ function IntercorrenciaEditor({ item, onChange, onRemove }) {
         <button
           type="button"
           onClick={onRemove}
-          className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-rose-600 transition hover:bg-rose-50"
+          className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-rose-600 transition hover:bg-rose-50"
         >
           <FaTrash />
           Remover
@@ -466,7 +466,7 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
       <div className="border-b border-slate-100 px-6 py-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <h2 className="text-2xl font-black text-slate-900">
+            <h2 className="text-2xl font-semibold text-slate-900">
               {form.nome_teste || item.nome_teste} - {form.prefixo || item.prefixo || "--"}
             </h2>
             <p className="mt-2 text-sm font-semibold text-slate-500">
@@ -481,7 +481,7 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-600 transition hover:bg-slate-50"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition hover:bg-slate-50"
             >
               Fechar
             </button>
@@ -601,7 +601,7 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
           }
         >
           {intercorrencias.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center">
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center">
               <FaExclamationTriangle className="mx-auto text-2xl text-slate-300" />
               <p className="mt-3 text-sm font-semibold text-slate-500">
                 Nenhuma intercorrencia registrada ate agora.
@@ -831,7 +831,7 @@ export default function SuprimentosTestes() {
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <Label>Na tela</Label>
-            <p className="mt-1 text-2xl font-black text-slate-900">{filteredRows.length}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{filteredRows.length}</p>
           </div>
         </div>
 
@@ -848,11 +848,11 @@ export default function SuprimentosTestes() {
             <EmptyState title="Nenhum teste encontrado" subtitle="Abra um teste novo para comecar a acompanhar a peca em campo." />
           </div>
         ) : (
-          <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200">
+          <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50">
-                  <tr className="text-left text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     <th className="px-4 py-4">Controle</th>
                     <th className="px-4 py-4">Teste</th>
                     <th className="px-4 py-4">Peca</th>
@@ -875,9 +875,9 @@ export default function SuprimentosTestes() {
                         onClick={() => openDetail(row)}
                         className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60"
                       >
-                        <td className="px-4 py-4 font-black text-slate-800">{row.numero_controle || "--"}</td>
+                        <td className="px-4 py-4 font-semibold text-slate-800">{row.numero_controle || "--"}</td>
                         <td className="px-4 py-4">
-                          <p className="font-black text-slate-900">{row.nome_teste}</p>
+                          <p className="font-semibold text-slate-900">{row.nome_teste}</p>
                           <p className="mt-1 text-xs font-semibold text-slate-500">{formatDateBR(row.data_inicio)}</p>
                         </td>
                         <td className="px-4 py-4">
@@ -910,7 +910,7 @@ export default function SuprimentosTestes() {
                           <p className="mt-1 text-xs text-slate-500">{formatDateBR(row.created_at)}</p>
                         </td>
                         <td className="px-4 py-4 text-right">
-                          <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700">
+                          <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
                             <FaEye />
                             Abrir
                           </span>

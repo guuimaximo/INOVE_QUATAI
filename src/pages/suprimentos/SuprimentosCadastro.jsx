@@ -19,14 +19,14 @@ import { supabase } from "../../supabase";
 import { EmptyState, PageHero, Panel, StatusChip } from "./SuprimentosUI";
 
 const inputClass =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 const textareaClass =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 resize-none";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 resize-none";
 
 function Field({ label, required = false, children, className = "" }) {
   return (
     <div className={className}>
-      <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.16em] text-blue-950">
+      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-blue-950">
         {label}
         {required && <span className="ml-1 text-rose-500">*</span>}
       </label>
@@ -175,13 +175,13 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
-      <div className="my-8 w-full max-w-lg rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+      <div className="my-8 w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Fornecedores</p>
-            <h2 className="mt-0.5 text-lg font-black text-slate-900">{initial ? "Editar Fornecedor" : "Novo Fornecedor"}</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-600">Fornecedores</p>
+            <h2 className="mt-0.5 text-lg font-semibold text-slate-900">{initial ? "Editar Fornecedor" : "Novo Fornecedor"}</h2>
           </div>
-          <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
+          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
         </div>
         <div className="px-6 py-5 space-y-4">
           <Field label="Nome / Razão Social" required>
@@ -195,7 +195,7 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
                   type="button"
                   onClick={handleConsultCnpj}
                   disabled={consultingCnpj}
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
                   title="Consultar CNPJ na BrasilAPI"
                 >
                   <FaSearch />
@@ -228,11 +228,11 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
           <Field label="Observações">
             <textarea rows={2} className={textareaClass} value={form.obs} onChange={(e) => setF("obs", e.target.value)} />
           </Field>
-          {error && <p className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700">{error}</p>}
+          {error && <p className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700">{error}</p>}
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-          <button onClick={onClose} className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50">
+          <button onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button onClick={handleSave} disabled={saving} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
             {saving ? "Salvando…" : "Salvar"}
           </button>
         </div>
@@ -315,10 +315,10 @@ function PecaModal({ initial = null, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+      <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
-          <h2 className="text-lg font-black text-slate-900">{initial ? "Editar Peça" : "Nova Peça"}</h2>
-          <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
+          <h2 className="text-lg font-semibold text-slate-900">{initial ? "Editar Peça" : "Nova Peça"}</h2>
+          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
         </div>
         <div className="px-6 py-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -358,7 +358,7 @@ function PecaModal({ initial = null, onClose, onSaved }) {
                 </button>
               )}
               {showFDrop && fOptions.length > 0 && (
-                <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                <div className="absolute z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
                   {fOptions.map((f) => (
                     <button
                       key={f.id}
@@ -381,11 +381,11 @@ function PecaModal({ initial = null, onClose, onSaved }) {
           <Field label="Observações">
             <textarea rows={2} className={textareaClass} value={form.obs} onChange={(e) => setF("obs", e.target.value)} />
           </Field>
-          {error && <p className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700">{error}</p>}
+          {error && <p className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700">{error}</p>}
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-          <button onClick={onClose} className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50">
+          <button onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button onClick={handleSave} disabled={saving} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
             {saving ? "Salvando…" : "Salvar"}
           </button>
         </div>
@@ -576,7 +576,7 @@ function FornecedoresTab() {
     <div className="space-y-4">
       {/* barra topo */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 min-w-[260px]">
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 min-w-[260px]">
           <FaSearch className="flex-shrink-0 text-slate-400 text-xs" />
           <input
             className="bg-transparent text-sm font-semibold text-slate-700 placeholder:text-slate-400 outline-none flex-1"
@@ -594,21 +594,21 @@ function FornecedoresTab() {
           <button
             onClick={updateVisibleBrasilApi}
             disabled={updatingBrasilApi || bulkUpdating || loading || rows.length === 0}
-            className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-black text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-50"
           >
             <FaSync className={updatingBrasilApi ? "animate-spin" : ""} /> Atualizar CNPJs visiveis
           </button>
           <button
             onClick={updateAllBrasilApi}
             disabled={bulkUpdating || updatingBrasilApi || loading}
-            className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-700 hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-50"
           >
             <FaSync className={bulkUpdating ? "animate-spin" : ""} /> Atualizar todos CNPJs
           </button>
           {bulkUpdating && (
             <button
               onClick={() => { bulkCancelRef.current = true; }}
-              className="flex items-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2.5 text-sm font-black text-rose-700 hover:bg-rose-100"
+              className="flex items-center gap-2 rounded-xl border border-rose-100 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100"
             >
               <FaTimes /> Pausar
             </button>
@@ -616,7 +616,7 @@ function FornecedoresTab() {
           <button
             onClick={() => setModal({})}
             disabled={bulkUpdating}
-            className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
           >
             <FaPlus /> Novo Fornecedor
           </button>
@@ -627,7 +627,7 @@ function FornecedoresTab() {
       {!search && (
         <p className="text-xs text-slate-400 font-semibold">
           Mostrando os primeiros {PAGE_SIZE} fornecedores. Use a busca para filtrar entre os{" "}
-          <span className="font-black text-slate-600">75.834</span> cadastrados.
+          <span className="font-semibold text-slate-600">75.834</span> cadastrados.
         </p>
       )}
       {search && !loading && (
@@ -638,12 +638,12 @@ function FornecedoresTab() {
         </p>
       )}
       {updateMessage && (
-        <p className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">
+        <p className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">
           {updateMessage}
         </p>
       )}
       {bulkProgress && (
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span>
               BrasilAPI: {bulkProgress.processed.toLocaleString("pt-BR")} / {bulkProgress.total ? bulkProgress.total.toLocaleString("pt-BR") : "..."} processado(s)
@@ -675,10 +675,10 @@ function FornecedoresTab() {
       ) : rows.length === 0 ? (
         <EmptyState icon={<FaBuilding />} title="Nenhum fornecedor encontrado" description={search ? "Tente outro termo de busca." : "Cadastre o primeiro fornecedor."} />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-100">
+        <div className="overflow-x-auto rounded-xl border border-slate-100">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+              <tr className="bg-slate-50 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                 <th className="px-4 py-3 text-left">Nome / Razão Social</th>
                 <th className="px-4 py-3 text-left">CNPJ / CPF</th>
                 <th className="px-4 py-3 text-left">Telefone</th>
@@ -784,7 +784,7 @@ function PecasTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 min-w-[260px]">
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 min-w-[260px]">
           <FaSearch className="flex-shrink-0 text-slate-400 text-xs" />
           <input
             className="bg-transparent text-sm font-semibold text-slate-700 placeholder:text-slate-400 outline-none flex-1"
@@ -798,7 +798,7 @@ function PecasTab() {
             </button>
           )}
         </div>
-        <button onClick={() => setModal({})} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-700">
+        <button onClick={() => setModal({})} className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
           <FaPlus /> Nova Peça
         </button>
       </div>
@@ -806,7 +806,7 @@ function PecasTab() {
       {!search && (
         <p className="text-xs text-slate-400 font-semibold">
           Mostrando os primeiros {PAGE_SIZE} itens unicos. Use a busca para filtrar entre os{" "}
-          <span className="font-black text-slate-600">17.954</span> cadastrados.
+          <span className="font-semibold text-slate-600">17.954</span> cadastrados.
         </p>
       )}
       {search && !loading && (
@@ -828,10 +828,10 @@ function PecasTab() {
       ) : filtered.length === 0 ? (
         <EmptyState icon={<FaBoxOpen />} title="Nenhuma peça encontrada" description={search ? "Tente outro termo de busca." : "Cadastre a primeira peça do catálogo."} />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-100">
+        <div className="overflow-x-auto rounded-xl border border-slate-100">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 text-xs font-black uppercase tracking-widest text-slate-400">
+              <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-widest text-slate-400">
                 <th className="px-4 py-3 text-left">Código</th>
                 <th className="px-4 py-3 text-left">Descrição</th>
                 <th className="px-4 py-3 text-left">Unid.</th>
@@ -902,7 +902,7 @@ export default function SuprimentosCadastro() {
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-black transition ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
                 activeTab === t.key
                   ? "bg-blue-600 text-white"
                   : "border border-slate-200 text-slate-600 hover:bg-slate-100"

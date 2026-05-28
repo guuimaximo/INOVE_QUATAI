@@ -77,12 +77,12 @@ const DETAIL_FORM = {
 };
 
 const inputClass =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 
 function Field({ label, required = false, children, className = "" }) {
   return (
     <label className={`block ${className}`}>
-      <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.16em] text-blue-950">
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-blue-950">
         {label} {required ? "*" : ""}
       </span>
       {children}
@@ -92,18 +92,18 @@ function Field({ label, required = false, children, className = "" }) {
 
 function Detail({ label, value }) {
   return (
-    <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
-      <p className="mt-1.5 text-sm font-black text-slate-950">{value || "--"}</p>
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">{label}</p>
+      <p className="mt-1.5 text-sm font-semibold text-slate-950">{value || "--"}</p>
     </div>
   );
 }
 
 function SectionBlock({ title, children, className = "" }) {
   return (
-    <section className={`rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
+    <section className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
       <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 className="text-base font-black text-slate-950">{title}</h3>
+        <h3 className="text-base font-semibold text-slate-950">{title}</h3>
       </div>
       {children}
     </section>
@@ -117,14 +117,14 @@ function ModalShell({ onClose, title, eyebrow, subtitle = null, actions = null, 
       onClick={onClose}
     >
       <div
-        className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[34px] border border-slate-200 bg-white shadow-2xl"
+        className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="shrink-0 border-b border-slate-100 bg-white px-5 py-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-[0.34em] text-blue-600">{eyebrow}</p>
-              <h2 className="mt-3 truncate text-2xl font-black text-slate-900">{title}</h2>
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{eyebrow}</p>
+              <h2 className="mt-3 truncate text-2xl font-semibold text-slate-900">{title}</h2>
               {subtitle ? <p className="mt-2 text-sm font-medium text-slate-500">{subtitle}</p> : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -132,7 +132,7 @@ function ModalShell({ onClose, title, eyebrow, subtitle = null, actions = null, 
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-100"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               >
                 <FaTimes />
                 Fechar
@@ -739,7 +739,7 @@ export default function SuprimentosGarantias() {
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               <FaFilter className="mr-1 inline" /> Situacao
             </span>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={inputClass}>
@@ -749,14 +749,14 @@ export default function SuprimentosGarantias() {
             </select>
           </label>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Na tela</p>
-            <p className="mt-2 text-2xl font-black text-slate-900">{filteredRows.length}</p>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Na tela</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">{filteredRows.length}</p>
           </div>
         </div>
 
         {errorMessage ? (
-          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
             {errorMessage}
           </div>
         ) : null}
@@ -768,11 +768,11 @@ export default function SuprimentosGarantias() {
             <EmptyState title="Nenhuma garantia encontrada" subtitle="Ajuste os filtros ou abra a primeira garantia do cluster." />
           </div>
         ) : (
-          <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200">
+          <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50">
-                  <tr className="text-left text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     <th className="px-4 py-3">Controle</th>
                     <th className="px-4 py-3">Peca</th>
                     <th className="px-4 py-3">Fornecedor</th>
@@ -793,9 +793,9 @@ export default function SuprimentosGarantias() {
                         onClick={() => openDetail(row)}
                         className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60"
                       >
-                        <td className="px-4 py-3 font-black text-slate-700">{row.numero_controle || "--"}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-700">{row.numero_controle || "--"}</td>
                         <td className="px-4 py-3">
-                          <p className="font-black text-slate-900">{row.peca}</p>
+                          <p className="font-semibold text-slate-900">{row.peca}</p>
                           <p className="mt-1 text-xs font-semibold text-slate-500">{row.codigo_peca || "Sem codigo"}</p>
                         </td>
                         <td className="px-4 py-3 font-semibold text-slate-700">{row.fornecedor}</td>
@@ -813,7 +813,7 @@ export default function SuprimentosGarantias() {
                           <p className="mt-1 text-xs text-slate-500">{formatDateBR(row.created_at)}</p>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700">
+                          <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
                             <FaEye />
                             Abrir
                           </span>

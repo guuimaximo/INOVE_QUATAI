@@ -1,6 +1,6 @@
 import { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { FaBoxes, FaClipboardList, FaTools, FaSignOutAlt, FaLock, FaMicrochip } from "react-icons/fa";
+import { FaBoxes, FaClipboardList, FaTools, FaSignOutAlt, FaMicrochip } from "react-icons/fa";
 
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
@@ -62,14 +62,6 @@ function hasModuleFallback(user, moduleKey) {
     const nivel = normalizeAccessText(user?.nivel);
     const paginas = userPages(user);
     const isGestao = ["gestor", "administrador", "admin"].some((n) => nivel.includes(n));
-
-    if (String(moduleKey).startsWith("embarcados_")) {
-      return Boolean(user);
-    }
-
-    if (String(moduleKey).startsWith("pcm_")) {
-      return isGestao || nivel.includes("manutencao") || paginas.some((p) => p.startsWith("pcm_"));
-    }
 
     if (isGestao) {
       return true;
@@ -141,43 +133,21 @@ export default function MobileHome() {
         <p className="text-sm text-slate-500">Escolha um modulo para comecar.</p>
 
         <div className="grid grid-cols-1 gap-4">
-          {liberacoes.map((m) => {
-            const ativo = m.liberado;
-            if (ativo) {
-              return (
-                <Link
-                  key={m.key}
-                  to={m.path}
-                  className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${m.gradient} px-5 py-6 text-white shadow-lg transition-transform active:scale-[0.98]`}
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="rounded-2xl bg-white/15 p-4 text-3xl">{m.icon}</div>
-                    <div className="flex-1">
-                      <div className="text-lg font-black">{m.title}</div>
-                      <div className="mt-1 text-sm text-white/85">{m.description}</div>
-                    </div>
-                  </div>
-                </Link>
-              );
-            }
-            return (
-              <div
-                key={m.key}
-                className="group relative overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white/70 px-5 py-6 text-slate-500"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="rounded-2xl bg-slate-100 p-4 text-3xl text-slate-400">{m.icon}</div>
-                  <div className="flex-1">
-                    <div className="text-lg font-black text-slate-700">{m.title}</div>
-                    <div className="mt-1 text-sm">{m.description}</div>
-                    <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
-                      <FaLock /> Sem permissao para este nivel
-                    </div>
-                  </div>
+          {liberacoes.filter((m) => m.liberado).map((m) => (
+            <Link
+              key={m.key}
+              to={m.path}
+              className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${m.gradient} px-5 py-6 text-white shadow-lg transition-transform active:scale-[0.98]`}
+            >
+              <div className="flex items-start gap-4">
+                <div className="rounded-2xl bg-white/15 p-4 text-3xl">{m.icon}</div>
+                <div className="flex-1">
+                  <div className="text-lg font-black">{m.title}</div>
+                  <div className="mt-1 text-sm text-white/85">{m.description}</div>
                 </div>
               </div>
-            );
-          })}
+            </Link>
+          ))}
         </div>
 
         {!algumLiberado ? (

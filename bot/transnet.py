@@ -227,7 +227,8 @@ def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> 
             + [data_ini, Keys.TAB, data_fim]
             + [Keys.TAB, Keys.ARROW_DOWN]
             + [Keys.TAB] * 7
-            + [Keys.ARROW_DOWN] * 3
+            + [Keys.ARROW_DOWN] * 4
+            + [Keys.ARROW_UP]
             + [Keys.ENTER] * 3
         )
         for key in seq:

@@ -395,14 +395,15 @@ export default function SuprimentosContagem() {
       }
 
       // 2) Insere o job (rede de segurança — o cron de 5 min pega mesmo sem GitHub)
-      await supabase.from("suprimentos_bot_jobs").insert({
+      const { data: jobCriado, error: jobError } = await supabase.from("suprimentos_bot_jobs").insert({
         tipo: "conferencia_dia",
         tipo_contagem: tipo,
         data_alvo: dataAlvo,
         status: "pendente",
         lote_id: loteIdParam || null,
         criado_por_nome: userInfo.nome || "App",
-      });
+      }).select("id").single();
+      if (jobError) throw jobError;
 
       // 3) Chama o GitHub Actions agora (workflow_dispatch)
       const token = import.meta.env.VITE_GITHUB_TOKEN_BOT;
@@ -412,9 +413,6 @@ export default function SuprimentosContagem() {
       const ref = import.meta.env.VITE_GITHUB_REF_BOT || "main";
       const workflow = tipo === "semanal" ? "bot-estoque-semanal.yml" : "bot-estoque-diaria.yml";
 
-      // IMPORTANTE: não passa data_alvo como input — assim o bot entra no modo "queue"
-      // e pega o job que acabamos de inserir (com lote_id). Se passasse data_alvo,
-      // o bot ignoraria o lote e processaria o dia inteiro.
       await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/dispatches`, {
         method: "POST",
         headers: {
@@ -423,7 +421,7 @@ export default function SuprimentosContagem() {
           "X-GitHub-Api-Version": "2022-11-28",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ref, inputs: {} }),
+        body: JSON.stringify({ ref, inputs: jobCriado?.id ? { job_id: jobCriado.id } : {} }),
       });
     } catch (_) {
       // ignora — cron de 5 min serve de fallback
@@ -460,8 +458,6 @@ export default function SuprimentosContagem() {
     setCodigo(""); setPeca(null); setNaoCadastrado(false); setQuantidade(""); setObservacao(""); setAviso("");
     setTimeout(() => codigoInputRef.current?.focus(), 50);
     carregarLotes();
-    // Mobile: dispara workflow automaticamente (Edge Function debouncia por lote_id)
-    if (isNativeShell) void dispararDispatchSilencioso("diaria", todayIsoBRT(), loteId);
   }
 
   async function salvarContagemFluxo() {
@@ -495,8 +491,6 @@ export default function SuprimentosContagem() {
     setBusy(false);
     if (error) { setErro(error.message); return false; }
     limparApontamento();
-    // Mobile: dispara workflow automaticamente (Edge Function debouncia por lote_id)
-    if (isNativeShell) void dispararDispatchSilencioso("diaria", todayIsoBRT(), loteId);
     return true;
   }
 

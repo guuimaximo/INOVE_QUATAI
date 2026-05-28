@@ -155,6 +155,7 @@ export default function SuprimentosContagemDia() {
         tipo: "conferencia_dia",
         tipo_contagem: "diaria",
         data_alvo: data,
+        lote_id: loteId || null,
         status: "pendente",
         criado_por_id: userInfo.id,
         criado_por_nome: userInfo.nome,
@@ -184,8 +185,7 @@ export default function SuprimentosContagemDia() {
             "X-GitHub-Api-Version": "2022-11-28",
             "Content-Type": "application/json",
           },
-          // sem inputs: bot pega da fila (job que acabamos de inserir tem data_alvo)
-          body: JSON.stringify({ ref, inputs: {} }),
+          body: JSON.stringify({ ref, inputs: job?.id ? { job_id: job.id } : {} }),
         }
       );
       if (!r.ok) {

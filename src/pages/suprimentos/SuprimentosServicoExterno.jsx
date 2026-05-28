@@ -503,9 +503,16 @@ function printFicha(record) {
 <style>
   @page { size: A4; margin: 0; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; line-height: 1.35; color: #0f172a; }
-  .page-wrap { padding: 18mm 14mm; }
+  html { margin: 0; padding: 0; }
+  body {
+    margin: 0;
+    padding: 18mm 14mm 22mm 14mm;
+    font-family: Arial, sans-serif;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #0f172a;
+  }
+  .page-wrap { display: block; }
   h1, h2, h3, p { margin: 0; padding: 0; }
   .nobreak { break-inside: avoid; page-break-inside: avoid; }
   .mb-3 { margin-bottom: 12px; }

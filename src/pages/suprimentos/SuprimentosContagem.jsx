@@ -372,6 +372,7 @@ export default function SuprimentosContagem() {
       contado_por_id: userInfo.id,
       contado_por_login: userInfo.login,
       contado_por_nome: userInfo.nome,
+      origem: (typeof Capacitor !== "undefined" && Capacitor?.isNativePlatform?.()) ? "mobile" : "web",
     };
     const { error } = await supabase.from("suprimentos_contagens").insert(payload);
     setBusy(false);

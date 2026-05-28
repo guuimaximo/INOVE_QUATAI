@@ -34,6 +34,32 @@ function json(body: unknown, status = 200) {
   });
 }
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+// Verifica se já existe um job ativo (pendente OU processando) para a mesma data_alvo
+// e tipo_contagem. Se sim, NÃO dispara — o workflow já está rodando.
+async function jobAtivoExistente(tipo: string, data_alvo: string): Promise<any | null> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return null;
+  const url = new URL(`${SUPABASE_URL}/rest/v1/suprimentos_bot_jobs`);
+  url.searchParams.set("select", "id,status,iniciado_em,created_at");
+  url.searchParams.set("data_alvo", `eq.${data_alvo}`);
+  url.searchParams.set("tipo_contagem", `eq.${tipo}`);
+  url.searchParams.set("status", "in.(pendente,processando)");
+  url.searchParams.set("order", "created_at.desc");
+  url.searchParams.set("limit", "1");
+
+  const r = await fetch(url.toString(), {
+    headers: {
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    },
+  });
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return rows?.[0] ?? null;
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
@@ -53,11 +79,27 @@ serve(async (req: Request) => {
   }
 
   const tipo = String(payload?.tipo ?? "diaria").toLowerCase();
+  const data_alvo = String(payload?.data_alvo ?? "");
+  const force = Boolean(payload?.force);
   const workflow =
     tipo === "semanal" ? "bot-estoque-semanal.yml" : "bot-estoque-diaria.yml";
 
+  // Debounce: se já existe job pendente/processando, não dispara de novo.
+  if (data_alvo && !force) {
+    const existente = await jobAtivoExistente(tipo, data_alvo);
+    if (existente) {
+      return json({
+        ok: true,
+        skipped: true,
+        reason: "ja_existe_job_ativo",
+        job: existente,
+        workflow,
+      });
+    }
+  }
+
   const inputs: Record<string, string> = {};
-  if (payload?.data_alvo) inputs["data_alvo"] = String(payload.data_alvo);
+  if (data_alvo) inputs["data_alvo"] = data_alvo;
 
   const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${workflow}/dispatches`;
   const ghResp = await fetch(url, {

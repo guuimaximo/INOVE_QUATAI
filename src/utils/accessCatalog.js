@@ -179,6 +179,7 @@ export const DEFAULT_LEVEL_PROFILES = [
       "suprimentos_garantias",
       "suprimentos_testes",
       "suprimentos_servico_externo",
+      "suprimentos_contagem",
       "pessoas_funcionarios",
       "pessoas_ferias",
       "pessoas_organograma",

@@ -24,6 +24,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
 import { EmptyState, KpiCard, PageHero, Panel, PartAutocomplete, StatusChip, SupplierAutocomplete } from "./SuprimentosUI";
 import { formatDateBR, formatDateTimeBR, todayISO, uploadSuprimentosFiles } from "./suprimentosShared";
+import logoInove from "../../assets/logoInovaQuatai.png";
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 const inputClass =
@@ -404,7 +405,7 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
 }
 
 /* ─── print ficha ─────────────────────────────────────────────── */
-function printFicha(record) {
+function legacyPrintFicha(record) {
   const itensHtml = (record.itens || [])
     .map(
       (it, i) => `<tr>
@@ -461,6 +462,197 @@ function printFicha(record) {
       <p style="margin-top:4px;font-size:11px;color:#64748b">Data: ___/___/______</p></div>
     <div class="sig-block" style="margin-top:32px"><p><strong>Assinatura do Terceiro (devolução)</strong></p>
       <p style="margin-top:4px;font-size:11px;color:#64748b">Data: ___/___/______</p></div>
+  </div>
+</body></html>`;
+
+  const w = window.open("", "_blank", "width=900,height=700");
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
+function escapePrintHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function printFicha(record) {
+  const status = record.status || "Em posse do terceiro";
+  const statusClass =
+    status === "Retornado" ? "status-retornado" :
+    status === "Cancelado" ? "status-cancelado" :
+    "status-aberto";
+  const sectionAssinaturas = record.observacao ? "5" : "4";
+  const itensHtml = (record.itens || [])
+    .map((it, i) => `<tr>
+      <td>${i + 1}</td>
+      <td>${escapePrintHtml(it.codigo || "-")}</td>
+      <td>${escapePrintHtml(it.descricao || "")}</td>
+      <td>${escapePrintHtml(`${it.quantidade || ""} ${it.unidade || ""}`.trim())}</td>
+      <td>${escapePrintHtml(it.obs || "")}</td>
+    </tr>`)
+    .join("");
+
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/>
+<title>Serviço Externo ${escapePrintHtml(record.numero_saida || "")}</title>
+<style>
+  @page { margin: 14mm; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
+  body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 11px; line-height: 1.35; color: #0f172a; }
+  h1, h2, h3, p { margin: 0; padding: 0; }
+  .nobreak { break-inside: avoid; page-break-inside: avoid; }
+  .mb-3 { margin-bottom: 12px; }
+  .mt-4 { margin-top: 16px; }
+  .doc-header {
+    display: flex; align-items: stretch; justify-content: space-between; gap: 16px;
+    border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 140px; align-self: center; }
+  .brand img { width: 48px; height: 48px; object-fit: contain; display: block; }
+  .brand-text { line-height: 1.1; }
+  .brand-name { font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: 0.12em; }
+  .brand-sub { font-size: 8.5px; color: #64748b; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 2px; }
+  .doc-title-block { flex: 1; text-align: center; align-self: center; }
+  .doc-title { font-size: 18px; font-weight: 800; color: #1e3a8a; letter-spacing: 0.04em; line-height: 1.15; }
+  .doc-subtitle { font-size: 10px; color: #475569; margin-top: 2px; }
+  .doc-meta {
+    text-align: right; font-size: 9.5px; color: #475569;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+    min-width: 140px; align-self: center;
+  }
+  .status-pill {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .status-aberto { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+  .status-retornado { background: #dcfce7; color: #166534; border: 1px solid #22c55e; }
+  .status-cancelado { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+  .section-title {
+    background: #1e3a8a; color: #fff; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 8px 10px; margin-bottom: 6px; border-radius: 2px;
+    line-height: 1; break-after: avoid-page; page-break-after: avoid;
+  }
+  .field-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 12px;
+    border: 1px solid #cbd5e1; padding: 8px 10px; border-radius: 3px; background: #f8fafc;
+  }
+  .field-grid .full { grid-column: 1 / -1; }
+  .field-label {
+    font-size: 9px; color: #475569; text-transform: uppercase;
+    letter-spacing: 0.05em; font-weight: 600; display: block;
+  }
+  .field-value { font-size: 11px; color: #0f172a; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; break-inside: auto; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  thead { display: table-header-group; }
+  .compact th, .compact td { padding: 4px 6px; border: 1px solid #cbd5e1; vertical-align: top; }
+  .compact thead th {
+    background: #1e3a8a; color: #fff; font-weight: 600; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.03em; text-align: left;
+  }
+  .compact tbody tr:nth-child(even) td { background: #f8fafc; }
+  .note-box {
+    border: 1px solid #cbd5e1; border-radius: 3px; padding: 8px 10px;
+    background: #f8fafc; min-height: 42px; font-size: 11px; white-space: pre-wrap;
+  }
+  .signature-box { text-align: center; }
+  .signature-line {
+    border-top: 1px solid #0f172a; margin: 40px 8px 4px 8px; padding-top: 3px;
+    font-size: 10px; font-weight: 600;
+  }
+  .signature-role { font-size: 9px; color: #475569; }
+  .footer-disclaimer {
+    margin-top: 12px; font-size: 8.5px; color: #64748b; text-align: justify;
+    border-top: 1px dashed #cbd5e1; padding-top: 6px;
+  }
+</style></head><body>
+  <header class="doc-header nobreak">
+    <div class="brand">
+      <img src="${logoInove}" alt="INOVE" />
+      <div class="brand-text">
+        <div class="brand-name">INOVE</div>
+        <div class="brand-sub">Gestão de Frota</div>
+      </div>
+    </div>
+    <div class="doc-title-block">
+      <h1 class="doc-title">SERVIÇO EXTERNO</h1>
+      <div class="doc-subtitle">Ficha de saída e controle de retorno</div>
+    </div>
+    <div class="doc-meta">
+      <div><strong>Nº:</strong> ${escapePrintHtml(record.numero_saida || "-")}</div>
+      <div><strong>Emissão:</strong> ${escapePrintHtml(new Date().toLocaleString("pt-BR"))}</div>
+      <div><span class="status-pill ${statusClass}">${escapePrintHtml(status)}</span></div>
+    </div>
+  </header>
+
+  <section class="mb-3 nobreak">
+    <div class="section-title">1. Identificação da saída</div>
+    <div class="field-grid">
+      <div><span class="field-label">Número</span><span class="field-value">${escapePrintHtml(record.numero_saida || "-")}</span></div>
+      <div><span class="field-label">Status</span><span class="field-value">${escapePrintHtml(status)}</span></div>
+      <div><span class="field-label">Nota de saída</span><span class="field-value">${escapePrintHtml(record.nota_saida_numero || "-")}</span></div>
+      <div><span class="field-label">Data da saída</span><span class="field-value">${escapePrintHtml(record.nota_saida_data ? formatDateBR(record.nota_saida_data) : "-")}</span></div>
+      <div><span class="field-label">Nota de retorno</span><span class="field-value">${escapePrintHtml(record.nota_retorno_numero || "-")}</span></div>
+      <div><span class="field-label">Data do retorno</span><span class="field-value">${escapePrintHtml(record.nota_retorno_data ? formatDateBR(record.nota_retorno_data) : "-")}</span></div>
+      <div class="full"><span class="field-label">Motivo / Serviço</span><span class="field-value">${escapePrintHtml(record.motivo || "-")}</span></div>
+    </div>
+  </section>
+
+  <section class="mb-3 nobreak">
+    <div class="section-title">2. Dados do terceiro</div>
+    <div class="field-grid">
+      <div style="grid-column:1 / span 2"><span class="field-label">Nome / Razão social</span><span class="field-value">${escapePrintHtml(record.terceiro_nome || "-")}</span></div>
+      <div><span class="field-label">CPF / CNPJ</span><span class="field-value">${escapePrintHtml(record.terceiro_cpf_cnpj || "-")}</span></div>
+      <div><span class="field-label">Telefone</span><span class="field-value">${escapePrintHtml(record.terceiro_telefone || "-")}</span></div>
+      <div class="full"><span class="field-label">Endereço</span><span class="field-value">${escapePrintHtml(record.terceiro_endereco || "-")}</span></div>
+    </div>
+  </section>
+
+  <section class="mb-3 nobreak">
+    <div class="section-title">3. Itens enviados</div>
+    <table class="compact">
+      <thead><tr><th style="width:36px">#</th><th style="width:95px">Código</th><th>Descrição</th><th style="width:90px">Qtd/Un</th><th>Obs.</th></tr></thead>
+      <tbody>${itensHtml || '<tr><td colspan="5" style="text-align:center;padding:8px">Nenhum item.</td></tr>'}</tbody>
+    </table>
+  </section>
+
+  ${record.observacao ? `
+  <section class="mb-3 nobreak">
+    <div class="section-title">4. Observações</div>
+    <div class="note-box">${escapePrintHtml(record.observacao)}</div>
+  </section>` : ""}
+
+  <section class="mt-4 nobreak">
+    <div class="section-title">${sectionAssinaturas}. Assinaturas</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px 26px;margin-top:8px">
+      <div class="signature-box">
+        <div class="signature-line">Responsável pela entrega</div>
+        <div class="signature-role">${escapePrintHtml(record.criado_por_nome || "-")}</div>
+      </div>
+      <div class="signature-box">
+        <div class="signature-line">${escapePrintHtml(record.terceiro_nome || "Terceiro")}</div>
+        <div class="signature-role">Assinatura do terceiro (recebimento)</div>
+      </div>
+      <div class="signature-box">
+        <div class="signature-line">Responsável pelo recebimento</div>
+        <div class="signature-role">Retorno / conferência</div>
+      </div>
+      <div class="signature-box">
+        <div class="signature-line">${escapePrintHtml(record.terceiro_nome || "Terceiro")}</div>
+        <div class="signature-role">Assinatura do terceiro (devolução)</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-disclaimer">
+    Este documento registra a saída de itens para serviço externo e seu controle de retorno, conforme dados
+    lançados no sistema. As partes signatárias declaram ciência dos itens, quantidades e condições descritas.
   </div>
 </body></html>`;
 

@@ -4,6 +4,7 @@ import {
   FaCamera,
   FaCheck,
   FaRedo,
+  FaRobot,
   FaSearch,
   FaTimes,
   FaTrashAlt,
@@ -164,6 +165,56 @@ export default function SuprimentosContagem() {
 
   useEffect(() => { carregarContagens(); }, []);
 
+  // ─── Bot de conferência com ERP ─────────────────────────────
+  const [confDate, setConfDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [botJob, setBotJob] = useState(null);
+  const [botMsg, setBotMsg] = useState("");
+  const botPollRef = useRef(null);
+
+  async function dispararConferencia() {
+    if (!confDate) { setBotMsg("Selecione a data."); return; }
+    setBotMsg("");
+    const { data, error } = await supabase
+      .from("suprimentos_bot_jobs")
+      .insert({
+        tipo: "conferencia_dia",
+        data_alvo: confDate,
+        status: "pendente",
+        criado_por_id: userInfo.id,
+        criado_por_nome: userInfo.nome,
+      })
+      .select()
+      .single();
+    if (error) { setBotMsg(`Erro ao enfileirar: ${error.message}`); return; }
+    setBotJob(data);
+    setBotMsg("Job enviado. O bot vai puxar do TransNet — pode levar alguns minutos.");
+  }
+
+  useEffect(() => {
+    if (!botJob || botJob.status === "concluido" || botJob.status === "erro") {
+      clearInterval(botPollRef.current);
+      botPollRef.current = null;
+      return;
+    }
+    botPollRef.current = setInterval(async () => {
+      const { data } = await supabase
+        .from("suprimentos_bot_jobs")
+        .select("*")
+        .eq("id", botJob.id)
+        .maybeSingle();
+      if (!data) return;
+      setBotJob(data);
+      if (data.status === "concluido") {
+        const r = data.resultado_json || {};
+        setBotMsg(`Conferência concluída: ${r.itens_atualizados ?? "?"} item(ns) atualizado(s), ${r.divergencias ?? "?"} divergência(s).`);
+        carregarContagens();
+      } else if (data.status === "erro") {
+        setBotMsg(`Bot falhou: ${data.erro || "erro desconhecido"}`);
+      }
+    }, 4000);
+    return () => clearInterval(botPollRef.current);
+  }, [botJob?.id, botJob?.status]);
+
   async function buscarPeca(codigoBusca) {
     const c = String(codigoBusca || "").trim();
     if (!c) { setPeca(null); setNaoCadastrado(false); return; }
@@ -276,6 +327,44 @@ export default function SuprimentosContagem() {
           </ActionButton>
         }
       />
+
+      <Panel
+        title="Conferir com o ERP"
+        subtitle="Roda o bot que entra no TransNet, lê o saldo do dia e atualiza as contagens daquela data."
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Data da contagem">
+            <input
+              type="date"
+              className={inputClass}
+              value={confDate}
+              onChange={(e) => setConfDate(e.target.value)}
+              max={new Date().toISOString().slice(0, 10)}
+            />
+          </Field>
+          <ActionButton
+            tone="blue"
+            onClick={dispararConferencia}
+            disabled={Boolean(botJob && ["pendente", "processando"].includes(botJob.status))}
+          >
+            <FaRobot />
+            {botJob && botJob.status === "pendente" ? "Aguardando bot..." :
+             botJob && botJob.status === "processando" ? "Bot rodando..." :
+             "Conferir com ERP"}
+          </ActionButton>
+          {botJob ? (
+            <StatusChip
+              tone={botJob.status === "concluido" ? "emerald" : botJob.status === "erro" ? "rose" : "amber"}
+              label={botJob.status === "concluido" ? "Concluído" :
+                     botJob.status === "erro" ? "Erro" :
+                     botJob.status === "processando" ? "Em execução" : "Na fila"}
+            />
+          ) : null}
+        </div>
+        {botMsg ? (
+          <p className="mt-3 text-sm font-medium text-slate-600">{botMsg}</p>
+        ) : null}
+      </Panel>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="Contagens totais" value={kpis.total} subtitle="Registradas no histórico" icon={<FaBarcode />} tone="blue" />

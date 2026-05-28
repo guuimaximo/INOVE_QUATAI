@@ -12,6 +12,10 @@ on:
         description: "Data alvo (YYYY-MM-DD). Vazio = processa fila."
         required: false
         default: ""
+      job_id:
+        description: "ID do job em suprimentos_bot_jobs. Vazio = usa data ou fila."
+        required: false
+        default: ""
 
 concurrency:
   group: bot-diaria
@@ -79,11 +83,15 @@ jobs:
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
           HEADLESS: "true"
           DATA_ALVO_INPUT: ${{ github.event.inputs.data_alvo }}
+          JOB_ID_INPUT: ${{ github.event.inputs.job_id }}
         run: |
           set -e
           echo "Chrome em: $CHROME_BIN"
           $CHROME_BIN --version || true
-          if [ -n "$DATA_ALVO_INPUT" ]; then
+          if [ -n "$JOB_ID_INPUT" ]; then
+            echo "Disparo direcionado com job_id=$JOB_ID_INPUT"
+            python -u bot_diaria.py --job-id "$JOB_ID_INPUT"
+          elif [ -n "$DATA_ALVO_INPUT" ]; then
             echo "Disparo manual com data_alvo=$DATA_ALVO_INPUT"
             python -u bot_diaria.py --data-alvo "$DATA_ALVO_INPUT"
           else

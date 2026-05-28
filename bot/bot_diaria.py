@@ -71,6 +71,17 @@ def proximo_job() -> dict:
     return rows[0] if rows else None
 
 
+def buscar_job(job_id: str) -> dict:
+    rows = supa_get(
+        "suprimentos_bot_jobs",
+        {
+            "id": f"eq.{job_id}",
+            "limit": 1,
+        },
+    )
+    return rows[0] if rows else None
+
+
 def marcar_processando(job_id: str):
     supa_patch(
         "suprimentos_bot_jobs",
@@ -260,7 +271,24 @@ def main():
         default="",
         help="Se informado, cria um job sintético para essa data (YYYY-MM-DD) e processa.",
     )
+    parser.add_argument(
+        "--job-id",
+        default="",
+        help="Se informado, processa exatamente este job da fila.",
+    )
     args = parser.parse_args()
+
+    if args.job_id:
+        try:
+            job = buscar_job(args.job_id)
+            if not job:
+                print(f"[bot] job_id={args.job_id} nao encontrado.")
+                return
+            processar_job(job)
+        except Exception as e:
+            traceback.print_exc()
+            print(f"[bot] erro processando job_id={args.job_id}: {e}")
+        return
 
     # Manual trigger via workflow_dispatch: cria o job na hora.
     if args.data_alvo:

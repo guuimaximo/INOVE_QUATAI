@@ -270,7 +270,7 @@ export default function Layout() {
       <MobileBottomNav
         items={mobileNavItems}
         currentPath={`${location.pathname}${location.search}`}
-        onOpenMenu={isLockedMobileModule ? undefined : () => setMobileSidebarOpen(true)}
+        onOpenMenu={isNativeShell ? () => navigate("/") : isLockedMobileModule ? undefined : () => setMobileSidebarOpen(true)}
       />
     </div>
   );

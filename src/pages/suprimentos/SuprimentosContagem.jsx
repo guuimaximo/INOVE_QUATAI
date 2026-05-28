@@ -836,6 +836,8 @@ export default function SuprimentosContagem() {
                   <div className="flex gap-2">
                     <input
                       ref={codigoInputRef}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       className={inputClass}
                       placeholder="Escaneie ou digite"
                       value={codigo}
@@ -964,6 +966,8 @@ export default function SuprimentosContagem() {
             <div className="flex gap-2">
               <input
                 ref={codigoInputRef}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 className={inputClass}
                 placeholder="Digite ou escaneie"
                 value={codigo}

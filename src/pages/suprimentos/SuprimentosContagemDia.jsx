@@ -66,6 +66,39 @@ export default function SuprimentosContagemDia() {
   }
   useEffect(() => { carregar(); }, [data]);
 
+  // Auto-refresh em tempo real (Realtime) — sem precisar sair e voltar.
+  useEffect(() => {
+    if (!data) return;
+    const inicio = `${data}T00:00:00`;
+    const fim = `${data}T23:59:59.999`;
+    let recarregando = false;
+    const debounceRecarregar = () => {
+      if (recarregando) return;
+      recarregando = true;
+      setTimeout(() => { recarregando = false; carregar(); }, 600);
+    };
+
+    const channel = supabase
+      .channel(`contagem-dia-${data}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_contagens" },
+        (payload) => {
+          const row = payload.new || payload.old || {};
+          const ts = row.created_at;
+          if (!ts || (ts >= inicio && ts <= fim)) debounceRecarregar();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_bot_jobs", filter: `data_alvo=eq.${data}` },
+        () => debounceRecarregar()
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [data]);
+
   async function dispararConferencia() {
     setBotMsg("");
     const { data: job, error } = await supabase

@@ -588,6 +588,35 @@ export default function SuprimentosContagem() {
     else setLoadingLotes(false);
   }, [isNativeShell]);
 
+  // Realtime: atualiza a lista de lotes sem precisar dar F5.
+  useEffect(() => {
+    let recarregando = false;
+    const debounceRecarregar = () => {
+      if (recarregando) return;
+      recarregando = true;
+      setTimeout(() => { recarregando = false; carregarLotes(); }, 800);
+    };
+    const channel = supabase
+      .channel("contagem-central")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_contagens" },
+        () => debounceRecarregar()
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "suprimentos_bot_jobs" },
+        () => debounceRecarregar()
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "suprimentos_auditorias" },
+        () => debounceRecarregar()
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   // ─── KPIs ──────────────────────────────────────────────────
   const kpis = useMemo(() => {
     const total = lotesDiarios.reduce((sum, l) => sum + l.total, 0);

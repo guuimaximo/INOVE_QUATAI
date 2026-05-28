@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import {
   FaCarCrash,
+  FaBoxes,
   FaClipboardCheck,
   FaClipboardList,
   FaCog,
@@ -29,6 +30,7 @@ function getPageTitle(pathname) {
   if (pathname.startsWith("/painel")) return "Painel";
   if (pathname.startsWith("/inicio-rapido")) return "Inicio";
   if (pathname.startsWith("/estoque-diesel")) return "Estoque de Diesel";
+  if (pathname.startsWith("/suprimentos/contagem")) return "Contagem";
   if (pathname.startsWith("/desempenho")) return "Diesel";
   if (pathname.startsWith("/embarcados")) return "Embarcados";
   if (pathname.startsWith("/pcm-troca-pneus")) return "Troca de pneus";
@@ -49,6 +51,7 @@ function getPageTitle(pathname) {
 function getIconForNav(key) {
   const normalizedKey = String(key || "").toLowerCase();
   if (normalizedKey.includes("estoque")) return FaWarehouse;
+  if (normalizedKey.includes("contagem")) return FaBoxes;
   if (normalizedKey.includes("diesel")) return FaGasPump;
 
   switch (key) {

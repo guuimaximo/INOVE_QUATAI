@@ -35,6 +35,10 @@ export default function SuprimentosContagemDia() {
     id: Number(user?.usuario_id || user?.id || 0) || null,
     nome: user?.nome || user?.nome_completo || user?.login || user?.email || "Usuario",
   }), [user]);
+  const isAdmin = useMemo(() => {
+    const nivel = String(user?.nivel || "").trim().toLowerCase();
+    return nivel === "administrador" || nivel === "admin";
+  }, [user]);
 
   const [contagens, setContagens] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -230,8 +234,8 @@ export default function SuprimentosContagemDia() {
             </div>
           </Panel>
         ) : null
-      ) : (
-        // Web: mantém o botão manual
+      ) : isAdmin ? (
+        // Web: botão manual SÓ para administradores
         <Panel
           title="Conferir com ERP"
           subtitle="Dispara o bot que entra no TransNet, lê o saldo desse dia e atualiza as contagens."
@@ -254,6 +258,20 @@ export default function SuprimentosContagemDia() {
           </div>
           {botMsg ? <p className="mt-3 text-sm font-medium text-slate-600">{botMsg}</p> : null}
         </Panel>
+      ) : (
+        // Web não-admin: vê só o status, sem botão
+        botJob ? (
+          <Panel title="Conferência com ERP" subtitle="Disparada por administradores ou automaticamente pelo cron.">
+            <div className="flex flex-wrap items-center gap-3">
+              {botStatusChip}
+              {botJob?.resultado_json ? (
+                <span className="text-xs font-medium text-slate-500">
+                  Última execução: {formatDateTimeBR(botJob.concluido_em)}
+                </span>
+              ) : null}
+            </div>
+          </Panel>
+        ) : null
       )}
 
       <Panel title="Itens deste lote">

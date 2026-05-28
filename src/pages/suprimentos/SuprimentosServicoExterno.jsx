@@ -26,14 +26,14 @@ import { formatDateBR, formatDateTimeBR, todayISO, uploadSuprimentosFiles } from
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 const inputClass =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 const textareaClass =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 resize-none";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 resize-none";
 
 function Field({ label, required = false, children, className = "" }) {
   return (
     <div className={className}>
-      <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.16em] text-blue-950">
+      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-blue-950">
         {label}{required && <span className="ml-1 text-rose-500">*</span>}
       </label>
       {children}
@@ -82,7 +82,7 @@ function TerceiroAutocomplete({ value, onChange, onSelect }) {
         onFocus={() => { if (options.length > 0) setShow(true); }}
       />
       {show && options.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
           {options.map((f) => (
             <button
               key={f.id}
@@ -183,14 +183,14 @@ function EvidenciasDropzone({ files, setFiles }) {
           onDragLeave={() => setIsDragging(false)}
           onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}
           onClick={() => fileRef.current?.click()}
-          className={`flex min-h-[140px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDragging ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"}`}
+          className={`flex min-h-[140px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDragging ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"}`}
         >
           <p className="text-sm font-semibold text-slate-700">Clique para enviar <span className="font-normal">ou arraste</span></p>
           <p className="mt-1 text-xs text-slate-400">PNG, JPG, MP4, MOV ou PDF</p>
           <input ref={fileRef} type="file" accept={ACCEPT_MIME.join(",")} multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
         </div>
         {/* paste box */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div
             tabIndex={0}
             onPaste={onPaste}
@@ -208,12 +208,12 @@ function EvidenciasDropzone({ files, setFiles }) {
       {files.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Arquivos anexados</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Arquivos anexados</p>
             <button type="button" onClick={() => setFiles([])} className="text-xs font-semibold text-rose-500 hover:underline">remover tudo</button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {files.map((f, i) => (
-              <div key={`${f.name}-${i}`} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+              <div key={`${f.name}-${i}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 flex-shrink-0">{badgeLabel(f)}</span>
                   <span className="truncate text-xs font-semibold text-slate-700">{f.name}</span>
@@ -271,13 +271,13 @@ function PecasCatalogPicker({ onSelect, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[28px] bg-white shadow-2xl border border-slate-200">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl border border-slate-200">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h3 className="text-base font-black text-slate-900">Selecionar Peça do Catálogo</h3>
+          <h3 className="text-base font-semibold text-slate-900">Selecionar Peça do Catálogo</h3>
           <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
         </div>
         <div className="px-4 py-3 border-b border-slate-100">
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
             <FaSearch className="text-slate-400 text-xs" />
             <input autoFocus className="bg-transparent outline-none text-sm font-semibold text-slate-700 placeholder:text-slate-400 w-full" placeholder="Buscar peça…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
@@ -330,22 +330,22 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
 
   return (
     <>
-      <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 space-y-3">
+      <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 space-y-3">
         <div className="flex items-start gap-2">
           {!readOnly && (
             <button type="button" onClick={() => onPickCatalog(index)}
-              className="mt-0.5 flex-shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-blue-700 hover:bg-blue-100"
+              className="mt-0.5 flex-shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-700 hover:bg-blue-100"
               title="Selecionar do catálogo">
               <FaList />
             </button>
           )}
           <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
             <div>
-              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Código</p>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">Código</p>
               <input className={inputClass + " text-xs"} placeholder="Código" value={item.codigo} onChange={handle("codigo")} disabled={readOnly} />
             </div>
             <div className="sm:col-span-2">
-              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição *</p>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">Descrição *</p>
               <PartAutocomplete
                 className={inputClass + " text-xs"}
                 placeholder="Descricao da peca"
@@ -364,7 +364,7 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
               />
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-blue-900">Qtd</p>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-blue-900">Qtd</p>
               <div className="flex gap-1">
                 <input className={inputClass + " text-xs"} type="number" min="0" value={item.quantidade} onChange={handle("quantidade")} disabled={readOnly} />
                 <input className={inputClass + " text-xs w-16"} placeholder="un" value={item.unidade} onChange={handle("unidade")} disabled={readOnly} />
@@ -379,15 +379,15 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
         </div>
 
         <div>
-          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Observação</p>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">Observação</p>
           <input className={inputClass + " text-xs"} placeholder="Observação sobre este item…" value={item.obs} onChange={handle("obs")} disabled={readOnly} />
         </div>
 
         {!readOnly && (
           <div>
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-blue-900">Fotos (opcional)</p>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-blue-900">Fotos (opcional)</p>
             <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-              className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
               📷 {uploading ? "Enviando…" : "Adicionar foto"}
             </button>
             <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFotos} />
@@ -621,13 +621,13 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
-        <div className="my-8 w-full max-w-3xl rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+        <div className="my-8 w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Serviço Externo</p>
-              <h2 className="mt-1 text-xl font-black text-blue-900">{isEdit ? "Editar Saída" : "Nova Saída"}</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-600">Serviço Externo</p>
+              <h2 className="mt-1 text-xl font-semibold text-blue-900">{isEdit ? "Editar Saída" : "Nova Saída"}</h2>
             </div>
-            <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
+            <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
           </div>
 
           <div className="px-6 py-5 space-y-5">
@@ -669,8 +669,8 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
             {/* Itens */}
             <div>
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-black uppercase tracking-widest text-blue-900">Itens enviados</p>
-                <button type="button" onClick={addItem} className="flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-1.5 text-xs font-black text-white hover:bg-blue-700">
+                <p className="text-xs font-semibold uppercase tracking-widest text-blue-900">Itens enviados</p>
+                <button type="button" onClick={addItem} className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
                   <FaPlus /> Adicionar item
                 </button>
               </div>
@@ -691,18 +691,18 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
 
             {/* Evidências */}
             <div>
-              <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-400">Evidências (fotos, vídeos, PDF)</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Evidências (fotos, vídeos, PDF)</p>
               <EvidenciasDropzone files={files} setFiles={setFiles} />
             </div>
 
             {error && (
-              <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>
+              <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>
             )}
           </div>
 
           <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4 rounded-b-[28px]">
-            <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">Cancelar</button>
-            <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50">
+            <button onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+            <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
               <FaTruckLoading /> {saving ? "Salvando…" : isEdit ? "Salvar alterações" : "Registrar saída"}
             </button>
           </div>
@@ -850,30 +850,30 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
-      <div className="my-8 w-full max-w-3xl rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+      <div className="my-8 w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl">
         {/* header */}
         <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Serviço Externo</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-600">Serviço Externo</p>
               <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
             </div>
-            <h2 className="mt-1 text-xl font-black text-slate-900">{record.numero_saida}</h2>
+            <h2 className="mt-1 text-xl font-semibold text-slate-900">{record.numero_saida}</h2>
             <p className="text-sm font-semibold text-slate-500">{record.terceiro_nome}</p>
           </div>
           <div className="flex items-center gap-2">
             {record.status === "Em posse do terceiro" && onEdit && (
               <button
                 onClick={() => { onClose(); onEdit(record); }}
-                className="flex items-center gap-1.5 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100"
+                className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
               >
                 <FaEdit /> Editar
               </button>
             )}
-            <button onClick={() => printFicha(record)} className="flex items-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
+            <button onClick={() => printFicha(record)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">
               <FaPrint /> Imprimir
             </button>
-            <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
+            <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
           </div>
         </div>
 
@@ -883,7 +883,7 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
             <button
               key={t.key}
               onClick={() => { setTab(t.key); setError(""); }}
-              className={`flex items-center gap-1.5 rounded-t-2xl px-3 py-2 text-xs font-black transition mb-0 ${
+              className={`flex items-center gap-1.5 rounded-t-2xl px-3 py-2 text-xs font-semibold transition mb-0 ${
                 tab === t.key ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100"
               }`}
             >
@@ -914,7 +914,7 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
 
               {/* itens */}
               <div>
-                <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Itens</p>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Itens</p>
                 <div className="space-y-3">
                   {(record.itens || []).map((it, i) => (
                     <ItemRow key={i} item={it} index={i} onChange={() => {}} onRemove={() => {}} onPickCatalog={() => {}} readOnly />
@@ -940,7 +940,7 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
                       return (
                         <div key={m.id} className="relative">
                           <div className={`absolute -left-2.5 top-1 h-4 w-4 rounded-full border-2 border-white ${tone === "blue" ? "bg-blue-500" : tone === "emerald" ? "bg-emerald-500" : tone === "rose" ? "bg-rose-500" : "bg-slate-400"}`} />
-                          <div className="ml-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                          <div className="ml-4 rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
                             <div className="flex items-center gap-2 mb-1">
                               <StatusChip tone={tone}>{m.tipo}</StatusChip>
                               <span className="text-xs text-slate-400">{formatDateTimeBR(m.created_at)}</span>
@@ -1000,8 +1000,8 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
                 <textarea rows={3} className={textareaClass} placeholder="Descreva o que foi realizado, condições de retorno…" value={retornoForm.descricao} onChange={(e) => setRetornoForm((f) => ({ ...f, descricao: e.target.value }))} />
               </Field>
               <div>
-                <p className="mb-2 text-xs font-black uppercase tracking-widest text-blue-900">Fotos do retorno (opcional)</p>
-                <button type="button" onClick={() => retornoFotoRef.current?.click()} disabled={uploadingRetornoFotos} className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-blue-900">Fotos do retorno (opcional)</p>
+                <button type="button" onClick={() => retornoFotoRef.current?.click()} disabled={uploadingRetornoFotos} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
                   <FaCamera /> {uploadingRetornoFotos ? "Enviando…" : "Adicionar foto"}
                 </button>
                 <input ref={retornoFotoRef} type="file" accept="image/*" multiple className="hidden" onChange={addRetornoFotos} />
@@ -1031,24 +1031,24 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
             </div>
           )}
 
-          {error && <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
+          {error && <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
         </div>
 
         {/* footer */}
         <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4 rounded-b-[28px]">
-          <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">Fechar</button>
+          <button onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Fechar</button>
           {tab === "obs" && canAct && (
-            <button onClick={registrarObservacao} disabled={saving} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50">
+            <button onClick={registrarObservacao} disabled={saving} className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
               <FaCheckCircle /> {saving ? "Salvando…" : "Salvar observação"}
             </button>
           )}
           {tab === "retorno" && canAct && (
-            <button onClick={registrarRetorno} disabled={saving} className="flex items-center gap-2 rounded-2xl bg-emerald-700 px-5 py-2.5 text-sm font-black text-white hover:bg-emerald-800 disabled:opacity-50">
+            <button onClick={registrarRetorno} disabled={saving} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
               <FaUndoAlt /> {saving ? "Salvando…" : "Confirmar retorno"}
             </button>
           )}
           {tab === "cancelar" && canAct && (
-            <button onClick={cancelar} disabled={saving} className="flex items-center gap-2 rounded-2xl bg-rose-600 px-5 py-2.5 text-sm font-black text-white hover:bg-rose-700 disabled:opacity-50">
+            <button onClick={cancelar} disabled={saving} className="flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
               <FaBan /> {saving ? "Salvando…" : "Cancelar saída"}
             </button>
           )}
@@ -1063,7 +1063,7 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, userInfo }) {
 function InfoField({ label, value, className = "" }) {
   return (
     <div className={className}>
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{label}</p>
       <p className="mt-0.5 text-sm font-semibold text-slate-800">{value || "—"}</p>
     </div>
   );
@@ -1123,7 +1123,7 @@ export default function SuprimentosServicoExterno() {
         title="Serviço Externo"
         description=""
         actions={
-          <button onClick={() => setShowNovo(true)} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow hover:bg-blue-700">
+          <button onClick={() => setShowNovo(true)} className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-700">
             <FaPlus /> Nova saída
           </button>
         }
@@ -1141,10 +1141,10 @@ export default function SuprimentosServicoExterno() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2">
             {STATUS_OPTIONS.map((s) => (
-              <button key={s} onClick={() => setStatusFilter(s)} className={`rounded-2xl px-3 py-1.5 text-xs font-black transition ${statusFilter === s ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-100"}`}>{s}</button>
+              <button key={s} onClick={() => setStatusFilter(s)} className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${statusFilter === s ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-100"}`}>{s}</button>
             ))}
           </div>
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
             <FaSearch className="text-slate-400 text-xs" />
             <input className="bg-transparent outline-none text-sm font-semibold text-slate-700 placeholder:text-slate-400 w-44" placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
             {search && <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600"><FaTimesCircle /></button>}
@@ -1154,7 +1154,7 @@ export default function SuprimentosServicoExterno() {
 
       {/* tabela */}
       <Panel>
-        {errorMsg && <div className="mb-4 rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">{errorMsg}</div>}
+        {errorMsg && <div className="mb-4 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700">{errorMsg}</div>}
         {loading ? (
           <div className="py-16 text-center text-sm font-semibold text-slate-400">Carregando…</div>
         ) : filtered.length === 0 ? (
@@ -1163,7 +1163,7 @@ export default function SuprimentosServicoExterno() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs font-black uppercase tracking-widest text-slate-400">
+                <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-widest text-slate-400">
                   <th className="pb-3 text-left pr-4">Nº</th>
                   <th className="pb-3 text-left pr-4">Status</th>
                   <th className="pb-3 text-left pr-4">Terceiro</th>
@@ -1183,7 +1183,7 @@ export default function SuprimentosServicoExterno() {
                       className="border-b border-slate-50 hover:bg-slate-50/60 cursor-pointer"
                       onClick={() => setSelected(r)}
                     >
-                      <td className="py-3 pr-4 font-black text-blue-700">{r.numero_saida}</td>
+                      <td className="py-3 pr-4 font-semibold text-blue-700">{r.numero_saida}</td>
                       <td className="py-3 pr-4"><StatusChip tone={meta.tone}>{meta.label}</StatusChip></td>
                       <td className="py-3 pr-4 font-semibold">{r.terceiro_nome}</td>
                       <td className="py-3 pr-4 text-slate-600 max-w-[180px] truncate">{r.motivo}</td>

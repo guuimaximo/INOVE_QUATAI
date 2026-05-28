@@ -145,7 +145,7 @@ export default function SuprimentosResumo() {
       </section>
 
       {errorMessage ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{errorMessage}</div>
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{errorMessage}</div>
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -163,14 +163,14 @@ export default function SuprimentosResumo() {
               {garantiasRecentes.map((row) => {
                 const meta = deriveGarantiaMeta(row);
                 return (
-                  <div key={row.id} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                  <div key={row.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div>
-                        <p className="text-base font-black text-slate-900">{row.peca}</p>
+                        <p className="text-base font-semibold text-slate-900">{row.peca}</p>
                         <p className="mt-1 text-sm font-semibold text-slate-500">
                           {row.fornecedor} · Prefixo {row.prefixo || "—"} · Falha em {formatDateBR(row.data_falha)}
                         </p>
-                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                           Aberto por {row.aberto_por_nome || "—"} · {formatDateTimeBR(row.created_at)}
                         </p>
                       </div>
@@ -203,11 +203,11 @@ export default function SuprimentosResumo() {
           ) : (
             <div className="space-y-3">
               {alertas.map((item) => (
-                <div key={item.id} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">{item.tipo}</p>
-                      <p className="mt-2 text-sm font-black text-slate-900">{item.titulo}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{item.tipo}</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">{item.titulo}</p>
                       <p className="mt-2 text-sm font-medium leading-6 text-slate-600">{item.texto}</p>
                     </div>
                     <StatusChip label="Atenção" tone={item.tone} />
@@ -235,14 +235,14 @@ export default function SuprimentosResumo() {
                 const meta = deriveTesteMeta(row);
                 const kmRodado = Math.max(Number(row.km_atual || 0) - Number(row.km_inicial || 0), 0);
                 return (
-                  <div key={row.id} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                  <div key={row.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div>
-                        <p className="text-base font-black text-slate-900">{row.nome_teste}</p>
+                        <p className="text-base font-semibold text-slate-900">{row.nome_teste}</p>
                         <p className="mt-1 text-sm font-semibold text-slate-500">
                           {row.peca} · {row.fornecedor} · Prefixo {row.prefixo || "—"}
                         </p>
-                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                           Aberto por {row.aberto_por_nome || "—"} · {formatDateTimeBR(row.created_at)}
                         </p>
                       </div>
@@ -296,7 +296,7 @@ export default function SuprimentosResumo() {
 function MiniInfo({ label, value }) {
   return (
     <div className="rounded-[18px] border border-white bg-white px-3 py-3 shadow-sm">
-      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
       <p className="mt-2 text-sm font-semibold text-slate-800">{value || "—"}</p>
     </div>
   );
@@ -304,16 +304,16 @@ function MiniInfo({ label, value }) {
 
 function PulseCard({ title, lines }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-      <p className="text-sm font-black uppercase tracking-[0.22em] text-slate-500">{title}</p>
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+      <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</p>
       <div className="mt-4 space-y-3">
         {lines.map((line) => (
-          <div key={line.label} className="flex items-center justify-between gap-4 rounded-2xl border border-white bg-white px-3 py-3 shadow-sm">
+          <div key={line.label} className="flex items-center justify-between gap-4 rounded-xl border border-white bg-white px-3 py-3 shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
               <span className="text-sm">{line.icon}</span>
               <span className="text-sm font-semibold">{line.label}</span>
             </div>
-            <span className="text-sm font-black text-slate-900">{line.value}</span>
+            <span className="text-sm font-semibold text-slate-900">{line.value}</span>
           </div>
         ))}
       </div>

@@ -58,12 +58,12 @@ const TONE_MAP = {
 
 export function PageHero({ eyebrow, title, description, actions = null }) {
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-sm">
+    <section className="rounded-xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-3xl">
-          <p className="text-xs font-black uppercase tracking-[0.35em] text-blue-600">{eyebrow}</p>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-blue-900">{title}</h1>
-          {description ? <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">{description}</p> : null}
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-blue-500">{eyebrow}</p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+          {description ? <p className="mt-1.5 max-w-2xl text-sm font-normal leading-6 text-slate-500">{description}</p> : null}
         </div>
 
         {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
@@ -75,14 +75,14 @@ export function PageHero({ eyebrow, title, description, actions = null }) {
 export function KpiCard({ title, value, subtitle, icon, tone = "blue" }) {
   const toneClasses = TONE_MAP[tone]?.card || TONE_MAP.blue.card;
   return (
-    <div className={`rounded-[24px] border bg-gradient-to-br ${toneClasses} p-4 shadow-sm`}>
+    <div className={`rounded-xl border bg-gradient-to-br ${toneClasses} p-4 shadow-sm`}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">{title}</p>
-          <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
-          {subtitle ? <p className="mt-2 text-xs font-semibold text-slate-600">{subtitle}</p> : null}
+          <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">{title}</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
+          {subtitle ? <p className="mt-1.5 text-xs font-normal text-slate-500">{subtitle}</p> : null}
         </div>
-        <div className="rounded-2xl bg-white/70 p-3 text-lg text-slate-700 shadow-sm">{icon}</div>
+        <div className="rounded-xl bg-white/70 p-3 text-lg text-slate-700 shadow-sm">{icon}</div>
       </div>
     </div>
   );
@@ -90,11 +90,11 @@ export function KpiCard({ title, value, subtitle, icon, tone = "blue" }) {
 
 export function Panel({ title, subtitle, actions = null, children, className = "" }) {
   return (
-    <section className={`rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
+    <section className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
       {(title || subtitle || actions) ? (
         <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            {title ? <h2 className="text-lg font-black text-slate-900">{title}</h2> : null}
+            {title ? <h2 className="text-lg font-semibold text-slate-900">{title}</h2> : null}
             {subtitle ? <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p> : null}
           </div>
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -108,7 +108,7 @@ export function Panel({ title, subtitle, actions = null, children, className = "
 export function StatusChip({ label, tone = "slate" }) {
   const chip = TONE_MAP[tone]?.chip || TONE_MAP.slate.chip;
   return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.18em] ${chip}`}>
+    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${chip}`}>
       {label}
     </span>
   );
@@ -125,7 +125,7 @@ export function ActionButton({ children, tone = "slate", className = "", type = 
   return (
     <button
       type={type}
-      className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-black transition ${tones[tone] || tones.slate} ${className}`}
+      className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${tones[tone] || tones.slate} ${className}`}
       {...props}
     >
       {children}
@@ -262,14 +262,12 @@ export function SupplierAutocomplete({
                   event.preventDefault();
                   selectOption(option);
                 }}
-                className="flex w-full items-start gap-3 border-b border-slate-50 px-4 py-3 text-left last:border-0 hover:bg-blue-50"
+                className="flex w-full flex-col gap-0.5 border-b border-slate-50 px-4 py-2.5 text-left last:border-0 hover:bg-blue-50/60"
               >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-slate-900">{option.nome}</p>
-                  <p className="mt-1 truncate text-xs font-semibold text-slate-500">
-                    {[option.cnpj, option.telefone].filter(Boolean).join(" - ") || "Fornecedor cadastrado"}
-                  </p>
-                </div>
+                <p className="truncate text-sm font-medium text-slate-900">{option.nome}</p>
+                <p className="truncate text-[11px] font-normal text-slate-500">
+                  {[option.cnpj, option.telefone].filter(Boolean).join(" · ") || "Fornecedor cadastrado"}
+                </p>
               </button>
             ))
           ) : (
@@ -363,17 +361,14 @@ export function PartAutocomplete({
                   event.preventDefault();
                   selectOption(option);
                 }}
-                className="flex w-full items-start gap-3 border-b border-slate-50 px-4 py-3 text-left last:border-0 hover:bg-blue-50"
+                className="flex w-full flex-col gap-0.5 border-b border-slate-50 px-4 py-2.5 text-left last:border-0 hover:bg-blue-50/60"
               >
-                <span className="mt-0.5 shrink-0 rounded-lg bg-blue-50 px-2 py-0.5 font-mono text-xs font-black text-blue-800">
-                  {option.codigo || "--"}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-slate-900">{option.descricao}</p>
-                  <p className="mt-1 truncate text-xs font-semibold text-slate-500">
-                    {[supplierNameFromPart(option), option.unidade_padrao].filter(Boolean).join(" - ") || "Catalogo"}
-                  </p>
-                </div>
+                <p className="truncate text-sm font-medium text-slate-900">{option.descricao}</p>
+                <p className="truncate text-[11px] font-normal text-slate-500">
+                  <span className="font-mono text-slate-400">{option.codigo || "--"}</span>
+                  {supplierNameFromPart(option) ? ` · ${supplierNameFromPart(option)}` : ""}
+                  {option.unidade_padrao ? ` · ${option.unidade_padrao}` : ""}
+                </p>
               </button>
             ))
           ) : (
@@ -387,11 +382,11 @@ export function PartAutocomplete({
 
 export function EmptyState({ title, subtitle }) {
   return (
-    <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm">
+    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm">
         <FaBoxOpen />
       </div>
-      <p className="mt-4 text-base font-black text-slate-900">{title}</p>
+      <p className="mt-4 text-base font-semibold text-slate-900">{title}</p>
       <p className="mt-2 text-sm font-medium text-slate-500">{subtitle}</p>
     </div>
   );
@@ -402,16 +397,36 @@ export function AttachmentInput({
   onExistingUrlsChange,
   newFiles,
   onNewFilesChange,
-  label = "Anexos",
-  accept = "image/*,video/*",
-  helperText = "Aceita múltiplas fotos e vídeos.",
+  label = "Evidências (Fotos, Vídeos e PDF)",
+  accept = "image/*,video/*,application/pdf",
+  helperText = "",
 }) {
   const fileNames = useMemo(() => (newFiles || []).map((file) => file?.name).filter(Boolean), [newFiles]);
+  const inputRef = useRef(null);
 
   function appendFiles(fileList) {
     const list = Array.from(fileList || []);
     if (list.length === 0) return;
     onNewFilesChange([...(newFiles || []), ...list]);
+  }
+
+  function handlePaste(event) {
+    const items = Array.from(event.clipboardData?.items || []);
+    const pasted = items
+      .filter((item) => item.kind === "file" && String(item.type || "").startsWith("image/"))
+      .map((item) => {
+        const file = item.getAsFile();
+        if (!file) return null;
+        const ext = file.type === "image/png" ? "png" : file.type === "image/jpeg" ? "jpg" : "img";
+        return new File([file], `print_${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`, {
+          type: file.type,
+          lastModified: Date.now(),
+        });
+      })
+      .filter(Boolean);
+    if (!pasted.length) return;
+    event.preventDefault();
+    appendFiles(pasted);
   }
 
   function removeNewFile(index) {
@@ -422,14 +437,24 @@ export function AttachmentInput({
     onExistingUrlsChange((existingUrls || []).filter((_, idx) => idx !== index));
   }
 
+  const total = (existingUrls?.length || 0) + fileNames.length;
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-black text-slate-700">{label}</label>
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-100">
-          <FaPlus />
-          Adicionar arquivos
+      {label ? <p className="text-sm font-medium text-slate-700">{label}</p> : null}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="flex min-h-[120px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center transition hover:border-blue-300 hover:bg-blue-50/40"
+        >
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold text-slate-800">Clique para enviar</span> ou arraste e solte
+          </p>
+          <p className="mt-1 text-xs text-slate-500">PNG, JPG, MP4, MOV ou PDF</p>
           <input
+            ref={inputRef}
             type="file"
             multiple
             accept={accept}
@@ -439,14 +464,28 @@ export function AttachmentInput({
               event.target.value = "";
             }}
           />
-        </label>
+        </button>
+
+        <div
+          role="button"
+          tabIndex={0}
+          onPaste={handlePaste}
+          className="flex min-h-[120px] flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center outline-none transition focus:border-blue-400 focus:bg-blue-50"
+        >
+          <p className="text-sm text-slate-700">Clique aqui e cole seu print.</p>
+          <p className="mt-1 text-xs text-slate-500">Somente imagens do clipboard serão adicionadas.</p>
+        </div>
       </div>
 
       {helperText ? <p className="text-xs font-medium text-slate-500">{helperText}</p> : null}
 
+      {total === 0 ? (
+        <p className="text-xs font-medium text-rose-400">Nenhuma evidência anexada ainda</p>
+      ) : null}
+
       {existingUrls?.length ? (
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Arquivos salvos</p>
+          <p className="text-xs font-medium tracking-wide text-slate-400">Arquivos salvos</p>
           <div className="flex flex-wrap gap-2">
             {existingUrls.map((url, index) => (
               <span key={`${url}-${index}`} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
@@ -463,7 +502,7 @@ export function AttachmentInput({
 
       {fileNames.length ? (
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Novos arquivos</p>
+          <p className="text-xs font-medium tracking-wide text-slate-400">Novos arquivos</p>
           <div className="flex flex-wrap gap-2">
             {fileNames.map((name, index) => (
               <span key={`${name}-${index}`} className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
@@ -503,7 +542,7 @@ export function AttachmentGallery({ urls }) {
               key={`${url}-${index}`}
               type="button"
               onClick={() => setViewerFile({ url, name })}
-              className="group overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-sm"
+              className="group overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-sm"
             >
               {image ? (
                 <>
@@ -515,7 +554,7 @@ export function AttachmentGallery({ urls }) {
                   />
                   <div className="flex items-start justify-between gap-3 p-3">
                     <div className="min-w-0">
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Imagem</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Imagem</p>
                       <p className="mt-2 truncate text-sm font-semibold text-slate-800">{name}</p>
                     </div>
                     <FaDownload className="text-slate-300 transition group-hover:text-slate-500" />
@@ -526,7 +565,7 @@ export function AttachmentGallery({ urls }) {
                   <video src={url} className="h-28 w-full object-cover" muted />
                   <div className="flex items-start justify-between gap-3 p-3">
                     <div className="min-w-0">
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Video</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Video</p>
                       <p className="mt-2 truncate text-sm font-semibold text-slate-800">{name}</p>
                     </div>
                     <FaDownload className="text-slate-300 transition group-hover:text-slate-500" />
@@ -535,7 +574,7 @@ export function AttachmentGallery({ urls }) {
               ) : (
                 <div className="flex items-start justify-between gap-3 p-3">
                   <div className="min-w-0">
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
                       {pdf ? "PDF" : "Arquivo"}
                     </p>
                     <p className="mt-2 truncate text-sm font-semibold text-slate-800">{name}</p>

@@ -1,7 +1,8 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
-import { FaArrowLeft, FaCheck, FaRobot } from "react-icons/fa";
+import { FaArrowLeft, FaCheck, FaRobot, FaTimes } from "react-icons/fa";
+import PullToRefresh from "../../components/PullToRefresh";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
 import {
@@ -45,6 +46,7 @@ export default function SuprimentosContagemDia() {
   const [loading, setLoading] = useState(true);
   const [botJob, setBotJob] = useState(null);
   const [botMsg, setBotMsg] = useState("");
+  const [itemSelecionado, setItemSelecionado] = useState(null);
   const botPollRef = useRef(null);
 
   async function carregar() {
@@ -242,7 +244,9 @@ export default function SuprimentosContagemDia() {
     />
   ) : null;
 
-  return (
+  const isNative = Boolean(Capacitor?.isNativePlatform?.());
+
+  const conteudo = (
     <div className="flex flex-col gap-6 p-6">
       <PageHero
         eyebrow="Suprimentos · Contagem · Lote"
@@ -343,9 +347,11 @@ export default function SuprimentosContagemDia() {
                     ? "bg-rose-50/40 border-rose-200"
                     : "bg-white border-slate-200";
               return (
-                <div
+                <button
                   key={c.id}
-                  className={`grid grid-cols-[1.4fr_0.8fr_0.8fr] items-center gap-2 rounded-xl border px-3 py-3 ${bg}`}
+                  type="button"
+                  onClick={() => setItemSelecionado(c)}
+                  className={`grid w-full grid-cols-[1.4fr_0.8fr_0.8fr] items-center gap-2 rounded-xl border px-3 py-3 text-left active:scale-[0.99] ${bg}`}
                 >
                   <div className="min-w-0">
                     <p className="truncate font-mono text-sm font-semibold text-slate-900">{c.codigo || "—"}</p>
@@ -359,7 +365,7 @@ export default function SuprimentosContagemDia() {
                   <span className="text-right text-sm font-semibold text-slate-700">
                     {conferido ? Number(c.saldo_erp).toLocaleString("pt-BR") : "—"}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -421,5 +427,76 @@ export default function SuprimentosContagemDia() {
         )}
       </Panel>
     </div>
+  );
+
+  return (
+    <>
+      {isNative ? (
+        <PullToRefresh onRefresh={carregar}>{conteudo}</PullToRefresh>
+      ) : (
+        conteudo
+      )}
+
+      {itemSelecionado ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-end justify-center bg-slate-900/60 p-4 sm:items-center"
+          onClick={() => setItemSelecionado(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Detalhe do item</p>
+                <p className="mt-0.5 font-mono text-sm font-semibold text-slate-500">{itemSelecionado.codigo || "—"}</p>
+              </div>
+              <button
+                onClick={() => setItemSelecionado(null)}
+                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"
+              >
+                <FaTimes />
+              </button>
+            </div>
+            <h3 className="text-base font-semibold text-slate-900">{itemSelecionado.descricao || "Sem cadastro"}</h3>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Saldo físico</p>
+                <p className="mt-0.5 font-semibold text-slate-900">{Number(itemSelecionado.quantidade || 0).toLocaleString("pt-BR")} {itemSelecionado.unidade || ""}</p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Saldo virtual (ERP)</p>
+                <p className="mt-0.5 font-semibold text-slate-900">
+                  {itemSelecionado.saldo_erp !== null && itemSelecionado.saldo_erp !== undefined
+                    ? Number(itemSelecionado.saldo_erp).toLocaleString("pt-BR")
+                    : "—"}
+                </p>
+              </div>
+              <div className="col-span-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Divergência</p>
+                <p className="mt-0.5 font-semibold text-slate-900">{diffLabel(itemSelecionado.diferenca)}</p>
+              </div>
+              {itemSelecionado.localizacao ? (
+                <div className="col-span-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Localização</p>
+                  <p className="mt-0.5 font-semibold text-slate-900">{itemSelecionado.localizacao}</p>
+                </div>
+              ) : null}
+              {itemSelecionado.observacao ? (
+                <div className="col-span-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Observação</p>
+                  <p className="mt-0.5 text-slate-700">{itemSelecionado.observacao}</p>
+                </div>
+              ) : null}
+              <div className="col-span-2 text-xs text-slate-500">
+                Contado por <span className="font-semibold text-slate-700">{itemSelecionado.contado_por_nome || "—"}</span>
+                {" · "}
+                {formatDateTimeBR(itemSelecionado.created_at)}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
+import PullToRefresh from "../../components/PullToRefresh";
 import {
   FaBarcode,
   FaCamera,
@@ -503,12 +504,26 @@ export default function SuprimentosContagem() {
     setTimeout(() => setScannerOpen(true), 250);
   }
 
-  function finalizarFluxo() {
+  async function finalizarFluxo() {
+    // Se tem um item parcialmente preenchido (qtd > 0 ou peca selecionada), salva antes
+    const podeSalvarPendente =
+      String(quantidade).trim() !== "" &&
+      !Number.isNaN(Number(quantidade)) &&
+      (peca || naoCadastrado) &&
+      codigo.trim() !== "";
+
+    if (podeSalvarPendente) {
+      try {
+        await salvarContagemFluxo();
+      } catch (_) {
+        /* ignora */
+      }
+    }
+
     setScannerOpen(false);
     setFluxoAtivo(false);
     limparApontamento();
-    // Garantia adicional ao fim da sessão (debounce por lote_id na Edge Function evita re-disparo)
-    if (isNativeShell && itensSessao > 0 && loteId) {
+    if (isNativeShell && (itensSessao > 0 || podeSalvarPendente) && loteId) {
       void dispararDispatchSilencioso("diaria", todayIsoBRT(), loteId);
     }
     setLoteId(null);
@@ -653,6 +668,7 @@ export default function SuprimentosContagem() {
 
   if (isNativeShell) {
     return (
+      <PullToRefresh onRefresh={carregarLotes}>
       <div className="min-h-[calc(100vh-120px)] bg-slate-50 p-4 pb-24">
         <div className="mx-auto flex max-w-md flex-col gap-4">
           <header className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -836,6 +852,7 @@ export default function SuprimentosContagem() {
 
         <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onScan={handleScan} />
       </div>
+      </PullToRefresh>
     );
   }
 

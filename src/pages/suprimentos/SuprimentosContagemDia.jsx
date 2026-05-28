@@ -184,7 +184,8 @@ export default function SuprimentosContagemDia() {
             "X-GitHub-Api-Version": "2022-11-28",
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ ref, inputs: { data_alvo: data } }),
+          // sem inputs: bot pega da fila (job que acabamos de inserir tem data_alvo)
+          body: JSON.stringify({ ref, inputs: {} }),
         }
       );
       if (!r.ok) {

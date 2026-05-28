@@ -186,6 +186,9 @@ export function deriveGarantiaMeta(row) {
   } else if (resultado === "Negada") {
     fase = "Negada";
     tone = "rose";
+  } else if (row?.retorno_fornecedor_em) {
+    fase = `Peça retornada pelo fornecedor em ${formatDateBR(row.retorno_fornecedor_em)}`;
+    tone = "emerald";
   } else if (row?.retirada_fornecedor_em) {
     fase = limiteRetorno
       ? `Aguardando retorno até ${formatDateBR(limiteRetorno)}`

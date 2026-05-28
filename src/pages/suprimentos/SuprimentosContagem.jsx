@@ -904,9 +904,13 @@ export default function SuprimentosContagem() {
             </p>
           </header>
 
-          {!fluxoAtivo ? (
+          {/* Quando o operador esta apontando (fluxoAtivo), so renderiza
+              o formulario na aba Contagem. Trocar de aba esconde o form,
+              mas o estado em memoria e preservado: voltar para "Contagem"
+              continua de onde parou. */}
+          {(!fluxoAtivo || abaAtiva !== "contagem") ? (
             <div className="space-y-3">
-              {abaAtiva === "contagem" && podeIniciar ? (
+              {abaAtiva === "contagem" && podeIniciar && !fluxoAtivo ? (
                 <button
                   type="button"
                   onClick={() => iniciarFluxo("diaria")}
@@ -928,6 +932,22 @@ export default function SuprimentosContagem() {
                   lotesPorTipo={lotesPorTipo}
                   lotesSemanais={lotesSemanais}
                 />
+              ) : null}
+
+              {fluxoAtivo && abaAtiva !== "contagem" ? (
+                <button
+                  type="button"
+                  onClick={() => navigate("/suprimentos/contagem?aba=contagem")}
+                  className="flex w-full items-center justify-between rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-left text-emerald-800 shadow-sm active:scale-[0.99]"
+                >
+                  <span>
+                    <span className="block text-xs font-black uppercase tracking-wider opacity-80">Sessao em andamento</span>
+                    <span className="mt-0.5 block text-sm font-semibold">
+                      {itensSessao} item(ns) salvo(s). Toque para continuar.
+                    </span>
+                  </span>
+                  <FaChevronRight />
+                </button>
               ) : null}
 
               {abaAtiva !== "contagem" && podeVerLotes ? (

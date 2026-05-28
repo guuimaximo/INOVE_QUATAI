@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { FaArrowLeft, FaCheck, FaRobot, FaTimes } from "react-icons/fa";
 import PullToRefresh from "../../components/PullToRefresh";
 import { AuthContext } from "../../context/AuthContext";
@@ -199,6 +200,53 @@ export default function SuprimentosContagemDia() {
     }
   }
 
+  async function notificarConferenciaConcluida(job) {
+    try {
+      const r = job?.resultado_json || {};
+      const total = Number(r.itens_total ?? r.itens_atualizados ?? 0);
+      const corretos = Number(r.itens_corretos ?? 0);
+      const acuracidade =
+        total > 0
+          ? `${Math.round((corretos / total) * 1000) / 10}%`
+          : r.acuracidade != null
+            ? `${r.acuracidade}%`
+            : null;
+      const titulo = "Contagem foi apurada";
+      const corpo = acuracidade
+        ? `Segue resultado: ${acuracidade}`
+        : `Segue resultado: ${r.itens_atualizados ?? "?"} atualizados, ${r.divergencias ?? "?"} divergências.`;
+
+      if (Capacitor?.isNativePlatform?.()) {
+        const perm = await LocalNotifications.checkPermissions();
+        if (perm.display !== "granted") {
+          const req = await LocalNotifications.requestPermissions();
+          if (req.display !== "granted") return;
+        }
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              id: Math.floor(Date.now() / 1000),
+              title: titulo,
+              body: corpo,
+              schedule: { at: new Date(Date.now() + 500) },
+              smallIcon: "ic_stat_icon_config_sample",
+              channelId: "default",
+            },
+          ],
+        });
+      } else if (typeof window !== "undefined" && "Notification" in window) {
+        if (Notification.permission === "default") {
+          await Notification.requestPermission();
+        }
+        if (Notification.permission === "granted") {
+          new Notification(titulo, { body: corpo });
+        }
+      }
+    } catch (err) {
+      console.warn("Falha ao enviar notificacao de conferencia:", err);
+    }
+  }
+
   useEffect(() => {
     if (!botJob || botJob.status === "concluido" || botJob.status === "erro") {
       clearInterval(botPollRef.current);
@@ -216,6 +264,7 @@ export default function SuprimentosContagemDia() {
       if (j.status === "concluido") {
         const r = j.resultado_json || {};
         setBotMsg(`Conferência concluída: ${r.itens_atualizados ?? "?"} atualizados, ${r.divergencias ?? "?"} divergências.`);
+        await notificarConferenciaConcluida(j);
         carregar();
       } else if (j.status === "erro") {
         setBotMsg(`Bot falhou: ${j.erro || "?"}`);

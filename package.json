@@ -24,6 +24,8 @@
     "@capacitor/ios": "^7.4.3",
     "@capacitor/local-notifications": "^7.0.1",
     "@supabase/supabase-js": "^2.45.0",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "chart.js": "^4.4.1",
     "clsx": "^2.1.0",
     "html2canvas": "^1.4.1",

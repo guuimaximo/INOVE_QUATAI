@@ -247,8 +247,16 @@ function FornecedorModal({ initial = null, onClose, onSaved }) {
 function PecaModal({ initial = null, onClose, onSaved }) {
   const [form, setForm] = useState(
     initial
-      ? { ...initial, fornecedor_id: initial.fornecedor_id || "", fornecedor_nome: initial.suprimentos_fornecedores?.nome || "" }
-      : { codigo: "", descricao: "", unidade_padrao: "un", fornecedor_id: "", fornecedor_nome: "", obs: "" }
+      ? {
+          ...initial,
+          fornecedor_id: initial.fornecedor_id || "",
+          fornecedor_nome: initial.suprimentos_fornecedores?.nome || "",
+          localizacao: initial.localizacao || "",
+          estoque_min: initial.estoque_min ?? "",
+          estoque_max: initial.estoque_max ?? "",
+          ref_fabricante: initial.ref_fabricante || "",
+        }
+      : { codigo: "", descricao: "", unidade_padrao: "un", fornecedor_id: "", fornecedor_nome: "", obs: "", localizacao: "", estoque_min: "", estoque_max: "", ref_fabricante: "" }
   );
   const [fOptions, setFOptions] = useState([]);
   const [showFDrop, setShowFDrop] = useState(false);
@@ -280,12 +288,17 @@ function PecaModal({ initial = null, onClose, onSaved }) {
   async function handleSave() {
     if (!form.descricao.trim()) { setError("Informe a descrição da peça."); return; }
     setSaving(true); setError("");
+    const toNum = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
     const payload = {
       codigo: form.codigo?.trim() || null,
       descricao: form.descricao.trim(),
       unidade_padrao: form.unidade_padrao || "un",
       fornecedor_id: form.fornecedor_id || null,
       obs: form.obs || null,
+      localizacao: form.localizacao?.trim() || null,
+      ref_fabricante: form.ref_fabricante?.trim() || null,
+      estoque_min: toNum(form.estoque_min),
+      estoque_max: toNum(form.estoque_max),
     };
     if (payload.codigo) {
       let duplicateQuery = supabase
@@ -334,6 +347,20 @@ function PecaModal({ initial = null, onClose, onSaved }) {
           <Field label="Descrição" required>
             <input className={inputClass} placeholder="Nome completo da peça" value={form.descricao} onChange={(e) => setF("descricao", e.target.value)} />
           </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Localização">
+              <input className={inputClass} placeholder="ex.: A1-03" value={form.localizacao} onChange={(e) => setF("localizacao", e.target.value)} />
+            </Field>
+            <Field label="Ref. Fabricante">
+              <input className={inputClass} placeholder="Código do fabricante" value={form.ref_fabricante} onChange={(e) => setF("ref_fabricante", e.target.value)} />
+            </Field>
+            <Field label="Estoque mínimo">
+              <input className={inputClass} type="number" min="0" step="1" placeholder="0" value={form.estoque_min} onChange={(e) => setF("estoque_min", e.target.value)} />
+            </Field>
+            <Field label="Estoque máximo">
+              <input className={inputClass} type="number" min="0" step="1" placeholder="0" value={form.estoque_max} onChange={(e) => setF("estoque_max", e.target.value)} />
+            </Field>
+          </div>
           <Field label="Fornecedor">
             <div ref={fRef} className="relative">
               <input
@@ -808,7 +835,10 @@ function PecasTab() {
               <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-widest text-slate-400">
                 <th className="px-4 py-3 text-left">Código</th>
                 <th className="px-4 py-3 text-left">Descrição</th>
+                <th className="px-4 py-3 text-left">Localização</th>
                 <th className="px-4 py-3 text-left">Unid.</th>
+                <th className="px-4 py-3 text-right">Mín.</th>
+                <th className="px-4 py-3 text-right">Máx.</th>
                 <th className="px-4 py-3 text-left">Fornecedor</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-center">Ações</th>
@@ -819,7 +849,10 @@ function PecasTab() {
                 <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50/50">
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-500">{p.codigo || "—"}</td>
                   <td className="px-4 py-3 font-semibold">{p.descricao}</td>
+                  <td className="px-4 py-3 text-slate-600">{p.localizacao || "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{p.unidade_padrao}</td>
+                  <td className="px-4 py-3 text-right text-slate-600">{p.estoque_min ?? "—"}</td>
+                  <td className="px-4 py-3 text-right text-slate-600">{p.estoque_max ?? "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{p.suprimentos_fornecedores?.nome || "—"}</td>
                   <td className="px-4 py-3">
                     <StatusChip tone={p.ativo ? "emerald" : "slate"}>{p.ativo ? "Ativo" : "Inativo"}</StatusChip>

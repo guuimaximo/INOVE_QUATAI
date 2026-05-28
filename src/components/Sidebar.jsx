@@ -229,6 +229,7 @@ export default function Sidebar() {
           { path: "/suprimentos/garantias", label: "Garantias", icon: <FaShieldAlt /> },
           { path: "/suprimentos/testes", label: "Testes", icon: <FaFlask /> },
           { path: "/suprimentos/servico-externo", label: "Serviço Externo", icon: <FaTruck /> },
+          { path: "/suprimentos/contagem", label: "Contagem", icon: <FaSearch /> },
         ],
       },
 

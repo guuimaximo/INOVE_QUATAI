@@ -1,0 +1,245 @@
+# bot/bot_diaria.py
+# Worker da conferência diária. Roda no GitHub Actions (cron a cada N min) ou local.
+# Pega o próximo job pendente em suprimentos_bot_jobs, busca o saldo do ERP
+# no dia D, escreve saldo_erp+diferenca em cada linha de suprimentos_contagens
+# daquele dia, marca o job como concluido.
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+import traceback
+from datetime import datetime
+from pathlib import Path
+from typing import Dict
+
+import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from transnet import gerar_estoque_virtual_csv, tratar_estoque_virtual  # noqa: E402
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("[bot] SUPABASE_URL / SUPABASE_SERVICE_KEY ausentes.")
+    # não falha o workflow; só sai sem trabalho.
+    sys.exit(0)
+
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation",
+}
+
+
+def supa_get(path: str, params: dict = None) -> list:
+    r = requests.get(f"{SUPABASE_URL}/rest/v1/{path}", headers=HEADERS, params=params or {}, timeout=60)
+    r.raise_for_status()
+    return r.json()
+
+
+def supa_patch(path: str, params: dict, payload: dict) -> list:
+    r = requests.patch(f"{SUPABASE_URL}/rest/v1/{path}", headers=HEADERS, params=params, json=payload, timeout=60)
+    r.raise_for_status()
+    return r.json() if r.content else []
+
+
+def supa_insert(path: str, payload: dict) -> dict:
+    r = requests.post(f"{SUPABASE_URL}/rest/v1/{path}", headers=HEADERS, json=payload, timeout=60)
+    r.raise_for_status()
+    return r.json()[0] if r.content else {}
+
+
+def proximo_job() -> dict:
+    rows = supa_get(
+        "suprimentos_bot_jobs",
+        {
+            "status": "eq.pendente",
+            "tipo": "eq.conferencia_dia",
+            "order": "created_at.asc",
+            "limit": 1,
+        },
+    )
+    return rows[0] if rows else None
+
+
+def marcar_processando(job_id: str):
+    supa_patch(
+        "suprimentos_bot_jobs",
+        {"id": f"eq.{job_id}"},
+        {"status": "processando", "iniciado_em": datetime.utcnow().isoformat() + "Z"},
+    )
+
+
+def marcar_concluido(job_id: str, resultado: dict):
+    supa_patch(
+        "suprimentos_bot_jobs",
+        {"id": f"eq.{job_id}"},
+        {
+            "status": "concluido",
+            "concluido_em": datetime.utcnow().isoformat() + "Z",
+            "resultado_json": resultado,
+            "erro": None,
+        },
+    )
+
+
+def marcar_erro(job_id: str, msg: str):
+    supa_patch(
+        "suprimentos_bot_jobs",
+        {"id": f"eq.{job_id}"},
+        {
+            "status": "erro",
+            "concluido_em": datetime.utcnow().isoformat() + "Z",
+            "erro": msg[:1000],
+        },
+    )
+
+
+def carregar_contagens_do_dia(data_alvo: str) -> list:
+    inicio = f"{data_alvo}T00:00:00"
+    fim = f"{data_alvo}T23:59:59.999"
+    rows = supa_get(
+        "suprimentos_contagens",
+        {
+            "select": "id,codigo,quantidade,saldo_erp,diferenca",
+            "created_at": f"gte.{inicio}",
+            "and": f"(created_at.lte.{fim})",
+            "order": "created_at.asc",
+            "limit": "10000",
+        },
+    )
+    return rows
+
+
+def baixar_saldos_do_dia(data_alvo_iso: str) -> Dict[str, float]:
+    d = datetime.strptime(data_alvo_iso, "%Y-%m-%d")
+    ddmm = d.strftime("%d%m%Y")
+    nome = f"saldo_{d.strftime('%Y%m%d')}.csv"
+    arq = gerar_estoque_virtual_csv(ddmm, ddmm, nome)
+    df = tratar_estoque_virtual(arq)
+    if "Saldo" not in df.columns:
+        raise RuntimeError("CSV não trouxe coluna 'Saldo'.")
+
+    saldos: Dict[str, float] = {}
+    for _, row in df.iterrows():
+        cod = str(row["Codigo da peça"]).zfill(6)
+        if not cod or cod == "000000":
+            continue
+        saldo = float(row.get("Saldo", 0) or 0)
+        saldos[cod] = saldo
+    return saldos
+
+
+def aplicar_resultado(contagens: list, saldos: Dict[str, float]) -> dict:
+    atualizados = 0
+    divergencias = 0
+    sem_codigo_no_erp = 0
+
+    for c in contagens:
+        cod = str(c.get("codigo") or "").strip()
+        if not cod:
+            continue
+        cod = cod.zfill(6)
+        qtd = float(c.get("quantidade") or 0)
+        if cod not in saldos:
+            sem_codigo_no_erp += 1
+            payload = {"saldo_erp": None, "diferenca": None}
+        else:
+            saldo = saldos[cod]
+            diff = qtd - saldo
+            if abs(diff) > 1e-6:
+                divergencias += 1
+            payload = {"saldo_erp": saldo, "diferenca": diff}
+        supa_patch("suprimentos_contagens", {"id": f"eq.{c['id']}"}, payload)
+        atualizados += 1
+
+    return {
+        "itens_atualizados": atualizados,
+        "divergencias": divergencias,
+        "sem_codigo_no_erp": sem_codigo_no_erp,
+    }
+
+
+def processar_job(job: dict):
+    job_id = job["id"]
+    data_alvo = job["data_alvo"]
+    print(f"[bot] processando job {job_id} data_alvo={data_alvo}")
+    marcar_processando(job_id)
+
+    contagens = carregar_contagens_do_dia(data_alvo)
+    if not contagens:
+        marcar_concluido(job_id, {"itens_atualizados": 0, "divergencias": 0, "msg": "Sem contagens nesse dia."})
+        print("[bot] nada pra processar.")
+        return
+
+    saldos = baixar_saldos_do_dia(data_alvo)
+    resultado = aplicar_resultado(contagens, saldos)
+    resultado["codigos_unicos_no_erp"] = len(saldos)
+    resultado["contagens_processadas"] = len(contagens)
+    marcar_concluido(job_id, resultado)
+    print(f"[bot] concluido: {resultado}")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--loop", action="store_true")
+    parser.add_argument("--interval", type=int, default=10)
+    parser.add_argument("--max-jobs", type=int, default=10, help="Limite de jobs por execução (uso no Actions).")
+    parser.add_argument(
+        "--data-alvo",
+        default="",
+        help="Se informado, cria um job sintético para essa data (YYYY-MM-DD) e processa.",
+    )
+    args = parser.parse_args()
+
+    # Manual trigger via workflow_dispatch: cria o job na hora.
+    if args.data_alvo:
+        try:
+            job = supa_insert(
+                "suprimentos_bot_jobs",
+                {
+                    "tipo": "conferencia_dia",
+                    "data_alvo": args.data_alvo,
+                    "status": "pendente",
+                    "criado_por_nome": "GitHub Actions",
+                },
+            )
+            processar_job(job)
+        except Exception as e:
+            traceback.print_exc()
+            print(f"[bot] erro no dispatch manual: {e}")
+        return
+
+    processados = 0
+    while True:
+        try:
+            job = proximo_job()
+            if job:
+                try:
+                    processar_job(job)
+                except Exception as e:
+                    msg = f"{type(e).__name__}: {e}"
+                    traceback.print_exc()
+                    marcar_erro(job["id"], msg)
+                processados += 1
+                if processados >= args.max_jobs:
+                    print(f"[bot] limite de {args.max_jobs} jobs por execução atingido.")
+                    return
+            elif not args.loop:
+                print("[bot] sem jobs pendentes.")
+                return
+        except Exception:
+            traceback.print_exc()
+
+        if not args.loop:
+            return
+        time.sleep(args.interval)
+
+
+if __name__ == "__main__":
+    main()

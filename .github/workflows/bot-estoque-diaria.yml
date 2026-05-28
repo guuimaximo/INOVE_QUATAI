@@ -1,0 +1,62 @@
+name: Bot Estoque · Conferência Diária
+
+on:
+  # Poll a cada 5 min (mínimo permitido pelo Actions). Pega jobs pendentes
+  # da tabela suprimentos_bot_jobs criados pela app.
+  schedule:
+    - cron: "*/5 * * * *"
+  # Disparo manual pela aba Actions (com data opcional).
+  workflow_dispatch:
+    inputs:
+      data_alvo:
+        description: "Data alvo (YYYY-MM-DD). Vazio = processa fila."
+        required: false
+        default: ""
+
+concurrency:
+  group: bot-diaria
+  cancel-in-progress: false
+
+jobs:
+  conferir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: bot/requirements.txt
+
+      - name: Setup Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Install Python deps
+        working-directory: bot
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run bot diário
+        working-directory: bot
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TRANSNET_URL: ${{ secrets.TRANSNET_URL }}
+          TRANSNET_USER: ${{ secrets.TRANSNET_USER }}
+          TRANSNET_PASSWORD: ${{ secrets.TRANSNET_PASSWORD }}
+          TRANSNET_ALMOXARIFADO: ${{ secrets.TRANSNET_ALMOXARIFADO }}
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+          HEADLESS: "true"
+        run: |
+          if [ -n "${{ github.event.inputs.data_alvo }}" ]; then
+            python bot_diaria.py --data-alvo "${{ github.event.inputs.data_alvo }}"
+          else
+            python bot_diaria.py --max-jobs 5
+          fi

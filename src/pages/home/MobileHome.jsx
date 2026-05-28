@@ -5,10 +5,12 @@ import { FaBoxes, FaClipboardList, FaTools, FaSignOutAlt, FaLock, FaMicrochip } 
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPageKey } from "../../utils/access";
+import { canUseAppResource } from "../../utils/appResources";
 
 const MOBILE_MODULES = [
   {
     key: "pcm_troca_pneus",
+    appResourceKey: "app.pneus.abrir",
     title: "Troca de pneus",
     description: "Audite, troque, gerencie estoque e envie para conserto.",
     path: "/pcm-troca-pneus",
@@ -17,6 +19,7 @@ const MOBILE_MODULES = [
   },
   {
     key: "pcm_controle_fichas",
+    appResourceKey: "app.fichas.abrir",
     title: "Controle de fichas",
     description: "Entregue fichas para o supervisor e acompanhe ate o Transnet.",
     path: "/pcm-controle-fichas",
@@ -25,6 +28,7 @@ const MOBILE_MODULES = [
   },
   {
     key: "embarcados_central",
+    appResourceKey: "app.embarcados.abrir",
     title: "Embarcados",
     description: "Central, movimentacoes e reparos dos equipamentos embarcados.",
     path: "/embarcados-central",
@@ -33,6 +37,7 @@ const MOBILE_MODULES = [
   },
   {
     key: "suprimentos_contagem",
+    appResourceKey: "app.contagem.iniciar",
     title: "Contagem",
     description: "Conte itens, confira lotes e acompanhe apontamentos.",
     path: "/suprimentos/contagem",
@@ -97,7 +102,11 @@ export default function MobileHome() {
         permissaoPerfil = false;
       }
       const fallbackLiberado = hasModuleFallback(user, m.key);
-      return { ...m, permissaoPerfil, fallbackLiberado, liberado: permissaoPerfil || fallbackLiberado };
+      const recursoMobile = m.appResourceKey ? canUseAppResource(user, m.appResourceKey) : false;
+      // O modulo aparece quando o usuario tem permissao na pagina (web/perfil)
+      // OU quando o admin liberou o recurso mobile especifico para ele.
+      const liberado = permissaoPerfil || fallbackLiberado || recursoMobile;
+      return { ...m, permissaoPerfil, fallbackLiberado, recursoMobile, liberado };
     });
   }, [user, profileMap]);
 

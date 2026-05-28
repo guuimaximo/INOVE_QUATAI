@@ -653,9 +653,35 @@ export default function Usuarios() {
     }
   }
 
+  async function garantirNivelRegistrado(nivel) {
+    const nivelLimpo = String(nivel || "").trim();
+    if (!nivelLimpo || nivelLimpo === "Pendente") return;
+    const jaExiste = (profiles || []).some(
+      (p) => normalizeText(p?.nome) === normalizeText(nivelLimpo)
+    );
+    if (jaExiste) return;
+    try {
+      const { error } = await supabase.from("app_niveis_acesso").insert({
+        nome: nivelLimpo,
+        descricao: `Nivel ${nivelLimpo} criado automaticamente ao ser atribuido a um usuario.`,
+        paginas: [],
+        farol_liberado: false,
+        ativo: true,
+        updated_at: new Date().toISOString(),
+      });
+      if (error && error.code !== "23505") {
+        console.warn("Falha ao auto-registrar nivel:", error.message);
+      }
+    } catch (err) {
+      console.warn("Erro ao auto-registrar nivel:", err);
+    }
+  }
+
   async function atualizarNivel(id, nivel) {
     setSavingId(id);
     setFeedback(null);
+
+    await garantirNivelRegistrado(nivel);
 
     const { error } = await supabase
       .from("usuarios_aprovadores")

@@ -136,10 +136,12 @@ export default function SuprimentosContagem() {
 
   const [codigo, setCodigo] = useState("");
   const [peca, setPeca] = useState(null);
+  const [naoCadastrado, setNaoCadastrado] = useState(false);
   const [quantidade, setQuantidade] = useState("");
   const [observacao, setObservacao] = useState("");
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState("");
+  const [aviso, setAviso] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const [contagens, setContagens] = useState([]);
@@ -164,8 +166,8 @@ export default function SuprimentosContagem() {
 
   async function buscarPeca(codigoBusca) {
     const c = String(codigoBusca || "").trim();
-    if (!c) { setPeca(null); return; }
-    setBusy(true); setErro("");
+    if (!c) { setPeca(null); setNaoCadastrado(false); return; }
+    setBusy(true); setErro(""); setAviso("");
     const { data, error } = await supabase
       .from("suprimentos_pecas")
       .select("id, codigo, descricao, unidade_padrao, localizacao, estoque_min, estoque_max, saldo_erp")
@@ -173,29 +175,43 @@ export default function SuprimentosContagem() {
       .limit(1)
       .maybeSingle();
     setBusy(false);
-    if (error) { setErro(error.message); setPeca(null); return; }
-    if (!data) { setErro(`Código ${c} não encontrado no catálogo.`); setPeca(null); return; }
+    if (error) { setErro(error.message); setPeca(null); setNaoCadastrado(false); return; }
+    if (!data) {
+      // Sem cadastro — deixa contar do mesmo jeito, marca para a central
+      setPeca(null);
+      setNaoCadastrado(true);
+      setAviso(`Código ${c} não está na base. Pode contar mesmo assim — vai aparecer na central como pendente de cadastro.`);
+      setTimeout(() => qtdInputRef.current?.focus(), 50);
+      return;
+    }
     setPeca(data);
+    setNaoCadastrado(false);
     setTimeout(() => qtdInputRef.current?.focus(), 50);
   }
 
   async function salvarContagem() {
-    if (!peca) { setErro("Selecione uma peça primeiro."); return; }
+    const codigoTrim = codigo.trim();
+    if (!peca && !naoCadastrado) {
+      // se o usuário só digitou e nem buscou ainda, tenta resolver agora
+      if (codigoTrim) await buscarPeca(codigoTrim);
+    }
+    if (!codigoTrim) { setErro("Informe o código contado."); return; }
     if (quantidade === "" || Number.isNaN(Number(quantidade))) {
       setErro("Informe uma quantidade válida.");
       return;
     }
     setBusy(true); setErro("");
     const qtd = Number(quantidade);
-    const diff = peca.saldo_erp !== null && peca.saldo_erp !== undefined ? qtd - Number(peca.saldo_erp) : null;
+    const saldoErp = peca?.saldo_erp ?? null;
+    const diff = saldoErp !== null && saldoErp !== undefined ? qtd - Number(saldoErp) : null;
     const payload = {
-      peca_id: peca.id,
-      codigo: peca.codigo,
-      descricao: peca.descricao,
-      localizacao: peca.localizacao,
-      unidade: peca.unidade_padrao,
+      peca_id: peca?.id || null,
+      codigo: peca?.codigo || codigoTrim,
+      descricao: peca?.descricao || "Sem cadastro",
+      localizacao: peca?.localizacao || null,
+      unidade: peca?.unidade_padrao || null,
       quantidade: qtd,
-      saldo_erp: peca.saldo_erp,
+      saldo_erp: saldoErp,
       diferenca: diff,
       observacao: observacao.trim() || null,
       contado_por_id: userInfo.id,
@@ -207,8 +223,10 @@ export default function SuprimentosContagem() {
     if (error) { setErro(error.message); return; }
     setCodigo("");
     setPeca(null);
+    setNaoCadastrado(false);
     setQuantidade("");
     setObservacao("");
+    setAviso("");
     setTimeout(() => codigoInputRef.current?.focus(), 50);
     carregarContagens();
   }
@@ -239,8 +257,12 @@ export default function SuprimentosContagem() {
     const hoje = new Date().toDateString();
     const hojeCount = contagens.filter((c) => new Date(c.created_at).toDateString() === hoje).length;
     const divergencia = contagens.filter((c) => c.diferenca !== null && Number(c.diferenca) !== 0).length;
-    return { total, hojeCount, divergencia };
+    const semCadastro = contagens.filter((c) => !c.peca_id).length;
+    return { total, hojeCount, divergencia, semCadastro };
   }, [contagens]);
+
+  const [filtroPendentes, setFiltroPendentes] = useState(false);
+  const visiveis = useMemo(() => filtroPendentes ? filtered.filter((c) => !c.peca_id) : filtered, [filtered, filtroPendentes]);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -255,10 +277,11 @@ export default function SuprimentosContagem() {
         }
       />
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="Contagens totais" value={kpis.total} subtitle="Registradas no histórico" icon={<FaBarcode />} tone="blue" />
         <KpiCard title="Contadas hoje" value={kpis.hojeCount} subtitle="Itens apontados nas últimas 24h" icon={<FaCheck />} tone="cyan" />
         <KpiCard title="Com divergência" value={kpis.divergencia} subtitle="Quantidade diferente do ERP" icon={<FaRedo />} tone="amber" />
+        <KpiCard title="Sem cadastro" value={kpis.semCadastro} subtitle="Códigos contados que não estão na base" icon={<FaTimes />} tone="rose" />
       </section>
 
       <Panel title="Registrar contagem" subtitle="Cada apontamento gera um registro independente, sem alterar nada do que já existe.">
@@ -296,7 +319,7 @@ export default function SuprimentosContagem() {
           <Field label="Peça">
             <input
               className={inputClass}
-              value={peca?.descricao || ""}
+              value={peca?.descricao || (naoCadastrado ? "Sem cadastro (será apontado na central)" : "")}
               placeholder="Aguardando código..."
               readOnly
             />
@@ -313,7 +336,7 @@ export default function SuprimentosContagem() {
               value={quantidade}
               onChange={(e) => setQuantidade(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarContagem(); } }}
-              disabled={!peca}
+              disabled={!peca && !naoCadastrado}
             />
           </Field>
 
@@ -352,39 +375,51 @@ export default function SuprimentosContagem() {
           </div>
         ) : null}
 
+        {aviso ? (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700">{aviso}</p>
+        ) : null}
         {erro ? (
           <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">{erro}</p>
         ) : null}
 
         <div className="mt-4 flex flex-wrap justify-end gap-3">
-          <ActionButton onClick={() => { setCodigo(""); setPeca(null); setQuantidade(""); setObservacao(""); setErro(""); }}>
+          <ActionButton onClick={() => { setCodigo(""); setPeca(null); setNaoCadastrado(false); setQuantidade(""); setObservacao(""); setErro(""); setAviso(""); }}>
             Limpar
           </ActionButton>
-          <ActionButton tone="emerald" onClick={salvarContagem} disabled={busy || !peca || quantidade === ""}>
+          <ActionButton tone="emerald" onClick={salvarContagem} disabled={busy || quantidade === "" || (!peca && !naoCadastrado)}>
             <FaCheck /> Salvar contagem
           </ActionButton>
         </div>
       </Panel>
 
       <Panel
-        title="Histórico de contagens"
-        subtitle="Últimos 200 apontamentos."
+        title="Central de contagens"
+        subtitle="Últimos 200 apontamentos. Itens sem cadastro ficam destacados para tratamento."
         actions={
-          <label className="relative block w-full sm:w-72">
-            <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar código, peça, usuário..."
-              className={`${inputClass} pl-11`}
-            />
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFiltroPendentes((v) => !v)}
+              className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${filtroPendentes ? "border-rose-300 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}
+            >
+              {filtroPendentes ? "Mostrando só sem cadastro" : "Filtrar sem cadastro"}
+            </button>
+            <label className="relative block w-full sm:w-72">
+              <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar código, peça, usuário..."
+                className={`${inputClass} pl-11`}
+              />
+            </label>
+          </div>
         }
       >
         {loadingHist ? (
           <p className="py-12 text-center text-sm font-semibold text-slate-400">Carregando histórico...</p>
-        ) : filtered.length === 0 ? (
-          <EmptyState title="Sem contagens" subtitle="Aponte o primeiro código de barras para começar." />
+        ) : visiveis.length === 0 ? (
+          <EmptyState title="Sem contagens" subtitle={filtroPendentes ? "Nada pendente — todas as contagens estão com cadastro." : "Aponte o primeiro código de barras para começar."} />
         ) : (
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <table className="min-w-full text-sm">
@@ -402,11 +437,18 @@ export default function SuprimentosContagem() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c) => (
-                  <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                {visiveis.map((c) => (
+                  <tr key={c.id} className={`border-t border-slate-100 hover:bg-slate-50/60 ${!c.peca_id ? "bg-rose-50/40" : ""}`}>
                     <td className="px-4 py-3 text-xs font-medium text-slate-500">{formatDateTimeBR(c.created_at)}</td>
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{c.codigo || "—"}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-900">{c.descricao || "—"}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-900">{c.descricao || "—"}</p>
+                      {!c.peca_id ? (
+                        <span className="mt-1 inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700">
+                          Sem cadastro
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3 text-slate-600">{c.localizacao || "—"}</td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-900">
                       {Number(c.quantidade || 0).toLocaleString("pt-BR")} {c.unidade || ""}

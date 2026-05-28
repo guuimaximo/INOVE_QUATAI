@@ -4,7 +4,6 @@ import { FaBoxes, FaClipboardList, FaTools, FaSignOutAlt, FaMicrochip } from "re
 
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
-import { canUserAccessPageKey } from "../../utils/access";
 import { canUseAppResource } from "../../utils/appResources";
 
 const MOBILE_MODULES = [
@@ -53,54 +52,28 @@ function normalizeAccessText(value) {
     .toLowerCase();
 }
 
-function userPages(user) {
-  return Array.isArray(user?.paginas_liberadas) ? user.paginas_liberadas.map((p) => String(p)) : [];
-}
-
-function hasModuleFallback(user, moduleKey) {
-  try {
-    const nivel = normalizeAccessText(user?.nivel);
-    const paginas = userPages(user);
-    const isGestao = ["gestor", "administrador", "admin"].some((n) => nivel.includes(n));
-
-    if (isGestao) {
-      return true;
-    }
-
-  } catch {
-    /* ignore */
-  }
-  return false;
-}
-
 export default function MobileHome() {
   const { user, logout } = useContext(AuthContext) || {};
-  let profileMap = {};
   let accessLoading = false;
   try {
     const acc = useAccessGovernance();
-    profileMap = acc?.profileMap || {};
     accessLoading = !!acc?.loading;
   } catch {
     /* ignore: provider missing */
   }
 
+  const nivelNorm = normalizeAccessText(user?.nivel);
+  const isAdmin = nivelNorm === "administrador" || nivelNorm === "admin";
+
   const liberacoes = useMemo(() => {
     return MOBILE_MODULES.map((m) => {
-      let permissaoPerfil = false;
-      try {
-        permissaoPerfil = canUserAccessPageKey(user, m.key, profileMap);
-      } catch {
-        permissaoPerfil = false;
-      }
-      const fallbackLiberado = hasModuleFallback(user, m.key);
+      // No mobile a regra e simples: o admin libera no toggle do modal.
+      // Administrador ve tudo automaticamente.
       const recursoMobile = m.appResourceKey ? canUseAppResource(user, m.appResourceKey) : false;
-      // O modulo aparece quando o usuario tem permissao na pagina (web/perfil)
-      // OU quando o admin liberou o recurso mobile especifico para ele.
-      const liberado = permissaoPerfil || fallbackLiberado || recursoMobile;
-      return { ...m, permissaoPerfil, fallbackLiberado, recursoMobile, liberado };
+      const liberado = isAdmin || recursoMobile;
+      return { ...m, recursoMobile, liberado };
     });
-  }, [user, profileMap]);
+  }, [user, isAdmin]);
 
   const algumLiberado = liberacoes.some((m) => m.liberado);
   const fallbackAtivo = liberacoes.some((m) => m.fallbackLiberado && !m.permissaoPerfil);

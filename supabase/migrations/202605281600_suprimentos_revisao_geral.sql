@@ -27,7 +27,9 @@ begin
 end $$;
 
 create index if not exists supcontagens_tipo_idx on public.suprimentos_contagens (tipo_contagem);
-create index if not exists supcontagens_data_idx on public.suprimentos_contagens ((created_at::date) desc);
+-- created_at::date depende do timezone (não é IMMUTABLE), então indexamos só a timestamp
+create index if not exists supcontagens_created_at_tipo_idx
+  on public.suprimentos_contagens (created_at desc, tipo_contagem);
 
 -- ─── suprimentos_servico_externo ───────────────────────────
 -- usadas no código (aba "Retorno" -> aprovado + valor aprovado)

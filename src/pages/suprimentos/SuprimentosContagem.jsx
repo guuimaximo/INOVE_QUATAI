@@ -372,6 +372,7 @@ export default function SuprimentosContagem() {
       contado_por_id: userInfo.id,
       contado_por_login: userInfo.login,
       contado_por_nome: userInfo.nome,
+      origem: (typeof Capacitor !== "undefined" && Capacitor?.isNativePlatform?.()) ? "mobile" : "web",
     };
     const { error } = await supabase.from("suprimentos_contagens").insert(payload);
     setBusy(false);
@@ -440,17 +441,18 @@ export default function SuprimentosContagem() {
     buscarPeca(text);
   }
 
-  // ─── Lotes (Diária = dia / Semanal = par de domingos) ─────
+  // ─── Lotes (Diária / Lubrificantes = por dia ; Semanal = auditorias) ──
   const [tab, setTab] = useState("diaria");
-  const [lotesDiarios, setLotesDiarios] = useState([]);
+  const [lotesPorTipo, setLotesPorTipo] = useState({ diaria: [], lubrificantes: [] });
   const [lotesSemanais, setLotesSemanais] = useState([]);
   const [loadingLotes, setLoadingLotes] = useState(true);
+  const lotesDiarios = lotesPorTipo.diaria;
 
   async function carregarLotes() {
     setLoadingLotes(true);
     const [contagensRes, auditoriasRes] = await Promise.all([
       supabase.from("suprimentos_contagens")
-        .select("id,codigo,quantidade,saldo_erp,diferenca,peca_id,created_at,contado_por_nome")
+        .select("id,codigo,quantidade,saldo_erp,diferenca,peca_id,created_at,contado_por_nome,tipo_contagem")
         .order("created_at", { ascending: false })
         .limit(5000),
       supabase.from("suprimentos_auditorias")
@@ -462,22 +464,43 @@ export default function SuprimentosContagem() {
     const contagens = contagensRes.data || [];
     setLotesSemanais(auditoriasRes.data || []);
 
-    // Agrupa por dia (YYYY-MM-DD em BRT — usando created_at)
-    const byDay = new Map();
+    // Agrupa por (tipo, dia)
+    const buckets = { diaria: new Map(), lubrificantes: new Map() };
     contagens.forEach((c) => {
+      const tipo = (c.tipo_contagem || "diaria").toLowerCase();
+      if (tipo === "semanal") return; // semanais saem em outro lugar
+      const byDay = buckets[tipo] || buckets.diaria;
       const d = new Date(c.created_at);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const cur = byDay.get(key) || { data: key, total: 0, divergencias: 0, sem_cadastro: 0, sem_conferir: 0, contadores: new Set() };
+      const cur = byDay.get(key) || { data: key, tipo, total: 0, corretos: 0, divergencias: 0, sem_cadastro: 0, sem_conferir: 0, conferidos: 0, contadores: new Set() };
       cur.total += 1;
-      if (!c.peca_id) cur.sem_cadastro += 1;
-      if (c.saldo_erp === null || c.saldo_erp === undefined) cur.sem_conferir += 1;
-      else if (Number(c.diferenca) !== 0) cur.divergencias += 1;
+      const semCad = !c.peca_id;
+      const conferido = c.saldo_erp !== null && c.saldo_erp !== undefined;
+      if (semCad) cur.sem_cadastro += 1;
+      if (!conferido) cur.sem_conferir += 1;
+      else {
+        cur.conferidos += 1;
+        if (Number(c.diferenca || 0) === 0) cur.corretos += 1;
+        else cur.divergencias += 1;
+      }
       if (c.contado_por_nome) cur.contadores.add(c.contado_por_nome);
       byDay.set(key, cur);
     });
-    const lotes = Array.from(byDay.values()).map((l) => ({ ...l, contadores: Array.from(l.contadores) }));
-    lotes.sort((a, b) => (a.data < b.data ? 1 : -1));
-    setLotesDiarios(lotes);
+
+    function finaliza(map) {
+      const arr = Array.from(map.values()).map((l) => ({
+        ...l,
+        contadores: Array.from(l.contadores),
+        acuracidade: l.conferidos > 0 ? Math.round((l.corretos / l.conferidos) * 1000) / 10 : null,
+      }));
+      arr.sort((a, b) => (a.data < b.data ? 1 : -1));
+      return arr.slice(0, 10); // últimos 10 lotes
+    }
+
+    setLotesPorTipo({
+      diaria: finaliza(buckets.diaria),
+      lubrificantes: finaliza(buckets.lubrificantes),
+    });
     setLoadingLotes(false);
   }
 
@@ -784,12 +807,13 @@ export default function SuprimentosContagem() {
 
       <Panel
         title="Lotes de contagem"
-        subtitle="Cada lote agrupa as contagens daquele período. Clique para ver o detalhe."
+        subtitle="Mostrando os últimos 10 lotes por tipo. Clique para abrir."
         actions={
           <div className="flex gap-2">
             {[
-              { key: "diaria", label: "Diária" },
-              { key: "semanal", label: "Semanal" },
+              { key: "diaria", label: "Contagem Diária" },
+              { key: "semanal", label: "Contagem Semanal" },
+              { key: "lubrificantes", label: "Lubrificantes" },
             ].map((t) => (
               <button
                 key={t.key}
@@ -804,40 +828,52 @@ export default function SuprimentosContagem() {
       >
         {loadingLotes ? (
           <p className="py-12 text-center text-sm font-semibold text-slate-400">Carregando...</p>
-        ) : tab === "diaria" ? (
-          lotesDiarios.length === 0 ? (
-            <EmptyState title="Sem lotes diários" subtitle="Faça a primeira contagem para abrir um lote." />
+        ) : (tab === "diaria" || tab === "lubrificantes") ? (
+          (lotesPorTipo[tab] || []).length === 0 ? (
+            <EmptyState
+              title={tab === "lubrificantes" ? "Sem lotes de lubrificantes" : "Sem lotes diários"}
+              subtitle="Faça a primeira contagem desse tipo para abrir um lote."
+            />
           ) : (
             <div className="overflow-hidden rounded-xl border border-slate-200">
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     <th className="px-4 py-3">Data</th>
-                    <th className="px-4 py-3 text-right">Itens contados</th>
+                    <th className="px-4 py-3 text-right">Itens</th>
+                    <th className="px-4 py-3 text-right">Conferidos</th>
+                    <th className="px-4 py-3 text-right">Acuracidade</th>
                     <th className="px-4 py-3 text-right">Divergências</th>
                     <th className="px-4 py-3 text-right">Sem cadastro</th>
-                    <th className="px-4 py-3 text-right">Pendentes</th>
                     <th className="px-4 py-3">Contadores</th>
                     <th className="px-4 py-3 text-right"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {lotesDiarios.map((l) => (
+                  {(lotesPorTipo[tab] || []).map((l) => (
                     <tr
-                      key={l.data}
+                      key={`${tab}-${l.data}`}
                       onClick={() => navigate(`/suprimentos/contagem/dia/${l.data}`)}
                       className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60"
                     >
                       <td className="px-4 py-3 font-semibold text-slate-900">{formatDateBR(l.data)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-700">{l.total}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{l.conferidos}</td>
+                      <td className="px-4 py-3 text-right">
+                        {l.acuracidade === null ? (
+                          <span className="text-slate-400">—</span>
+                        ) : (
+                          <StatusChip
+                            label={`${l.acuracidade}%`}
+                            tone={l.acuracidade >= 95 ? "emerald" : l.acuracidade >= 80 ? "amber" : "rose"}
+                          />
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         {l.divergencias > 0 ? <StatusChip label={String(l.divergencias)} tone="amber" /> : <span className="text-slate-400">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {l.sem_cadastro > 0 ? <StatusChip label={String(l.sem_cadastro)} tone="rose" /> : <span className="text-slate-400">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {l.sem_conferir > 0 ? <StatusChip label={String(l.sem_conferir)} tone="slate" /> : <StatusChip label="Conferido" tone="emerald" />}
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
                         {l.contadores.slice(0, 3).join(", ")}{l.contadores.length > 3 ? ` +${l.contadores.length - 3}` : ""}

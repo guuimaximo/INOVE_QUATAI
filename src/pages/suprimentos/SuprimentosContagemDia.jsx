@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FaArrowLeft, FaCheck, FaRobot, FaTrashAlt } from "react-icons/fa";
+import { FaArrowLeft, FaCheck, FaRobot } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
 import {
@@ -121,18 +121,14 @@ export default function SuprimentosContagemDia() {
     return () => clearInterval(botPollRef.current);
   }, [botJob?.id, botJob?.status]);
 
-  async function excluir(id) {
-    if (!window.confirm("Remover esta contagem?")) return;
-    await supabase.from("suprimentos_contagens").delete().eq("id", id);
-    carregar();
-  }
-
   const kpis = useMemo(() => {
     const total = contagens.length;
-    const divergencias = contagens.filter((c) => c.diferenca !== null && Number(c.diferenca) !== 0).length;
     const conferidos = contagens.filter((c) => c.saldo_erp !== null && c.saldo_erp !== undefined).length;
+    const corretos = contagens.filter((c) => c.saldo_erp !== null && c.saldo_erp !== undefined && Number(c.diferenca || 0) === 0).length;
+    const divergencias = conferidos - corretos;
     const sem_cadastro = contagens.filter((c) => !c.peca_id).length;
-    return { total, divergencias, conferidos, sem_cadastro };
+    const acuracidade = conferidos > 0 ? Math.round((corretos / conferidos) * 1000) / 10 : null;
+    return { total, divergencias, conferidos, sem_cadastro, corretos, acuracidade };
   }, [contagens]);
 
   const botStatusChip = botJob ? (
@@ -161,9 +157,9 @@ export default function SuprimentosContagemDia() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="Itens contados" value={kpis.total} subtitle="No lote" icon={<FaCheck />} tone="blue" />
-        <KpiCard title="Conferidos com ERP" value={kpis.conferidos} subtitle="Já com saldo_erp" icon={<FaCheck />} tone="cyan" />
+        <KpiCard title="Conferidos" value={kpis.conferidos} subtitle={`${kpis.sem_cadastro} sem cadastro fora da acurácia`} icon={<FaCheck />} tone="cyan" />
         <KpiCard title="Divergências" value={kpis.divergencias} subtitle="Qtd diferente do ERP" icon={<FaCheck />} tone="amber" />
-        <KpiCard title="Sem cadastro" value={kpis.sem_cadastro} subtitle="Códigos pendentes" icon={<FaCheck />} tone="rose" />
+        <KpiCard title="Acuracidade" value={kpis.acuracidade !== null ? `${kpis.acuracidade}%` : "—"} subtitle="Corretos / Conferidos" icon={<FaCheck />} tone="emerald" />
       </section>
 
       <Panel
@@ -207,7 +203,7 @@ export default function SuprimentosContagemDia() {
                   <th className="px-4 py-3 text-right">Saldo ERP</th>
                   <th className="px-4 py-3">Divergência</th>
                   <th className="px-4 py-3">Contado por</th>
-                  <th className="px-4 py-3 text-right"></th>
+                  <th className="px-4 py-3">Origem</th>
                 </tr>
               </thead>
               <tbody>
@@ -234,10 +230,14 @@ export default function SuprimentosContagemDia() {
                       <StatusChip label={diffLabel(c.diferenca)} tone={diffTone(c.diferenca)} />
                     </td>
                     <td className="px-4 py-3 text-slate-700">{c.contado_por_nome || "—"}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => excluir(c.id)} className="rounded-xl p-2 text-rose-500 hover:bg-rose-50" title="Remover">
-                        <FaTrashAlt />
-                      </button>
+                    <td className="px-4 py-3">
+                      {c.origem === "mobile" ? (
+                        <StatusChip label="Mobile" tone="cyan" />
+                      ) : c.origem === "web" ? (
+                        <StatusChip label="Web" tone="slate" />
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

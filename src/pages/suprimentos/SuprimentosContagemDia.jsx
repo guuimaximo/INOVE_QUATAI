@@ -28,8 +28,9 @@ function diffLabel(diff) {
 }
 
 export default function SuprimentosContagemDia() {
-  const { data } = useParams(); // YYYY-MM-DD
+  const { data: dataParam, loteId } = useParams(); // YYYY-MM-DD ou uuid do lote
   const navigate = useNavigate();
+  const [data, setData] = useState(dataParam || "");
   const { user } = useContext(AuthContext);
   const userInfo = useMemo(() => ({
     id: Number(user?.usuario_id || user?.id || 0) || null,
@@ -48,33 +49,61 @@ export default function SuprimentosContagemDia() {
 
   async function carregar() {
     setLoading(true);
-    const inicio = `${data}T00:00:00`;
-    const fim = `${data}T23:59:59.999`;
-    const { data: rows } = await supabase
-      .from("suprimentos_contagens")
-      .select("*")
-      .gte("created_at", inicio)
-      .lte("created_at", fim)
-      .order("created_at", { ascending: false });
-    setContagens(rows || []);
+    let rows = [];
+    let dataAlvo = data;
 
-    // Pega o último job daquele dia
-    const { data: jobs } = await supabase
-      .from("suprimentos_bot_jobs")
-      .select("*")
-      .eq("data_alvo", data)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    setBotJob(jobs?.[0] || null);
+    if (loteId) {
+      // Filtra por lote_id
+      const res = await supabase
+        .from("suprimentos_contagens")
+        .select("*")
+        .eq("lote_id", loteId)
+        .order("created_at", { ascending: false });
+      rows = res.data || [];
+      // descobre a data_alvo a partir da primeira contagem
+      if (rows.length > 0) {
+        const d = new Date(rows[rows.length - 1].created_at);
+        dataAlvo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        setData(dataAlvo);
+      }
+    } else if (data) {
+      const inicio = `${data}T00:00:00`;
+      const fim = `${data}T23:59:59.999`;
+      const res = await supabase
+        .from("suprimentos_contagens")
+        .select("*")
+        .gte("created_at", inicio)
+        .lte("created_at", fim)
+        .order("created_at", { ascending: false });
+      rows = res.data || [];
+    }
+    setContagens(rows);
+
+    // Pega o último job (por lote_id se houver, senão por data_alvo)
+    let jobRes;
+    if (loteId) {
+      jobRes = await supabase
+        .from("suprimentos_bot_jobs")
+        .select("*")
+        .eq("lote_id", loteId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+    } else if (dataAlvo) {
+      jobRes = await supabase
+        .from("suprimentos_bot_jobs")
+        .select("*")
+        .eq("data_alvo", dataAlvo)
+        .order("created_at", { ascending: false })
+        .limit(1);
+    }
+    setBotJob(jobRes?.data?.[0] || null);
     setLoading(false);
   }
-  useEffect(() => { carregar(); }, [data]);
+  useEffect(() => { carregar(); }, [data, loteId]);
 
-  // Auto-refresh em tempo real (Realtime) — sem precisar sair e voltar.
+  // Auto-refresh em tempo real (Realtime).
   useEffect(() => {
-    if (!data) return;
-    const inicio = `${data}T00:00:00`;
-    const fim = `${data}T23:59:59.999`;
+    if (!data && !loteId) return;
     let recarregando = false;
     const debounceRecarregar = () => {
       if (recarregando) return;
@@ -82,9 +111,22 @@ export default function SuprimentosContagemDia() {
       setTimeout(() => { recarregando = false; carregar(); }, 600);
     };
 
-    const channel = supabase
-      .channel(`contagem-dia-${data}`)
-      .on(
+    const channel = supabase.channel(`contagem-lote-${loteId || data}`);
+
+    if (loteId) {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_contagens", filter: `lote_id=eq.${loteId}` },
+        () => debounceRecarregar()
+      ).on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_bot_jobs", filter: `lote_id=eq.${loteId}` },
+        () => debounceRecarregar()
+      );
+    } else {
+      const inicio = `${data}T00:00:00`;
+      const fim = `${data}T23:59:59.999`;
+      channel.on(
         "postgres_changes",
         { event: "*", schema: "public", table: "suprimentos_contagens" },
         (payload) => {
@@ -92,16 +134,16 @@ export default function SuprimentosContagemDia() {
           const ts = row.created_at;
           if (!ts || (ts >= inicio && ts <= fim)) debounceRecarregar();
         }
-      )
-      .on(
+      ).on(
         "postgres_changes",
         { event: "*", schema: "public", table: "suprimentos_bot_jobs", filter: `data_alvo=eq.${data}` },
         () => debounceRecarregar()
-      )
-      .subscribe();
+      );
+    }
 
+    channel.subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [data]);
+  }, [data, loteId]);
 
   async function dispararConferencia() {
     setBotMsg("");
@@ -204,8 +246,10 @@ export default function SuprimentosContagemDia() {
     <div className="flex flex-col gap-6 p-6">
       <PageHero
         eyebrow="Suprimentos · Contagem · Lote"
-        title={`Contagens de ${formatDateBR(data)}`}
-        description={`Todas as contagens feitas no dia ${formatDateBR(data)}.`}
+        title={loteId ? `Lote ${String(loteId).slice(0, 8)}` : `Contagens de ${formatDateBR(data)}`}
+        description={loteId
+          ? `Sessão de contagem ${String(loteId).slice(0, 8)} (${formatDateBR(data)}).`
+          : `Todas as contagens feitas no dia ${formatDateBR(data)}.`}
         actions={
           <ActionButton onClick={() => navigate("/suprimentos/contagem")}>
             <FaArrowLeft /> Voltar

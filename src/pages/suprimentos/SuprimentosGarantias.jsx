@@ -110,6 +110,51 @@ function SectionBlock({ title, children, className = "" }) {
   );
 }
 
+function FlowStepCard({ title, date, tone, pendingLabel, actionLabel, onAction, editing, onDateChange, children }) {
+  const activeClass = tone === "emerald"
+    ? "border-emerald-200 bg-emerald-50"
+    : tone === "amber"
+      ? "border-amber-200 bg-amber-50"
+      : "border-slate-200 bg-slate-50";
+  const chipClass = date
+    ? tone === "emerald"
+      ? "bg-emerald-100 text-emerald-800"
+      : "bg-amber-100 text-amber-800"
+    : "bg-white text-slate-500";
+
+  return (
+    <div className={`rounded-2xl border p-4 ${activeClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">{title}</p>
+          <p className="mt-2 text-sm font-black text-slate-950">
+            {date ? formatDateBR(date) : pendingLabel}
+          </p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-[11px] font-black uppercase ${chipClass}`}>
+          {date ? "Registrado" : "Pendente"}
+        </span>
+      </div>
+      {children ? <div className="mt-3 text-xs font-semibold text-slate-600">{children}</div> : null}
+      {editing ? (
+        <input
+          type="date"
+          value={date}
+          onChange={(event) => onDateChange(event.target.value)}
+          className={`${inputClass} mt-4`}
+        />
+      ) : null}
+      <ActionButton
+        tone={date ? "slate" : tone}
+        onClick={onAction}
+        className="mt-4 w-full justify-center"
+      >
+        {date ? `${title} em ${formatDateBR(date)}` : actionLabel}
+      </ActionButton>
+    </div>
+  );
+}
+
 function ModalShell({ onClose, title, eyebrow, subtitle = null, actions = null, children }) {
   return (
     <div
@@ -448,10 +493,22 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
         <SectionBlock
           title="Andamento"
         >
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <ActionButton
-            tone={form.retirada_fornecedor_em ? "slate" : "amber"}
-            onClick={() => {
+        <div className="mb-4 flex justify-end">
+          <ActionButton onClick={() => setEditingDatas((v) => !v)}>
+            {editingDatas ? "Concluir edicao" : "Editar datas"}
+          </ActionButton>
+        </div>
+
+        <div className="mb-4 grid gap-4 md:grid-cols-2">
+          <FlowStepCard
+            title="Retirada"
+            date={form.retirada_fornecedor_em}
+            tone="amber"
+            pendingLabel="Aguardando retirada"
+            actionLabel="Marcar peca retirada"
+            editing={editingDatas}
+            onDateChange={(value) => setForm((prev) => ({ ...prev, retirada_fornecedor_em: value }))}
+            onAction={() => {
               if (form.retirada_fornecedor_em && !editingDatas) return;
               const now = new Date();
               const stamp = `Peca retirada por ${userName} em ${now.toLocaleString("pt-BR")}.`;
@@ -464,13 +521,18 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
               }));
             }}
           >
-            {form.retirada_fornecedor_em
-              ? `Retirada em ${formatDateBR(form.retirada_fornecedor_em)}`
-              : "Marcar peca retirada"}
-          </ActionButton>
-          <ActionButton
-            tone={form.retorno_fornecedor_em ? "slate" : "emerald"}
-            onClick={() => {
+            Saida da peca com o fornecedor para analise.
+          </FlowStepCard>
+
+          <FlowStepCard
+            title="Retornada"
+            date={form.retorno_fornecedor_em}
+            tone="emerald"
+            pendingLabel="Aguardando retorno"
+            actionLabel="Marcar peca retornada"
+            editing={editingDatas}
+            onDateChange={(value) => setForm((prev) => ({ ...prev, retorno_fornecedor_em: value }))}
+            onAction={() => {
               if (form.retorno_fornecedor_em && !editingDatas) return;
               const now = new Date();
               const stamp = `Peca retornada por ${userName} em ${now.toLocaleString("pt-BR")}.`;
@@ -483,14 +545,10 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
               }));
             }}
           >
-            {form.retorno_fornecedor_em
-              ? `Retornada em ${formatDateBR(form.retorno_fornecedor_em)}`
-              : "Marcar peca retornada"}
-          </ActionButton>
-          <ActionButton onClick={() => setEditingDatas((v) => !v)}>
-            {editingDatas ? "Concluir edicao" : "Editar"}
-          </ActionButton>
+            Volta do fornecedor, seja por peca, credito ou negativa.
+          </FlowStepCard>
         </div>
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Enviado em">
             <input
@@ -501,16 +559,6 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
               disabled={!editingDatas && Boolean(form.enviado_fornecedor_em)}
             />
           </Field>
-          {editingDatas ? (
-            <Field label="Retirada da peca">
-              <input
-                type="date"
-                value={form.retirada_fornecedor_em}
-                onChange={(e) => setForm((prev) => ({ ...prev, retirada_fornecedor_em: e.target.value }))}
-                className={inputClass}
-              />
-            </Field>
-          ) : null}
           <Field label="Prazo (dias)">
             <input
               type="number"
@@ -550,16 +598,6 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
               ))}
             </select>
           </Field>
-          {editingDatas ? (
-            <Field label="Data retorno">
-              <input
-                type="date"
-                value={form.retorno_fornecedor_em}
-                onChange={(e) => setForm((prev) => ({ ...prev, retorno_fornecedor_em: e.target.value }))}
-                className={inputClass}
-              />
-            </Field>
-          ) : null}
           {showApprovedFields ? (
             <>
               <Field label="Tipo de retorno">

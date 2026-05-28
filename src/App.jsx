@@ -293,6 +293,7 @@ export default function App() {
               <Route path="/suprimentos/cadastro" element={<SuprimentosCadastro />} />
               <Route path="/suprimentos/contagem" element={<SuprimentosContagem />} />
               <Route path="/suprimentos/contagem/dia/:data" element={<SuprimentosContagemDia />} />
+              <Route path="/suprimentos/contagem/lote/:loteId" element={<SuprimentosContagemDia />} />
               <Route path="/suprimentos/contagem/semanal/:id" element={<SuprimentosContagemSemanal />} />
               <Route path="/suprimentos" element={<Navigate to="/suprimentos/resumo" replace />} />
 

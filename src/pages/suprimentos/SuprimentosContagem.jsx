@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
+import PullToRefresh from "../../components/PullToRefresh";
 import {
   FaBarcode,
   FaCamera,
@@ -503,12 +504,26 @@ export default function SuprimentosContagem() {
     setTimeout(() => setScannerOpen(true), 250);
   }
 
-  function finalizarFluxo() {
+  async function finalizarFluxo() {
+    // Se tem um item parcialmente preenchido (qtd > 0 ou peca selecionada), salva antes
+    const podeSalvarPendente =
+      String(quantidade).trim() !== "" &&
+      !Number.isNaN(Number(quantidade)) &&
+      (peca || naoCadastrado) &&
+      codigo.trim() !== "";
+
+    if (podeSalvarPendente) {
+      try {
+        await salvarContagemFluxo();
+      } catch (_) {
+        /* ignora */
+      }
+    }
+
     setScannerOpen(false);
     setFluxoAtivo(false);
     limparApontamento();
-    // Garantia adicional ao fim da sessão (debounce por lote_id na Edge Function evita re-disparo)
-    if (isNativeShell && itensSessao > 0 && loteId) {
+    if (isNativeShell && (itensSessao > 0 || podeSalvarPendente) && loteId) {
       void dispararDispatchSilencioso("diaria", todayIsoBRT(), loteId);
     }
     setLoteId(null);
@@ -531,7 +546,7 @@ export default function SuprimentosContagem() {
     setLoadingLotes(true);
     const [contagensRes, auditoriasRes] = await Promise.all([
       supabase.from("suprimentos_contagens")
-        .select("id,codigo,quantidade,saldo_erp,diferenca,peca_id,created_at,contado_por_nome,tipo_contagem")
+        .select("id,codigo,quantidade,saldo_erp,diferenca,peca_id,created_at,contado_por_nome,tipo_contagem,lote_id")
         .order("created_at", { ascending: false })
         .limit(5000),
       supabase.from("suprimentos_auditorias")
@@ -543,15 +558,30 @@ export default function SuprimentosContagem() {
     const contagens = contagensRes.data || [];
     setLotesSemanais(auditoriasRes.data || []);
 
-    // Agrupa por (tipo, dia)
+    // Agrupa por (tipo, lote_id) -- contagens sem lote_id usam o dia como chave (fallback)
     const buckets = { diaria: new Map(), lubrificantes: new Map() };
     contagens.forEach((c) => {
       const tipo = (c.tipo_contagem || "diaria").toLowerCase();
-      if (tipo === "semanal") return; // semanais saem em outro lugar
-      const byDay = buckets[tipo] || buckets.diaria;
+      if (tipo === "semanal") return;
+      const byLote = buckets[tipo] || buckets.diaria;
       const d = new Date(c.created_at);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const cur = byDay.get(key) || { data: key, tipo, total: 0, corretos: 0, divergencias: 0, sem_cadastro: 0, sem_conferir: 0, conferidos: 0, contadores: new Set() };
+      const dayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const key = c.lote_id || `dia:${dayStr}`;
+      const cur = byLote.get(key) || {
+        key,
+        lote_id: c.lote_id || null,
+        data: dayStr,
+        primeira: c.created_at,
+        ultima: c.created_at,
+        tipo,
+        total: 0,
+        corretos: 0,
+        divergencias: 0,
+        sem_cadastro: 0,
+        sem_conferir: 0,
+        conferidos: 0,
+        contadores: new Set(),
+      };
       cur.total += 1;
       const semCad = !c.peca_id;
       const conferido = c.saldo_erp !== null && c.saldo_erp !== undefined;
@@ -563,7 +593,10 @@ export default function SuprimentosContagem() {
         else cur.divergencias += 1;
       }
       if (c.contado_por_nome) cur.contadores.add(c.contado_por_nome);
-      byDay.set(key, cur);
+      // mantém a janela do lote
+      if (c.created_at < cur.primeira) cur.primeira = c.created_at;
+      if (c.created_at > cur.ultima) cur.ultima = c.created_at;
+      byLote.set(key, cur);
     });
 
     function finaliza(map) {
@@ -572,8 +605,8 @@ export default function SuprimentosContagem() {
         contadores: Array.from(l.contadores),
         acuracidade: l.conferidos > 0 ? Math.round((l.corretos / l.conferidos) * 1000) / 10 : null,
       }));
-      arr.sort((a, b) => (a.data < b.data ? 1 : -1));
-      return arr.slice(0, 10); // últimos 10 lotes
+      arr.sort((a, b) => (a.ultima < b.ultima ? 1 : -1));
+      return arr.slice(0, 10);
     }
 
     setLotesPorTipo({
@@ -583,10 +616,44 @@ export default function SuprimentosContagem() {
     setLoadingLotes(false);
   }
 
+  function abrirLote(lote) {
+    if (lote.lote_id) navigate(`/suprimentos/contagem/lote/${lote.lote_id}`);
+    else navigate(`/suprimentos/contagem/dia/${lote.data}`);
+  }
+
   useEffect(() => {
     if (!isNativeShell) carregarLotes();
     else setLoadingLotes(false);
   }, [isNativeShell]);
+
+  // Realtime: atualiza a lista de lotes sem precisar dar F5.
+  useEffect(() => {
+    let recarregando = false;
+    const debounceRecarregar = () => {
+      if (recarregando) return;
+      recarregando = true;
+      setTimeout(() => { recarregando = false; carregarLotes(); }, 800);
+    };
+    const channel = supabase
+      .channel("contagem-central")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_contagens" },
+        () => debounceRecarregar()
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "suprimentos_bot_jobs" },
+        () => debounceRecarregar()
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "suprimentos_auditorias" },
+        () => debounceRecarregar()
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   // ─── KPIs ──────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -601,6 +668,7 @@ export default function SuprimentosContagem() {
 
   if (isNativeShell) {
     return (
+      <PullToRefresh onRefresh={carregarLotes}>
       <div className="min-h-[calc(100vh-120px)] bg-slate-50 p-4 pb-24">
         <div className="mx-auto flex max-w-md flex-col gap-4">
           <header className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -657,20 +725,26 @@ export default function SuprimentosContagem() {
                     <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-500">Carregando...</p>
                   ) : lotesDiarios.length ? (
                     <div className="space-y-2">
-                      {lotesDiarios.slice(0, 12).map((lote) => (
-                        <button
-                          key={lote.data}
-                          type="button"
-                          onClick={() => navigate(`/suprimentos/contagem/dia/${lote.data}`)}
-                          className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-left active:scale-[0.99]"
-                        >
-                          <span>
-                            <span className="block text-sm font-black text-slate-950">{formatDateBR(lote.data)}</span>
-                            <span className="text-xs font-semibold text-slate-500">{lote.total} item(ns) · {lote.divergencias} divergencia(s)</span>
-                          </span>
-                          <FaChevronRight className="text-slate-400" />
-                        </button>
-                      ))}
+                      {lotesDiarios.slice(0, 12).map((lote) => {
+                        const hora = new Date(lote.ultima || lote.primeira).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+                        return (
+                          <button
+                            key={lote.key}
+                            type="button"
+                            onClick={() => abrirLote(lote)}
+                            className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-left active:scale-[0.99]"
+                          >
+                            <span>
+                              <span className="block text-sm font-black text-slate-950">{formatDateBR(lote.data)} · {hora}</span>
+                              <span className="text-xs font-semibold text-slate-500">
+                                {lote.total} item(ns) · {lote.divergencias} divergencia(s)
+                                {lote.acuracidade !== null ? ` · ${lote.acuracidade}%` : ""}
+                              </span>
+                            </span>
+                            <FaChevronRight className="text-slate-400" />
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-500">Nenhuma contagem encontrada.</p>
@@ -778,6 +852,7 @@ export default function SuprimentosContagem() {
 
         <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onScan={handleScan} />
       </div>
+      </PullToRefresh>
     );
   }
 
@@ -929,13 +1004,15 @@ export default function SuprimentosContagem() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(lotesPorTipo[tab] || []).map((l) => (
+                  {(lotesPorTipo[tab] || []).map((l) => {
+                    const hora = new Date(l.ultima || l.primeira).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+                    return (
                     <tr
-                      key={`${tab}-${l.data}`}
-                      onClick={() => navigate(`/suprimentos/contagem/dia/${l.data}`)}
+                      key={`${tab}-${l.key}`}
+                      onClick={() => abrirLote(l)}
                       className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60"
                     >
-                      <td className="px-4 py-3 font-semibold text-slate-900">{formatDateBR(l.data)}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{formatDateBR(l.data)} <span className="ml-1 text-xs font-normal text-slate-500">{hora}</span></td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-700">{l.total}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{l.conferidos}</td>
                       <td className="px-4 py-3 text-right">
@@ -961,7 +1038,8 @@ export default function SuprimentosContagem() {
                         <FaChevronRight />
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

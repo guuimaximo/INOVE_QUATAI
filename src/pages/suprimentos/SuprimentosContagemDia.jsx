@@ -1,7 +1,8 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
-import { FaArrowLeft, FaCheck, FaRobot } from "react-icons/fa";
+import { FaArrowLeft, FaCheck, FaRobot, FaTimes } from "react-icons/fa";
+import PullToRefresh from "../../components/PullToRefresh";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
 import {
@@ -28,43 +29,123 @@ function diffLabel(diff) {
 }
 
 export default function SuprimentosContagemDia() {
-  const { data } = useParams(); // YYYY-MM-DD
+  const { data: dataParam, loteId } = useParams(); // YYYY-MM-DD ou uuid do lote
   const navigate = useNavigate();
+  const [data, setData] = useState(dataParam || "");
   const { user } = useContext(AuthContext);
   const userInfo = useMemo(() => ({
     id: Number(user?.usuario_id || user?.id || 0) || null,
     nome: user?.nome || user?.nome_completo || user?.login || user?.email || "Usuario",
   }), [user]);
+  const isAdmin = useMemo(() => {
+    const nivel = String(user?.nivel || "").trim().toLowerCase();
+    return nivel === "administrador" || nivel === "admin";
+  }, [user]);
 
   const [contagens, setContagens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [botJob, setBotJob] = useState(null);
   const [botMsg, setBotMsg] = useState("");
+  const [itemSelecionado, setItemSelecionado] = useState(null);
   const botPollRef = useRef(null);
 
   async function carregar() {
     setLoading(true);
-    const inicio = `${data}T00:00:00`;
-    const fim = `${data}T23:59:59.999`;
-    const { data: rows } = await supabase
-      .from("suprimentos_contagens")
-      .select("*")
-      .gte("created_at", inicio)
-      .lte("created_at", fim)
-      .order("created_at", { ascending: false });
-    setContagens(rows || []);
+    let rows = [];
+    let dataAlvo = data;
 
-    // Pega o último job daquele dia
-    const { data: jobs } = await supabase
-      .from("suprimentos_bot_jobs")
-      .select("*")
-      .eq("data_alvo", data)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    setBotJob(jobs?.[0] || null);
+    if (loteId) {
+      // Filtra por lote_id
+      const res = await supabase
+        .from("suprimentos_contagens")
+        .select("*")
+        .eq("lote_id", loteId)
+        .order("created_at", { ascending: false });
+      rows = res.data || [];
+      // descobre a data_alvo a partir da primeira contagem
+      if (rows.length > 0) {
+        const d = new Date(rows[rows.length - 1].created_at);
+        dataAlvo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        setData(dataAlvo);
+      }
+    } else if (data) {
+      const inicio = `${data}T00:00:00`;
+      const fim = `${data}T23:59:59.999`;
+      const res = await supabase
+        .from("suprimentos_contagens")
+        .select("*")
+        .gte("created_at", inicio)
+        .lte("created_at", fim)
+        .order("created_at", { ascending: false });
+      rows = res.data || [];
+    }
+    setContagens(rows);
+
+    // Pega o último job (por lote_id se houver, senão por data_alvo)
+    let jobRes;
+    if (loteId) {
+      jobRes = await supabase
+        .from("suprimentos_bot_jobs")
+        .select("*")
+        .eq("lote_id", loteId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+    } else if (dataAlvo) {
+      jobRes = await supabase
+        .from("suprimentos_bot_jobs")
+        .select("*")
+        .eq("data_alvo", dataAlvo)
+        .order("created_at", { ascending: false })
+        .limit(1);
+    }
+    setBotJob(jobRes?.data?.[0] || null);
     setLoading(false);
   }
-  useEffect(() => { carregar(); }, [data]);
+  useEffect(() => { carregar(); }, [data, loteId]);
+
+  // Auto-refresh em tempo real (Realtime).
+  useEffect(() => {
+    if (!data && !loteId) return;
+    let recarregando = false;
+    const debounceRecarregar = () => {
+      if (recarregando) return;
+      recarregando = true;
+      setTimeout(() => { recarregando = false; carregar(); }, 600);
+    };
+
+    const channel = supabase.channel(`contagem-lote-${loteId || data}`);
+
+    if (loteId) {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_contagens", filter: `lote_id=eq.${loteId}` },
+        () => debounceRecarregar()
+      ).on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_bot_jobs", filter: `lote_id=eq.${loteId}` },
+        () => debounceRecarregar()
+      );
+    } else {
+      const inicio = `${data}T00:00:00`;
+      const fim = `${data}T23:59:59.999`;
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_contagens" },
+        (payload) => {
+          const row = payload.new || payload.old || {};
+          const ts = row.created_at;
+          if (!ts || (ts >= inicio && ts <= fim)) debounceRecarregar();
+        }
+      ).on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suprimentos_bot_jobs", filter: `data_alvo=eq.${data}` },
+        () => debounceRecarregar()
+      );
+    }
+
+    channel.subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [data, loteId]);
 
   async function dispararConferencia() {
     setBotMsg("");
@@ -163,12 +244,16 @@ export default function SuprimentosContagemDia() {
     />
   ) : null;
 
-  return (
+  const isNative = Boolean(Capacitor?.isNativePlatform?.());
+
+  const conteudo = (
     <div className="flex flex-col gap-6 p-6">
       <PageHero
         eyebrow="Suprimentos · Contagem · Lote"
-        title={`Contagens de ${formatDateBR(data)}`}
-        description={`Todas as contagens feitas no dia ${formatDateBR(data)}.`}
+        title={loteId ? `Lote ${String(loteId).slice(0, 8)}` : `Contagens de ${formatDateBR(data)}`}
+        description={loteId
+          ? `Sessão de contagem ${String(loteId).slice(0, 8)} (${formatDateBR(data)}).`
+          : `Todas as contagens feitas no dia ${formatDateBR(data)}.`}
         actions={
           <ActionButton onClick={() => navigate("/suprimentos/contagem")}>
             <FaArrowLeft /> Voltar
@@ -197,8 +282,8 @@ export default function SuprimentosContagemDia() {
             </div>
           </Panel>
         ) : null
-      ) : (
-        // Web: mantém o botão manual
+      ) : isAdmin ? (
+        // Web: botão manual SÓ para administradores
         <Panel
           title="Conferir com ERP"
           subtitle="Dispara o bot que entra no TransNet, lê o saldo desse dia e atualiza as contagens."
@@ -221,6 +306,20 @@ export default function SuprimentosContagemDia() {
           </div>
           {botMsg ? <p className="mt-3 text-sm font-medium text-slate-600">{botMsg}</p> : null}
         </Panel>
+      ) : (
+        // Web não-admin: vê só o status, sem botão
+        botJob ? (
+          <Panel title="Conferência com ERP" subtitle="Disparada por administradores ou automaticamente pelo cron.">
+            <div className="flex flex-wrap items-center gap-3">
+              {botStatusChip}
+              {botJob?.resultado_json ? (
+                <span className="text-xs font-medium text-slate-500">
+                  Última execução: {formatDateTimeBR(botJob.concluido_em)}
+                </span>
+              ) : null}
+            </div>
+          </Panel>
+        ) : null
       )}
 
       <Panel title="Itens deste lote">
@@ -248,9 +347,11 @@ export default function SuprimentosContagemDia() {
                     ? "bg-rose-50/40 border-rose-200"
                     : "bg-white border-slate-200";
               return (
-                <div
+                <button
                   key={c.id}
-                  className={`grid grid-cols-[1.4fr_0.8fr_0.8fr] items-center gap-2 rounded-xl border px-3 py-3 ${bg}`}
+                  type="button"
+                  onClick={() => setItemSelecionado(c)}
+                  className={`grid w-full grid-cols-[1.4fr_0.8fr_0.8fr] items-center gap-2 rounded-xl border px-3 py-3 text-left active:scale-[0.99] ${bg}`}
                 >
                   <div className="min-w-0">
                     <p className="truncate font-mono text-sm font-semibold text-slate-900">{c.codigo || "—"}</p>
@@ -264,7 +365,7 @@ export default function SuprimentosContagemDia() {
                   <span className="text-right text-sm font-semibold text-slate-700">
                     {conferido ? Number(c.saldo_erp).toLocaleString("pt-BR") : "—"}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -326,5 +427,76 @@ export default function SuprimentosContagemDia() {
         )}
       </Panel>
     </div>
+  );
+
+  return (
+    <>
+      {isNative ? (
+        <PullToRefresh onRefresh={carregar}>{conteudo}</PullToRefresh>
+      ) : (
+        conteudo
+      )}
+
+      {itemSelecionado ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-end justify-center bg-slate-900/60 p-4 sm:items-center"
+          onClick={() => setItemSelecionado(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Detalhe do item</p>
+                <p className="mt-0.5 font-mono text-sm font-semibold text-slate-500">{itemSelecionado.codigo || "—"}</p>
+              </div>
+              <button
+                onClick={() => setItemSelecionado(null)}
+                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"
+              >
+                <FaTimes />
+              </button>
+            </div>
+            <h3 className="text-base font-semibold text-slate-900">{itemSelecionado.descricao || "Sem cadastro"}</h3>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Saldo físico</p>
+                <p className="mt-0.5 font-semibold text-slate-900">{Number(itemSelecionado.quantidade || 0).toLocaleString("pt-BR")} {itemSelecionado.unidade || ""}</p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Saldo virtual (ERP)</p>
+                <p className="mt-0.5 font-semibold text-slate-900">
+                  {itemSelecionado.saldo_erp !== null && itemSelecionado.saldo_erp !== undefined
+                    ? Number(itemSelecionado.saldo_erp).toLocaleString("pt-BR")
+                    : "—"}
+                </p>
+              </div>
+              <div className="col-span-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Divergência</p>
+                <p className="mt-0.5 font-semibold text-slate-900">{diffLabel(itemSelecionado.diferenca)}</p>
+              </div>
+              {itemSelecionado.localizacao ? (
+                <div className="col-span-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Localização</p>
+                  <p className="mt-0.5 font-semibold text-slate-900">{itemSelecionado.localizacao}</p>
+                </div>
+              ) : null}
+              {itemSelecionado.observacao ? (
+                <div className="col-span-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Observação</p>
+                  <p className="mt-0.5 text-slate-700">{itemSelecionado.observacao}</p>
+                </div>
+              ) : null}
+              <div className="col-span-2 text-xs text-slate-500">
+                Contado por <span className="font-semibold text-slate-700">{itemSelecionado.contado_por_nome || "—"}</span>
+                {" · "}
+                {formatDateTimeBR(itemSelecionado.created_at)}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

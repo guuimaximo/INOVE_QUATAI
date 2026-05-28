@@ -208,7 +208,48 @@ export default function SuprimentosContagemDia() {
           <p className="py-12 text-center text-sm font-semibold text-slate-400">Carregando...</p>
         ) : contagens.length === 0 ? (
           <EmptyState title="Nenhuma contagem nessa data" subtitle="Faça novas contagens na tela principal." />
+        ) : Capacitor?.isNativePlatform?.() ? (
+          // ─── Mobile: lista compacta Codigo / Fisico / Virtual + cor da linha ───
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1.4fr_0.8fr_0.8fr] gap-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <span>Código</span>
+              <span className="text-right">Saldo Físico</span>
+              <span className="text-right">Saldo Virtual</span>
+            </div>
+            {contagens.map((c) => {
+              const conferido = c.saldo_erp !== null && c.saldo_erp !== undefined;
+              const certo = conferido && Number(c.diferenca || 0) === 0;
+              const errado = conferido && Number(c.diferenca || 0) !== 0;
+              const bg = certo
+                ? "bg-emerald-50 border-emerald-200"
+                : errado
+                  ? "bg-rose-50 border-rose-200"
+                  : !c.peca_id
+                    ? "bg-rose-50/40 border-rose-200"
+                    : "bg-white border-slate-200";
+              return (
+                <div
+                  key={c.id}
+                  className={`grid grid-cols-[1.4fr_0.8fr_0.8fr] items-center gap-2 rounded-xl border px-3 py-3 ${bg}`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-sm font-semibold text-slate-900">{c.codigo || "—"}</p>
+                    {!c.peca_id ? (
+                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700">Sem cadastro</p>
+                    ) : null}
+                  </div>
+                  <span className="text-right text-sm font-semibold text-slate-900">
+                    {Number(c.quantidade || 0).toLocaleString("pt-BR")}
+                  </span>
+                  <span className="text-right text-sm font-semibold text-slate-700">
+                    {conferido ? Number(c.saldo_erp).toLocaleString("pt-BR") : "—"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         ) : (
+          // ─── Web: tabela completa ──────────────────────────────────────
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50">

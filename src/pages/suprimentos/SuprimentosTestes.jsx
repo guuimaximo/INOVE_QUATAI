@@ -396,33 +396,33 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
 
   if (!open || !item) return null;
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  async function saveTeste(overrides = {}) {
     setSaving(true);
 
     try {
-      const uploaded = await uploadSuprimentosFiles(newFiles, `testes/${form.prefixo || item.prefixo || "sem-prefixo"}`);
+      const nextForm = { ...form, ...overrides };
+      const uploaded = await uploadSuprimentosFiles(newFiles, `testes/${nextForm.prefixo || item.prefixo || "sem-prefixo"}`);
       const ultimaIntercorrencia = getTesteLastIntercorrencia(intercorrencias);
 
       const payload = {
-        nome_teste: form.nome_teste.trim(),
-        peca: form.peca.trim(),
-        codigo_peca: form.codigo_peca.trim() || null,
-        fornecedor: form.fornecedor.trim(),
-        prefixo: form.prefixo.trim(),
-        data_inicio: form.data_inicio || null,
-        km_inicial: safeNumber(form.km_inicial),
-        objetivo: form.objetivo.trim() || null,
-        km_atual: safeNumber(form.km_atual),
-        prazo_teste: form.prazo_teste || null,
-        observacao: form.descricao_final.trim() || null,
+        nome_teste: nextForm.nome_teste.trim(),
+        peca: nextForm.peca.trim(),
+        codigo_peca: nextForm.codigo_peca.trim() || null,
+        fornecedor: nextForm.fornecedor.trim(),
+        prefixo: nextForm.prefixo.trim(),
+        data_inicio: nextForm.data_inicio || null,
+        km_inicial: safeNumber(nextForm.km_inicial),
+        objetivo: nextForm.objetivo.trim() || null,
+        km_atual: safeNumber(nextForm.km_atual),
+        prazo_teste: nextForm.prazo_teste || null,
+        observacao: nextForm.descricao_final.trim() || null,
         falha_registrada: intercorrencias.length > 0,
         data_falha: ultimaIntercorrencia?.data || null,
         km_falha: safeNumber(ultimaIntercorrencia?.km),
         descricao_falha: serializeTesteIntercorrencias(intercorrencias),
-        parecer_tecnico: form.parecer_tecnico.trim() || null,
-        resultado_final: form.resultado_final || null,
-        encerrado_em: form.encerrado_em || null,
+        parecer_tecnico: nextForm.parecer_tecnico.trim() || null,
+        resultado_final: nextForm.resultado_final || null,
+        encerrado_em: nextForm.encerrado_em || null,
         anexos: [...existingAttachments, ...uploaded],
         updated_at: new Date().toISOString(),
       };
@@ -437,6 +437,17 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    await saveTeste();
+  }
+
+  async function handleEncerrarTeste() {
+    const encerradoEm = form.encerrado_em || todayISO();
+    setForm((prev) => ({ ...prev, encerrado_em: encerradoEm }));
+    await saveTeste({ encerrado_em: encerradoEm });
   }
 
   const meta = deriveTesteMeta({
@@ -696,6 +707,10 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
 
         <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
           <ActionButton onClick={onClose}>Cancelar</ActionButton>
+          <ActionButton type="button" tone="emerald" disabled={saving} onClick={handleEncerrarTeste} className={saving ? "opacity-60" : ""}>
+            <FaFlagCheckered />
+            {saving ? "Salvando..." : "Encerrar teste"}
+          </ActionButton>
           <ActionButton type="submit" tone="blue" disabled={saving} className={saving ? "opacity-60" : ""}>
             {saving ? "Salvando..." : "Salvar teste"}
           </ActionButton>

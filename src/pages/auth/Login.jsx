@@ -592,10 +592,32 @@ export default function Login() {
       }
 
       if (isAuthSchemaFailure(authSignInError)) {
-        pushFeedback(
-          "error",
-          "Seu acesso Auth esta em manutencao no momento. Para este usuario, confirme se a senha legada ainda esta sincronizada."
-        );
+        // Diagnostico: confere se o usuario existe pelo login/email para
+        // dizer se o problema e senha errada ou usuario inexistente.
+        try {
+          const ident = String(identifier || "").trim();
+          const [byLogin, byEmail] = await Promise.all([
+            supabase.from("usuarios_aprovadores").select("id,login,email,precisa_redefinir_senha").ilike("login", ident).maybeSingle(),
+            supabase.from("usuarios_aprovadores").select("id,login,email,precisa_redefinir_senha").ilike("email", ident).maybeSingle(),
+          ]);
+          const userRow = byLogin?.data || byEmail?.data || null;
+          if (userRow) {
+            pushFeedback(
+              "error",
+              `Usuario encontrado, mas a senha digitada nao confere com a senha temporaria salva. Peca ao admin para resetar de novo ou conferir a senha em Configuracoes -> Usuarios.`
+            );
+          } else {
+            pushFeedback(
+              "error",
+              `Nenhum usuario com login/email "${ident}" foi localizado. Confira o que esta cadastrado em Configuracoes -> Usuarios.`
+            );
+          }
+        } catch {
+          pushFeedback(
+            "error",
+            "Seu acesso Auth esta em manutencao no momento. Confirme login e senha temporaria com o administrador."
+          );
+        }
         return;
       }
 

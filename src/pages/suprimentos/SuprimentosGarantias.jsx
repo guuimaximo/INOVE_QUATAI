@@ -56,6 +56,7 @@ const QUICK_FORM = {
   valor_peca: "",
   tipo_garantia: "Peca comprada",
   prefixo: "",
+  data_instalacao: "",
   km_instalacao: "",
   km_falha: "",
   data_falha: todayISO(),
@@ -100,11 +101,14 @@ function Detail({ label, value }) {
   );
 }
 
-function SectionBlock({ title, children, className = "" }) {
+function SectionBlock({ title, description, children, className = "" }) {
   return (
     <section className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
-      <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+      <div className="mb-4 border-b border-slate-100 pb-3">
         <h3 className="text-base font-semibold text-slate-950">{title}</h3>
+        {description ? (
+          <p className="mt-1 text-xs font-medium text-slate-500">{description}</p>
+        ) : null}
       </div>
       {children}
     </section>
@@ -226,6 +230,7 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
         valor_peca: safeNumber(form.valor_peca) ?? 0,
         tipo_garantia: form.tipo_garantia || "Peca comprada",
         prefixo: form.prefixo.trim(),
+        data_instalacao: form.data_instalacao || null,
         km_instalacao: safeNumber(form.km_instalacao),
         km_falha: safeNumber(form.km_falha),
         data_falha: form.data_falha || null,
@@ -250,119 +255,139 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
   return (
     <ModalShell onClose={onClose} title="Nova garantia" eyebrow="Cadastro rapido">
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Field label="Peca" required>
-            <PartAutocomplete
-              value={form.peca}
-              onChange={(value) => setForm((prev) => ({ ...prev, peca: value }))}
-              onSelect={(peca) =>
-                setForm((prev) => ({
-                  ...prev,
-                  peca: peca.descricao || prev.peca,
-                  codigo_peca: peca.codigo || prev.codigo_peca,
-                  fornecedor: peca.fornecedor_nome || prev.fornecedor,
-                }))
-              }
-              className={inputClass}
-              required
-            />
-          </Field>
-          <Field label="Codigo da peca">
-            <input
-              value={form.codigo_peca}
-              onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: e.target.value }))}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Fornecedor" required>
-            <SupplierAutocomplete
-              value={form.fornecedor}
-              onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))}
-              className={inputClass}
-              required
-            />
-          </Field>
-          <Field label="Data da compra">
-            <input
-              type="date"
-              value={form.data_compra}
-              onChange={(e) => setForm((prev) => ({ ...prev, data_compra: e.target.value }))}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Valor da peca">
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.valor_peca}
-              onChange={(e) => setForm((prev) => ({ ...prev, valor_peca: e.target.value }))}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Tipo da garantia">
-            <select
-              value={form.tipo_garantia}
-              onChange={(e) => setForm((prev) => ({ ...prev, tipo_garantia: e.target.value }))}
-              className={inputClass}
-            >
-              {GARANTIA_TIPOS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Prefixo" required>
-            <CampoPrefixo
-              value={form.prefixo}
-              onChange={(value) => setForm((prev) => ({ ...prev, prefixo: value }))}
-              label=""
-            />
-          </Field>
-          <Field label="KM instalacao">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.km_instalacao}
-              onChange={(e) => setForm((prev) => ({ ...prev, km_instalacao: e.target.value }))}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="KM falha">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.km_falha}
-              onChange={(e) => setForm((prev) => ({ ...prev, km_falha: e.target.value }))}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Data da falha" required>
-            <input
-              type="date"
-              value={form.data_falha}
-              onChange={(e) => setForm((prev) => ({ ...prev, data_falha: e.target.value }))}
-              className={inputClass}
-              required
-            />
-          </Field>
-          <Field label="Tipo de solicitacao">
-            <select
-              value={form.tipo_solicitacao}
-              onChange={(e) => setForm((prev) => ({ ...prev, tipo_solicitacao: e.target.value }))}
-              className={inputClass}
-            >
-              {GARANTIA_TIPOS_SOLICITACAO.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        <SectionBlock title="Cadastro da peca" description="Identificacao da peca, fornecedor e referencia comercial.">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <Field label="Peca" required>
+              <PartAutocomplete
+                value={form.peca}
+                onChange={(value) => setForm((prev) => ({ ...prev, peca: value }))}
+                onSelect={(peca) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    peca: peca.descricao || prev.peca,
+                    codigo_peca: peca.codigo || prev.codigo_peca,
+                    fornecedor: peca.fornecedor_nome || prev.fornecedor,
+                  }))
+                }
+                className={inputClass}
+                required
+              />
+            </Field>
+            <Field label="Codigo da peca">
+              <input
+                value={form.codigo_peca}
+                onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Fornecedor" required>
+              <SupplierAutocomplete
+                value={form.fornecedor}
+                onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))}
+                className={inputClass}
+                required
+              />
+            </Field>
+            <Field label="Data da compra">
+              <input
+                type="date"
+                value={form.data_compra}
+                onChange={(e) => setForm((prev) => ({ ...prev, data_compra: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Valor da peca">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.valor_peca}
+                onChange={(e) => setForm((prev) => ({ ...prev, valor_peca: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Tipo da garantia">
+              <select
+                value={form.tipo_garantia}
+                onChange={(e) => setForm((prev) => ({ ...prev, tipo_garantia: e.target.value }))}
+                className={inputClass}
+              >
+                {GARANTIA_TIPOS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </SectionBlock>
+
+        <SectionBlock title="Instalacao" description="Em qual prefixo a peca foi instalada e quando.">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <Field label="Prefixo" required>
+              <CampoPrefixo
+                value={form.prefixo}
+                onChange={(value) => setForm((prev) => ({ ...prev, prefixo: value }))}
+                label=""
+              />
+            </Field>
+            <Field label="Data da instalacao">
+              <input
+                type="date"
+                value={form.data_instalacao}
+                onChange={(e) => setForm((prev) => ({ ...prev, data_instalacao: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="KM instalacao">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.km_instalacao}
+                onChange={(e) => setForm((prev) => ({ ...prev, km_instalacao: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        </SectionBlock>
+
+        <SectionBlock title="Falha" description="Detalhes da ocorrencia que motivou a abertura da garantia.">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <Field label="Data da falha" required>
+              <input
+                type="date"
+                value={form.data_falha}
+                onChange={(e) => setForm((prev) => ({ ...prev, data_falha: e.target.value }))}
+                className={inputClass}
+                required
+              />
+            </Field>
+            <Field label="KM falha">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.km_falha}
+                onChange={(e) => setForm((prev) => ({ ...prev, km_falha: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Tipo de solicitacao">
+              <select
+                value={form.tipo_solicitacao}
+                onChange={(e) => setForm((prev) => ({ ...prev, tipo_solicitacao: e.target.value }))}
+                className={inputClass}
+              >
+                {GARANTIA_TIPOS_SOLICITACAO.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </SectionBlock>
 
         <Panel title="Anexos iniciais">
           <AttachmentInput
@@ -485,6 +510,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
           <Detail label="Codigo" value={item.codigo_peca} />
           <Detail label="Fornecedor" value={item.fornecedor} />
           <Detail label="Prefixo" value={item.prefixo} />
+          <Detail label="Data instalacao" value={formatDateBR(item.data_instalacao)} />
           <Detail label="Data falha" value={formatDateBR(item.data_falha)} />
           <Detail label="KM falha" value={formatKm(item.km_falha)} />
           <Detail label="Solicitacao" value={item.tipo_solicitacao} />

@@ -672,8 +672,8 @@ export default function Usuarios() {
   const [savingId, setSavingId] = useState(null);
   const [busca, setBusca] = useState("");
   const [nivelFiltro, setNivelFiltro] = useState("");
-  const [statusFiltro, setStatusFiltro] = useState("");
-  const [sortColumn, setSortColumn] = useState("nome");
+  const [statusFiltro, setStatusFiltro] = useState("ativo");
+  const [sortColumn, setSortColumn] = useState("nivel");
   const [sortDir, setSortDir] = useState("asc");
 
   function toggleSort(column) {

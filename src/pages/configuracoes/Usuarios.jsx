@@ -433,6 +433,32 @@ function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
     setPaginasBloqueadas((current) => current.filter((item) => item !== pageKey));
   }
 
+  function setStateCategoria(paginas, state) {
+    const keys = paginas.map((p) => p.key);
+    if (state === "liberar") {
+      setPaginasLiberadas((current) =>
+        Array.from(new Set([...current.filter((item) => !keys.includes(item)), ...keys]))
+      );
+      setPaginasBloqueadas((current) => current.filter((item) => !keys.includes(item)));
+      return;
+    }
+    if (state === "bloquear") {
+      setPaginasBloqueadas((current) =>
+        Array.from(new Set([...current.filter((item) => !keys.includes(item)), ...keys]))
+      );
+      setPaginasLiberadas((current) => current.filter((item) => !keys.includes(item)));
+      return;
+    }
+    setPaginasLiberadas((current) => current.filter((item) => !keys.includes(item)));
+    setPaginasBloqueadas((current) => current.filter((item) => !keys.includes(item)));
+  }
+
+  function getCategoriaState(paginas) {
+    const states = paginas.map((p) => getState(p.key));
+    const first = states[0];
+    return states.every((s) => s === first) ? first : "misto";
+  }
+
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-6xl max-h-[92vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
@@ -475,9 +501,47 @@ function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
                 Use <strong>Herdar</strong> para seguir o nível. Use <strong>Liberar</strong> para abrir uma página só para esse usuário e <strong>Bloquear</strong> para esconder uma página mesmo que o nível permita.
               </div>
 
-              {Object.entries(PAGINAS_POR_CATEGORIA).map(([categoria, paginas]) => (
+              {Object.entries(PAGINAS_POR_CATEGORIA).map(([categoria, paginas]) => {
+                const catState = getCategoriaState(paginas);
+                return (
             <div key={categoria} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 mb-3">{categoria}</h3>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">{categoria}</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="self-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Cluster</span>
+                  {[
+                    { value: "herdar", label: "Herdar" },
+                    { value: "liberar", label: "Liberar" },
+                    { value: "bloquear", label: "Bloquear" },
+                  ].map((option) => {
+                    const active = catState === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setStateCategoria(paginas, option.value)}
+                        title={`Aplicar ${option.label} em todas as paginas de ${categoria}`}
+                        className={`rounded-lg px-2.5 py-1.5 text-[11px] font-black transition ${
+                          active
+                            ? option.value === "liberar"
+                              ? "bg-emerald-600 text-white"
+                              : option.value === "bloquear"
+                              ? "bg-rose-600 text-white"
+                              : "bg-slate-800 text-white"
+                            : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                  {catState === "misto" ? (
+                    <span className="self-center rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black uppercase text-amber-700">
+                      Misto
+                    </span>
+                  ) : null}
+                </div>
+              </div>
               <div className="space-y-3">
                 {paginas.map((pagina) => (
                   <div key={pagina.key} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -518,7 +582,8 @@ function PermissoesUsuarioModal({ usuario, onClose, onSave, saving }) {
                 ))}
               </div>
             </div>
-          ))}
+                );
+              })}
             </>
           ) : (
             <>
@@ -608,6 +673,19 @@ export default function Usuarios() {
   const [busca, setBusca] = useState("");
   const [nivelFiltro, setNivelFiltro] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("");
+  const [sortColumn, setSortColumn] = useState("nome");
+  const [sortDir, setSortDir] = useState("asc");
+
+  function toggleSort(column) {
+    setSortColumn((current) => {
+      if (current === column) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return current;
+      }
+      setSortDir("asc");
+      return column;
+    });
+  }
   const [feedback, setFeedback] = useState(null);
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
   const [usuarioSelecionado, setUsuarioSelecionado] = useState(null);
@@ -842,7 +920,7 @@ export default function Usuarios() {
   const filtrados = useMemo(() => {
     const term = normalizeText(busca);
 
-    return usuarios.filter((usuario) => {
+    const base = usuarios.filter((usuario) => {
       if (term && !buildSearchBlob(usuario).includes(term)) return false;
       if (nivelFiltro && usuario?.nivel !== nivelFiltro) return false;
       const ativo = isUsuarioAtivo(usuario?.ativo);
@@ -854,7 +932,28 @@ export default function Usuarios() {
       }
       return true;
     });
-  }, [usuarios, busca, nivelFiltro, statusFiltro]);
+
+    const getSortValue = (usuario) => {
+      switch (sortColumn) {
+        case "login": return normalizeText(usuario?.login || "");
+        case "nivel": return normalizeText(usuario?.nivel || "");
+        case "status": return isUsuarioAtivo(usuario?.ativo) ? "ativo" : "inativo";
+        case "sessao": return usuario?.ultimo_ping_em || "";
+        case "nome":
+        default: return normalizeText(usuario?.nome || "");
+      }
+    };
+
+    const ordenados = [...base].sort((a, b) => {
+      const va = getSortValue(a);
+      const vb = getSortValue(b);
+      if (va < vb) return sortDir === "asc" ? -1 : 1;
+      if (va > vb) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return ordenados;
+  }, [usuarios, busca, nivelFiltro, statusFiltro, sortColumn, sortDir]);
 
   const metricas = useMemo(() => {
     const total = usuarios.length;
@@ -990,11 +1089,29 @@ export default function Usuarios() {
           <table className="w-full text-left text-sm border-collapse min-w-[1080px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
               <tr>
-                <th className="p-2 font-black">Usuário</th>
-                <th className="p-2 font-black">Login</th>
-                <th className="p-2 font-black">Nível</th>
-                <th className="p-2 font-black">Status</th>
-                <th className="p-2 font-black">Sessao</th>
+                {[
+                  { key: "nome", label: "Usuário" },
+                  { key: "login", label: "Login" },
+                  { key: "nivel", label: "Nível" },
+                  { key: "status", label: "Status" },
+                  { key: "sessao", label: "Sessao" },
+                ].map((col) => {
+                  const active = sortColumn === col.key;
+                  return (
+                    <th key={col.key} className="p-2 font-black">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(col.key)}
+                        className={`inline-flex items-center gap-1 transition hover:text-slate-800 ${active ? "text-slate-800" : ""}`}
+                      >
+                        {col.label}
+                        <span className="text-[8px] leading-none">
+                          {active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
                 <th className="p-2 font-black text-right">Ações</th>
               </tr>
             </thead>

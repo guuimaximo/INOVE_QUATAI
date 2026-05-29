@@ -304,16 +304,32 @@ export default function Login() {
   }
 
   async function fetchLegacyCredentialMatch(identifier, currentPassword) {
-    const { data, error } = await supabase
-      .from("usuarios_aprovadores")
-      .select("*")
-      .or(`login.eq.${identifier},email.eq.${identifier}`)
-      .eq("senha", currentPassword)
-      .maybeSingle();
+    const ident = String(identifier || "").trim();
+    const senha = String(currentPassword || "").trim();
+    if (!ident || !senha) return null;
 
-    if (error) throw error;
+    // Tenta por login (case-insensitive) e em paralelo por email tambem.
+    // Faz em duas queries para evitar o escape fragil do .or() quando o
+    // identificador tem "@", virgula etc.
+    const [byLogin, byEmail] = await Promise.all([
+      supabase
+        .from("usuarios_aprovadores")
+        .select("*")
+        .ilike("login", ident)
+        .eq("senha", senha)
+        .maybeSingle(),
+      supabase
+        .from("usuarios_aprovadores")
+        .select("*")
+        .ilike("email", ident)
+        .eq("senha", senha)
+        .maybeSingle(),
+    ]);
 
-    return data || null;
+    if (byLogin?.error && byLogin.error.code !== "PGRST116") throw byLogin.error;
+    if (byEmail?.error && byEmail.error.code !== "PGRST116") throw byEmail.error;
+
+    return byLogin?.data || byEmail?.data || null;
   }
 
   async function finalizeAuthenticatedLogin(identifier) {

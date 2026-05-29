@@ -850,23 +850,40 @@ export default function Usuarios() {
     setResetandoSenha(true);
     setFeedback(null);
 
-    const payload = {
-      senha: novaSenha,
+    const senhaLimpa = String(novaSenha || "").trim();
+    if (!senhaLimpa) {
+      setFeedback({ type: "error", text: "Informe uma senha temporaria valida." });
+      setResetandoSenha(false);
+      return;
+    }
+
+    const payloadCompleto = {
+      senha: senhaLimpa,
       precisa_redefinir_senha: true,
       senha_alterada_em: new Date().toISOString(),
       senha_alterada_por: "admin",
     };
 
-    const { data, error } = await supabase
-      .from("usuarios_aprovadores")
-      .update(payload)
-      .eq("id", usuario.id)
-      .select("*")
-      .single();
+    async function tentarUpdate(payload) {
+      return supabase
+        .from("usuarios_aprovadores")
+        .update(payload)
+        .eq("id", usuario.id)
+        .select("*")
+        .single();
+    }
+
+    // Se o banco nao tiver alguma das colunas opcionais, refaz so com senha
+    // para garantir que a temporaria seja gravada e o login funcione.
+    let { data, error } = await tentarUpdate(payloadCompleto);
+    if (error) {
+      console.warn("Falha no reset completo, tentando so com senha:", error.message);
+      ({ data, error } = await tentarUpdate({ senha: senhaLimpa }));
+    }
 
     if (error) {
       console.error(error.message);
-      setFeedback({ type: "error", text: "Erro ao redefinir a senha do usuário." });
+      setFeedback({ type: "error", text: `Erro ao redefinir senha: ${error.message}` });
       setResetandoSenha(false);
       return;
     }

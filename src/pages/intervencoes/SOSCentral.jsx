@@ -1,6 +1,7 @@
 // src/pages/SOSCentral.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
+import { AuthContext } from "../../context/AuthContext";
 import {
   FaSearch,
   FaEye,
@@ -15,6 +16,7 @@ import {
   FaCalendarAlt,
   FaTools,
   FaInbox,
+  FaTrash,
   FaWrench,
   FaRoad,
   FaFilter
@@ -190,9 +192,25 @@ function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
 
 /* --- Modal de Detalhes do SOS --- */
 function DetalheSOSModal({ sos, onClose, onAtualizar }) {
+  const { user } = useContext(AuthContext) || {};
+  const isAdmin = String(user?.nivel || "").trim().toLowerCase() === "administrador";
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({});
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+
+  async function excluirSOS() {
+    if (!isAdmin || !sos?.id) return;
+    const label = sos?.numero_sos ? `SOS #${sos.numero_sos}` : "esta etiqueta de SOS";
+    if (!window.confirm(`Excluir ${label}? Esta acao nao pode ser desfeita.`)) return;
+    const { error } = await supabase.from("sos_acionamentos").delete().eq("id", sos.id);
+    if (error) {
+      console.error("Erro ao excluir SOS:", error);
+      window.alert(`Nao foi possivel excluir: ${error.message || error}`);
+      return;
+    }
+    onClose?.();
+    onAtualizar?.(true);
+  }
   
   const [historicoPrev, setHistoricoPrev] = useState(null);
   const [historicoInsp, setHistoricoInsp] = useState(null);
@@ -399,6 +417,15 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             ) : (
               <button onClick={salvarAlteracoes} className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-md transition active:scale-95">
                 <FaSave /> Salvar
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={excluirSOS}
+                className="bg-rose-100 text-rose-700 hover:bg-rose-200 border border-rose-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition active:scale-95"
+                title="Excluir etiqueta (Administrador)"
+              >
+                <FaTrash /> Excluir etiqueta
               </button>
             )}
             <button onClick={onClose} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition">

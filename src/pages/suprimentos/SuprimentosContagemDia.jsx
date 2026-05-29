@@ -2,7 +2,8 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
-import { FaArrowLeft, FaCheck, FaRobot, FaTimes } from "react-icons/fa";
+import * as XLSX from "xlsx";
+import { FaArrowLeft, FaCheck, FaFileExcel, FaRobot, FaTimes } from "react-icons/fa";
 import PullToRefresh from "../../components/PullToRefresh";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
@@ -147,6 +148,46 @@ export default function SuprimentosContagemDia() {
     channel.subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [data, loteId]);
+
+  function baixarExcel() {
+    if (!contagens.length) {
+      window.alert("Esse lote nao tem itens contados para exportar.");
+      return;
+    }
+    const linhas = contagens.map((c, idx) => ({
+      "#": idx + 1,
+      Codigo: c.codigo || "",
+      Descricao: c.descricao || "",
+      Localizacao: c.localizacao || "",
+      Unidade: c.unidade || "",
+      Quantidade: c.quantidade ?? "",
+      "Saldo ERP": c.saldo_erp ?? "",
+      Diferenca: c.diferenca ?? "",
+      Status: c.peca_id
+        ? (c.saldo_erp === null || c.saldo_erp === undefined
+            ? "Sem ERP"
+            : Number(c.diferenca || 0) === 0
+              ? "OK"
+              : "Divergencia")
+        : "Sem cadastro",
+      "Contado por": c.contado_por_nome || "",
+      "Tipo": c.tipo_contagem || "",
+      "Data": c.created_at ? formatDateTimeBR(c.created_at) : "",
+      Observacao: c.observacao || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(linhas);
+    // Largura aproximada das colunas
+    ws["!cols"] = [
+      { wch: 4 }, { wch: 14 }, { wch: 40 }, { wch: 14 },
+      { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+      { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 30 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Contagens");
+    const stamp = (data || new Date().toISOString().slice(0, 10)).replace(/-/g, "");
+    const sufixo = loteId ? `_lote_${String(loteId).slice(0, 8)}` : "";
+    XLSX.writeFile(wb, `contagem_${stamp}${sufixo}.xlsx`);
+  }
 
   async function dispararConferencia() {
     setBotMsg("");
@@ -305,9 +346,14 @@ export default function SuprimentosContagemDia() {
           ? `Sessão de contagem ${String(loteId).slice(0, 8)} (${formatDateBR(data)}).`
           : `Todas as contagens feitas no dia ${formatDateBR(data)}.`}
         actions={
-          <ActionButton onClick={() => navigate("/suprimentos/contagem")}>
-            <FaArrowLeft /> Voltar
-          </ActionButton>
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionButton onClick={() => navigate("/suprimentos/contagem")}>
+              <FaArrowLeft /> Voltar
+            </ActionButton>
+            <ActionButton onClick={baixarExcel} disabled={loading || !contagens.length}>
+              <FaFileExcel /> Baixar Excel
+            </ActionButton>
+          </div>
         }
       />
 

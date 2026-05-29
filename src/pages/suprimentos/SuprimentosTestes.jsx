@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import {
   FaCheckCircle,
+  FaEdit,
   FaExclamationTriangle,
   FaEye,
   FaFlagCheckered,
@@ -44,6 +45,10 @@ import {
   todayISO,
   uploadSuprimentosFiles,
 } from "./suprimentosShared";
+
+// Forca o que o operador digita a ficar em CAIXA ALTA, preservando
+// numeros, acentos e espacos. Numeros e datas continuam intocados.
+const upper = (value) => String(value ?? "").toUpperCase();
 
 const QUICK_FORM = {
   nome_teste: "",
@@ -221,7 +226,7 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
           <Field label="Nome do teste" required>
             <input
               value={form.nome_teste}
-              onChange={(e) => setForm((prev) => ({ ...prev, nome_teste: e.target.value }))}
+              onChange={(e) => setForm((prev) => ({ ...prev, nome_teste: upper(e.target.value) }))}
               className={inputClass}
               required
             />
@@ -230,13 +235,13 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
           <Field label="Peca" required>
             <PartAutocomplete
               value={form.peca}
-              onChange={(value) => setForm((prev) => ({ ...prev, peca: value }))}
+              onChange={(value) => setForm((prev) => ({ ...prev, peca: upper(value) }))}
               onSelect={(peca) =>
                 setForm((prev) => ({
                   ...prev,
-                  peca: peca.descricao || prev.peca,
-                  codigo_peca: peca.codigo || prev.codigo_peca,
-                  fornecedor: peca.fornecedor_nome || prev.fornecedor,
+                  peca: upper(peca.descricao || prev.peca),
+                  codigo_peca: upper(peca.codigo || prev.codigo_peca),
+                  fornecedor: upper(peca.fornecedor_nome || prev.fornecedor),
                 }))
               }
               className={inputClass}
@@ -247,13 +252,13 @@ function QuickCreateTesteModal({ open, onClose, onSaved, user }) {
           <Field label="Codigo da peca">
             <input
               value={form.codigo_peca}
-              onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: e.target.value }))}
+              onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: upper(e.target.value) }))}
               className={inputClass}
             />
           </Field>
 
           <Field label="Fornecedor / marca" required>
-            <SupplierAutocomplete value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))} className={inputClass} required />
+            <SupplierAutocomplete value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: upper(v) }))} className={inputClass} required />
           </Field>
 
           <Field label="Prefixo" required>
@@ -353,7 +358,7 @@ function IntercorrenciaEditor({ item, onChange, onRemove }) {
         <Field label="O que houve" className="md:col-span-3">
           <textarea
             value={item.descricao}
-            onChange={(e) => onChange({ ...item, descricao: e.target.value })}
+            onChange={(e) => onChange({ ...item, descricao: upper(e.target.value) })}
             className={`${inputClass} min-h-[110px]`}
             placeholder="Descreva a intercorrencia observada no teste."
           />
@@ -514,7 +519,7 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
             <Field label="Nome do teste" required className="xl:col-span-2">
               <input
                 value={form.nome_teste}
-                onChange={(e) => setForm((prev) => ({ ...prev, nome_teste: e.target.value }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, nome_teste: upper(e.target.value) }))}
                 className={inputClass}
                 required
               />
@@ -523,13 +528,13 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
             <Field label="Peca" required>
               <PartAutocomplete
                 value={form.peca}
-                onChange={(value) => setForm((prev) => ({ ...prev, peca: value }))}
+                onChange={(value) => setForm((prev) => ({ ...prev, peca: upper(value) }))}
                 onSelect={(peca) =>
                   setForm((prev) => ({
                     ...prev,
-                    peca: peca.descricao || prev.peca,
-                    codigo_peca: peca.codigo || prev.codigo_peca,
-                    fornecedor: peca.fornecedor_nome || prev.fornecedor,
+                    peca: upper(peca.descricao || prev.peca),
+                    codigo_peca: upper(peca.codigo || prev.codigo_peca),
+                    fornecedor: upper(peca.fornecedor_nome || prev.fornecedor),
                   }))
                 }
                 className={inputClass}
@@ -540,13 +545,13 @@ function TesteDetailModal({ open, item, onClose, onSaved }) {
             <Field label="Codigo da peca">
               <input
                 value={form.codigo_peca}
-                onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: e.target.value }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: upper(e.target.value) }))}
                 className={inputClass}
               />
             </Field>
 
             <Field label="Fornecedor / marca" required className="xl:col-span-2">
-              <SupplierAutocomplete value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: v }))} className={inputClass} required />
+              <SupplierAutocomplete value={form.fornecedor} onChange={(v) => setForm((prev) => ({ ...prev, fornecedor: upper(v) }))} className={inputClass} required />
             </Field>
 
             <Field label="Prefixo" required>
@@ -940,6 +945,15 @@ export default function SuprimentosTestes() {
                               <FaEye />
                               Abrir
                             </span>
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); openDetail(row); }}
+                              title="Editar teste"
+                              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
+                            >
+                              <FaEdit />
+                              Editar
+                            </button>
                             {isAdmin && (
                               <button
                                 type="button"

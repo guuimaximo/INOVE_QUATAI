@@ -59,18 +59,18 @@ function ImagemAnaliseModal({ row, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 p-5">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">Análise de imagens</div>
             <h2 className="mt-2 text-2xl font-black text-slate-900">Ocorrência #{row.numero_ocorrencia}</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">{row.prefixo} · {formatDateBR(row.data_ocorrencia)} às {formatTimeBR(row.hora_ocorrencia)}</p>
           </div>
-          <button onClick={onClose} className="rounded-2xl bg-slate-200 px-4 py-2 text-sm font-black text-slate-700">Fechar</button>
+          <button onClick={onClose} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-black text-slate-700">Fechar</button>
         </div>
 
         <div className="space-y-4 p-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-relaxed text-slate-700">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-relaxed text-slate-700">
             <div className="font-black text-slate-900">{row.local}</div>
             <div className="mt-2">{row.descricao}</div>
           </div>
@@ -83,7 +83,7 @@ function ImagemAnaliseModal({ row, onClose, onSaved }) {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-600">Imagem confirma ocorrência?</label>
-              <select value={form.imagens_confirmam_ocorrencia} onChange={(e) => setForm({ ...form, imagens_confirmam_ocorrencia: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none focus:border-blue-400">
+              <select value={form.imagens_confirmam_ocorrencia} onChange={(e) => setForm({ ...form, imagens_confirmam_ocorrencia: e.target.value })} className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none focus:border-blue-400">
                 <option>Sim</option>
                 <option>Não</option>
                 <option>Inconclusivo</option>
@@ -92,7 +92,7 @@ function ImagemAnaliseModal({ row, onClose, onSaved }) {
             </div>
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-600">Responsabilidade aparente</label>
-              <select value={form.imagens_responsabilidade} onChange={(e) => setForm({ ...form, imagens_responsabilidade: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none focus:border-blue-400">
+              <select value={form.imagens_responsabilidade} onChange={(e) => setForm({ ...form, imagens_responsabilidade: e.target.value })} className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none focus:border-blue-400">
                 <option>Terceiro</option>
                 <option>Empresa</option>
                 <option>Motorista</option>
@@ -101,10 +101,10 @@ function ImagemAnaliseModal({ row, onClose, onSaved }) {
             </div>
             <div className="md:col-span-2">
               <label className="mb-1 block text-sm font-semibold text-slate-600">Observação da Ouvidoria</label>
-              <textarea rows={4} value={form.imagens_observacao} onChange={(e) => setForm({ ...form, imagens_observacao: e.target.value })} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold outline-none focus:border-blue-400" />
+              <textarea rows={4} value={form.imagens_observacao} onChange={(e) => setForm({ ...form, imagens_observacao: e.target.value })} className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold outline-none focus:border-blue-400" />
             </div>
             <div className="md:col-span-2">
-              <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center hover:border-blue-300 hover:bg-blue-50/40">
+              <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center hover:border-blue-300 hover:bg-blue-50/40">
                 <FaUpload className="mb-2 text-2xl text-slate-400" />
                 <span className="text-sm font-black text-slate-700">Anexar imagens da câmera</span>
                 <span className="mt-1 text-xs text-slate-500">{files.length ? `${files.length} arquivo(s) selecionado(s)` : "Fotos, vídeos ou PDF"}</span>
@@ -113,7 +113,7 @@ function ImagemAnaliseModal({ row, onClose, onSaved }) {
             </div>
           </div>
 
-          <button disabled={saving} onClick={salvar} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700 disabled:bg-slate-400">
+          <button disabled={saving} onClick={salvar} className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700 disabled:bg-slate-400">
             <FaCheckCircle /> {saving ? "Salvando..." : "Salvar análise e liberar para tratativa"}
           </button>
         </div>
@@ -163,27 +163,27 @@ export default function AcidentesImagens() {
 
   return (
     <div className="min-h-screen space-y-5 bg-slate-50 p-4 text-slate-800 md:p-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Acidentes</div>
         <h1 className="mt-3 flex items-center gap-3 text-3xl font-black text-slate-900">
-          <span className="rounded-2xl bg-blue-50 p-3 text-blue-600"><FaCamera /></span>
+          <span className="rounded-lg bg-blue-50 p-3 text-blue-600"><FaCamera /></span>
           Imagens de Acidentes
         </h1>
         <p className="mt-2 text-sm text-slate-600">Ocorrências aguardando verificação das imagens de câmera.</p>
       </div>
 
-      <div className="flex items-center rounded-3xl border border-slate-200 bg-white px-4 shadow-sm">
+      <div className="flex items-center rounded-xl border border-slate-200 bg-white px-4 shadow-sm">
         <FaSearch className="mr-3 text-slate-400" />
         <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar prefixo, motorista, local..." className="flex-1 bg-transparent py-4 text-sm font-semibold outline-none" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {loading ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-slate-400">Carregando...</div>
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-400">Carregando...</div>
         ) : filtrados.length === 0 ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-slate-400">Nenhuma ocorrência aguardando imagens.</div>
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-400">Nenhuma ocorrência aguardando imagens.</div>
         ) : filtrados.map((row) => (
-          <button key={row.id} onClick={() => setSelected(row)} className="rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/30">
+          <button key={row.id} onClick={() => setSelected(row)} className="rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/30">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-xs font-black uppercase tracking-wide text-slate-400">Ocorrência #{row.numero_ocorrencia}</div>

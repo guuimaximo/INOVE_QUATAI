@@ -8,6 +8,7 @@ import {
   FaPlus,
   FaSearch,
   FaTimesCircle,
+  FaTrash,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
@@ -32,7 +33,7 @@ function Card({ title, value, tone = "slate" }) {
     rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
   };
   return (
-    <div className={`rounded-3xl border bg-gradient-to-br p-5 shadow-sm ${tones[tone]}`}>
+    <div className={`rounded-xl border bg-gradient-to-br p-5 shadow-sm ${tones[tone]}`}>
       <div className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{title}</div>
       <div className="mt-3 text-3xl font-black text-slate-900">{value}</div>
     </div>
@@ -121,19 +122,19 @@ function AcidenteModal({ row, onClose, onChanged }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 p-5">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">Ocorrência #{row.numero_ocorrencia}</div>
             <h2 className="mt-2 text-2xl font-black text-slate-900">{row.prefixo} - {row.linha || "Sem linha"}</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">{formatDateBR(row.data_ocorrencia)} às {formatTimeBR(row.hora_ocorrencia)} · {row.local}</p>
           </div>
-          <button onClick={onClose} className="rounded-2xl bg-slate-200 px-4 py-2 text-sm font-black text-slate-700">Fechar</button>
+          <button onClick={onClose} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-black text-slate-700">Fechar</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <section className="rounded-3xl border border-slate-200 p-4 lg:col-span-2">
+            <section className="rounded-xl border border-slate-200 p-4 lg:col-span-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`rounded-full border px-3 py-1 text-xs font-black ${statusTone(row.status)}`}>{row.status}</span>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-black text-slate-700">{row.situacao_operacional}</span>
@@ -144,7 +145,7 @@ function AcidenteModal({ row, onClose, onChanged }) {
                 <Info label="Condutor" value={row.condutor_terceiro} />
                 <Info label="Tipo" value={row.tipo_acidente} />
               </div>
-              <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-semibold leading-relaxed text-slate-700">
+              <div className="mt-4 rounded-lg bg-slate-50 p-4 text-sm font-semibold leading-relaxed text-slate-700">
                 {row.descricao}
               </div>
               <div className="mt-4">
@@ -152,13 +153,13 @@ function AcidenteModal({ row, onClose, onChanged }) {
                 <FileList urls={row.evidencias_urls} />
               </div>
               {row.mensagem_whatsapp ? (
-                <button onClick={() => copyToClipboard(row.mensagem_whatsapp).then(() => alert("Mensagem copiada."))} className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-slate-800 px-4 py-3 text-sm font-black text-white">
+                <button onClick={() => copyToClipboard(row.mensagem_whatsapp).then(() => alert("Mensagem copiada."))} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-3 text-sm font-black text-white">
                   <FaCopy /> Copiar WhatsApp
                 </button>
               ) : null}
             </section>
 
-            <section className="rounded-3xl border border-slate-200 p-4">
+            <section className="rounded-xl border border-slate-200 p-4">
               <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Imagens</h3>
               <div className="mt-3 space-y-2 text-sm font-semibold text-slate-600">
                 <div>Confirmam: {safeText(row.imagens_confirmam_ocorrencia)}</div>
@@ -172,33 +173,33 @@ function AcidenteModal({ row, onClose, onChanged }) {
           </div>
 
           <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <section className="rounded-3xl border border-slate-200 p-4">
+            <section className="rounded-xl border border-slate-200 p-4">
               <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Nova tratativa</h3>
-              <textarea rows={4} value={descricao} onChange={(e) => setDescricao(e.target.value)} className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold outline-none focus:border-blue-400" placeholder="Contato com terceiro, orientação, encaminhamento..." />
-              <input type="file" multiple accept="image/*,video/*,application/pdf" onChange={(e) => setFiles(Array.from(e.target.files || []))} className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm" />
-              <button disabled={saving} onClick={adicionarTratativa} className="mt-3 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:bg-slate-400">
+              <textarea rows={4} value={descricao} onChange={(e) => setDescricao(e.target.value)} className="mt-3 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold outline-none focus:border-blue-400" placeholder="Contato com terceiro, orientação, encaminhamento..." />
+              <input type="file" multiple accept="image/*,video/*,application/pdf" onChange={(e) => setFiles(Array.from(e.target.files || []))} className="mt-3 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm" />
+              <button disabled={saving} onClick={adicionarTratativa} className="mt-3 rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:bg-slate-400">
                 Adicionar tratativa
               </button>
             </section>
 
-            <section className="rounded-3xl border border-slate-200 p-4">
+            <section className="rounded-xl border border-slate-200 p-4">
               <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Encerramento</h3>
-              <textarea rows={3} value={parecer} onChange={(e) => setParecer(e.target.value)} className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold outline-none focus:border-emerald-400" placeholder="Parecer final para concluir..." />
-              <button onClick={concluir} className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white">
+              <textarea rows={3} value={parecer} onChange={(e) => setParecer(e.target.value)} className="mt-3 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold outline-none focus:border-emerald-400" placeholder="Parecer final para concluir..." />
+              <button onClick={concluir} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-black text-white">
                 <FaCheckCircle /> Concluir
               </button>
-              <textarea rows={2} value={cancelMotivo} onChange={(e) => setCancelMotivo(e.target.value)} className="mt-4 w-full rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold outline-none focus:border-rose-400" placeholder="Motivo para cancelar..." />
-              <button onClick={cancelar} className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white">
+              <textarea rows={2} value={cancelMotivo} onChange={(e) => setCancelMotivo(e.target.value)} className="mt-4 w-full rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold outline-none focus:border-rose-400" placeholder="Motivo para cancelar..." />
+              <button onClick={cancelar} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-3 text-sm font-black text-white">
                 <FaTimesCircle /> Cancelar
               </button>
             </section>
           </div>
 
-          <section className="mt-5 rounded-3xl border border-slate-200 p-4">
+          <section className="mt-5 rounded-xl border border-slate-200 p-4">
             <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Histórico de tratativas</h3>
             <div className="mt-3 space-y-3">
               {tratativas.length === 0 ? <div className="text-sm text-slate-400">Nenhuma tratativa registrada.</div> : tratativas.map((t) => (
-                <div key={t.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div key={t.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="text-xs font-black uppercase tracking-wide text-slate-500">{new Date(t.created_at).toLocaleString("pt-BR")} · {safeText(t.criado_por_nome)}</div>
                   <div className="mt-2 text-sm font-semibold text-slate-700">{t.descricao}</div>
                   <div className="mt-2"><FileList urls={t.evidencias_urls} /></div>
@@ -214,7 +215,7 @@ function AcidenteModal({ row, onClose, onChanged }) {
 
 function Info({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
       <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</div>
       <div className="mt-1 text-sm font-black text-slate-800">{safeText(value)}</div>
     </div>
@@ -222,11 +223,27 @@ function Info({ label, value }) {
 }
 
 export default function AcidentesCentral() {
+  const { user } = useContext(AuthContext);
+  const isAdmin = String(user?.nivel || "").trim().toLowerCase() === "administrador";
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("");
   const [selected, setSelected] = useState(null);
+
+  async function excluirAcidente(row) {
+    if (!isAdmin) return;
+    const label = row?.numero_ocorrencia || row?.prefixo || "este acidente";
+    if (!window.confirm(`Excluir o acidente #${label}? Esta acao nao pode ser desfeita.`)) return;
+    const { error } = await supabase.from("acidentes_ocorrencias").delete().eq("id", row.id);
+    if (error) {
+      console.error("Erro ao excluir acidente:", error);
+      window.alert(`Nao foi possivel excluir: ${error.message || error}`);
+      return;
+    }
+    if (selected?.id === row.id) setSelected(null);
+    await carregar();
+  }
 
   async function carregar() {
     setLoading(true);
@@ -272,16 +289,16 @@ export default function AcidentesCentral() {
 
   return (
     <div className="min-h-screen space-y-5 bg-slate-50 p-4 text-slate-800 md:p-6">
-      <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
         <div>
           <div className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Acidentes</div>
           <h1 className="mt-3 flex items-center gap-3 text-3xl font-black text-slate-900">
-            <span className="rounded-2xl bg-blue-50 p-3 text-blue-600"><FaClipboardList /></span>
+            <span className="rounded-lg bg-blue-50 p-3 text-blue-600"><FaClipboardList /></span>
             Central de Acidentes
           </h1>
           <p className="mt-2 text-sm text-slate-600">Tratativas, imagens e encerramento das ocorrências.</p>
         </div>
-        <Link to="/acidentes/lancamento" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700">
+        <Link to="/acidentes/lancamento" className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700">
           <FaPlus /> Nova ocorrência
         </Link>
       </div>
@@ -294,18 +311,18 @@ export default function AcidentesCentral() {
         <Card title="Canceladas" value={counts.cancelado} tone="rose" />
       </div>
 
-      <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row">
-        <div className="flex min-w-[240px] flex-1 items-center rounded-2xl border border-slate-200 bg-slate-50 px-3">
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row">
+        <div className="flex min-w-[240px] flex-1 items-center rounded-lg border border-slate-200 bg-slate-50 px-3">
           <FaSearch className="mr-2 text-slate-400" />
           <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar prefixo, motorista, placa, local..." className="flex-1 bg-transparent py-3 text-sm font-semibold outline-none" />
         </div>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700">
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700">
           <option value="">Todos os status</option>
           {ACIDENTE_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full min-w-[1100px] text-left">
           <thead className="border-b bg-slate-50 text-xs font-black uppercase tracking-[0.18em] text-slate-600">
             <tr>
@@ -333,8 +350,17 @@ export default function AcidentesCentral() {
                 <td className="p-4"><span className={`rounded-full border px-3 py-1 text-xs font-black ${statusTone(r.status)}`}>{r.status}</span></td>
                 <td className="p-4">
                   <div className="flex gap-2">
-                    {r.status === "Aguardando imagens" ? <Link onClick={(e) => e.stopPropagation()} to="/acidentes/imagens" className="rounded-xl bg-amber-100 p-2 text-amber-700"><FaCamera /></Link> : null}
-                    <button onClick={(e) => { e.stopPropagation(); setSelected(r); }} className="rounded-xl bg-blue-600 p-2 text-white"><FaEye /></button>
+                    {r.status === "Aguardando imagens" ? <Link onClick={(e) => e.stopPropagation()} to="/acidentes/imagens" className="rounded-lg bg-amber-100 p-2 text-amber-700"><FaCamera /></Link> : null}
+                    <button onClick={(e) => { e.stopPropagation(); setSelected(r); }} className="rounded-lg bg-blue-600 p-2 text-white" title="Detalhes"><FaEye /></button>
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); excluirAcidente(r); }}
+                        className="rounded-lg bg-rose-100 p-2 text-rose-700 hover:bg-rose-200"
+                        title="Excluir (Administrador)"
+                      >
+                        <FaTrash />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

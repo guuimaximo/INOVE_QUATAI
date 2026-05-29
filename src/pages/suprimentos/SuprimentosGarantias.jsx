@@ -502,19 +502,32 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <SectionBlock title="Resumo">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <Detail label="Controle" value={item.numero_controle} />
-          <Detail label="Tipo da garantia" value={item.tipo_garantia || "Peca comprada"} />
-          <Detail label="Peca" value={item.peca} />
-          <Detail label="Codigo" value={item.codigo_peca} />
-          <Detail label="Fornecedor" value={item.fornecedor} />
-          <Detail label="Prefixo" value={item.prefixo} />
-          <Detail label="Data instalacao" value={formatDateBR(item.data_instalacao)} />
-          <Detail label="Data falha" value={formatDateBR(item.data_falha)} />
-          <Detail label="KM falha" value={formatKm(item.km_falha)} />
-          <Detail label="Solicitacao" value={item.tipo_solicitacao} />
-        </div>
+        <SectionBlock title="Cadastro da peca" description="Identificacao da peca, fornecedor e referencia comercial.">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <Detail label="Controle" value={item.numero_controle} />
+            <Detail label="Tipo da garantia" value={item.tipo_garantia || "Peca comprada"} />
+            <Detail label="Peca" value={item.peca} />
+            <Detail label="Codigo" value={item.codigo_peca} />
+            <Detail label="Fornecedor" value={item.fornecedor} />
+            <Detail label="Data da compra" value={formatDateBR(item.data_compra)} />
+            <Detail label="Valor da peca" value={item.valor_peca != null ? `R$ ${Number(item.valor_peca).toFixed(2)}` : "--"} />
+          </div>
+        </SectionBlock>
+
+        <SectionBlock title="Instalacao" description="Onde e quando a peca foi instalada.">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <Detail label="Prefixo" value={item.prefixo} />
+            <Detail label="Data da instalacao" value={formatDateBR(item.data_instalacao)} />
+            <Detail label="KM instalacao" value={formatKm(item.km_instalacao)} />
+          </div>
+        </SectionBlock>
+
+        <SectionBlock title="Falha" description="Detalhes da ocorrencia que motivou a abertura da garantia.">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <Detail label="Data da falha" value={formatDateBR(item.data_falha)} />
+            <Detail label="KM falha" value={formatKm(item.km_falha)} />
+            <Detail label="Tipo de solicitacao" value={item.tipo_solicitacao} />
+          </div>
         </SectionBlock>
 
         <SectionBlock

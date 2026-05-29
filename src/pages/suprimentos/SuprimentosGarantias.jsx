@@ -390,6 +390,11 @@ function QuickCreateGarantiaModal({ open, onClose, onSaved, user }) {
         </SectionBlock>
 
         <Panel title="Anexos iniciais">
+          <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-4 py-3">
+            <p className="text-sm font-black uppercase tracking-wide text-rose-700">
+              SEMPRE AO LANCAR UMA GARANTIA ANEXE TODAS AS FOTOS E VIDEOS POSSIVEIS PARA DAR SUBSIDIO PARA A MESMA
+            </p>
+          </div>
           <AttachmentInput
             existingUrls={[]}
             onExistingUrlsChange={() => {}}

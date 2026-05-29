@@ -21,6 +21,7 @@ import {
   ActionButton,
   AttachmentGallery,
   AttachmentInput,
+  DateRangeFilter,
   EmptyState,
   KpiCard,
   PageHero,
@@ -740,6 +741,8 @@ export default function SuprimentosGarantias() {
   const [errorMessage, setErrorMessage] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
+  const [periodoDe, setPeriodoDe] = useState("");
+  const [periodoAte, setPeriodoAte] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
@@ -799,9 +802,12 @@ export default function SuprimentosGarantias() {
         "aberto_por_nome",
         "protocolo_fornecedor",
       ]);
-      return statusOk && searchOk;
+      const baseDate = String(row?.data_falha || row?.data_compra || row?.created_at || "").slice(0, 10);
+      const dataDeOk = periodoDe ? baseDate >= periodoDe : true;
+      const dataAteOk = periodoAte ? baseDate <= periodoAte : true;
+      return statusOk && searchOk && dataDeOk && dataAteOk;
     });
-  }, [rows, search, statusFilter]);
+  }, [rows, search, statusFilter, periodoDe, periodoAte]);
 
   const cards = useMemo(() => {
     const abertas = rows.filter((row) => deriveGarantiaMeta(row).status === "Aberta");
@@ -875,6 +881,17 @@ export default function SuprimentosGarantias() {
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Na tela</p>
             <p className="mt-2 text-2xl font-semibold text-slate-900">{filteredRows.length}</p>
           </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-4">
+          <DateRangeFilter
+            from={periodoDe}
+            to={periodoAte}
+            onFromChange={setPeriodoDe}
+            onToChange={setPeriodoAte}
+            onClear={() => { setPeriodoDe(""); setPeriodoAte(""); }}
+          />
+          <p className="text-xs font-semibold text-slate-500">Filtra pela data da falha.</p>
         </div>
 
         {errorMessage ? (

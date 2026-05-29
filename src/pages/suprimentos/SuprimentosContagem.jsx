@@ -20,6 +20,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
 import {
   ActionButton,
+  DateRangeFilter,
   EmptyState,
   KpiCard,
   PageHero,
@@ -729,7 +730,34 @@ export default function SuprimentosContagem() {
   // ─── Lotes (Diária / Lubrificantes = por dia ; Semanal = auditorias) ──
   const [tab, setTab] = useState("diaria");
   const [lotesPorTipo, setLotesPorTipo] = useState({ diaria: [], lubrificantes: [] });
+  const [periodoDe, setPeriodoDe] = useState("");
+  const [periodoAte, setPeriodoAte] = useState("");
   const [lotesSemanais, setLotesSemanais] = useState([]);
+
+  const lotesPorTipoFiltrados = useMemo(() => {
+    const inRange = (data) => {
+      if (!periodoDe && !periodoAte) return true;
+      const d = String(data || "").slice(0, 10);
+      if (periodoDe && d < periodoDe) return false;
+      if (periodoAte && d > periodoAte) return false;
+      return true;
+    };
+    return {
+      diaria: (lotesPorTipo.diaria || []).filter((l) => inRange(l.data)),
+      lubrificantes: (lotesPorTipo.lubrificantes || []).filter((l) => inRange(l.data)),
+    };
+  }, [lotesPorTipo, periodoDe, periodoAte]);
+
+  const lotesSemanaisFiltrados = useMemo(() => {
+    if (!periodoDe && !periodoAte) return lotesSemanais;
+    return lotesSemanais.filter((a) => {
+      const fim = String(a?.data_fim || a?.data_inicio || "").slice(0, 10);
+      const inicio = String(a?.data_inicio || "").slice(0, 10);
+      if (periodoDe && fim && fim < periodoDe) return false;
+      if (periodoAte && inicio && inicio > periodoAte) return false;
+      return true;
+    });
+  }, [lotesSemanais, periodoDe, periodoAte]);
   const [loadingLotes, setLoadingLotes] = useState(true);
   const lotesDiarios = lotesPorTipo.diaria;
 
@@ -1230,10 +1258,21 @@ export default function SuprimentosContagem() {
           </div>
         }
       >
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-3">
+          <DateRangeFilter
+            from={periodoDe}
+            to={periodoAte}
+            onFromChange={setPeriodoDe}
+            onToChange={setPeriodoAte}
+            onClear={() => { setPeriodoDe(""); setPeriodoAte(""); }}
+          />
+          <p className="text-xs font-semibold text-slate-500">Filtra por data do lote.</p>
+        </div>
+
         {loadingLotes ? (
           <p className="py-12 text-center text-sm font-semibold text-slate-400">Carregando...</p>
         ) : (tab === "diaria" || tab === "lubrificantes") ? (
-          (lotesPorTipo[tab] || []).length === 0 ? (
+          (lotesPorTipoFiltrados[tab] || []).length === 0 ? (
             <EmptyState
               title={tab === "lubrificantes" ? "Sem lotes de lubrificantes" : "Sem lotes diários"}
               subtitle="Faça a primeira contagem desse tipo para abrir um lote."
@@ -1254,7 +1293,7 @@ export default function SuprimentosContagem() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(lotesPorTipo[tab] || []).map((l) => {
+                  {(lotesPorTipoFiltrados[tab] || []).map((l) => {
                     const hora = new Date(l.ultima || l.primeira).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
                     return (
                     <tr
@@ -1307,7 +1346,7 @@ export default function SuprimentosContagem() {
             </div>
           )
         ) : (
-          lotesSemanais.length === 0 ? (
+          lotesSemanaisFiltrados.length === 0 ? (
             <EmptyState title="Sem auditorias semanais" subtitle="O bot semanal roda toda segunda 03h. Você também pode disparar manual em GitHub Actions." />
           ) : (
             <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -1324,7 +1363,7 @@ export default function SuprimentosContagem() {
                   </tr>
                 </thead>
                 <tbody>
-                  {lotesSemanais.map((a) => {
+                  {lotesSemanaisFiltrados.map((a) => {
                     const r = a.resumo_json || {};
                     return (
                       <tr

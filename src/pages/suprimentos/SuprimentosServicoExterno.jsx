@@ -23,7 +23,7 @@ import {
 } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
-import { EmptyState, KpiCard, PageHero, Panel, PartAutocomplete, StatusChip, SupplierAutocomplete } from "./SuprimentosUI";
+import { DateRangeFilter, EmptyState, KpiCard, PageHero, Panel, PartAutocomplete, StatusChip, SupplierAutocomplete } from "./SuprimentosUI";
 import { formatDateBR, formatDateTimeBR, todayISO, uploadSuprimentosFiles } from "./suprimentosShared";
 import logoInove from "../../assets/logoInovaQuatai.png";
 
@@ -1283,6 +1283,8 @@ export default function SuprimentosServicoExterno() {
   const [errorMsg, setErrorMsg] = useState("");
   const [statusFilter, setStatusFilter] = useState("Todos");
   const [search, setSearch] = useState("");
+  const [periodoDe, setPeriodoDe] = useState("");
+  const [periodoAte, setPeriodoAte] = useState("");
 
   const [showNovo, setShowNovo] = useState(false);
   const [editRecord, setEditRecord] = useState(null);
@@ -1316,9 +1318,12 @@ export default function SuprimentosServicoExterno() {
       const matchStatus = statusFilter === "Todos" || r.status === statusFilter;
       const q = search.toLowerCase();
       const matchSearch = !q || [r.numero_saida, r.terceiro_nome, r.motivo, r.nota_saida_numero].some((v) => (v || "").toLowerCase().includes(q));
-      return matchStatus && matchSearch;
+      const baseDate = String(r?.nota_saida_data || r?.created_at || "").slice(0, 10);
+      const dataDeOk = periodoDe ? baseDate >= periodoDe : true;
+      const dataAteOk = periodoAte ? baseDate <= periodoAte : true;
+      return matchStatus && matchSearch && dataDeOk && dataAteOk;
     });
-  }, [records, statusFilter, search]);
+  }, [records, statusFilter, search, periodoDe, periodoAte]);
 
   const kpis = useMemo(() => ({
     total: records.length,
@@ -1354,10 +1359,19 @@ export default function SuprimentosServicoExterno() {
               <button key={s} onClick={() => setStatusFilter(s)} className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${statusFilter === s ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-100"}`}>{s}</button>
             ))}
           </div>
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-            <FaSearch className="text-slate-400 text-xs" />
-            <input className="bg-transparent outline-none text-sm font-semibold text-slate-700 placeholder:text-slate-400 w-44" placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
-            {search && <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600"><FaTimesCircle /></button>}
+          <div className="flex flex-wrap items-center gap-3">
+            <DateRangeFilter
+              from={periodoDe}
+              to={periodoAte}
+              onFromChange={setPeriodoDe}
+              onToChange={setPeriodoAte}
+              onClear={() => { setPeriodoDe(""); setPeriodoAte(""); }}
+            />
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <FaSearch className="text-slate-400 text-xs" />
+              <input className="bg-transparent outline-none text-sm font-semibold text-slate-700 placeholder:text-slate-400 w-44" placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              {search && <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600"><FaTimesCircle /></button>}
+            </div>
           </div>
         </div>
       </Panel>

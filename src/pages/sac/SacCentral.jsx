@@ -257,11 +257,27 @@ function Info({ label, value }) {
 }
 
 export default function SacCentral() {
+  const { user } = useContext(AuthContext);
+  const isAdmin = String(user?.nivel || "").trim().toLowerCase() === "administrador";
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("Todos");
   const [selected, setSelected] = useState(null);
+
+  async function excluirSac(row) {
+    if (!isAdmin || !row?.id) return;
+    const label = row?.protocolo || row?.cliente_nome || "este atendimento";
+    if (!window.confirm(`Excluir o SAC "${label}"? Esta acao nao pode ser desfeita.`)) return;
+    const { error } = await supabase.from("sac_atendimentos").delete().eq("id", row.id);
+    if (error) {
+      console.error("Erro ao excluir SAC:", error);
+      window.alert(`Nao foi possivel excluir: ${error.message || error}`);
+      return;
+    }
+    if (selected?.id === row.id) setSelected(null);
+    await carregar();
+  }
 
   async function carregar() {
     setLoading(true);
@@ -353,6 +369,7 @@ export default function SacCentral() {
                 <th className="px-4 py-3">Motivo</th>
                 <th className="px-4 py-3">Atendimento</th>
                 <th className="px-4 py-3">Status</th>
+                {isAdmin ? <th className="px-4 py-3 text-right">Acoes</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -367,10 +384,22 @@ export default function SacCentral() {
                   <td className="px-4 py-3 font-semibold text-slate-700">{row.grupo_motivo} / {safeText(row.subgrupo_motivo)}</td>
                   <td className="px-4 py-3 font-semibold text-slate-700">{formatDateBR(row.data_atendimento)} {formatTimeBR(row.hora_atendimento)}</td>
                   <td className="px-4 py-3"><span className={`rounded-full border px-3 py-1 text-xs font-black ${statusTone(row.status)}`}>{row.status}</span></td>
+                  {isAdmin ? (
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => excluirSac(row)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-bold text-rose-600 transition hover:bg-rose-50"
+                        title="Excluir SAC (Administrador)"
+                      >
+                        <FaTimesCircle /> Excluir
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
               {filtrados.length === 0 && !loading ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm font-bold text-slate-400">Nenhum atendimento encontrado.</td></tr>
+                <tr><td colSpan={isAdmin ? 7 : 6} className="px-4 py-10 text-center text-sm font-bold text-slate-400">Nenhum atendimento encontrado.</td></tr>
               ) : null}
             </tbody>
           </table>

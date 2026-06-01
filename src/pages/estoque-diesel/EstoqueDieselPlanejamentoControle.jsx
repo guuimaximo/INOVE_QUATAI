@@ -668,7 +668,24 @@ function buildMonthRows({ year, month, product, measurements, planningRows, rece
       };
     }
 
-    const saldoPlanejado = safeNumber(runningBalance, 0);
+    // Mesmo quando o "actual" (medicao de D+1) nao existe, se houver
+    // medicao no proprio dia, usar o Saldo inicial do dia dela como
+    // saldo projetado (litros_final_t1+t2). Senao, cai no runningBalance.
+    const saldoReguaMesmoDia = round(
+      safeNumber(sameDayMeasurement?.litrosFinalT1, 0) +
+        safeNumber(sameDayMeasurement?.litrosFinalT2, 0),
+      2
+    );
+    const saldoPlanejado =
+      saldoReguaMesmoDia && saldoReguaMesmoDia > 0
+        ? saldoReguaMesmoDia
+        : safeNumber(
+            sameDayMeasurement?.medicaoInicial ??
+              sameDayMeasurement?.medicaoAtual ??
+              sameDayMeasurement?.saldoFinal ??
+              runningBalance,
+            runningBalance
+          );
     const plannedReceipt =
       recebidoReal > 0 ? recebidoReal : safeNumber(plan?.plannedReceipt ?? 0, 0);
     const plannedOutput = safeNumber(

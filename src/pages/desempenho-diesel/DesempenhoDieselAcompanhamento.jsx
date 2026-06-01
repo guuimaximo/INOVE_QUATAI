@@ -17,6 +17,7 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
+import DateRangePopover from "../../components/DateRangePopover";
 
 import ModalLancamentoIntervencao from "../../components/desempenho/ModalLancamentoIntervencao";
 import ModalProntuarioUnificado from "../../components/desempenho/ModalProntuarioUnificado";
@@ -881,20 +882,19 @@ export default function DesempenhoDieselAcompanhamento() {
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Período</label>
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                type="date"
-                value={filtroDataIni}
-                onChange={(e) => setFiltroDataIni(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-              />
-              <input
-                type="date"
-                value={filtroDataFim}
-                onChange={(e) => setFiltroDataFim(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-              />
-            </div>
+            <DateRangePopover
+              from={filtroDataIni}
+              to={filtroDataFim}
+              placeholder="Selecionar periodo"
+              onChange={({ from, to }) => {
+                setFiltroDataIni(from);
+                setFiltroDataFim(to);
+              }}
+              onClear={() => {
+                setFiltroDataIni("");
+                setFiltroDataFim("");
+              }}
+            />
           </div>
 
           <div className="flex flex-wrap gap-2 items-center md:justify-end">

@@ -24,6 +24,7 @@ import {
 import { supabase } from "../../supabase";
 import { supabaseBCNT } from "../../supabaseBCNT";
 import { DieselPageShell } from "../../components/desempenho/DieselPageShell";
+import DateRangePopover from "../../components/DateRangePopover";
 
 const GH_USER = import.meta.env.VITE_GITHUB_USER;
 const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
@@ -1451,14 +1452,22 @@ function DieselAgenteView({ onAlert }) {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
           <div>
-            <label className="text-xs font-bold text-slate-500">Início</label>
-            <input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500">Fim</label>
-            <input type="date" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+            <label className="text-xs font-bold text-slate-500 mb-1 block">Período</label>
+            <DateRangePopover
+              from={periodoInicio}
+              to={periodoFim}
+              placeholder="Selecionar periodo"
+              onChange={({ from, to }) => {
+                setPeriodoInicio(from);
+                setPeriodoFim(to);
+              }}
+              onClear={() => {
+                setPeriodoInicio("");
+                setPeriodoFim("");
+              }}
+            />
           </div>
           <button
             onClick={dispararGerencial}

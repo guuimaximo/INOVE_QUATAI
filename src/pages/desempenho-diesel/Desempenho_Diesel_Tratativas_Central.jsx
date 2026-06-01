@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
+import DateRangePopover from "../../components/DateRangePopover";
 import {
   FaSearch,
   FaFilter,
@@ -390,23 +391,14 @@ export default function Desempenho_Diesel_Tratativas_Central() {
           </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Data inicial</label>
-            <input
-              type="date"
-              value={filtros.dataInicio}
-              onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-            />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Data final</label>
-            <input
-              type="date"
-              value={filtros.dataFim}
-              onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+          <div className="md:col-span-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Período</label>
+            <DateRangePopover
+              from={filtros.dataInicio}
+              to={filtros.dataFim}
+              placeholder="Selecionar periodo"
+              onChange={({ from, to }) => setFiltros((current) => ({ ...current, dataInicio: from, dataFim: to }))}
+              onClear={() => setFiltros((current) => ({ ...current, dataInicio: "", dataFim: "" }))}
             />
           </div>
 

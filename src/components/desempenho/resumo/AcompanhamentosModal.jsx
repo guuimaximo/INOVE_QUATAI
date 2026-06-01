@@ -140,6 +140,37 @@ export default function AcompanhamentosModal({
         </div>
       </div>
 
+      {/* Linha 1 - Motoristas acompanhados, recortados pela regra 10/20/30 */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="bg-white p-4 rounded-xl border shadow-sm">
+          <p className="text-sm text-gray-500 font-bold">Motoristas acompanhados</p>
+          <p className="text-2xl font-black text-slate-800">
+            {fmtInt((acompanhamentosComEvolucao || []).length)}
+          </p>
+          <p className="text-[11px] font-semibold text-slate-400 mt-1">Total no filtro atual</p>
+        </div>
+        {[
+          { tipo: "CHECKPOINT_10D", label: "Janela 10 dias", tone: "text-blue-700" },
+          { tipo: "CHECKPOINT_20D", label: "Janela 20 dias", tone: "text-indigo-700" },
+          { tipo: "CHECKPOINT_30D", label: "Janela 30 dias", tone: "text-violet-700" },
+          { tipo: "SEM_DADOS", label: "Sem dados", tone: "text-slate-500" },
+        ].map((card) => {
+          const qtd = (acompanhamentosComEvolucao || []).filter((a) => a?.checkpoint_tipo === card.tipo).length;
+          return (
+            <div key={card.tipo} className="bg-white p-4 rounded-xl border shadow-sm">
+              <p className="text-sm text-gray-500 font-bold">{card.label}</p>
+              <p className={`text-2xl font-black ${card.tone}`}>{fmtInt(qtd)}</p>
+              <p className="text-[11px] font-semibold text-slate-400 mt-1">
+                {card.tipo === "SEM_DADOS"
+                  ? "Sem janela completa"
+                  : "Com prontuario gerado"}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Linha 2 - Resultado dos checkpoints */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="bg-white p-4 rounded-xl border shadow-sm">
           <p className="text-sm text-gray-500 font-bold">Checkpoints</p>

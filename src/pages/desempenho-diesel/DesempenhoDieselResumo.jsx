@@ -2112,36 +2112,6 @@ export default function DesempenhoDieselAnalise() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {[
-              { key: "RESUMO_INSTRUTOR", label: "Resumo por Instrutor" },
-              { key: "TEMPO_DIA", label: "Tempo por Dia" },
-              { key: "CHECKPOINT_LINHA", label: "Check Point por Linha" },
-              { key: "ACOMPANHAMENTOS", label: "Acompanhamentos" },
-            ].map((sub) => (
-              <button
-                key={sub.key}
-                onClick={() => setSubAcompanhamento(sub.key)}
-                className={`px-3 py-2 rounded-lg font-bold border transition ${
-                  subAcompanhamento === sub.key
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                {sub.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="rounded-xl border bg-slate-50 p-4">
-            <h2 className="text-lg font-black text-slate-800">
-              {headerSubAcompanhamento[subAcompanhamento]?.titulo}
-            </h2>
-            <p className="text-sm text-slate-500">
-              {headerSubAcompanhamento[subAcompanhamento]?.subtitulo}
-            </p>
-          </div>
-
           <AcompanhamentosModal
             subAcompanhamento={subAcompanhamento}
             setSubAcompanhamento={setSubAcompanhamento}

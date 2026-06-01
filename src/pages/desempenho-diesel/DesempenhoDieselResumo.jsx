@@ -1369,13 +1369,16 @@ export default function DesempenhoDieselAnalise() {
       });
     });
 
-    if (!mesReferencia) return rows;
-
     return rows.filter((row) => {
-      const mesItem = row?.data_ref ? String(row.data_ref).slice(0, 7) : "";
-      return mesItem === mesReferencia;
+      const dataIso = String(row?.data_ref || "");
+      const mesItem = dataIso.slice(0, 7);
+      const diaItem = dataIso.slice(0, 10);
+      if (mesReferencia && mesItem !== mesReferencia) return false;
+      if (periodoDe && diaItem && diaItem < periodoDe) return false;
+      if (periodoAte && diaItem && diaItem > periodoAte) return false;
+      return true;
     });
-  }, [acompanhamentosComEvolucao, sessoesPorAcompanhamento, mesReferencia]);
+  }, [acompanhamentosComEvolucao, sessoesPorAcompanhamento, mesReferencia, periodoDe, periodoAte]);
 
   const idsAcompanhamentosResumoInstrutor = useMemo(
     () => new Set(registrosInstrutor.map((row) => row.acompanhamento_id).filter(Boolean)),

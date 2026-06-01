@@ -83,24 +83,13 @@ export default function MobileHome() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 py-6">
       <div className="mx-auto max-w-md space-y-6">
-        <header className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">INOVE Quatai</div>
-            <h1 className="text-2xl font-black text-slate-900">Ola, {user?.nome || user?.login || "Operador"}</h1>
-            <p className="text-sm text-slate-500">
-              Nivel: <strong className="text-slate-700">{nivelLabel}</strong>
-              {accessLoading ? " · carregando permissoes..." : ""}
-            </p>
-          </div>
-          {logout ? (
-            <button
-              type="button"
-              onClick={logout}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50"
-            >
-              <FaSignOutAlt /> Sair
-            </button>
-          ) : null}
+        <header>
+          <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">INOVE Quatai</div>
+          <h1 className="text-2xl font-black text-slate-900">Ola, {user?.nome || user?.login || "Operador"}</h1>
+          <p className="text-sm text-slate-500">
+            Nivel: <strong className="text-slate-700">{nivelLabel}</strong>
+            {accessLoading ? " · carregando permissoes..." : ""}
+          </p>
         </header>
 
         <p className="text-sm text-slate-500">Escolha um modulo para comecar.</p>
@@ -133,6 +122,18 @@ export default function MobileHome() {
         {fallbackAtivo ? (
           <div className="rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-[11px] text-blue-800">
             Modo permissivo: liberamos os modulos compativeis com seu nivel ({nivelLabel}) no app. Se algo nao abrir, peca ao gestor para revisar as paginas do nivel.
+          </div>
+        ) : null}
+
+        {logout ? (
+          <div className="pt-6">
+            <button
+              type="button"
+              onClick={logout}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm font-black text-rose-700 shadow-sm transition active:scale-[0.99]"
+            >
+              <FaSignOutAlt /> Sair do INOVE
+            </button>
           </div>
         ) : null}
       </div>

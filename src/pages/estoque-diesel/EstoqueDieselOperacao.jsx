@@ -794,13 +794,29 @@ export default function EstoqueDieselOperacao() {
     });
   }
 
-  function resetFormForNewEntry() {
-    setForm(buildPreparedForm(buildDefaultForm(product, year, month), entries, metadata, { forcePumpInitials: true }));
+  function resetFormForNewEntry(overrides = {}) {
+    const { entriesOverride, metadataOverride, dateOverride } = overrides;
+    const usableEntries = entriesOverride || entries;
+    const usableMetadata = metadataOverride || metadata;
+    const baseForm = buildDefaultForm(product, year, month);
+    if (dateOverride) baseForm.date = dateOverride;
+    setForm(buildPreparedForm(baseForm, usableEntries, usableMetadata, { forcePumpInitials: true }));
     setReceiptFiles({ before: null, after: null });
     setCustomSupplierMode(false);
     setSelectedReceiptId(null);
     setEditingReceiptId(null);
     setFeedback(null);
+  }
+
+  function getNextDateAfter(dateStr) {
+    if (!dateStr) return null;
+    try {
+      const d = new Date(`${dateStr}T00:00:00`);
+      d.setDate(d.getDate() + 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    } catch {
+      return null;
+    }
   }
 
   function handleStartDailyLaunch() {
@@ -937,7 +953,14 @@ export default function EstoqueDieselOperacao() {
         type: "success",
         message: "Lancamento salvo no Supabase. A tabela abaixo foi recalculada em cascata mantendo a régua original.",
       });
-      resetFormForNewEntry();
+      // Pula automaticamente para o proximo dia (apos o dia que acabamos
+      // de salvar). E usa o snapshot recem-atualizado de entries para que
+      // os hodometros iniciais sejam puxados corretamente do dia salvo.
+      const proximaData = getNextDateAfter(form.date);
+      resetFormForNewEntry({
+        entriesOverride: nextEntries,
+        dateOverride: proximaData || undefined,
+      });
     } catch (error) {
       console.error("Falha ao salvar medição:", error);
       setFeedback({

@@ -586,18 +586,27 @@ function buildMonthRows({ year, month, product, measurements, planningRows, rece
         : safeNumber(receiptByDate.get(date)?.receivedLiters ?? 0, 0);
 
     if (realizedDay) {
-      // Regra do saldo projetado para dias com medicao: usar a leitura da
-      // regua do proprio dia ("Saldo inicial do dia" na tela de Medicao =
-      // medicaoInicial = soma litros_final_t1 + t2). Quando a regua nao
-      // foi informada, cai no cascata (saldoAnterior / runningBalance).
+      // Saldo projetado do dia X = "Saldo inicial do dia" da MEDICAO de X.
+      // Esse valor corresponde a litros_final_t1 + t2 do proprio dia X
+      // (regua convertida em litros pelo cilindro). Como o lookup acima
+      // usa shiftDate(+1) -- que e o D+1 para herdar o saldo final de X
+      // como abertura de X+1 -- aqui precisamos da medicao do dia X em si,
+      // nao do dia seguinte. Quando a regua nao foi informada, cai no
+      // cascata (saldoAnterior / runningBalance).
+      const medicaoMesmoDia = sameDayMeasurement || actual;
       const saldoRegua = round(
-        safeNumber(actual?.litrosFinalT1, 0) + safeNumber(actual?.litrosFinalT2, 0),
+        safeNumber(medicaoMesmoDia?.litrosFinalT1, 0) +
+          safeNumber(medicaoMesmoDia?.litrosFinalT2, 0),
         2
       );
       const saldoAnteriorMedido = safeNumber(
         saldoRegua && saldoRegua > 0
           ? saldoRegua
-          : actual?.medicaoInicial ?? actual?.medicaoAtual ?? actual?.saldoFinal ?? actual?.saldoAnterior ?? runningBalance,
+          : medicaoMesmoDia?.medicaoInicial ??
+            medicaoMesmoDia?.medicaoAtual ??
+            medicaoMesmoDia?.saldoFinal ??
+            actual?.saldoAnterior ??
+            runningBalance,
         runningBalance
       );
       const saldoPlanejado = saldoAnteriorMedido;

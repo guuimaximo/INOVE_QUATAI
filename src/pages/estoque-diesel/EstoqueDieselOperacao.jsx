@@ -503,6 +503,7 @@ export default function EstoqueDieselOperacao() {
   const [pumpConfigDrafts, setPumpConfigDrafts] = useState({});
   const [savingPumpConfigId, setSavingPumpConfigId] = useState(null);
   const launchPanelRef = useRef(null);
+  const receiptFormRef = useRef(null);
 
   function buildPreparedForm(baseForm, sourceEntries = entries, sourceMetadata = metadata, options = {}) {
     const { forcePumpInitials = false } = options;
@@ -1230,7 +1231,29 @@ export default function EstoqueDieselOperacao() {
     }
   }
 
+  function isReceiptFormDirty() {
+    const f = form || {};
+    const algumCampo =
+      String(f.nfVolumeLitros || "").trim() !== "" ||
+      String(f.unitPrice || "").trim() !== "" ||
+      String(f.supplier || "").trim() !== "" ||
+      String(f.nfNumero || "").trim() !== "" ||
+      String(f.receiptRuleBeforeT1 || "").trim() !== "" ||
+      String(f.receiptRuleBeforeT2 || "").trim() !== "" ||
+      String(f.receiptRuleAfterT1 || "").trim() !== "" ||
+      String(f.receiptRuleAfterT2 || "").trim() !== "" ||
+      Boolean(receiptFiles?.before) ||
+      Boolean(receiptFiles?.after);
+    return f.hasReceipt && algumCampo && !editingReceiptId;
+  }
+
   function prepareNewReceipt() {
+    if (isReceiptFormDirty()) {
+      const ok = window.confirm(
+        "Voce tem dados nao salvos no formulario de recebimento. Salve primeiro ou clique OK para descartar e iniciar um novo."
+      );
+      if (!ok) return;
+    }
     setShowReceiptModal(true);
     setSelectedReceiptId(null);
     setEditingReceiptId(null);
@@ -1251,6 +1274,9 @@ export default function EstoqueDieselOperacao() {
       receiptPhotoBeforeUrl: "",
       receiptPhotoAfterUrl: "",
     }));
+    window.requestAnimationFrame(() => {
+      receiptFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   function openReceiptConsultation() {
@@ -1262,6 +1288,12 @@ export default function EstoqueDieselOperacao() {
   }
 
   function closeReceiptModal() {
+    if (isReceiptFormDirty()) {
+      const ok = window.confirm(
+        "Voce tem dados nao salvos no recebimento. Tem certeza que deseja sair? Os dados serao descartados."
+      );
+      if (!ok) return;
+    }
     // Descarta o que foi digitado e nao salvo, para nao "vazar" no calculo do dia.
     clearReceiptFields();
     setShowReceiptModal(false);
@@ -1565,7 +1597,7 @@ export default function EstoqueDieselOperacao() {
                 </div>
 
                 <div className="overflow-y-auto p-5">
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div ref={receiptFormRef} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                     <div>
                       <h4 className="text-sm font-black uppercase tracking-wider text-emerald-700">Dados do recebimento</h4>
                       <p className="mt-1 text-sm font-semibold text-emerald-700">

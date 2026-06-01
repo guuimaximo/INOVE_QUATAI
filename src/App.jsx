@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
-import { useContext, useEffect } from "react";
+import { lazy, Suspense, useContext, useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 
 import { AuthProvider } from "./context/AuthContext";
@@ -16,93 +16,96 @@ import UpdateAppPrompt from "./components/UpdateAppPrompt";
 
 import { getDefaultAccessiblePath } from "./utils/access";
 
+// Login + Dashboard ficam eager (pagina inicial). O resto faz lazy
+// para o usuario nao precisar baixar 4 MB de JS antes de abrir uma
+// pagina simples. Cada pagina carrega seu chunk so quando navegada.
 import Login from "./pages/auth/Login";
-import AtualizarSenha from "./pages/auth/AtualizarSenha";
-import AtualizarPerfil from "./pages/auth/AtualizarPerfil";
+const AtualizarSenha = lazy(() => import("./pages/auth/AtualizarSenha"));
+const AtualizarPerfil = lazy(() => import("./pages/auth/AtualizarPerfil"));
 
 import Dashboard from "./pages/home/Dashboard";
 import InicioRapido from "./pages/home/InicioRapido";
-
-import CentralTratativas from "./pages/tratativas/CentralTratativas";
-import TratativasResumo from "./pages/tratativas/TratativasResumo";
-import TratarTratativa from "./pages/tratativas/TratarTratativa";
-import ConsultarTratativa from "./pages/tratativas/ConsultarTratativa";
-import SolicitacaoTratativa from "./pages/tratativas/SolicitacaoTratativa";
-import TratativasRH from "./pages/tratativas/TratativasRH";
-
-import LancarAvaria from "./pages/avarias/LancarAvaria";
-import CobrancasAvarias from "./pages/avarias/CobrancasAvarias";
-import AprovacaoAvarias from "./pages/avarias/AprovacaoAvarias";
-import AvariasEmRevisao from "./pages/avarias/AvariasEmRevisao";
-import AvariasResumo from "./pages/avarias/AvariasResumo";
-import AcidentesLancamento from "./pages/acidentes/AcidentesLancamento";
-import AcidentesImagens from "./pages/acidentes/AcidentesImagens";
-import AcidentesCentral from "./pages/acidentes/AcidentesCentral";
-import SacLancamento from "./pages/sac/SacLancamento";
-import SacCentral from "./pages/sac/SacCentral";
-import SacResumo from "./pages/sac/SacResumo";
-
-import SolicitacaoSOS from "./pages/intervencoes/SolicitacaoSOS";
-import SOSFechamento from "./pages/intervencoes/SOSFechamento";
-import SOSTratamento from "./pages/intervencoes/SOSTratamento";
-import SOSCentral from "./pages/intervencoes/SOSCentral";
-import SOSDashboard from "./pages/intervencoes/SOSDashboard";
-import SOS_Resumo from "./pages/intervencoes/SOS_Resumo";
-import KMRodado from "./pages/intervencoes/KMRodado";
-
-import PCMInicio from "./pages/pcm/PCMInicio";
-import PCMDiario from "./pages/pcm/PCMDiario";
-import PCMResumo from "./pages/pcm/PCMResumo";
-import PCM_Preventivas from "./pages/pcm/PCM_Preventivas";
-import PCMTrocaPneus from "./pages/pcm/PCMTrocaPneus";
-import PCMControleFichas from "./pages/pcm/PCMControleFichas";
 import MobileHome from "./pages/home/MobileHome";
 import { MobileTabBadgesProvider } from "./context/MobileTabBadgesContext";
 
-import Usuarios from "./pages/configuracoes/Usuarios";
-import NiveisAcesso from "./pages/configuracoes/NiveisAcesso";
-import Funcionarios from "./pages/pessoas/Funcionarios";
-import Ferias from "./pages/pessoas/Ferias";
-import OrganogramaCanvas from "./pages/pessoas/OrganogramaCanvas";
-import VagasCentral from "./pages/pessoas/VagasCentral";
+const CentralTratativas = lazy(() => import("./pages/tratativas/CentralTratativas"));
+const TratativasResumo = lazy(() => import("./pages/tratativas/TratativasResumo"));
+const TratarTratativa = lazy(() => import("./pages/tratativas/TratarTratativa"));
+const ConsultarTratativa = lazy(() => import("./pages/tratativas/ConsultarTratativa"));
+const SolicitacaoTratativa = lazy(() => import("./pages/tratativas/SolicitacaoTratativa"));
+const TratativasRH = lazy(() => import("./pages/tratativas/TratativasRH"));
 
-import DesempenhoLancamento from "./pages/desempenho-diesel/DesempenhoLancamento";
-import DesempenhoDieselResumo from "./pages/desempenho-diesel/DesempenhoDieselResumo";
-import DesempenhoDieselAcompanhamento from "./pages/desempenho-diesel/DesempenhoDieselAcompanhamento";
-import DesempenhoDieselTratativas from "./pages/desempenho-diesel/DesempenhoDieselTratativas";
-import DesempenhoDieselAgente from "./pages/desempenho-diesel/DesempenhoDieselAgente";
-import DesempenhoDieselCheckpoint from "./pages/desempenho-diesel/DesempenhoDieselCheckpoint";
-import Desempenho_Diesel_Tratativas_Central from "./pages/desempenho-diesel/Desempenho_Diesel_Tratativas_Central";
-import DieselTratarTratativa from "./pages/desempenho-diesel/DieselTratarTratativa";
-import DieselConsultarTratativa from "./pages/desempenho-diesel/DieselConsultarTratativa";
+const LancarAvaria = lazy(() => import("./pages/avarias/LancarAvaria"));
+const CobrancasAvarias = lazy(() => import("./pages/avarias/CobrancasAvarias"));
+const AprovacaoAvarias = lazy(() => import("./pages/avarias/AprovacaoAvarias"));
+const AvariasEmRevisao = lazy(() => import("./pages/avarias/AvariasEmRevisao"));
+const AvariasResumo = lazy(() => import("./pages/avarias/AvariasResumo"));
+const AcidentesLancamento = lazy(() => import("./pages/acidentes/AcidentesLancamento"));
+const AcidentesImagens = lazy(() => import("./pages/acidentes/AcidentesImagens"));
+const AcidentesCentral = lazy(() => import("./pages/acidentes/AcidentesCentral"));
+const SacLancamento = lazy(() => import("./pages/sac/SacLancamento"));
+const SacCentral = lazy(() => import("./pages/sac/SacCentral"));
+const SacResumo = lazy(() => import("./pages/sac/SacResumo"));
 
-import EstoqueDieselResumo from "./pages/estoque-diesel/EstoqueDieselResumo";
-import EstoqueDieselOperacao from "./pages/estoque-diesel/EstoqueDieselOperacao";
-import EstoqueDieselPlanejamentoControle from "./pages/estoque-diesel/EstoqueDieselPlanejamentoControle";
-import EstoqueDieselParametros from "./pages/estoque-diesel/EstoqueDieselParametros";
-import EstoqueDieselRecebimento from "./pages/estoque-diesel/EstoqueDieselRecebimento";
+const SolicitacaoSOS = lazy(() => import("./pages/intervencoes/SolicitacaoSOS"));
+const SOSFechamento = lazy(() => import("./pages/intervencoes/SOSFechamento"));
+const SOSTratamento = lazy(() => import("./pages/intervencoes/SOSTratamento"));
+const SOSCentral = lazy(() => import("./pages/intervencoes/SOSCentral"));
+const SOSDashboard = lazy(() => import("./pages/intervencoes/SOSDashboard"));
+const SOS_Resumo = lazy(() => import("./pages/intervencoes/SOS_Resumo"));
+const KMRodado = lazy(() => import("./pages/intervencoes/KMRodado"));
 
-import ChecklistCentral from "./pages/checklists/ChecklistCentral";
+const PCMInicio = lazy(() => import("./pages/pcm/PCMInicio"));
+const PCMDiario = lazy(() => import("./pages/pcm/PCMDiario"));
+const PCMResumo = lazy(() => import("./pages/pcm/PCMResumo"));
+const PCM_Preventivas = lazy(() => import("./pages/pcm/PCM_Preventivas"));
+const PCMTrocaPneus = lazy(() => import("./pages/pcm/PCMTrocaPneus"));
+const PCMControleFichas = lazy(() => import("./pages/pcm/PCMControleFichas"));
 
-import EmbarcadosCentral from "./pages/embarcados/EmbarcadosCentral";
-import EmbarcadosMovimentacoes from "./pages/embarcados/EmbarcadosMovimentacoes";
-import EmbarcadosReparos from "./pages/embarcados/EmbarcadosReparos";
-import EmbarcadosEnvioManutencao from "./pages/embarcados/EmbarcadosEnvioManutencao";
-import ReparoSolicitacaoDetalhes from "./components/embarcados/ReparoSolicitacaoDetalhes";
-import ReparoSolicitacaoExecucao from "./components/embarcados/ReparoSolicitacaoExecucao";
+const Usuarios = lazy(() => import("./pages/configuracoes/Usuarios"));
+const NiveisAcesso = lazy(() => import("./pages/configuracoes/NiveisAcesso"));
+const Funcionarios = lazy(() => import("./pages/pessoas/Funcionarios"));
+const Ferias = lazy(() => import("./pages/pessoas/Ferias"));
+const OrganogramaCanvas = lazy(() => import("./pages/pessoas/OrganogramaCanvas"));
+const VagasCentral = lazy(() => import("./pages/pessoas/VagasCentral"));
 
-import EstruturaFisicaSolicitacao from "./pages/estrutura-fisica/EstruturaFisicaSolicitacao";
-import EstruturaFisicaCentral from "./pages/estrutura-fisica/EstruturaFisicaCentral";
-import EstruturaFisicaConsultar from "./pages/estrutura-fisica/EstruturaFisicaConsultar";
-import EstruturaFisicaTratar from "./pages/estrutura-fisica/EstruturaFisicaTratar";
-import SuprimentosResumo from "./pages/suprimentos/SuprimentosResumo";
-import SuprimentosGarantias from "./pages/suprimentos/SuprimentosGarantias";
-import SuprimentosTestes from "./pages/suprimentos/SuprimentosTestes";
-import SuprimentosServicoExterno from "./pages/suprimentos/SuprimentosServicoExterno";
-import SuprimentosCadastro from "./pages/suprimentos/SuprimentosCadastro";
-import SuprimentosContagem from "./pages/suprimentos/SuprimentosContagem";
-import SuprimentosContagemDia from "./pages/suprimentos/SuprimentosContagemDia";
-import SuprimentosContagemSemanal from "./pages/suprimentos/SuprimentosContagemSemanal";
+const DesempenhoLancamento = lazy(() => import("./pages/desempenho-diesel/DesempenhoLancamento"));
+const DesempenhoDieselResumo = lazy(() => import("./pages/desempenho-diesel/DesempenhoDieselResumo"));
+const DesempenhoDieselAcompanhamento = lazy(() => import("./pages/desempenho-diesel/DesempenhoDieselAcompanhamento"));
+const DesempenhoDieselTratativas = lazy(() => import("./pages/desempenho-diesel/DesempenhoDieselTratativas"));
+const DesempenhoDieselAgente = lazy(() => import("./pages/desempenho-diesel/DesempenhoDieselAgente"));
+const DesempenhoDieselCheckpoint = lazy(() => import("./pages/desempenho-diesel/DesempenhoDieselCheckpoint"));
+const Desempenho_Diesel_Tratativas_Central = lazy(() => import("./pages/desempenho-diesel/Desempenho_Diesel_Tratativas_Central"));
+const DieselTratarTratativa = lazy(() => import("./pages/desempenho-diesel/DieselTratarTratativa"));
+const DieselConsultarTratativa = lazy(() => import("./pages/desempenho-diesel/DieselConsultarTratativa"));
+
+const EstoqueDieselResumo = lazy(() => import("./pages/estoque-diesel/EstoqueDieselResumo"));
+const EstoqueDieselOperacao = lazy(() => import("./pages/estoque-diesel/EstoqueDieselOperacao"));
+const EstoqueDieselPlanejamentoControle = lazy(() => import("./pages/estoque-diesel/EstoqueDieselPlanejamentoControle"));
+const EstoqueDieselParametros = lazy(() => import("./pages/estoque-diesel/EstoqueDieselParametros"));
+const EstoqueDieselRecebimento = lazy(() => import("./pages/estoque-diesel/EstoqueDieselRecebimento"));
+
+const ChecklistCentral = lazy(() => import("./pages/checklists/ChecklistCentral"));
+
+const EmbarcadosCentral = lazy(() => import("./pages/embarcados/EmbarcadosCentral"));
+const EmbarcadosMovimentacoes = lazy(() => import("./pages/embarcados/EmbarcadosMovimentacoes"));
+const EmbarcadosReparos = lazy(() => import("./pages/embarcados/EmbarcadosReparos"));
+const EmbarcadosEnvioManutencao = lazy(() => import("./pages/embarcados/EmbarcadosEnvioManutencao"));
+const ReparoSolicitacaoDetalhes = lazy(() => import("./components/embarcados/ReparoSolicitacaoDetalhes"));
+const ReparoSolicitacaoExecucao = lazy(() => import("./components/embarcados/ReparoSolicitacaoExecucao"));
+
+const EstruturaFisicaSolicitacao = lazy(() => import("./pages/estrutura-fisica/EstruturaFisicaSolicitacao"));
+const EstruturaFisicaCentral = lazy(() => import("./pages/estrutura-fisica/EstruturaFisicaCentral"));
+const EstruturaFisicaConsultar = lazy(() => import("./pages/estrutura-fisica/EstruturaFisicaConsultar"));
+const EstruturaFisicaTratar = lazy(() => import("./pages/estrutura-fisica/EstruturaFisicaTratar"));
+const SuprimentosResumo = lazy(() => import("./pages/suprimentos/SuprimentosResumo"));
+const SuprimentosGarantias = lazy(() => import("./pages/suprimentos/SuprimentosGarantias"));
+const SuprimentosTestes = lazy(() => import("./pages/suprimentos/SuprimentosTestes"));
+const SuprimentosServicoExterno = lazy(() => import("./pages/suprimentos/SuprimentosServicoExterno"));
+const SuprimentosCadastro = lazy(() => import("./pages/suprimentos/SuprimentosCadastro"));
+const SuprimentosContagem = lazy(() => import("./pages/suprimentos/SuprimentosContagem"));
+const SuprimentosContagemDia = lazy(() => import("./pages/suprimentos/SuprimentosContagemDia"));
+const SuprimentosContagemSemanal = lazy(() => import("./pages/suprimentos/SuprimentosContagemSemanal"));
 
 function HomeDecider() {
   const { user } = useContext(AuthContext);
@@ -170,6 +173,15 @@ export default function App() {
       <AccessProvider>
         <MobileTabBadgesProvider>
         <>
+          <Suspense
+            fallback={
+              <div className="fixed inset-0 z-[50] flex items-center justify-center bg-slate-50/80 backdrop-blur-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-lg">
+                  <div className="text-sm font-bold text-slate-700">Carregando pagina...</div>
+                </div>
+              </div>
+            }
+          >
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/atualizar-senha" element={<AtualizarSenha />} />
@@ -340,6 +352,7 @@ export default function App() {
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
 
           <InstallAppPrompt />
           <UpdateAppPrompt />

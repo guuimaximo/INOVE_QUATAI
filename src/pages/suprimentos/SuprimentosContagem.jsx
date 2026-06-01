@@ -558,12 +558,15 @@ export default function SuprimentosContagem() {
 
   async function dispararDispatchSilencioso(tipo, dataAlvo, loteIdParam) {
     try {
-      // 1) Debounce — se já existe job pro mesmo lote, nem cria nem chama
+      // 1) Debounce — so ignora se ja existe job pendente OU em processamento.
+      // Jobs concluidos/erros nao bloqueiam (ex.: reabriu lote, ou tentou de
+      // novo apos falha). Isso garante que cada finalizacao gera uma checagem.
       if (loteIdParam) {
         const { data: jaTem } = await supabase
           .from("suprimentos_bot_jobs")
           .select("id,status")
           .eq("lote_id", loteIdParam)
+          .in("status", ["pendente", "processando"])
           .limit(1);
         if (jaTem && jaTem.length > 0) return;
       } else if (dataAlvo) {
@@ -715,7 +718,11 @@ export default function SuprimentosContagem() {
     setScannerOpen(false);
     setFluxoAtivo(false);
     limparApontamento();
-    if (isNativeShell && (itensSessao > 0 || podeSalvarPendente) && loteId) {
+    // Sempre que finalizar e houver um lote com qualquer contagem (incluindo
+    // a que acabou de ser salva), dispara a conferencia. Web ou APK, qualquer
+    // usuario. Se o GitHub Actions nao puder ser chamado na hora, o job fica
+    // pendente em suprimentos_bot_jobs e o cron do bot pega na proxima rodada.
+    if (loteId && (itensSessao > 0 || podeSalvarPendente)) {
       void dispararDispatchSilencioso(tipoContagemAtual, todayIsoBRT(), loteId);
     }
     setLoteId(null);

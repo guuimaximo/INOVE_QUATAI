@@ -71,6 +71,53 @@ def proximo_job() -> dict:
     return rows[0] if rows else None
 
 
+def lotes_pendentes_view() -> list:
+    """Lotes com contagens lancadas mas sem job concluido / pendente.
+
+    A view garante que o bot se auto-recupera quando o app nao consegue
+    chamar o workflow_dispatch (rede ruim, token nao configurado, etc.):
+    na proxima rodada agendada o bot detecta os lotes pendentes pela view
+    e enfileira automaticamente.
+    """
+    try:
+        return supa_get(
+            "vw_suprimentos_lotes_pendentes",
+            {
+                "select": "lote_id,tipo_contagem,data_alvo,total_itens,ultimo_registro",
+                "order": "ultimo_registro.asc",
+                "limit": 50,
+            },
+        )
+    except Exception as exc:
+        print(f"[bot] falha ao consultar view de lotes pendentes: {exc}")
+        return []
+
+
+def enfileirar_lotes_da_view() -> int:
+    """Para cada lote da view, cria um job pendente. Retorna quantidade criada."""
+    lotes = lotes_pendentes_view()
+    criados = 0
+    for lote in lotes:
+        try:
+            supa_insert(
+                "suprimentos_bot_jobs",
+                {
+                    "tipo": "conferencia_dia",
+                    "tipo_contagem": lote.get("tipo_contagem") or "diaria",
+                    "data_alvo": lote.get("data_alvo"),
+                    "lote_id": lote.get("lote_id"),
+                    "status": "pendente",
+                    "criado_por_nome": "Bot (recuperacao via view)",
+                },
+            )
+            criados += 1
+        except Exception as exc:
+            print(f"[bot] nao consegui enfileirar lote {lote.get('lote_id')}: {exc}")
+    if criados:
+        print(f"[bot] {criados} lote(s) pendente(s) enfileirado(s) a partir da view.")
+    return criados
+
+
 def buscar_job(job_id: str) -> dict:
     rows = supa_get(
         "suprimentos_bot_jobs",
@@ -307,6 +354,13 @@ def main():
             traceback.print_exc()
             print(f"[bot] erro no dispatch manual: {e}")
         return
+
+    # Antes de comecar a varrer a fila, da uma olhada na view e enfileira
+    # qualquer lote que ficou orfao (app finalizou mas o dispatch nao chegou).
+    try:
+        enfileirar_lotes_da_view()
+    except Exception:
+        traceback.print_exc()
 
     processados = 0
     while True:

@@ -45,6 +45,27 @@ export default function SuprimentosContagemDia() {
   }, [user]);
 
   const [contagens, setContagens] = useState([]);
+  const [filtroResultado, setFiltroResultado] = useState("todos");
+
+  const contagensFiltradas = useMemo(() => {
+    if (filtroResultado === "todos") return contagens;
+    return contagens.filter((c) => {
+      const conferido = c.saldo_erp !== null && c.saldo_erp !== undefined;
+      const diff = Number(c.diferenca || 0);
+      switch (filtroResultado) {
+        case "divergencia":
+          return conferido && diff !== 0;
+        case "ok":
+          return conferido && diff === 0;
+        case "sem_cadastro":
+          return !c.peca_id;
+        case "sem_erp":
+          return c.peca_id && !conferido;
+        default:
+          return true;
+      }
+    });
+  }, [contagens, filtroResultado]);
   const [loading, setLoading] = useState(true);
   const [botJob, setBotJob] = useState(null);
   const [botMsg, setBotMsg] = useState("");
@@ -419,10 +440,49 @@ export default function SuprimentosContagemDia() {
       )}
 
       <Panel title="Itens deste lote">
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Filtrar:</span>
+          {[
+            { key: "todos", label: `Todos (${contagens.length})` },
+            { key: "divergencia", label: `Com divergencia (${kpis.divergencias})` },
+            { key: "ok", label: `OK (${kpis.corretos})` },
+            { key: "sem_cadastro", label: `Sem cadastro (${kpis.sem_cadastro})` },
+            { key: "sem_erp", label: "Sem ERP" },
+          ].map((opt) => {
+            const ativo = filtroResultado === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setFiltroResultado(opt.key)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                  ativo
+                    ? opt.key === "divergencia"
+                      ? "bg-rose-600 text-white"
+                      : opt.key === "ok"
+                        ? "bg-emerald-600 text-white"
+                        : opt.key === "sem_cadastro" || opt.key === "sem_erp"
+                          ? "bg-amber-600 text-white"
+                          : "bg-slate-800 text-white"
+                    : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+          {filtroResultado !== "todos" ? (
+            <span className="ml-auto text-xs font-semibold text-slate-500">
+              Exibindo {contagensFiltradas.length} de {contagens.length}
+            </span>
+          ) : null}
+        </div>
         {loading ? (
           <p className="py-12 text-center text-sm font-semibold text-slate-400">Carregando...</p>
         ) : contagens.length === 0 ? (
           <EmptyState title="Nenhuma contagem nessa data" subtitle="Faça novas contagens na tela principal." />
+        ) : contagensFiltradas.length === 0 ? (
+          <EmptyState title="Nenhum item com esse filtro" subtitle="Troque para 'Todos' para ver tudo do lote." />
         ) : Capacitor?.isNativePlatform?.() ? (
           // ─── Mobile: lista compacta Codigo / Fisico / Virtual + cor da linha ───
           <div className="space-y-2">
@@ -431,7 +491,7 @@ export default function SuprimentosContagemDia() {
               <span className="text-right">Saldo Físico</span>
               <span className="text-right">Saldo Virtual</span>
             </div>
-            {contagens.map((c) => {
+            {contagensFiltradas.map((c) => {
               const conferido = c.saldo_erp !== null && c.saldo_erp !== undefined;
               const certo = conferido && Number(c.diferenca || 0) === 0;
               const errado = conferido && Number(c.diferenca || 0) !== 0;
@@ -483,7 +543,7 @@ export default function SuprimentosContagemDia() {
                 </tr>
               </thead>
               <tbody>
-                {contagens.map((c) => (
+                {contagensFiltradas.map((c) => (
                   <tr key={c.id} className={`border-t border-slate-100 hover:bg-slate-50/60 ${!c.peca_id ? "bg-rose-50/40" : ""}`}>
                     <td className="px-4 py-3 text-xs font-medium text-slate-500">{formatDateTimeBR(c.created_at)}</td>
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{c.codigo || "—"}</td>

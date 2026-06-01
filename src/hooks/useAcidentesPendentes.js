@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import { AuthContext } from "../context/AuthContext";
 
@@ -24,6 +24,7 @@ export function useAcidentesPendentes({ pollMs = 60000 } = {}) {
   const elegivel = isEligibleUser(user);
   const [pendentes, setPendentes] = useState({ count: 0, rows: [] });
   const [loading, setLoading] = useState(false);
+  const channelRef = useRef(null);
 
   async function carregar() {
     if (!elegivel) return;
@@ -53,25 +54,31 @@ export function useAcidentesPendentes({ pollMs = 60000 } = {}) {
     const interval = setInterval(carregar, pollMs);
 
     // Realtime: qualquer mudanca em acidentes_ocorrencias dispara recarga.
-    // Nome unico por mount evita o erro "cannot add postgres_changes
-    // callbacks after subscribe()" quando o componente remonta (StrictMode/
-    // HMR) e o canal anterior ainda estava registrado.
+    // Nome unico por mount + guard via ref evita "cannot add
+    // postgres_changes callbacks after subscribe()" em StrictMode/HMR.
+    if (channelRef.current) {
+      try { supabase.removeChannel(channelRef.current); } catch { /* ignora */ }
+      channelRef.current = null;
+    }
     const channelName = `acidentes-pendentes-${Date.now()}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "acidentes_ocorrencias" },
-        () => carregar()
-      )
-      .subscribe();
+    const channel = supabase.channel(channelName);
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "acidentes_ocorrencias" },
+      () => carregar()
+    );
+    channel.subscribe();
+    channelRef.current = channel;
 
     return () => {
       clearInterval(interval);
       try {
-        supabase.removeChannel(channel);
+        if (channelRef.current) {
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+        }
       } catch {
         /* ignora */
       }

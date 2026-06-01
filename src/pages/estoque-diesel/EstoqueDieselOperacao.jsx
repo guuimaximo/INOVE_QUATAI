@@ -658,12 +658,18 @@ export default function EstoqueDieselOperacao() {
     [form.date, product, receipts]
   );
   const plannedDieselLiters = useMemo(() => {
-    const inlinePlanned = form.hasReceipt ? safeNumber(form.nfVolumeLitros, 0) : 0;
+    // A modal "Recebimento de diesel" virou a fonte unica do planejado/recebido.
+    // Se ja existem recebimentos salvos para o dia, o planejado do form legacy
+    // (form.nfVolumeLitros) e ignorado para nao duplicar a conta.
     const externalPlanned = dailyReceipts.reduce(
       (sum, receipt) => sum + safeNumber(receipt.nfVolumeLitros, 0),
       0
     );
-    return roundNumber(inlinePlanned + externalPlanned) ?? 0;
+    if (dailyReceipts.length > 0) {
+      return roundNumber(externalPlanned) ?? 0;
+    }
+    const inlinePlanned = form.hasReceipt ? safeNumber(form.nfVolumeLitros, 0) : 0;
+    return roundNumber(inlinePlanned) ?? 0;
   }, [dailyReceipts, form.hasReceipt, form.nfVolumeLitros]);
   const selectedDailyReceipt = useMemo(
     () => dailyReceipts.find((receipt) => receipt.id === selectedReceiptId) || null,

@@ -773,7 +773,15 @@ export function computeMeasurement(form, params, previousEntry, receipts = []) {
     2
   );
 
-  const entradaRecebimentos = round((externalDailyReceipts || 0) + (inlineReceiptLiters || 0), 2);
+  // A modal de Recebimento e a fonte unica do volume recebido. Se ja existe
+  // pelo menos um recebimento salvo no dia, ignoramos o inline (que era o
+  // fluxo legacy embutido na medicao). Sem isso o usuario via 20.000L quando
+  // entrou so um recebimento de 10.000L: 10k do inline + 10k do externo.
+  const usaInline = !(receipts && receipts.length > 0);
+  const entradaRecebimentos = round(
+    (externalDailyReceipts || 0) + (usaInline ? (inlineReceiptLiters || 0) : 0),
+    2
+  );
   const entradaDiesel = round(entradaRecebimentos || 0, 2);
   const saldoFinal = round((medicaoInicial || 0) + (entradaDiesel || 0), 2);
   const medicaoAtual = saldoFinal;

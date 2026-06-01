@@ -1019,12 +1019,23 @@ export default function DesempenhoDieselAnalise() {
         const duracaoMin =
           totalSessoes > 0 ? n(sessoesResumo.totalMinutos) : duracaoMinIntervencao;
 
+        // Data da ultima sessao (a lista de carregarSessoesAcompanhamento ja
+        // vem ordenada desc, entao o primeiro item e o mais recente). Quando
+        // nao ha sessao, cai no data_ref do proprio acompanhamento.
+        const ultimaSessaoData =
+          (sessoesResumo?.sessoes || []).reduce((acc, s) => {
+            const d = String(s?.data_ref || "");
+            return d && d > acc ? d : acc;
+          }, "") || "";
+        const dataUltimaSessao = ultimaSessaoData || dtInicioStr;
+
         const aBase = {
           ...a,
           status_norm: statusNorm(a.status),
           linha_resolvida: contexto.linha || "SEM LINHA",
           cluster_resolvido: contexto.cluster || "",
           data_ref: dtInicioStr,
+          data_ultima_sessao: dataUltimaSessao,
           duracao_min: duracaoMin,
           duracao_intervencao_min: duracaoMinIntervencao,
           total_sessoes: totalSessoes,

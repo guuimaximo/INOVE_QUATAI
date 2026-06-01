@@ -40,8 +40,10 @@ export default function AcompanhamentosModal({
       : (acompanhamentosComEvolucao || []).filter((a) => !!a?.prontuario_pendente).length;
   const [detalheModal, setDetalheModal] = useState(null);
 
-  // Estados para a ordenação
-  const [sortConfigAcompanhamentos, setSortConfigAcompanhamentos] = useState({ key: "data_ref", direction: "desc" });
+  // Estados para a ordenação. Por padrao a lista vem ordenada pela data
+  // da ultima sessao (com fallback automatico para a data do acompanhamento
+  // quando o motorista ainda nao tem sessoes registradas).
+  const [sortConfigAcompanhamentos, setSortConfigAcompanhamentos] = useState({ key: "data_ultima_sessao", direction: "desc" });
 
   const tabs = [
     ["RESUMO_INSTRUTOR", "Resumo por Instrutor"],
@@ -65,11 +67,21 @@ export default function AcompanhamentosModal({
     return sortConfigAcompanhamentos.direction === 'asc' ? <span className="ml-1 text-blue-600 text-xs">▲</span> : <span className="ml-1 text-blue-600 text-xs">▼</span>;
   };
 
-  // Função auxiliar de ordenação
+  // Função auxiliar de ordenação. Para o campo data_ultima_sessao, faz
+  // fallback automatico para data_ref quando o acompanhamento ainda nao
+  // tem sessao registrada -- isso garante que o motorista nunca "suma"
+  // por falta de sessao.
   const sortFunc = (lista, config) => {
     const { key, direction } = config;
+    const pickValue = (row) => {
+      if (key === "data_ultima_sessao") {
+        return row?.data_ultima_sessao || row?.data_ref || "";
+      }
+      return row?.[key];
+    };
     return [...(lista || [])].sort((a, b) => {
-      let va = a?.[key], vb = b?.[key];
+      const va = pickValue(a);
+      const vb = pickValue(b);
       const na = Number(va), nb = Number(vb);
       const ambosNumericos = Number.isFinite(na) && Number.isFinite(nb);
       let cmp = ambosNumericos ? na - nb : String(va ?? "").localeCompare(String(vb ?? ""), "pt-BR", { numeric: true, sensitivity: "base" });

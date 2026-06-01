@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
+import DateRangePopover from "../../components/DateRangePopover";
 import {
   FaSearch,
   FaFilter,
@@ -442,18 +443,12 @@ export default function CentralTratativas() {
             />
           </div>
 
-          <input
-            type="date"
-            value={filtros.dataInicio}
-            onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
-          />
-
-          <input
-            type="date"
-            value={filtros.dataFim}
-            onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white"
+          <DateRangePopover
+            from={filtros.dataInicio}
+            to={filtros.dataFim}
+            placeholder="Periodo"
+            onChange={({ from, to }) => setFiltros((current) => ({ ...current, dataInicio: from, dataFim: to }))}
+            onClear={() => setFiltros((current) => ({ ...current, dataInicio: "", dataFim: "" }))}
           />
 
           <div className="relative">

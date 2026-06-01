@@ -1,6 +1,7 @@
 // src/pages/AvariasResumo.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
+import DateRangePopover from "../../components/DateRangePopover";
 import {
   ResponsiveContainer,
   BarChart,
@@ -438,21 +439,13 @@ export default function AvariasResumo() {
 
           <div className="flex flex-col">
             <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Período (Data Avaria)</label>
-            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-              <input
-                type="date"
-                className="bg-transparent text-sm font-black text-slate-700 outline-none px-2"
-                value={dataInicio}
-                onChange={(e) => setDataInicio(e.target.value)}
-              />
-              <span className="text-slate-400 font-bold">até</span>
-              <input
-                type="date"
-                className="bg-transparent text-sm font-black text-slate-700 outline-none px-2"
-                value={dataFim}
-                onChange={(e) => setDataFim(e.target.value)}
-              />
-            </div>
+            <DateRangePopover
+              from={dataInicio}
+              to={dataFim}
+              placeholder="Selecionar periodo"
+              onChange={({ from, to }) => { setDataInicio(from); setDataFim(to); }}
+              onClear={() => { setDataInicio(""); setDataFim(""); }}
+            />
           </div>
 
           <div className="flex gap-2">

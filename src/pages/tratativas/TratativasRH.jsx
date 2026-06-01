@@ -1,6 +1,7 @@
 // src/pages/TratativasRH.jsx
 import React, { useEffect, useMemo, useState, useContext } from "react";
 import { supabase } from "../../supabase";
+import DateRangePopover from "../../components/DateRangePopover";
 import { AuthContext } from "../../context/AuthContext";
 import {
   FaCheckCircle,
@@ -432,17 +433,12 @@ export default function TratativasRH() {
             onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
             className="col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
           />
-          <input
-            type="date"
-            value={filtros.dataInicio}
-            onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
-          />
-          <input
-            type="date"
-            value={filtros.dataFim}
-            onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
+          <DateRangePopover
+            from={filtros.dataInicio}
+            to={filtros.dataFim}
+            placeholder="Periodo"
+            onChange={({ from, to }) => setFiltros((current) => ({ ...current, dataInicio: from, dataFim: to }))}
+            onClear={() => setFiltros((current) => ({ ...current, dataInicio: "", dataFim: "" }))}
           />
           <select
             value={filtros.status}

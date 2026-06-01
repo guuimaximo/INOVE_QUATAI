@@ -1,6 +1,7 @@
 // src/pages/CobrancasAvarias.jsx
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../../supabase";
+import DateRangePopover from "../../components/DateRangePopover";
 import { FaSearch } from "react-icons/fa";
 import CobrancaDetalheModal from "../../components/CobrancaDetalheModal";
 
@@ -402,25 +403,15 @@ export default function CobrancasAvarias() {
         </div>
 
         {/* Período */}
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="flex flex-col">
-            <label className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Início</label>
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700 outline-none"
-            />
-          </div>
-          <div className="flex flex-col">
-            <label className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Fim</label>
-            <input
-              type="date"
-              value={dataFim}
-              onChange={(e) => setDataFim(e.target.value)}
-              className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700 outline-none"
-            />
-          </div>
+        <div className="flex flex-col">
+          <label className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Período</label>
+          <DateRangePopover
+            from={dataInicio}
+            to={dataFim}
+            placeholder="Selecionar periodo"
+            onChange={({ from, to }) => { setDataInicio(from); setDataFim(to); }}
+            onClear={() => { setDataInicio(""); setDataFim(""); }}
+          />
         </div>
 
         <select className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700" value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>

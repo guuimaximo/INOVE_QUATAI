@@ -7,6 +7,7 @@ import {
   FaTimes,
 } from "react-icons/fa";
 import FileViewerModal from "../../components/FileViewerModal";
+import DateRangePopoverComponent from "../../components/DateRangePopover";
 import { supabase } from "../../supabase";
 import { fileNameFromUrl } from "./suprimentosShared";
 
@@ -380,29 +381,24 @@ export function PartAutocomplete({
   );
 }
 
+// Wrapper que usa o DateRangePopover global, mantendo a API antiga
+// (onFromChange / onToChange) que ja era usada nas 4 paginas de Suprimentos.
 export function DateRangeFilter({ from, to, onFromChange, onToChange, onClear }) {
-  const inputCls = "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
   return (
-    <div className="flex flex-wrap items-end gap-2">
-      <label className="flex flex-col text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-        De
-        <input type="date" value={from || ""} onChange={(e) => onFromChange(e.target.value)} className={inputCls} />
-      </label>
-      <label className="flex flex-col text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-        Ate
-        <input type="date" value={to || ""} onChange={(e) => onToChange(e.target.value)} className={inputCls} />
-      </label>
-      {(from || to) && onClear ? (
-        <button
-          type="button"
-          onClick={onClear}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
-          title="Limpar periodo"
-        >
-          Limpar
-        </button>
-      ) : null}
-    </div>
+    <DateRangePopoverComponent
+      from={from}
+      to={to}
+      placeholder="Periodo"
+      onChange={(range) => {
+        onFromChange?.(range?.from || "");
+        onToChange?.(range?.to || "");
+      }}
+      onClear={() => {
+        onFromChange?.("");
+        onToChange?.("");
+        onClear?.();
+      }}
+    />
   );
 }
 

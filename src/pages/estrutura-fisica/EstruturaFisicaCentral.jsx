@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
+import DateRangePopover from "../../components/DateRangePopover";
 
 const VIEW = {
   OPEN_ONLY: "open_only",
@@ -327,17 +328,12 @@ export default function EstruturaFisicaCentral() {
             onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
             className={inputClass}
           />
-          <input
-            type="date"
-            value={filtros.dataInicio}
-            onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            className={inputClass}
-          />
-          <input
-            type="date"
-            value={filtros.dataFim}
-            onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
-            className={inputClass}
+          <DateRangePopover
+            from={filtros.dataInicio}
+            to={filtros.dataFim}
+            placeholder="Periodo"
+            onChange={({ from, to }) => setFiltros((current) => ({ ...current, dataInicio: from, dataFim: to }))}
+            onClear={() => setFiltros((current) => ({ ...current, dataInicio: "", dataFim: "" }))}
           />
           <select
             value={filtros.setor}

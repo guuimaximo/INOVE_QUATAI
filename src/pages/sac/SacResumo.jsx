@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, LabelList } from "recharts";
 import { FaChartLine, FaDownload, FaFilter, FaHeadset } from "react-icons/fa";
 import { supabase } from "../../supabase";
+import DateRangePopover from "../../components/DateRangePopover";
 import { InoveStatCard } from "../../components/InovePage";
 import { formatDateBR, SAC_STATUS, statusTone, todayISO } from "./SacCommon";
 
@@ -160,9 +161,14 @@ export default function SacResumo() {
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center gap-2 text-sm font-black text-slate-800"><FaFilter /> Filtros</div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold outline-none focus:border-blue-400" />
-          <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold outline-none focus:border-blue-400" />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <DateRangePopover
+            from={filtros.dataInicio}
+            to={filtros.dataFim}
+            placeholder="Selecionar periodo"
+            onChange={({ from, to }) => setFiltros((current) => ({ ...current, dataInicio: from, dataFim: to }))}
+            onClear={() => setFiltros((current) => ({ ...current, dataInicio: "", dataFim: "" }))}
+          />
           <select value={filtros.status} onChange={(e) => setFiltros({ ...filtros, status: e.target.value })} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold outline-none focus:border-blue-400">
             <option value="Todos">Todos os status</option>
             {SAC_STATUS.map((status) => <option key={status} value={status}>{status}</option>)}

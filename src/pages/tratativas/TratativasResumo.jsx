@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
+import DateRangePopover from "../../components/DateRangePopover";
 import * as XLSX from "xlsx";
 import {
   ResponsiveContainer,
@@ -891,23 +892,14 @@ export default function TratativasResumo() {
         </div>
 
         <div className="mt-5 pt-5 border-t grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 items-end">
-          <div className="xl:col-span-1">
-            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Data início</label>
-            <input
-              type="date"
-              value={filtros.dataInicio}
-              onChange={(e) => setFiltros((f) => ({ ...f, dataInicio: e.target.value }))}
-              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none"
-            />
-          </div>
-
-          <div className="xl:col-span-1">
-            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Data fim</label>
-            <input
-              type="date"
-              value={filtros.dataFim}
-              onChange={(e) => setFiltros((f) => ({ ...f, dataFim: e.target.value }))}
-              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none"
+          <div className="xl:col-span-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1 block">Período</label>
+            <DateRangePopover
+              from={filtros.dataInicio}
+              to={filtros.dataFim}
+              placeholder="Selecionar periodo"
+              onChange={({ from, to }) => setFiltros((f) => ({ ...f, dataInicio: from, dataFim: to }))}
+              onClear={() => setFiltros((f) => ({ ...f, dataInicio: "", dataFim: "" }))}
             />
           </div>
 

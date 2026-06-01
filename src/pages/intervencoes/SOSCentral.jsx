@@ -2,6 +2,7 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
+import DateRangePopover from "../../components/DateRangePopover";
 import {
   FaSearch,
   FaEye,
@@ -777,21 +778,13 @@ export default function SOSCentral() {
 
         <div className="flex flex-col">
           <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Período Específico</label>
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1.5">
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="bg-transparent px-2 outline-none text-sm font-semibold text-slate-700"
-            />
-            <span className="text-slate-400 font-bold">até</span>
-            <input
-              type="date"
-              value={dataFim}
-              onChange={(e) => setDataFim(e.target.value)}
-              className="bg-transparent px-2 outline-none text-sm font-semibold text-slate-700"
-            />
-          </div>
+          <DateRangePopover
+            from={dataInicio}
+            to={dataFim}
+            placeholder="Selecionar periodo"
+            onChange={({ from, to }) => { setDataInicio(from); setDataFim(to); }}
+            onClear={() => { setDataInicio(""); setDataFim(""); }}
+          />
         </div>
 
         <div className="flex flex-col">

@@ -706,6 +706,23 @@ export default function DesempenhoDieselAnalise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Quando o usuario seleciona um periodo, alinha automaticamente o
+  // Mes Referencia para o mes do periodo e o Mes Comparacao para o mes
+  // anterior. Se o periodo cruzar dois meses, usa o de "ate" como
+  // referencia (mais recente).
+  useEffect(() => {
+    const baseIso = periodoAte || periodoDe;
+    if (!baseIso) return;
+    const isoMes = String(baseIso).slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(isoMes)) return;
+    const [ano, mes] = isoMes.split("-").map(Number);
+    const ant = new Date(ano, mes - 2, 1);
+    const isoAnt = `${ant.getFullYear()}-${String(ant.getMonth() + 1).padStart(2, "0")}`;
+    if (mesReferencia !== isoMes) setMesReferencia(isoMes);
+    if (mesComparacao !== isoAnt) setMesComparacao(isoAnt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodoDe, periodoAte]);
+
   // Lista deterministica dos ultimos 24 meses para os seletores. Independe
   // do dataset ja carregado, para o usuario poder pedir um mes mais antigo.
   const opcoesMeses = useMemo(() => {

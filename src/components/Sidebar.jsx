@@ -46,6 +46,7 @@ import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
 import { useAccessGovernance } from "../context/AccessContext";
+import { useAcidentesPendentes } from "../hooks/useAcidentesPendentes";
 import { canUserAccessPath, canUserSeeFarol } from "../utils/access";
 
 /* =========================
@@ -115,6 +116,7 @@ export default function Sidebar() {
   const { user, logout } = useContext(AuthContext);
   const { profileMap } = useAccessGovernance();
   const navigate = useNavigate();
+  const { count: acidentesPendentes } = useAcidentesPendentes();
 
   const canSee = useMemo(
     () => (path) => canUserAccessPath(user, path, profileMap),
@@ -662,6 +664,11 @@ export default function Sidebar() {
             >
               <div className="flex items-center gap-3">
                 <FaExclamationTriangle /> <span>Acidentes</span>
+                {acidentesPendentes > 0 ? (
+                  <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-black leading-none text-white shadow">
+                    {acidentesPendentes > 99 ? "99+" : acidentesPendentes}
+                  </span>
+                ) : null}
               </div>
               {acidentesOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
             </button>

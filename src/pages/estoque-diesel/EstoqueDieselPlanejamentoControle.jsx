@@ -523,10 +523,39 @@ function buildMonthRows({ year, month, product, measurements, planningRows, rece
       .filter((entry) => entry.product === product && entry.date < `${year}-${month}-01`)
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0] || null;
 
+  // Saldo no fim do dia da ultima medicao real (pode ser bem antes do mes atual).
   let runningBalance = safeNumber(
     previousEntry?.saldoFinal ?? previousEntry?.medicaoAtual ?? 0,
     0
   );
+
+  // Avanca a cascata desde a ultima medicao real ate o primeiro dia do mes
+  // exibido, projetando os dias intermediarios pela programacao
+  // (entrada_prevista / saida_prevista) ou pelos padroes por dia da semana.
+  // Sem isso, ao virar de mes o saldo inicial ficava preso na ultima medicao
+  // (ex.: 29/05 = 19.407L) e ignorava as projecoes de 30/05 e 31/05.
+  if (previousEntry?.date) {
+    const cutoff = `${year}-${month}-01`;
+    const start = new Date(`${previousEntry.date}T00:00:00`);
+    start.setDate(start.getDate() + 1);
+    let cursor = start;
+    while (true) {
+      const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+      if (iso >= cutoff) break;
+      const plan = planningByDate[iso] || null;
+      const recebimentoDia = safeNumber(
+        plan?.plannedReceipt ?? receiptByDate.get(iso)?.receivedLiters ?? 0,
+        0
+      );
+      const saidaDia = safeNumber(
+        plan?.plannedOutput ?? getDefaultPlannedOutput(product, iso),
+        0
+      );
+      runningBalance = safeNumber(runningBalance + recebimentoDia - saidaDia, runningBalance);
+      cursor.setDate(cursor.getDate() + 1);
+      if (cursor.getFullYear() > Number(year) + 2) break; // guarda contra loop
+    }
+  }
 
   const monthNumber = Number(month);
   const daysInMonth = new Date(Number(year), monthNumber, 0).getDate();

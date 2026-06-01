@@ -6,7 +6,7 @@ export const SAC_ORIGENS = ["WhatsApp", "Ligacao", "Email", "Prefeitura", "Prese
 
 export const SAC_MOTIVOS = {
   Reclamacao: ["Intervalo de atendimento", "Cartao", "Conduta do operador", "Direcao perigosa", "Lotacao", "Horario", "Limpeza", "Acessibilidade"],
-  Informacao: ["Itinerario", "Horarios", "Cartao", "Tarifas", "Achados e perdidos"],
+  Informacao: ["Itinerario", "Horarios", "Cartao", "Tarifas", "Achados e perdidos", "Envio de curriculo"],
   Denuncia: ["Evasao", "Conduta indevida", "Seguranca", "Fraude"],
   Elogio: ["Operador", "Linha", "Atendimento", "Conservacao"],
   Sugestao: ["Linha", "Horario", "Ponto", "Aplicativo", "Atendimento"],

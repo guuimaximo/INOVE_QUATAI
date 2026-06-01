@@ -1281,13 +1281,31 @@ export default function DesempenhoDieselAnalise() {
         if (filtroStatus && a.status_norm !== filtroStatus) return false;
         if (filtroProntuario && a.checkpoint_tipo !== filtroProntuario) return false;
         if (mesReferencia) {
-          const mesItem = a.data_ref ? String(a.data_ref).slice(0, 7) : "";
-          if (mesItem !== mesReferencia) return false;
+          // O filtro de mes referencia recorta por DATA DE SESSAO. Um
+          // acompanhamento que comecou em outro mes mas teve sessoes
+          // dentro do mes selecionado continua aparecendo. Quando o
+          // acompanhamento nao tem sessao registrada, cai no
+          // dt_inicio_monitoramento (data_ref).
+          const sessoesDoAcomp = sessoesPorAcompanhamento.get(a.id)?.sessoes || [];
+          const datasParaCheck = sessoesDoAcomp.length
+            ? sessoesDoAcomp.map((s) => String(s?.data_ref || "").slice(0, 7))
+            : [String(a.data_ref || "").slice(0, 7)];
+          if (!datasParaCheck.some((m) => m === mesReferencia)) return false;
         }
         if (periodoDe || periodoAte) {
-          const base = String(a.data_ultima_sessao || a.data_ref || "").slice(0, 10);
-          if (periodoDe && base && base < periodoDe) return false;
-          if (periodoAte && base && base > periodoAte) return false;
+          // Mesma logica: respeita o periodo por sessao (com fallback
+          // para data_ultima_sessao / data_ref do acompanhamento).
+          const sessoesDoAcomp = sessoesPorAcompanhamento.get(a.id)?.sessoes || [];
+          const datasParaCheck = sessoesDoAcomp.length
+            ? sessoesDoAcomp.map((s) => String(s?.data_ref || "").slice(0, 10))
+            : [String(a.data_ultima_sessao || a.data_ref || "").slice(0, 10)];
+          const algumDentro = datasParaCheck.some((base) => {
+            if (!base) return false;
+            if (periodoDe && base < periodoDe) return false;
+            if (periodoAte && base > periodoAte) return false;
+            return true;
+          });
+          if (!algumDentro) return false;
         }
         if (filtroConclusao && a.conclusao_checkpoint !== filtroConclusao) return false;
 

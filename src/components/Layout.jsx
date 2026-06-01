@@ -242,16 +242,7 @@ export default function Layout() {
             <p className="truncate text-base font-semibold text-slate-900">{pageTitle}</p>
           </button>
 
-          {isNativeShell ? (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
-              aria-label="Sair"
-            >
-              <FaSignOutAlt className="text-base" />
-            </button>
-          ) : (
+          {isNativeShell ? null : (
             <button
               type="button"
               onClick={() => setMobileSidebarOpen((current) => !current)}

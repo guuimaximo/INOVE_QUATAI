@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { FaCheckCircle, FaClipboardList, FaExternalLinkAlt, FaPaperclip, FaPlus, FaSearch, FaTimesCircle } from "react-icons/fa";
+import { FaCheckCircle, FaClipboardList, FaFilePdf, FaPaperclip, FaPlay, FaPlus, FaSearch, FaTimesCircle } from "react-icons/fa";
+import MediaPreviewModal from "../../components/MediaPreviewModal";
 import { supabase } from "../../supabase";
 import { InoveStatCard } from "../../components/InovePage";
 import { AuthContext } from "../../context/AuthContext";
@@ -14,16 +15,55 @@ import {
   uploadSacFiles,
 } from "./SacCommon";
 
-function FileList({ urls = [] }) {
+function detectMediaKind(url = "") {
+  const u = String(url).toLowerCase();
+  if (/\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/.test(u)) return "video";
+  if (/\.pdf(\?|#|$)/.test(u)) return "pdf";
+  if (/\.(jpe?g|png|gif|webp|bmp|heic|heif|avif)(\?|#|$)/.test(u)) return "image";
+  return "other";
+}
+
+function FileList({ urls = [], onOpen }) {
   const list = Array.isArray(urls) ? urls : [];
   if (!list.length) return <span className="text-sm text-slate-400">Sem anexos.</span>;
   return (
-    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-      {list.map((url, index) => (
-        <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50">
-          <FaPaperclip /> Evidencia {index + 1} <FaExternalLinkAlt className="ml-auto text-xs" />
-        </a>
-      ))}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      {list.map((url, index) => {
+        const kind = detectMediaKind(url);
+        return (
+          <button
+            key={`${url}-${index}`}
+            type="button"
+            onClick={() => onOpen?.({ url, title: `Evidencia ${index + 1}` })}
+            className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm transition hover:border-blue-400 hover:shadow-md"
+            title={`Abrir Evidencia ${index + 1}`}
+          >
+            {kind === "image" ? (
+              <img src={url} alt={`Evidencia ${index + 1}`} className="h-full w-full object-cover transition group-hover:scale-105" loading="lazy" />
+            ) : kind === "video" ? (
+              <>
+                <video src={url} className="h-full w-full object-cover" preload="metadata" muted playsInline />
+                <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+                  <FaPlay className="text-3xl drop-shadow-md" />
+                </span>
+              </>
+            ) : kind === "pdf" ? (
+              <span className="flex h-full w-full flex-col items-center justify-center gap-2 text-rose-600">
+                <FaFilePdf className="text-3xl" />
+                <span className="text-xs font-bold">PDF</span>
+              </span>
+            ) : (
+              <span className="flex h-full w-full flex-col items-center justify-center gap-2 text-slate-600">
+                <FaPaperclip className="text-2xl" />
+                <span className="text-xs font-bold">Anexo</span>
+              </span>
+            )}
+            <span className="absolute bottom-1 left-1 right-1 truncate rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              Evidencia {index + 1}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -36,6 +76,7 @@ function SacModal({ row, onClose, onReload }) {
   const [conclusao, setConclusao] = useState(row?.conclusao || "");
   const [canceladoMotivo, setCanceladoMotivo] = useState(row?.cancelado_motivo || "");
   const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   useEffect(() => {
     if (!row?.id) return;
@@ -149,7 +190,7 @@ function SacModal({ row, onClose, onReload }) {
 
             <section className="rounded-3xl border border-slate-200 p-5">
               <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Evidencias</h3>
-              <div className="mt-3"><FileList urls={row.evidencias_urls} /></div>
+              <div className="mt-3"><FileList urls={row.evidencias_urls} onOpen={setPreview} /></div>
             </section>
 
             <section className="rounded-3xl border border-slate-200 p-5">
@@ -171,7 +212,7 @@ function SacModal({ row, onClose, onReload }) {
                       <span>{new Date(mov.created_at).toLocaleString("pt-BR")}</span>
                     </div>
                     <p className="mt-2 whitespace-pre-wrap text-sm font-semibold text-slate-700">{mov.descricao}</p>
-                    <div className="mt-3"><FileList urls={mov.anexos_urls} /></div>
+                    <div className="mt-3"><FileList urls={mov.anexos_urls} onOpen={setPreview} /></div>
                   </div>
                 ))}
               </div>
@@ -196,6 +237,12 @@ function SacModal({ row, onClose, onReload }) {
           </aside>
         </div>
       </div>
+      <MediaPreviewModal
+        open={Boolean(preview?.url)}
+        url={preview?.url}
+        title={preview?.title || "Evidencia"}
+        onClose={() => setPreview(null)}
+      />
     </div>
   );
 }

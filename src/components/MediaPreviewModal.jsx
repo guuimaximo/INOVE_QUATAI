@@ -1,7 +1,11 @@
 import { FaExternalLinkAlt, FaTimes } from "react-icons/fa";
 
 function isPdfUrl(url = "") {
-  return String(url).toLowerCase().includes(".pdf");
+  return /\.pdf(\?|#|$)/i.test(String(url));
+}
+
+function isVideoUrl(url = "") {
+  return /\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/i.test(String(url));
 }
 
 export default function MediaPreviewModal({
@@ -13,6 +17,7 @@ export default function MediaPreviewModal({
   if (!open || !url) return null;
 
   const isPdf = isPdfUrl(url);
+  const isVideo = isVideoUrl(url);
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
@@ -49,6 +54,13 @@ export default function MediaPreviewModal({
               src={url}
               title={title}
               className="h-[78vh] w-full rounded-xl border border-slate-300 bg-white"
+            />
+          ) : isVideo ? (
+            <video
+              src={url}
+              controls
+              autoPlay
+              className="mx-auto max-h-[78vh] max-w-full rounded-xl bg-black shadow"
             />
           ) : (
             <img

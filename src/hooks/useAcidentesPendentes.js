@@ -52,9 +52,15 @@ export function useAcidentesPendentes({ pollMs = 60000 } = {}) {
     carregar();
     const interval = setInterval(carregar, pollMs);
 
-    // Realtime: qualquer mudanca em acidentes_ocorrencias dispara recarga
+    // Realtime: qualquer mudanca em acidentes_ocorrencias dispara recarga.
+    // Nome unico por mount evita o erro "cannot add postgres_changes
+    // callbacks after subscribe()" quando o componente remonta (StrictMode/
+    // HMR) e o canal anterior ainda estava registrado.
+    const channelName = `acidentes-pendentes-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
     const channel = supabase
-      .channel("acidentes-pendentes")
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "acidentes_ocorrencias" },
@@ -64,7 +70,11 @@ export function useAcidentesPendentes({ pollMs = 60000 } = {}) {
 
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(channel);
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        /* ignora */
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elegivel]);

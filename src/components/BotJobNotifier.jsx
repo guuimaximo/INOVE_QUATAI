@@ -88,7 +88,7 @@ export default function BotJobNotifier() {
     }
 
     const channel = supabase
-      .channel("bot-jobs-notifier")
+      .channel(`bot-jobs-notifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "suprimentos_bot_jobs" },

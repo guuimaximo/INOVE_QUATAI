@@ -6,7 +6,7 @@ import { useAcidentesPendentes } from "../hooks/useAcidentesPendentes";
 // Aparece UMA vez por sessao quando o usuario elegivel entra no Inove
 // e ja existem acidentes "Aguardando imagens" na base.
 export default function AcidentesAlertaModal() {
-  const { elegivel, count, rows } = useAcidentesPendentes();
+  const { elegivel, popupHabilitado, count, rows } = useAcidentesPendentes();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [vistoNestaSessao, setVistoNestaSessao] = useState(false);
@@ -22,10 +22,10 @@ export default function AcidentesAlertaModal() {
   }, []);
 
   useEffect(() => {
-    if (!elegivel) return;
+    if (!elegivel || !popupHabilitado) return;
     if (vistoNestaSessao) return;
     if (count > 0) setOpen(true);
-  }, [elegivel, count, vistoNestaSessao]);
+  }, [elegivel, popupHabilitado, count, vistoNestaSessao]);
 
   function fechar() {
     setOpen(false);

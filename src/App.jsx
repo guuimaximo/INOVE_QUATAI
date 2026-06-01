@@ -11,6 +11,7 @@ import Layout from "./components/Layout";
 import RequireAuth from "./routes/RequireAuth";
 import InstallAppPrompt from "./components/InstallAppPrompt";
 import BotJobNotifier from "./components/BotJobNotifier";
+import AcidentesAlertaModal from "./components/AcidentesAlertaModal";
 import UpdateAppPrompt from "./components/UpdateAppPrompt";
 
 import { getDefaultAccessiblePath } from "./utils/access";
@@ -343,6 +344,7 @@ export default function App() {
           <InstallAppPrompt />
           <UpdateAppPrompt />
           <BotJobNotifier />
+          <AcidentesAlertaModal />
         </>
         </MobileTabBadgesProvider>
       </AccessProvider>

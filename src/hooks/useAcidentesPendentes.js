@@ -5,7 +5,7 @@ import { AuthContext } from "../context/AuthContext";
 // Quem deve ver os alertas de Acidentes "Aguardando imagens":
 // 1) Qualquer usuario com nivel "Ouvidoria"
 // 2) A gestora Flavia (id=47, login=30061127)
-// 3) Guilherme (id=5, login=Guilherme)
+// 3) Guilherme (id=5, login=Guilherme) -- recebe so o badge, sem popup
 function isEligibleUser(user) {
   if (!user) return false;
   const nivel = String(user.nivel || "").trim().toLowerCase();
@@ -19,9 +19,22 @@ function isEligibleUser(user) {
   return false;
 }
 
+// Quem deve receber o POPUP (alem do badge). Guilherme prefere so
+// o badge -- por isso fica de fora aqui.
+function shouldShowPopup(user) {
+  if (!user) return false;
+  const nivel = String(user.nivel || "").trim().toLowerCase();
+  if (nivel === "ouvidoria") return true;
+  const id = Number(user.usuario_id || user.id || 0);
+  const login = String(user.login || "").trim().toLowerCase();
+  if (id === 47 || login === "30061127") return true; // Flavia
+  return false;
+}
+
 export function useAcidentesPendentes({ pollMs = 60000 } = {}) {
   const { user } = useContext(AuthContext) || {};
   const elegivel = isEligibleUser(user);
+  const popupHabilitado = shouldShowPopup(user);
   const [pendentes, setPendentes] = useState({ count: 0, rows: [] });
   const [loading, setLoading] = useState(false);
   const channelRef = useRef(null);
@@ -86,7 +99,7 @@ export function useAcidentesPendentes({ pollMs = 60000 } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elegivel]);
 
-  return { elegivel, loading, ...pendentes, refresh: carregar };
+  return { elegivel, popupHabilitado, loading, ...pendentes, refresh: carregar };
 }
 
 export default useAcidentesPendentes;

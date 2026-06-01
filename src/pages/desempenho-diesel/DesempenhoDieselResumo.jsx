@@ -24,6 +24,7 @@ import {
   resolveAcompanhamentoContext,
 } from "../../utils/dieselAcompanhamento";
 
+import DateRangePopover from "../../components/DateRangePopover";
 import AnaliseLinhasModal from "../../components/desempenho/resumo/AnaliseLinhasModal";
 import RankingMotoristasModal from "../../components/desempenho/resumo/RankingMotoristasModal";
 import RankingCarrosModal from "../../components/desempenho/resumo/RankingCarrosModal";
@@ -897,6 +898,21 @@ export default function DesempenhoDieselAnalise() {
       .sort((a, b) => b.Litros_Desp_Meta - a.Litros_Desp_Meta);
   }, [rowsReferenciaComRef]);
 
+  // Indice unico para lookup O(1) por chapa. Sem isso, a tela ficava muito
+  // lenta com 26k+ registros porque calcularJanelaSimetricaPorDias e a
+  // montagem de acompanhamentosComEvolucao percorriam o dataset inteiro
+  // 4-5 vezes por motorista.
+  const datasetPorChapa = useMemo(() => {
+    const map = new Map();
+    for (const row of dataset || []) {
+      const chapaKey = String(row?.chapa || "").trim();
+      if (!chapaKey) continue;
+      if (!map.has(chapaKey)) map.set(chapaKey, []);
+      map.get(chapaKey).push(row);
+    }
+    return map;
+  }, [dataset]);
+
   function calcularJanelaSimetricaPorDias(chapa, dataRef, janelaDias) {
     const chapaNorm = String(chapa || "").trim();
     const dtRef = safeDateStr(dataRef);
@@ -913,7 +929,7 @@ export default function DesempenhoDieselAnalise() {
       };
     }
 
-    const baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapaNorm);
+    const baseMotorista = datasetPorChapa.get(chapaNorm) || [];
     const diasAgrupados = agruparPorDiaStr(baseMotorista);
 
     if (!diasAgrupados.length) {
@@ -1056,7 +1072,7 @@ export default function DesempenhoDieselAnalise() {
           };
         }
 
-        const baseMotorista = dataset.filter((r) => String(r.chapa || "").trim() === chapa);
+        const baseMotorista = datasetPorChapa.get(chapa) || [];
         const diasAgrupados = agruparPorDiaStr(baseMotorista);
 
         if (!diasAgrupados.length) {
@@ -1922,22 +1938,19 @@ export default function DesempenhoDieselAnalise() {
             ))}
           </select>
 
-          <div className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-1.5">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">De</span>
-            <input
-              type="date"
-              value={periodoDe}
-              onChange={(e) => setPeriodoDe(e.target.value)}
-              className="flex-1 bg-transparent text-sm font-bold text-slate-800 outline-none"
-            />
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Ate</span>
-            <input
-              type="date"
-              value={periodoAte}
-              onChange={(e) => setPeriodoAte(e.target.value)}
-              className="flex-1 bg-transparent text-sm font-bold text-slate-800 outline-none"
-            />
-          </div>
+          <DateRangePopover
+            from={periodoDe}
+            to={periodoAte}
+            placeholder="Período (De → Até)"
+            onChange={({ from, to }) => {
+              setPeriodoDe(from);
+              setPeriodoAte(to);
+            }}
+            onClear={() => {
+              setPeriodoDe("");
+              setPeriodoAte("");
+            }}
+          />
 
           <select
             value={filtroLinha}

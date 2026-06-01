@@ -393,6 +393,9 @@ export default function AcompanhamentosModal({
                 <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("data_ref")}>
                   Início {getSortIcon("data_ref")}
                 </th>
+                <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("data_ultima_sessao")}>
+                  Última sessão {getSortIcon("data_ultima_sessao")}
+                </th>
                 <th className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort("duracao_min")}>
                   Tempo {getSortIcon("duracao_min")}
                 </th>
@@ -457,6 +460,9 @@ export default function AcompanhamentosModal({
                     </span>
                   </td>
                   <td className="px-4 py-4">{fmtDateBr(row.data_ref)}</td>
+                  <td className="px-4 py-4 font-bold text-slate-700">
+                    {fmtDateBr(row.data_ultima_sessao || row.data_ref)}
+                  </td>
                   <td className="px-4 py-4">{formatMinutes(row.duracao_min)}</td>
                   <td className="px-4 py-4">
                     <div className="flex flex-col gap-2">

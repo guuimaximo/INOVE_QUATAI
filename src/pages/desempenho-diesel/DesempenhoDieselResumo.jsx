@@ -415,6 +415,8 @@ export default function DesempenhoDieselAnalise() {
   const [filtroProntuario, setFiltroProntuario] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroConclusao, setFiltroConclusao] = useState("");
+  const [periodoDe, setPeriodoDe] = useState("");
+  const [periodoAte, setPeriodoAte] = useState("");
   const [mesReferencia, setMesReferencia] = useState("");
 
   const [mostrarExplicacao, setMostrarExplicacao] = useState(false);
@@ -1176,6 +1178,11 @@ export default function DesempenhoDieselAnalise() {
           const mesItem = a.data_ref ? String(a.data_ref).slice(0, 7) : "";
           if (mesItem !== mesReferencia) return false;
         }
+        if (periodoDe || periodoAte) {
+          const base = String(a.data_ultima_sessao || a.data_ref || "").slice(0, 10);
+          if (periodoDe && base && base < periodoDe) return false;
+          if (periodoAte && base && base > periodoAte) return false;
+        }
         if (filtroConclusao && a.conclusao_checkpoint !== filtroConclusao) return false;
 
         const q = busca.toLowerCase().trim();
@@ -1201,6 +1208,8 @@ export default function DesempenhoDieselAnalise() {
     filtroConclusao,
     busca,
     motoristaContextMap,
+    periodoDe,
+    periodoAte,
   ]);
 
   const registrosInstrutor = useMemo(() => {
@@ -1913,6 +1922,23 @@ export default function DesempenhoDieselAnalise() {
             ))}
           </select>
 
+          <div className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">De</span>
+            <input
+              type="date"
+              value={periodoDe}
+              onChange={(e) => setPeriodoDe(e.target.value)}
+              className="flex-1 bg-transparent text-sm font-bold text-slate-800 outline-none"
+            />
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Ate</span>
+            <input
+              type="date"
+              value={periodoAte}
+              onChange={(e) => setPeriodoAte(e.target.value)}
+              className="flex-1 bg-transparent text-sm font-bold text-slate-800 outline-none"
+            />
+          </div>
+
           <select
             value={filtroLinha}
             onChange={(e) => setFiltroLinha(e.target.value)}
@@ -2006,6 +2032,8 @@ export default function DesempenhoDieselAnalise() {
               setFiltroStatus("");
               setFiltroConclusao("");
               setMesReferencia("");
+              setPeriodoDe("");
+              setPeriodoAte("");
             }}
             className="px-4 py-2 rounded-xl font-black text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
           >

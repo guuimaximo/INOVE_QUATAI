@@ -586,18 +586,18 @@ function buildMonthRows({ year, month, product, measurements, planningRows, rece
         : safeNumber(receiptByDate.get(date)?.receivedLiters ?? 0, 0);
 
     if (realizedDay) {
-      // Regra do saldo projetado para dias com medicao: usar o saldo da regua
-      // lida no inicio do dia (litros_anterior_t1 + t2). E essa leitura que
-      // representa fisicamente o tanque na abertura. So caimos no cascade
-      // (saldoAnterior / runningBalance) quando a regua nao foi informada.
+      // Regra do saldo projetado para dias com medicao: usar a leitura da
+      // regua do proprio dia ("Saldo inicial do dia" na tela de Medicao =
+      // medicaoInicial = soma litros_final_t1 + t2). Quando a regua nao
+      // foi informada, cai no cascata (saldoAnterior / runningBalance).
       const saldoRegua = round(
-        safeNumber(actual?.litrosAnteriorT1, 0) + safeNumber(actual?.litrosAnteriorT2, 0),
+        safeNumber(actual?.litrosFinalT1, 0) + safeNumber(actual?.litrosFinalT2, 0),
         2
       );
       const saldoAnteriorMedido = safeNumber(
         saldoRegua && saldoRegua > 0
           ? saldoRegua
-          : actual?.saldoAnterior ?? actual?.medicaoD1 ?? runningBalance,
+          : actual?.medicaoInicial ?? actual?.medicaoAtual ?? actual?.saldoFinal ?? actual?.saldoAnterior ?? runningBalance,
         runningBalance
       );
       const saldoPlanejado = saldoAnteriorMedido;

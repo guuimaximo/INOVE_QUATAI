@@ -740,7 +740,16 @@ export default function EstoqueDieselOperacao() {
   }
 
   function updateField(field, value) {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+      // Trocar manualmente a data deve repuxar regua anterior e hodometros
+      // iniciais a partir do D-1 daquela data; senao a tela fica com os
+      // dados do dia anterior (carregados quando o form foi aberto).
+      if (field === "date" && !current.id && value && value !== current.date) {
+        return buildPreparedForm(next, entries, metadata, { forcePumpInitials: true });
+      }
+      return next;
+    });
   }
 
   function clearReceiptFields() {
@@ -799,7 +808,26 @@ export default function EstoqueDieselOperacao() {
     const usableEntries = entriesOverride || entries;
     const usableMetadata = metadataOverride || metadata;
     const baseForm = buildDefaultForm(product, year, month);
-    if (dateOverride) baseForm.date = dateOverride;
+
+    if (dateOverride) {
+      baseForm.date = dateOverride;
+    } else {
+      // Pega a data do ultimo lancamento do mes atual e abre no dia seguinte.
+      // Se nao houver nenhum lancamento no mes, segue o default (hoje ou
+      // primeiro dia do mes). Assim "Novo lancamento" nao volta para 01.
+      const ultimoDoMes = (usableEntries || [])
+        .filter((e) => e.product === product && e.date && e.date.startsWith(`${year}-${month}`))
+        .map((e) => e.date)
+        .sort()
+        .pop();
+      if (ultimoDoMes) {
+        const proxima = getNextDateAfter(ultimoDoMes);
+        if (proxima && proxima.startsWith(`${year}-${month}`)) {
+          baseForm.date = proxima;
+        }
+      }
+    }
+
     setForm(buildPreparedForm(baseForm, usableEntries, usableMetadata, { forcePumpInitials: true }));
     setReceiptFiles({ before: null, after: null });
     setCustomSupplierMode(false);

@@ -1,19 +1,59 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { FaCamera, FaCheckCircle, FaSearch, FaUpload } from "react-icons/fa";
+import { FaCamera, FaCheckCircle, FaFilePdf, FaPaperclip, FaPlay, FaSearch, FaUpload } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
 import { formatDateBR, formatTimeBR, safeText, statusTone, uploadAcidenteFiles } from "./AcidentesCommon";
+import MediaPreviewModal from "../../components/MediaPreviewModal";
 
-function FileList({ urls = [] }) {
+function detectMediaKind(url = "") {
+  const u = String(url).toLowerCase();
+  if (/\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/.test(u)) return "video";
+  if (/\.pdf(\?|#|$)/.test(u)) return "pdf";
+  if (/\.(jpe?g|png|gif|webp|bmp|heic|heif|avif)(\?|#|$)/.test(u)) return "image";
+  return "other";
+}
+
+function FileList({ urls = [], onOpen }) {
   const list = Array.isArray(urls) ? urls : [];
   if (!list.length) return <div className="text-sm font-semibold text-slate-400">Sem anexos.</div>;
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {list.map((url, idx) => (
-        <a key={`${url}-${idx}`} href={url} target="_blank" rel="noreferrer" className="truncate rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">
-          Anexo {idx + 1}
-        </a>
-      ))}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      {list.map((url, idx) => {
+        const kind = detectMediaKind(url);
+        return (
+          <button
+            key={`${url}-${idx}`}
+            type="button"
+            onClick={() => onOpen?.({ url, title: `Anexo ${idx + 1}` })}
+            className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-sm transition hover:border-blue-400 hover:shadow-md"
+            title={`Abrir Anexo ${idx + 1}`}
+          >
+            {kind === "image" ? (
+              <img src={url} alt={`Anexo ${idx + 1}`} className="h-full w-full object-cover transition group-hover:scale-105" loading="lazy" />
+            ) : kind === "video" ? (
+              <>
+                <video src={url} className="h-full w-full object-cover" preload="metadata" muted playsInline />
+                <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+                  <FaPlay className="text-3xl drop-shadow-md" />
+                </span>
+              </>
+            ) : kind === "pdf" ? (
+              <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-rose-600">
+                <FaFilePdf className="text-3xl" />
+                <span className="text-xs font-bold">PDF</span>
+              </span>
+            ) : (
+              <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-600">
+                <FaPaperclip className="text-2xl" />
+                <span className="text-xs font-bold">Anexo</span>
+              </span>
+            )}
+            <span className="absolute bottom-1 left-1 right-1 truncate rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              Anexo {idx + 1}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -27,6 +67,7 @@ function ImagemAnaliseModal({ row, onClose, onSaved }) {
   });
   const [files, setFiles] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   if (!row) return null;
 
@@ -77,8 +118,15 @@ function ImagemAnaliseModal({ row, onClose, onSaved }) {
 
           <div>
             <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Evidências do lançamento</div>
-            <FileList urls={row.evidencias_urls} />
+            <FileList urls={row.evidencias_urls} onOpen={setPreview} />
           </div>
+
+          {Array.isArray(row.imagens_urls) && row.imagens_urls.length > 0 ? (
+            <div>
+              <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Imagens já anexadas</div>
+              <FileList urls={row.imagens_urls} onOpen={setPreview} />
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
@@ -118,6 +166,12 @@ function ImagemAnaliseModal({ row, onClose, onSaved }) {
           </button>
         </div>
       </div>
+      <MediaPreviewModal
+        open={Boolean(preview?.url)}
+        url={preview?.url}
+        title={preview?.title || "Anexo"}
+        onClose={() => setPreview(null)}
+      />
     </div>
   );
 }

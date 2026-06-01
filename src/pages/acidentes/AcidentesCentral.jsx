@@ -5,6 +5,9 @@ import {
   FaClipboardList,
   FaCopy,
   FaEye,
+  FaFilePdf,
+  FaPaperclip,
+  FaPlay,
   FaPlus,
   FaSearch,
   FaTimesCircle,
@@ -12,6 +15,7 @@ import {
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
+import MediaPreviewModal from "../../components/MediaPreviewModal";
 import { AuthContext } from "../../context/AuthContext";
 import {
   ACIDENTE_STATUS,
@@ -40,16 +44,55 @@ function Card({ title, value, tone = "slate" }) {
   );
 }
 
-function FileList({ urls = [] }) {
+function detectMediaKind(url = "") {
+  const u = String(url).toLowerCase();
+  if (/\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/.test(u)) return "video";
+  if (/\.pdf(\?|#|$)/.test(u)) return "pdf";
+  if (/\.(jpe?g|png|gif|webp|bmp|heic|heif|avif)(\?|#|$)/.test(u)) return "image";
+  return "other";
+}
+
+function FileList({ urls = [], onOpen }) {
   const list = Array.isArray(urls) ? urls : [];
   if (!list.length) return <div className="text-sm font-semibold text-slate-400">Sem anexos.</div>;
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {list.map((url, idx) => (
-        <a key={`${url}-${idx}`} href={url} target="_blank" rel="noreferrer" className="truncate rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">
-          Anexo {idx + 1}
-        </a>
-      ))}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      {list.map((url, idx) => {
+        const kind = detectMediaKind(url);
+        return (
+          <button
+            key={`${url}-${idx}`}
+            type="button"
+            onClick={() => onOpen?.({ url, title: `Anexo ${idx + 1}` })}
+            className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-sm transition hover:border-blue-400 hover:shadow-md"
+            title={`Abrir Anexo ${idx + 1}`}
+          >
+            {kind === "image" ? (
+              <img src={url} alt={`Anexo ${idx + 1}`} className="h-full w-full object-cover transition group-hover:scale-105" loading="lazy" />
+            ) : kind === "video" ? (
+              <>
+                <video src={url} className="h-full w-full object-cover" preload="metadata" muted playsInline />
+                <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+                  <FaPlay className="text-3xl drop-shadow-md" />
+                </span>
+              </>
+            ) : kind === "pdf" ? (
+              <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-rose-600">
+                <FaFilePdf className="text-3xl" />
+                <span className="text-xs font-bold">PDF</span>
+              </span>
+            ) : (
+              <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-600">
+                <FaPaperclip className="text-2xl" />
+                <span className="text-xs font-bold">Anexo</span>
+              </span>
+            )}
+            <span className="absolute bottom-1 left-1 right-1 truncate rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              Anexo {idx + 1}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -62,6 +105,7 @@ function AcidenteModal({ row, onClose, onChanged }) {
   const [parecer, setParecer] = useState(row?.parecer_final || "");
   const [cancelMotivo, setCancelMotivo] = useState("");
   const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   useEffect(() => {
     if (!row?.id) return;
@@ -150,7 +194,7 @@ function AcidenteModal({ row, onClose, onChanged }) {
               </div>
               <div className="mt-4">
                 <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Evidências iniciais</div>
-                <FileList urls={row.evidencias_urls} />
+                <FileList urls={row.evidencias_urls} onOpen={setPreview} />
               </div>
               {row.mensagem_whatsapp ? (
                 <button onClick={() => copyToClipboard(row.mensagem_whatsapp).then(() => alert("Mensagem copiada."))} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-3 text-sm font-black text-white">
@@ -167,7 +211,7 @@ function AcidenteModal({ row, onClose, onChanged }) {
                 <div>Observação: {safeText(row.imagens_observacao)}</div>
               </div>
               <div className="mt-4">
-                <FileList urls={row.imagens_urls} />
+                <FileList urls={row.imagens_urls} onOpen={setPreview} />
               </div>
             </section>
           </div>
@@ -202,13 +246,19 @@ function AcidenteModal({ row, onClose, onChanged }) {
                 <div key={t.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="text-xs font-black uppercase tracking-wide text-slate-500">{new Date(t.created_at).toLocaleString("pt-BR")} · {safeText(t.criado_por_nome)}</div>
                   <div className="mt-2 text-sm font-semibold text-slate-700">{t.descricao}</div>
-                  <div className="mt-2"><FileList urls={t.evidencias_urls} /></div>
+                  <div className="mt-2"><FileList urls={t.evidencias_urls} onOpen={setPreview} /></div>
                 </div>
               ))}
             </div>
           </section>
         </div>
       </div>
+      <MediaPreviewModal
+        open={Boolean(preview?.url)}
+        url={preview?.url}
+        title={preview?.title || "Anexo"}
+        onClose={() => setPreview(null)}
+      />
     </div>
   );
 }

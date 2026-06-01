@@ -10,6 +10,7 @@ export const SAC_MOTIVOS = {
   Denuncia: ["Evasao", "Conduta indevida", "Seguranca", "Fraude"],
   Elogio: ["Operador", "Linha", "Atendimento", "Conservacao"],
   Sugestao: ["Linha", "Horario", "Ponto", "Aplicativo", "Atendimento"],
+  "Solicitacao": ["Bloqueio"],
 };
 
 export const SAC_ACOES = [

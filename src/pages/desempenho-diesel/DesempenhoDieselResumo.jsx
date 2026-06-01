@@ -398,6 +398,9 @@ export default function DesempenhoDieselAnalise() {
   const [avisoDadosExternos, setAvisoDadosExternos] = useState("");
 
   const [rowsBase, setRowsBase] = useState([]);
+  const [mesesCarregados, setMesesCarregados] = useState(new Set());
+  const [mesComparacao, setMesComparacao] = useState("");
+  const [carregandoMesExtra, setCarregandoMesExtra] = useState(false);
   const [acompanhamentos, setAcompanhamentos] = useState([]);
   const [sessoesAcompanhamento, setSessoesAcompanhamento] = useState([]);
   const [funcionarios, setFuncionarios] = useState([]);
@@ -432,7 +435,12 @@ export default function DesempenhoDieselAnalise() {
     direction: "desc",
   });
 
-  async function carregarPremiacao() {
+  // Carrega premiacao diaria filtrando por uma lista de meses (anomes
+  // formato YYYYMM). Sem essa janela, o load pega o ano inteiro (~26k
+  // linhas) e a tela demorava varios segundos. O default agora e
+  // mes corrente + mes anterior; outros meses sao carregados sob
+  // demanda quando o usuario escolhe nos seletores.
+  async function carregarPremiacao(mesesYYYYMM = []) {
     if (!isSupabaseBCNTConfigured) {
       throw new Error("Supabase BCNT nao configurado.");
     }
@@ -443,13 +451,28 @@ export default function DesempenhoDieselAnalise() {
 
     while (true) {
       const end = start + pageSize - 1;
-      const { data, error } = await supabaseBCNT
+      let query = supabaseBCNT
         .from("premiacao_diaria_atualizada")
         .select(
           "id_premiacao_diaria, dia, ano, mes, anomes, motorista, linha, prefixo, fabricante, cluster, km_rodado, litros_consumidos, km_l, meta_kml_usada, litros_ideais"
         )
-        .order("dia", { ascending: false })
-        .range(start, end);
+        .order("dia", { ascending: false });
+
+      if (Array.isArray(mesesYYYYMM) && mesesYYYYMM.length) {
+        // Tenta filtrar tanto por string ("202605") quanto por inteiro (202605)
+        const variants = Array.from(
+          new Set(
+            mesesYYYYMM.flatMap((m) => {
+              const s = String(m).replace("-", "").slice(0, 6);
+              const n = Number.isFinite(Number(s)) ? Number(s) : null;
+              return n != null ? [s, n] : [s];
+            })
+          )
+        );
+        query = query.in("anomes", variants);
+      }
+
+      const { data, error } = await query.range(start, end);
 
       if (error) throw error;
 
@@ -462,6 +485,43 @@ export default function DesempenhoDieselAnalise() {
     }
 
     return all;
+  }
+
+  function defaultMesesParaCarregar() {
+    const hoje = new Date();
+    const mesAtual = `${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+    const dataAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const mesAnterior = `${dataAnterior.getFullYear()}${String(dataAnterior.getMonth() + 1).padStart(2, "0")}`;
+    return [mesAnterior, mesAtual];
+  }
+
+  function mesYyyyMmFromIso(iso) {
+    if (!iso) return "";
+    return String(iso).replace("-", "").slice(0, 6);
+  }
+
+  async function garantirMesCarregado(isoYearMonth) {
+    const mesYYYYMM = mesYyyyMmFromIso(isoYearMonth);
+    if (!mesYYYYMM) return;
+    if (mesesCarregados.has(mesYYYYMM)) return;
+    try {
+      setCarregandoMesExtra(true);
+      const extras = await carregarPremiacao([mesYYYYMM]);
+      const idsExistentes = new Set((rowsBase || []).map((r) => r.id_premiacao_diaria));
+      const novos = (extras || []).filter((r) => !idsExistentes.has(r.id_premiacao_diaria));
+      if (novos.length) {
+        setRowsBase((prev) => [...(prev || []), ...novos]);
+      }
+      setMesesCarregados((prev) => {
+        const next = new Set(prev);
+        next.add(mesYYYYMM);
+        return next;
+      });
+    } catch (err) {
+      console.error("Falha ao carregar mes extra:", err);
+    } finally {
+      setCarregandoMesExtra(false);
+    }
   }
 
   async function carregarFuncionarios() {
@@ -530,9 +590,10 @@ export default function DesempenhoDieselAnalise() {
     setLoading(true);
     setErro("");
     setAvisoDadosExternos("");
+    const mesesIniciais = defaultMesesParaCarregar();
     try {
       const [premiacaoResult, acompResult, funcsResult, sessoesResult] = await Promise.allSettled([
-        carregarPremiacao(),
+        carregarPremiacao(mesesIniciais),
         carregarAcompanhamentos(),
         carregarFuncionarios(),
         carregarSessoesAcompanhamento(),
@@ -545,9 +606,11 @@ export default function DesempenhoDieselAnalise() {
 
       if (premiacaoResult.status === "fulfilled") {
         setRowsBase(premiacaoResult.value);
+        setMesesCarregados(new Set(mesesIniciais));
       } else {
         console.warn("Falha ao carregar premiacao BCNT", premiacaoResult.reason);
         setRowsBase([]);
+        setMesesCarregados(new Set());
         avisos.push(mensagemErroFonteDados("Premiacao diaria", premiacaoResult.reason));
       }
 
@@ -632,17 +695,44 @@ export default function DesempenhoDieselAnalise() {
     return [...new Set(dataset.map((r) => r.Mes_Ano).filter(Boolean))].sort();
   }, [dataset]);
 
+  // Default: mes referencia = mes atual; mes comparacao = mes anterior.
   useEffect(() => {
-    if (!mesReferencia && mesesDisponiveis.length) {
-      setMesReferencia(mesesDisponiveis[mesesDisponiveis.length - 1]);
-    }
-  }, [mesReferencia, mesesDisponiveis]);
+    const hoje = new Date();
+    const isoAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+    const ant = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const isoAnt = `${ant.getFullYear()}-${String(ant.getMonth() + 1).padStart(2, "0")}`;
+    if (!mesReferencia) setMesReferencia(isoAtual);
+    if (!mesComparacao) setMesComparacao(isoAnt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const mesComparacao = useMemo(() => {
-    if (!mesReferencia) return "";
-    const idx = mesesDisponiveis.indexOf(mesReferencia);
-    return idx > 0 ? mesesDisponiveis[idx - 1] : "";
-  }, [mesReferencia, mesesDisponiveis]);
+  // Lista deterministica dos ultimos 24 meses para os seletores. Independe
+  // do dataset ja carregado, para o usuario poder pedir um mes mais antigo.
+  const opcoesMeses = useMemo(() => {
+    const out = [];
+    const base = new Date();
+    base.setDate(1);
+    for (let i = 0; i < 24; i += 1) {
+      const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    // Inclui meses ja presentes no dataset (caso venham mais antigos que 24m)
+    for (const m of mesesDisponiveis) {
+      if (m && !out.includes(m)) out.push(m);
+    }
+    return out.sort().reverse();
+  }, [mesesDisponiveis]);
+
+  // Quando o usuario seleciona um mes ainda nao carregado, busca no banco.
+  useEffect(() => {
+    if (mesReferencia) garantirMesCarregado(mesReferencia);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mesReferencia]);
+
+  useEffect(() => {
+    if (mesComparacao) garantirMesCarregado(mesComparacao);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mesComparacao]);
 
   const linhasUnicas = useMemo(() => {
     const set = new Set();
@@ -1925,18 +2015,37 @@ export default function DesempenhoDieselAnalise() {
             />
           </div>
 
-          <select
-            value={mesReferencia}
-            onChange={(e) => setMesReferencia(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-          >
-            <option value="">Selecione o mês</option>
-            {mesesDisponiveis.map((mes) => (
-              <option key={mes} value={mes}>
-                {mes}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-col">
+            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+              Mês referência {carregandoMesExtra ? "(carregando...)" : ""}
+            </label>
+            <select
+              value={mesReferencia}
+              onChange={(e) => setMesReferencia(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+            >
+              <option value="">Mês de referência</option>
+              {opcoesMeses.map((mes) => (
+                <option key={`ref-${mes}`} value={mes}>{mes}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+              Mês comparação
+            </label>
+            <select
+              value={mesComparacao}
+              onChange={(e) => setMesComparacao(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+            >
+              <option value="">Sem comparação</option>
+              {opcoesMeses.map((mes) => (
+                <option key={`comp-${mes}`} value={mes}>{mes}</option>
+              ))}
+            </select>
+          </div>
 
           <DateRangePopover
             from={periodoDe}
@@ -2045,6 +2154,7 @@ export default function DesempenhoDieselAnalise() {
               setFiltroStatus("");
               setFiltroConclusao("");
               setMesReferencia("");
+              setMesComparacao("");
               setPeriodoDe("");
               setPeriodoAte("");
             }}

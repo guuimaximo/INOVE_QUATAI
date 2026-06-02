@@ -9,7 +9,10 @@ import {
   FaSave,
   FaCalendarAlt,
   FaArrowLeft,
+  FaWhatsapp,
+  FaCopy,
 } from "react-icons/fa";
+import { buildMensagemWhatsAppEspecial, copyToClipboard } from "./EspecialCommon";
 import {
   syncEspecialToGoogle,
   isGoogleConnected,
@@ -64,6 +67,18 @@ export default function ControleEspecialLancamento() {
   // Lista de e-mails (com EMAIL_TRAVADO sempre presente)
   const [emails, setEmails] = useState(() => Array.from(new Set(EMAILS_PADRAO)));
   const [novoEmail, setNovoEmail] = useState("");
+
+  const mensagemWhats = useMemo(() => buildMensagemWhatsAppEspecial(form), [form]);
+
+  const handleCopiar = async () => {
+    await copyToClipboard(mensagemWhats);
+    alert("Mensagem copiada — cola no WhatsApp.");
+  };
+
+  const handleAbrirWhats = () => {
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(mensagemWhats)}`;
+    window.open(url, "_blank");
+  };
 
   useEffect(() => {
     if (isGoogleConnected()) {
@@ -419,6 +434,32 @@ export default function ControleEspecialLancamento() {
             className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold flex items-center gap-2"
           >
             <FaPlus size={12} /> Adicionar
+          </button>
+        </div>
+      </Section>
+
+      {/* Mensagem WhatsApp */}
+      <Section title="💬 Mensagem para WhatsApp" color="bg-emerald-50 border-emerald-200">
+        <p className="text-xs text-slate-600 mb-3">
+          Preview da mensagem com os dados acima. Atualiza automaticamente conforme você preenche o formulário.
+        </p>
+        <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-950 p-4 text-xs font-semibold leading-relaxed text-white">
+          {mensagemWhats}
+        </pre>
+        <div className="mt-3 flex flex-wrap gap-2 justify-end">
+          <button
+            type="button"
+            onClick={handleCopiar}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+          >
+            <FaCopy /> Copiar mensagem
+          </button>
+          <button
+            type="button"
+            onClick={handleAbrirWhats}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-sm font-black"
+          >
+            <FaWhatsapp /> Abrir no WhatsApp
           </button>
         </div>
       </Section>

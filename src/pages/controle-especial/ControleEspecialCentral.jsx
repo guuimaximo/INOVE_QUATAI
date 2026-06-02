@@ -9,7 +9,9 @@ import {
   FaUsers,
   FaTrash,
   FaSync,
+  FaWhatsapp,
 } from "react-icons/fa";
+import { buildMensagemWhatsAppEspecial, copyToClipboard } from "./EspecialCommon";
 import {
   deleteEspecialFromGoogle,
   isGoogleConnected,
@@ -83,6 +85,13 @@ export default function ControleEspecialCentral() {
     } catch (err) {
       alert("Erro: " + (err.message || err));
     }
+  };
+
+  const handleWhats = async (e) => {
+    const msg = buildMensagemWhatsAppEspecial(e);
+    await copyToClipboard(msg);
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
   };
 
   const handleReenviar = async (e) => {
@@ -218,6 +227,13 @@ export default function ControleEspecialCentral() {
               </div>
 
               <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleWhats(e)}
+                  className="p-2 rounded-lg text-slate-500 hover:bg-emerald-50 hover:text-emerald-600"
+                  title="Compartilhar no WhatsApp"
+                >
+                  <FaWhatsapp />
+                </button>
                 <button
                   onClick={() => handleReenviar(e)}
                   className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-blue-600"

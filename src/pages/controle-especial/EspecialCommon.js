@@ -18,12 +18,12 @@ function formatTimeBR(s) {
   return String(s).substring(0, 5);
 }
 
-function blocoParadas(paradas, prefixoIcone = "•") {
+function blocoParadas(paradas) {
   return (paradas || [])
     .filter((p) => p?.local || p?.endereco)
     .flatMap((p, i) => {
-      const linhas = [`${prefixoIcone} Parada ${i + 1}: ${safeText(p.local)}`];
-      if (safeText(p.endereco)) linhas.push(`     ${safeText(p.endereco)}`);
+      const linhas = [`🚏 *Parada ${i + 1}:* ${safeText(p.local) || "—"}`];
+      if (safeText(p.endereco)) linhas.push(`     📌 ${safeText(p.endereco)}`);
       return linhas;
     });
 }
@@ -41,15 +41,16 @@ export function buildMensagemWhatsAppEspecial(form) {
   bloco.push(`🚐 Quantidade de ônibus: *${form.qtd_onibus || 1}*`);
   bloco.push("");
 
-  const motoristas = (form.motoristas || []).filter((m) => m?.chapa || m?.nome);
+  const motoristas = (form.motoristas || []).filter((m) => m?.chapa || m?.nome || m?.prefixo);
   if (motoristas.length > 0) {
-    bloco.push("*👨‍✈️ Motoristas*");
+    bloco.push("*👨‍✈️ MOTORISTAS E VEÍCULOS*");
     motoristas.forEach((m, i) => {
       const nome = safeText(m?.nome);
       const chapa = safeText(m?.chapa);
       const prefixo = safeText(m?.prefixo);
-      const linha = `Ônibus ${i + 1}: ${[chapa, nome].filter(Boolean).join(" - ") || "—"}`;
-      bloco.push(linha + (prefixo ? `  (Prefixo ${prefixo})` : ""));
+      bloco.push(`*🚌 Ônibus ${i + 1}*`);
+      bloco.push(`👤 Motorista: ${[chapa, nome].filter(Boolean).join(" - ") || "—"}`);
+      bloco.push(`🚍 Veículo (prefixo): ${prefixo || "—"}`);
     });
     bloco.push("");
   }

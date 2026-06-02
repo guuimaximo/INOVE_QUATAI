@@ -293,12 +293,19 @@ export default function ControleEspecialLancamento() {
         </p>
         <div className="space-y-3">
           {(form.motoristas || []).map((m, idx) => (
-            <div key={idx} className="rounded-lg bg-white border border-slate-200 p-3">
+            <div
+              key={idx}
+              className="rounded-lg bg-white border border-slate-200 p-3 relative"
+              style={{ zIndex: 100 - idx }}
+            >
               <div className="text-[11px] font-extrabold uppercase text-slate-500 mb-2">
                 🚌 Ônibus {idx + 1}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2">
+                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
+                    Motorista (chapa ou nome)
+                  </label>
                   <CampoMotorista
                     value={{ chapa: m.chapa || "", nome: m.nome || "" }}
                     onChange={(val) =>
@@ -306,8 +313,16 @@ export default function ControleEspecialLancamento() {
                     }
                     label=""
                   />
+                  {m.chapa && m.nome && (
+                    <div className="mt-1 text-xs text-emerald-700 font-bold">
+                      ✓ {m.chapa} — {m.nome}
+                    </div>
+                  )}
                 </div>
                 <div>
+                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
+                    Veículo (prefixo)
+                  </label>
                   <CampoPrefixo
                     value={m.prefixo || ""}
                     onChange={(val) => updMotorista(idx, { prefixo: val })}

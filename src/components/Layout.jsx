@@ -175,6 +175,35 @@ export default function Layout() {
   useEffect(() => {
     if (farolTab === "farol" && !farolMounted) setFarolMounted(true);
   }, [farolTab, farolMounted]);
+
+  // Permite que outros componentes (ex.: botão "Ir para Farol" na sidebar) e
+  // o próprio Farol embarcado peçam pra trocar de aba.
+  useEffect(() => {
+    if (!podeVerFarol) return;
+    const onSwitchToFarol = () => {
+      setFarolMounted(true);
+      setFarolTab("farol");
+      setMobileSidebarOpen(false);
+    };
+    const onSwitchToInove = () => setFarolTab("inove");
+    const onMessage = (ev) => {
+      const data = ev?.data;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "farol:switch-to-inove") setFarolTab("inove");
+      if (data.type === "inove:switch-to-farol") {
+        setFarolMounted(true);
+        setFarolTab("farol");
+      }
+    };
+    window.addEventListener("inove:switch-to-farol", onSwitchToFarol);
+    window.addEventListener("inove:switch-to-inove", onSwitchToInove);
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("inove:switch-to-farol", onSwitchToFarol);
+      window.removeEventListener("inove:switch-to-inove", onSwitchToInove);
+      window.removeEventListener("message", onMessage);
+    };
+  }, [podeVerFarol]);
   const isNativeShell = Capacitor.isNativePlatform();
   const isInTrocaPneus = location.pathname === "/pcm-troca-pneus";
   const isInControleFichas = location.pathname === "/pcm-controle-fichas";

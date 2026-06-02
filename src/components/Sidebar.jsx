@@ -143,7 +143,9 @@ export default function Sidebar() {
     } catch (e) {
       console.warn("Falha ao salvar farol_user:", e);
     }
-    window.location.href = FAROL_URL;
+    // Troca pra aba do Farol no Layout (mantém a sessão do Inove).
+    // O Layout escuta este evento e seta farolTab = "farol".
+    window.dispatchEvent(new CustomEvent("inove:switch-to-farol"));
   }
 
   const links = useMemo(

@@ -28,7 +28,10 @@ import Sidebar from "./Sidebar";
 import { useMobileTabBadges } from "../context/MobileTabBadgesContext";
 import { AuthContext } from "../context/AuthContext";
 import { useAccessGovernance } from "../context/AccessContext";
+import { canUserSeeFarol } from "../utils/access";
 import { getMobileNavItems } from "../utils/mobileNavigation";
+
+const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
 
 function getPageTitle(pathname) {
   if (pathname === "/" || pathname === "/inove") return "Inicio";
@@ -166,6 +169,12 @@ export default function Layout() {
   const { profileMap } = useAccessGovernance();
   const { badges } = useMobileTabBadges();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [farolTab, setFarolTab] = useState("inove"); // "inove" | "farol"
+  const [farolMounted, setFarolMounted] = useState(false);
+  const podeVerFarol = useMemo(() => canUserSeeFarol(user, profileMap), [user, profileMap]);
+  useEffect(() => {
+    if (farolTab === "farol" && !farolMounted) setFarolMounted(true);
+  }, [farolTab, farolMounted]);
   const isNativeShell = Capacitor.isNativePlatform();
   const isInTrocaPneus = location.pathname === "/pcm-troca-pneus";
   const isInControleFichas = location.pathname === "/pcm-controle-fichas";
@@ -278,9 +287,51 @@ export default function Layout() {
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 pb-20 md:px-6 md:py-6 lg:pb-6">
+          {podeVerFarol && !isNativeShell && (
+            <div className="sticky top-0 z-20 hidden border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur lg:flex">
+              <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setFarolTab("inove")}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${
+                    farolTab === "inove"
+                      ? "bg-white text-blue-700 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Inove
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFarolTab("farol")}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${
+                    farolTab === "farol"
+                      ? "bg-white text-emerald-700 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Farol Tático
+                </button>
+              </div>
+            </div>
+          )}
+
+          <main
+            className={`flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 pb-20 md:px-6 md:py-6 lg:pb-6 ${
+              farolTab === "farol" ? "hidden" : ""
+            }`}
+          >
             <Outlet />
           </main>
+
+          {podeVerFarol && farolMounted && (
+            <iframe
+              src={FAROL_URL}
+              title="Farol Tático"
+              className={`flex-1 w-full h-full border-0 ${farolTab === "farol" ? "" : "hidden"}`}
+              style={{ minHeight: "calc(100vh - 56px)" }}
+            />
+          )}
         </div>
       </div>
 

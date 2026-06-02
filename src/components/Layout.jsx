@@ -361,7 +361,7 @@ export default function Layout() {
               src={FAROL_URL}
               title="Farol Tático"
               className={`flex-1 w-full border-0 ${farolTab === "farol" ? "block" : "hidden"}`}
-              style={{ minHeight: "calc(100vh - 56px)", height: "calc(100vh - 56px)" }}
+              style={{ height: "calc(100dvh - 49px)", minHeight: "calc(100dvh - 49px)" }}
             />
           )}
         </div>

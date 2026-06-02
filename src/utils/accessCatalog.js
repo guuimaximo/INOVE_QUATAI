@@ -24,6 +24,9 @@ export const APP_ACCESS_PAGES = [
   { key: "acidentes_imagens", label: "Acidentes Imagens", category: "Acidentes", path: "/acidentes/imagens", patterns: ["/acidentes/imagens"] },
   { key: "acidentes_central", label: "Acidentes Central", category: "Acidentes", path: "/acidentes/central", patterns: ["/acidentes", "/acidentes/central"] },
 
+  { key: "especial_lancamento", label: "Especial Lancamento", category: "Controle de Especial", path: "/controle-especial/lancamento", patterns: ["/controle-especial/lancamento"] },
+  { key: "especial_central", label: "Especial Central", category: "Controle de Especial", path: "/controle-especial/central", patterns: ["/controle-especial", "/controle-especial/central"] },
+
   { key: "sos_solicitacao", label: "SOS Solicitacao", category: "Intervencoes", path: "/sos-solicitacao", patterns: ["/sos-solicitacao"] },
   { key: "sos_fechamento", label: "SOS Fechamento", category: "Intervencoes", path: "/sos-fechamento", patterns: ["/sos-fechamento"] },
   { key: "sos_tratamento", label: "SOS Manutencao", category: "Intervencoes", path: "/sos-tratamento", patterns: ["/sos-tratamento"] },

@@ -607,28 +607,34 @@ export default function Sidebar() {
         )}
 
         {/* Controle de Especial */}
-        <>
-          <button
-            onClick={() => setEspecialOpen(!especialOpen)}
-            className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
-            type="button"
-          >
-            <div className="flex items-center gap-3">
-              <FaBusAlt /> <span>Controle de Especial</span>
-            </div>
-            {especialOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
-          </button>
-          {especialOpen && (
-            <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
-              <NavLink to="/controle-especial/lancamento" className={subNavLinkClass}>
-                <FaPlus /> <span>Lançamento</span>
-              </NavLink>
-              <NavLink to="/controle-especial/central" className={subNavLinkClass}>
-                <FaListAlt /> <span>Central</span>
-              </NavLink>
-            </div>
-          )}
-        </>
+        {(canSee("/controle-especial/lancamento") || canSee("/controle-especial/central")) && (
+          <>
+            <button
+              onClick={() => setEspecialOpen(!especialOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3">
+                <FaBusAlt /> <span>Controle de Especial</span>
+              </div>
+              {especialOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+            {especialOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
+                {canSee("/controle-especial/lancamento") && (
+                  <NavLink to="/controle-especial/lancamento" className={subNavLinkClass}>
+                    <FaPlus /> <span>Lançamento</span>
+                  </NavLink>
+                )}
+                {canSee("/controle-especial/central") && (
+                  <NavLink to="/controle-especial/central" className={subNavLinkClass}>
+                    <FaListAlt /> <span>Central</span>
+                  </NavLink>
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         {showSac && (
           <>

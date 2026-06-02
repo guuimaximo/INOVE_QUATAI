@@ -41,11 +41,78 @@ const TIPOS_VAGA = ["NOVA", "SUBSTITUICAO"];
 const SN_OPCOES = ["SIM", "NAO"];
 const APROVACAO_OPCOES = ["SIM", "NAO", "EM_APROVACAO"];
 
+// ─────────────────────────────────────────────────────────────────────────
+// SLA por tipo de vaga (em dias)
+//   • Operacional (Motorista, Lavador, Auxiliar de Manutenção, etc.): 12 dias
+//   • Demais (Adm/Gestão e Técnicas): 20 dias
+// ─────────────────────────────────────────────────────────────────────────
+const SLA_DEFAULT = 20;
+const SLA_OPERACIONAL = 12;
+const OPERACIONAL_KEYWORDS = [
+  "motorista", "cobrador", "lavador", "lavagem",
+  "auxiliar de manut", "aux manut", "aux. manut", "ajudante", "aux serv",
+  "auxiliar de servi", "auxiliar de limp", "limpeza",
+  "borracheiro", "vigia", "porteiro",
+];
+function getSLADias(nome_cargo) {
+  const s = String(nome_cargo || "").toLowerCase();
+  if (OPERACIONAL_KEYWORDS.some((k) => s.includes(k))) return SLA_OPERACIONAL;
+  return SLA_DEFAULT;
+}
+function getDiasAberta(criado_em) {
+  if (!criado_em) return 0;
+  const ini = new Date(criado_em).getTime();
+  if (Number.isNaN(ini)) return 0;
+  const dias = Math.floor((Date.now() - ini) / (1000 * 60 * 60 * 24));
+  return Math.max(0, dias);
+}
+function calcularSLA(vaga) {
+  const aberta = !["CONCLUIDA", "CANCELADA"].includes(vaga?.status);
+  const sla = getSLADias(vaga?.nome_cargo);
+  const dias = getDiasAberta(vaga?.criado_em);
+  const vencida = aberta && dias > sla;
+  const restante = sla - dias;
+  return { sla, dias, vencida, restante, aberta };
+}
+
 function StatusBadge({ status }) {
   const s = STATUS_BY_VALUE.get(status) || { label: status, cor: "amber" };
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${STATUS_CHIP[s.cor] || ""}`}>
       {s.label}
+    </span>
+  );
+}
+
+function SLABadge({ vaga }) {
+  const info = calcularSLA(vaga);
+  if (!info.aberta) return null;
+  if (info.vencida) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-100 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide text-red-700"
+        title={`SLA ${info.sla} dias · vencida há ${info.dias - info.sla} dia(s)`}
+      >
+        ⚠ VENCIDA · +{info.dias - info.sla}d
+      </span>
+    );
+  }
+  if (info.restante <= 3) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-800"
+        title={`SLA ${info.sla} dias · faltam ${info.restante} dia(s)`}
+      >
+        ⏳ Quase vence · {info.restante}d
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500"
+      title={`SLA ${info.sla} dias · ${info.dias} dia(s) aberta`}
+    >
+      SLA {info.sla}d · {info.dias}d
     </span>
   );
 }
@@ -291,8 +358,11 @@ function DetalheVaga({ vaga, onClose, onUpdateStatus, onEditar, onConcluir, savi
       }
     >
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <StatusBadge status={vaga.status} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={vaga.status} />
+            <SLABadge vaga={vaga} />
+          </div>
           <div className="text-xs text-slate-500">Atualizada em {formatDateTime(vaga.atualizado_em)}</div>
         </div>
 
@@ -537,6 +607,7 @@ export default function VagasCentral() {
       if (tab === "abertas" && !["ABERTA", "RECRUTAMENTO", "ENTREVISTAS", "APROVACAO", "APROVADA"].includes(r.status)) return false;
       if (tab === "concluidas" && r.status !== "CONCLUIDA") return false;
       if (tab === "canceladas" && r.status !== "CANCELADA") return false;
+      if (tab === "vencidas" && !calcularSLA(r).vencida) return false;
       if (!q) return true;
       return [r.numero_vaga, r.nome_cargo, r.area, r.gestor, r.contratado_nome]
         .filter(Boolean)
@@ -549,7 +620,8 @@ export default function VagasCentral() {
     const abertas = rows.filter((r) => ["ABERTA", "RECRUTAMENTO", "ENTREVISTAS", "APROVACAO", "APROVADA"].includes(r.status)).length;
     const concluidas = rows.filter((r) => r.status === "CONCLUIDA").length;
     const canceladas = rows.filter((r) => r.status === "CANCELADA").length;
-    return { total, abertas, concluidas, canceladas };
+    const vencidas = rows.filter((r) => calcularSLA(r).vencida).length;
+    return { total, abertas, concluidas, canceladas, vencidas };
   }, [rows]);
 
   function exportarExcel() {
@@ -557,9 +629,14 @@ export default function VagasCentral() {
       alert("Sem dados para exportar.");
       return;
     }
-    const linhas = filtradas.map((r) => ({
+    const linhas = filtradas.map((r) => {
+      const info = calcularSLA(r);
+      return ({
       Vaga: r.numero_vaga,
       Status: STATUS_BY_VALUE.get(r.status)?.label || r.status,
+      "SLA (dias)": info.sla,
+      "Dias aberta": info.dias,
+      "Vencida": info.vencida ? "SIM" : "NAO",
       Cargo: r.nome_cargo,
       Area: r.area,
       Gestor: r.gestor,
@@ -576,7 +653,8 @@ export default function VagasCentral() {
       "Quem abriu": r.criado_por_nome,
       "Contratado": r.contratado_nome,
       "Data contratacao": formatDate(r.data_contratacao),
-    }));
+      });
+    });
     const ws = XLSX.utils.json_to_sheet(linhas);
     ws["!cols"] = Object.keys(linhas[0]).map(() => ({ wch: 18 }));
     const wb = XLSX.utils.book_new();
@@ -617,6 +695,7 @@ export default function VagasCentral() {
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setTab("todos")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${tab === "todos" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>Todas ({stats.total})</button>
         <button type="button" onClick={() => setTab("abertas")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${tab === "abertas" ? "border-amber-600 bg-amber-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>Em andamento ({stats.abertas})</button>
+        <button type="button" onClick={() => setTab("vencidas")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition flex items-center gap-1 ${tab === "vencidas" ? "border-red-600 bg-red-600 text-white" : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"}`}>⚠ Vencidas ({stats.vencidas})</button>
         <button type="button" onClick={() => setTab("concluidas")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${tab === "concluidas" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>Concluidas ({stats.concluidas})</button>
         <button type="button" onClick={() => setTab("canceladas")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${tab === "canceladas" ? "border-rose-600 bg-rose-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>Canceladas ({stats.canceladas})</button>
       </div>
@@ -645,9 +724,10 @@ export default function VagasCentral() {
             {filtradas.map((r) => (
               <div key={r.id} className="flex flex-col gap-3 px-4 py-3 transition hover:bg-slate-50 md:flex-row md:items-center md:justify-between">
                 <button type="button" onClick={() => setDetalhe(r)} className="flex-1 text-left">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-black uppercase tracking-wide text-blue-700">{r.numero_vaga}</span>
                     <StatusBadge status={r.status} />
+                    <SLABadge vaga={r} />
                   </div>
                   <div className="mt-0.5 text-sm font-bold text-slate-900">
                     {r.nome_cargo} {r.area ? <span className="font-normal text-slate-500">· {r.area}</span> : null}

@@ -4,6 +4,8 @@ import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
 import PrettyDatePicker from "../../components/PrettyDatePicker";
 import PrettyTimePicker from "../../components/PrettyTimePicker";
+import CampoMotorista from "../../components/CampoMotorista";
+import CampoPrefixo from "../../components/CampoPrefixo";
 import {
   FaBusAlt,
   FaPlus,
@@ -59,6 +61,7 @@ export default function ControleEspecialLancamento() {
     volta_end_destino: "",
 
     qtd_onibus: 1,
+    motoristas: [{ chapa: "", nome: "", prefixo: "" }],
     observacoes: "",
   });
 
@@ -89,6 +92,9 @@ export default function ControleEspecialLancamento() {
           volta_destino_local: data.volta_destino_local || "",
           volta_end_destino: data.volta_end_destino || "",
           qtd_onibus: data.qtd_onibus || 1,
+          motoristas: Array.isArray(data.motoristas) && data.motoristas.length
+            ? data.motoristas
+            : [{ chapa: "", nome: "", prefixo: "" }],
           observacoes: data.observacoes || "",
         });
         if (data.emails_extras?.length) setEmails(data.emails_extras);
@@ -114,7 +120,27 @@ export default function ControleEspecialLancamento() {
   };
 
   // Atualizar campos do form
-  const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const upd = (k, v) => {
+    setForm((p) => {
+      // Se mudou qtd_onibus, ajusta o array de motoristas pra mesma quantidade
+      if (k === "qtd_onibus") {
+        const novaQtd = Math.max(1, Number(v) || 1);
+        const lista = Array.isArray(p.motoristas) ? [...p.motoristas] : [];
+        while (lista.length < novaQtd) lista.push({ chapa: "", nome: "", prefixo: "" });
+        while (lista.length > novaQtd) lista.pop();
+        return { ...p, qtd_onibus: novaQtd, motoristas: lista };
+      }
+      return { ...p, [k]: v };
+    });
+  };
+
+  const updMotorista = (idx, novo) => {
+    setForm((p) => {
+      const arr = [...(p.motoristas || [])];
+      arr[idx] = { ...arr[idx], ...novo };
+      return { ...p, motoristas: arr };
+    });
+  };
 
   const updParada = (lista, idx, key, val) => {
     setForm((p) => {
@@ -257,6 +283,41 @@ export default function ControleEspecialLancamento() {
               className="input"
             />
           </Field>
+        </div>
+      </Section>
+
+      {/* Motoristas / Ônibus */}
+      <Section title="👨‍✈️ Motoristas e Ônibus" color="bg-slate-50 border-slate-200">
+        <p className="text-xs text-slate-500 mb-3">
+          Um motorista por ônibus. A quantidade vem do campo acima — altere "Quantidade de ônibus" para adicionar/remover linhas.
+        </p>
+        <div className="space-y-3">
+          {(form.motoristas || []).map((m, idx) => (
+            <div key={idx} className="rounded-lg bg-white border border-slate-200 p-3">
+              <div className="text-[11px] font-extrabold uppercase text-slate-500 mb-2">
+                🚌 Ônibus {idx + 1}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2">
+                  <CampoMotorista
+                    value={{ chapa: m.chapa || "", nome: m.nome || "" }}
+                    onChange={(val) =>
+                      updMotorista(idx, { chapa: val?.chapa || "", nome: val?.nome || "" })
+                    }
+                    label=""
+                  />
+                </div>
+                <div>
+                  <CampoPrefixo
+                    value={m.prefixo || ""}
+                    onChange={(val) => updMotorista(idx, { prefixo: val })}
+                    label=""
+                    placeholder="Prefixo do ônibus"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </Section>
 

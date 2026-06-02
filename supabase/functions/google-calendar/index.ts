@@ -81,9 +81,23 @@ function buildEvent(especial: any, emails: string[]) {
     especial.volta_end_destino ? `   ${especial.volta_end_destino}` : null,
   ].filter(Boolean);
 
+  const motoristas = (especial.motoristas || []).filter((m: any) => m?.chapa || m?.nome);
+  const linhasMot = motoristas.length
+    ? [
+        "👨‍✈️ Motoristas",
+        ...motoristas.map(
+          (m: any, i: number) =>
+            `Ônibus ${i + 1}: ${[m?.chapa, m?.nome].filter(Boolean).join(" - ") || "—"}` +
+            (m?.prefixo ? `  (Prefixo ${m.prefixo})` : ""),
+        ),
+        "",
+      ]
+    : [];
+
   const descricao = [
     `Quantidade de ônibus: ${especial.qtd_onibus || 1}`,
     "",
+    ...linhasMot,
     ...linhasIda,
     ...linhasVolta,
     "",

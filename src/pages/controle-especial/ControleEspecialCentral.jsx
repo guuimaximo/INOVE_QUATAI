@@ -365,6 +365,27 @@ function PopupDetalhes({ especial, isAdmin, onClose, onEditar, onReenviar, onWha
             <Bloco icon={<FaBusAlt />} label="Ônibus" valor={e.qtd_onibus || 1} />
           </div>
 
+          {/* Motoristas */}
+          {!!(e.motoristas || []).filter((m) => m?.chapa || m?.nome).length && (
+            <Section title="👨‍✈️ Motoristas">
+              <div className="space-y-1.5">
+                {(e.motoristas || []).filter((m) => m?.chapa || m?.nome).map((m, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                      ÔN {i + 1}
+                    </span>
+                    <span className="font-semibold text-slate-800">
+                      {[m.chapa, m.nome].filter(Boolean).join(" - ") || "—"}
+                    </span>
+                    {m.prefixo && (
+                      <span className="text-xs text-slate-500 ml-auto">Prefixo {m.prefixo}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
           {/* IDA */}
           <Section title="🚌 IDA" color="bg-blue-50 border-blue-200">
             <Line label="Saída" valor={`${fmtHora(e.ida_hora_saida)} · ${e.ida_local_saida || "—"}`} />

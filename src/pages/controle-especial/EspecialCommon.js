@@ -41,6 +41,19 @@ export function buildMensagemWhatsAppEspecial(form) {
   bloco.push(`🚐 Quantidade de ônibus: *${form.qtd_onibus || 1}*`);
   bloco.push("");
 
+  const motoristas = (form.motoristas || []).filter((m) => m?.chapa || m?.nome);
+  if (motoristas.length > 0) {
+    bloco.push("*👨‍✈️ Motoristas*");
+    motoristas.forEach((m, i) => {
+      const nome = safeText(m?.nome);
+      const chapa = safeText(m?.chapa);
+      const prefixo = safeText(m?.prefixo);
+      const linha = `Ônibus ${i + 1}: ${[chapa, nome].filter(Boolean).join(" - ") || "—"}`;
+      bloco.push(linha + (prefixo ? `  (Prefixo ${prefixo})` : ""));
+    });
+    bloco.push("");
+  }
+
   // IDA
   bloco.push("*🚌 IDA*");
   bloco.push(`⏰ Saída: ${horaIda || "—"}`);

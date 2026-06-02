@@ -24,6 +24,8 @@ const AtualizarSenha = lazy(() => import("./pages/auth/AtualizarSenha"));
 const AtualizarPerfil = lazy(() => import("./pages/auth/AtualizarPerfil"));
 
 import Dashboard from "./pages/home/Dashboard";
+import ControleEspecialCentral from "./pages/controle-especial/ControleEspecialCentral";
+import ControleEspecialLancamento from "./pages/controle-especial/ControleEspecialLancamento";
 import InicioRapido from "./pages/home/InicioRapido";
 import MobileHome from "./pages/home/MobileHome";
 import { MobileTabBadgesProvider } from "./context/MobileTabBadgesContext";
@@ -198,6 +200,9 @@ export default function App() {
               <Route path="/" element={<HomeDecider />} />
               <Route path="/inove" element={<HomeDecider />} />
               <Route path="/painel" element={<Dashboard />} />
+              <Route path="/controle-especial" element={<Navigate to="/controle-especial/central" replace />} />
+              <Route path="/controle-especial/central" element={<ControleEspecialCentral />} />
+              <Route path="/controle-especial/lancamento" element={<ControleEspecialLancamento />} />
               <Route path="/portal" element={<Navigate to="/inove" replace />} />
               <Route path="/inicio-rapido" element={<InicioRapido />} />
 

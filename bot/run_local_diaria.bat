@@ -21,11 +21,10 @@ python -m pip install -q -r requirements.txt
 rem ----- credenciais (edita aqui) -----------------------------
 set SUPABASE_URL=https://wboelthngddvkgrvwkbu.supabase.co
 rem cole o service_role do Supabase (Project Settings -> API):
-set SUPABASE_SERVICE_KEY=COLE_AQUI
-
+set SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indib2VsdGhuZ2RkdmtncnZ3a2J1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5ODQxMzcsImV4cCI6MjA3NjU2MDEzN30.A3ylU8Tkx20VOD3EjOr3K7ir0J_jZrCfBNlzAOtODXg
 rem credenciais do TransNet:
 set TRANSNET_USER=GUILHERMEMAXIMO
-set TRANSNET_PASSWORD=COLE_AQUI
+set TRANSNET_PASSWORD=Transnet@349031
 set TRANSNET_ALMOXARIFADO=046
 set TRANSNET_URL=https://transnet.grupocsc.com.br/sgtweb/index.php?c=controleAcesso.CLogin&m=verTelaLogin
 

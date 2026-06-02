@@ -1032,7 +1032,10 @@ function SidePanel({
   }
 
   return (
-    <div className="absolute right-0 top-0 z-30 flex h-full w-full max-w-lg flex-col border-l border-slate-200 bg-white shadow-2xl">
+    <div
+      className="fixed right-0 top-0 z-40 flex w-full max-w-lg flex-col border-l border-slate-200 bg-white shadow-2xl"
+      style={{ height: "100dvh" }}
+    >
       <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div className="min-w-0">
           <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-600">Detalhe da area</div>

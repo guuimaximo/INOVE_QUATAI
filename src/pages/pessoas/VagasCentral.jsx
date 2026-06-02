@@ -397,6 +397,7 @@ function ConcluirModal({ open, vaga, onClose, onConfirm, saving }) {
 
 export default function VagasCentral() {
   const { user } = useContext(AuthContext) || {};
+  const isAdmin = String(user?.nivel || "").toLowerCase() === "administrador";
   const userName = safeText(user?.nome) || safeText(user?.login) || "Usuario";
 
   const [rows, setRows] = useState([]);
@@ -665,9 +666,11 @@ export default function VagasCentral() {
                       <button type="button" onClick={() => setConcluindo(r)} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-emerald-700">
                         <FaUserCheck className="inline mr-1" /> Concluir
                       </button>
-                      <button type="button" onClick={() => cancelarVaga(r)} className="rounded-lg bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700 hover:bg-rose-200">
-                        <FaTimesCircle className="inline mr-1" /> Cancelar
-                      </button>
+                      {isAdmin && (
+                        <button type="button" onClick={() => cancelarVaga(r)} className="rounded-lg bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700 hover:bg-rose-200" title="Cancelar (Admin)">
+                          <FaTimesCircle className="inline mr-1" /> Cancelar
+                        </button>
+                      )}
                     </>
                   ) : null}
                 </div>

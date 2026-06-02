@@ -12,6 +12,11 @@ import {
   FaUserCheck,
   FaUserPlus,
   FaTimesCircle,
+  FaExclamationTriangle,
+  FaChartLine,
+  FaChartBar,
+  FaChartPie,
+  FaClock,
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
 
@@ -475,6 +480,7 @@ export default function VagasCentral() {
   const [saving, setSaving] = useState(false);
   const [busca, setBusca] = useState("");
   const [tab, setTab] = useState("todos");
+  const [view, setView] = useState("lista"); // "lista" | "dashboard"
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState("new"); // new | edit
@@ -601,6 +607,23 @@ export default function VagasCentral() {
     atualizarStatus(vaga, "CANCELADA");
   }
 
+  async function excluirVaga(vaga) {
+    if (!isAdmin) return alert("Apenas Administradores podem excluir.");
+    if (!confirm(`Excluir definitivamente a vaga ${vaga.numero_vaga} - ${vaga.nome_cargo}? Esta ação não pode ser desfeita.`)) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("vagas_solicitacao").delete().eq("id", vaga.id);
+      if (error) throw error;
+      setDetalhe((d) => (d?.id === vaga.id ? null : d));
+      await carregar();
+    } catch (error) {
+      console.error(error);
+      alert(error?.message || "Erro ao excluir.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const filtradas = useMemo(() => {
     const q = busca.toLowerCase().trim();
     return rows.filter((r) => {
@@ -673,6 +696,22 @@ export default function VagasCentral() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => setView("lista")}
+              className={`px-3 py-1.5 text-xs font-black rounded-lg flex items-center gap-1.5 transition ${view === "lista" ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}
+            >
+              <FaClipboardList /> Lista
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("dashboard")}
+              className={`px-3 py-1.5 text-xs font-black rounded-lg flex items-center gap-1.5 transition ${view === "dashboard" ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}
+            >
+              <FaChartLine /> Dashboard
+            </button>
+          </div>
           <button type="button" onClick={exportarExcel} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700">
             <FaDownload /> Excel
           </button>
@@ -688,10 +727,39 @@ export default function VagasCentral() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <CardKPI titulo="Total" valor={stats.total} cor="slate" sub="Todas as solicitacoes" />
         <CardKPI titulo="Abertas" valor={stats.abertas} cor="amber" sub="Em andamento" />
+        <CardKPI titulo="Vencidas" valor={stats.vencidas} cor="rose" sub="Estouraram o SLA" />
         <CardKPI titulo="Concluidas" valor={stats.concluidas} cor="emerald" sub="Vagas preenchidas" />
         <CardKPI titulo="Canceladas" valor={stats.canceladas} cor="rose" sub="Sem efetivacao" />
       </div>
 
+      {/* Regra do SLA */}
+      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm">
+        <div className="flex items-center gap-2 text-blue-800 font-black mb-2">
+          <FaExclamationTriangle /> Regra do SLA
+        </div>
+        <p className="text-blue-700 text-xs mb-2">
+          O SLA é calculado a partir da data de abertura da vaga. Quando o prazo é estourado, ela aparece com o selo <b>⚠ VENCIDA</b>.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+          <div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
+            <div className="font-black text-blue-800">Adm e Gestão</div>
+            <div className="text-slate-600">SLA: <b>20 dias</b></div>
+          </div>
+          <div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
+            <div className="font-black text-blue-800">Técnicas (Mecânico, Eletricista, Sup. Manut.)</div>
+            <div className="text-slate-600">SLA: <b>20 dias</b></div>
+          </div>
+          <div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
+            <div className="font-black text-blue-800">Operacionais (Motorista, Lavador, Aux. Manut., etc.)</div>
+            <div className="text-slate-600">SLA: <b>12 dias</b></div>
+          </div>
+        </div>
+      </div>
+
+      {view === "dashboard" ? (
+        <DashboardVagas rows={rows} />
+      ) : (
+      <>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setTab("todos")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${tab === "todos" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>Todas ({stats.total})</button>
         <button type="button" onClick={() => setTab("abertas")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${tab === "abertas" ? "border-amber-600 bg-amber-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>Em andamento ({stats.abertas})</button>
@@ -746,19 +814,29 @@ export default function VagasCentral() {
                       <button type="button" onClick={() => setConcluindo(r)} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-emerald-700">
                         <FaUserCheck className="inline mr-1" /> Concluir
                       </button>
-                      {isAdmin && (
-                        <button type="button" onClick={() => cancelarVaga(r)} className="rounded-lg bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700 hover:bg-rose-200" title="Cancelar (Admin)">
-                          <FaTimesCircle className="inline mr-1" /> Cancelar
-                        </button>
-                      )}
+                      <button type="button" onClick={() => cancelarVaga(r)} className="rounded-lg bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700 hover:bg-rose-200">
+                        <FaTimesCircle className="inline mr-1" /> Cancelar
+                      </button>
                     </>
                   ) : null}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => excluirVaga(r)}
+                      className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700"
+                      title="Excluir (Admin)"
+                    >
+                      Excluir
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+      </>
+      )}
 
       <VagaForm
         open={formOpen}
@@ -785,6 +863,339 @@ export default function VagasCentral() {
         onConfirm={concluirContratacao}
         saving={saving}
       />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Dashboard BI — painel de Recrutamento e Vagas
+// ─────────────────────────────────────────────────────────────────────────
+function DashboardVagas({ rows }) {
+  const [periodo, setPeriodo] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+
+  const mesesDisponiveis = useMemo(() => {
+    const set = new Set();
+    rows.forEach((r) => {
+      if (r.criado_em) {
+        const d = new Date(r.criado_em);
+        set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+      }
+    });
+    return Array.from(set).sort().reverse();
+  }, [rows]);
+
+  const dados = useMemo(() => {
+    const [ano, mes] = periodo.split("-").map(Number);
+    const inicioMes = new Date(ano, mes - 1, 1);
+    const fimMes = new Date(ano, mes, 0, 23, 59, 59);
+
+    const criadasNoPeriodo = rows.filter((r) => {
+      if (!r.criado_em) return false;
+      const d = new Date(r.criado_em);
+      return d >= inicioMes && d <= fimMes;
+    });
+
+    const fechadasNoPeriodo = rows.filter((r) => {
+      if (r.status !== "CONCLUIDA") return false;
+      if (!r.data_contratacao) return false;
+      const d = new Date(r.data_contratacao);
+      return d >= inicioMes && d <= fimMes;
+    });
+
+    const abertasAgora = rows.filter((r) =>
+      ["ABERTA", "RECRUTAMENTO", "ENTREVISTAS", "APROVACAO", "APROVADA"].includes(r.status),
+    );
+
+    const vencidas = abertasAgora.filter((r) => calcularSLA(r).vencida);
+
+    const tempoMedio = (() => {
+      if (!fechadasNoPeriodo.length) return null;
+      const dias = fechadasNoPeriodo
+        .map((r) => {
+          if (!r.criado_em || !r.data_contratacao) return null;
+          return (new Date(r.data_contratacao) - new Date(r.criado_em)) / (1000 * 60 * 60 * 24);
+        })
+        .filter((v) => v !== null && Number.isFinite(v));
+      if (!dias.length) return null;
+      return dias.reduce((a, b) => a + b, 0) / dias.length;
+    })();
+
+    const tempoMedioAbertas = (() => {
+      if (!abertasAgora.length) return null;
+      const dias = abertasAgora
+        .map((r) => getDiasAberta(r.criado_em))
+        .filter((v) => v >= 0);
+      if (!dias.length) return null;
+      return dias.reduce((a, b) => a + b, 0) / dias.length;
+    })();
+
+    const eficacia = criadasNoPeriodo.length
+      ? (fechadasNoPeriodo.length / criadasNoPeriodo.length) * 100
+      : null;
+
+    // Por função (top 6)
+    const porFuncao = new Map();
+    [...criadasNoPeriodo, ...fechadasNoPeriodo].forEach((r) => {
+      const k = String(r.nome_cargo || "Sem cargo").toUpperCase();
+      if (!porFuncao.has(k)) porFuncao.set(k, { abertas: 0, fechadas: 0 });
+      const it = porFuncao.get(k);
+      if (r.status === "CONCLUIDA") it.fechadas++;
+      else it.abertas++;
+    });
+    const topFuncoes = Array.from(porFuncao.entries())
+      .map(([nome, v]) => ({ nome, ...v, total: v.abertas + v.fechadas }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 6);
+
+    // Por recrutador (criado_por)
+    const porRecrutador = new Map();
+    rows
+      .filter((r) => {
+        const d = r.criado_em ? new Date(r.criado_em) : null;
+        return d && d >= inicioMes && d <= fimMes;
+      })
+      .forEach((r) => {
+        const k = r.criado_por_nome || r.criado_por_login || "—";
+        if (!porRecrutador.has(k)) porRecrutador.set(k, { abertas: 0, fechadas: 0 });
+        const it = porRecrutador.get(k);
+        if (r.status === "CONCLUIDA") it.fechadas++;
+        else it.abertas++;
+      });
+    const recrutadores = Array.from(porRecrutador.entries())
+      .map(([nome, v]) => {
+        const total = v.abertas + v.fechadas;
+        const pctFech = total ? (v.fechadas / total) * 100 : 0;
+        return { nome, ...v, total, pctFech };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    // Série dos últimos 6 meses (criadas vs fechadas)
+    const ultimosMeses = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(ano, mes - 1 - i, 1);
+      const ini = d;
+      const fim = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+      const cr = rows.filter((r) => {
+        const x = r.criado_em ? new Date(r.criado_em) : null;
+        return x && x >= ini && x <= fim;
+      }).length;
+      const fc = rows.filter((r) => {
+        if (r.status !== "CONCLUIDA") return false;
+        const x = r.data_contratacao ? new Date(r.data_contratacao) : null;
+        return x && x >= ini && x <= fim;
+      }).length;
+      ultimosMeses.push({
+        label: d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
+        criadas: cr,
+        fechadas: fc,
+      });
+    }
+
+    return {
+      criadas: criadasNoPeriodo.length,
+      fechadas: fechadasNoPeriodo.length,
+      abertas: abertasAgora.length,
+      vencidas: vencidas.length,
+      contratados: fechadasNoPeriodo.length,
+      eficacia,
+      tempoMedio,
+      tempoMedioAbertas,
+      topFuncoes,
+      recrutadores,
+      ultimosMeses,
+    };
+  }, [rows, periodo]);
+
+  const maxFuncao = Math.max(1, ...dados.topFuncoes.map((f) => f.total));
+  const maxMes = Math.max(1, ...dados.ultimosMeses.map((m) => Math.max(m.criadas, m.fechadas)));
+
+  return (
+    <div className="space-y-4">
+      {/* Header do dashboard */}
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center">
+              <FaChartLine size={20} />
+            </div>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">
+                Painel de Recrutamento e Vagas
+              </div>
+              <h2 className="text-xl font-black text-slate-800">Visão geral do mês</h2>
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
+              Período (mês)
+            </label>
+            <select
+              value={periodo}
+              onChange={(e) => setPeriodo(e.target.value)}
+              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 shadow-sm"
+            >
+              {mesesDisponiveis.length === 0 && (
+                <option value={periodo}>{periodo}</option>
+              )}
+              {mesesDisponiveis.map((m) => {
+                const [a, mm] = m.split("-").map(Number);
+                const label = new Date(a, mm - 1, 1).toLocaleDateString("pt-BR", {
+                  month: "long",
+                  year: "numeric",
+                });
+                return (
+                  <option key={m} value={m}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* KPIs principais */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <CardBI label="VAGAS CRIADAS" valor={dados.criadas} />
+        <CardBI label="VAGAS FECHADAS" valor={dados.fechadas} cor="emerald" />
+        <CardBI
+          label="EFICÁCIA"
+          valor={dados.eficacia !== null ? `${dados.eficacia.toFixed(1)}%` : "—"}
+          cor="blue"
+        />
+        <CardBI label="VAGAS EM ABERTO" valor={dados.abertas} cor="amber" />
+        <CardBI label="VENCIDAS (SLA)" valor={dados.vencidas} cor="rose" />
+        <CardBI
+          label="TEMPO MÉDIO (FECHADAS)"
+          valor={dados.tempoMedio !== null ? `${dados.tempoMedio.toFixed(1)} dias` : "—"}
+          cor="slate"
+        />
+      </div>
+
+      {/* Gráficos */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Evolução mensal */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-black text-slate-800">Vagas por Mês</div>
+            <div className="text-[10px] flex items-center gap-3">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-600" /> Criadas
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" /> Fechadas
+              </span>
+            </div>
+          </div>
+          <div className="flex items-end justify-between gap-2 h-48 border-b border-slate-100">
+            {dados.ultimosMeses.map((m) => (
+              <div key={m.label} className="flex-1 flex flex-col items-center justify-end gap-1">
+                <div className="flex items-end gap-0.5 w-full justify-center" style={{ height: "100%" }}>
+                  <div
+                    className="bg-blue-600 rounded-t w-3"
+                    style={{ height: `${(m.criadas / maxMes) * 100}%` }}
+                    title={`Criadas: ${m.criadas}`}
+                  />
+                  <div
+                    className="bg-emerald-500 rounded-t w-3"
+                    style={{ height: `${(m.fechadas / maxMes) * 100}%` }}
+                    title={`Fechadas: ${m.fechadas}`}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between mt-1">
+            {dados.ultimosMeses.map((m) => (
+              <div key={m.label} className="flex-1 text-[10px] text-center text-slate-500 font-bold capitalize">
+                {m.label}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Top funções */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="text-sm font-black text-slate-800 mb-3">Top Funções no período</div>
+          {dados.topFuncoes.length === 0 ? (
+            <div className="text-xs text-slate-400 italic">Sem dados no período.</div>
+          ) : (
+            <div className="space-y-2">
+              {dados.topFuncoes.map((f) => (
+                <div key={f.nome}>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-700 truncate flex-1">{f.nome}</span>
+                    <span className="text-slate-500 font-black">
+                      {f.fechadas}/{f.total}
+                    </span>
+                  </div>
+                  <div className="h-3 bg-slate-100 rounded overflow-hidden flex">
+                    <div
+                      className="bg-emerald-500"
+                      style={{ width: `${(f.fechadas / maxFuncao) * 100}%` }}
+                      title={`Fechadas: ${f.fechadas}`}
+                    />
+                    <div
+                      className="bg-amber-400"
+                      style={{ width: `${(f.abertas / maxFuncao) * 100}%` }}
+                      title={`Abertas: ${f.abertas}`}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recrutadores */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:col-span-2">
+          <div className="text-sm font-black text-slate-800 mb-3">
+            Recrutadores no período · % Fechadas
+          </div>
+          {dados.recrutadores.length === 0 ? (
+            <div className="text-xs text-slate-400 italic">Sem dados no período.</div>
+          ) : (
+            <div className="space-y-2">
+              {dados.recrutadores.map((r) => (
+                <div key={r.nome} className="flex items-center gap-3">
+                  <div className="w-40 text-xs font-bold text-slate-700 truncate">{r.nome}</div>
+                  <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden relative">
+                    <div
+                      className="absolute inset-y-0 left-0 bg-emerald-400 transition-all"
+                      style={{ width: `${r.pctFech}%` }}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-end px-2 text-[11px] font-black text-slate-700">
+                      {r.pctFech.toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-bold w-20 text-right">
+                    {r.fechadas}/{r.total}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardBI({ label, valor, cor = "slate" }) {
+  const colors = {
+    slate: "bg-white text-slate-800 border-slate-200",
+    blue: "bg-blue-50 text-blue-800 border-blue-200",
+    emerald: "bg-emerald-50 text-emerald-800 border-emerald-200",
+    amber: "bg-amber-50 text-amber-800 border-amber-200",
+    rose: "bg-rose-50 text-rose-800 border-rose-200",
+  };
+  return (
+    <div className={`rounded-2xl border px-4 py-3 shadow-sm ${colors[cor] || colors.slate}`}>
+      <div className="text-[10px] font-black uppercase tracking-wider opacity-70">{label}</div>
+      <div className="text-3xl font-black mt-1">{valor}</div>
     </div>
   );
 }

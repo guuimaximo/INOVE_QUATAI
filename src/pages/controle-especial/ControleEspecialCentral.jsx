@@ -14,7 +14,6 @@ import {
 import { buildMensagemWhatsAppEspecial, copyToClipboard } from "./EspecialCommon";
 import {
   deleteEspecialFromGoogle,
-  isGoogleConnected,
   syncEspecialToGoogle,
 } from "../../utils/googleCalendar";
 
@@ -95,10 +94,6 @@ export default function ControleEspecialCentral() {
   };
 
   const handleReenviar = async (e) => {
-    if (!isGoogleConnected()) {
-      alert("Conecte com Google Agenda primeiro.");
-      return;
-    }
     try {
       const res = await syncEspecialToGoogle(e, e.emails_extras || []);
       await supabase

@@ -13,13 +13,7 @@ import {
   FaCopy,
 } from "react-icons/fa";
 import { buildMensagemWhatsAppEspecial, copyToClipboard } from "./EspecialCommon";
-import {
-  syncEspecialToGoogle,
-  isGoogleConnected,
-  ensureGoogleToken,
-  getStoredGoogleEmail,
-  clearGoogleToken,
-} from "../../utils/googleCalendar";
+import { syncEspecialToGoogle } from "../../utils/googleCalendar";
 
 // E-mails sempre incluídos por padrão
 const EMAILS_PADRAO = [
@@ -41,8 +35,6 @@ export default function ControleEspecialLancamento() {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   const [salvando, setSalvando] = useState(false);
-  const [googleEmail, setGoogleEmail] = useState(null);
-  const [googleStatus, setGoogleStatus] = useState("disconnected");
 
   const [form, setForm] = useState({
     data: "",
@@ -78,29 +70,6 @@ export default function ControleEspecialLancamento() {
   const handleAbrirWhats = () => {
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(mensagemWhats)}`;
     window.open(url, "_blank");
-  };
-
-  useEffect(() => {
-    if (isGoogleConnected()) {
-      setGoogleStatus("connected");
-      setGoogleEmail(getStoredGoogleEmail());
-    }
-  }, []);
-
-  const handleConnectGoogle = async () => {
-    try {
-      const token = await ensureGoogleToken({ forcePrompt: true });
-      setGoogleStatus("connected");
-      setGoogleEmail(token.email);
-    } catch (e) {
-      alert("Falha ao conectar com Google: " + (e.message || e));
-    }
-  };
-
-  const handleDisconnectGoogle = () => {
-    clearGoogleToken();
-    setGoogleStatus("disconnected");
-    setGoogleEmail(null);
   };
 
   // Atualizar campos do form
@@ -159,25 +128,22 @@ export default function ControleEspecialLancamento() {
         .single();
       if (error) throw error;
 
-      // Manda pro Google Agenda
-      if (googleStatus === "connected") {
-        try {
-          const res = await syncEspecialToGoogle(data, emails);
-          await supabase
-            .from("especiais")
-            .update({ google_event_id: res.eventId })
-            .eq("id", data.id);
-          alert(
-            `Especial cadastrado e enviado pro Google Agenda (${res.action === "created" ? "novo evento criado" : "evento atualizado"}). Convites foram enviados pros participantes.`
-          );
-        } catch (e) {
-          alert(
-            "Especial cadastrado, mas falhou ao enviar pro Google Agenda: " +
-              (e.message || e)
-          );
-        }
-      } else {
-        alert("Especial cadastrado. (Google Agenda não está conectado — conecte e edite para reenviar)");
+      // Manda pro Google Agenda (centralizado via Edge Function)
+      try {
+        const res = await syncEspecialToGoogle(data, emails);
+        await supabase
+          .from("especiais")
+          .update({ google_event_id: res.eventId })
+          .eq("id", data.id);
+        alert(
+          `Especial cadastrado e enviado pro Google Agenda (${res.action === "created" ? "novo evento criado" : "evento atualizado"}). Convites foram enviados pros participantes.`
+        );
+      } catch (e) {
+        alert(
+          "Especial cadastrado, mas falhou ao enviar pro Google Agenda: " +
+            (e.message || e) +
+            "\n\nVerifique se as secrets do Google estão configuradas no Supabase."
+        );
       }
       navigate("/controle-especial/central");
     } catch (e) {
@@ -206,36 +172,10 @@ export default function ControleEspecialLancamento() {
         </div>
       </div>
 
-      {/* Google connection */}
-      <div className="mb-6 rounded-xl border border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3">
-        <div className="text-sm">
-          {googleStatus === "connected" ? (
-            <>
-              <span className="text-emerald-600 font-bold">● Google Agenda conectado</span>
-              <span className="text-slate-500 ml-2">como <b>{googleEmail || "—"}</b></span>
-            </>
-          ) : (
-            <>
-              <span className="text-amber-600 font-bold">● Google Agenda desconectado</span>
-              <span className="text-slate-500 ml-2">conecte para mandar o convite automaticamente</span>
-            </>
-          )}
-        </div>
-        {googleStatus === "connected" ? (
-          <button
-            onClick={handleDisconnectGoogle}
-            className="text-xs font-bold text-slate-500 hover:text-red-600"
-          >
-            Desconectar
-          </button>
-        ) : (
-          <button
-            onClick={handleConnectGoogle}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-black"
-          >
-            Conectar Google
-          </button>
-        )}
+      {/* Aviso central de transmissão */}
+      <div className="mb-6 rounded-xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-800 flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-purple-600" />
+        Os eventos serão criados <b>na agenda principal de transmissão</b>. Não é necessário conectar Google pessoal — todos os convites saem da mesma conta.
       </div>
 
       {/* Dados básicos */}

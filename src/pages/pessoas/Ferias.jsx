@@ -698,6 +698,11 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
               </div>
             ) : null}
 
+            {/* ─── 1. INFORMAÇÕES ─── */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/40 p-3">
+              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-700 flex items-center gap-2 mb-3">
+                <FaUsers className="text-blue-600" /> 1. Informações
+              </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <InfoBox label="Cracha" value={item.nr_cracha} />
               <InfoBox label="Status atual" value={item.resumo_status_label} />
@@ -737,6 +742,8 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
                 </div>
               </div>
             </div>
+            </div>
+            {/* ─── /1. INFORMAÇÕES ─── */}
 
             {showHistorico ? (
               <div className="rounded-2xl border border-blue-200 bg-white p-4">
@@ -781,149 +788,165 @@ function PlanejamentoModal({ item, open, onClose, onSave, saving }) {
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/50 px-4 py-3">
-              <div className="text-sm font-black uppercase tracking-wide text-blue-900">Preenchimento rapido</div>
-              <div className="mt-2 text-sm text-slate-700">
-                <span className="font-semibold text-blue-900">Pode liberar:</span> janela que a equipe suporta.
-                {" "} <span className="font-semibold text-emerald-900">Vai tirar:</span> periodo confirmado.
-                {" "} <span className="font-semibold text-amber-900">Abono:</span> quando houver venda de dias.
+            {/* ─── 2. CONTROLE DO GESTOR ─── */}
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/40 p-3">
+              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-900 flex items-center gap-2 mb-3">
+                <FaCheckCircle /> 2. Controle do Gestor
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field
-                label="Pode liberar - inicio"
-                hint="Primeiro dia em que a equipe consegue liberar esse colaborador."
-              >
-                <input
-                  className={FIELD_INPUT}
-                  type="date"
-                  value={form.janela_sugerida_inicio}
-                  onChange={(event) => updateField("janela_sugerida_inicio", event.target.value)}
-                />
-              </Field>
-              <Field
-                label="Pode liberar - fim"
-                hint="Ultimo dia dessa janela possivel."
-              >
-                <input
-                  className={FIELD_INPUT}
-                  type="date"
-                  value={form.janela_sugerida_fim}
-                  onChange={(event) => updateField("janela_sugerida_fim", event.target.value)}
-                />
-              </Field>
-              <Field
-                label="Ferias confirmadas - inicio"
-                hint="Data real que ficou combinada."
-              >
-                <input
-                  className={FIELD_INPUT}
-                  type="date"
-                  value={form.programado_inicio}
-                  onChange={(event) => updateField("programado_inicio", event.target.value)}
-                />
-              </Field>
-              <Field
-                label="Ferias confirmadas - fim"
-                hint="Ultimo dia confirmado de gozo."
-              >
-                <input
-                  className={FIELD_INPUT}
-                  type="date"
-                  value={form.programado_fim}
-                  onChange={(event) => updateField("programado_fim", event.target.value)}
-                />
-              </Field>
-              <Field label="Planejar com abono">
-                <select
-                  className={FIELD_INPUT}
-                  value={form.usar_abono ? "SIM" : "NAO"}
-                  onChange={(event) => updateField("usar_abono", event.target.value === "SIM")}
+              <div className="text-[11px] text-slate-600 mb-3">
+                <span className="font-bold text-blue-900">Pode liberar:</span> janela que a equipe suporta. Defina prioridade e deixe observações para o RH.
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <Field
+                  label="Pode liberar - inicio"
+                  hint="Primeiro dia em que a equipe consegue liberar."
                 >
-                  <option value="NAO">Nao</option>
-                  <option value="SIM">Sim</option>
-                </select>
-              </Field>
-              <Field label="Status do planejamento">
-                <select
-                  className={FIELD_INPUT}
-                  value={form.status_planejamento}
-                  onChange={(event) => updateField("status_planejamento", event.target.value)}
-                >
-                  {STATUS_PLANEJAMENTO.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Prioridade">
-                <select
-                  className={FIELD_INPUT}
-                  value={form.prioridade}
-                  onChange={(event) => updateField("prioridade", event.target.value)}
-                >
-                  {PRIORIDADES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            {form.usar_abono ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Field label="Abono - inicio">
                   <input
                     className={FIELD_INPUT}
                     type="date"
-                    value={form.programado_abono_inicio}
-                    onChange={(event) => updateField("programado_abono_inicio", event.target.value)}
+                    value={form.janela_sugerida_inicio}
+                    onChange={(event) => updateField("janela_sugerida_inicio", event.target.value)}
                   />
                 </Field>
-                <Field label="Abono - fim">
+                <Field
+                  label="Pode liberar - fim"
+                  hint="Ultimo dia dessa janela possivel."
+                >
                   <input
                     className={FIELD_INPUT}
                     type="date"
-                    value={form.programado_abono_fim}
-                    onChange={(event) => updateField("programado_abono_fim", event.target.value)}
+                    value={form.janela_sugerida_fim}
+                    onChange={(event) => updateField("janela_sugerida_fim", event.target.value)}
+                  />
+                </Field>
+                <Field label="Prioridade">
+                  <select
+                    className={FIELD_INPUT}
+                    value={form.prioridade}
+                    onChange={(event) => updateField("prioridade", event.target.value)}
+                  >
+                    {PRIORIDADES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Status do planejamento">
+                  <select
+                    className={FIELD_INPUT}
+                    value={form.status_planejamento}
+                    onChange={(event) => updateField("status_planejamento", event.target.value)}
+                  >
+                    {STATUS_PLANEJAMENTO.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <div className="mt-3">
+                <Field
+                  label="Observacoes do gestor"
+                  hint="Ex.: nao pode sair junto com fulano, equipe reduzida, cobertura do turno confirmada."
+                >
+                  <textarea
+                    className={`${FIELD_INPUT} min-h-[100px] resize-y`}
+                    value={form.observacoes}
+                    onChange={(event) => updateField("observacoes", event.target.value)}
                   />
                 </Field>
               </div>
-            ) : null}
+            </div>
+            {/* ─── /2. CONTROLE DO GESTOR ─── */}
 
-            {item.proximo_inicio_gozo || item.proximo_inicio_abono ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setForm((current) => ({
-                    ...current,
-                    programado_inicio: item.proximo_inicio_gozo || "",
-                    programado_fim: item.proximo_fim_gozo || "",
-                    usar_abono: Boolean(item.proximo_inicio_abono || item.proximo_fim_abono || current.usar_abono),
-                    programado_abono_inicio: item.proximo_inicio_abono || "",
-                    programado_abono_fim: item.proximo_fim_abono || "",
-                  }))
-                }
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
-              >
-                <FaCalendarAlt />
-                Usar agenda vinda da base
-              </button>
-            ) : null}
+            {/* ─── 3. ENVIO PARA O RH ─── */}
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
+              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-900 flex items-center gap-2 mb-3">
+                <FaUpload /> 3. Envio para o RH
+              </div>
+              <div className="text-[11px] text-slate-600 mb-3">
+                <span className="font-bold text-emerald-900">Vai tirar:</span> período confirmado para envio ao RH.
+                {" "}<span className="font-bold text-amber-800">Abono:</span> quando houver venda de dias.
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <Field
+                  label="Ferias confirmadas - inicio"
+                  hint="Data real que ficou combinada."
+                >
+                  <input
+                    className={FIELD_INPUT}
+                    type="date"
+                    value={form.programado_inicio}
+                    onChange={(event) => updateField("programado_inicio", event.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="Ferias confirmadas - fim"
+                  hint="Ultimo dia confirmado de gozo."
+                >
+                  <input
+                    className={FIELD_INPUT}
+                    type="date"
+                    value={form.programado_fim}
+                    onChange={(event) => updateField("programado_fim", event.target.value)}
+                  />
+                </Field>
+                <Field label="Planejar com abono">
+                  <select
+                    className={FIELD_INPUT}
+                    value={form.usar_abono ? "SIM" : "NAO"}
+                    onChange={(event) => updateField("usar_abono", event.target.value === "SIM")}
+                  >
+                    <option value="NAO">Nao</option>
+                    <option value="SIM">Sim</option>
+                  </select>
+                </Field>
+              </div>
 
-            <Field
-              label="Observacoes do gestor"
-              hint="Ex.: nao pode sair junto com fulano, equipe reduzida, cobertura do turno confirmada."
-            >
-              <textarea
-                className={`${FIELD_INPUT} min-h-[120px] resize-y`}
-                value={form.observacoes}
-                onChange={(event) => updateField("observacoes", event.target.value)}
-              />
-            </Field>
+              {form.usar_abono ? (
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <Field label="Abono - inicio">
+                    <input
+                      className={FIELD_INPUT}
+                      type="date"
+                      value={form.programado_abono_inicio}
+                      onChange={(event) => updateField("programado_abono_inicio", event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Abono - fim">
+                    <input
+                      className={FIELD_INPUT}
+                      type="date"
+                      value={form.programado_abono_fim}
+                      onChange={(event) => updateField("programado_abono_fim", event.target.value)}
+                    />
+                  </Field>
+                </div>
+              ) : null}
+
+              {item.proximo_inicio_gozo || item.proximo_inicio_abono ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((current) => ({
+                      ...current,
+                      programado_inicio: item.proximo_inicio_gozo || "",
+                      programado_fim: item.proximo_fim_gozo || "",
+                      usar_abono: Boolean(item.proximo_inicio_abono || item.proximo_fim_abono || current.usar_abono),
+                      programado_abono_inicio: item.proximo_inicio_abono || "",
+                      programado_abono_fim: item.proximo_fim_abono || "",
+                    }))
+                  }
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
+                >
+                  <FaCalendarAlt />
+                  Usar agenda vinda da base
+                </button>
+              ) : null}
+            </div>
+            {/* ─── /3. ENVIO PARA O RH ─── */}
 
             <div className={`rounded-2xl border p-4 ${mismatchDias ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
               <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Checagem rapida</div>
@@ -1515,32 +1538,8 @@ export default function Ferias() {
     setCalendarMonth(next.toISOString().slice(0, 7));
   }
 
-  const VIEW_TAB_META = {
-    gestores: {
-      icon: <FaUsers />,
-      title: "Controle do Gestor",
-      subtitle: "Equipe agrupada por gerente · libera, programa e acompanha o crítico.",
-    },
-    calendario: {
-      icon: <FaCalendarAlt />,
-      title: "Informações",
-      subtitle: "Visão geral em calendário das férias programadas e em gozo.",
-    },
-    rh: {
-      icon: <FaCheckCircle />,
-      title: "Envio para o RH",
-      subtitle: "Listagem mensal consolidada para acompanhamento do RH.",
-    },
-  };
-  const VIEW_TAB_LABELS = {
-    gestores: "Controle do Gestor",
-    calendario: "Informações",
-    rh: "Envio para o RH",
-  };
-  const activeMeta = VIEW_TAB_META[viewMode] || VIEW_TAB_META.gestores;
-
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-6 p-4 md:p-6">
       <input
         ref={fileInputRef}
         type="file"
@@ -1549,82 +1548,29 @@ export default function Ferias() {
         className="hidden"
       />
 
-      {/* Abas grandes no topo */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {VIEW_MODES.map((mode) => {
-            const meta = VIEW_TAB_META[mode.value];
-            const active = viewMode === mode.value;
-            return (
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-sm font-black uppercase tracking-wide text-slate-800">Central de Férias</div>
+            <div className="mt-1 text-sm text-slate-500">Gestores para a operação, calendário para leitura rápida e RH mensal para acompanhamento do planejado.</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {VIEW_MODES.map((mode) => (
               <button
                 key={mode.value}
                 type="button"
                 onClick={() => setViewMode(mode.value)}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left transition ${
-                  active
-                    ? "bg-blue-600 text-white shadow"
-                    : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition ${
+                  viewMode === mode.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
-                <span
-                  className={`flex h-10 w-10 flex-none items-center justify-center rounded-xl text-lg ${
-                    active ? "bg-white/15 text-white" : "bg-white text-blue-600 shadow-sm"
-                  }`}
-                >
-                  {meta?.icon}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[10px] font-black uppercase tracking-[0.18em] opacity-70">
-                    {active ? "ATIVA" : "ABRIR"}
-                  </span>
-                  <span className="block text-sm font-black leading-tight">
-                    {VIEW_TAB_LABELS[mode.value]}
-                  </span>
-                </span>
+                {mode.label}
               </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Cabeçalho da aba ativa */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-black text-slate-800 flex items-center gap-2">
-              <span className="text-blue-600">{activeMeta.icon}</span> {activeMeta.title}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5">{activeMeta.subtitle}</div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => exportarCSV(filteredRecords)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <FaDownload /> Exportar
-            </button>
-            <button
-              type="button"
-              onClick={carregarDados}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <FaSync /> Recarregar
-            </button>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importing}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-black text-white hover:bg-blue-700 disabled:opacity-60"
-            >
-              <FaUpload /> {importing ? "Importando..." : "Atualizar base"}
-            </button>
+            ))}
           </div>
         </div>
-      </div>
-
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="hidden">{/* placeholder removido */}</div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Buscar">

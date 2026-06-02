@@ -1515,74 +1515,32 @@ export default function Ferias() {
     setCalendarMonth(next.toISOString().slice(0, 7));
   }
 
+  const VIEW_TAB_META = {
+    gestores: {
+      icon: <FaUsers />,
+      title: "Controle do Gestor",
+      subtitle: "Equipe agrupada por gerente · libera, programa e acompanha o crítico.",
+    },
+    calendario: {
+      icon: <FaCalendarAlt />,
+      title: "Informações",
+      subtitle: "Visão geral em calendário das férias programadas e em gozo.",
+    },
+    rh: {
+      icon: <FaCheckCircle />,
+      title: "Envio para o RH",
+      subtitle: "Listagem mensal consolidada para acompanhamento do RH.",
+    },
+  };
+  const VIEW_TAB_LABELS = {
+    gestores: "Controle do Gestor",
+    calendario: "Informações",
+    rh: "Envio para o RH",
+  };
+  const activeMeta = VIEW_TAB_META[viewMode] || VIEW_TAB_META.gestores;
+
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-blue-600">Pessoas</div>
-          <h1 className="mt-1 text-3xl font-black text-slate-900">Ferias</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Central para o gestor enxergar a equipe por gerente, abrir o card do colaborador e para o RH acompanhar o planejado por mes.
-          </p>
-        </div>
-
-        <div className="grid w-full max-w-2xl grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-            <div className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-blue-900">
-              <FaCheckCircle />
-              Fluxo do gestor
-            </div>
-            <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-blue-900/90">
-              <div>1. Filtra por gestor e ve os criticos.</div>
-              <div>2. Abre a linha e consulta o card do colaborador.</div>
-              <div>3. Registra quando pode liberar.</div>
-              <div>4. Define quando vai tirar e RH acompanha por mes.</div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <div className="text-sm font-black uppercase tracking-wide text-slate-700">Base oficial</div>
-                <div className="mt-1 text-xs text-slate-500">
-                  {stats.baseAtualizadaEm
-                    ? `Atualizada em ${formatDateTimeBR(stats.baseAtualizadaEm)}`
-                    : "Nenhuma base publicada ainda"}
-                </div>
-                {stats.fonteArquivo ? <div className="mt-1 text-xs text-slate-400">{stats.fonteArquivo}</div> : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <FaUpload />
-                {importing ? "Importando..." : "Atualizar base"}
-              </button>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => exportarCSV(filteredRecords)}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-              >
-                <FaDownload />
-                Exportar visao atual
-              </button>
-              <button
-                type="button"
-                onClick={carregarDados}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                <FaSync />
-                Recarregar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="space-y-4 p-4 md:p-6">
       <input
         ref={fileInputRef}
         type="file"
@@ -1591,39 +1549,82 @@ export default function Ferias() {
         className="hidden"
       />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
-        <CardKPI titulo="Colaboradores" valor={formatInt(stats.colaboradores)} cor="slate" icon={<FaUsers />} />
-        <CardKPI titulo="Periodos ativos" valor={formatInt(stats.periodos)} cor="blue" icon={<FaCalendarAlt />} />
-        <CardKPI titulo="Em ferias" valor={formatInt(stats.emGozo)} cor="purple" icon={<FaUserClock />} />
-        <CardKPI titulo="Programados" valor={formatInt(stats.programados)} cor="emerald" icon={<FaCheckCircle />} />
-        <CardKPI titulo="Vencidos" valor={formatInt(stats.vencidos)} cor="rose" icon={<FaExclamationTriangle />} />
-        <CardKPI titulo="Com saldo" valor={formatInt(stats.saldo)} cor="amber" icon={<FaClock />} sub={`${formatInt(stats.alerta11)} em alerta 11 meses`} />
-        <CardKPI titulo="Com abono" valor={formatInt(stats.comAbono)} cor="blue" icon={<FaCalendarAlt />} sub="Historico ou planejamento com abono" />
-      </div>
-
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="text-sm font-black uppercase tracking-wide text-slate-800">Visao da central</div>
-            <div className="mt-1 text-sm text-slate-500">Gestores para a operacao, calendario para leitura rapida e RH mensal para acompanhamento do planejado.</div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {VIEW_MODES.map((mode) => (
+      {/* Abas grandes no topo */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {VIEW_MODES.map((mode) => {
+            const meta = VIEW_TAB_META[mode.value];
+            const active = viewMode === mode.value;
+            return (
               <button
                 key={mode.value}
                 type="button"
                 onClick={() => setViewMode(mode.value)}
-                className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition ${
-                  viewMode === mode.value
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left transition ${
+                  active
+                    ? "bg-blue-600 text-white shadow"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100"
                 }`}
               >
-                {mode.label}
+                <span
+                  className={`flex h-10 w-10 flex-none items-center justify-center rounded-xl text-lg ${
+                    active ? "bg-white/15 text-white" : "bg-white text-blue-600 shadow-sm"
+                  }`}
+                >
+                  {meta?.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-black uppercase tracking-[0.18em] opacity-70">
+                    {active ? "ATIVA" : "ABRIR"}
+                  </span>
+                  <span className="block text-sm font-black leading-tight">
+                    {VIEW_TAB_LABELS[mode.value]}
+                  </span>
+                </span>
               </button>
-            ))}
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Cabeçalho da aba ativa */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-black text-slate-800 flex items-center gap-2">
+              <span className="text-blue-600">{activeMeta.icon}</span> {activeMeta.title}
+            </div>
+            <div className="text-xs text-slate-500 mt-0.5">{activeMeta.subtitle}</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => exportarCSV(filteredRecords)}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              <FaDownload /> Exportar
+            </button>
+            <button
+              type="button"
+              onClick={carregarDados}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              <FaSync /> Recarregar
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-black text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              <FaUpload /> {importing ? "Importando..." : "Atualizar base"}
+            </button>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="hidden">{/* placeholder removido */}</div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Buscar">

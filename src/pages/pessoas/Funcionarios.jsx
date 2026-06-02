@@ -335,7 +335,7 @@ export default function Funcionarios() {
         const { data, error } = await supabaseBCNT
           .from("funcionarios_atualizada")
           .select("id_funcionario, nr_cracha, nm_funcionario, nm_funcao, nr_telefone_celular, dt_inicio_atividade, status")
-          .eq("status", "ativo")
+          .in("status", ["ativo", "afastado"])
           .order("nm_funcionario", { ascending: true })
           .range(start, start + pageSize - 1);
 
@@ -400,13 +400,17 @@ export default function Funcionarios() {
       const afastamento = afastamentoPorChave.get(key);
       const areaTitulo = aloc ? areasByCodigo.get(aloc.area_codigo)?.titulo : "";
 
+      const afastadoBCNT =
+        String(funcionario.status || "").trim().toLowerCase() === "afastado";
+
       return {
         ...funcionario,
         _alocacao: aloc ? "Alocado" : "Sobrando",
         _area_codigo: aloc?.area_codigo || "",
         _area_titulo: areaTitulo || "",
         _afastamento: afastamento || null,
-        _afastado: Boolean(afastamento),
+        _afastado: Boolean(afastamento) || afastadoBCNT,
+        _afastadoBCNT: afastadoBCNT,
       };
     });
   }, [funcionarios, alocPorChave, areasByCodigo, afastamentoPorChave]);

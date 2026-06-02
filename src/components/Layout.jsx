@@ -261,8 +261,9 @@ export default function Layout() {
     navigate("/login", { replace: true });
   }
 
+  const onFarolTab = podeVerFarol && !isNativeShell && farolTab === "farol";
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className={`bg-slate-50 ${onFarolTab ? "h-screen flex flex-col overflow-hidden" : "min-h-screen"}`}>
       <div
         className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:hidden"
         style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
@@ -326,7 +327,7 @@ export default function Layout() {
         </div>
       )}
 
-      <div className="flex min-h-[calc(100vh-73px)] lg:min-h-screen">
+      <div className={`flex ${onFarolTab ? "flex-1 min-h-0" : "min-h-[calc(100vh-73px)] lg:min-h-screen"}`}>
         {isNativeShell || farolTab === "farol" ? null : (
           <>
             <div
@@ -360,8 +361,7 @@ export default function Layout() {
             <iframe
               src={FAROL_URL}
               title="Farol Tático"
-              className={`flex-1 w-full border-0 ${farolTab === "farol" ? "block" : "hidden"}`}
-              style={{ height: "calc(100dvh - 49px)", minHeight: "calc(100dvh - 49px)" }}
+              className={`w-full h-full flex-1 border-0 ${farolTab === "farol" ? "block" : "hidden"}`}
             />
           )}
         </div>

@@ -1,7 +1,9 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
+import PrettyDatePicker from "../../components/PrettyDatePicker";
+import PrettyTimePicker from "../../components/PrettyTimePicker";
 import {
   FaBusAlt,
   FaPlus,
@@ -33,8 +35,12 @@ function novaParada() {
 
 export default function ControleEspecialLancamento() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get("id");
   const { user } = useContext(AuthContext);
   const [salvando, setSalvando] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [especialOriginal, setEspecialOriginal] = useState(null);
 
   const [form, setForm] = useState({
     data: "",
@@ -52,9 +58,44 @@ export default function ControleEspecialLancamento() {
     volta_destino_local: "",
     volta_end_destino: "",
 
-    qtd_onibus: 2,
+    qtd_onibus: 1,
     observacoes: "",
   });
+
+  // Carrega especial existente se houver ?id=
+  useEffect(() => {
+    if (!editId) return;
+    (async () => {
+      setCarregando(true);
+      const { data, error } = await supabase
+        .from("especiais")
+        .select("*")
+        .eq("id", editId)
+        .single();
+      if (!error && data) {
+        setEspecialOriginal(data);
+        setForm({
+          data: data.data || "",
+          ida_hora_saida: (data.ida_hora_saida || "07:00").substring(0, 5),
+          ida_local_saida: data.ida_local_saida || "",
+          ida_end_saida: data.ida_end_saida || "",
+          ida_paradas: data.ida_paradas?.length ? data.ida_paradas : [novaParada()],
+          ida_destino_local: data.ida_destino_local || "",
+          ida_end_destino: data.ida_end_destino || "",
+          volta_hora_saida: (data.volta_hora_saida || "15:00").substring(0, 5),
+          volta_local_saida: data.volta_local_saida || "",
+          volta_end_saida: data.volta_end_saida || "",
+          volta_paradas: data.volta_paradas?.length ? data.volta_paradas : [novaParada()],
+          volta_destino_local: data.volta_destino_local || "",
+          volta_end_destino: data.volta_end_destino || "",
+          qtd_onibus: data.qtd_onibus || 1,
+          observacoes: data.observacoes || "",
+        });
+        if (data.emails_extras?.length) setEmails(data.emails_extras);
+      }
+      setCarregando(false);
+    })();
+  }, [editId]);
 
   // Lista de e-mails (com EMAIL_TRAVADO sempre presente)
   const [emails, setEmails] = useState(() => Array.from(new Set(EMAILS_PADRAO)));
@@ -116,16 +157,29 @@ export default function ControleEspecialLancamento() {
     try {
       const payload = {
         ...form,
-        criado_por_login: user?.login || null,
-        criado_por_nome: user?.nome || null,
         emails_extras: emails,
+        updated_at: new Date().toISOString(),
       };
+      if (!editId) {
+        payload.criado_por_login = user?.login || null;
+        payload.criado_por_nome = user?.nome || null;
+      }
 
-      const { data, error } = await supabase
-        .from("especiais")
-        .insert(payload)
-        .select()
-        .single();
+      let data, error;
+      if (editId) {
+        ({ data, error } = await supabase
+          .from("especiais")
+          .update(payload)
+          .eq("id", editId)
+          .select()
+          .single());
+      } else {
+        ({ data, error } = await supabase
+          .from("especiais")
+          .insert(payload)
+          .select()
+          .single());
+      }
       if (error) throw error;
 
       // Manda pro Google Agenda (centralizado via Edge Function)
@@ -167,8 +221,14 @@ export default function ControleEspecialLancamento() {
           <FaBusAlt size={22} />
         </div>
         <div>
-          <h1 className="text-2xl font-black text-slate-800">Lançamento de Especial</h1>
-          <p className="text-sm text-slate-500">Cadastre uma viagem especial e envie pro Google Agenda dos participantes.</p>
+          <h1 className="text-2xl font-black text-slate-800">
+            {editId ? "Editar Especial" : "Lançamento de Especial"}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {editId
+              ? "Ajuste os dados e reenvie pro Google Agenda. O evento existente será atualizado."
+              : "Cadastre uma viagem especial e envie pro Google Agenda dos participantes."}
+          </p>
         </div>
       </div>
 
@@ -182,11 +242,10 @@ export default function ControleEspecialLancamento() {
       <Section title="Dados gerais">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Data">
-            <input
-              type="date"
+            <PrettyDatePicker
               value={form.data}
-              onChange={(e) => upd("data", e.target.value)}
-              className="input"
+              onChange={(v) => upd("data", v)}
+              placeholder="Selecionar data"
             />
           </Field>
           <Field label="Quantidade de ônibus">
@@ -205,11 +264,9 @@ export default function ControleEspecialLancamento() {
       <Section title="🚌 IDA" color="bg-blue-50 border-blue-200">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Horário de saída">
-            <input
-              type="time"
+            <PrettyTimePicker
               value={form.ida_hora_saida}
-              onChange={(e) => upd("ida_hora_saida", e.target.value)}
-              className="input"
+              onChange={(v) => upd("ida_hora_saida", v)}
             />
           </Field>
           <Field label="Local de saída">
@@ -264,11 +321,9 @@ export default function ControleEspecialLancamento() {
       <Section title="🚌 VOLTA" color="bg-amber-50 border-amber-200">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Horário de retorno">
-            <input
-              type="time"
+            <PrettyTimePicker
               value={form.volta_hora_saida}
-              onChange={(e) => upd("volta_hora_saida", e.target.value)}
-              className="input"
+              onChange={(v) => upd("volta_hora_saida", v)}
             />
           </Field>
           <Field label="Local de saída (retorno)">
@@ -417,7 +472,7 @@ export default function ControleEspecialLancamento() {
           disabled={salvando}
           className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-sm font-black shadow-md flex items-center gap-2 disabled:opacity-50"
         >
-          <FaSave /> {salvando ? "Salvando..." : "Lançar e Enviar pro Google"}
+          <FaSave /> {salvando ? "Salvando..." : editId ? "Salvar Alterações e Reenviar" : "Lançar e Enviar pro Google"}
         </button>
       </div>
 

@@ -263,7 +263,7 @@ export default function Layout() {
 
   const onFarolTab = podeVerFarol && !isNativeShell && farolTab === "farol";
   return (
-    <div className={`bg-slate-50 ${onFarolTab ? "h-screen flex flex-col overflow-hidden" : "min-h-screen"}`}>
+    <div className={`bg-slate-50 min-h-screen ${onFarolTab ? "overflow-hidden h-screen" : ""}`}>
       <div
         className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:hidden"
         style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
@@ -296,7 +296,9 @@ export default function Layout() {
       </div>
 
       {podeVerFarol && !isNativeShell && (
-        <div className="sticky top-0 z-40 hidden border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white shadow-sm lg:flex lg:items-stretch">
+        <div
+          className={`${onFarolTab ? "fixed top-0 left-0 right-0" : "sticky top-0"} z-40 hidden border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white shadow-sm lg:flex lg:items-stretch`}
+        >
           <button
             type="button"
             onClick={() => setFarolTab("inove")}
@@ -357,16 +359,19 @@ export default function Layout() {
             <Outlet />
           </main>
 
-          {podeVerFarol && farolMounted && (
-            <iframe
-              src={FAROL_URL}
-              title="Farol Tático"
-              className={`w-full flex-1 border-0 ${farolTab === "farol" ? "block" : "hidden"}`}
-              style={{ height: "calc(100dvh - 49px)" }}
-            />
-          )}
         </div>
       </div>
+
+      {/* Iframe Farol — posicionado fixo pra ignorar qualquer container e
+          ocupar 100% da viewport abaixo das abas, sem espaço branco. */}
+      {podeVerFarol && farolMounted && (
+        <iframe
+          src={FAROL_URL}
+          title="Farol Tático"
+          className={`fixed left-0 right-0 bottom-0 border-0 bg-white ${farolTab === "farol" ? "block" : "hidden"}`}
+          style={{ top: "49px", width: "100vw", height: "calc(100vh - 49px)" }}
+        />
+      )}
 
       <MobileBottomNav
         items={mobileNavItems}

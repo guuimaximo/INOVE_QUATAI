@@ -142,7 +142,7 @@ function buildNextNumero(rows) {
   return `VG-${String(maxN + 1).padStart(4, "0")}`;
 }
 
-function CardKPI({ titulo, valor, cor = "slate", sub }) {
+function CardKPI({ titulo, valor, cor = "slate", sub, compact = false }) {
   const cls = {
     slate: "border-slate-200 bg-slate-50 text-slate-900",
     emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
@@ -152,6 +152,15 @@ function CardKPI({ titulo, valor, cor = "slate", sub }) {
     purple: "border-purple-200 bg-purple-50 text-purple-900",
     sky: "border-sky-200 bg-sky-50 text-sky-900",
   }[cor];
+  if (compact) {
+    return (
+      <div className={`rounded-xl border ${cls} px-3 py-2`}>
+        <div className="text-[9px] font-bold uppercase tracking-wider opacity-70">{titulo}</div>
+        <div className="text-xl font-black leading-tight">{valor}</div>
+        {sub ? <div className="text-[10px] opacity-70 leading-tight">{sub}</div> : null}
+      </div>
+    );
+  }
   return (
     <div className={`rounded-2xl border ${cls} px-4 py-3`}>
       <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">{titulo}</div>
@@ -612,12 +621,30 @@ export default function VagasCentral() {
     if (!confirm(`Excluir definitivamente a vaga ${vaga.numero_vaga} - ${vaga.nome_cargo}? Esta ação não pode ser desfeita.`)) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from("vagas_solicitacao").delete().eq("id", vaga.id);
+      // Tenta apagar dependências comuns primeiro (não falha se a tabela não existe)
+      const dependentes = ["vagas_historico", "vagas_anexos", "vagas_comentarios"];
+      for (const t of dependentes) {
+        try {
+          await supabase.from(t).delete().eq("vaga_id", vaga.id);
+        } catch { /* ignora se tabela não existe */ }
+      }
+      const { error, data } = await supabase
+        .from("vagas_solicitacao")
+        .delete()
+        .eq("id", vaga.id)
+        .select();
       if (error) throw error;
+      if (!data || data.length === 0) {
+        // RLS bloqueou silenciosamente
+        throw new Error(
+          "A vaga não foi excluída. Verifique as permissões (RLS) da tabela vagas_solicitacao no Supabase."
+        );
+      }
       setDetalhe((d) => (d?.id === vaga.id ? null : d));
       await carregar();
+      alert("Vaga excluída.");
     } catch (error) {
-      console.error(error);
+      console.error("excluirVaga:", error);
       alert(error?.message || "Erro ao excluir.");
     } finally {
       setSaving(false);
@@ -724,42 +751,42 @@ export default function VagasCentral() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <CardKPI titulo="Total" valor={stats.total} cor="slate" sub="Todas as solicitacoes" />
-        <CardKPI titulo="Abertas" valor={stats.abertas} cor="amber" sub="Em andamento" />
-        <CardKPI titulo="Vencidas" valor={stats.vencidas} cor="rose" sub="Estouraram o SLA" />
-        <CardKPI titulo="Concluidas" valor={stats.concluidas} cor="emerald" sub="Vagas preenchidas" />
-        <CardKPI titulo="Canceladas" valor={stats.canceladas} cor="rose" sub="Sem efetivacao" />
+      {view === "dashboard" ? (
+        <DashboardVagas rows={rows} />
+      ) : (
+      <>
+      {/* KPIs compactos em uma linha só */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <CardKPI titulo="Total" valor={stats.total} cor="slate" sub="Solicitacoes" compact />
+        <CardKPI titulo="Abertas" valor={stats.abertas} cor="amber" sub="Em andamento" compact />
+        <CardKPI titulo="Vencidas" valor={stats.vencidas} cor="rose" sub="SLA estourado" compact />
+        <CardKPI titulo="Concluidas" valor={stats.concluidas} cor="emerald" sub="Preenchidas" compact />
+        <CardKPI titulo="Canceladas" valor={stats.canceladas} cor="rose" sub="Sem efetivacao" compact />
       </div>
 
       {/* Regra do SLA */}
-      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm">
-        <div className="flex items-center gap-2 text-blue-800 font-black mb-2">
+      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm">
+        <div className="flex items-center gap-2 text-blue-800 font-black mb-1.5 text-xs">
           <FaExclamationTriangle /> Regra do SLA
         </div>
-        <p className="text-blue-700 text-xs mb-2">
-          O SLA é calculado a partir da data de abertura da vaga. Quando o prazo é estourado, ela aparece com o selo <b>⚠ VENCIDA</b>.
+        <p className="text-blue-700 text-[11px] mb-2">
+          O SLA é calculado a partir da data de abertura da vaga. Quando o prazo é estourado, aparece o selo <b>⚠ VENCIDA</b>.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-          <div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+          <div className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5">
             <div className="font-black text-blue-800">Adm e Gestão</div>
             <div className="text-slate-600">SLA: <b>20 dias</b></div>
           </div>
-          <div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
+          <div className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5">
             <div className="font-black text-blue-800">Técnicas (Mecânico, Eletricista, Sup. Manut.)</div>
             <div className="text-slate-600">SLA: <b>20 dias</b></div>
           </div>
-          <div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
+          <div className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5">
             <div className="font-black text-blue-800">Operacionais (Motorista, Lavador, Aux. Manut., etc.)</div>
             <div className="text-slate-600">SLA: <b>12 dias</b></div>
           </div>
         </div>
       </div>
-
-      {view === "dashboard" ? (
-        <DashboardVagas rows={rows} />
-      ) : (
-      <>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setTab("todos")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${tab === "todos" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>Todas ({stats.total})</button>
         <button type="button" onClick={() => setTab("abertas")} className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${tab === "abertas" ? "border-amber-600 bg-amber-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>Em andamento ({stats.abertas})</button>

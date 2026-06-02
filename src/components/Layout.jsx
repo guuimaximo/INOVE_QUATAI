@@ -265,8 +265,40 @@ export default function Layout() {
         </div>
       </div>
 
+      {podeVerFarol && !isNativeShell && (
+        <div className="sticky top-0 z-40 hidden border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white shadow-sm lg:flex lg:items-stretch">
+          <button
+            type="button"
+            onClick={() => setFarolTab("inove")}
+            className={`relative flex-1 max-w-[260px] flex items-center justify-center gap-2 px-6 py-3 text-sm font-extrabold tracking-wide transition-all ${
+              farolTab === "inove"
+                ? "bg-white text-blue-700 border-b-[3px] border-blue-600 shadow-[inset_0_-1px_0_rgba(37,99,235,0.15)]"
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/60 border-b-[3px] border-transparent"
+            }`}
+          >
+            <FaThLarge className={farolTab === "inove" ? "text-blue-600" : "text-slate-400"} />
+            Inove
+          </button>
+          <button
+            type="button"
+            onClick={() => setFarolTab("farol")}
+            className={`relative flex-1 max-w-[260px] flex items-center justify-center gap-2 px-6 py-3 text-sm font-extrabold tracking-wide transition-all ${
+              farolTab === "farol"
+                ? "bg-white text-emerald-700 border-b-[3px] border-emerald-600 shadow-[inset_0_-1px_0_rgba(5,150,105,0.15)]"
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/60 border-b-[3px] border-transparent"
+            }`}
+          >
+            <span className={`inline-flex h-5 w-5 items-center justify-center rounded ${farolTab === "farol" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"} text-[10px] font-black`}>
+              FT
+            </span>
+            Farol Tático
+          </button>
+          <div className="flex-1" />
+        </div>
+      )}
+
       <div className="flex min-h-[calc(100vh-73px)] lg:min-h-screen">
-        {isNativeShell ? null : (
+        {isNativeShell || farolTab === "farol" ? null : (
           <>
             <div
               className={`fixed inset-0 z-40 bg-slate-950/40 transition-opacity duration-200 lg:hidden ${
@@ -287,35 +319,6 @@ export default function Layout() {
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {podeVerFarol && !isNativeShell && (
-            <div className="sticky top-0 z-20 hidden border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur lg:flex">
-              <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
-                <button
-                  type="button"
-                  onClick={() => setFarolTab("inove")}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${
-                    farolTab === "inove"
-                      ? "bg-white text-blue-700 shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  Inove
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFarolTab("farol")}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${
-                    farolTab === "farol"
-                      ? "bg-white text-emerald-700 shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  Farol Tático
-                </button>
-              </div>
-            </div>
-          )}
-
           <main
             className={`flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 pb-20 md:px-6 md:py-6 lg:pb-6 ${
               farolTab === "farol" ? "hidden" : ""
@@ -328,8 +331,8 @@ export default function Layout() {
             <iframe
               src={FAROL_URL}
               title="Farol Tático"
-              className={`flex-1 w-full h-full border-0 ${farolTab === "farol" ? "" : "hidden"}`}
-              style={{ minHeight: "calc(100vh - 56px)" }}
+              className={`flex-1 w-full border-0 ${farolTab === "farol" ? "block" : "hidden"}`}
+              style={{ minHeight: "calc(100vh - 56px)", height: "calc(100vh - 56px)" }}
             />
           )}
         </div>

@@ -361,7 +361,8 @@ export default function Layout() {
             <iframe
               src={FAROL_URL}
               title="Farol Tático"
-              className={`w-full h-full flex-1 border-0 ${farolTab === "farol" ? "block" : "hidden"}`}
+              className={`w-full flex-1 border-0 ${farolTab === "farol" ? "block" : "hidden"}`}
+              style={{ height: "calc(100dvh - 49px)" }}
             />
           )}
         </div>

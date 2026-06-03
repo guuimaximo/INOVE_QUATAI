@@ -370,6 +370,8 @@ export default function Layout() {
           title="Farol Tático"
           className={`fixed left-0 right-0 bottom-0 border-0 bg-white ${farolTab === "farol" ? "block" : "hidden"}`}
           style={{ top: "49px", width: "100vw", height: "calc(100vh - 49px)" }}
+          allow="display-capture; microphone; camera; clipboard-read; clipboard-write; autoplay; fullscreen"
+          allowFullScreen
         />
       )}
 

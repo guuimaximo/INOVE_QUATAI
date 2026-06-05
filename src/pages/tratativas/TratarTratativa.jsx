@@ -604,6 +604,18 @@ export default function TratarTratativa() {
 
       if (upd.error) throw upd.error;
 
+      // ➜ Se essa tratativa veio do SAC, devolve o SAC pra "Aguardando resposta ao cliente"
+      if (String(t?.setor_origem || "").toUpperCase() === "SAC") {
+        try {
+          await supabase
+            .from("sac_atendimentos")
+            .update({ status: "Aguardando resposta ao cliente" })
+            .eq("tratativa_id", t.id);
+        } catch (sacErr) {
+          console.warn("Falha ao notificar SAC:", sacErr);
+        }
+      }
+
       alert("Tratativa concluída com sucesso!");
       nav(-1);
     } catch (e) {

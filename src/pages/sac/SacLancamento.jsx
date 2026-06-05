@@ -31,6 +31,8 @@ const initialForm = () => ({
   detalhamento: "",
   acao_tomada: "Registrado e esclarecido com passageiro",
   abrir_tratativa: false,
+  status_acao: "concluido", // "concluido" | "pendente"
+  prioridade_tratativa: "Media", // só usado quando pendente
 });
 
 export default function SacLancamento() {
@@ -77,13 +79,13 @@ export default function SacLancamento() {
   }, [operador]);
 
   useEffect(() => {
-    const abrirTratativa = form.acao_tomada === "Abrir tratativa";
+    const abrirTratativa = form.status_acao === "pendente";
     setForm((prev) =>
       prev.abrir_tratativa === abrirTratativa
         ? prev
         : { ...prev, abrir_tratativa: abrirTratativa }
     );
-  }, [form.acao_tomada]);
+  }, [form.status_acao]);
 
   function usarAgora() {
     setForm((prev) => ({
@@ -176,7 +178,7 @@ export default function SacLancamento() {
     try {
       const folder = `${form.data_atendimento}_${form.cliente_telefone || "sem-cliente"}_${Date.now()}`;
       const evidencias_urls = await uploadSacFiles(files, folder);
-      const status = form.abrir_tratativa ? "Em tratativa" : "Registrado";
+      const status = form.abrir_tratativa ? "Em tratativa" : "Concluido";
       let tratativaId = null;
 
       if (form.abrir_tratativa) {
@@ -186,7 +188,7 @@ export default function SacLancamento() {
             motorista_chapa: form.operador_chapa || null,
             motorista_nome: form.operador_nome || null,
             tipo_ocorrencia: `SAC - ${form.grupo_motivo}`,
-            prioridade: form.grupo_motivo === "Denuncia" ? "Alta" : "Media",
+            prioridade: form.prioridade_tratativa || "Media",
             setor_origem: "SAC",
             linha: form.linha || null,
             descricao: buildDescricaoTratativa("novo protocolo"),
@@ -437,22 +439,101 @@ export default function SacLancamento() {
         </div>
 
         <div className="md:col-span-2">
-          <label className="block text-sm text-gray-600 mb-1">
-            Acao tomada
+          <label className="block text-sm text-gray-600 mb-2">
+            Ação tomada
           </label>
-          <select
-            value={form.acao_tomada}
-            onChange={(e) =>
-              setForm({ ...form, acao_tomada: e.target.value })
-            }
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
-          >
-            {SAC_ACOES.map((acao) => (
-              <option key={acao} value={acao}>
-                {acao}
-              </option>
-            ))}
-          </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, status_acao: "concluido" })}
+              className={`rounded-2xl border-2 px-4 py-3 text-left transition ${
+                form.status_acao === "concluido"
+                  ? "border-emerald-500 bg-emerald-50 shadow"
+                  : "border-slate-200 bg-white hover:border-emerald-300"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-emerald-700 font-black text-sm">
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${form.status_acao === "concluido" ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300"}`}>
+                  {form.status_acao === "concluido" ? "✓" : ""}
+                </span>
+                CONCLUÍDO
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">
+                Já resolvi na abertura. SAC vai direto pra <b>Concluído</b>.
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, status_acao: "pendente" })}
+              className={`rounded-2xl border-2 px-4 py-3 text-left transition ${
+                form.status_acao === "pendente"
+                  ? "border-amber-400 bg-amber-50 shadow"
+                  : "border-slate-200 bg-white hover:border-amber-300"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-amber-700 font-black text-sm">
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${form.status_acao === "pendente" ? "border-amber-500 bg-amber-500 text-white" : "border-slate-300"}`}>
+                  {form.status_acao === "pendente" ? "⏳" : ""}
+                </span>
+                PENDENTE
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">
+                Vira <b>tratativa</b> para a Operação resolver e retornar.
+              </div>
+            </button>
+          </div>
+
+          {form.status_acao === "pendente" && (
+            <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 space-y-3">
+              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-800">
+                Tratativa para a Operação
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">
+                  Prioridade
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {["Baixa", "Media", "Alta"].map((p) => {
+                    const ativo = form.prioridade_tratativa === p;
+                    const cores = {
+                      Baixa: ativo ? "bg-slate-200 border-slate-400 text-slate-700" : "bg-white border-slate-200 text-slate-500",
+                      Media: ativo ? "bg-blue-100 border-blue-400 text-blue-800" : "bg-white border-slate-200 text-slate-500",
+                      Alta: ativo ? "bg-red-100 border-red-400 text-red-800" : "bg-white border-slate-200 text-slate-500",
+                    };
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setForm({ ...form, prioridade_tratativa: p })}
+                        className={`flex-1 sm:flex-none px-4 py-2 rounded-xl border-2 text-xs font-black uppercase transition ${cores[p]}`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {form.status_acao === "concluido" && (
+            <div className="mt-3">
+              <label className="block text-xs font-bold text-slate-600 mb-1">
+                Detalhar ação tomada
+              </label>
+              <select
+                value={form.acao_tomada}
+                onChange={(e) => setForm({ ...form, acao_tomada: e.target.value })}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
+              >
+                {SAC_ACOES.filter((a) => a !== "Abrir tratativa").map((acao) => (
+                  <option key={acao} value={acao}>
+                    {acao}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="md:col-span-2">

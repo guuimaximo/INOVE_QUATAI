@@ -1,6 +1,12 @@
 import { supabase } from "../../supabase";
 
-export const SAC_STATUS = ["Registrado", "Em tratativa", "Concluido", "Cancelado"];
+export const SAC_STATUS = [
+  "Registrado",
+  "Em tratativa",
+  "Aguardando resposta ao cliente",
+  "Concluido",
+  "Cancelado",
+];
 
 export const SAC_ORIGENS = ["WhatsApp", "Ligacao", "Email", "Prefeitura", "Presencial", "Redes sociais"];
 

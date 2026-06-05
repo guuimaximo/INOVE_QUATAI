@@ -221,59 +221,108 @@ function SacModal({ row, onClose, onReload }) {
           </div>
 
           <aside className="space-y-4">
-            {row.status === "Aguardando resposta ao cliente" && (
-              <section className="rounded-3xl border-2 border-rose-300 bg-rose-50/60 p-5">
-                <div className="text-xs font-black uppercase tracking-wide text-rose-700 flex items-center gap-1">
-                  🔔 Aguardando retorno
+            {/* Em tratativa pela Operação — só aguarda, nada de concluir/cancelar */}
+            {row.status === "Em tratativa" && (
+              <section className="rounded-3xl border-2 border-amber-300 bg-amber-50/60 p-5">
+                <div className="text-xs font-black uppercase tracking-wide text-amber-800 flex items-center gap-2">
+                  ⏳ Aguardando Operação
                 </div>
-                <p className="mt-2 text-xs text-rose-700/80">
-                  A Operação já tratou. Registre o retorno ao cliente e conclua o SAC.
+                <p className="mt-2 text-sm text-amber-800/90">
+                  A Operação está tratando este caso. Quando a tratativa for concluída,
+                  o SAC volta automaticamente como <b>"Aguardando retorno ao cliente"</b> e
+                  você poderá concluir.
                 </p>
+                {row.tratativa_id ? (
+                  <Link
+                    to={`/tratar/${row.tratativa_id}`}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-600 px-3 py-2 text-xs font-black text-white hover:bg-amber-700"
+                  >
+                    Ver tratativa →
+                  </Link>
+                ) : null}
               </section>
             )}
-            <section className="rounded-3xl border border-emerald-200 bg-emerald-50/30 p-5">
-              <h3 className="text-sm font-black uppercase tracking-wide text-emerald-800 flex items-center gap-2">
-                <FaCheckCircle /> Concluir
-              </h3>
-              <textarea
-                rows={4}
-                value={conclusao}
-                onChange={(e) => setConclusao(e.target.value)}
-                className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-400"
-                placeholder={
-                  row.status === "Aguardando resposta ao cliente"
-                    ? "Descreva o retorno dado ao cliente."
-                    : "Conclusao do atendimento."
-                }
-              />
-              <button
-                type="button"
-                onClick={() => atualizarStatus("Concluido")}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-700"
-              >
-                <FaCheckCircle />
-                {row.status === "Aguardando resposta ao cliente" ? "Concluir e Retornar ao Cliente" : "Concluir SAC"}
-              </button>
-            </section>
-            <section className="rounded-3xl border border-rose-200 bg-white p-5">
-              <h3 className="text-sm font-black uppercase tracking-wide text-rose-700 flex items-center gap-2">
-                <FaTimesCircle /> Cancelar
-              </h3>
-              <textarea
-                rows={3}
-                value={canceladoMotivo}
-                onChange={(e) => setCanceladoMotivo(e.target.value)}
-                className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400"
-                placeholder="Motivo do cancelamento."
-              />
-              <button
-                type="button"
-                onClick={() => atualizarStatus("Cancelado")}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white border-2 border-rose-300 text-rose-700 px-4 py-2.5 text-sm font-black hover:bg-rose-50"
-              >
-                <FaTimesCircle /> Cancelar SAC
-              </button>
-            </section>
+
+            {/* Aguardando retorno ao cliente — abre as opções */}
+            {row.status === "Aguardando resposta ao cliente" && (
+              <>
+                <section className="rounded-3xl border-2 border-rose-300 bg-rose-50/60 p-5">
+                  <div className="text-xs font-black uppercase tracking-wide text-rose-700 flex items-center gap-1">
+                    🔔 Aguardando retorno
+                  </div>
+                  <p className="mt-2 text-xs text-rose-700/80">
+                    A Operação já tratou. Registre o retorno ao cliente e conclua o SAC.
+                  </p>
+                </section>
+                <section className="rounded-3xl border border-emerald-200 bg-emerald-50/30 p-5">
+                  <h3 className="text-sm font-black uppercase tracking-wide text-emerald-800 flex items-center gap-2">
+                    <FaCheckCircle /> Concluir
+                  </h3>
+                  <textarea
+                    rows={4}
+                    value={conclusao}
+                    onChange={(e) => setConclusao(e.target.value)}
+                    className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-400"
+                    placeholder="Descreva o retorno dado ao cliente."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => atualizarStatus("Concluido")}
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-700"
+                  >
+                    <FaCheckCircle /> Concluir e Retornar ao Cliente
+                  </button>
+                </section>
+                <section className="rounded-3xl border border-rose-200 bg-white p-5">
+                  <h3 className="text-sm font-black uppercase tracking-wide text-rose-700 flex items-center gap-2">
+                    <FaTimesCircle /> Cancelar
+                  </h3>
+                  <textarea
+                    rows={3}
+                    value={canceladoMotivo}
+                    onChange={(e) => setCanceladoMotivo(e.target.value)}
+                    className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400"
+                    placeholder="Motivo do cancelamento."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => atualizarStatus("Cancelado")}
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white border-2 border-rose-300 text-rose-700 px-4 py-2.5 text-sm font-black hover:bg-rose-50"
+                  >
+                    <FaTimesCircle /> Cancelar SAC
+                  </button>
+                </section>
+              </>
+            )}
+
+            {/* Já fechado */}
+            {row.status === "Concluido" && (
+              <section className="rounded-3xl border-2 border-emerald-300 bg-emerald-50/60 p-5">
+                <div className="text-xs font-black uppercase tracking-wide text-emerald-700 flex items-center gap-2">
+                  <FaCheckCircle /> Concluído
+                </div>
+                {row.conclusao ? (
+                  <p className="mt-2 text-sm text-emerald-900 whitespace-pre-wrap">{row.conclusao}</p>
+                ) : (
+                  <p className="mt-2 text-xs text-emerald-700/80">Sem texto de conclusão registrado.</p>
+                )}
+                {row.concluido_em ? (
+                  <p className="mt-2 text-[10px] text-emerald-700/70">Fechado em {new Date(row.concluido_em).toLocaleString("pt-BR")}</p>
+                ) : null}
+              </section>
+            )}
+            {row.status === "Cancelado" && (
+              <section className="rounded-3xl border-2 border-slate-300 bg-slate-50 p-5">
+                <div className="text-xs font-black uppercase tracking-wide text-slate-700 flex items-center gap-2">
+                  <FaTimesCircle /> Cancelado
+                </div>
+                {row.cancelado_motivo ? (
+                  <p className="mt-2 text-sm text-slate-800 whitespace-pre-wrap">{row.cancelado_motivo}</p>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-600">Sem motivo registrado.</p>
+                )}
+              </section>
+            )}
           </aside>
         </div>
       </div>

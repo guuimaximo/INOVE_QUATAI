@@ -31,7 +31,7 @@ const initialForm = () => ({
   detalhamento: "",
   acao_tomada: "Registrado e esclarecido com passageiro",
   abrir_tratativa: false,
-  status_acao: "concluido", // "concluido" | "pendente"
+  status_acao: "pendente", // padrão: abre como pendente; gestor decide se conclui na hora
   prioridade_tratativa: "Media", // Gravissima | Alta | Media | Baixa — alinhado ao SLA da Operação
 });
 

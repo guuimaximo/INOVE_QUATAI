@@ -32,7 +32,7 @@ const initialForm = () => ({
   acao_tomada: "Registrado e esclarecido com passageiro",
   abrir_tratativa: false,
   status_acao: "concluido", // "concluido" | "pendente"
-  prioridade_tratativa: "Media", // só usado quando pendente
+  prioridade_tratativa: "Media", // Gravissima | Alta | Media | Baixa — alinhado ao SLA da Operação
 });
 
 export default function SacLancamento() {
@@ -207,10 +207,14 @@ export default function SacLancamento() {
         tratativaId = tratativa?.id || null;
       }
 
+      // Remove campos que existem só no form (não na tabela sac_atendimentos)
+      // eslint-disable-next-line no-unused-vars
+      const { status_acao, prioridade_tratativa, abrir_tratativa, ...sacFields } = form;
+
       const { data, error } = await supabase
         .from("sac_atendimentos")
         .insert({
-          ...form,
+          ...sacFields,
           status,
           tratativa_id: tratativaId,
           evidencias_urls,
@@ -488,26 +492,30 @@ export default function SacLancamento() {
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-800">
                 Tratativa para a Operação
               </div>
+              <div className="text-[11px] text-amber-900/80">
+                SLA é calculado em cima da prioridade — quanto mais grave, mais rápido a Operação tem que responder.
+              </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Prioridade
+                  Prioridade (SLA da Operação)
                 </label>
-                <div className="flex gap-2 flex-wrap">
-                  {["Baixa", "Media", "Alta"].map((p) => {
-                    const ativo = form.prioridade_tratativa === p;
-                    const cores = {
-                      Baixa: ativo ? "bg-slate-200 border-slate-400 text-slate-700" : "bg-white border-slate-200 text-slate-500",
-                      Media: ativo ? "bg-blue-100 border-blue-400 text-blue-800" : "bg-white border-slate-200 text-slate-500",
-                      Alta: ativo ? "bg-red-100 border-red-400 text-red-800" : "bg-white border-slate-200 text-slate-500",
-                    };
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { v: "Gravissima", label: "Gravíssima", sla: "1 dia", ativoCls: "bg-red-200 border-red-500 text-red-900", inativoCls: "bg-white border-red-200 text-slate-500 hover:border-red-400" },
+                    { v: "Alta", label: "Alta", sla: "3 dias", ativoCls: "bg-orange-100 border-orange-500 text-orange-900", inativoCls: "bg-white border-orange-200 text-slate-500 hover:border-orange-400" },
+                    { v: "Media", label: "Média", sla: "7 dias", ativoCls: "bg-yellow-100 border-yellow-500 text-yellow-900", inativoCls: "bg-white border-yellow-200 text-slate-500 hover:border-yellow-400" },
+                    { v: "Baixa", label: "Baixa", sla: "15 dias", ativoCls: "bg-emerald-100 border-emerald-500 text-emerald-900", inativoCls: "bg-white border-emerald-200 text-slate-500 hover:border-emerald-400" },
+                  ].map((p) => {
+                    const ativo = form.prioridade_tratativa === p.v;
                     return (
                       <button
-                        key={p}
+                        key={p.v}
                         type="button"
-                        onClick={() => setForm({ ...form, prioridade_tratativa: p })}
-                        className={`flex-1 sm:flex-none px-4 py-2 rounded-xl border-2 text-xs font-black uppercase transition ${cores[p]}`}
+                        onClick={() => setForm({ ...form, prioridade_tratativa: p.v })}
+                        className={`px-3 py-2 rounded-xl border-2 text-left transition ${ativo ? p.ativoCls : p.inativoCls}`}
                       >
-                        {p}
+                        <div className="text-xs font-black uppercase">{p.label}</div>
+                        <div className="text-[10px] opacity-80">SLA {p.sla}</div>
                       </button>
                     );
                   })}
@@ -558,6 +566,20 @@ export default function SacLancamento() {
           <label className="block text-sm text-gray-700 font-medium mb-2">
             Evidências (Fotos, Vídeos e PDF)
           </label>
+
+          <div className="mb-3 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 text-sm">
+            <div className="flex items-start gap-2">
+              <span className="text-red-600 text-base leading-none">⚠️</span>
+              <div>
+                <div className="font-black text-red-700">
+                  Anexar evidências é fundamental para a tratativa
+                </div>
+                <div className="text-red-700/90 text-xs mt-0.5">
+                  Sem fotos, vídeos ou documentos, a Operação não tem como confirmar o ocorrido nem agir com segurança. Sempre que possível, registre o máximo de provas: foto do veículo/linha, do local, áudio do passageiro, prints da conversa — tudo conta.
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <div

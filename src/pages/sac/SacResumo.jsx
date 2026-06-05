@@ -82,15 +82,40 @@ export default function SacResumo() {
   const cards = useMemo(() => {
     const total = rows.length;
     const emTratativa = rows.filter((r) => r.status === "Em tratativa").length;
+    const aguardandoRetorno = rows.filter((r) => r.status === "Aguardando resposta ao cliente").length;
     const concluidos = rows.filter((r) => r.status === "Concluido").length;
     const cancelados = rows.filter((r) => r.status === "Cancelado").length;
-    const reincidentes = new Set(rows.filter((r) => r.cliente_telefone).map((r) => r.cliente_telefone)).size;
+
+    // Tempo médio de resposta ao cliente:
+    // diferença entre created_at e concluido_em, considerando só os SACs que
+    // passaram por tratativa (tinham status Pendente / Em tratativa antes de concluir).
+    const concluidosComTratativa = rows.filter(
+      (r) => r.status === "Concluido" && r.tratativa_id && r.concluido_em && r.created_at
+    );
+    let tempoMedioMs = null;
+    if (concluidosComTratativa.length) {
+      const soma = concluidosComTratativa.reduce((acc, r) => {
+        const ini = new Date(r.created_at).getTime();
+        const fim = new Date(r.concluido_em).getTime();
+        return acc + Math.max(0, fim - ini);
+      }, 0);
+      tempoMedioMs = soma / concluidosComTratativa.length;
+    }
+    let tempoLabel = "—";
+    if (tempoMedioMs !== null) {
+      const horas = tempoMedioMs / (1000 * 60 * 60);
+      if (horas >= 24) tempoLabel = `${(horas / 24).toFixed(1)}d`;
+      else if (horas >= 1) tempoLabel = `${horas.toFixed(1)}h`;
+      else tempoLabel = `${Math.round(tempoMedioMs / 60000)}min`;
+    }
+
     return [
       ["Atendimentos", total],
       ["Em tratativa", emTratativa],
+      ["Aguardando retorno", aguardandoRetorno],
       ["Concluidos", concluidos],
       ["Cancelados", cancelados],
-      ["Telefones unicos", reincidentes],
+      [`Tempo medio de resposta (${concluidosComTratativa.length})`, tempoLabel],
     ];
   }, [rows]);
 

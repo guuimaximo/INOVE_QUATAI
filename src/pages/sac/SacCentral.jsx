@@ -104,6 +104,7 @@ function SacModal({ row, onClose, onReload }) {
         ...pickMovementUser(user),
       });
       if (error) throw error;
+      // legado: SACs antigos com status "Registrado" sobem pra "Em tratativa" ao receber 1ª movimentação
       if (row.status === "Registrado") {
         await supabase.from("sac_atendimentos").update({ status: "Em tratativa" }).eq("id", row.id);
       }
@@ -220,17 +221,56 @@ function SacModal({ row, onClose, onReload }) {
           </div>
 
           <aside className="space-y-4">
-            <section className="rounded-3xl border border-slate-200 p-5">
-              <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Concluir</h3>
-              <textarea rows={4} value={conclusao} onChange={(e) => setConclusao(e.target.value)} className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-400" placeholder="Conclusao do atendimento." />
-              <button type="button" onClick={() => atualizarStatus("Concluido")} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">
-                <FaCheckCircle /> Concluir SAC
+            {row.status === "Aguardando resposta ao cliente" && (
+              <section className="rounded-3xl border-2 border-rose-300 bg-rose-50/60 p-5">
+                <div className="text-xs font-black uppercase tracking-wide text-rose-700 flex items-center gap-1">
+                  🔔 Aguardando retorno
+                </div>
+                <p className="mt-2 text-xs text-rose-700/80">
+                  A Operação já tratou. Registre o retorno ao cliente e conclua o SAC.
+                </p>
+              </section>
+            )}
+            <section className="rounded-3xl border border-emerald-200 bg-emerald-50/30 p-5">
+              <h3 className="text-sm font-black uppercase tracking-wide text-emerald-800 flex items-center gap-2">
+                <FaCheckCircle /> Concluir
+              </h3>
+              <textarea
+                rows={4}
+                value={conclusao}
+                onChange={(e) => setConclusao(e.target.value)}
+                className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-400"
+                placeholder={
+                  row.status === "Aguardando resposta ao cliente"
+                    ? "Descreva o retorno dado ao cliente."
+                    : "Conclusao do atendimento."
+                }
+              />
+              <button
+                type="button"
+                onClick={() => atualizarStatus("Concluido")}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-700"
+              >
+                <FaCheckCircle />
+                {row.status === "Aguardando resposta ao cliente" ? "Concluir e Retornar ao Cliente" : "Concluir SAC"}
               </button>
             </section>
-            <section className="rounded-3xl border border-slate-200 p-5">
-              <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Cancelar</h3>
-              <textarea rows={4} value={canceladoMotivo} onChange={(e) => setCanceladoMotivo(e.target.value)} className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400" placeholder="Motivo do cancelamento." />
-              <button type="button" onClick={() => atualizarStatus("Cancelado")} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white hover:bg-rose-700">
+            <section className="rounded-3xl border border-rose-200 bg-white p-5">
+              <h3 className="text-sm font-black uppercase tracking-wide text-rose-700 flex items-center gap-2">
+                <FaTimesCircle /> Cancelar
+              </h3>
+              <textarea
+                rows={3}
+                value={canceladoMotivo}
+                onChange={(e) => setCanceladoMotivo(e.target.value)}
+                className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none focus:border-rose-400"
+                placeholder="Motivo do cancelamento."
+              />
+              <button
+                type="button"
+                onClick={() => atualizarStatus("Cancelado")}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white border-2 border-rose-300 text-rose-700 px-4 py-2.5 text-sm font-black hover:bg-rose-50"
+              >
                 <FaTimesCircle /> Cancelar SAC
               </button>
             </section>
@@ -286,7 +326,20 @@ export default function SacCentral() {
       if (status !== "Todos") q = q.eq("status", status);
       const { data, error } = await q;
       if (error) throw error;
-      setRows(data || []);
+      // Ordena por prioridade do fluxo: Aguardando resposta → Em tratativa → Concluido → Cancelado
+      const peso = {
+        "Aguardando resposta ao cliente": 0,
+        "Em tratativa": 1,
+        Concluido: 2,
+        Cancelado: 3,
+      };
+      const ordenado = [...(data || [])].sort((a, b) => {
+        const pa = peso[a.status] ?? 99;
+        const pb = peso[b.status] ?? 99;
+        if (pa !== pb) return pa - pb;
+        return (b.created_at || "").localeCompare(a.created_at || "");
+      });
+      setRows(ordenado);
     } catch (error) {
       console.error(error);
       alert(`Erro ao carregar SAC: ${error?.message || error}`);
@@ -311,11 +364,15 @@ export default function SacCentral() {
   const cards = useMemo(() => {
     const total = rows.length;
     return [
-      ["Total", total],
-      ["Registrado", rows.filter((r) => r.status === "Registrado").length],
-      ["Em tratativa", rows.filter((r) => r.status === "Em tratativa").length],
-      ["Concluido", rows.filter((r) => r.status === "Concluido").length],
-      ["Cancelado", rows.filter((r) => r.status === "Cancelado").length],
+      { label: "Total", value: total, tone: "blue" },
+      {
+        label: "Aguardando retorno",
+        value: rows.filter((r) => r.status === "Aguardando resposta ao cliente").length,
+        tone: "rose",
+      },
+      { label: "Em tratativa", value: rows.filter((r) => r.status === "Em tratativa").length, tone: "amber" },
+      { label: "Concluido", value: rows.filter((r) => r.status === "Concluido").length, tone: "emerald" },
+      { label: "Cancelado", value: rows.filter((r) => r.status === "Cancelado").length, tone: "rose" },
     ];
   }, [rows]);
 
@@ -337,13 +394,8 @@ export default function SacCentral() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        {cards.map(([label, value], index) => (
-          <InoveStatCard
-            key={label}
-            title={label}
-            value={value}
-            tone={index === 2 ? "amber" : index === 3 ? "emerald" : index === 4 ? "rose" : "blue"}
-          />
+        {cards.map((c) => (
+          <InoveStatCard key={c.label} title={c.label} value={c.value} tone={c.tone} />
         ))}
       </div>
 
@@ -373,9 +425,20 @@ export default function SacCentral() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filtrados.map((row) => (
-                <tr key={row.id} onClick={() => setSelected(row)} className="cursor-pointer hover:bg-blue-50/50">
-                  <td className="px-4 py-3 font-black text-blue-700">{row.protocolo}</td>
+              {filtrados.map((row) => {
+                const aguardando = row.status === "Aguardando resposta ao cliente";
+                return (
+                <tr
+                  key={row.id}
+                  onClick={() => setSelected(row)}
+                  className={`cursor-pointer transition ${aguardando ? "bg-rose-50/70 hover:bg-rose-100/70 border-l-4 border-rose-500" : "hover:bg-blue-50/50"}`}
+                >
+                  <td className="px-4 py-3 font-black text-blue-700">
+                    <div className="flex items-center gap-2">
+                      {aguardando && <span className="text-rose-600" title="Aguardando retorno ao cliente">🔔</span>}
+                      {row.protocolo}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="font-bold text-slate-800">{safeText(row.cliente_nome)}</div>
                     <div className="text-xs text-slate-500">{safeText(row.cliente_telefone)}</div>
@@ -383,7 +446,11 @@ export default function SacCentral() {
                   <td className="px-4 py-3 font-semibold text-slate-700">{safeText(row.carro_prefixo)} • {safeText(row.linha)}</td>
                   <td className="px-4 py-3 font-semibold text-slate-700">{row.grupo_motivo} / {safeText(row.subgrupo_motivo)}</td>
                   <td className="px-4 py-3 font-semibold text-slate-700">{formatDateBR(row.data_atendimento)} {formatTimeBR(row.hora_atendimento)}</td>
-                  <td className="px-4 py-3"><span className={`rounded-full border px-3 py-1 text-xs font-black ${statusTone(row.status)}`}>{row.status}</span></td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full border px-3 py-1 text-xs font-black ${aguardando ? "border-rose-300 bg-rose-100 text-rose-800" : statusTone(row.status)}`}>
+                      {aguardando ? "AGUARDANDO RETORNO" : row.status}
+                    </span>
+                  </td>
                   {isAdmin ? (
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <button
@@ -397,7 +464,8 @@ export default function SacCentral() {
                     </td>
                   ) : null}
                 </tr>
-              ))}
+                );
+              })}
               {filtrados.length === 0 && !loading ? (
                 <tr><td colSpan={isAdmin ? 7 : 6} className="px-4 py-10 text-center text-sm font-bold text-slate-400">Nenhum atendimento encontrado.</td></tr>
               ) : null}

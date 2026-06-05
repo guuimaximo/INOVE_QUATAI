@@ -82,25 +82,54 @@ function statusRank(row) {
   return 3;
 }
 
+// Helpers de persistência por aba do navegador (sessionStorage)
+const STORAGE_KEY = "central_tratativas_state_v1";
+function loadPersisted() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+function savePersisted(state) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function CentralTratativas() {
+  const persisted = loadPersisted();
   const [tratativas, setTratativas] = useState([]);
-  const [filtros, setFiltros] = useState({
-    busca: "",
-    dataInicio: "",
-    dataFim: "",
-    setor: "",
-    status: "",
-    prioridade: "",
-  });
+  const [filtros, setFiltros] = useState(
+    persisted?.filtros || {
+      busca: "",
+      dataInicio: "",
+      dataFim: "",
+      setor: "",
+      status: "",
+      prioridade: "",
+    }
+  );
   const [loading, setLoading] = useState(false);
 
   const [setores, setSetores] = useState([]);
-  const [viewMode, setViewMode] = useState(VIEW.OPEN_ONLY);
+  const [viewMode, setViewMode] = useState(persisted?.viewMode || VIEW.OPEN_ONLY);
 
-  const [sort, setSort] = useState({
-    key: "default",
-    dir: "asc",
-  });
+  const [sort, setSort] = useState(
+    persisted?.sort || {
+      key: "default",
+      dir: "asc",
+    }
+  );
+
+  // Salva sempre que muda
+  useEffect(() => {
+    savePersisted({ filtros, viewMode, sort });
+  }, [filtros, viewMode, sort]);
 
   const [totalCount, setTotalCount] = useState(0);
   const [pendentesCount, setPendentesCount] = useState(0);

@@ -1,7 +1,6 @@
 import { supabase } from "../../supabase";
 
 export const SAC_STATUS = [
-  "Registrado",
   "Em tratativa",
   "Aguardando resposta ao cliente",
   "Concluido",

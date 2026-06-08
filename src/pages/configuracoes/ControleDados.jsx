@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   FaDatabase,
   FaHdd,
+  FaRobot,
   FaSync,
   FaExclamationTriangle,
 } from "react-icons/fa";
@@ -16,6 +17,15 @@ function fmtBytes(n) {
   if (v >= MB) return `${(v / MB).toFixed(1)} MB`;
   if (v >= 1024) return `${(v / 1024).toFixed(0)} KB`;
   return `${v} B`;
+}
+
+function fmtMoeda(valor, moeda = "USD") {
+  const v = Number(valor || 0);
+  try {
+    return v.toLocaleString("pt-BR", { style: "currency", currency: moeda });
+  } catch {
+    return `${moeda} ${v.toFixed(2)}`;
+  }
 }
 
 function Card({ icon, title, subtitle, children, error, loading }) {
@@ -117,6 +127,49 @@ function SupabaseCard({ titulo, projeto, payload, loading }) {
   );
 }
 
+function GcpCard({ payload, loading }) {
+  const ok = payload?.ok;
+  const data = payload?.data;
+  const erro = !ok ? payload?.error || "sem resposta" : null;
+
+  return (
+    <Card
+      icon={<FaRobot />}
+      title="Google Cloud · IA"
+      subtitle="Vertex AI / Gemini — últimos 30 dias"
+      loading={loading}
+      error={erro}
+    >
+      {data && (
+        <div className="grid grid-cols-1 gap-2">
+          <Stat
+            label="Custo total 30 dias"
+            value={fmtMoeda(data.total_30d, data.moeda)}
+            hint="dado oficial do BigQuery billing export"
+          />
+          {Array.isArray(data.por_servico) && data.por_servico.length > 0 && (
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <div className="text-[10px] uppercase font-bold text-slate-500 mb-1.5">
+                Por serviço
+              </div>
+              <ul className="text-xs text-slate-700 space-y-1">
+                {data.por_servico.slice(0, 6).map((s) => (
+                  <li key={s.servico} className="flex justify-between gap-2">
+                    <span className="truncate">{s.servico}</span>
+                    <span className="font-bold text-slate-900 whitespace-nowrap">
+                      {fmtMoeda(s.custo, s.moeda || data.moeda)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function ControleDados() {
   const [loading, setLoading] = useState(false);
   const [snapshot, setSnapshot] = useState(null);
@@ -189,12 +242,14 @@ export default function ControleDados() {
           payload={snapshot?.supabase_farol}
           loading={loading}
         />
+        <GcpCard payload={snapshot?.gcp} loading={loading} />
       </div>
 
       <p className="text-[11px] text-slate-400 mt-4">
-        Para o card do Farol retornar dados, os secrets FAROL_PROJECT_URL e
-        FAROL_SERVICE_ROLE_KEY precisam estar configurados no projeto Supabase
-        do Inove.
+        Secrets necessários no Supabase Inove: FAROL_PROJECT_URL,
+        FAROL_SERVICE_ROLE_KEY, GCP_SA_EMAIL, GCP_SA_PRIVATE_KEY,
+        GCP_BILLING_TABLE. Custo GCP só começa a aparecer ~24h depois do
+        BigQuery billing export ser ativado.
       </p>
     </div>
   );

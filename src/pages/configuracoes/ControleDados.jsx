@@ -28,6 +28,52 @@ function fmtMoeda(valor, moeda = "USD") {
   }
 }
 
+// Cotas do plano Pro do Supabase (atualizar se mudar de plano).
+const PRO_DB_GB = 8;
+const PRO_STORAGE_GB = 100;
+const PRO_DB_OVERAGE_USD_PER_GB = 0.125;
+const PRO_STORAGE_OVERAGE_USD_PER_GB = 0.021;
+
+function Quota({ label, bytes, limitGb, overagePerGb }) {
+  const usedGb = Number(bytes || 0) / GB;
+  const pct = limitGb > 0 ? (usedGb / limitGb) * 100 : 0;
+  const overGb = Math.max(0, usedGb - limitGb);
+  const overUsd = overGb * overagePerGb;
+
+  let barColor = "bg-emerald-500";
+  let textColor = "text-emerald-700";
+  if (pct >= 100) {
+    barColor = "bg-rose-500";
+    textColor = "text-rose-700";
+  } else if (pct >= 70) {
+    barColor = "bg-amber-500";
+    textColor = "text-amber-700";
+  }
+
+  return (
+    <div className="col-span-2 rounded-xl bg-slate-50 border border-slate-100 p-3">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] uppercase font-bold text-slate-500">{label}</span>
+        <span className={`text-xs font-extrabold ${textColor}`}>
+          {usedGb.toFixed(2)} / {limitGb} GB
+          <span className="text-slate-400 font-normal"> · {pct.toFixed(0)}%</span>
+        </span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+        <div
+          className={`h-full ${barColor} transition-all`}
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
+      </div>
+      {overGb > 0 && (
+        <div className="mt-1.5 text-[11px] font-bold text-rose-700">
+          Overage estimado: +{fmtMoeda(overUsd, "USD")} / mês ({overGb.toFixed(2)} GB acima)
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Card({ icon, title, subtitle, children, error, loading }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -84,6 +130,18 @@ function SupabaseCard({ titulo, projeto, payload, loading }) {
         <div className="grid grid-cols-2 gap-2">
           <Stat label="Tamanho do banco" value={fmtBytes(data.db_bytes)} />
           <Stat label="Storage usado" value={fmtBytes(data.storage_bytes)} />
+          <Quota
+            label="Banco (Pro: 8 GB)"
+            bytes={data.db_bytes}
+            limitGb={PRO_DB_GB}
+            overagePerGb={PRO_DB_OVERAGE_USD_PER_GB}
+          />
+          <Quota
+            label="Storage (Pro: 100 GB)"
+            bytes={data.storage_bytes}
+            limitGb={PRO_STORAGE_GB}
+            overagePerGb={PRO_STORAGE_OVERAGE_USD_PER_GB}
+          />
           {Array.isArray(data.buckets) && data.buckets.length > 0 && (
             <div className="col-span-2 rounded-xl bg-slate-50 border border-slate-100 p-3">
               <div className="text-[10px] uppercase font-bold text-slate-500 mb-1.5">

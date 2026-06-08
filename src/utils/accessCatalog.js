@@ -84,6 +84,7 @@ export const APP_ACCESS_PAGES = [
   { key: "pessoas_organograma", label: "Organograma", category: "Pessoas", path: "/organograma", patterns: ["/organograma", "/organograma-canvas", "/organograma-manutencao"] },
   { key: "pessoas_vagas", label: "Vagas", category: "Pessoas", path: "/vagas", patterns: ["/vagas"] },
   { key: "config_niveis", label: "Configuracoes Niveis", category: "Configuracoes", path: "/niveis-acesso", patterns: ["/niveis-acesso"] },
+  { key: "config_controle_dados", label: "Controle de Dados", category: "Configuracoes", path: "/controle-dados", patterns: ["/controle-dados"] },
 ];
 
 export const MOBILE_NAV_PRIORITY = [

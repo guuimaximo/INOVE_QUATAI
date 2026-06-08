@@ -66,6 +66,7 @@ const PCMControleFichas = lazy(() => import("./pages/pcm/PCMControleFichas"));
 
 const Usuarios = lazy(() => import("./pages/configuracoes/Usuarios"));
 const NiveisAcesso = lazy(() => import("./pages/configuracoes/NiveisAcesso"));
+const ControleDados = lazy(() => import("./pages/configuracoes/ControleDados"));
 const Funcionarios = lazy(() => import("./pages/pessoas/Funcionarios"));
 const Ferias = lazy(() => import("./pages/pessoas/Ferias"));
 const OrganogramaCanvas = lazy(() => import("./pages/pessoas/OrganogramaCanvas"));
@@ -353,6 +354,7 @@ export default function App() {
               <Route path="/organograma-canvas" element={<Navigate to="/organograma" replace />} />
               <Route path="/organograma-manutencao" element={<Navigate to="/organograma" replace />} />
               <Route path="/niveis-acesso" element={<NiveisAcesso />} />
+              <Route path="/controle-dados" element={<ControleDados />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

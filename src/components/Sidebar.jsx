@@ -31,6 +31,7 @@ import {
   FaBuilding,
   FaIdBadge,
   FaShieldAlt,
+  FaHdd,
   FaUsers,
   FaWarehouse,
   FaCalendarAlt,
@@ -282,6 +283,7 @@ export default function Sidebar() {
       configuracoes: [
         { path: "/usuarios", label: "Usuários", icon: <FaUserCog /> },
         { path: "/niveis-acesso", label: "Níveis de acesso", icon: <FaShieldAlt /> },
+        { path: "/controle-dados", label: "Controle de Dados", icon: <FaHdd /> },
       ],
     }),
     []
@@ -309,7 +311,7 @@ export default function Sidebar() {
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
     if (path.startsWith("/suprimentos")) setSuprimentosOpen(true);
     if (path.startsWith("/funcionarios") || path.startsWith("/organograma")) setPessoasOpen(true);
-    if (path.startsWith("/usuarios") || path.startsWith("/niveis-acesso")) setConfigOpen(true);
+    if (path.startsWith("/usuarios") || path.startsWith("/niveis-acesso") || path.startsWith("/controle-dados")) setConfigOpen(true);
   }, [location.pathname]);
 
   const navLinkClass = ({ isActive }) =>

@@ -273,6 +273,32 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const activityEvents = ["mousemove", "keydown", "click", "scroll", "visibilitychange"];
 
+    // Gravação ativa no Farol (iframe) suspende o logout por inatividade.
+    // O Farol envia postMessage { type: "farol:recording", active: bool } ao
+    // iniciar/parar; opcionalmente repete como heartbeat. Sem heartbeat por
+    // mais de RECORDING_HEARTBEAT_MS, consideramos a gravação encerrada.
+    const RECORDING_HEARTBEAT_MS = 2 * 60 * 1000;
+    let recordingActive = false;
+    let recordingLastPing = 0;
+
+    const isRecording = () => {
+      if (!recordingActive) return false;
+      if (Date.now() - recordingLastPing > RECORDING_HEARTBEAT_MS) {
+        recordingActive = false;
+        return false;
+      }
+      return true;
+    };
+
+    const onMessage = (ev) => {
+      const data = ev?.data;
+      if (!data || typeof data !== "object") return;
+      if (data.type !== "farol:recording") return;
+      recordingActive = data.active !== false;
+      recordingLastPing = Date.now();
+      if (recordingActive) touchActivity();
+    };
+
     const onActivity = () => {
       if (document.visibilityState === "visible") {
         touchActivity();
@@ -283,8 +309,16 @@ export function AuthProvider({ children }) {
     };
 
     activityEvents.forEach((eventName) => window.addEventListener(eventName, onActivity));
+    window.addEventListener("message", onMessage);
 
     const timer = window.setInterval(() => {
+      if (isRecording()) {
+        touchActivity();
+        void syncPresence();
+        void syncAccessSnapshot();
+        return;
+      }
+
       if (window.location.pathname === "/sos-dashboard") {
         touchActivity();
         void syncPresence();
@@ -305,6 +339,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       activityEvents.forEach((eventName) => window.removeEventListener(eventName, onActivity));
+      window.removeEventListener("message", onMessage);
       window.clearInterval(timer);
     };
   }, [logout, syncAccessSnapshot, syncPresence]);

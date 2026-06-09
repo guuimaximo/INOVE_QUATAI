@@ -25,7 +25,7 @@ with grupos as (
   group by
     c.lote_id,
     coalesce(c.tipo_contagem, 'diaria'),
-    to_char(c.created_at at time zone 'America/Sao_Paulo', 'YYYY-MM-DD')
+    (c.created_at at time zone 'America/Sao_Paulo')::date
 )
 select
   g.lote_id,

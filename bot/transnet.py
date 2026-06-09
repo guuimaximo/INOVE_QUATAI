@@ -11,10 +11,8 @@ from pathlib import Path
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -151,6 +149,236 @@ def _make_driver() -> webdriver.Chrome:
     return driver
 
 
+def _ddmmyyyy_to_br(data: str) -> str:
+    return f"{data[:2]}/{data[2:4]}/{data[4:]}"
+
+
+def _preencher_relatorio_estoque(driver: webdriver.Chrome, data_ini: str, data_fim: str) -> dict:
+    """Preenche o relatorio por DOM, sem depender de foco, TAB ou setas."""
+    return driver.execute_script(
+        """
+        const almoxarifadoAlvo = arguments[0];
+        const dataInicial = arguments[1];
+        const dataFinal = arguments[2];
+        const sep = String.fromCharCode(171, 166, 124, 166, 187);
+        const info = {};
+
+        function byId(id) {
+            return document.getElementById(id);
+        }
+
+        function byName(name) {
+            return document.getElementsByName(name)[0] || null;
+        }
+
+        function setValue(selector, value) {
+            const el = byId(selector) || byName(selector);
+            if (!el) {
+                info[`missing_${selector}`] = true;
+                return false;
+            }
+            el.value = value;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        }
+
+        function hiddenValue(selectId) {
+            const select = byId(selectId);
+            if (!select) return '';
+            const values = Array.from(select.options).map((option) => option.value).filter(Boolean);
+            return values.length ? values.join(sep) + sep : '';
+        }
+
+        function syncHidden(hiddenId, selectId) {
+            const hidden = byId(hiddenId) || byName(hiddenId);
+            if (hidden) hidden.value = hiddenValue(selectId);
+        }
+
+        function moveAll(fromId, toId) {
+            const from = byId(fromId);
+            const to = byId(toId);
+            if (!from || !to) return 0;
+            const options = Array.from(from.options);
+            options.forEach((option) => to.appendChild(option));
+            return options.length;
+        }
+
+        function normalize(value) {
+            return String(value || '')
+                .normalize('NFD')
+                .replace(/[\\u0300-\\u036f]/g, '')
+                .toUpperCase()
+                .trim();
+        }
+
+        function findOption(select, target) {
+            const wanted = normalize(target);
+            const wantedDigits = String(target || '').replace(/\\D/g, '');
+            return Array.from(select.options).find((option) => {
+                const text = normalize(option.textContent);
+                const value = normalize(option.value);
+                const textDigits = text.replace(/\\D/g, '');
+                return value === wanted
+                    || text.startsWith(`${wanted} -`)
+                    || (wantedDigits && textDigits.startsWith(wantedDigits))
+                    || text.includes(wanted);
+            });
+        }
+
+        function findOptionByVisibleCode(select, target) {
+            const wanted = normalize(target);
+            return Array.from(select.options).find((option) => {
+                const text = normalize(option.textContent);
+                return text.startsWith(`${wanted} -`);
+            });
+        }
+
+        function selectOnlyByTarget(leftId, rightId, hiddenLeftId, hiddenRightId, target) {
+            const left = byId(leftId);
+            const right = byId(rightId);
+            if (!left || !right) return { found: false, reason: 'select_missing' };
+
+            const match = findOption(right, target) || findOption(left, target);
+            if (!match) {
+                syncHidden(hiddenLeftId, leftId);
+                syncHidden(hiddenRightId, rightId);
+                return {
+                    found: false,
+                    reason: 'target_not_found',
+                    kept: hiddenValue(rightId),
+                };
+            }
+
+            const pool = document.createElement('select');
+            Array.from(left.options).forEach((option) => pool.appendChild(option));
+            Array.from(right.options).forEach((option) => pool.appendChild(option));
+
+            Array.from(pool.options).forEach((option) => {
+                if (option === match) {
+                    right.appendChild(option);
+                } else {
+                    left.appendChild(option);
+                }
+            });
+
+            syncHidden(hiddenLeftId, leftId);
+            syncHidden(hiddenRightId, rightId);
+            return {
+                found: Boolean(match),
+                value: match ? match.value : '',
+                text: match ? match.textContent.trim() : '',
+            };
+        }
+
+        function selectByTargets(leftId, rightId, hiddenLeftId, hiddenRightId, targets) {
+            const left = byId(leftId);
+            const right = byId(rightId);
+            if (!left || !right) return { found: [], missing: targets, reason: 'select_missing' };
+
+            const matches = [];
+            const missing = [];
+            targets.forEach((target) => {
+                const match = findOptionByVisibleCode(right, target) || findOptionByVisibleCode(left, target);
+                if (match) {
+                    matches.push(match);
+                } else {
+                    missing.push(target);
+                }
+            });
+
+            if (!matches.length) {
+                syncHidden(hiddenLeftId, leftId);
+                syncHidden(hiddenRightId, rightId);
+                return {
+                    found: [],
+                    missing,
+                    kept: hiddenValue(rightId),
+                };
+            }
+
+            const wanted = new Set(matches);
+            const pool = document.createElement('select');
+            Array.from(left.options).forEach((option) => pool.appendChild(option));
+            Array.from(right.options).forEach((option) => pool.appendChild(option));
+
+            Array.from(pool.options).forEach((option) => {
+                if (wanted.has(option)) {
+                    right.appendChild(option);
+                } else {
+                    left.appendChild(option);
+                }
+            });
+
+            syncHidden(hiddenLeftId, leftId);
+            syncHidden(hiddenRightId, rightId);
+            return {
+                found: matches.map((option) => option.textContent.trim()),
+                missing,
+            };
+        }
+
+        function clearSelected(leftId, rightId, hiddenLeftId, hiddenRightId) {
+            const moved = moveAll(rightId, leftId);
+            syncHidden(hiddenLeftId, leftId);
+            syncHidden(hiddenRightId, rightId);
+            return moved;
+        }
+
+        info.empresa = selectOnlyByTarget('lstidEmpresa1', 'lstidEmpresa2', 'idEmpresa1', 'idEmpresa2', '046');
+        info.almoxarifado = selectOnlyByTarget(
+            'lstalmoxarifado1',
+            'lstalmoxarifado2',
+            'almoxarifado1',
+            'almoxarifado2',
+            almoxarifadoAlvo
+        );
+
+        info.grupos = selectByTargets('lstgrupo1', 'lstgrupo2', 'grupo1', 'grupo2', ['04', '10', '11', '14', '45']);
+        info.subgrupos_limpos = clearSelected('lstsubgrupo1', 'lstsubgrupo2', 'subgrupo1', 'subgrupo2');
+
+        setValue('cdProdutoInicial', '00000000000');
+        setValue('cdProdutoFinal', '99999999999');
+        setValue('dataInicial', dataInicial);
+        setValue('dataFinal', dataFinal);
+        setValue('tipoRelatorio', 'D');
+        setValue('csImprimePmu', 'N');
+        setValue('csQuebraSubgrupo', 'N');
+        setValue('imprimeProdutosInativos', 'S');
+        setValue('imprimeApenasProdutosMovimentados', 'N');
+        setValue('imprimeApenasProdutosContabSaida', 'N');
+        setValue('qtCasasDecimais', '2');
+        setValue('visualizacao', '4');
+        setValue('hiddenVis', '4');
+        setValue('hiddenEsc', '0');
+        setValue('hiddenTam', '1');
+
+        if (typeof preencheValores === 'function') {
+            preencheValores();
+        }
+
+        info.hidden = {
+            empresa: (byId('idEmpresa2') || {}).value || '',
+            almoxarifado: (byId('almoxarifado2') || {}).value || '',
+            grupo: (byId('grupo2') || {}).value || '',
+            subgrupo: (byId('subgrupo2') || {}).value || '',
+            visualizacao: (byId('hiddenVis') || {}).value || '',
+        };
+
+        const form = document.forms.formulario;
+        if (!form) {
+            throw new Error('Formulario do relatorio nao encontrado.');
+        }
+        form.action = '?c=suprimentos.CSuRelatorioEntradasESaidasAcumuladas&itemMenu=4941&m=pesquisar';
+        form.submit();
+        return info;
+        """,
+        TRANSNET_ALMOXARIFADO,
+        _ddmmyyyy_to_br(data_ini),
+        _ddmmyyyy_to_br(data_fim),
+    )
+
+
 def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> str:
     """data_ini/data_fim no formato DDMMYYYY."""
     _log("STEP 0", f"data_ini={data_ini}  data_fim={data_fim}  arquivo_destino={nome_saida}")
@@ -216,24 +444,9 @@ def gerar_estoque_virtual_csv(data_ini: str, data_fim: str, nome_saida: str) -> 
             _log("STEP 5", f"setDownloadBehavior pós-nav ignorado: {e}")
 
         before = _snapshot(OUT_DIR)
-        ac = ActionChains(driver)
-        ac.send_keys(TRANSNET_ALMOXARIFADO)
-        ac.perform()
+        info_form = _preencher_relatorio_estoque(driver, data_ini, data_fim)
+        _log("STEP 5", f"formulario via DOM: {info_form}")
         time.sleep(1)
-        seq = (
-            [Keys.TAB] * 7
-            + [Keys.ARROW_DOWN]
-            + [Keys.TAB] * 2
-            + [data_ini, Keys.TAB, data_fim]
-            + [Keys.TAB, Keys.ARROW_DOWN]
-            + [Keys.TAB] * 7
-            + [Keys.ARROW_DOWN] * 4
-            + [Keys.ARROW_UP]
-            + [Keys.ENTER] * 3
-        )
-        for key in seq:
-            ac.send_keys(key)
-        ac.perform()
 
         # Screenshot + HTML pós-form pra você ver se a tela mudou
         try:

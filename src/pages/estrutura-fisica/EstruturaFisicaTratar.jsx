@@ -2,6 +2,19 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
+import {
+  FaArrowLeft,
+  FaTools,
+  FaUser,
+  FaBuilding,
+  FaExclamationTriangle,
+  FaInfoCircle,
+  FaClipboardList,
+  FaCalendarAlt,
+  FaCheckCircle,
+  FaBan,
+  FaSave,
+} from "react-icons/fa";
 
 function isValidUUID(v) {
   if (!v) return false;
@@ -369,30 +382,89 @@ export default function TratarEstruturaFisica() {
   const inputClass = "w-full rounded-xl border border-slate-300 bg-slate-50/50 px-4 py-2.5 text-sm text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all";
   const labelClass = "block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2";
 
+  const dataSolic = item.data_solicitacao
+    ? new Date(`${item.data_solicitacao}T00:00:00`).toLocaleDateString("pt-BR")
+    : "-";
+  const prazoEstimado = item.prazo_estimado
+    ? new Date(`${item.prazo_estimado}T00:00:00`).toLocaleDateString("pt-BR")
+    : "-";
+
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl space-y-6">
-        
-        <div>
+    <div className="min-h-screen space-y-5 bg-slate-50 p-4 md:p-6 text-slate-800">
+      {/* Hero */}
+      <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
+        <div className="space-y-3">
           <button
             onClick={() => nav(-1)}
-            className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors inline-flex items-center gap-1 mb-4"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           >
-            &larr; Voltar
+            <FaArrowLeft />
+            Voltar
           </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Dar Baixa na Execução</h1>
-              <p className="text-sm text-slate-500 mt-1">Pedido #{item.numero_pedido || "-"}</p>
+
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-orange-600">
+              Estrutura Física
             </div>
+            <h1 className="mt-3 flex items-center gap-3 text-3xl font-black text-slate-900">
+              <span className="rounded-2xl bg-orange-50 p-3 text-orange-600 shadow-sm">
+                <FaTools />
+              </span>
+              Tratar Solicitação
+              <span className="text-sm font-mono font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded border border-slate-200 align-middle">
+                #{item.numero_pedido || item.id}
+              </span>
+            </h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Revise os dados, registre a execução e dê baixa na solicitação.
+            </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
-          <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-            <span className="w-2 h-6 bg-blue-500 rounded-full inline-block"></span>
-            Detalhes da Solicitação
-          </h2>
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 self-end">
+          <div><span className="font-semibold">Solicitante:</span> {item.nome_solicitante || "-"}</div>
+          <div className="mt-1"><span className="font-semibold">Data:</span> {dataSolic}</div>
+        </div>
+      </div>
+
+      {/* Cards resumo */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <ResumoCard
+          titulo="Solicitante"
+          valor={item.nome_solicitante || "-"}
+          subtitulo={item.setor || "-"}
+          icon={<FaUser className="text-3xl text-blue-100" />}
+          border="border-l-blue-500"
+        />
+        <ResumoCard
+          titulo="Prioridade"
+          valor={item.prioridade || "-"}
+          subtitulo={`Prazo: ${prazoEstimado}`}
+          icon={<FaExclamationTriangle className="text-3xl text-amber-100" />}
+          border="border-l-amber-500"
+        />
+        <ResumoCard
+          titulo="Status"
+          valor={item.status || "-"}
+          subtitulo={item.responsavel_area || "-"}
+          icon={<FaInfoCircle className="text-3xl text-orange-100" />}
+          border="border-l-orange-500"
+        />
+        <ResumoCard
+          titulo="Data da solicitação"
+          valor={dataSolic}
+          subtitulo={`Pedido #${item.numero_pedido || "-"}`}
+          icon={<FaCalendarAlt className="text-3xl text-emerald-100" />}
+          border="border-l-emerald-500"
+        />
+      </div>
+
+      {/* Detalhes */}
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <FaClipboardList className="text-slate-500" />
+          <h2 className="text-lg font-bold text-slate-800">Detalhes da Solicitação</h2>
+        </div>
 
           <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <Item titulo="Nº Pedido" valor={item.numero_pedido || "-"} />
@@ -412,11 +484,11 @@ export default function TratarEstruturaFisica() {
           </dl>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
-          <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-            <span className="w-2 h-6 bg-orange-500 rounded-full inline-block"></span>
-            Tratamento e Execução
-          </h2>
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <FaTools className="text-orange-500" />
+          <h2 className="text-lg font-bold text-slate-800">Tratamento e Execução</h2>
+        </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
@@ -534,32 +606,61 @@ export default function TratarEstruturaFisica() {
             </div>
           </div>
 
-          <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
-            <button
-              onClick={cancelar}
-              disabled={loading}
-              className="w-full sm:w-auto rounded-xl border border-red-200 bg-white px-5 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 hover:border-red-300 disabled:opacity-60 transition-all"
-            >
-              Cancelar Pedido
-            </button>
+        <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
+          <button
+            onClick={cancelar}
+            disabled={loading}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-white px-5 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 hover:border-red-300 disabled:opacity-60 transition"
+          >
+            <FaBan /> Cancelar Pedido
+          </button>
 
-            <button
-              onClick={salvarAndamento}
-              disabled={loading}
-              className="w-full sm:w-auto rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-60 transition-all"
-            >
-              {loading ? "Salvando..." : "Salvar Edição"}
-            </button>
+          <button
+            onClick={salvarAndamento}
+            disabled={loading}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-60 transition"
+          >
+            <FaSave /> {loading ? "Salvando..." : "Salvar Edição"}
+          </button>
 
-            <button
-              onClick={concluir}
-              disabled={loading}
-              className="w-full sm:w-auto rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 transition-all"
-            >
-              Concluir Pedido
-            </button>
+          <button
+            onClick={concluir}
+            disabled={loading}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 transition"
+          >
+            <FaCheckCircle /> Concluir Pedido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResumoCard({ titulo, valor, subtitulo, icon, border }) {
+  const tone =
+    border?.includes("blue")
+      ? "from-blue-50 to-cyan-50 border-blue-200"
+      : border?.includes("amber")
+      ? "from-amber-50 to-orange-50 border-amber-200"
+      : border?.includes("orange")
+      ? "from-orange-50 to-amber-50 border-orange-200"
+      : border?.includes("emerald")
+      ? "from-emerald-50 to-teal-50 border-emerald-200"
+      : "from-slate-50 to-gray-50 border-slate-200";
+
+  return (
+    <div className={`min-h-[124px] rounded-3xl border bg-gradient-to-br p-4 shadow-sm ${tone}`}>
+      <div className="flex h-full items-start justify-between gap-3">
+        <div className="flex h-full min-w-0 flex-col justify-between">
+          <p className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{titulo}</p>
+          <div className="mt-2">
+            <p className="text-xl font-black text-slate-900 truncate">{valor}</p>
+            {subtitulo && (
+              <p className="mt-1 text-xs font-semibold text-slate-500 truncate">{subtitulo}</p>
+            )}
           </div>
         </div>
+        <div className="opacity-80 shrink-0">{icon}</div>
       </div>
     </div>
   );

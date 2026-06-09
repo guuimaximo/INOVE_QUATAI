@@ -16,7 +16,7 @@ with grupos as (
   select
     c.lote_id,
     coalesce(c.tipo_contagem, 'diaria') as tipo_contagem,
-    to_char(c.created_at at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') as data_alvo,
+    (c.created_at at time zone 'America/Sao_Paulo')::date as data_alvo,
     min(c.created_at) as primeiro_registro,
     max(c.created_at) as ultimo_registro,
     count(*) as total_itens,

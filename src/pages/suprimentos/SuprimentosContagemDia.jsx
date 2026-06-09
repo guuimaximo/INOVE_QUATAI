@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import * as XLSX from "xlsx";
@@ -32,8 +32,21 @@ function diffLabel(diff) {
 
 export default function SuprimentosContagemDia() {
   const { data: dataParam, loteId } = useParams(); // YYYY-MM-DD ou uuid do lote
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [data, setData] = useState(dataParam || "");
+  // Suporte a "sessao mesclada": URL pode ter ?lotes=id1,id2 alem do :loteId
+  const loteIdsMesclados = useMemo(() => {
+    const raw = searchParams.get("lotes");
+    if (raw) {
+      const arr = raw.split(",").map((s) => s.trim()).filter(Boolean);
+      if (loteId && !arr.includes(loteId)) arr.unshift(loteId);
+      return arr;
+    }
+    return loteId ? [loteId] : [];
+  }, [loteId, searchParams]);
+  // Filtro por tipo (a aba "Diária" so' mostra peca; "Lubrificantes" so' oleo)
+  const tipoFiltro = searchParams.get("tipo") || null;
   const { user } = useContext(AuthContext);
   const userInfo = useMemo(() => ({
     id: Number(user?.usuario_id || user?.id || 0) || null,
@@ -77,13 +90,13 @@ export default function SuprimentosContagemDia() {
     let rows = [];
     let dataAlvo = data;
 
-    if (loteId) {
-      // Filtra por lote_id
-      const res = await supabase
-        .from("suprimentos_contagens")
-        .select("*")
-        .eq("lote_id", loteId)
-        .order("created_at", { ascending: false });
+    if (loteIdsMesclados.length > 0) {
+      // Suporta 1 ou varios lote_ids (sessao mesclada)
+      let q = supabase.from("suprimentos_contagens").select("*");
+      q = loteIdsMesclados.length === 1
+        ? q.eq("lote_id", loteIdsMesclados[0])
+        : q.in("lote_id", loteIdsMesclados);
+      const res = await q.order("created_at", { ascending: false });
       rows = res.data || [];
       // descobre a data_alvo a partir da primeira contagem
       if (rows.length > 0) {
@@ -102,17 +115,21 @@ export default function SuprimentosContagemDia() {
         .order("created_at", { ascending: false });
       rows = res.data || [];
     }
+
+    // Filtro por tipo (split por aba)
+    if (tipoFiltro) {
+      rows = rows.filter((r) => String(r.tipo_contagem || "diaria") === tipoFiltro);
+    }
     setContagens(rows);
 
     // Pega o último job (por lote_id se houver, senão por data_alvo)
     let jobRes;
-    if (loteId) {
-      jobRes = await supabase
-        .from("suprimentos_bot_jobs")
-        .select("*")
-        .eq("lote_id", loteId)
-        .order("created_at", { ascending: false })
-        .limit(1);
+    if (loteIdsMesclados.length > 0) {
+      let jq = supabase.from("suprimentos_bot_jobs").select("*");
+      jq = loteIdsMesclados.length === 1
+        ? jq.eq("lote_id", loteIdsMesclados[0])
+        : jq.in("lote_id", loteIdsMesclados);
+      jobRes = await jq.order("created_at", { ascending: false }).limit(1);
     } else if (dataAlvo) {
       jobRes = await supabase
         .from("suprimentos_bot_jobs")
@@ -124,7 +141,7 @@ export default function SuprimentosContagemDia() {
     setBotJob(jobRes?.data?.[0] || null);
     setLoading(false);
   }
-  useEffect(() => { carregar(); }, [data, loteId]);
+  useEffect(() => { carregar(); }, [data, loteId, searchParams]);
 
   // Auto-refresh em tempo real (Realtime).
   useEffect(() => {

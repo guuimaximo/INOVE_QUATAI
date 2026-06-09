@@ -282,6 +282,34 @@ function BarcodeScanner({ open, onClose, onScan }) {
 }
 
 /* ─── Card de acuracidade do ultimo lote (home da Contagem mobile) ─────── */
+function BotStatusBadge({ job }) {
+  const status = job?.bot_status;
+  if (!status) return null;
+  let label = null;
+  let cls = "bg-slate-100 text-slate-600 border-slate-200";
+  if (status === "erro") {
+    label = "Bot falhou";
+    cls = "bg-rose-50 text-rose-700 border-rose-200";
+  } else if (status === "pendente") {
+    label = "Aguardando bot";
+    cls = "bg-amber-50 text-amber-800 border-amber-200";
+  } else if (status === "processando") {
+    label = "Processando";
+    cls = "bg-blue-50 text-blue-700 border-blue-200";
+  } else if (status === "concluido") {
+    return null; // sem badge — acuracidade ja' diz o resultado
+  }
+  if (!label) return null;
+  return (
+    <span
+      title={job?.bot_erro || ""}
+      className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold border ${cls}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function UltimaAcuracidadeCard({ loading, lotesPorTipo, lotesSemanais }) {
   if (loading) {
     return (
@@ -411,16 +439,26 @@ function ListaLotesMobile({ aba, loading, lotesPorTipo, lotesSemanais, onAbrir, 
     <div className="space-y-2">
       <p className="px-1 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{titulo}</p>
       {lista.map((lote) => {
-        const hora = new Date(lote.ultima || lote.primeira).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        const horaIni = new Date(lote.primeira).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        const horaFim = new Date(lote.ultima).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        const mergedCount = (lote.member_ids || []).length;
         return (
           <button
             key={`${tipo}-${lote.key}`}
             type="button"
-            onClick={() => onAbrir(lote)}
+            onClick={() => onAbrir(lote, tipo)}
             className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm active:scale-[0.99]"
           >
             <span>
-              <span className="block text-sm font-black text-slate-950">{formatDateBR(lote.data)} · {hora}</span>
+              <span className="flex flex-wrap items-center gap-2 text-sm font-black text-slate-950">
+                {formatDateBR(lote.data)} · {horaIni === horaFim ? horaIni : `${horaIni}–${horaFim}`}
+                {mergedCount > 1 ? (
+                  <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                    {mergedCount} sessões
+                  </span>
+                ) : null}
+                <BotStatusBadge job={lote} />
+              </span>
               <span className="text-xs font-semibold text-slate-500">
                 {lote.total} item(ns) · {lote.divergencias} divergencia(s)
                 {lote.acuracidade !== null ? ` · ${lote.acuracidade}%` : ""}
@@ -770,7 +808,7 @@ export default function SuprimentosContagem() {
 
   async function carregarLotes() {
     setLoadingLotes(true);
-    const [contagensRes, auditoriasRes] = await Promise.all([
+    const [contagensRes, auditoriasRes, botJobsRes] = await Promise.all([
       supabase.from("suprimentos_contagens")
         .select("id,codigo,quantidade,saldo_erp,diferenca,peca_id,created_at,contado_por_nome,tipo_contagem,lote_id")
         .order("created_at", { ascending: false })
@@ -780,9 +818,26 @@ export default function SuprimentosContagem() {
         .eq("tipo", "semanal")
         .order("data_fim", { ascending: false })
         .limit(50),
+      // Ultimos jobs do bot (de qualquer status) pra mostrar feedback por lote.
+      supabase.from("suprimentos_bot_jobs")
+        .select("id,lote_id,data_alvo,tipo_contagem,status,erro,created_at,concluido_em")
+        .order("created_at", { ascending: false })
+        .limit(500),
     ]);
     const contagens = contagensRes.data || [];
     setLotesSemanais(auditoriasRes.data || []);
+
+    // Mapa: ultimo job por (lote_id) e por (data_alvo+tipo) pra lotes legacy
+    const ultimoJobPorLote = new Map();
+    const ultimoJobPorDiaTipo = new Map();
+    (botJobsRes.data || []).forEach((j) => {
+      if (j.lote_id) {
+        if (!ultimoJobPorLote.has(j.lote_id)) ultimoJobPorLote.set(j.lote_id, j);
+      } else if (j.data_alvo) {
+        const k = `${j.data_alvo}|${j.tipo_contagem || "diaria"}`;
+        if (!ultimoJobPorDiaTipo.has(k)) ultimoJobPorDiaTipo.set(k, j);
+      }
+    });
 
     // Agrupa por (tipo, lote_id) -- contagens sem lote_id usam o dia como chave (fallback)
     const buckets = { diaria: new Map(), lubrificantes: new Map() };
@@ -825,14 +880,71 @@ export default function SuprimentosContagem() {
       byLote.set(key, cur);
     });
 
-    function finaliza(map) {
-      const arr = Array.from(map.values()).map((l) => ({
+    function attachBotStatus(l) {
+      const job = l.lote_id
+        ? ultimoJobPorLote.get(l.lote_id)
+        : ultimoJobPorDiaTipo.get(`${l.data}|${l.tipo}`);
+      // ja' converte contadores pra array agora (vai ser usado no merge)
+      return {
         ...l,
-        contadores: Array.from(l.contadores),
+        contadores: l.contadores instanceof Set ? Array.from(l.contadores) : (l.contadores || []),
+        bot_status: job?.status || null,    // null | pendente | processando | concluido | erro
+        bot_erro: job?.erro || null,
+        bot_concluido_em: job?.concluido_em || null,
+      };
+    }
+
+    // Merge por sessão: lotes consecutivos do MESMO contador com gap <= 30min
+    // (calculado entre o ultimo registro de um lote e o primeiro do proximo)
+    // viram uma unica linha visual. Mantemos lote_ids agrupados em member_ids
+    // pra a tela de detalhe abrir todos juntos.
+    function mergeSessoes(arr) {
+      const GAP_MS = 30 * 60 * 1000;
+      const sorted = [...arr].sort((a, b) => (a.primeira < b.primeira ? -1 : 1));
+      const result = [];
+      for (const l of sorted) {
+        const last = result[result.length - 1];
+        const sameDay = last && last.data === l.data;
+        const sameContador = last
+          && last.contadores.length === 1
+          && l.contadores.length === 1
+          && last.contadores[0] === l.contadores[0];
+        const gapMs = last
+          ? new Date(l.primeira).getTime() - new Date(last.ultima).getTime()
+          : Infinity;
+        if (last && sameDay && sameContador && gapMs >= 0 && gapMs <= GAP_MS) {
+          // merge
+          last.member_ids = [...(last.member_ids || [last.lote_id].filter(Boolean)), ...(l.lote_id ? [l.lote_id] : [])];
+          last.ultima = l.ultima;
+          last.total += l.total;
+          last.corretos += l.corretos;
+          last.divergencias += l.divergencias;
+          last.sem_cadastro += l.sem_cadastro;
+          last.sem_conferir += l.sem_conferir;
+          last.conferidos += l.conferidos;
+          // mantém pior bot_status (erro > pendente > nada > concluido)
+          const rank = (s) => (s === "erro" ? 3 : s === "pendente" || s === "processando" ? 2 : s === "concluido" ? 0 : 1);
+          if (rank(l.bot_status) > rank(last.bot_status)) {
+            last.bot_status = l.bot_status;
+            last.bot_erro = l.bot_erro;
+            last.bot_concluido_em = l.bot_concluido_em;
+          }
+        } else {
+          result.push({ ...l, member_ids: l.lote_id ? [l.lote_id] : [] });
+        }
+      }
+      return result;
+    }
+
+    function finaliza(map) {
+      const arrComStatus = Array.from(map.values()).map(attachBotStatus);
+      const arrMerged = mergeSessoes(arrComStatus);
+      const arr = arrMerged.map((l) => ({
+        ...l,
         acuracidade: l.conferidos > 0 ? Math.round((l.corretos / l.conferidos) * 1000) / 10 : null,
       }));
       arr.sort((a, b) => (a.ultima < b.ultima ? 1 : -1));
-      return arr.slice(0, 10);
+      return arr.slice(0, 20);
     }
 
     setLotesPorTipo({
@@ -842,9 +954,14 @@ export default function SuprimentosContagem() {
     setLoadingLotes(false);
   }
 
-  function abrirLote(lote) {
-    if (lote.lote_id) navigate(`/suprimentos/contagem/lote/${lote.lote_id}`);
-    else navigate(`/suprimentos/contagem/dia/${lote.data}`);
+  function abrirLote(lote, tipoFiltro = null) {
+    const ids = Array.isArray(lote.member_ids) ? lote.member_ids.filter(Boolean) : [];
+    const qsParts = [];
+    if (ids.length > 1) qsParts.push(`lotes=${encodeURIComponent(ids.join(","))}`);
+    if (tipoFiltro) qsParts.push(`tipo=${encodeURIComponent(tipoFiltro)}`);
+    const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
+    if (ids[0]) navigate(`/suprimentos/contagem/lote/${ids[0]}${qs}`);
+    else navigate(`/suprimentos/contagem/dia/${lote.data}${qs}`);
   }
 
   async function excluirLote(lote) {
@@ -1302,13 +1419,27 @@ export default function SuprimentosContagem() {
                 <tbody>
                   {(lotesPorTipoFiltrados[tab] || []).map((l) => {
                     const hora = new Date(l.ultima || l.primeira).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+                    const horaIni = new Date(l.primeira).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+                    const horaFim = new Date(l.ultima).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+                    const mergedCount = (l.member_ids || []).length;
                     return (
                     <tr
                       key={`${tab}-${l.key}`}
-                      onClick={() => abrirLote(l)}
+                      onClick={() => abrirLote(l, tab)}
                       className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60"
                     >
-                      <td className="px-4 py-3 font-semibold text-slate-900">{formatDateBR(l.data)} <span className="ml-1 text-xs font-normal text-slate-500">{hora}</span></td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">
+                        {formatDateBR(l.data)}
+                        <span className="ml-1 text-xs font-normal text-slate-500">
+                          {horaIni === horaFim ? hora : `${horaIni}–${horaFim}`}
+                        </span>
+                        {mergedCount > 1 ? (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                            {mergedCount} sessões
+                          </span>
+                        ) : null}
+                        <BotStatusBadge job={l} />
+                      </td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-700">{l.total}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{l.conferidos}</td>
                       <td className="px-4 py-3 text-right">

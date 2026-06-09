@@ -2,6 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import DateRangePopover from "../../components/DateRangePopover";
+import {
+  FaSearch,
+  FaFilter,
+  FaClock,
+  FaExclamationCircle,
+  FaCheckCircle,
+  FaFolderOpen,
+  FaTools,
+  FaEye,
+} from "react-icons/fa";
 
 const VIEW = {
   OPEN_ONLY: "open_only",
@@ -35,19 +45,13 @@ export default function EstruturaFisicaCentral() {
     status: "",
   });
 
-  const [sort, setSort] = useState({
-    key: "default",
-    dir: "asc",
-  });
+  const [sort, setSort] = useState({ key: "default", dir: "asc" });
 
   const [cards, setCards] = useState({
     total: 0,
     pendentes: 0,
     atrasadas: 0,
-    emAnalise: 0,
-    emAndamento: 0,
     concluidas: 0,
-    canceladas: 0,
   });
 
   function isAtrasada(row) {
@@ -133,10 +137,7 @@ export default function EstruturaFisicaCentral() {
         total: arr.length,
         pendentes: arr.filter((x) => !isFinalizada(x.status)).length,
         atrasadas: arr.filter((x) => isAtrasada(x)).length,
-        emAnalise: arr.filter((x) => x.status === "EM_ANALISE").length,
-        emAndamento: arr.filter((x) => x.status === "EM_ANDAMENTO").length,
         concluidas: arr.filter((x) => x.status === "CONCLUIDO").length,
-        canceladas: arr.filter((x) => x.status === "CANCELADO").length,
       });
     } catch (e) {
       console.error("Erro ao carregar cards:", e);
@@ -271,63 +272,71 @@ export default function EstruturaFisicaCentral() {
     return <span className={`${base} bg-slate-100 text-slate-700 border-slate-300`}>{row?.status || "-"}</span>;
   }
 
-  const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all";
-
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6 bg-slate-50 min-h-screen">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="min-h-screen space-y-5 bg-slate-50 p-4 md:p-6 text-slate-800">
+      {/* Hero */}
+      <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Controle de Manutenção
+          <div className="text-xs font-black uppercase tracking-[0.24em] text-orange-600">
+            Estrutura Física
+          </div>
+          <h1 className="mt-3 flex items-center gap-3 text-3xl font-black text-slate-900">
+            <span className="rounded-2xl bg-orange-50 p-3 text-orange-600 shadow-sm">
+              <FaTools />
+            </span>
+            Central de Manutenção
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Gerenciamento da estrutura física</p>
+          <p className="mt-2 text-sm text-slate-600">
+            Acompanhe pendências, atrasos por SLA e conclusões dos chamados de estrutura.
+          </p>
         </div>
 
-        <div className="inline-flex bg-slate-200/50 p-1 rounded-lg border border-slate-200">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setViewMode(VIEW.ALL)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+            className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-wide transition ${
               viewMode === VIEW.ALL
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-slate-900 text-white shadow-sm"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
-            Ver Tudo
+            Ver tudo
           </button>
+
           <button
             onClick={() => setViewMode(VIEW.OPEN_ONLY)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+            className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-wide transition ${
               viewMode === VIEW.OPEN_ONLY
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-orange-600 text-white shadow-sm"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
-            Pendentes e Atrasadas
+            Pendentes e atrasadas
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
-        <Card label="Total" value={cards.total} color="text-slate-900" />
-        <Card label="Pendentes" value={cards.pendentes} color="text-yellow-600" />
-        <Card label="Atrasadas" value={cards.atrasadas} color="text-red-600" />
-        <Card label="Em análise" value={cards.emAnalise} color="text-blue-600" />
-        <Card label="Em andamento" value={cards.emAndamento} color="text-orange-600" />
-        <Card label="Concluídas" value={cards.concluidas} color="text-green-600" />
-        <Card label="Canceladas" value={cards.canceladas} color="text-slate-500" />
-      </div>
+      {/* Filtros */}
+      <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="text-lg font-black text-slate-900">Filtros da central</h2>
+          <p className="text-sm text-slate-500">
+            Refine a visualização por texto, período, setor, prioridade e status.
+          </p>
+        </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">Filtros</h2>
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+          <div className="relative md:col-span-2">
+            <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar (pedido, solicitante, setor...)"
+              value={filtros.busca}
+              onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-400 focus:bg-white"
+            />
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <input
-            type="text"
-            placeholder="Buscar pedido ou setor..."
-            value={filtros.busca}
-            onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-            className={inputClass}
-          />
           <DateRangePopover
             from={filtros.dataInicio}
             to={filtros.dataFim}
@@ -335,59 +344,200 @@ export default function EstruturaFisicaCentral() {
             onChange={({ from, to }) => setFiltros((current) => ({ ...current, dataInicio: from, dataFim: to }))}
             onClear={() => setFiltros((current) => ({ ...current, dataInicio: "", dataFim: "" }))}
           />
-          <select
-            value={filtros.setor}
-            onChange={(e) => setFiltros({ ...filtros, setor: e.target.value })}
-            className={inputClass}
-          >
-            <option value="">Todos os Setores</option>
-            {setores.map((s) => (
-              <option key={s.id} value={s.nome}>{s.nome}</option>
-            ))}
-          </select>
-          <select
-            value={filtros.prioridade}
-            onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
-            className={inputClass}
-          >
-            <option value="">Prioridades</option>
-            <option value="URGENTE">Urgente</option>
-            <option value="ALTA">Alta</option>
-            <option value="MEDIA">Média</option>
-            <option value="BAIXA">Baixa</option>
-          </select>
-          <select
-            value={filtros.status}
-            onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
-            className={inputClass}
-          >
-            <option value="">Status</option>
-            <option value="PENDENTE">Pendente</option>
-            <option value="EM_ANALISE">Em Análise</option>
-            <option value="EM_ANDAMENTO">Em Andamento</option>
-            <option value="CONCLUIDO">Concluído</option>
-            <option value="CANCELADO">Cancelado</option>
-          </select>
+
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.setor}
+              onChange={(e) => setFiltros({ ...filtros, setor: e.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-400 focus:bg-white"
+            >
+              <option value="">Todos os Setores</option>
+              {setores.map((s) => (
+                <option key={s.id} value={s.nome}>
+                  {s.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.prioridade}
+              onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-400 focus:bg-white"
+            >
+              <option value="">Todas as Prioridades</option>
+              <option value="URGENTE">Urgente</option>
+              <option value="ALTA">Alta</option>
+              <option value="MEDIA">Média</option>
+              <option value="BAIXA">Baixa</option>
+            </select>
+          </div>
+
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-slate-400" />
+            <select
+              value={filtros.status}
+              onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-400 focus:bg-white"
+            >
+              <option value="">Todos os Status</option>
+              <option value="PENDENTE">Pendente</option>
+              <option value="EM_ANALISE">Em Análise</option>
+              <option value="EM_ANDAMENTO">Em Andamento</option>
+              <option value="CONCLUIDO">Concluído</option>
+              <option value="CANCELADO">Cancelado</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-5">
+        <div className="flex justify-end gap-2 flex-wrap">
           <button
             onClick={limparFiltros}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+            className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
           >
             Limpar
           </button>
           <button
             onClick={aplicar}
             disabled={loading}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 shadow-sm disabled:opacity-50 transition-colors"
+            className="rounded-2xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700 disabled:bg-slate-400"
           >
-            {loading ? "Aplicando..." : "Aplicar Filtros"}
+            {loading ? "Aplicando..." : "Aplicar"}
           </button>
+        </div>
+
+        <div className="text-xs text-slate-500">
+          Ordenação padrão: <b>Atrasadas</b> → <b>Prioridade</b> → <b>Mais recentes</b>.
+          Clique no cabeçalho da tabela para ordenar; clique novamente para inverter; na
+          terceira volta ao padrão.
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-slate-700">
+            Regra de SLA para considerar como <span className="text-red-700">ATRASADA</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+            <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 font-bold">
+              Urgente: 1 dia
+            </span>
+            <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-bold">
+              Alta: 3 dias
+            </span>
+            <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-bold">
+              Média: 7 dias
+            </span>
+            <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 font-bold">
+              Baixa: 15 dias
+            </span>
+            <span className="text-slate-500">
+              (Atraso é calculado quando o <b>prazo estimado</b> está vencido e o
+              status é diferente de Concluído/Cancelado)
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      {/* Cards de resumo */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardResumo
+          titulo="Total"
+          valor={cards.total}
+          icone={<FaFolderOpen className="text-4xl text-blue-50" />}
+          border="border-l-blue-500"
+        />
+        <CardResumo
+          titulo="Pendentes"
+          valor={cards.pendentes}
+          icone={<FaClock className="text-4xl text-yellow-50" />}
+          border="border-l-yellow-500"
+        />
+        <CardResumo
+          titulo="Concluídas"
+          valor={cards.concluidas}
+          icone={<FaCheckCircle className="text-4xl text-emerald-50" />}
+          border="border-l-emerald-500"
+        />
+        <CardResumo
+          titulo="Atrasadas (SLA)"
+          valor={cards.atrasadas}
+          icone={<FaExclamationCircle className="text-4xl text-red-50" />}
+          border="border-l-red-500"
+        />
+      </div>
+
+      {/* Mobile cards */}
+      <div className="space-y-3 lg:hidden">
+        {loading ? (
+          <div className="rounded-3xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
+            Carregando...
+          </div>
+        ) : rowsOrdenadas.length === 0 ? (
+          <div className="rounded-3xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
+            Nenhum registro encontrado.
+          </div>
+        ) : (
+          rowsOrdenadas.map((row) => {
+            const finalizada = isFinalizada(row?.status);
+            const atrasada = isAtrasada(row);
+            return (
+              <div key={row.id} className={`rounded-3xl border bg-white p-4 shadow-sm ${atrasada ? "border-red-200" : "border-slate-200"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-slate-900">
+                      #{row.numero_pedido} — {row.nome_solicitante || "-"}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {row.data_solicitacao
+                        ? new Date(`${row.data_solicitacao}T00:00:00`).toLocaleDateString("pt-BR")
+                        : "-"}
+                    </div>
+                  </div>
+                  <div>{badgeStatus(row)}</div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Setor
+                    </div>
+                    <div className="mt-1 text-slate-700">{row.setor || "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Prioridade
+                    </div>
+                    <div className="mt-1">{badgePrioridade(row.prioridade)}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => navigate(`/estrutura-fisica/consultar/${row.id}`)}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-slate-800 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-900"
+                  >
+                    <FaEye size={13} /> Consultar
+                  </button>
+                  {!finalizada && (
+                    <button
+                      onClick={() => navigate(`/estrutura-fisica/tratar/${row.id}`)}
+                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-orange-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-orange-700"
+                    >
+                      Dar baixa
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Tabela desktop */}
+      <div className="hidden lg:block bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-xs font-semibold tracking-wider">
@@ -410,38 +560,41 @@ export default function EstruturaFisicaCentral() {
                   </td>
                 </tr>
               ) : (
-                rowsOrdenadas.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-4 py-3 font-bold text-slate-700">#{row.numero_pedido}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {row.data_solicitacao
-                        ? new Date(`${row.data_solicitacao}T00:00:00`).toLocaleDateString("pt-BR")
-                        : "-"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-700 font-medium">{row.nome_solicitante || "-"}</td>
-                    <td className="px-4 py-3 text-slate-600">{row.setor || "-"}</td>
-                    <td className="px-4 py-3">{badgePrioridade(row.prioridade)}</td>
-                    <td className="px-4 py-3">{badgeStatus(row)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => navigate(`/estrutura-fisica/consultar/${row.id}`)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-                        >
-                          Consultar
-                        </button>
-                        {!isFinalizada(row.status) && (
+                rowsOrdenadas.map((row) => {
+                  const atrasada = isAtrasada(row);
+                  return (
+                    <tr key={row.id} className={`hover:bg-slate-50/80 transition-colors ${atrasada ? "bg-red-50/30" : ""}`}>
+                      <td className="px-4 py-3 font-bold text-slate-700">#{row.numero_pedido}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {row.data_solicitacao
+                          ? new Date(`${row.data_solicitacao}T00:00:00`).toLocaleDateString("pt-BR")
+                          : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 font-medium">{row.nome_solicitante || "-"}</td>
+                      <td className="px-4 py-3 text-slate-600">{row.setor || "-"}</td>
+                      <td className="px-4 py-3">{badgePrioridade(row.prioridade)}</td>
+                      <td className="px-4 py-3">{badgeStatus(row)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => navigate(`/estrutura-fisica/tratar/${row.id}`)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-colors"
+                            onClick={() => navigate(`/estrutura-fisica/consultar/${row.id}`)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
                           >
-                            Dar Baixa
+                            Consultar
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {!isFinalizada(row.status) && (
+                            <button
+                              onClick={() => navigate(`/estrutura-fisica/tratar/${row.id}`)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 shadow-sm transition-colors"
+                            >
+                              Dar Baixa
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -451,11 +604,27 @@ export default function EstruturaFisicaCentral() {
   );
 }
 
-function Card({ label, value, color }) {
+function CardResumo({ titulo, valor, icone, border }) {
+  const tone =
+    border?.includes("blue")
+      ? "from-blue-50 to-cyan-50 border-blue-200 text-blue-700"
+      : border?.includes("yellow")
+      ? "from-amber-50 to-orange-50 border-amber-200 text-amber-700"
+      : border?.includes("emerald")
+      ? "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700"
+      : border?.includes("red")
+      ? "from-rose-50 to-pink-50 border-rose-200 text-rose-700"
+      : "from-slate-50 to-gray-50 border-slate-200 text-slate-700";
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center">
-      <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">{label}</span>
-      <span className={`mt-1 text-3xl font-black ${color}`}>{value}</span>
+    <div className={`min-h-[124px] rounded-3xl border bg-gradient-to-br p-4 shadow-sm ${tone}`}>
+      <div className="flex h-full items-start justify-between gap-3">
+        <div className="flex h-full min-w-0 flex-col justify-between">
+          <p className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{titulo}</p>
+          <p className="mt-3 text-3xl font-black text-slate-900">{valor}</p>
+        </div>
+        <div className="text-2xl opacity-80">{icone}</div>
+      </div>
     </div>
   );
 }
@@ -466,7 +635,7 @@ function Th({ children, onClick, className = "" }) {
       onClick={onClick}
       className={`px-4 py-3 font-semibold whitespace-nowrap cursor-pointer select-none hover:text-slate-700 transition-colors ${className}`}
     >
-      <div className={`flex items-center gap-1 ${className.includes('text-right') ? 'justify-end' : ''}`}>
+      <div className={`flex items-center gap-1 ${className.includes("text-right") ? "justify-end" : ""}`}>
         {children}
       </div>
     </th>

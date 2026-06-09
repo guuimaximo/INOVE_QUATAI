@@ -11,7 +11,10 @@
 
 begin;
 
-create or replace view public.vw_suprimentos_lotes_pendentes as
+-- View tem reorder de colunas: precisa drop antes de re-criar.
+drop view if exists public.vw_suprimentos_lotes_pendentes;
+
+create view public.vw_suprimentos_lotes_pendentes as
 with grupos as (
   select
     c.lote_id,

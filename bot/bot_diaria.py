@@ -11,7 +11,7 @@ import os
 import sys
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict
 
@@ -184,13 +184,138 @@ def carregar_contagens_do_lote(lote_id: str) -> list:
     rows = supa_get(
         "suprimentos_contagens",
         {
-            "select": "id,codigo,quantidade,saldo_erp,diferenca,lote_id,created_at",
+            "select": "id,codigo,quantidade,saldo_erp,diferenca,lote_id,created_at,tipo_contagem,contado_por_nome",
             "lote_id": f"eq.{lote_id}",
             "order": "created_at.asc",
             "limit": "10000",
         },
     )
     return rows
+
+
+def carregar_contagens_dos_lotes(lote_ids: list[str]) -> list:
+    ids = [str(lote_id) for lote_id in lote_ids if lote_id]
+    if not ids:
+        return []
+    rows = supa_get(
+        "suprimentos_contagens",
+        {
+            "select": "id,codigo,quantidade,saldo_erp,diferenca,lote_id,created_at,tipo_contagem,contado_por_nome",
+            "lote_id": f"in.({','.join(ids)})",
+            "order": "created_at.asc",
+            "limit": "10000",
+        },
+    )
+    return rows
+
+
+def _parse_ts(ts: str) -> datetime:
+    raw = str(ts or "").replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        dt = datetime.strptime(str(ts)[:19], "%Y-%m-%dT%H:%M:%S")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _dia_local(ts: str) -> str:
+    return _parse_ts(ts).astimezone(timezone(timedelta(hours=-3))).date().isoformat()
+
+
+def _bucket_lote(rows: list[dict]) -> dict | None:
+    if not rows:
+        return None
+    ordenadas = sorted(rows, key=lambda row: row.get("created_at") or "")
+    contadores = {row.get("contado_por_nome") for row in ordenadas if row.get("contado_por_nome")}
+    return {
+        "lote_id": ordenadas[0].get("lote_id"),
+        "data": _dia_local(ordenadas[0].get("created_at")),
+        "tipo": str(ordenadas[0].get("tipo_contagem") or "diaria").lower(),
+        "primeira": ordenadas[0].get("created_at"),
+        "ultima": ordenadas[-1].get("created_at"),
+        "contadores": contadores,
+        "total": len(ordenadas),
+    }
+
+
+def _mesma_sessao(lote_anterior: dict, lote_atual: dict) -> bool:
+    if not lote_anterior or not lote_atual:
+        return False
+    if lote_anterior["data"] != lote_atual["data"]:
+        return False
+    if lote_anterior["tipo"] != lote_atual["tipo"]:
+        return False
+    if len(lote_anterior["contadores"]) != 1 or len(lote_atual["contadores"]) != 1:
+        return False
+    if next(iter(lote_anterior["contadores"])) != next(iter(lote_atual["contadores"])):
+        return False
+    gap = _parse_ts(lote_atual["primeira"]) - _parse_ts(lote_anterior["ultima"])
+    return timedelta(0) <= gap <= timedelta(minutes=30)
+
+
+def descobrir_lote_ids_da_sessao(lote_id: str) -> list[str]:
+    base_rows = carregar_contagens_do_lote(lote_id)
+    base = _bucket_lote(base_rows)
+    if not base:
+        return [str(lote_id)]
+
+    inicio = f"{base['data']}T00:00:00-03:00"
+    fim = f"{base['data']}T23:59:59.999-03:00"
+    rows = supa_get(
+        "suprimentos_contagens",
+        {
+            "select": "lote_id,created_at,tipo_contagem,contado_por_nome",
+            "created_at": f"gte.{inicio}",
+            "and": f"(created_at.lte.{fim})",
+            "tipo_contagem": f"eq.{base['tipo']}",
+            "order": "created_at.asc",
+            "limit": "10000",
+        },
+    )
+
+    por_lote: dict[str, list[dict]] = {}
+    for row in rows:
+        row_lote_id = row.get("lote_id")
+        if row_lote_id:
+            por_lote.setdefault(str(row_lote_id), []).append(row)
+
+    buckets = [_bucket_lote(lote_rows) for lote_rows in por_lote.values()]
+    buckets = [bucket for bucket in buckets if bucket]
+    buckets.sort(key=lambda bucket: bucket["primeira"])
+    idx = next((i for i, bucket in enumerate(buckets) if str(bucket["lote_id"]) == str(lote_id)), -1)
+    if idx < 0:
+        return [str(lote_id)]
+
+    inicio_idx = idx
+    while inicio_idx > 0 and _mesma_sessao(buckets[inicio_idx - 1], buckets[inicio_idx]):
+        inicio_idx -= 1
+
+    fim_idx = idx
+    while fim_idx + 1 < len(buckets) and _mesma_sessao(buckets[fim_idx], buckets[fim_idx + 1]):
+        fim_idx += 1
+
+    lote_ids = [str(bucket["lote_id"]) for bucket in buckets[inicio_idx:fim_idx + 1]]
+    total = sum(bucket["total"] for bucket in buckets[inicio_idx:fim_idx + 1])
+    _log("lotes", f"sessao expandida: {len(lote_ids)} lote(s), {total} contagem(ns)")
+    return lote_ids or [str(lote_id)]
+
+
+def lote_ids_do_job(job: dict) -> list[str]:
+    resultado = job.get("resultado_json") or {}
+    lote_ids = resultado.get("lote_ids") if isinstance(resultado, dict) else None
+    if isinstance(lote_ids, list):
+        ids = [str(lote_id) for lote_id in lote_ids if lote_id]
+    else:
+        ids = []
+    lote_id = job.get("lote_id")
+    if ids:
+        if lote_id and str(lote_id) not in ids:
+            ids.insert(0, str(lote_id))
+    elif lote_id:
+        ids = descobrir_lote_ids_da_sessao(str(lote_id))
+    return ids
 
 
 def _log(step: str, msg: str = ""):
@@ -266,13 +391,14 @@ def processar_job(job: dict):
     job_id = job["id"]
     data_alvo = job["data_alvo"]
     lote_id = job.get("lote_id")
-    escopo = f"lote_id={lote_id}" if lote_id else f"dia_inteiro={data_alvo}"
+    lote_ids = lote_ids_do_job(job)
+    escopo = f"lote_ids={len(lote_ids)}" if lote_ids else f"dia_inteiro={data_alvo}"
     _log("STEP 1", f"job id={job_id}  data_alvo={data_alvo}  escopo={escopo}")
     marcar_processando(job_id)
     _log("STEP 2", "marcado como 'processando' no Supabase")
 
-    if lote_id:
-        contagens = carregar_contagens_do_lote(lote_id)
+    if lote_ids:
+        contagens = carregar_contagens_dos_lotes(lote_ids)
         # se o job tem lote_id mas data_alvo nao foi setado, descobre a partir da contagem
         if contagens and not data_alvo:
             data_alvo = contagens[0]["created_at"][:10]
@@ -301,6 +427,7 @@ def processar_job(job: dict):
     resultado["codigos_unicos_no_erp"] = len(saldos)
     resultado["contagens_processadas"] = len(contagens)
     resultado["lote_id"] = lote_id
+    resultado["lote_ids"] = lote_ids
     resultado["escopo"] = escopo
     _log("STEP 6", "marcando job como 'concluido'")
     marcar_concluido(job_id, resultado)

@@ -236,6 +236,7 @@ export default function SuprimentosContagemDia() {
         tipo_contagem: "diaria",
         data_alvo: data,
         lote_id: loteId || null,
+        resultado_json: loteIdsMesclados.length > 1 ? { lote_ids: loteIdsMesclados } : null,
         status: "pendente",
         criado_por_id: userInfo.id,
         criado_por_nome: userInfo.nome,

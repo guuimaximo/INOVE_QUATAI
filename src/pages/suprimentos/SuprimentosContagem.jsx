@@ -31,6 +31,14 @@ import { formatDateBR, formatDateTimeBR } from "./suprimentosShared";
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
+const BOT_JOB_ATIVO_MAX_MS = 45 * 60 * 1000;
+
+function botJobAindaAtivo(job) {
+  const referencia = job?.updated_at || job?.iniciado_em || job?.created_at;
+  const quando = referencia ? new Date(referencia).getTime() : 0;
+
+  return Boolean(quando && Date.now() - quando < BOT_JOB_ATIVO_MAX_MS);
+}
 
 function Field({ label, required = false, children }) {
   return (
@@ -602,20 +610,20 @@ export default function SuprimentosContagem() {
       if (loteIdParam) {
         const { data: jaTem } = await supabase
           .from("suprimentos_bot_jobs")
-          .select("id,status")
+          .select("id,status,created_at,updated_at,iniciado_em")
           .eq("lote_id", loteIdParam)
           .in("status", ["pendente", "processando"])
           .limit(1);
-        if (jaTem && jaTem.length > 0) return;
+        if (jaTem?.some(botJobAindaAtivo)) return;
       } else if (dataAlvo) {
         const { data: jaTem } = await supabase
           .from("suprimentos_bot_jobs")
-          .select("id,status")
+          .select("id,status,created_at,updated_at,iniciado_em")
           .eq("data_alvo", dataAlvo)
           .eq("tipo_contagem", tipo)
           .in("status", ["pendente", "processando"])
           .limit(1);
-        if (jaTem && jaTem.length > 0) return;
+        if (jaTem?.some(botJobAindaAtivo)) return;
       }
 
       // 2) Insere o job (rede de segurança — o cron de 5 min pega mesmo sem GitHub)

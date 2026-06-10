@@ -38,6 +38,7 @@ HEADERS = {
     "Content-Type": "application/json",
     "Prefer": "return=representation",
 }
+JOB_PROCESSANDO_MAX_MINUTOS = 45
 
 
 def supa_get(path: str, params: dict = None) -> list:
@@ -71,6 +72,39 @@ def proximo_job() -> dict:
     return rows[0] if rows else None
 
 
+def recuperar_jobs_processando_travados() -> int:
+    """Volta para pendente qualquer job que ficou processando tempo demais."""
+    limite = (datetime.now(timezone.utc) - timedelta(minutes=JOB_PROCESSANDO_MAX_MINUTOS)).isoformat()
+    rows = supa_get(
+        "suprimentos_bot_jobs",
+        {
+            "select": "id,updated_at,iniciado_em",
+            "status": "eq.processando",
+            "lote_id": "not.is.null",
+            "updated_at": f"lt.{limite}",
+            "order": "updated_at.asc",
+            "limit": 25,
+        },
+    )
+    recuperados = 0
+    for job in rows:
+        try:
+            supa_patch(
+                "suprimentos_bot_jobs",
+                {"id": f"eq.{job['id']}"},
+                {
+                    "status": "pendente",
+                    "erro": f"Job recuperado automaticamente apos mais de {JOB_PROCESSANDO_MAX_MINUTOS} min em processando.",
+                },
+            )
+            recuperados += 1
+        except Exception as exc:
+            print(f"[bot] nao consegui recuperar job travado {job.get('id')}: {exc}")
+    if recuperados:
+        print(f"[bot] {recuperados} job(s) travado(s) voltaram para pendente.")
+    return recuperados
+
+
 def lotes_pendentes_view() -> list:
     """Lotes com contagens lancadas mas sem job concluido / pendente.
 
@@ -94,25 +128,31 @@ def lotes_pendentes_view() -> list:
 
 
 def enfileirar_lotes_da_view() -> int:
-    """Para cada lote da view, cria um job pendente. Retorna quantidade criada."""
+    """Cria um job por sessao pendente, evitando duplicar lotes mesclados."""
     lotes = lotes_pendentes_view()
     criados = 0
+    lotes_cobertos = set()
     for lote in lotes:
+        lote_id = lote.get("lote_id")
+        if not lote_id or lote_id in lotes_cobertos:
+            continue
         try:
+            lote_ids_sessao = descobrir_lote_ids_da_sessao(lote_id) or [lote_id]
+            lotes_cobertos.update(lote_ids_sessao)
             supa_insert(
                 "suprimentos_bot_jobs",
                 {
                     "tipo": "conferencia_dia",
                     "tipo_contagem": lote.get("tipo_contagem") or "diaria",
                     "data_alvo": lote.get("data_alvo"),
-                    "lote_id": lote.get("lote_id"),
+                    "lote_id": lote_id,
                     "status": "pendente",
                     "criado_por_nome": "Bot (recuperacao via view)",
                 },
             )
             criados += 1
         except Exception as exc:
-            print(f"[bot] nao consegui enfileirar lote {lote.get('lote_id')}: {exc}")
+            print(f"[bot] nao consegui enfileirar lote {lote_id}: {exc}")
     if criados:
         print(f"[bot] {criados} lote(s) pendente(s) enfileirado(s) a partir da view.")
     return criados
@@ -485,6 +525,7 @@ def main():
     # Antes de comecar a varrer a fila, da uma olhada na view e enfileira
     # qualquer lote que ficou orfao (app finalizou mas o dispatch nao chegou).
     try:
+        recuperar_jobs_processando_travados()
         enfileirar_lotes_da_view()
     except Exception:
         traceback.print_exc()

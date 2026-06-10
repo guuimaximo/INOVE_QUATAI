@@ -120,22 +120,73 @@ function exportarCSV(dados, nomeArquivo) {
     return;
   }
   
-  const cabecalho = ["ID", "Data Avaria", "Veículo (Prefixo)", "Motorista/Responsável", "Origem", "Status Cobrança", "Valor Orçado", "Valor Cobrado"];
-  
+  const fmtData = (v) => {
+    if (!v) return "";
+    const iso = String(v).includes("T") ? v : `${v}T00:00:00`;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR");
+  };
+  const fmtDataHora = (v) => {
+    if (!v) return "";
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("pt-BR");
+  };
+  const num = (v) => Number(v || 0).toFixed(2).replace(".", ",");
+  const dias = (a, b) => {
+    if (!a || !b) return "";
+    const da = new Date(a);
+    const db = new Date(b);
+    if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return "";
+    return String(Math.round((db - da) / (1000 * 60 * 60 * 24)));
+  };
+
+  const cabecalho = [
+    "ID",
+    "Data Avaria",
+    "Data Lançamento",
+    "Data Cobrança",
+    "Dias até cobrança",
+    "Prefixo",
+    "Placa",
+    "Motorista",
+    "Origem",
+    "Origem Cobrança",
+    "Status",
+    "Status Cobrança",
+    "Valor Orçado",
+    "Valor Cobrado",
+    "Descrição",
+    "Aprovado por",
+    "Data Aprovação",
+  ];
+
   const linhas = dados.map((row) => {
-    const dataFmt = row.dataAvaria ? new Date(row.dataAvaria.includes("T") ? row.dataAvaria : `${row.dataAvaria}T00:00:00`).toLocaleDateString("pt-BR") : "";
-    const motoristaLimpo = String(row.motoristaId || "").includes(' - ') ? String(row.motoristaId).split(' - ')[1].trim() : String(row.motoristaId || "");
-    
+    const dataCob = row.data_cobranca || row.cobrado_em || "";
+    const motoristaLimpo = String(row.motoristaId || "").includes(" - ")
+      ? String(row.motoristaId).split(" - ")[1].trim()
+      : String(row.motoristaId || "");
+
     return [
       row.id,
-      dataFmt,
+      fmtData(row.dataAvaria),
+      fmtDataHora(row.created_at),
+      fmtData(dataCob),
+      dias(row.dataAvaria, dataCob),
       row.prefixo || "",
+      row.placa || "",
       motoristaLimpo,
       normalizeOrigem(row),
+      row.origem_cobranca || "",
+      row.status || "",
       normalizeStatusCobranca(row),
-      Number(row.valor_total_orcamento || 0).toFixed(2).replace(".", ","),
-      Number(row.valor_cobrado || 0).toFixed(2).replace(".", ",")
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(";");
+      num(row.valor_total_orcamento),
+      num(row.valor_cobrado),
+      String(row.descricao || "").replace(/\s+/g, " ").trim(),
+      row.aprovado_por || "",
+      fmtDataHora(row.aprovado_em),
+    ]
+      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+      .join(";");
   });
 
   const csv = [cabecalho.join(";"), ...linhas].join("\n");
@@ -786,7 +837,6 @@ export default function AvariasResumo() {
               setDirSort("desc");
             }
           }}
-          onExportar={() => exportarCSV(rows, `Avarias_Detalhes_${dataInicio}_a_${dataFim}`)}
         />
       )}
 
@@ -834,7 +884,6 @@ function AvariasDetalhes({
   buscaDet, setBuscaDet,
   statusCobDet, setStatusCobDet,
   colunaSort, dirSort, onSort,
-  onExportar,
 }) {
   const rowsFiltradas = useMemo(() => {
     const busca = String(buscaDet || "").trim().toLowerCase();
@@ -953,12 +1002,6 @@ function AvariasDetalhes({
               </button>
             )}
           </div>
-          <button
-            onClick={onExportar}
-            className="self-end inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition shadow-sm"
-          >
-            <FaDownload /> Exportar planilha
-          </button>
         </div>
 
         {/* Indicadores */}

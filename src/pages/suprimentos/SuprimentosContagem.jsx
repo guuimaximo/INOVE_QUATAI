@@ -321,7 +321,7 @@ function BotStatusBadge({ job }) {
 function UltimaAcuracidadeCard({ loading, lotesPorTipo, lotesSemanais }) {
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-500 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-500 shadow-sm">
         Carregando ultima apuracao...
       </div>
     );
@@ -346,7 +346,7 @@ function UltimaAcuracidadeCard({ loading, lotesPorTipo, lotesSemanais }) {
 
   if (!ultimo) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-center text-sm font-semibold text-slate-500">
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-3 text-center text-xs font-semibold text-slate-500">
         Ainda nao ha contagens apuradas.
       </div>
     );
@@ -366,17 +366,17 @@ function UltimaAcuracidadeCard({ loading, lotesPorTipo, lotesSemanais }) {
   const tipoLabel = ultimo.tipo === "lubrificantes" ? "Lubrificantes" : ultimo.tipo === "semanal" ? "Semanal" : "Diaria";
 
   return (
-    <div className={`rounded-2xl border p-4 shadow-sm ${toneClass}`}>
-      <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-80">Ultima apuracao</p>
-      <div className="mt-1 flex items-end justify-between gap-4">
+    <div className={`rounded-2xl border p-3 shadow-sm ${toneClass}`}>
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-80">Ultima apuracao</p>
+      <div className="mt-1 flex items-end justify-between gap-3">
         <div>
-          <p className="text-3xl font-black leading-none">{acuracidadeLabel}</p>
-          <p className="mt-1 text-xs font-semibold opacity-90">
+          <p className="text-xl font-black leading-none">{acuracidadeLabel}</p>
+          <p className="mt-1 text-[11px] font-semibold opacity-90">
             {tipoLabel} · {formatDateBR(ultimo.data)}
           </p>
         </div>
         {ultimo.total ? (
-          <p className="text-xs font-semibold opacity-80">{ultimo.total} item(ns)</p>
+          <p className="text-[11px] font-semibold opacity-80">{ultimo.total} item(ns)</p>
         ) : null}
       </div>
     </div>
@@ -392,7 +392,7 @@ function ListaLotesMobile({ aba, loading, lotesPorTipo, lotesSemanais, onAbrir, 
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-500 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-500 shadow-sm">
         Carregando...
       </div>
     );
@@ -401,7 +401,7 @@ function ListaLotesMobile({ aba, loading, lotesPorTipo, lotesSemanais, onAbrir, 
   if (aba === "semanal") {
     if (!lotesSemanais.length) {
       return (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm font-semibold text-slate-500">
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-center text-xs font-semibold text-slate-500">
           Sem auditorias semanais.
         </div>
       );
@@ -416,7 +416,7 @@ function ListaLotesMobile({ aba, loading, lotesPorTipo, lotesSemanais, onAbrir, 
               key={a.id}
               type="button"
               onClick={() => onAbrirSemanal(a)}
-              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm active:scale-[0.99]"
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm active:scale-[0.99]"
             >
               <span>
                 <span className="block text-sm font-black text-slate-950">
@@ -438,7 +438,7 @@ function ListaLotesMobile({ aba, loading, lotesPorTipo, lotesSemanais, onAbrir, 
   const lista = lotesPorTipo?.[tipo] || [];
   if (!lista.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm font-semibold text-slate-500">
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-center text-xs font-semibold text-slate-500">
         Nenhum lote encontrado.
       </div>
     );
@@ -455,7 +455,7 @@ function ListaLotesMobile({ aba, loading, lotesPorTipo, lotesSemanais, onAbrir, 
             key={`${tipo}-${lote.key}`}
             type="button"
             onClick={() => onAbrir(lote, tipo)}
-            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm active:scale-[0.99]"
+            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm active:scale-[0.99]"
           >
             <span>
               <span className="flex flex-wrap items-center gap-2 text-sm font-black text-slate-950">
@@ -1054,12 +1054,12 @@ export default function SuprimentosContagem() {
     }
     return (
       <PullToRefresh onRefresh={carregarLotes}>
-      <div className="min-h-[calc(100vh-120px)] bg-slate-50 p-4 pb-24">
-        <div className="mx-auto flex max-w-md flex-col gap-4">
-          <header className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">Suprimentos</p>
-            <h1 className="mt-2 text-2xl font-black text-slate-950">Contagem</h1>
-            <p className="mt-2 text-sm font-semibold text-slate-500">
+      <div className="min-h-[calc(100vh-120px)] bg-slate-50 p-3 pb-24">
+        <div className="mx-auto flex max-w-md flex-col gap-3">
+          <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">Suprimentos</p>
+            <h1 className="mt-1 text-xl font-black text-slate-950">Contagem</h1>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
               {fluxoAtivo ? `${itensSessao} item(ns) salvo(s) nesta sessao.` : "Inicie uma sessao para contar item por item."}
             </p>
           </header>
@@ -1074,14 +1074,14 @@ export default function SuprimentosContagem() {
                 <button
                   type="button"
                   onClick={() => iniciarFluxo("diaria")}
-                  className="flex min-h-[180px] w-full flex-col items-start justify-end rounded-[32px] bg-gradient-to-br from-emerald-600 to-teal-800 p-6 text-left text-white shadow-xl active:scale-[0.98]"
+                  className="flex min-h-[132px] w-full flex-col items-start justify-end rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 p-4 text-left text-white shadow-lg active:scale-[0.98]"
                 >
-                  <span className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/15 text-3xl">
+                  <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-xl">
                     <FaBarcode />
                   </span>
-                  <span className="text-2xl font-black">Iniciar contagem</span>
-                  <span className="mt-2 text-sm font-semibold text-white/80">
-                    Escaneie ou digite. Itens de lubrificantes vao automaticamente para a aba certa.
+                  <span className="text-xl font-black">Iniciar contagem</span>
+                  <span className="mt-1 text-xs font-semibold text-white/85">
+                    Escaneie ou digite. Lubrificantes caem na aba certa.
                   </span>
                 </button>
               ) : null}
@@ -1128,8 +1128,8 @@ export default function SuprimentosContagem() {
               ) : null}
             </div>
           ) : (
-            <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
                     {tipoContagemAtual === "lubrificantes" ? "Lubrificantes" : "Item atual"}
@@ -1140,7 +1140,7 @@ export default function SuprimentosContagem() {
                 <button
                   type="button"
                   onClick={() => setScannerOpen(true)}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm"
                   aria-label="Escanear"
                 >
                   <FaCamera />
@@ -1148,7 +1148,7 @@ export default function SuprimentosContagem() {
                 ) : null}
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <Field label="Codigo">
                   <div className="flex gap-2">
                     <input
@@ -1172,9 +1172,9 @@ export default function SuprimentosContagem() {
                   </div>
                 </Field>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Peca</p>
-                  <p className="mt-2 text-base font-black text-slate-950">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Peca</p>
+                  <p className="mt-1 line-clamp-2 text-sm font-black text-slate-950">
                     {peca?.descricao || (naoCadastrado ? "Sem cadastro" : "Aguardando leitura")}
                   </p>
                   {peca?.saldo_erp !== null && peca?.saldo_erp !== undefined ? (
@@ -1191,7 +1191,7 @@ export default function SuprimentosContagem() {
                     type="number"
                     min="0"
                     step="0.01"
-                    className={`${inputClass} text-center text-2xl font-black`}
+                    className={`${inputClass} text-center text-xl font-black`}
                     placeholder="0"
                     value={quantidade}
                     onChange={(e) => setQuantidade(e.target.value)}
@@ -1209,15 +1209,15 @@ export default function SuprimentosContagem() {
                   />
                 </Field>
 
-                {aviso ? <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">{aviso}</p> : null}
-                {erro ? <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{erro}</p> : null}
+                {aviso ? <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">{aviso}</p> : null}
+                {erro ? <p className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{erro}</p> : null}
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={finalizarFluxo}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-black text-slate-700"
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-xs font-black text-slate-700"
                 >
                   Finalizar
                 </button>
@@ -1225,7 +1225,7 @@ export default function SuprimentosContagem() {
                   type="button"
                   onClick={proximoItem}
                   disabled={busy || quantidade === "" || (!peca && !naoCadastrado)}
-                  className="rounded-2xl bg-emerald-600 px-4 py-4 text-sm font-black text-white shadow-sm disabled:opacity-50"
+                  className="rounded-2xl bg-emerald-600 px-3 py-3 text-xs font-black text-white shadow-sm disabled:opacity-50"
                 >
                   Proximo
                 </button>

@@ -59,15 +59,15 @@ const TONE_MAP = {
 
 export function PageHero({ eyebrow, title, description, actions = null }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-3xl">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-blue-500">{eyebrow}</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
-          {description ? <p className="mt-1.5 max-w-2xl text-sm font-normal leading-6 text-slate-500">{description}</p> : null}
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-600">{eyebrow}</p>
+          <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">{title}</h1>
+          {description ? <p className="mt-1 max-w-2xl text-xs font-medium leading-5 text-slate-500">{description}</p> : null}
         </div>
 
-        {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
     </section>
   );
@@ -76,14 +76,14 @@ export function PageHero({ eyebrow, title, description, actions = null }) {
 export function KpiCard({ title, value, subtitle, icon, tone = "blue" }) {
   const toneClasses = TONE_MAP[tone]?.card || TONE_MAP.blue.card;
   return (
-    <div className={`rounded-xl border bg-gradient-to-br ${toneClasses} p-4 shadow-sm`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">{title}</p>
-          <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
-          {subtitle ? <p className="mt-1.5 text-xs font-normal text-slate-500">{subtitle}</p> : null}
+    <div className={`rounded-2xl border bg-gradient-to-br ${toneClasses} p-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)]`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{title}</p>
+          <p className="mt-1 text-2xl font-black tracking-tight text-slate-950">{value}</p>
+          {subtitle ? <p className="mt-0.5 line-clamp-1 text-[11px] font-medium text-slate-500">{subtitle}</p> : null}
         </div>
-        <div className="rounded-xl bg-white/70 p-3 text-lg text-slate-700 shadow-sm">{icon}</div>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/80 text-sm text-slate-700 shadow-sm">{icon}</div>
       </div>
     </div>
   );
@@ -91,12 +91,12 @@ export function KpiCard({ title, value, subtitle, icon, tone = "blue" }) {
 
 export function Panel({ title, subtitle, actions = null, children, className = "" }) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
+    <section className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)] ${className}`}>
       {(title || subtitle || actions) ? (
-        <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="mb-4 flex flex-col gap-2 border-b border-slate-100 pb-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            {title ? <h2 className="text-lg font-semibold text-slate-900">{title}</h2> : null}
-            {subtitle ? <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p> : null}
+            {title ? <h2 className="text-base font-black text-slate-950">{title}</h2> : null}
+            {subtitle ? <p className="mt-0.5 text-xs font-medium text-slate-500">{subtitle}</p> : null}
           </div>
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
@@ -109,7 +109,7 @@ export function Panel({ title, subtitle, actions = null, children, className = "
 export function StatusChip({ label, tone = "slate", children }) {
   const chip = TONE_MAP[tone]?.chip || TONE_MAP.slate.chip;
   return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${chip}`}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${chip}`}>
       {label ?? children}
     </span>
   );
@@ -126,7 +126,7 @@ export function ActionButton({ children, tone = "slate", className = "", type = 
   return (
     <button
       type={type}
-      className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${tones[tone] || tones.slate} ${className}`}
+      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition ${tones[tone] || tones.slate} ${className}`}
       {...props}
     >
       {children}

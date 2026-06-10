@@ -283,14 +283,16 @@ export default function SuprimentosContagemDia() {
   async function notificarConferenciaConcluida(job) {
     try {
       const r = job?.resultado_json || {};
-      const total = Number(r.itens_total ?? r.itens_atualizados ?? 0);
-      const corretos = Number(r.itens_corretos ?? 0);
-      const acuracidade =
-        total > 0
-          ? `${Math.round((corretos / total) * 1000) / 10}%`
-          : r.acuracidade != null
-            ? `${r.acuracidade}%`
-            : null;
+      const atualizados = Number(r.itens_total ?? r.itens_atualizados ?? 0);
+      const semErp = Number(r.sem_codigo_no_erp ?? 0);
+      const divergencias = Number(r.divergencias ?? 0);
+      const conferidos = Math.max(0, atualizados - semErp);
+      const corretos = Math.max(0, conferidos - divergencias);
+      const acuracidade = r.acuracidade != null
+        ? `${r.acuracidade}%`
+        : conferidos > 0
+          ? `${Math.round((corretos / conferidos) * 1000) / 10}%`
+          : null;
       const titulo = "Contagem foi apurada";
       const corpo = acuracidade
         ? `Segue resultado: ${acuracidade}`

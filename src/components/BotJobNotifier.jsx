@@ -9,15 +9,16 @@ import { supabase } from "../supabase";
 // quanto no navegador (Notification API). Cada job so notifica uma vez.
 
 function calcularAcuracidade(resultadoJson = {}) {
-  const total = Number(
-    resultadoJson.itens_total ?? resultadoJson.itens_atualizados ?? 0
-  );
-  const corretos = Number(resultadoJson.itens_corretos ?? 0);
-  if (total > 0 && Number.isFinite(corretos)) {
-    return `${Math.round((corretos / total) * 1000) / 10}%`;
-  }
   if (resultadoJson.acuracidade != null) {
     return `${resultadoJson.acuracidade}%`;
+  }
+  const atualizados = Number(resultadoJson.itens_total ?? resultadoJson.itens_atualizados ?? 0);
+  const semErp = Number(resultadoJson.sem_codigo_no_erp ?? 0);
+  const divergencias = Number(resultadoJson.divergencias ?? 0);
+  const conferidos = Math.max(0, atualizados - semErp);
+  const corretos = Math.max(0, conferidos - divergencias);
+  if (conferidos > 0) {
+    return `${Math.round((corretos / conferidos) * 1000) / 10}%`;
   }
   return null;
 }

@@ -250,6 +250,8 @@ export default function AvariasResumo() {
   const [dataInicio, setDataInicio] = useState(mesAtualIni);
   const [dataFim, setDataFim] = useState(mesAtualFim);
   const [origemFiltro, setOrigemFiltro] = useState("");
+  // Qual coluna usar pra filtrar pelo periodo: dataAvaria | created_at | data_cobranca
+  const [filtroPorCampo, setFiltroPorCampo] = useState("dataAvaria");
   const [aba, setAba] = useState("dashboard"); // "dashboard" | "detalhes"
 
   // Filtros específicos da aba Detalhes
@@ -268,8 +270,24 @@ export default function AvariasResumo() {
       .eq("status", "Aprovado")
       .order("created_at", { ascending: false });
 
-    if (dataInicio) query = query.gte("dataAvaria", dataInicio);
-    if (dataFim) query = query.lte("dataAvaria", `${dataFim}T23:59:59`);
+    // O periodo filtra pela coluna escolhida no dropdown (avaria / lancamento / cobranca).
+    // Para "data_cobranca" usamos OR pra cobrir o fallback cobrado_em.
+    if (filtroPorCampo === "data_cobranca") {
+      if (dataInicio) {
+        query = query.or(
+          `data_cobranca.gte.${dataInicio},cobrado_em.gte.${dataInicio}`
+        );
+      }
+      if (dataFim) {
+        query = query.or(
+          `data_cobranca.lte.${dataFim}T23:59:59,cobrado_em.lte.${dataFim}T23:59:59`
+        );
+      }
+    } else {
+      const col = filtroPorCampo === "created_at" ? "created_at" : "dataAvaria";
+      if (dataInicio) query = query.gte(col, dataInicio);
+      if (dataFim) query = query.lte(col, `${dataFim}T23:59:59`);
+    }
 
     if (origemFiltro) {
       query = query.or(`origem.ilike.${origemFiltro},origem_cobranca.ilike.${origemFiltro}`);
@@ -290,7 +308,7 @@ export default function AvariasResumo() {
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataInicio, dataFim, origemFiltro]);
+  }, [dataInicio, dataFim, origemFiltro, filtroPorCampo]);
 
   const kpis = useMemo(() => {
     const base = rows;
@@ -443,7 +461,22 @@ export default function AvariasResumo() {
           </div>
 
           <div className="flex flex-col">
-            <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Período (Data Avaria)</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Filtrar período por</label>
+            <select
+              className="border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-200 outline-none"
+              value={filtroPorCampo}
+              onChange={(e) => setFiltroPorCampo(e.target.value)}
+            >
+              <option value="dataAvaria">Data da avaria</option>
+              <option value="created_at">Data do lançamento</option>
+              <option value="data_cobranca">Data da cobrança</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-[10px] font-black text-slate-500 uppercase mb-1">
+              Período ({filtroPorCampo === "dataAvaria" ? "Data avaria" : filtroPorCampo === "created_at" ? "Data lançamento" : "Data cobrança"})
+            </label>
             <DateRangePopover
               from={dataInicio}
               to={dataFim}

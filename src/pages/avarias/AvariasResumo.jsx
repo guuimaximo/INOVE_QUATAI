@@ -250,6 +250,13 @@ export default function AvariasResumo() {
   const [dataInicio, setDataInicio] = useState(mesAtualIni);
   const [dataFim, setDataFim] = useState(mesAtualFim);
   const [origemFiltro, setOrigemFiltro] = useState("");
+  const [aba, setAba] = useState("dashboard"); // "dashboard" | "detalhes"
+
+  // Filtros específicos da aba Detalhes
+  const [buscaDet, setBuscaDet] = useState("");
+  const [statusCobDet, setStatusCobDet] = useState("");
+  const [colunaSort, setColunaSort] = useState("dataAvaria");
+  const [dirSort, setDirSort] = useState("desc");
 
   const carregar = async () => {
     setLoading(true);
@@ -257,9 +264,7 @@ export default function AvariasResumo() {
 
     let query = supabase
       .from("avarias")
-      .select(
-        "id, status, status_cobranca, valor_total_orcamento, valor_cobrado, origem, origem_cobranca, dataAvaria, created_at, prefixo, motoristaId"
-      )
+      .select("*")
       .eq("status", "Aprovado")
       .order("created_at", { ascending: false });
 
@@ -478,10 +483,31 @@ export default function AvariasResumo() {
             <FaExclamationTriangle /> {errMsg}
           </div>
         )}
+
+        {/* Abas — Dashboard | Detalhes */}
+        <div className="mt-5 pt-5 border-t flex flex-wrap gap-2">
+          {[
+            { id: "dashboard", label: "Dashboard", icon: <FaChartLine /> },
+            { id: "detalhes", label: "Detalhes", icon: <FaTools /> },
+          ].map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setAba(t.id)}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition ${
+                aba === t.id
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {aba === "dashboard" && (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <CardKPI 
+        <CardKPI
           title="Total de Avarias" 
           value={loading ? "-" : fmtInt(kpis.totalQtde)} 
           sub={loading ? "" : `Orçado: ${moneyBRL(kpis.totalOrcado)}`} 
@@ -705,6 +731,29 @@ export default function AvariasResumo() {
         </div>
 
       </div>
+      )}
+
+      {aba === "detalhes" && (
+        <AvariasDetalhes
+          rows={rows}
+          loading={loading}
+          buscaDet={buscaDet}
+          setBuscaDet={setBuscaDet}
+          statusCobDet={statusCobDet}
+          setStatusCobDet={setStatusCobDet}
+          colunaSort={colunaSort}
+          dirSort={dirSort}
+          onSort={(col) => {
+            if (colunaSort === col) {
+              setDirSort((d) => (d === "asc" ? "desc" : "asc"));
+            } else {
+              setColunaSort(col);
+              setDirSort("desc");
+            }
+          }}
+          onExportar={() => exportarCSV(rows, `Avarias_Detalhes_${dataInicio}_a_${dataFim}`)}
+        />
+      )}
 
       {loading && (
         <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-[1px] flex items-center justify-center z-50">
@@ -719,5 +768,279 @@ export default function AvariasResumo() {
       )}
 
     </div>
+  );
+}
+
+/* =========================
+   ABA DETALHES
+========================= */
+
+function fmtDateBR(v) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR");
+}
+
+function pickDataCobranca(r) {
+  return r?.data_cobranca || r?.cobrado_em || null;
+}
+
+function diasEntre(a, b) {
+  if (!a || !b) return null;
+  const da = new Date(a);
+  const db = new Date(b);
+  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return null;
+  return Math.round((db - da) / (1000 * 60 * 60 * 24));
+}
+
+function AvariasDetalhes({
+  rows, loading,
+  buscaDet, setBuscaDet,
+  statusCobDet, setStatusCobDet,
+  colunaSort, dirSort, onSort,
+  onExportar,
+}) {
+  const rowsFiltradas = useMemo(() => {
+    const busca = String(buscaDet || "").trim().toLowerCase();
+    let arr = rows.filter((r) => {
+      if (statusCobDet && normalizeStatusCobranca(r) !== statusCobDet) return false;
+      if (!busca) return true;
+      const blob = [
+        r.prefixo, r.motoristaId, r.descricao,
+        r.origem, r.origem_cobranca, r.placa,
+      ].map((x) => String(x || "").toLowerCase()).join(" ");
+      return blob.includes(busca);
+    });
+
+    // Sort
+    arr = [...arr].sort((a, b) => {
+      const k = colunaSort;
+      let va, vb;
+      if (k === "dataCobranca") {
+        va = pickDataCobranca(a);
+        vb = pickDataCobranca(b);
+      } else if (k === "diasAteCobranca") {
+        va = diasEntre(a.dataAvaria, pickDataCobranca(a)) ?? -1;
+        vb = diasEntre(b.dataAvaria, pickDataCobranca(b)) ?? -1;
+      } else {
+        va = a[k];
+        vb = b[k];
+      }
+      if (va === null || va === undefined) va = "";
+      if (vb === null || vb === undefined) vb = "";
+      // numeric?
+      const numA = Number(va);
+      const numB = Number(vb);
+      if (!Number.isNaN(numA) && !Number.isNaN(numB) && typeof va !== "string") {
+        return dirSort === "asc" ? numA - numB : numB - numA;
+      }
+      const sa = String(va);
+      const sb = String(vb);
+      const c = sa.localeCompare(sb, "pt-BR");
+      return dirSort === "asc" ? c : -c;
+    });
+
+    return arr;
+  }, [rows, buscaDet, statusCobDet, colunaSort, dirSort]);
+
+  // Indicadores
+  const indicadores = useMemo(() => {
+    const base = rowsFiltradas;
+    const total = base.length;
+    const cobradas = base.filter((r) => normalizeStatusCobranca(r) === "Cobrada");
+    const pendentes = base.filter((r) => normalizeStatusCobranca(r) === "Pendente");
+    const canceladas = base.filter((r) => normalizeStatusCobranca(r) === "Cancelada");
+
+    const lags = cobradas
+      .map((r) => diasEntre(r.dataAvaria, pickDataCobranca(r)))
+      .filter((d) => d !== null && d >= 0);
+    const tempoMedio = lags.length
+      ? Math.round(lags.reduce((s, d) => s + d, 0) / lags.length)
+      : null;
+    const maiorAtraso = lags.length ? Math.max(...lags) : null;
+
+    const lancamentoLags = base
+      .map((r) => diasEntre(r.dataAvaria, r.created_at))
+      .filter((d) => d !== null && d >= 0);
+    const tempoMedioLanc = lancamentoLags.length
+      ? Math.round(lancamentoLags.reduce((s, d) => s + d, 0) / lancamentoLags.length)
+      : null;
+
+    const pctCobradas = total ? Math.round((cobradas.length / total) * 100) : 0;
+
+    return { total, cobradas: cobradas.length, pendentes: pendentes.length, canceladas: canceladas.length, tempoMedio, tempoMedioLanc, maiorAtraso, pctCobradas };
+  }, [rowsFiltradas]);
+
+  const sortIcon = (col) => {
+    if (colunaSort !== col) return <span className="ml-1 text-slate-300">↕</span>;
+    return <span className="ml-1 text-blue-600">{dirSort === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Filtros + indicadores */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
+        <div className="flex flex-col md:flex-row gap-3 md:items-end justify-between">
+          <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col">
+              <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Buscar (prefixo, motorista, descrição)</label>
+              <div className="relative">
+                <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={buscaDet}
+                  onChange={(e) => setBuscaDet(e.target.value)}
+                  placeholder="Digite para filtrar..."
+                  className="rounded-xl border border-slate-300 bg-slate-50 py-2.5 pl-9 pr-3 text-sm font-medium text-slate-800 outline-none focus:border-blue-400 focus:bg-white w-72"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col">
+              <label className="text-[10px] font-black text-slate-500 uppercase mb-1">Status da cobrança</label>
+              <select
+                value={statusCobDet}
+                onChange={(e) => setStatusCobDet(e.target.value)}
+                className="rounded-xl border border-slate-300 bg-slate-50 py-2.5 px-3 text-sm font-medium text-slate-800 outline-none focus:border-blue-400 focus:bg-white"
+              >
+                <option value="">Todos</option>
+                <option value="Pendente">Pendente</option>
+                <option value="Cobrada">Cobrada</option>
+                <option value="Cancelada">Cancelada</option>
+              </select>
+            </div>
+            {(buscaDet || statusCobDet) && (
+              <button
+                onClick={() => { setBuscaDet(""); setStatusCobDet(""); }}
+                className="self-end px-4 py-2.5 rounded-xl text-xs font-black bg-slate-100 text-slate-700 hover:bg-slate-200"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <button
+            onClick={onExportar}
+            className="self-end inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition shadow-sm"
+          >
+            <FaDownload /> Exportar planilha
+          </button>
+        </div>
+
+        {/* Indicadores */}
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <Indicador label="Total" value={fmtInt(indicadores.total)} tone="slate" />
+          <Indicador label="Cobradas" value={fmtInt(indicadores.cobradas)} tone="emerald" />
+          <Indicador label="Pendentes" value={fmtInt(indicadores.pendentes)} tone="amber" />
+          <Indicador label="Canceladas" value={fmtInt(indicadores.canceladas)} tone="rose" />
+          <Indicador label="% cobradas" value={`${indicadores.pctCobradas}%`} tone="blue" />
+          <Indicador
+            label="Tempo médio até cobrança"
+            value={indicadores.tempoMedio !== null ? `${indicadores.tempoMedio}d` : "—"}
+            tone="violet"
+          />
+          <Indicador
+            label="Tempo médio do lançamento"
+            value={indicadores.tempoMedioLanc !== null ? `${indicadores.tempoMedioLanc}d` : "—"}
+            tone="slate"
+          />
+        </div>
+      </div>
+
+      {/* Tabela */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500">
+              <tr>
+                <Th onClick={() => onSort("prefixo")}>Prefixo {sortIcon("prefixo")}</Th>
+                <Th onClick={() => onSort("motoristaId")}>Motorista {sortIcon("motoristaId")}</Th>
+                <Th onClick={() => onSort("origem")}>Origem {sortIcon("origem")}</Th>
+                <Th onClick={() => onSort("status_cobranca")}>Status cobr. {sortIcon("status_cobranca")}</Th>
+                <Th onClick={() => onSort("dataAvaria")} className="text-right">Data avaria {sortIcon("dataAvaria")}</Th>
+                <Th onClick={() => onSort("created_at")} className="text-right">Data lançamento {sortIcon("created_at")}</Th>
+                <Th onClick={() => onSort("dataCobranca")} className="text-right">Data cobrança {sortIcon("dataCobranca")}</Th>
+                <Th onClick={() => onSort("diasAteCobranca")} className="text-right">Dias p/ cobrança {sortIcon("diasAteCobranca")}</Th>
+                <Th onClick={() => onSort("valor_total_orcamento")} className="text-right">Valor orçado {sortIcon("valor_total_orcamento")}</Th>
+                <Th onClick={() => onSort("valor_cobrado")} className="text-right">Valor cobrado {sortIcon("valor_cobrado")}</Th>
+                <Th>Descrição</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr><td colSpan={11} className="px-6 py-8 text-center text-slate-500">Carregando...</td></tr>
+              ) : rowsFiltradas.length === 0 ? (
+                <tr><td colSpan={11} className="px-6 py-8 text-center text-slate-500">Nenhuma avaria encontrada.</td></tr>
+              ) : (
+                rowsFiltradas.map((r) => {
+                  const dc = pickDataCobranca(r);
+                  const dias = diasEntre(r.dataAvaria, dc);
+                  return (
+                    <tr key={r.id} className="hover:bg-slate-50/60">
+                      <td className="px-3 py-2 font-bold text-slate-800">{r.prefixo || "—"}</td>
+                      <td className="px-3 py-2 text-slate-700">{r.motoristaId || "—"}</td>
+                      <td className="px-3 py-2 text-slate-700">{normalizeOrigem(r) || "—"}</td>
+                      <td className="px-3 py-2">
+                        <StatusCobChip status={normalizeStatusCobranca(r)} />
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-700">{fmtDateBR(r.dataAvaria)}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{fmtDateBR(r.created_at)}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{fmtDateBR(dc)}</td>
+                      <td className="px-3 py-2 text-right font-bold text-slate-700">{dias !== null ? `${dias}d` : "—"}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{moneyBRL(r.valor_total_orcamento)}</td>
+                      <td className="px-3 py-2 text-right text-emerald-700 font-bold">{moneyBRL(r.valor_cobrado)}</td>
+                      <td className="px-3 py-2 text-slate-600 max-w-[280px] truncate" title={r.descricao || ""}>{r.descricao || "—"}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Th({ children, onClick, className = "" }) {
+  return (
+    <th
+      onClick={onClick}
+      className={`px-3 py-3 font-black whitespace-nowrap select-none ${onClick ? "cursor-pointer hover:text-slate-700" : ""} ${className}`}
+    >
+      <span className={`inline-flex items-center gap-1 ${className.includes("text-right") ? "justify-end w-full" : ""}`}>
+        {children}
+      </span>
+    </th>
+  );
+}
+
+function Indicador({ label, value, tone = "slate" }) {
+  const tones = {
+    slate: "bg-slate-50 border-slate-200 text-slate-700",
+    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    amber: "bg-amber-50 border-amber-200 text-amber-700",
+    rose: "bg-rose-50 border-rose-200 text-rose-700",
+    blue: "bg-blue-50 border-blue-200 text-blue-700",
+    violet: "bg-violet-50 border-violet-200 text-violet-700",
+  };
+  return (
+    <div className={`rounded-xl border p-3 ${tones[tone] || tones.slate}`}>
+      <div className="text-[10px] font-black uppercase tracking-wider opacity-80">{label}</div>
+      <div className="mt-1 text-xl font-black text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function StatusCobChip({ status }) {
+  const map = {
+    Pendente: "bg-amber-50 text-amber-800 border-amber-200",
+    Cobrada: "bg-emerald-50 text-emerald-800 border-emerald-200",
+    Cancelada: "bg-rose-50 text-rose-800 border-rose-200",
+  };
+  const cls = map[status] || "bg-slate-100 text-slate-700 border-slate-200";
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border ${cls}`}>
+      {status || "—"}
+    </span>
   );
 }

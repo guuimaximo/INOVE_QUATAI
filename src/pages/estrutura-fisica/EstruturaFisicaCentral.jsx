@@ -11,11 +11,33 @@ import {
   FaFolderOpen,
   FaTools,
   FaEye,
+  FaChartLine,
+  FaListAlt,
+  FaHourglassHalf,
+  FaCalendarTimes,
 } from "react-icons/fa";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
 
 const VIEW = {
   OPEN_ONLY: "open_only",
   ALL: "all",
+};
+
+// SLA em dias por prioridade (alinhado com o cadastro / dropdown da solicitacao)
+const SLA_DIAS = {
+  URGENTE: 5,
+  ALTA: 10,
+  MEDIA: 20,
+  BAIXA: 30,
 };
 
 function norm(v) {
@@ -35,6 +57,7 @@ export default function EstruturaFisicaCentral() {
   const [loading, setLoading] = useState(false);
 
   const [viewMode, setViewMode] = useState(VIEW.OPEN_ONLY);
+  const [aba, setAba] = useState("lista"); // "lista" | "dashboard"
 
   const [filtros, setFiltros] = useState({
     busca: "",
@@ -422,16 +445,16 @@ export default function EstruturaFisicaCentral() {
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
             <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 font-bold">
-              Urgente: 1 dia
+              Urgente: 5 dias
             </span>
             <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-bold">
-              Alta: 3 dias
+              Alta: 10 dias
             </span>
             <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-bold">
-              Média: 7 dias
+              Média: 20 dias
             </span>
             <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 font-bold">
-              Baixa: 15 dias
+              Baixa: 30 dias
             </span>
             <span className="text-slate-500">
               (Atraso é calculado quando o <b>prazo estimado</b> está vencido e o
@@ -441,6 +464,28 @@ export default function EstruturaFisicaCentral() {
         </div>
       </div>
 
+      {/* Abas — Lista | Dashboard */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { id: "lista", label: "Lista", icon: <FaListAlt /> },
+          { id: "dashboard", label: "Dashboard", icon: <FaChartLine /> },
+        ].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setAba(t.id)}
+            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition ${
+              aba === t.id
+                ? "bg-slate-900 text-white shadow-sm"
+                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {aba === "lista" && (
+      <>
       {/* Cards de resumo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <CardResumo
@@ -599,6 +644,242 @@ export default function EstruturaFisicaCentral() {
             </tbody>
           </table>
         </div>
+      </div>
+      </>
+      )}
+
+      {aba === "dashboard" && (
+        <DashboardEF rows={rows} isAtrasada={isAtrasada} />
+      )}
+    </div>
+  );
+}
+
+function DashboardEF({ rows, isAtrasada }) {
+  const normPrior = (p) => String(p || "").trim().toUpperCase();
+
+  // Indicadores
+  const ind = useMemo(() => {
+    const total = rows.length;
+    const concluidas = rows.filter((r) => String(r.status).toUpperCase() === "CONCLUIDO");
+    const canceladas = rows.filter((r) => String(r.status).toUpperCase() === "CANCELADO");
+    const pendentes = rows.filter(
+      (r) => !["CONCLUIDO", "CANCELADO"].includes(String(r.status).toUpperCase())
+    );
+    const atrasadas = pendentes.filter((r) => isAtrasada(r));
+
+    const dentro = concluidas.filter((r) => {
+      const concl = r.concluido_em ? new Date(r.concluido_em) : null;
+      const prazo = r.prazo_estimado ? new Date(`${r.prazo_estimado}T23:59:59`) : null;
+      return concl && prazo && concl <= prazo;
+    });
+    const fora = concluidas.filter((r) => {
+      const concl = r.concluido_em ? new Date(r.concluido_em) : null;
+      const prazo = r.prazo_estimado ? new Date(`${r.prazo_estimado}T23:59:59`) : null;
+      return concl && prazo && concl > prazo;
+    });
+
+    // Tempo médio de atendimento (em dias) — de concluídas
+    const tempos = concluidas
+      .map((r) => {
+        if (!r.data_solicitacao || !r.concluido_em) return null;
+        const ini = new Date(`${r.data_solicitacao}T00:00:00`);
+        const fim = new Date(r.concluido_em);
+        if (Number.isNaN(ini.getTime()) || Number.isNaN(fim.getTime())) return null;
+        return Math.max(0, (fim - ini) / (1000 * 60 * 60 * 24));
+      })
+      .filter((v) => v !== null);
+    const tempoMedio = tempos.length
+      ? Math.round((tempos.reduce((s, v) => s + v, 0) / tempos.length) * 10) / 10
+      : null;
+
+    const pctSla = concluidas.length
+      ? Math.round((dentro.length / concluidas.length) * 100)
+      : null;
+
+    return {
+      total,
+      concluidas: concluidas.length,
+      canceladas: canceladas.length,
+      pendentes: pendentes.length,
+      atrasadas: atrasadas.length,
+      dentro: dentro.length,
+      fora: fora.length,
+      tempoMedio,
+      pctSla,
+    };
+  }, [rows, isAtrasada]);
+
+  // Top 10 setores por acionamentos
+  const topSetores = useMemo(() => {
+    const map = new Map();
+    rows.forEach((r) => {
+      const k = String(r.setor || "—").trim() || "—";
+      const cur = map.get(k) || { setor: k, total: 0, atrasadas: 0, concluidas: 0 };
+      cur.total += 1;
+      if (String(r.status).toUpperCase() === "CONCLUIDO") cur.concluidas += 1;
+      if (isAtrasada(r)) cur.atrasadas += 1;
+      map.set(k, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 10);
+  }, [rows, isAtrasada]);
+
+  // SLA por prioridade
+  const slaPorPrioridade = useMemo(() => {
+    const ordem = ["URGENTE", "ALTA", "MEDIA", "BAIXA"];
+    const map = new Map();
+    rows.filter((r) => String(r.status).toUpperCase() === "CONCLUIDO").forEach((r) => {
+      const k = normPrior(r.prioridade) || "—";
+      const cur = map.get(k) || { prioridade: k, dentro: 0, fora: 0 };
+      const concl = r.concluido_em ? new Date(r.concluido_em) : null;
+      const prazo = r.prazo_estimado ? new Date(`${r.prazo_estimado}T23:59:59`) : null;
+      if (concl && prazo) {
+        if (concl <= prazo) cur.dentro += 1;
+        else cur.fora += 1;
+      }
+      map.set(k, cur);
+    });
+    return ordem
+      .map((p) => map.get(p) || { prioridade: p, dentro: 0, fora: 0 })
+      .filter((x) => x.dentro + x.fora > 0);
+  }, [rows]);
+
+  // Evolução mensal
+  const evolucao = useMemo(() => {
+    const map = new Map();
+    rows.forEach((r) => {
+      const d = r.data_solicitacao ? new Date(`${r.data_solicitacao}T00:00:00`) : null;
+      if (!d || Number.isNaN(d.getTime())) return;
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const cur = map.get(k) || { mes: k, abertos: 0, concluidos: 0 };
+      cur.abertos += 1;
+      if (String(r.status).toUpperCase() === "CONCLUIDO") cur.concluidos += 1;
+      map.set(k, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => (a.mes < b.mes ? -1 : 1));
+  }, [rows]);
+
+  return (
+    <div className="space-y-5">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <Kpi label="Total" value={ind.total} tone="slate" icon={<FaFolderOpen />} />
+        <Kpi label="Concluídas no prazo" value={ind.dentro} tone="emerald" icon={<FaCheckCircle />} />
+        <Kpi label="Concluídas fora do prazo" value={ind.fora} tone="rose" icon={<FaCalendarTimes />} />
+        <Kpi label="Pendentes" value={ind.pendentes} tone="amber" icon={<FaClock />} />
+        <Kpi label="Atrasadas" value={ind.atrasadas} tone="rose" icon={<FaExclamationCircle />} />
+        <Kpi
+          label="SLA cumprido"
+          value={ind.pctSla !== null ? `${ind.pctSla}%` : "—"}
+          tone={ind.pctSla === null ? "slate" : ind.pctSla >= 80 ? "emerald" : ind.pctSla >= 60 ? "amber" : "rose"}
+          icon={<FaHourglassHalf />}
+        />
+      </div>
+
+      {/* Tempo médio + SLA por prioridade */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-wider text-slate-500">Tempo médio de atendimento</div>
+          <div className="mt-3 text-4xl font-black text-slate-900">
+            {ind.tempoMedio !== null ? `${ind.tempoMedio} dias` : "—"}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">Média de dias entre <b>solicitação</b> e <b>conclusão</b>.</div>
+        </div>
+
+        <div className="lg:col-span-2 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">
+            Cumprimento de SLA por prioridade
+          </div>
+          {slaPorPrioridade.length === 0 ? (
+            <div className="py-10 text-center text-sm font-bold text-slate-400">
+              Sem conclusões no período.
+            </div>
+          ) : (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={slaPorPrioridade} stackOffset="expand">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis dataKey="prioridade" tick={{ fill: "#64748b", fontSize: 12, fontWeight: "bold" }} />
+                  <YAxis tickFormatter={(v) => `${Math.round(v * 100)}%`} tick={{ fill: "#64748b", fontSize: 11 }} />
+                  <Tooltip formatter={(v) => `${v} chamado(s)`} />
+                  <Legend />
+                  <Bar dataKey="dentro" stackId="a" fill="#10b981" name="No prazo" />
+                  <Bar dataKey="fora" stackId="a" fill="#f43f5e" name="Fora do prazo" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Top 10 setores */}
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">
+          Top 10 setores com mais acionamentos
+        </div>
+        {topSetores.length === 0 ? (
+          <div className="py-8 text-center text-sm font-bold text-slate-400">Sem dados.</div>
+        ) : (
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topSetores} layout="vertical" margin={{ left: 10, right: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                <XAxis type="number" tick={{ fill: "#64748b", fontSize: 11 }} />
+                <YAxis type="category" dataKey="setor" width={150} tick={{ fill: "#0f172a", fontSize: 12 }} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="total" fill="#3b82f6" name="Total" />
+                <Bar dataKey="concluidas" fill="#10b981" name="Concluídas" />
+                <Bar dataKey="atrasadas" fill="#f43f5e" name="Atrasadas" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {/* Evolução mensal */}
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">
+          Evolução mensal (aberturas × conclusões)
+        </div>
+        {evolucao.length === 0 ? (
+          <div className="py-8 text-center text-sm font-bold text-slate-400">Sem dados.</div>
+        ) : (
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={evolucao}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fill: "#64748b", fontSize: 11, fontWeight: "bold" }} />
+                <YAxis tick={{ fill: "#64748b", fontSize: 11 }} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="abertos" fill="#3b82f6" name="Abertos" />
+                <Bar dataKey="concluidos" fill="#10b981" name="Concluídos" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, tone = "slate", icon }) {
+  const tones = {
+    slate: "from-slate-50 to-gray-50 border-slate-200 text-slate-700",
+    emerald: "from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700",
+    amber: "from-amber-50 to-orange-50 border-amber-200 text-amber-700",
+    rose: "from-rose-50 to-pink-50 border-rose-200 text-rose-700",
+    blue: "from-blue-50 to-cyan-50 border-blue-200 text-blue-700",
+  };
+  return (
+    <div className={`rounded-2xl border bg-gradient-to-br p-3 shadow-sm ${tones[tone] || tones.slate}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-80 truncate">{label}</p>
+          <p className="mt-1 text-2xl font-black text-slate-900">{value}</p>
+        </div>
+        <div className="text-lg opacity-70 shrink-0">{icon}</div>
       </div>
     </div>
   );

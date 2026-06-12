@@ -383,6 +383,35 @@ function createAuditoriaForm(nextFicha, userName) {
   };
 }
 
+function createAuditoriaFormFromRow(row) {
+  const posicoesMap = new Map(getAuditoriaPosicoes(row).map((item) => [norm(item.posicao), item]));
+
+  return {
+    ficha: row?.ficha_auditoria || "",
+    dataLancamento: formatDate(row?.created_at),
+    quemLancou: row?.criado_por_nome || row?.criado_por_login || "Equipe PCM",
+    prefixo: row?.prefixo || "",
+    observacoes: row?.observacoes || "",
+    posicoes: POSICOES.map((posicao) => {
+      const atual = posicoesMap.get(norm(posicao));
+      return {
+        posicao,
+        numeroFogo: atual?.numero_fogo || "",
+        calibragem: atual?.calibragem || "",
+        sulco: atual?.sulco || "",
+        foto: null,
+        fotoUrl: atual?.foto_url || "",
+        fotoPath: atual?.foto_path || "",
+        conferencia_status: atual?.conferencia_status || null,
+        conferencia_em: atual?.conferencia_em || null,
+        conferencia_por_nome: atual?.conferencia_por_nome || null,
+        conferencia_por_login: atual?.conferencia_por_login || null,
+        conferencia_por_id: atual?.conferencia_por_id || null,
+      };
+    }),
+  };
+}
+
 function createEstoqueItem() {
   return {
     numeroPneu: "",
@@ -1185,6 +1214,8 @@ function AuditoriaModal({
   open,
   form,
   saving,
+  isEditing = false,
+  canSaveOffline = true,
   onClose,
   onFieldChange,
   onPosicaoChange,
@@ -1197,7 +1228,7 @@ function AuditoriaModal({
 
   return (
     <ModalShell
-      title="Lancar auditoria de pneus"
+      title={isEditing ? "Editar auditoria de pneus" : "Lancar auditoria de pneus"}
       subtitle="PCM · Auditoria"
       onClose={onClose}
       maxWidth="max-w-6xl"
@@ -1210,15 +1241,17 @@ function AuditoriaModal({
           >
             Cancelar
           </button>
-          <button
-            type="button"
-            onClick={onSalvarOffline}
-            disabled={saving}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60"
-          >
-            <FaSave />
-            Salvar offline
-          </button>
+          {canSaveOffline ? (
+            <button
+              type="button"
+              onClick={onSalvarOffline}
+              disabled={saving}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60"
+            >
+              <FaSave />
+              Salvar offline
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onSalvar}
@@ -1226,7 +1259,7 @@ function AuditoriaModal({
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
           >
             <FaSave />
-            {saving ? "Salvando..." : "Salvar auditoria"}
+            {saving ? "Salvando..." : isEditing ? "Salvar alteracoes" : "Salvar auditoria"}
           </button>
         </div>
       }
@@ -1286,6 +1319,7 @@ function AuditoriaModal({
               <PhotoField
                 title="Foto do numero de fogo"
                 file={posicao.foto}
+                imageUrl={posicao.fotoUrl || ""}
                 inputId={`auditoria-${index}`}
                 onChange={(event) => onPosicaoChange(index, "foto", event.target.files?.[0] || null)}
                 onNativeCapture={() => onCapturePhoto(index)}
@@ -1703,10 +1737,12 @@ function ConsultaModal({
   open,
   tab,
   row,
+  canEditAuditoriaCompleta,
   transnetSaving,
   checkingStatusKey,
   isNativeShell,
   onClose,
+  onEditarAuditoriaCompleta,
   onMarcarTransnet,
   onMarcarAuditoriaStatus,
   onMarcarEstoqueStatus,
@@ -1995,7 +2031,16 @@ function ConsultaModal({
     );
 
     footer = (
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        {canEditAuditoriaCompleta ? (
+          <button
+            type="button"
+            onClick={onEditarAuditoriaCompleta}
+            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Editar todos os campos
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onClose}
@@ -2230,6 +2275,8 @@ function ConsultaModal({
 
 export default function PCMTrocaPneus() {
   const { user } = useContext(AuthContext);
+  const isAdmin =
+    norm(user?.nivel).toLowerCase() === "administrador" || norm(user?.nivel).toLowerCase() === "adm";
   const isNativeShell = Capacitor.isNativePlatform();
   const [searchParams, setSearchParams] = useSearchParams();
   const userName = safeText(user?.nome || user?.login || user?.email) || "Equipe PCM";
@@ -2265,6 +2312,7 @@ export default function PCMTrocaPneus() {
   const [estoqueOpen, setEstoqueOpen] = useState(false);
   const [consertoOpen, setConsertoOpen] = useState(false);
   const [riscadoOpen, setRiscadoOpen] = useState(false);
+  const [auditoriaEditId, setAuditoriaEditId] = useState(null);
 
   const [consulta, setConsulta] = useState({ open: false, tab: TAB_TROCA, row: null });
 
@@ -2810,6 +2858,14 @@ export default function PCMTrocaPneus() {
     setSearchParams({ aba: tab });
   }
 
+  function handleEditarAuditoriaCompleta() {
+    if (!isAdmin || consulta.tab !== TAB_AUDITORIA || !consulta.row) return;
+    setAuditoriaEditId(consulta.row.id);
+    setAuditoriaForm(createAuditoriaFormFromRow(consulta.row));
+    setConsulta((current) => ({ ...current, open: false }));
+    setAuditoriaOpen(true);
+  }
+
   function limparFiltrosAtivos() {
     if (activeTab === TAB_TROCA) {
       setTrocaFiltros({
@@ -2869,6 +2925,7 @@ export default function PCMTrocaPneus() {
 
     if (activeTab === TAB_AUDITORIA) {
       const rowsRef = auditorias.length ? auditorias : await carregarAuditorias();
+      setAuditoriaEditId(null);
       setAuditoriaForm(createAuditoriaForm(buildNextFicha(rowsRef, "ficha_auditoria", "AP"), userName));
       setAuditoriaOpen(true);
       return;
@@ -3135,6 +3192,53 @@ export default function PCMTrocaPneus() {
         origem: "INOVE_WEB_APP",
       },
     ]);
+
+    if (error) throw error;
+  }
+
+  async function updateAuditoriaPayload(payload) {
+    const posicoes = [];
+
+    for (let index = 0; index < payload.posicoes.length; index += 1) {
+      const item = payload.posicoes[index];
+      let fotoPath = item.fotoPath || "";
+      let fotoUrl = item.fotoUrl || "";
+
+      if (item.fotoFile) {
+        const uploaded = await uploadFoto(
+          BUCKET_AUDITORIA,
+          "auditorias",
+          payload.id,
+          `posicao_${index + 1}`,
+          item.fotoFile
+        );
+        fotoPath = uploaded.path;
+        fotoUrl = uploaded.url;
+      }
+
+      posicoes.push({
+        posicao: item.posicao,
+        numero_fogo: item.numeroFogo,
+        calibragem: item.calibragem,
+        sulco: item.sulco,
+        foto_path: fotoPath,
+        foto_url: fotoUrl,
+        conferencia_status: item.conferencia_status || null,
+        conferencia_em: item.conferencia_em || null,
+        conferencia_por_nome: item.conferencia_por_nome || null,
+        conferencia_por_login: item.conferencia_por_login || null,
+        conferencia_por_id: item.conferencia_por_id || null,
+      });
+    }
+
+    const { error } = await supabase
+      .from("pcm_auditoria_pneus")
+      .update({
+        prefixo: payload.prefixo,
+        posicoes,
+        observacoes: payload.observacoes,
+      })
+      .eq("id", payload.id);
 
     if (error) throw error;
   }
@@ -3420,6 +3524,7 @@ export default function PCMTrocaPneus() {
     const ficha = safeText(auditoriaForm.ficha);
     const prefixo = safeText(auditoriaForm.prefixo);
     const observacoes = safeText(auditoriaForm.observacoes);
+    const isEditing = !!auditoriaEditId;
 
     if (!ficha || !prefixo) {
       alert("Preencha ficha e prefixo da auditoria.");
@@ -3427,7 +3532,11 @@ export default function PCMTrocaPneus() {
     }
 
     const hasInvalidPosition = auditoriaForm.posicoes.some(
-      (item) => !safeText(item.numeroFogo) || !safeText(item.calibragem) || !safeText(item.sulco) || !item.foto
+      (item) =>
+        !safeText(item.numeroFogo) ||
+        !safeText(item.calibragem) ||
+        !safeText(item.sulco) ||
+        (!item.foto && !item.fotoUrl)
     );
 
     if (hasInvalidPosition) {
@@ -3436,7 +3545,7 @@ export default function PCMTrocaPneus() {
     }
 
     const payload = {
-      id: createClientUuid(),
+      id: auditoriaEditId || createClientUuid(),
       ficha,
       prefixo,
       observacoes,
@@ -3449,22 +3558,45 @@ export default function PCMTrocaPneus() {
         calibragem: safeText(item.calibragem),
         sulco: safeText(item.sulco),
         fotoFile: item.foto,
+        fotoUrl: item.fotoUrl || "",
+        fotoPath: item.fotoPath || "",
+        conferencia_status: item.conferencia_status || null,
+        conferencia_em: item.conferencia_em || null,
+        conferencia_por_nome: item.conferencia_por_nome || null,
+        conferencia_por_login: item.conferencia_por_login || null,
+        conferencia_por_id: item.conferencia_por_id || null,
       })),
     };
 
     try {
       setSaving(true);
 
-      if (mode === "offline" || !window.navigator.onLine) {
+      if (isEditing && (mode === "offline" || !window.navigator.onLine)) {
+        alert("Edicao de auditoria existente exige internet.");
+        return;
+      }
+
+      if (!isEditing && (mode === "offline" || !window.navigator.onLine)) {
         await queueAuditoriaSubmission(payload);
+      } else if (isEditing) {
+        await updateAuditoriaPayload(payload);
       } else {
         await submitAuditoriaPayload(payload);
       }
 
       setAuditoriaOpen(false);
-      if (mode === "offline" || !window.navigator.onLine) {
+      setAuditoriaEditId(null);
+      if (!isEditing && (mode === "offline" || !window.navigator.onLine)) {
         setAuditoriaForm(createAuditoriaForm(auditoriaForm.ficha, userName));
         alert("Auditoria salva offline. Ela sera enviada quando a internet voltar.");
+      } else if (isEditing) {
+        const data = await carregarAuditorias();
+        const updatedRow = (data || []).find((item) => item.id === payload.id) || null;
+        setAuditoriaForm(createAuditoriaForm(buildNextFicha(data, "ficha_auditoria", "AP"), userName));
+        if (updatedRow) {
+          setConsulta({ open: true, tab: TAB_AUDITORIA, row: updatedRow });
+        }
+        alert("Auditoria atualizada com sucesso.");
       } else {
         const data = await carregarAuditorias();
         setAuditoriaForm(createAuditoriaForm(buildNextFicha(data, "ficha_auditoria", "AP"), userName));
@@ -3472,9 +3604,10 @@ export default function PCMTrocaPneus() {
       }
     } catch (error) {
       console.error("Erro ao salvar auditoria:", error);
-      if (mode !== "offline" && isNetworkError(error)) {
+      if (!isEditing && mode !== "offline" && isNetworkError(error)) {
         await queueAuditoriaSubmission(payload);
         setAuditoriaOpen(false);
+        setAuditoriaEditId(null);
         setAuditoriaForm(createAuditoriaForm(auditoriaForm.ficha, userName));
         alert("Sem internet no envio. A auditoria foi guardada offline e sera enviada depois.");
         return;
@@ -4870,7 +5003,12 @@ export default function PCMTrocaPneus() {
         open={auditoriaOpen}
         form={auditoriaForm}
         saving={saving}
-        onClose={() => setAuditoriaOpen(false)}
+        isEditing={!!auditoriaEditId}
+        canSaveOffline={!auditoriaEditId}
+        onClose={() => {
+          setAuditoriaOpen(false);
+          setAuditoriaEditId(null);
+        }}
         onFieldChange={updateAuditoriaField}
         onPosicaoChange={updateAuditoriaPosicao}
         onCapturePhoto={captureAuditoriaPhoto}
@@ -4925,10 +5063,12 @@ export default function PCMTrocaPneus() {
         open={consulta.open}
         tab={consulta.tab}
         row={consulta.row}
+        canEditAuditoriaCompleta={consulta.tab === TAB_AUDITORIA && isAdmin}
         transnetSaving={transnetSaving}
         checkingStatusKey={checkingStatusKey}
         isNativeShell={isNativeShell}
         onClose={closeConsulta}
+        onEditarAuditoriaCompleta={handleEditarAuditoriaCompleta}
         onMarcarTransnet={marcarTransnet}
         onMarcarAuditoriaStatus={marcarAuditoriaStatus}
         onMarcarEstoqueStatus={marcarEstoqueStatus}

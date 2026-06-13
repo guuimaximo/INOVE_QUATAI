@@ -27,6 +27,20 @@ function fmtData(iso) {
   }
 }
 
+function fmtDataCurta(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 function normalizarPneu(valor) {
   const digits = String(valor || "").replace(/\D/g, "");
   if (!digits) return "";
@@ -202,6 +216,7 @@ export default function PCMControlePneus() {
           temAuditoria: !!row.tem_auditoria,
           posicoes: {},
           troca: false,
+          trocasDetalhes: [],
         });
       }
 
@@ -211,14 +226,27 @@ export default function PCMControlePneus() {
         aud: row.numero_fogo_aud,
         status: row.status,
       };
-      if (row.troca_pos_auditoria) item.troca = true;
+      if (row.troca_pos_auditoria) {
+        item.troca = true;
+        item.trocasDetalhes.push({
+          posicao: row.posicao,
+          data: row.troca_ultima_em || null,
+        });
+      }
       if (!item.ficha && row.ficha_auditoria) item.ficha = row.ficha_auditoria;
       if (!item.auditoria_em && row.auditoria_em) item.auditoria_em = row.auditoria_em;
       if (!item.auditado_por && row.auditado_por) item.auditado_por = row.auditado_por;
       if (row.tem_auditoria) item.temAuditoria = true;
     }
 
-    return [...map.values()];
+    return [...map.values()].map((item) => ({
+      ...item,
+      trocasDetalhes: item.trocasDetalhes.sort((a, b) => {
+        const da = a.data ? new Date(a.data).getTime() : 0;
+        const db = b.data ? new Date(b.data).getTime() : 0;
+        return db - da;
+      }),
+    }));
   }, [rowsRaw]);
 
   const filtradas = useMemo(() => {
@@ -619,7 +647,17 @@ export default function PCMControlePneus() {
                     </td>
                   ))}
                   <td className="px-2 py-1.5 text-center">
-                    {row.troca ? <span className="font-bold text-amber-600">SIM</span> : <span className="text-slate-300">—</span>}
+                    {row.troca ? (
+                      <div className="space-y-1 text-left">
+                        {row.trocasDetalhes.map((item) => (
+                          <div key={`${row.grupo_id}-${item.posicao}-${item.data || "sem-data"}`} className="rounded bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                            {item.posicao} · {fmtDataCurta(item.data)}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

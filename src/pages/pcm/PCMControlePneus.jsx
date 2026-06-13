@@ -10,6 +10,7 @@ const STATUS_PALETTE = {
   "OUTRO VEICULO": { bg: "#fef9c3", border: "#ca8a04", text: "#713f12", chip: "#ca8a04" },
   "NAO EXISTE": { bg: "#ffedd5", border: "#ea580c", text: "#7c2d12", chip: "#ea580c" },
   ESTOQUE: { bg: "#dbeafe", border: "#2563eb", text: "#1e3a8a", chip: "#2563eb" },
+  INCORRETO: { bg: "#fee2e2", border: "#dc2626", text: "#7f1d1d", chip: "#dc2626" },
 };
 
 function fmtData(iso) {
@@ -110,7 +111,8 @@ export default function PCMControlePneus() {
   const [buscaFogo, setBuscaFogo] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroComparacao, setFiltroComparacao] = useState("");
-  const [filtroManual, setFiltroManual] = useState("");
+  const [somenteSelecionados, setSomenteSelecionados] = useState(false);
+  const [prefixosSelecionados, setPrefixosSelecionados] = useState([]);
   const [filtroDataAuditoria, setFiltroDataAuditoria] = useState("");
   const [disparando, setDisparando] = useState(false);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
@@ -221,10 +223,15 @@ export default function PCMControlePneus() {
       }
 
       const item = map.get(key);
+      const statusVisual =
+        row.status ||
+        ((row.numero_fogo_base && !row.numero_fogo_aud) || (!row.numero_fogo_base && row.numero_fogo_aud)
+          ? "INCORRETO"
+          : null);
       item.posicoes[row.posicao] = {
         base: row.numero_fogo_base,
         aud: row.numero_fogo_aud,
-        status: row.status,
+        status: statusVisual,
       };
       if (row.troca_pos_auditoria) {
         item.troca = true;
@@ -251,11 +258,6 @@ export default function PCMControlePneus() {
 
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    const prefixosManuais = filtroManual
-      .split(/[,\s;]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-
     return linhasBase.filter((row) => {
       if (q) {
         const hay = [row.ficha, row.prefixo, row.auditado_por].join(" ").toLowerCase();
@@ -275,7 +277,7 @@ export default function PCMControlePneus() {
       if (filtroComparacao === "CORRETO" && !todosOk) return false;
       if (filtroComparacao === "INCORRETO" && !temIncorreto) return false;
 
-      if (prefixosManuais.length > 0 && !prefixosManuais.includes(String(row.prefixo || "").trim())) {
+      if (somenteSelecionados && !prefixosSelecionados.includes(String(row.prefixo || "").trim())) {
         return false;
       }
 
@@ -288,7 +290,7 @@ export default function PCMControlePneus() {
 
       return true;
     });
-  }, [busca, filtroStatus, filtroComparacao, filtroManual, filtroDataAuditoria, linhasBase]);
+  }, [busca, filtroStatus, filtroComparacao, somenteSelecionados, prefixosSelecionados, filtroDataAuditoria, linhasBase]);
 
   const kpis = useMemo(() => {
     let totalStatus = 0;
@@ -379,11 +381,6 @@ export default function PCMControlePneus() {
 
   const estoqueFiltrado = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    const prefixosManuais = filtroManual
-      .split(/[,\s;]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-
     return estoqueComparado.filter((row) => {
       if (q) {
         const hay = [row.pneu, row.ficha_estoque, row.marca, row.situacao_inove, row.local, row.status].join(" ").toLowerCase();
@@ -392,9 +389,9 @@ export default function PCMControlePneus() {
       if (filtroStatus && row.status !== filtroStatus) return false;
       if (filtroComparacao === "CORRETO" && row.status !== "ESTOQUE OK") return false;
       if (filtroComparacao === "INCORRETO" && row.status === "ESTOQUE OK") return false;
-      if (prefixosManuais.length > 0) {
-        const localPrefixo = String(row.local || "").split("·")[0].trim();
-        if (!prefixosManuais.includes(localPrefixo) && !prefixosManuais.includes(String(row.ficha_estoque || "").trim())) return false;
+      if (somenteSelecionados) {
+        const localPrefixo = String(row.local || "").match(/\d+/)?.[0] || "";
+        if (!prefixosSelecionados.includes(localPrefixo)) return false;
       }
       if (filtroDataAuditoria) {
         if (!row.data_estoque) return false;
@@ -404,7 +401,7 @@ export default function PCMControlePneus() {
       }
       return true;
     });
-  }, [estoqueComparado, busca, filtroStatus, filtroComparacao, filtroManual, filtroDataAuditoria]);
+  }, [estoqueComparado, busca, filtroStatus, filtroComparacao, somenteSelecionados, prefixosSelecionados, filtroDataAuditoria]);
 
   const estoqueKpis = useMemo(() => {
     return {
@@ -416,6 +413,12 @@ export default function PCMControlePneus() {
       naoExiste: estoqueComparado.filter((item) => item.status === "NAO EXISTE").length,
     };
   }, [estoqueComparado]);
+
+  function togglePrefixoSelecionado(prefixo) {
+    setPrefixosSelecionados((current) =>
+      current.includes(prefixo) ? current.filter((item) => item !== prefixo) : [...current, prefixo]
+    );
+  }
 
   const resultadoBuscaFogo = useMemo(() => {
     const pneu = normalizarPneu(buscaFogo);
@@ -587,12 +590,13 @@ export default function PCMControlePneus() {
           <option value="CORRETO">Correto</option>
           <option value="INCORRETO">Incorreto</option>
         </select>
-        <input
-          value={filtroManual}
-          onChange={(event) => setFiltroManual(event.target.value)}
-          placeholder="Filtro manual: 221601, 221602"
-          className="min-w-[240px] rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-        />
+        <button
+          type="button"
+          onClick={() => setSomenteSelecionados((current) => !current)}
+          className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${somenteSelecionados ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-300 bg-white text-slate-600"}`}
+        >
+          {somenteSelecionados ? "Manual ligado" : "Filtro manual"}
+        </button>
         <input
           type="date"
           value={filtroDataAuditoria}
@@ -608,10 +612,11 @@ export default function PCMControlePneus() {
       {carregando ? (
         <div className="grid place-items-center py-16 text-slate-500">Carregando…</div>
       ) : abaAtiva === "veiculos" ? (
-        <div className="overflow-auto rounded-lg border border-slate-200 bg-white shadow">
+        <div className="max-h-[calc(100vh-260px)] overflow-auto rounded-lg border border-slate-200 bg-white shadow">
           <table className="w-full text-xs">
-            <thead className="bg-slate-100 text-slate-700">
+            <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
               <tr>
+                <th className="px-2 py-2 text-center">Flag</th>
                 <th className="px-2 py-2 text-left">Data</th>
                 <th className="px-2 py-2 text-left">Ficha</th>
                 <th className="px-2 py-2 text-left">Prefixo</th>
@@ -626,7 +631,7 @@ export default function PCMControlePneus() {
             <tbody>
               {filtradas.length === 0 ? (
                 <tr>
-                  <td colSpan={3 + POSICOES.length + 1} className="py-8 text-center text-slate-400">
+                  <td colSpan={4 + POSICOES.length + 1} className="py-8 text-center text-slate-400">
                     Nenhum prefixo na base TransNet.
                   </td>
                 </tr>
@@ -634,9 +639,19 @@ export default function PCMControlePneus() {
 
               {filtradas.map((row) => (
                 <tr key={row.grupo_id} className="border-t border-slate-100 hover:bg-slate-50">
+                  <td className="px-2 py-1.5 text-center">
+                    <button
+                      type="button"
+                      onClick={() => togglePrefixoSelecionado(row.prefixo)}
+                      className={`rounded px-2 py-1 text-xs font-bold ${prefixosSelecionados.includes(row.prefixo) ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}
+                      title="Selecionar prefixo no filtro manual"
+                    >
+                      ⚑
+                    </button>
+                  </td>
                   <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{fmtData(row.auditoria_em)}</td>
                   <td className="px-2 py-1.5 font-mono text-slate-700">{row.ficha || "—"}</td>
-                  <td className="px-2 py-1.5 font-bold text-slate-900">{row.prefixo}</td>
+                  <td className={`px-2 py-1.5 font-bold ${POSICOES.some((posicao) => row.posicoes[posicao]?.status === "INCORRETO") ? "text-red-600" : "text-slate-900"}`}>{row.prefixo}</td>
                   {POSICOES.map((posicao) => (
                     <td key={posicao} className="px-1 py-1">
                       <Celula
@@ -665,9 +680,9 @@ export default function PCMControlePneus() {
           </table>
         </div>
       ) : (
-        <div className="overflow-auto rounded-lg border border-slate-200 bg-white shadow">
+        <div className="max-h-[calc(100vh-260px)] overflow-auto rounded-lg border border-slate-200 bg-white shadow">
           <table className="w-full text-xs">
-            <thead className="bg-slate-100 text-slate-700">
+            <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
               <tr>
                 <th className="px-2 py-2 text-left">Data</th>
                 <th className="px-2 py-2 text-left">Ficha</th>

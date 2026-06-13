@@ -94,8 +94,33 @@ serve(async (req: Request) => {
   const data_alvo = String(payload?.data_alvo ?? "");
   const lote_id = payload?.lote_id ? String(payload.lote_id) : undefined;
   const force = Boolean(payload?.force);
-  const workflow =
-    tipo === "semanal" ? "bot-estoque-semanal.yml" : "bot-estoque-diaria.yml";
+
+  const WORKFLOWS: Record<string, string> = {
+    diaria: "bot-estoque-diaria.yml",
+    semanal: "bot-estoque-semanal.yml",
+    sr_aberta: "bot-sr-aberta.yml",
+  };
+  const workflow = WORKFLOWS[tipo] ?? WORKFLOWS.diaria;
+
+  // SR Aberta: sem debounce nem job tracking — dispara direto.
+  if (tipo === "sr_aberta") {
+    const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${workflow}/dispatches`;
+    const ghResp = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ref: REF }),
+    });
+    if (!ghResp.ok) {
+      const text = await ghResp.text();
+      return json({ ok: false, status: ghResp.status, workflow, ref: REF, error: text }, 502);
+    }
+    return json({ ok: true, workflow, ref: REF });
+  }
 
   // Debounce por lote (se vier) ou por (data, tipo)
   if (!force && (lote_id || data_alvo)) {

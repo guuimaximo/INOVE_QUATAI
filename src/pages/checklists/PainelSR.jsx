@@ -1,11 +1,14 @@
 // src/pages/checklists/PainelSR.jsx
 // Painel "Kitchen Display" das SRs em aberto no TransNet.
-// 2 colunas: Mecanica (vermelho) e Eletrica (amarelo).
-// Clicar no card grava triado_em no Supabase -> some pra todos via realtime.
+// 2 colunas: Mecanica (vermelho) | Eletrica (amarelo).
+// Clique no card grava triado_em -> some pra todos (realtime).
+// O proprio painel dispara o bot a cada AUTO_REFRESH_MS via dispatch-bot.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabase";
 import { FaWrench, FaBolt, FaSyncAlt } from "react-icons/fa";
+
+const AUTO_REFRESH_MS = 5 * 60_000; // 5 min
 
 function ordenarPorPrefixo(arr) {
   return [...arr].sort((a, b) => {
@@ -75,23 +78,58 @@ function Coluna({ titulo, icone, cor, srs, onTriar }) {
   );
 }
 
+function formatCountdown(ms) {
+  if (ms <= 0) return "00:00";
+  const total = Math.ceil(ms / 1000);
+  const m = String(Math.floor(total / 60)).padStart(2, "0");
+  const s = String(total % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
 export default function PainelSR() {
   const [srs, setSrs] = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const [atualizando, setAtualizando] = useState(false);
+  const [disparando, setDisparando] = useState(false);
+  const [proximoEm, setProximoEm] = useState(AUTO_REFRESH_MS);
+  const [ultimaConsulta, setUltimaConsulta] = useState(null);
+  const proximaExecucaoRef = useRef(Date.now() + AUTO_REFRESH_MS);
 
   async function carregar() {
-    setAtualizando(true);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("solicitacao_reparo_aberta")
       .select("*")
       .is("triado_em", null)
       .order("prefixo", { ascending: true });
-    if (!error) setSrs(data || []);
+    setSrs(data || []);
     setCarregando(false);
-    setAtualizando(false);
+    if (data && data.length) {
+      const max = data
+        .map((d) => d.ultima_consulta)
+        .filter(Boolean)
+        .sort()
+        .pop();
+      if (max) setUltimaConsulta(max);
+    }
   }
 
+  async function dispararBot(motivo = "agendado") {
+    if (disparando) return;
+    setDisparando(true);
+    try {
+      const { error } = await supabase.functions.invoke("dispatch-bot", {
+        body: { tipo: "sr_aberta" },
+      });
+      if (error) console.error("dispatch-bot falhou", error);
+      // Reagenda proxima execucao independente do resultado.
+      proximaExecucaoRef.current = Date.now() + AUTO_REFRESH_MS;
+      // Da uns segundos pro bot rodar e recarrega.
+      setTimeout(carregar, 45_000);
+    } finally {
+      setDisparando(false);
+    }
+  }
+
+  // Bootstrap: carrega dados + assina realtime + timer do countdown.
   useEffect(() => {
     carregar();
     const ch = supabase
@@ -102,18 +140,26 @@ export default function PainelSR() {
         () => carregar(),
       )
       .subscribe();
-    const itv = setInterval(carregar, 60_000); // fallback caso o realtime caia
+
+    const tick = setInterval(() => {
+      const restante = proximaExecucaoRef.current - Date.now();
+      setProximoEm(restante);
+      if (restante <= 0) {
+        dispararBot("auto");
+      }
+    }, 1000);
+
     return () => {
       supabase.removeChannel(ch);
-      clearInterval(itv);
+      clearInterval(tick);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function triar(sr) {
-    // Otimista: tira da tela na hora
     setSrs((prev) => prev.filter((x) => x.id_reclamacao !== sr.id_reclamacao));
     const { data: userData } = await supabase.auth.getUser();
-    const quem = userData?.user?.email || "desconhecido";
+    const quem = userData?.user?.email || "painel";
     const { error } = await supabase
       .from("solicitacao_reparo_aberta")
       .update({ triado_em: new Date().toISOString(), triado_por: quem })
@@ -132,15 +178,23 @@ export default function PainelSR() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] p-3 gap-3 bg-slate-100">
-      <header className="flex items-center gap-3">
+      <header className="flex items-center gap-3 flex-wrap">
         <h1 className="text-2xl font-bold text-slate-800">Painel SR</h1>
+        <div className="text-sm text-slate-600">
+          Próxima atualização em <span className="font-mono font-bold text-slate-900">{formatCountdown(proximoEm)}</span>
+          {ultimaConsulta && (
+            <span className="ml-3 text-slate-500">
+              Última: {new Date(ultimaConsulta).toLocaleTimeString("pt-BR")}
+            </span>
+          )}
+        </div>
         <button
-          onClick={carregar}
-          className="ml-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-sm"
-          disabled={atualizando}
-          title="Atualizar"
+          onClick={() => dispararBot("manual")}
+          className="ml-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 text-sm"
+          disabled={disparando}
         >
-          <FaSyncAlt className={atualizando ? "animate-spin" : ""} /> Atualizar
+          <FaSyncAlt className={disparando ? "animate-spin" : ""} />
+          {disparando ? "Disparando..." : "Atualizar agora"}
         </button>
       </header>
 

@@ -1,9 +1,8 @@
 name: Bot SR Aberta · Consulta TransNet
 
 on:
-  schedule:
-    # A cada 5 min (pode demorar uns minutos pra disparar quando o runner esta cheio).
-    - cron: "*/5 * * * *"
+  # Disparado pelo INOVE via dispatch-bot Edge Function (tipo: "sr_aberta").
+  # Sem cron — a tela do Painel SR comanda a frequencia.
   workflow_dispatch:
 
 concurrency:

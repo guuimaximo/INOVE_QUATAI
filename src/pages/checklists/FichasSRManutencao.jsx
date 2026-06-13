@@ -73,7 +73,7 @@ function CardAberto({ grupo, cor, onFechar }) {
   );
 }
 
-function ColunaAberto({ titulo, icone, cor, grupos, onFechar }) {
+function ColunaAberto({ titulo, icone, cor, grupos, onFechar, comPlaca = false }) {
   const palette = { mecanica: "#dc2626", eletrica: "#ca8a04" }[cor];
   return (
     <section className="flex flex-col h-full min-h-0">
@@ -83,14 +83,22 @@ function ColunaAberto({ titulo, icone, cor, grupos, onFechar }) {
       >
         {icone}
         <span>{titulo}</span>
+        {comPlaca && (
+          <span className="ml-1 text-[10px] uppercase tracking-wider bg-green-500/90 px-2 py-0.5 rounded">
+            chegou
+          </span>
+        )}
         <span className="ml-auto bg-white/20 px-2 py-0.5 rounded-full text-sm">
           {grupos.length}
         </span>
       </header>
-      <div className="flex-1 min-h-0 overflow-auto bg-slate-50 rounded-b-lg p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 content-start">
+      <div
+        className="flex-1 min-h-0 overflow-auto rounded-b-lg p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 content-start"
+        style={{ background: comPlaca ? "#ecfdf5" : "#f8fafc" }}
+      >
         {grupos.length === 0 && (
           <div className="col-span-full text-center text-slate-400 py-6 text-xs">
-            Nenhuma SR em aberto
+            {comPlaca ? "Nenhum carro chegou ainda" : "Nenhuma SR em aberto"}
           </div>
         )}
         {grupos.map((g) => (
@@ -257,23 +265,24 @@ export default function FichasSRManutencao() {
   }
 
   const {
-    abertasMec, abertasEle,
+    semPlacaMec, semPlacaEle,
+    comPlacaMec, comPlacaEle,
     fechadasMec, fechadasEle,
   } = useMemo(() => {
-    const abertas = srs.filter((s) => !s.triado_em && !s.fechado_em);
-    const fechadas = srs.filter((s) => {
-      const t = s.triado_em || s.fechado_em;
-      return t && new Date(t) >= corte;
-    });
-    // Fechadas: mais recentes primeiro.
-    fechadas.sort((a, b) => {
-      const ta = a.triado_em || a.fechado_em;
-      const tb = b.triado_em || b.fechado_em;
-      return String(tb).localeCompare(String(ta));
-    });
+    // SEM PLACA: aberta no TransNet, ainda nao triada pelo auxiliar.
+    const semPlaca = srs.filter((s) => !s.triado_em && !s.fechado_em);
+    // COM PLACA: auxiliar ja colocou a placa, manutencao pode comecar.
+    const comPlaca = srs.filter((s) => s.triado_em && !s.fechado_em);
+    // FECHADAS: depois do corte das 20h.
+    const fechadas = srs.filter(
+      (s) => s.fechado_em && new Date(s.fechado_em) >= corte,
+    );
+    fechadas.sort((a, b) => String(b.fechado_em).localeCompare(String(a.fechado_em)));
     return {
-      abertasMec: agruparPorPrefixo(abertas.filter((s) => s.categoria === "mecanica")),
-      abertasEle: agruparPorPrefixo(abertas.filter((s) => s.categoria === "eletrica")),
+      semPlacaMec: agruparPorPrefixo(semPlaca.filter((s) => s.categoria === "mecanica")),
+      semPlacaEle: agruparPorPrefixo(semPlaca.filter((s) => s.categoria === "eletrica")),
+      comPlacaMec: agruparPorPrefixo(comPlaca.filter((s) => s.categoria === "mecanica")),
+      comPlacaEle: agruparPorPrefixo(comPlaca.filter((s) => s.categoria === "eletrica")),
       fechadasMec: fechadas.filter((s) => s.categoria === "mecanica"),
       fechadasEle: fechadas.filter((s) => s.categoria === "eletrica"),
     };
@@ -308,13 +317,18 @@ export default function FichasSRManutencao() {
       {carregando ? (
         <div className="flex-1 grid place-items-center text-slate-500">Carregando…</div>
       ) : (
-        <div className="flex-1 min-h-0 grid grid-rows-[3fr_2fr] gap-2">
-          {/* Topo: abertas */}
+        <div className="flex-1 min-h-0 grid grid-rows-3 gap-2">
+          {/* Linha 1: SEM PLACA — auxiliar ainda nao triou */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 min-h-0">
-            <ColunaAberto titulo="Em aberto · Mecânica" icone={<FaWrench />} cor="mecanica" grupos={abertasMec} onFechar={setGrupoFechando} />
-            <ColunaAberto titulo="Em aberto · Elétrica" icone={<FaBolt />} cor="eletrica" grupos={abertasEle} onFechar={setGrupoFechando} />
+            <ColunaAberto titulo="Sem placa · Mecânica" icone={<FaWrench />} cor="mecanica" grupos={semPlacaMec} onFechar={setGrupoFechando} />
+            <ColunaAberto titulo="Sem placa · Elétrica" icone={<FaBolt />} cor="eletrica" grupos={semPlacaEle} onFechar={setGrupoFechando} />
           </div>
-          {/* Base: fechadas a partir das 20:00 */}
+          {/* Linha 2: COM PLACA — chegou na garagem, pronto pra executar */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 min-h-0">
+            <ColunaAberto titulo="Com placa · Mecânica" icone={<FaWrench />} cor="mecanica" grupos={comPlacaMec} onFechar={setGrupoFechando} comPlaca />
+            <ColunaAberto titulo="Com placa · Elétrica" icone={<FaBolt />} cor="eletrica" grupos={comPlacaEle} onFechar={setGrupoFechando} comPlaca />
+          </div>
+          {/* Linha 3: FECHADAS pos corte 20:00 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 min-h-0">
             <ColunaFechadas titulo="Fechadas · Mecânica" icone={<FaWrench />} cor="mecanica" srs={fechadasMec} />
             <ColunaFechadas titulo="Fechadas · Elétrica" icone={<FaBolt />} cor="eletrica" srs={fechadasEle} />

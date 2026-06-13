@@ -60,7 +60,21 @@ alocacao_por_pneu as (
 troca_post as (
   select
     t.prefixo_instalacao as prefixo,
-    t.posicao_instalacao as posicao,
+    case upper(trim(coalesce(t.posicao_instalacao, '')))
+      when 'DD' then 'DD'
+      when 'DIANTEIRO DIREITO' then 'DD'
+      when 'DE' then 'DE'
+      when 'DIANTEIRO ESQUERDO' then 'DE'
+      when 'TEE' then 'TEE'
+      when 'TRASEIRO EXTERNO ESQUERDO' then 'TEE'
+      when 'TEI' then 'TEI'
+      when 'TRASEIRO INTERNO ESQUERDO' then 'TEI'
+      when 'TDI' then 'TDI'
+      when 'TRASEIRO INTERNO DIREITO' then 'TDI'
+      when 'TDE' then 'TDE'
+      when 'TRASEIRO EXTERNO DIREITO' then 'TDE'
+      else trim(coalesce(t.posicao_instalacao, ''))
+    end as posicao,
     max(t.created_at) as ultima_troca_em
   from public.pcm_troca_pneus t
   where t.prefixo_instalacao is not null

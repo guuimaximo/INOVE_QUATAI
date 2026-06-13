@@ -92,6 +92,9 @@ export default function PCMControlePneus() {
   const [busca, setBusca] = useState("");
   const [buscaFogo, setBuscaFogo] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
+  const [filtroComparacao, setFiltroComparacao] = useState("");
+  const [filtroManual, setFiltroManual] = useState("");
+  const [filtroDataAuditoria, setFiltroDataAuditoria] = useState("");
   const [disparando, setDisparando] = useState(false);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
 
@@ -204,6 +207,11 @@ export default function PCMControlePneus() {
 
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
+    const prefixosManuais = filtroManual
+      .split(/[,\s;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
     return linhasBase.filter((row) => {
       if (q) {
         const hay = [row.ficha, row.prefixo, row.auditado_por].join(" ").toLowerCase();
@@ -215,9 +223,28 @@ export default function PCMControlePneus() {
         if (!has) return false;
       }
 
+       const statuses = POSICOES.map((posicao) => row.posicoes[posicao]?.status).filter(Boolean);
+       const temAuditoria = POSICOES.some((posicao) => !!row.posicoes[posicao]?.aud);
+       const todosOk = temAuditoria && statuses.length > 0 && statuses.every((status) => status === "OK");
+       const temIncorreto = statuses.some((status) => status !== "OK");
+
+      if (filtroComparacao === "CORRETO" && !todosOk) return false;
+      if (filtroComparacao === "INCORRETO" && !temIncorreto) return false;
+
+      if (prefixosManuais.length > 0 && !prefixosManuais.includes(String(row.prefixo || "").trim())) {
+        return false;
+      }
+
+      if (filtroDataAuditoria) {
+        if (!row.auditoria_em) return false;
+        const inicio = new Date(`${filtroDataAuditoria}T00:00:00`);
+        const dataAuditoria = new Date(row.auditoria_em);
+        if (Number.isNaN(dataAuditoria.getTime()) || dataAuditoria < inicio) return false;
+      }
+
       return true;
     });
-  }, [busca, filtroStatus, linhasBase]);
+  }, [busca, filtroStatus, filtroComparacao, filtroManual, filtroDataAuditoria, linhasBase]);
 
   const kpis = useMemo(() => {
     let totalStatus = 0;
@@ -370,6 +397,28 @@ export default function PCMControlePneus() {
           <option value="NAO EXISTE">NAO EXISTE</option>
           <option value="ESTOQUE">ESTOQUE</option>
         </select>
+        <select
+          value={filtroComparacao}
+          onChange={(event) => setFiltroComparacao(event.target.value)}
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+        >
+          <option value="">Todos resultados</option>
+          <option value="CORRETO">Correto</option>
+          <option value="INCORRETO">Incorreto</option>
+        </select>
+        <input
+          value={filtroManual}
+          onChange={(event) => setFiltroManual(event.target.value)}
+          placeholder="Filtro manual: 221601, 221602"
+          className="min-w-[240px] rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+        />
+        <input
+          type="date"
+          value={filtroDataAuditoria}
+          onChange={(event) => setFiltroDataAuditoria(event.target.value)}
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+          title="Auditorias a partir desta data"
+        />
         <span className="ml-auto text-xs text-slate-500">
           Exibindo {filtradas.length} / {linhasBase.length}
         </span>

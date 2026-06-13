@@ -63,6 +63,7 @@ const PCMResumo = lazy(() => import("./pages/pcm/PCMResumo"));
 const PCM_Preventivas = lazy(() => import("./pages/pcm/PCM_Preventivas"));
 const PCMTrocaPneus = lazy(() => import("./pages/pcm/PCMTrocaPneus"));
 const PCMControleFichas = lazy(() => import("./pages/pcm/PCMControleFichas"));
+const PCMControlePneus = lazy(() => import("./pages/pcm/PCMControlePneus"));
 
 const Usuarios = lazy(() => import("./pages/configuracoes/Usuarios"));
 const NiveisAcesso = lazy(() => import("./pages/configuracoes/NiveisAcesso"));

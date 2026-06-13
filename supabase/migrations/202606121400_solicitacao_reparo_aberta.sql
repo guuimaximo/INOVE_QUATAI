@@ -28,6 +28,7 @@ alter table public.solicitacao_reparo_aberta add column if not exists categoria 
 alter table public.solicitacao_reparo_aberta add column if not exists triado_em timestamptz;
 alter table public.solicitacao_reparo_aberta add column if not exists triado_por text;
 alter table public.solicitacao_reparo_aberta add column if not exists fechado_em timestamptz;
+alter table public.solicitacao_reparo_aberta add column if not exists fechado_por text;
 
 create index if not exists idx_sra_data_abertura on public.solicitacao_reparo_aberta (data_abertura desc);
 create index if not exists idx_sra_ultima_consulta on public.solicitacao_reparo_aberta (ultima_consulta desc);

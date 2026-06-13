@@ -28,15 +28,16 @@ function agruparPorPrefixo(arr) {
     .map(([prefixo, srs]) => ({ prefixo, srs }));
 }
 
-function CardAberto({ grupo, cor }) {
+function CardAberto({ grupo, cor, onFechar }) {
   const palette = {
     mecanica: { bg: "#fee2e2", border: "#dc2626", chip: "#dc2626" },
     eletrica: { bg: "#fef9c3", border: "#ca8a04", chip: "#ca8a04" },
   }[cor];
   const { prefixo, srs } = grupo;
   return (
-    <div
-      className="rounded-xl p-3 shadow-sm"
+    <button
+      onClick={() => onFechar(grupo)}
+      className="text-left rounded-xl p-3 shadow-sm hover:shadow-md active:scale-95 transition"
       style={{ background: palette.bg, border: `2px solid ${palette.border}` }}
     >
       <div className="flex items-center justify-between mb-1">
@@ -58,11 +59,11 @@ function CardAberto({ grupo, cor }) {
           </div>
         ))}
       </div>
-    </div>
+    </button>
   );
 }
 
-function ColunaAberto({ titulo, icone, cor, grupos }) {
+function ColunaAberto({ titulo, icone, cor, grupos, onFechar }) {
   const palette = { mecanica: "#dc2626", eletrica: "#ca8a04" }[cor];
   return (
     <section className="flex flex-col h-full min-h-0">
@@ -83,7 +84,7 @@ function ColunaAberto({ titulo, icone, cor, grupos }) {
           </div>
         )}
         {grupos.map((g) => (
-          <CardAberto key={g.prefixo} grupo={g} cor={cor} />
+          <CardAberto key={g.prefixo} grupo={g} cor={cor} onFechar={onFechar} />
         ))}
       </div>
     </section>
@@ -95,7 +96,9 @@ function LinhaFechada({ sr }) {
   const hh = fechado
     ? new Date(fechado).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     : "";
-  const origem = sr.triado_em ? "triado" : "atendido";
+  let origem = "—";
+  if (sr.fechado_em) origem = sr.fechado_por || "auto";
+  else if (sr.triado_em) origem = "auxiliar";
   return (
     <tr className="text-xs border-b border-slate-200 hover:bg-slate-50">
       <td className="px-2 py-1 font-bold text-slate-900">{sr.prefixo}</td>
@@ -103,7 +106,7 @@ function LinhaFechada({ sr }) {
       <td className="px-2 py-1 text-slate-700">{sr.motivo || "-"}</td>
       <td className="px-2 py-1 text-slate-500 max-w-[200px] truncate">{sr.observacao}</td>
       <td className="px-2 py-1 text-slate-500">{hh}</td>
-      <td className="px-2 py-1 text-slate-400">{origem}</td>
+      <td className="px-2 py-1 text-slate-400 truncate max-w-[120px]">{origem}</td>
     </tr>
   );
 }
@@ -155,6 +158,8 @@ export default function FichasSRManutencao() {
   const [srs, setSrs] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
+  const [grupoFechando, setGrupoFechando] = useState(null);
+  const [salvando, setSalvando] = useState(false);
   const corte = useMemo(() => ultimoCorte20h(), []);
 
   async function carregar() {
@@ -189,6 +194,32 @@ export default function FichasSRManutencao() {
       clearInterval(itv);
     };
   }, []);
+
+  async function confirmarFechar() {
+    if (!grupoFechando) return;
+    setSalvando(true);
+    const ids = grupoFechando.srs.map((s) => s.id_reclamacao);
+    const { data: userData } = await supabase.auth.getUser();
+    const quem = userData?.user?.email || "manutencao";
+    // Otimista: tira da tela.
+    setSrs((prev) =>
+      prev.map((s) =>
+        ids.includes(s.id_reclamacao)
+          ? { ...s, fechado_em: new Date().toISOString(), fechado_por: quem }
+          : s,
+      ),
+    );
+    const { error } = await supabase
+      .from("solicitacao_reparo_aberta")
+      .update({ fechado_em: new Date().toISOString(), fechado_por: quem })
+      .in("id_reclamacao", ids);
+    setSalvando(false);
+    setGrupoFechando(null);
+    if (error) {
+      alert("Falha ao fechar: " + error.message);
+      carregar();
+    }
+  }
 
   const {
     abertasMec, abertasEle,
@@ -238,13 +269,54 @@ export default function FichasSRManutencao() {
         <div className="flex-1 min-h-0 grid grid-rows-[3fr_2fr] gap-2">
           {/* Topo: abertas */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 min-h-0">
-            <ColunaAberto titulo="Em aberto · Mecânica" icone={<FaWrench />} cor="mecanica" grupos={abertasMec} />
-            <ColunaAberto titulo="Em aberto · Elétrica" icone={<FaBolt />} cor="eletrica" grupos={abertasEle} />
+            <ColunaAberto titulo="Em aberto · Mecânica" icone={<FaWrench />} cor="mecanica" grupos={abertasMec} onFechar={setGrupoFechando} />
+            <ColunaAberto titulo="Em aberto · Elétrica" icone={<FaBolt />} cor="eletrica" grupos={abertasEle} onFechar={setGrupoFechando} />
           </div>
           {/* Base: fechadas a partir das 20:00 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 min-h-0">
             <ColunaFechadas titulo="Fechadas · Mecânica" icone={<FaWrench />} cor="mecanica" srs={fechadasMec} />
             <ColunaFechadas titulo="Fechadas · Elétrica" icone={<FaBolt />} cor="eletrica" srs={fechadasEle} />
+          </div>
+        </div>
+      )}
+
+      {grupoFechando && (
+        <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5">
+            <h2 className="text-lg font-bold mb-1">Fechar SR</h2>
+            <p className="text-sm text-slate-600 mb-3">
+              Confirma fechamento do prefixo{" "}
+              <span className="font-bold text-slate-900">{grupoFechando.prefixo}</span>{" "}
+              ({grupoFechando.srs.length}{" "}
+              {grupoFechando.srs.length > 1 ? "SRs" : "SR"})?
+            </p>
+            <ul className="bg-slate-50 rounded p-2 text-xs space-y-1 max-h-40 overflow-auto mb-4">
+              {grupoFechando.srs.map((sr) => (
+                <li key={sr.id_reclamacao}>
+                  <span className="text-slate-500 mr-1">#{sr.codigo}</span>
+                  <span className="font-medium">{sr.motivo}</span>
+                  {sr.observacao && (
+                    <span className="text-slate-500"> · {sr.observacao}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setGrupoFechando(null)}
+                className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm"
+                disabled={salvando}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarFechar}
+                className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm disabled:opacity-50"
+                disabled={salvando}
+              >
+                {salvando ? "Fechando..." : "Confirmar fechamento"}
+              </button>
+            </div>
           </div>
         </div>
       )}

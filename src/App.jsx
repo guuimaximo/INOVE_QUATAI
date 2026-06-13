@@ -89,8 +89,6 @@ const EstoqueDieselPlanejamentoControle = lazy(() => import("./pages/estoque-die
 const EstoqueDieselParametros = lazy(() => import("./pages/estoque-diesel/EstoqueDieselParametros"));
 const EstoqueDieselRecebimento = lazy(() => import("./pages/estoque-diesel/EstoqueDieselRecebimento"));
 
-const PCMControlePneus = lazy(() => import("./pages/pcm/PCMControlePneus"));
-
 const ChecklistCentral = lazy(() => import("./pages/checklists/ChecklistCentral"));
 const PainelSR = lazy(() => import("./pages/checklists/PainelSR"));
 const FichasSRManutencao = lazy(() => import("./pages/checklists/FichasSRManutencao"));

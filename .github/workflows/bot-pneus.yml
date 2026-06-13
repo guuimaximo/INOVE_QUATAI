@@ -1,0 +1,58 @@
+name: Bot Pneus · Snapshot TransNet
+
+on:
+  # Disparado pelo INOVE via dispatch-bot Edge Function (tipo: "pneus").
+  workflow_dispatch:
+
+concurrency:
+  group: bot-pneus
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: bot/requirements.txt
+
+      - name: Setup Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Install Python deps
+        working-directory: bot
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run bot pneus
+        working-directory: bot
+        timeout-minutes: 20
+        env:
+          PYTHONUNBUFFERED: "1"
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TRANSNET_URL: ${{ secrets.TRANSNET_URL }}
+          TRANSNET_USER: ${{ secrets.TRANSNET_USER }}
+          TRANSNET_PASSWORD: ${{ secrets.TRANSNET_PASSWORD }}
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+          HEADLESS: "true"
+        run: python -u bot_pneus.py
+
+      - name: Upload CSVs/debug
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-pneus-debug-${{ github.run_attempt }}
+          path: bot/downloads/**
+          if-no-files-found: ignore
+          retention-days: 7

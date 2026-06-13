@@ -99,11 +99,12 @@ serve(async (req: Request) => {
     diaria: "bot-estoque-diaria.yml",
     semanal: "bot-estoque-semanal.yml",
     sr_aberta: "bot-sr-aberta.yml",
+    pneus: "bot-pneus.yml",
   };
   const workflow = WORKFLOWS[tipo] ?? WORKFLOWS.diaria;
 
-  // SR Aberta: sem debounce nem job tracking — dispara direto.
-  if (tipo === "sr_aberta") {
+  // SR Aberta / Pneus: sem debounce nem job tracking — dispara direto.
+  if (tipo === "sr_aberta" || tipo === "pneus") {
     const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${workflow}/dispatches`;
     const ghResp = await fetch(url, {
       method: "POST",

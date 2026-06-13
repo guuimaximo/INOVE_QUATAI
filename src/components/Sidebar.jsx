@@ -176,6 +176,7 @@ export default function Sidebar() {
           { path: PCM_ROUTES.preventivas, label: "Preventivas", icon: <FaWrench /> },
           { path: PCM_ROUTES.trocaPneus, label: "Troca de pneus", icon: <FaTools /> },
           { path: PCM_ROUTES.controleFichas, label: "Controle de fichas", icon: <FaClipboardList /> },
+          { path: "/pcm-controle-pneus", label: "Controle de pneus", icon: <FaTools /> },
         ],
       },
 

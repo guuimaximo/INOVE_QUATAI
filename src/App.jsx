@@ -88,6 +88,8 @@ const EstoqueDieselPlanejamentoControle = lazy(() => import("./pages/estoque-die
 const EstoqueDieselParametros = lazy(() => import("./pages/estoque-diesel/EstoqueDieselParametros"));
 const EstoqueDieselRecebimento = lazy(() => import("./pages/estoque-diesel/EstoqueDieselRecebimento"));
 
+const PCMControlePneus = lazy(() => import("./pages/pcm/PCMControlePneus"));
+
 const ChecklistCentral = lazy(() => import("./pages/checklists/ChecklistCentral"));
 const PainelSR = lazy(() => import("./pages/checklists/PainelSR"));
 const FichasSRManutencao = lazy(() => import("./pages/checklists/FichasSRManutencao"));
@@ -267,6 +269,7 @@ export default function App() {
               <Route path="/pcm-preventivas" element={<PCM_Preventivas />} />
               <Route path="/pcm-troca-pneus" element={<PCMTrocaPneus />} />
               <Route path="/pcm-controle-fichas" element={<PCMControleFichas />} />
+              <Route path="/pcm-controle-pneus" element={<PCMControlePneus />} />
 
               {/* Checklists */}
               <Route path="/checklists" element={<ChecklistCentral />} />

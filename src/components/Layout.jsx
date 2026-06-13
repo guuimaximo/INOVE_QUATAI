@@ -41,6 +41,7 @@ function getPageTitle(pathname) {
   if (pathname.startsWith("/suprimentos/contagem")) return "Contagem";
   if (pathname.startsWith("/desempenho")) return "Diesel";
   if (pathname.startsWith("/embarcados")) return "Embarcados";
+  if (pathname.startsWith("/pcm-controle-pneus")) return "Controle de pneus";
   if (pathname.startsWith("/pcm-troca-pneus")) return "Troca de pneus";
   if (pathname.startsWith("/pcm")) return "PCM";
   if (pathname.startsWith("/central") || pathname.startsWith("/tratativas")) return "Tratativas";

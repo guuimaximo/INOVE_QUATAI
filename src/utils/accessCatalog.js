@@ -110,6 +110,7 @@ export const MOBILE_NAV_PRIORITY = [
   "embarcados_reparos",
   "suprimentos_contagem",
   "pcm_resumo",
+  "pcm_controle_pneus",
   "pcm_troca_pneus",
   "pcm_controle_fichas",
 ];
@@ -134,6 +135,7 @@ export const MOBILE_QUICK_LINK_PRIORITY = [
   "embarcados_reparos",
   "suprimentos_contagem",
   "pcm_resumo",
+  "pcm_controle_pneus",
   "pcm_troca_pneus",
   "pcm_controle_fichas",
 ];
@@ -176,6 +178,7 @@ export const DEFAULT_LEVEL_PROFILES = [
       "pcm_inicio",
       "pcm_diario",
       "pcm_preventivas",
+      "pcm_controle_pneus",
       "pcm_troca_pneus",
       "pcm_controle_fichas",
       "embarcados_central",
@@ -241,7 +244,7 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "Borracheiro",
     descricao: "Troca de pneus.",
     ativo: true,
-    paginas: ["pcm_troca_pneus"],
+    paginas: ["pcm_troca_pneus", "pcm_controle_pneus"],
     farol_liberado: false,
   },
   {

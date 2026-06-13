@@ -213,6 +213,7 @@ const ACCESS_FALLBACK_PRIORITY = [
   "/diesel-tratativas",
   "/embarcados-central",
   "/pcm-resumo",
+  "/pcm-controle-pneus",
   "/pcm-troca-pneus",
 ];
 

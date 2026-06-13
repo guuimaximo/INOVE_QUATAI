@@ -97,6 +97,7 @@ select
     when ua.auditoria_em is not null and tp.ultima_troca_em is not null and tp.ultima_troca_em > ua.auditoria_em then true
     else false
   end as troca_pos_auditoria,
+  tp.ultima_troca_em as troca_ultima_em,
   case
     when ap.numero_fogo_aud is null or ap.numero_fogo_aud = '' then null
     when lpad(regexp_replace(coalesce(b.numero_fogo_base, ''), '\D', '', 'g'), 6, '0')

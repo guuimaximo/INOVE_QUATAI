@@ -84,10 +84,13 @@ function KpiCard({ label, value, cor }) {
 }
 
 export default function PCMControlePneus() {
+  const [abaAtiva, setAbaAtiva] = useState("veiculos");
   const [rowsRaw, setRowsRaw] = useState([]);
   const [alocacoes, setAlocacoes] = useState([]);
   const [ativos, setAtivos] = useState([]);
   const [inativos, setInativos] = useState([]);
+  const [estoqueRows, setEstoqueRows] = useState([]);
+  const [consertos, setConsertos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
   const [buscaFogo, setBuscaFogo] = useState("");
@@ -101,18 +104,29 @@ export default function PCMControlePneus() {
   async function carregar() {
     setCarregando(true);
     try {
-      const [{ data, error }, { data: alocData, error: alocError }, { data: ativosData, error: ativosError }, { data: inativosData, error: inativosError }] =
+      const [
+        { data, error },
+        { data: alocData, error: alocError },
+        { data: ativosData, error: ativosError },
+        { data: inativosData, error: inativosError },
+        { data: estoqueData, error: estoqueError },
+        { data: consertosData, error: consertosError },
+      ] =
         await Promise.all([
           supabase.from("vw_pcm_controle_pneus_central").select("*"),
           supabase.from("pcm_pneus_transnet_alocacao").select("prefixo, posicao, numero_fogo, snapshot_em"),
           supabase.from("pcm_pneus_transnet_ativos").select("numero_fogo, localizacao, posicao, marca, medida"),
           supabase.from("pcm_pneus_transnet_inativos").select("numero_fogo, motivo"),
+          supabase.from("pcm_estoque_pneus").select("id, ficha_estoque, numero_fogo, numero_pneu, marca, situacao, created_at").order("created_at", { ascending: false }),
+          supabase.from("pcm_consertos_pneus").select("id, ficha_conserto, numero_fogo, prefixo, status, situacao_origem, created_at").order("created_at", { ascending: false }),
         ]);
 
       if (error) throw error;
       if (alocError) throw alocError;
       if (ativosError) throw ativosError;
       if (inativosError) throw inativosError;
+      if (estoqueError) throw estoqueError;
+      if (consertosError) throw consertosError;
 
       const sorted = [...(data || [])].sort((a, b) => {
         const prefixoA = String(a?.prefixo_base || a?.prefixo_auditoria || "").localeCompare(
@@ -128,6 +142,8 @@ export default function PCMControlePneus() {
       setAlocacoes(alocData || []);
       setAtivos(ativosData || []);
       setInativos(inativosData || []);
+      setEstoqueRows(estoqueData || []);
+      setConsertos(consertosData || []);
       setUltimaAtualizacao(sorted?.[0]?.snapshot_em || alocData?.[0]?.snapshot_em || null);
     } catch (error) {
       console.error("Erro ao carregar controle de pneus:", error);
@@ -278,6 +294,101 @@ export default function PCMControlePneus() {
     };
   }, [linhasBase]);
 
+  const estoqueComparado = useMemo(() => {
+    const latestEstoque = new Map();
+    for (const item of estoqueRows) {
+      const pneu = normalizarPneu(item.numero_fogo || item.numero_pneu);
+      if (!pneu || latestEstoque.has(pneu)) continue;
+      latestEstoque.set(pneu, item);
+    }
+
+    const consertoAberto = new Map();
+    for (const item of consertos) {
+      const pneu = normalizarPneu(item.numero_fogo);
+      if (!pneu || consertoAberto.has(pneu)) continue;
+      if (String(item.status || "").toUpperCase() === "CONCLUIDO") continue;
+      consertoAberto.set(pneu, item);
+    }
+
+    const pneus = new Set([...latestEstoque.keys(), ...consertoAberto.keys()]);
+
+    return [...pneus].map((pneu) => {
+      const estoque = latestEstoque.get(pneu) || null;
+      const conserto = consertoAberto.get(pneu) || null;
+      const aloc = alocacoes.find((item) => normalizarPneu(item.numero_fogo) === pneu) || null;
+      const ativo = ativos.find((item) => normalizarPneu(item.numero_fogo) === pneu) || null;
+      const inativo = inativos.find((item) => normalizarPneu(item.numero_fogo) === pneu) || null;
+
+      let status = "NAO EXISTE";
+      let local = "Não encontrado no TransNet";
+
+      if (inativo) {
+        status = "SUCATA";
+        local = inativo.motivo || "Inativo no TransNet";
+      } else if (conserto) {
+        status = "BORRACHARIA";
+        local = `${conserto.status || "PENDENTE"}${conserto.prefixo ? ` · prefixo ${conserto.prefixo}` : ""}`;
+      } else if (aloc) {
+        status = "EM VEICULO";
+        local = `${aloc.prefixo} · ${aloc.posicao}`;
+      } else if (ativo) {
+        status = "ESTOQUE OK";
+        local = `${ativo.localizacao || "Ativo sem localização"}${ativo.posicao ? ` · ${ativo.posicao}` : ""}`;
+      }
+
+      return {
+        pneu,
+        ficha_estoque: estoque?.ficha_estoque || "",
+        data_estoque: estoque?.created_at || conserto?.created_at || null,
+        marca: estoque?.marca || ativo?.marca || "",
+        situacao_inove: estoque?.situacao || conserto?.situacao_origem || "",
+        status,
+        local,
+        conserto_status: conserto?.status || "",
+      };
+    }).sort((a, b) => String(a.pneu).localeCompare(String(b.pneu), "pt-BR", { numeric: true }));
+  }, [estoqueRows, consertos, alocacoes, ativos, inativos]);
+
+  const estoqueFiltrado = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const prefixosManuais = filtroManual
+      .split(/[,\s;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    return estoqueComparado.filter((row) => {
+      if (q) {
+        const hay = [row.pneu, row.ficha_estoque, row.marca, row.situacao_inove, row.local, row.status].join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (filtroStatus && row.status !== filtroStatus) return false;
+      if (filtroComparacao === "CORRETO" && row.status !== "ESTOQUE OK") return false;
+      if (filtroComparacao === "INCORRETO" && row.status === "ESTOQUE OK") return false;
+      if (prefixosManuais.length > 0) {
+        const localPrefixo = String(row.local || "").split("·")[0].trim();
+        if (!prefixosManuais.includes(localPrefixo) && !prefixosManuais.includes(String(row.ficha_estoque || "").trim())) return false;
+      }
+      if (filtroDataAuditoria) {
+        if (!row.data_estoque) return false;
+        const inicio = new Date(`${filtroDataAuditoria}T00:00:00`);
+        const dataEstoque = new Date(row.data_estoque);
+        if (Number.isNaN(dataEstoque.getTime()) || dataEstoque < inicio) return false;
+      }
+      return true;
+    });
+  }, [estoqueComparado, busca, filtroStatus, filtroComparacao, filtroManual, filtroDataAuditoria]);
+
+  const estoqueKpis = useMemo(() => {
+    return {
+      total: estoqueComparado.length,
+      ok: estoqueComparado.filter((item) => item.status === "ESTOQUE OK").length,
+      borracharia: estoqueComparado.filter((item) => item.status === "BORRACHARIA").length,
+      emVeiculo: estoqueComparado.filter((item) => item.status === "EM VEICULO").length,
+      sucata: estoqueComparado.filter((item) => item.status === "SUCATA").length,
+      naoExiste: estoqueComparado.filter((item) => item.status === "NAO EXISTE").length,
+    };
+  }, [estoqueComparado]);
+
   const resultadoBuscaFogo = useMemo(() => {
     const pneu = normalizarPneu(buscaFogo);
     if (!pneu) return null;
@@ -343,13 +454,43 @@ export default function PCMControlePneus() {
         </button>
       </header>
 
+      <section className="mb-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("veiculos")}
+          className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${abaAtiva === "veiculos" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
+        >
+          Veículos
+        </button>
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("estoque")}
+          className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${abaAtiva === "estoque" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
+        >
+          Estoque
+        </button>
+      </section>
+
       <section className="mb-3 flex flex-wrap gap-2">
-        <KpiCard label="Base TransNet" value={kpis.base} cor="#475569" />
-        <KpiCard label={`OK · ${kpis.okPct}%`} value={kpis.ok} cor="#16a34a" />
-        <KpiCard label="Sucata" value={kpis.sucata} cor="#dc2626" />
-        <KpiCard label="Outro veículo" value={kpis.outro} cor="#ca8a04" />
-        <KpiCard label="Não existe" value={kpis.naoExiste} cor="#ea580c" />
-        <KpiCard label="Estoque" value={kpis.estoque} cor="#2563eb" />
+        {abaAtiva === "veiculos" ? (
+          <>
+            <KpiCard label="Base TransNet" value={kpis.base} cor="#475569" />
+            <KpiCard label={`OK · ${kpis.okPct}%`} value={kpis.ok} cor="#16a34a" />
+            <KpiCard label="Sucata" value={kpis.sucata} cor="#dc2626" />
+            <KpiCard label="Outro veículo" value={kpis.outro} cor="#ca8a04" />
+            <KpiCard label="Não existe" value={kpis.naoExiste} cor="#ea580c" />
+            <KpiCard label="Estoque" value={kpis.estoque} cor="#2563eb" />
+          </>
+        ) : (
+          <>
+            <KpiCard label="Itens" value={estoqueKpis.total} cor="#475569" />
+            <KpiCard label="Estoque OK" value={estoqueKpis.ok} cor="#16a34a" />
+            <KpiCard label="Borracharia" value={estoqueKpis.borracharia} cor="#7c3aed" />
+            <KpiCard label="Em veículo" value={estoqueKpis.emVeiculo} cor="#ca8a04" />
+            <KpiCard label="Sucata" value={estoqueKpis.sucata} cor="#dc2626" />
+            <KpiCard label="Não existe" value={estoqueKpis.naoExiste} cor="#ea580c" />
+          </>
+        )}
         <div className="min-w-[340px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
           <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">Buscar número de fogo</div>
           <div className="relative">
@@ -391,11 +532,23 @@ export default function PCMControlePneus() {
           className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
         >
           <option value="">Todos os status</option>
-          <option value="OK">OK</option>
-          <option value="SUCATA">SUCATA</option>
-          <option value="OUTRO VEICULO">OUTRO VEICULO</option>
-          <option value="NAO EXISTE">NAO EXISTE</option>
-          <option value="ESTOQUE">ESTOQUE</option>
+          {abaAtiva === "veiculos" ? (
+            <>
+              <option value="OK">OK</option>
+              <option value="SUCATA">SUCATA</option>
+              <option value="OUTRO VEICULO">OUTRO VEICULO</option>
+              <option value="NAO EXISTE">NAO EXISTE</option>
+              <option value="ESTOQUE">ESTOQUE</option>
+            </>
+          ) : (
+            <>
+              <option value="ESTOQUE OK">ESTOQUE OK</option>
+              <option value="BORRACHARIA">BORRACHARIA</option>
+              <option value="EM VEICULO">EM VEICULO</option>
+              <option value="SUCATA">SUCATA</option>
+              <option value="NAO EXISTE">NAO EXISTE</option>
+            </>
+          )}
         </select>
         <select
           value={filtroComparacao}
@@ -420,13 +573,13 @@ export default function PCMControlePneus() {
           title="Auditorias a partir desta data"
         />
         <span className="ml-auto text-xs text-slate-500">
-          Exibindo {filtradas.length} / {linhasBase.length}
+          Exibindo {abaAtiva === "veiculos" ? filtradas.length : estoqueFiltrado.length} / {abaAtiva === "veiculos" ? linhasBase.length : estoqueComparado.length}
         </span>
       </section>
 
       {carregando ? (
         <div className="grid place-items-center py-16 text-slate-500">Carregando…</div>
-      ) : (
+      ) : abaAtiva === "veiculos" ? (
         <div className="overflow-auto rounded-lg border border-slate-200 bg-white shadow">
           <table className="w-full text-xs">
             <thead className="bg-slate-100 text-slate-700">
@@ -468,6 +621,48 @@ export default function PCMControlePneus() {
                   <td className="px-2 py-1.5 text-center">
                     {row.troca ? <span className="font-bold text-amber-600">SIM</span> : <span className="text-slate-300">—</span>}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white shadow">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-100 text-slate-700">
+              <tr>
+                <th className="px-2 py-2 text-left">Data</th>
+                <th className="px-2 py-2 text-left">Ficha</th>
+                <th className="px-2 py-2 text-left">Número de fogo</th>
+                <th className="px-2 py-2 text-left">Marca</th>
+                <th className="px-2 py-2 text-left">Situação INOVE</th>
+                <th className="px-2 py-2 text-left">Status TransNet</th>
+                <th className="px-2 py-2 text-left">Onde está</th>
+                <th className="px-2 py-2 text-left">Conserto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estoqueFiltrado.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                    Nenhum item de estoque encontrado.
+                  </td>
+                </tr>
+              ) : null}
+              {estoqueFiltrado.map((row) => (
+                <tr key={row.pneu} className="border-t border-slate-100 hover:bg-slate-50">
+                  <td className="whitespace-nowrap px-2 py-2 text-slate-600">{fmtData(row.data_estoque)}</td>
+                  <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_estoque || "—"}</td>
+                  <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.pneu}</td>
+                  <td className="px-2 py-2 text-slate-700">{row.marca || "—"}</td>
+                  <td className="px-2 py-2 text-slate-700">{row.situacao_inove || "—"}</td>
+                  <td className="px-2 py-2">
+                    <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "ESTOQUE OK" ? "#16a34a" : row.status === "BORRACHARIA" ? "#7c3aed" : row.status === "EM VEICULO" ? "#ca8a04" : row.status === "SUCATA" ? "#dc2626" : "#ea580c" }}>
+                      {row.status}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 text-slate-700">{row.local}</td>
+                  <td className="px-2 py-2 text-slate-700">{row.conserto_status || "—"}</td>
                 </tr>
               ))}
             </tbody>

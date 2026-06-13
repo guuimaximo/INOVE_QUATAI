@@ -30,7 +30,21 @@ auditoria_posicoes as (
     ua.prefixo as prefixo_auditoria,
     ua.auditoria_em,
     ua.auditado_por,
-    coalesce(nullif(trim(p->>'posicao'), ''), '') as posicao,
+    case upper(trim(coalesce(p->>'posicao', '')))
+      when 'DD' then 'DD'
+      when 'DIANTEIRO DIREITO' then 'DD'
+      when 'DE' then 'DE'
+      when 'DIANTEIRO ESQUERDO' then 'DE'
+      when 'TEE' then 'TEE'
+      when 'TRASEIRO EXTERNO ESQUERDO' then 'TEE'
+      when 'TEI' then 'TEI'
+      when 'TRASEIRO INTERNO ESQUERDO' then 'TEI'
+      when 'TDI' then 'TDI'
+      when 'TRASEIRO INTERNO DIREITO' then 'TDI'
+      when 'TDE' then 'TDE'
+      when 'TRASEIRO EXTERNO DIREITO' then 'TDE'
+      else coalesce(nullif(trim(p->>'posicao'), ''), '')
+    end as posicao,
     nullif(trim(p->>'numero_fogo'), '') as numero_fogo_aud
   from ultima_auditoria ua
   left join lateral jsonb_array_elements(coalesce(ua.posicoes, '[]'::jsonb)) p on true

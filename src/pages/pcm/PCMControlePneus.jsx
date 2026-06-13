@@ -27,6 +27,12 @@ function fmtData(iso) {
   }
 }
 
+function normalizarPneu(valor) {
+  const digits = String(valor || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.padStart(6, "0");
+}
+
 function Celula({ base, aud, status }) {
   const palette = STATUS_PALETTE[status] || {
     bg: "#f8fafc",
@@ -38,21 +44,22 @@ function Celula({ base, aud, status }) {
 
   return (
     <div
-      className="min-w-[110px] rounded p-1.5"
+      className="min-w-[178px] rounded-md px-2 py-1.5"
       style={{
         background: vazio ? "#f8fafc" : palette.bg,
         border: `1px solid ${vazio ? "#e2e8f0" : palette.border}`,
         color: palette.text,
       }}
     >
-      <div className="flex items-center justify-between gap-1 text-[10px]">
-        <span className="font-mono">{base || "—"}</span>
-        <span className="text-slate-500">·</span>
-        <span className="font-mono font-bold">{aud || "—"}</span>
+      <div className="grid grid-cols-[40px_1fr] items-center gap-x-2 gap-y-1">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Base</span>
+        <span className="font-mono text-[13px] font-semibold leading-none">{base || "—"}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Aud</span>
+        <span className="font-mono text-[13px] font-bold leading-none">{aud || "—"}</span>
       </div>
       {status ? (
         <div
-          className="mt-0.5 rounded px-1 text-center text-[9px] font-bold uppercase tracking-wide text-white"
+          className="mt-1 rounded px-1.5 py-0.5 text-center text-[9px] font-bold uppercase tracking-wide text-white"
           style={{ background: palette.chip }}
         >
           {status}
@@ -78,8 +85,12 @@ function KpiCard({ label, value, cor }) {
 
 export default function PCMControlePneus() {
   const [rowsRaw, setRowsRaw] = useState([]);
+  const [alocacoes, setAlocacoes] = useState([]);
+  const [ativos, setAtivos] = useState([]);
+  const [inativos, setInativos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
+  const [buscaFogo, setBuscaFogo] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [disparando, setDisparando] = useState(false);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
@@ -87,18 +98,37 @@ export default function PCMControlePneus() {
   async function carregar() {
     setCarregando(true);
     try {
-      const { data, error } = await supabase
-        .from("vw_pcm_controle_pneus_central")
-        .select("*")
-        .order("prefixo_base", { ascending: true });
+      const [{ data, error }, { data: alocData, error: alocError }, { data: ativosData, error: ativosError }, { data: inativosData, error: inativosError }] =
+        await Promise.all([
+          supabase.from("vw_pcm_controle_pneus_central").select("*"),
+          supabase.from("pcm_pneus_transnet_alocacao").select("prefixo, posicao, numero_fogo, snapshot_em"),
+          supabase.from("pcm_pneus_transnet_ativos").select("numero_fogo, localizacao, posicao, marca, medida"),
+          supabase.from("pcm_pneus_transnet_inativos").select("numero_fogo, motivo"),
+        ]);
 
       if (error) throw error;
+      if (alocError) throw alocError;
+      if (ativosError) throw ativosError;
+      if (inativosError) throw inativosError;
 
-      setRowsRaw(data || []);
-      setUltimaAtualizacao(data?.[0]?.snapshot_em || null);
+      const sorted = [...(data || [])].sort((a, b) => {
+        const prefixoA = String(a?.prefixo_base || a?.prefixo_auditoria || "").localeCompare(
+          String(b?.prefixo_base || b?.prefixo_auditoria || ""),
+          "pt-BR",
+          { numeric: true, sensitivity: "base" }
+        );
+        if (prefixoA !== 0) return prefixoA;
+        return String(a?.posicao || "").localeCompare(String(b?.posicao || ""), "pt-BR");
+      });
+
+      setRowsRaw(sorted);
+      setAlocacoes(alocData || []);
+      setAtivos(ativosData || []);
+      setInativos(inativosData || []);
+      setUltimaAtualizacao(sorted?.[0]?.snapshot_em || alocData?.[0]?.snapshot_em || null);
     } catch (error) {
       console.error("Erro ao carregar controle de pneus:", error);
-      alert(error?.message || "Nao foi possivel carregar o controle de pneus.");
+      alert(error?.message || "Não foi possível carregar o controle de pneus.");
     } finally {
       setCarregando(false);
     }
@@ -108,21 +138,9 @@ export default function PCMControlePneus() {
     carregar();
     const ch = supabase
       .channel("pcm_controle_pneus")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pcm_pneus_transnet_alocacao" },
-        () => carregar()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pcm_auditoria_pneus" },
-        () => carregar()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pcm_troca_pneus" },
-        () => carregar()
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "pcm_pneus_transnet_alocacao" }, () => carregar())
+      .on("postgres_changes", { event: "*", schema: "public", table: "pcm_auditoria_pneus" }, () => carregar())
+      .on("postgres_changes", { event: "*", schema: "public", table: "pcm_troca_pneus" }, () => carregar())
       .subscribe();
 
     return () => {
@@ -202,7 +220,6 @@ export default function PCMControlePneus() {
   }, [busca, filtroStatus, linhasBase]);
 
   const kpis = useMemo(() => {
-    let auditados = 0;
     let totalStatus = 0;
     let ok = 0;
     let sucata = 0;
@@ -211,7 +228,6 @@ export default function PCMControlePneus() {
     let estoque = 0;
 
     for (const row of linhasBase) {
-      if (row.temAuditoria) auditados += 1;
       for (const posicao of POSICOES) {
         const status = row.posicoes[posicao]?.status;
         if (!status) continue;
@@ -226,7 +242,6 @@ export default function PCMControlePneus() {
 
     return {
       base: linhasBase.length,
-      auditados,
       ok,
       sucata,
       outro,
@@ -235,6 +250,51 @@ export default function PCMControlePneus() {
       okPct: totalStatus ? Math.round((ok / totalStatus) * 100) : 0,
     };
   }, [linhasBase]);
+
+  const resultadoBuscaFogo = useMemo(() => {
+    const pneu = normalizarPneu(buscaFogo);
+    if (!pneu) return null;
+
+    const matchAloc = alocacoes.find((item) => normalizarPneu(item.numero_fogo) === pneu);
+    if (matchAloc) {
+      return {
+        status: "TRANSNET",
+        texto: `Prefixo ${matchAloc.prefixo} · ${matchAloc.posicao}`,
+        detalhe: "Pneu alocado em veículo no snapshot TransNet.",
+        cor: "#2563eb",
+      };
+    }
+
+    const matchInativo = inativos.find((item) => normalizarPneu(item.numero_fogo) === pneu);
+    if (matchInativo) {
+      return {
+        status: "SUCATA",
+        texto: "Pneu inativo / sucata",
+        detalhe: matchInativo.motivo || "Registrado como inativo no TransNet.",
+        cor: "#dc2626",
+      };
+    }
+
+    const matchAtivo = ativos.find((item) => normalizarPneu(item.numero_fogo) === pneu);
+    if (matchAtivo) {
+      const local = matchAtivo.localizacao || "Local não informado";
+      const posicao = matchAtivo.posicao ? ` · ${matchAtivo.posicao}` : "";
+      const isVeiculo = /^\d{3}-[0-9A-Z]+$/i.test(local);
+      return {
+        status: isVeiculo ? "ATIVO" : "ESTOQUE",
+        texto: `${local}${posicao}`,
+        detalhe: [matchAtivo.marca, matchAtivo.medida].filter(Boolean).join(" · ") || "Pneu ativo no TransNet.",
+        cor: isVeiculo ? "#16a34a" : "#2563eb",
+      };
+    }
+
+    return {
+      status: "NAO ENCONTRADO",
+      texto: "Não localizado nas bases carregadas",
+      detalhe: "Verifique se o número de fogo está correto.",
+      cor: "#ea580c",
+    };
+  }, [alocacoes, ativos, inativos, buscaFogo]);
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-slate-100 p-3">
@@ -263,6 +323,29 @@ export default function PCMControlePneus() {
         <KpiCard label="Outro veículo" value={kpis.outro} cor="#ca8a04" />
         <KpiCard label="Não existe" value={kpis.naoExiste} cor="#ea580c" />
         <KpiCard label="Estoque" value={kpis.estoque} cor="#2563eb" />
+        <div className="min-w-[340px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">Buscar número de fogo</div>
+          <div className="relative">
+            <FaSearch className="absolute left-2 top-2.5 text-xs text-slate-400" />
+            <input
+              value={buscaFogo}
+              onChange={(event) => setBuscaFogo(event.target.value)}
+              placeholder="Ex.: 508013"
+              className="w-full rounded-lg border border-slate-300 py-1.5 pl-7 pr-2 text-sm"
+            />
+          </div>
+          {resultadoBuscaFogo ? (
+            <div className="mt-2 rounded-md border px-2 py-1.5" style={{ borderColor: resultadoBuscaFogo.cor }}>
+              <div className="text-[10px] font-bold uppercase tracking-wide" style={{ color: resultadoBuscaFogo.cor }}>
+                {resultadoBuscaFogo.status}
+              </div>
+              <div className="text-sm font-semibold text-slate-800">{resultadoBuscaFogo.texto}</div>
+              <div className="text-xs text-slate-500">{resultadoBuscaFogo.detalhe}</div>
+            </div>
+          ) : (
+            <div className="mt-2 text-xs text-slate-400">Digite um número de fogo para localizar o pneu.</div>
+          )}
+        </div>
       </section>
 
       <section className="mb-2 flex items-center gap-2">
@@ -334,11 +417,7 @@ export default function PCMControlePneus() {
                     </td>
                   ))}
                   <td className="px-2 py-1.5 text-center">
-                    {row.troca ? (
-                      <span className="font-bold text-amber-600">SIM</span>
-                    ) : (
-                      <span className="text-slate-300">—</span>
-                    )}
+                    {row.troca ? <span className="font-bold text-amber-600">SIM</span> : <span className="text-slate-300">—</span>}
                   </td>
                 </tr>
               ))}

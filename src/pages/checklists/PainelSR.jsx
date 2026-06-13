@@ -119,13 +119,16 @@ export default function PainelSR() {
   const proximaExecucaoRef = useRef(Date.now() + AUTO_REFRESH_MS);
 
   async function carregar() {
-    const hoje = new Date().toISOString().slice(0, 10); // YYYY-MM-DD local UTC
+    const hoje = new Date();
+    const ontem = new Date(hoje);
+    ontem.setDate(hoje.getDate() - 1);
+    const desde = ontem.toISOString().slice(0, 10); // YYYY-MM-DD
     const { data } = await supabase
       .from("solicitacao_reparo_aberta")
       .select("*")
       .is("triado_em", null)
       .is("fechado_em", null)
-      .eq("data_abertura", hoje)
+      .gte("data_abertura", desde)
       .order("prefixo", { ascending: true });
     setSrs(data || []);
     setCarregando(false);

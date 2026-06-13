@@ -268,7 +268,10 @@ export default function Sidebar() {
         { path: "/acidentes/central", label: "Central", icon: <FaListAlt /> },
       ],
 
-      checklists: [{ path: "/checklists", label: "Central", icon: <FaClipboardCheck /> }],
+      checklists: [
+        { path: "/checklists", label: "Central", icon: <FaClipboardCheck /> },
+        { path: "/checklists/painel-sr", label: "Painel SR", icon: <FaClipboardCheck /> },
+      ],
 
       sos: [
         { path: "/sos-resumo", label: "Resumo", icon: <FaChartPie /> },

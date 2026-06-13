@@ -43,6 +43,7 @@ export const APP_ACCESS_PAGES = [
   { key: "pcm_controle_fichas", label: "PCM Controle de Fichas", category: "PCM", path: "/pcm-controle-fichas", patterns: ["/pcm-controle-fichas"] },
 
   { key: "checklists_central", label: "Checklists Central", category: "Checklists", path: "/checklists", patterns: ["/checklists"] },
+  { key: "checklists_painel_sr", label: "Painel SR", category: "Checklists", path: "/checklists/painel-sr", patterns: ["/checklists/painel-sr"] },
 
   { key: "embarcados_central", label: "Embarcados Central", category: "Embarcados", path: "/embarcados-central", patterns: ["/embarcados-central", "/embarcados"] },
   { key: "embarcados_movimentacoes", label: "Embarcados Movimentacoes", category: "Embarcados", path: "/embarcados-movimentacoes", patterns: ["/embarcados-movimentacoes"] },

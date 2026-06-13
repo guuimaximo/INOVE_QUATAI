@@ -3,9 +3,19 @@
 // - Topo: SRs em aberto (cards) divididas em Mecanica | Eletrica.
 // - Base: SRs fechadas a partir do ultimo corte das 20:00 (linhas compactas).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabase";
 import { FaWrench, FaBolt, FaSyncAlt } from "react-icons/fa";
+
+const AUTO_REFRESH_MS = 3 * 60_000; // 3 min
+
+function formatCountdown(ms) {
+  if (ms <= 0) return "00:00";
+  const total = Math.ceil(ms / 1000);
+  const m = String(Math.floor(total / 60)).padStart(2, "0");
+  const s = String(total % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
 
 function ultimoCorte20h() {
   const agora = new Date();
@@ -160,7 +170,25 @@ export default function FichasSRManutencao() {
   const [atualizando, setAtualizando] = useState(false);
   const [grupoFechando, setGrupoFechando] = useState(null);
   const [salvando, setSalvando] = useState(false);
+  const [disparando, setDisparando] = useState(false);
+  const [proximoEm, setProximoEm] = useState(AUTO_REFRESH_MS);
+  const proximaExecucaoRef = useRef(Date.now() + AUTO_REFRESH_MS);
   const corte = useMemo(() => ultimoCorte20h(), []);
+
+  async function dispararBot() {
+    if (disparando) return;
+    setDisparando(true);
+    try {
+      const { error } = await supabase.functions.invoke("dispatch-bot", {
+        body: { tipo: "sr_aberta" },
+      });
+      if (error) console.error("dispatch-bot falhou", error);
+      proximaExecucaoRef.current = Date.now() + AUTO_REFRESH_MS;
+      setTimeout(carregar, 45_000);
+    } finally {
+      setDisparando(false);
+    }
+  }
 
   async function carregar() {
     setAtualizando(true);
@@ -189,10 +217,17 @@ export default function FichasSRManutencao() {
       )
       .subscribe();
     const itv = setInterval(carregar, 60_000);
+    const tickTimer = setInterval(() => {
+      const restante = proximaExecucaoRef.current - Date.now();
+      setProximoEm(restante);
+      if (restante <= 0) dispararBot();
+    }, 1000);
     return () => {
       supabase.removeChannel(ch);
       clearInterval(itv);
+      clearInterval(tickTimer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function confirmarFechar() {
@@ -254,12 +289,19 @@ export default function FichasSRManutencao() {
             day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
           })}
         </span>
+        <div className="text-sm text-slate-600 ml-2">
+          Próx. atualização em{" "}
+          <span className="font-mono font-bold text-slate-900">
+            {formatCountdown(proximoEm)}
+          </span>
+        </div>
         <button
-          onClick={carregar}
-          className="ml-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-sm"
-          disabled={atualizando}
+          onClick={() => dispararBot()}
+          className="ml-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 text-sm"
+          disabled={disparando}
         >
-          <FaSyncAlt className={atualizando ? "animate-spin" : ""} /> Atualizar
+          <FaSyncAlt className={disparando ? "animate-spin" : ""} />
+          {disparando ? "Disparando..." : "Atualizar agora"}
         </button>
       </header>
 

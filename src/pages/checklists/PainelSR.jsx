@@ -116,6 +116,8 @@ export default function PainelSR() {
   const [disparando, setDisparando] = useState(false);
   const [proximoEm, setProximoEm] = useState(AUTO_REFRESH_MS);
   const [ultimaConsulta, setUltimaConsulta] = useState(null);
+  const [grupoTriando, setGrupoTriando] = useState(null);
+  const [salvando, setSalvando] = useState(false);
   const proximaExecucaoRef = useRef(Date.now() + AUTO_REFRESH_MS);
 
   async function carregar() {
@@ -186,15 +188,25 @@ export default function PainelSR() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function triar(srsDoGrupo) {
-    const ids = srsDoGrupo.map((s) => s.id_reclamacao);
-    setSrs((prev) => prev.filter((x) => !ids.includes(x.id_reclamacao)));
+  function pedirTriagem(srsDoGrupo) {
+    // srsDoGrupo é uma lista; converte pra { prefixo, srs }
+    const prefixo = srsDoGrupo[0]?.prefixo || "?";
+    setGrupoTriando({ prefixo, srs: srsDoGrupo });
+  }
+
+  async function confirmarTriagem() {
+    if (!grupoTriando) return;
+    setSalvando(true);
+    const ids = grupoTriando.srs.map((s) => s.id_reclamacao);
     const { data: userData } = await supabase.auth.getUser();
     const quem = userData?.user?.email || "painel";
+    setSrs((prev) => prev.filter((x) => !ids.includes(x.id_reclamacao)));
     const { error } = await supabase
       .from("solicitacao_reparo_aberta")
       .update({ triado_em: new Date().toISOString(), triado_por: quem })
       .in("id_reclamacao", ids);
+    setSalvando(false);
+    setGrupoTriando(null);
     if (error) {
       alert("Falha ao triar: " + error.message);
       carregar();
@@ -244,7 +256,7 @@ export default function PainelSR() {
             cor="mecanica"
             grupos={mecanica}
             totalSrs={totalMec}
-            onTriar={triar}
+            onTriar={pedirTriagem}
           />
           <Coluna
             titulo="Elétrica"
@@ -252,8 +264,49 @@ export default function PainelSR() {
             cor="eletrica"
             grupos={eletrica}
             totalSrs={totalEle}
-            onTriar={triar}
+            onTriar={pedirTriagem}
           />
+        </div>
+      )}
+
+      {grupoTriando && (
+        <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5">
+            <h2 className="text-lg font-bold mb-1">Confirmar triagem</h2>
+            <p className="text-sm text-slate-600 mb-3">
+              Confirma que a placa foi colocada no prefixo{" "}
+              <span className="font-bold text-slate-900">{grupoTriando.prefixo}</span>{" "}
+              ({grupoTriando.srs.length}{" "}
+              {grupoTriando.srs.length > 1 ? "SRs" : "SR"})?
+            </p>
+            <ul className="bg-slate-50 rounded p-2 text-xs space-y-1 max-h-40 overflow-auto mb-4">
+              {grupoTriando.srs.map((sr) => (
+                <li key={sr.id_reclamacao}>
+                  <span className="text-slate-500 mr-1">#{sr.codigo}</span>
+                  <span className="font-medium">{sr.motivo}</span>
+                  {sr.observacao && (
+                    <span className="text-slate-500"> · {sr.observacao}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setGrupoTriando(null)}
+                className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm"
+                disabled={salvando}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarTriagem}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50"
+                disabled={salvando}
+              >
+                {salvando ? "Salvando..." : "Confirmar triagem"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

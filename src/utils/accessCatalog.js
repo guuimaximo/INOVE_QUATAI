@@ -44,6 +44,7 @@ export const APP_ACCESS_PAGES = [
 
   { key: "checklists_central", label: "Checklists Central", category: "Checklists", path: "/checklists", patterns: ["/checklists"] },
   { key: "checklists_painel_sr", label: "Painel SR", category: "Checklists", path: "/checklists/painel-sr", patterns: ["/checklists/painel-sr"] },
+  { key: "checklists_fichas_sr_manutencao", label: "Fichas SR - Manutenção", category: "Checklists", path: "/checklists/fichas-sr-manutencao", patterns: ["/checklists/fichas-sr-manutencao"] },
 
   { key: "embarcados_central", label: "Embarcados Central", category: "Embarcados", path: "/embarcados-central", patterns: ["/embarcados-central", "/embarcados"] },
   { key: "embarcados_movimentacoes", label: "Embarcados Movimentacoes", category: "Embarcados", path: "/embarcados-movimentacoes", patterns: ["/embarcados-movimentacoes"] },

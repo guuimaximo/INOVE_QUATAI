@@ -90,6 +90,7 @@ const EstoqueDieselRecebimento = lazy(() => import("./pages/estoque-diesel/Estoq
 
 const ChecklistCentral = lazy(() => import("./pages/checklists/ChecklistCentral"));
 const PainelSR = lazy(() => import("./pages/checklists/PainelSR"));
+const FichasSRManutencao = lazy(() => import("./pages/checklists/FichasSRManutencao"));
 
 const EmbarcadosCentral = lazy(() => import("./pages/embarcados/EmbarcadosCentral"));
 const EmbarcadosMovimentacoes = lazy(() => import("./pages/embarcados/EmbarcadosMovimentacoes"));
@@ -270,6 +271,7 @@ export default function App() {
               {/* Checklists */}
               <Route path="/checklists" element={<ChecklistCentral />} />
               <Route path="/checklists/painel-sr" element={<PainelSR />} />
+              <Route path="/checklists/fichas-sr-manutencao" element={<FichasSRManutencao />} />
 
               {/* Embarcados */}
               <Route path="/embarcados-central" element={<EmbarcadosCentral />} />

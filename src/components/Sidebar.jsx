@@ -271,6 +271,7 @@ export default function Sidebar() {
       checklists: [
         { path: "/checklists", label: "Central", icon: <FaClipboardCheck /> },
         { path: "/checklists/painel-sr", label: "Painel SR", icon: <FaClipboardCheck /> },
+        { path: "/checklists/fichas-sr-manutencao", label: "Fichas SR - Manutenção", icon: <FaClipboardCheck /> },
       ],
 
       sos: [

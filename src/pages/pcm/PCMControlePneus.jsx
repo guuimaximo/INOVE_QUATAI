@@ -87,15 +87,22 @@ export default function PCMControlePneus() {
   async function carregar() {
     setCarregando(true);
     try {
-      const { data, error } = await supabase
-        .from("vw_pcm_controle_pneus_central")
-        .select("*")
-        .order("prefixo_base", { ascending: true });
+      const { data, error } = await supabase.from("vw_pcm_controle_pneus_central").select("*");
 
       if (error) throw error;
 
-      setRowsRaw(data || []);
-      setUltimaAtualizacao(data?.[0]?.snapshot_em || null);
+      const sorted = [...(data || [])].sort((a, b) => {
+        const prefixoA = String(a?.prefixo_base || a?.prefixo_auditoria || "").localeCompare(
+          String(b?.prefixo_base || b?.prefixo_auditoria || ""),
+          "pt-BR",
+          { numeric: true, sensitivity: "base" }
+        );
+        if (prefixoA !== 0) return prefixoA;
+        return String(a?.posicao || "").localeCompare(String(b?.posicao || ""), "pt-BR");
+      });
+
+      setRowsRaw(sorted);
+      setUltimaAtualizacao(sorted?.[0]?.snapshot_em || null);
     } catch (error) {
       console.error("Erro ao carregar controle de pneus:", error);
       alert(error?.message || "Nao foi possivel carregar o controle de pneus.");

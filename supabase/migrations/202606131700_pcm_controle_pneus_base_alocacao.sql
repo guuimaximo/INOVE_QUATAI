@@ -1,11 +1,35 @@
 create or replace view public.vw_pcm_controle_pneus_central as
-with base as (
+with posicoes as (
+  select 'DD' as posicao
+  union all select 'DE'
+  union all select 'TEE'
+  union all select 'TEI'
+  union all select 'TDI'
+  union all select 'TDE'
+),
+prefixos_base as (
+  select distinct a.prefixo
+  from public.pcm_pneus_transnet_alocacao a
+),
+base_snapshot as (
   select
     a.prefixo,
     a.posicao,
     nullif(trim(a.numero_fogo), '') as numero_fogo_base,
     a.snapshot_em
   from public.pcm_pneus_transnet_alocacao a
+),
+base as (
+  select
+    pb.prefixo,
+    p.posicao,
+    bs.numero_fogo_base,
+    bs.snapshot_em
+  from prefixos_base pb
+  cross join posicoes p
+  left join base_snapshot bs
+    on bs.prefixo = pb.prefixo
+   and bs.posicao = p.posicao
 ),
 auditorias_ordenadas as (
   select
@@ -51,11 +75,11 @@ auditoria_posicoes as (
 ),
 alocacao_por_pneu as (
   select
-    lpad(regexp_replace(coalesce(b.numero_fogo_base, ''), '\D', '', 'g'), 6, '0') as pneu_key,
-    b.prefixo,
-    b.posicao
-  from base b
-  where coalesce(b.numero_fogo_base, '') <> ''
+    lpad(regexp_replace(coalesce(bs.numero_fogo_base, ''), '\D', '', 'g'), 6, '0') as pneu_key,
+    bs.prefixo,
+    bs.posicao
+  from base_snapshot bs
+  where coalesce(bs.numero_fogo_base, '') <> ''
 ),
 troca_post as (
   select

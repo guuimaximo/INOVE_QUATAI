@@ -10,44 +10,65 @@ import { FaWrench, FaBolt, FaSyncAlt } from "react-icons/fa";
 
 const AUTO_REFRESH_MS = 3 * 60_000; // 3 min
 
-function ordenarPorPrefixo(arr) {
-  return [...arr].sort((a, b) => {
-    const pa = String(a.prefixo || "").padStart(10, "0");
-    const pb = String(b.prefixo || "").padStart(10, "0");
-    return pa.localeCompare(pb);
-  });
+function agruparPorPrefixo(arr) {
+  const map = new Map();
+  for (const sr of arr) {
+    const key = sr.prefixo || "?";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(sr);
+  }
+  // Sort de cada grupo por id_reclamacao (mais antigo primeiro).
+  for (const list of map.values()) {
+    list.sort((a, b) => a.id_reclamacao - b.id_reclamacao);
+  }
+  // Sort dos grupos por prefixo crescente.
+  return [...map.entries()]
+    .sort(([a], [b]) => String(a).padStart(10, "0").localeCompare(String(b).padStart(10, "0")))
+    .map(([prefixo, srs]) => ({ prefixo, srs }));
 }
 
-function CardSR({ sr, onTriar, cor }) {
+function CardSR({ grupo, onTriar, cor }) {
   const corMap = {
     mecanica: { bg: "#fee2e2", border: "#dc2626", chip: "#dc2626" },
     eletrica: { bg: "#fef9c3", border: "#ca8a04", chip: "#ca8a04" },
   };
   const c = corMap[cor];
+  const { prefixo, srs } = grupo;
   return (
     <button
-      onClick={() => onTriar(sr)}
+      onClick={() => onTriar(srs)}
       className="text-left rounded-xl p-4 shadow hover:shadow-lg transition active:scale-95"
       style={{ background: c.bg, border: `2px solid ${c.border}` }}
     >
       <div className="flex items-center justify-between mb-2">
-        <div className="text-3xl font-black text-slate-900">{sr.prefixo || "?"}</div>
+        <div className="text-3xl font-black text-slate-900">{prefixo}</div>
         <span
           className="text-xs font-semibold text-white px-2 py-1 rounded-full"
           style={{ background: c.chip }}
         >
-          SR {sr.codigo}
+          {srs.length > 1 ? `${srs.length} SRs` : `SR ${srs[0].codigo}`}
         </span>
       </div>
-      <div className="text-sm font-medium text-slate-700">{sr.motivo || "-"}</div>
-      {sr.observacao && (
-        <div className="text-xs text-slate-600 mt-1 line-clamp-2">{sr.observacao}</div>
-      )}
+      <div className="space-y-1.5">
+        {srs.map((sr) => (
+          <div key={sr.id_reclamacao} className="text-sm">
+            <div className="font-medium text-slate-700">
+              {srs.length > 1 && (
+                <span className="text-xs text-slate-500 mr-1">#{sr.codigo}</span>
+              )}
+              {sr.motivo || "-"}
+            </div>
+            {sr.observacao && (
+              <div className="text-xs text-slate-600 line-clamp-2">{sr.observacao}</div>
+            )}
+          </div>
+        ))}
+      </div>
     </button>
   );
 }
 
-function Coluna({ titulo, icone, cor, srs, onTriar }) {
+function Coluna({ titulo, icone, cor, grupos, totalSrs, onTriar }) {
   const palette = {
     mecanica: { header: "#dc2626", text: "white" },
     eletrica: { header: "#ca8a04", text: "white" },
@@ -61,17 +82,20 @@ function Coluna({ titulo, icone, cor, srs, onTriar }) {
         {icone}
         <span>{titulo}</span>
         <span className="ml-auto bg-white/20 px-3 py-0.5 rounded-full text-sm">
-          {srs.length}
+          {grupos.length}
+          {totalSrs !== grupos.length && (
+            <span className="opacity-80"> ({totalSrs} SRs)</span>
+          )}
         </span>
       </header>
       <div className="flex-1 min-h-0 overflow-auto bg-slate-50 rounded-b-xl p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 content-start">
-        {srs.length === 0 && (
+        {grupos.length === 0 && (
           <div className="col-span-full text-center text-slate-400 py-12 text-sm">
             Nenhuma SR em aberto
           </div>
         )}
-        {srs.map((sr) => (
-          <CardSR key={sr.id_reclamacao} sr={sr} onTriar={onTriar} cor={cor} />
+        {grupos.map((g) => (
+          <CardSR key={g.prefixo} grupo={g} onTriar={onTriar} cor={cor} />
         ))}
       </div>
     </section>
@@ -159,24 +183,30 @@ export default function PainelSR() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function triar(sr) {
-    setSrs((prev) => prev.filter((x) => x.id_reclamacao !== sr.id_reclamacao));
+  async function triar(srsDoGrupo) {
+    const ids = srsDoGrupo.map((s) => s.id_reclamacao);
+    setSrs((prev) => prev.filter((x) => !ids.includes(x.id_reclamacao)));
     const { data: userData } = await supabase.auth.getUser();
     const quem = userData?.user?.email || "painel";
     const { error } = await supabase
       .from("solicitacao_reparo_aberta")
       .update({ triado_em: new Date().toISOString(), triado_por: quem })
-      .eq("id_reclamacao", sr.id_reclamacao);
+      .in("id_reclamacao", ids);
     if (error) {
-      alert("Falha ao triar SR " + sr.codigo + ": " + error.message);
+      alert("Falha ao triar: " + error.message);
       carregar();
     }
   }
 
-  const { mecanica, eletrica } = useMemo(() => {
+  const { mecanica, eletrica, totalMec, totalEle } = useMemo(() => {
     const m = srs.filter((s) => s.categoria === "mecanica");
     const e = srs.filter((s) => s.categoria === "eletrica");
-    return { mecanica: ordenarPorPrefixo(m), eletrica: ordenarPorPrefixo(e) };
+    return {
+      mecanica: agruparPorPrefixo(m),
+      eletrica: agruparPorPrefixo(e),
+      totalMec: m.length,
+      totalEle: e.length,
+    };
   }, [srs]);
 
   return (
@@ -209,14 +239,16 @@ export default function PainelSR() {
             titulo="Mecânica"
             icone={<FaWrench />}
             cor="mecanica"
-            srs={mecanica}
+            grupos={mecanica}
+            totalSrs={totalMec}
             onTriar={triar}
           />
           <Coluna
             titulo="Elétrica"
             icone={<FaBolt />}
             cor="eletrica"
-            srs={eletrica}
+            grupos={eletrica}
+            totalSrs={totalEle}
             onTriar={triar}
           />
         </div>

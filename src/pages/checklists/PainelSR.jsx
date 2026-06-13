@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabase";
 import { FaWrench, FaBolt, FaSyncAlt } from "react-icons/fa";
 
-const AUTO_REFRESH_MS = 5 * 60_000; // 5 min
+const AUTO_REFRESH_MS = 3 * 60_000; // 3 min
 
 function ordenarPorPrefixo(arr) {
   return [...arr].sort((a, b) => {
@@ -95,10 +95,13 @@ export default function PainelSR() {
   const proximaExecucaoRef = useRef(Date.now() + AUTO_REFRESH_MS);
 
   async function carregar() {
+    const hoje = new Date().toISOString().slice(0, 10); // YYYY-MM-DD local UTC
     const { data } = await supabase
       .from("solicitacao_reparo_aberta")
       .select("*")
       .is("triado_em", null)
+      .is("fechado_em", null)
+      .eq("data_abertura", hoje)
       .order("prefixo", { ascending: true });
     setSrs(data || []);
     setCarregando(false);

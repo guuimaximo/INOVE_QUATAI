@@ -16,6 +16,7 @@ create table if not exists public.solicitacao_reparo_aberta (
     observacao       text,
     triado_em        timestamptz,
     triado_por       text,
+    fechado_em       timestamptz,  -- bot seta quando SR some da lista do TransNet (= atendida)
     primeiro_visto   timestamptz not null default now(),
     ultima_consulta  timestamptz not null default now()
 );
@@ -26,6 +27,7 @@ alter table public.solicitacao_reparo_aberta add column if not exists motivo tex
 alter table public.solicitacao_reparo_aberta add column if not exists categoria text;
 alter table public.solicitacao_reparo_aberta add column if not exists triado_em timestamptz;
 alter table public.solicitacao_reparo_aberta add column if not exists triado_por text;
+alter table public.solicitacao_reparo_aberta add column if not exists fechado_em timestamptz;
 
 create index if not exists idx_sra_data_abertura on public.solicitacao_reparo_aberta (data_abertura desc);
 create index if not exists idx_sra_ultima_consulta on public.solicitacao_reparo_aberta (ultima_consulta desc);

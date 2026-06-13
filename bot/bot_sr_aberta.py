@@ -286,6 +286,36 @@ def upsert(sb, srs: list[dict]):
     ).execute()
 
 
+def carregar_existentes(sb) -> dict[int, dict]:
+    """Retorna {id_reclamacao: {motivo, observacao, categoria}} das SRs ainda em aberto."""
+    resp = (
+        sb.table("solicitacao_reparo_aberta")
+        .select("id_reclamacao,motivo,observacao,categoria")
+        .is_("fechado_em", "null")
+        .execute()
+    )
+    return {r["id_reclamacao"]: r for r in (resp.data or [])}
+
+
+def marcar_fechadas(sb, ids_atuais: set[int]):
+    """Seta fechado_em=now() pras SRs que estavam abertas no banco mas nao
+    aparecem mais na listagem do TransNet."""
+    existentes = (
+        sb.table("solicitacao_reparo_aberta")
+        .select("id_reclamacao")
+        .is_("fechado_em", "null")
+        .execute()
+    )
+    abertos_db = {r["id_reclamacao"] for r in (existentes.data or [])}
+    sumiram = abertos_db - ids_atuais
+    if not sumiram:
+        return
+    log("fechar", f"{len(sumiram)} SRs sumiram do TransNet -> marcando fechado_em")
+    sb.table("solicitacao_reparo_aberta").update(
+        {"fechado_em": datetime.utcnow().isoformat()}
+    ).in_("id_reclamacao", list(sumiram)).execute()
+
+
 def main():
     if not (TRANSNET_USER and TRANSNET_PASSWORD):
         sys.exit("ENV faltando: TRANSNET_USER / TRANSNET_PASSWORD")
@@ -298,15 +328,29 @@ def main():
         login(driver)
         srs = listar_srs_abertas_hoje(driver)
 
+        # Carrega o que ja tem no banco pra evitar reentrar nas SRs ja conhecidas.
+        existentes = carregar_existentes(sb)
+        log("cache", f"{len(existentes)} SRs ja no banco em aberto")
+
         for s in srs:
-            det = pegar_detalhe(driver, s["id_reclamacao"])
-            s["observacao"] = det["observacao"]
-            s["motivo"] = det["motivo"]
-            s["categoria"] = classificar(det["motivo"])
-            log("detalhe", f"id={s['id_reclamacao']} motivo={det['motivo']!r} cat={s['categoria']}")
+            cached = existentes.get(s["id_reclamacao"])
+            if cached and cached.get("motivo"):
+                s["motivo"] = cached["motivo"]
+                s["observacao"] = cached.get("observacao") or ""
+                s["categoria"] = cached.get("categoria") or classificar(cached["motivo"])
+            else:
+                det = pegar_detalhe(driver, s["id_reclamacao"])
+                s["observacao"] = det["observacao"]
+                s["motivo"] = det["motivo"]
+                s["categoria"] = classificar(det["motivo"])
+                log("detalhe", f"id={s['id_reclamacao']} motivo={det['motivo']!r} cat={s['categoria']}")
 
         upsert(sb, srs)
-        log("fim", f"ok ({len(srs)} SRs)")
+
+        # Marca como fechada qualquer SR que sumiu da listagem do TransNet.
+        marcar_fechadas(sb, {s["id_reclamacao"] for s in srs})
+
+        log("fim", f"ok ({len(srs)} SRs ativas)")
     finally:
         try:
             driver.quit()

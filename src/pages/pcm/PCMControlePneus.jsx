@@ -3,6 +3,7 @@ import { supabase } from "../../supabase";
 import { FaSyncAlt, FaSearch, FaCarSide } from "react-icons/fa";
 
 const POSICOES = ["DD", "DE", "TEE", "TEI", "TDI", "TDE"];
+const FILTROS_STORAGE_KEY = "pcm_controle_pneus_filtros_v1";
 
 const STATUS_PALETTE = {
   OK: { bg: "#dcfce7", border: "#16a34a", text: "#14532d", chip: "#16a34a" },
@@ -51,6 +52,15 @@ function normalizarPneu(valor) {
 
 function isBorrachariaLocal(localizacao) {
   return /BORRACH|RECAP|CONSERT/i.test(String(localizacao || ""));
+}
+
+function lerFiltrosSalvos() {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(FILTROS_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
 }
 
 function Celula({ base, aud, status, trocaApos, detalheStatus }) {
@@ -111,7 +121,8 @@ function KpiCard({ label, value, cor }) {
 }
 
 export default function PCMControlePneus() {
-  const [abaAtiva, setAbaAtiva] = useState("veiculos");
+  const filtrosIniciais = lerFiltrosSalvos();
+  const [abaAtiva, setAbaAtiva] = useState(filtrosIniciais.abaAtiva || "veiculos");
   const [rowsRaw, setRowsRaw] = useState([]);
   const [alocacoes, setAlocacoes] = useState([]);
   const [ativos, setAtivos] = useState([]);
@@ -119,13 +130,13 @@ export default function PCMControlePneus() {
   const [estoqueRows, setEstoqueRows] = useState([]);
   const [consertos, setConsertos] = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const [busca, setBusca] = useState("");
-  const [buscaFogo, setBuscaFogo] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("");
-  const [filtroComparacao, setFiltroComparacao] = useState("");
-  const [somenteSelecionados, setSomenteSelecionados] = useState(false);
-  const [prefixosSelecionados, setPrefixosSelecionados] = useState([]);
-  const [filtroDataAuditoria, setFiltroDataAuditoria] = useState("");
+  const [busca, setBusca] = useState(filtrosIniciais.busca || "");
+  const [buscaFogo, setBuscaFogo] = useState(filtrosIniciais.buscaFogo || "");
+  const [filtroStatus, setFiltroStatus] = useState(filtrosIniciais.filtroStatus || "");
+  const [filtroComparacao, setFiltroComparacao] = useState(filtrosIniciais.filtroComparacao || "");
+  const [somenteSelecionados, setSomenteSelecionados] = useState(!!filtrosIniciais.somenteSelecionados);
+  const [prefixosSelecionados, setPrefixosSelecionados] = useState(Array.isArray(filtrosIniciais.prefixosSelecionados) ? filtrosIniciais.prefixosSelecionados : []);
+  const [filtroDataAuditoria, setFiltroDataAuditoria] = useState(filtrosIniciais.filtroDataAuditoria || "");
   const [disparando, setDisparando] = useState(false);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
 
@@ -195,6 +206,23 @@ export default function PCMControlePneus() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      FILTROS_STORAGE_KEY,
+      JSON.stringify({
+        abaAtiva,
+        busca,
+        buscaFogo,
+        filtroStatus,
+        filtroComparacao,
+        somenteSelecionados,
+        prefixosSelecionados,
+        filtroDataAuditoria,
+      })
+    );
+  }, [abaAtiva, busca, buscaFogo, filtroStatus, filtroComparacao, somenteSelecionados, prefixosSelecionados, filtroDataAuditoria]);
+
   async function dispararBot() {
     if (disparando) return;
     setDisparando(true);
@@ -210,6 +238,12 @@ export default function PCMControlePneus() {
       }
     } finally {
       setTimeout(() => setDisparando(false), 4000);
+    }
+  }
+
+  function atualizarPagina() {
+    if (typeof window !== "undefined") {
+      window.location.reload();
     }
   }
 
@@ -545,12 +579,20 @@ export default function PCMControlePneus() {
           {ultimaAtualizacao ? `Snapshot TransNet: ${fmtData(ultimaAtualizacao)}` : "Nenhum snapshot do TransNet ainda"}
         </span>
         <button
+          type="button"
+          onClick={atualizarPagina}
+          className="ml-auto inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <FaSyncAlt />
+          Atualizar p?gina
+        </button>
+        <button
           onClick={dispararBot}
           disabled={disparando}
-          className="ml-auto inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-1.5 text-sm text-white hover:bg-orange-700 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-1.5 text-sm text-white hover:bg-orange-700 disabled:opacity-50"
         >
           <FaSyncAlt className={disparando ? "animate-spin" : ""} />
-          {disparando ? "Disparado, aguarde ~3min…" : "Atualizar base TransNet"}
+          {disparando ? "Disparado, aguarde ~3min???" : "Atualizar base TransNet"}
         </button>
       </header>
 

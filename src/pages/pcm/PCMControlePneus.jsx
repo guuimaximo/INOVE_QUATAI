@@ -8,6 +8,7 @@ const STATUS_PALETTE = {
   OK: { bg: "#dcfce7", border: "#16a34a", text: "#14532d", chip: "#16a34a" },
   SUCATA: { bg: "#fee2e2", border: "#dc2626", text: "#7f1d1d", chip: "#dc2626" },
   "OUTRO VEICULO": { bg: "#fef9c3", border: "#ca8a04", text: "#713f12", chip: "#ca8a04" },
+  DUPLICIDADE: { bg: "#ede0d4", border: "#8b5e3c", text: "#5b341b", chip: "#8b5e3c" },
   "NAO EXISTE": { bg: "#ffedd5", border: "#ea580c", text: "#7c2d12", chip: "#ea580c" },
   ESTOQUE: { bg: "#dbeafe", border: "#2563eb", text: "#1e3a8a", chip: "#2563eb" },
   INCORRETO: { bg: "#fee2e2", border: "#dc2626", text: "#7f1d1d", chip: "#dc2626" },
@@ -52,7 +53,7 @@ function isBorrachariaLocal(localizacao) {
   return /BORRACH|RECAP|CONSERT/i.test(String(localizacao || ""));
 }
 
-function Celula({ base, aud, status, trocaApos }) {
+function Celula({ base, aud, status, trocaApos, detalheStatus }) {
   const palette = STATUS_PALETTE[status] || {
     bg: "#f8fafc",
     border: "#cbd5e1",
@@ -64,10 +65,12 @@ function Celula({ base, aud, status, trocaApos }) {
   return (
     <div
       className="min-w-[178px] rounded-md px-2 py-1.5"
+      title={detalheStatus || undefined}
       style={{
         background: vazio ? "#f8fafc" : palette.bg,
         border: `1px solid ${vazio ? "#e2e8f0" : palette.border}`,
         color: palette.text,
+        cursor: detalheStatus ? "help" : "default",
       }}
     >
       {trocaApos ? (
@@ -212,6 +215,24 @@ export default function PCMControlePneus() {
 
   const linhasBase = useMemo(() => {
     const map = new Map();
+    const alocacaoPorPneu = new Map();
+
+    for (const item of alocacoes) {
+      const pneu = normalizarPneu(item.numero_fogo);
+      if (!pneu || alocacaoPorPneu.has(pneu)) continue;
+      alocacaoPorPneu.set(pneu, item);
+    }
+
+    const auditoriaPorPneu = new Map();
+    for (const row of rowsRaw) {
+      const pneu = normalizarPneu(row.numero_fogo_aud);
+      if (!pneu || pneu === "000000") continue;
+      if (!auditoriaPorPneu.has(pneu)) auditoriaPorPneu.set(pneu, []);
+      auditoriaPorPneu.get(pneu).push({
+        prefixo: row.prefixo_base || row.prefixo_auditoria || "",
+        posicao: row.posicao,
+      });
+    }
 
     for (const row of rowsRaw) {
       const key = row.grupo_id || row.auditoria_id || row.prefixo_base || row.prefixo_auditoria;
@@ -232,16 +253,49 @@ export default function PCMControlePneus() {
       }
 
       const item = map.get(key);
-      const statusVisual =
+      const prefixoAtual = row.prefixo_base || row.prefixo_auditoria || "";
+      const pneuAuditoria = normalizarPneu(row.numero_fogo_aud);
+      const outrasAuditoriasMesmoPneu = (auditoriaPorPneu.get(pneuAuditoria) || []).filter(
+        (registro) => registro.prefixo !== prefixoAtual || registro.posicao !== row.posicao
+      );
+      const alocacaoAtual = alocacaoPorPneu.get(pneuAuditoria);
+
+      let statusVisual =
         row.status ||
         ((row.numero_fogo_base && !row.numero_fogo_aud) || (!row.numero_fogo_base && row.numero_fogo_aud)
           ? "INCORRETO"
           : null);
+
+      if (!row.numero_fogo_base && row.numero_fogo_aud) {
+        statusVisual = "INCORRETO";
+      }
+
+      let detalheStatus = "";
+      if (statusVisual === "OK" && outrasAuditoriasMesmoPneu.length > 0) {
+        statusVisual = "DUPLICIDADE";
+        const outra = outrasAuditoriasMesmoPneu[0];
+        detalheStatus = `Tambem aparece na auditoria do carro ${outra.prefixo} na posicao ${outra.posicao}.`;
+      } else if (statusVisual === "OUTRO VEICULO") {
+        const detalhes = [];
+        if (
+          alocacaoAtual &&
+          (String(alocacaoAtual.prefixo || "") !== String(prefixoAtual) || String(alocacaoAtual.posicao || "") !== String(row.posicao || ""))
+        ) {
+          detalhes.push(`No TransNet esta no carro ${alocacaoAtual.prefixo} na posicao ${alocacaoAtual.posicao}.`);
+        }
+        if (outrasAuditoriasMesmoPneu.length > 0) {
+          const outra = outrasAuditoriasMesmoPneu[0];
+          detalhes.push(`Tambem aparece na auditoria do carro ${outra.prefixo} na posicao ${outra.posicao}.`);
+        }
+        detalheStatus = detalhes.join(" ");
+      }
+
       item.posicoes[row.posicao] = {
         base: row.numero_fogo_base,
         aud: row.numero_fogo_aud,
         status: statusVisual,
         trocaApos: !!row.troca_pos_auditoria,
+        detalheStatus,
       };
       if (row.troca_pos_auditoria) {
         item.troca = true;
@@ -264,7 +318,7 @@ export default function PCMControlePneus() {
         return db - da;
       }),
     }));
-  }, [rowsRaw]);
+  }, [rowsRaw, alocacoes]);
 
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -579,8 +633,10 @@ export default function PCMControlePneus() {
           {abaAtiva === "veiculos" ? (
             <>
               <option value="OK">OK</option>
+              <option value="DUPLICIDADE">DUPLICIDADE</option>
               <option value="SUCATA">SUCATA</option>
               <option value="OUTRO VEICULO">OUTRO VEICULO</option>
+              <option value="INCORRETO">INCORRETO</option>
               <option value="NAO EXISTE">NAO EXISTE</option>
               <option value="ESTOQUE">ESTOQUE</option>
             </>
@@ -664,7 +720,10 @@ export default function PCMControlePneus() {
                   </td>
                   <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{fmtData(row.auditoria_em)}</td>
                   <td className="px-2 py-1.5 font-mono text-slate-700">{row.ficha || "—"}</td>
-                  <td className={`px-2 py-1.5 font-bold ${POSICOES.some((posicao) => row.posicoes[posicao]?.status === "INCORRETO") ? "text-red-600" : "text-slate-900"}`}>{row.prefixo}</td>
+                  <td className={`px-2 py-1.5 font-bold ${POSICOES.some((posicao) => {
+                    const status = row.posicoes[posicao]?.status;
+                    return status && status !== "OK";
+                  }) ? "text-red-600" : "text-slate-900"}`}>{row.prefixo}</td>
                   {POSICOES.map((posicao) => (
                     <td key={posicao} className="px-1 py-1">
                       <Celula
@@ -672,6 +731,7 @@ export default function PCMControlePneus() {
                         aud={row.posicoes[posicao]?.aud}
                         status={row.posicoes[posicao]?.status}
                         trocaApos={row.posicoes[posicao]?.trocaApos}
+                        detalheStatus={row.posicoes[posicao]?.detalheStatus}
                       />
                     </td>
                   ))}

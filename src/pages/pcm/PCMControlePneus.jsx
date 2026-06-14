@@ -54,6 +54,10 @@ function isBorrachariaLocal(localizacao) {
   return /BORRACH|RECAP|CONSERT/i.test(String(localizacao || ""));
 }
 
+function isRecapadoraSituacao(situacao) {
+  return /RECAP/i.test(String(situacao || ""));
+}
+
 function lerFiltrosSalvos() {
   if (typeof window === "undefined") return {};
   try {
@@ -123,6 +127,7 @@ function KpiCard({ label, value, cor }) {
 export default function PCMControlePneus() {
   const filtrosIniciais = lerFiltrosSalvos();
   const [abaAtiva, setAbaAtiva] = useState(filtrosIniciais.abaAtiva || "veiculos");
+  const [abaEstoqueAtiva, setAbaEstoqueAtiva] = useState(filtrosIniciais.abaEstoqueAtiva || "fisico");
   const [rowsRaw, setRowsRaw] = useState([]);
   const [alocacoes, setAlocacoes] = useState([]);
   const [ativos, setAtivos] = useState([]);
@@ -212,6 +217,7 @@ export default function PCMControlePneus() {
       FILTROS_STORAGE_KEY,
       JSON.stringify({
         abaAtiva,
+        abaEstoqueAtiva,
         busca,
         buscaFogo,
         filtroStatus,
@@ -221,7 +227,7 @@ export default function PCMControlePneus() {
         filtroDataAuditoria,
       })
     );
-  }, [abaAtiva, busca, buscaFogo, filtroStatus, filtroComparacao, somenteSelecionados, prefixosSelecionados, filtroDataAuditoria]);
+  }, [abaAtiva, abaEstoqueAtiva, busca, buscaFogo, filtroStatus, filtroComparacao, somenteSelecionados, prefixosSelecionados, filtroDataAuditoria]);
 
   async function dispararBot() {
     if (disparando) return;
@@ -472,6 +478,13 @@ export default function PCMControlePneus() {
       inativosPorPneu.set(pneu, item);
     }
 
+    const consertoPorPneu = new Map();
+    for (const item of consertos) {
+      const pneu = normalizarPneu(item.numero_fogo);
+      if (!pneu || consertoPorPneu.has(pneu)) continue;
+      consertoPorPneu.set(pneu, item);
+    }
+
     const fisicoRows = [...latestEstoque.entries()].map(([pneu, estoque]) => {
       const aloc = alocacaoPorPneu.get(pneu) || null;
       const ativo = ativosPorPneu.get(pneu) || null;
@@ -542,11 +555,55 @@ export default function PCMControlePneus() {
       };
     });
 
+    const recapadoraRows = [...latestEstoque.entries()]
+      .filter(([, estoque]) => isRecapadoraSituacao(estoque?.situacao))
+      .map(([pneu, estoque]) => {
+        const aloc = alocacaoPorPneu.get(pneu) || null;
+        const ativo = ativosPorPneu.get(pneu) || null;
+        const inativo = inativosPorPneu.get(pneu) || null;
+        const auditoria = (auditoriaPorPneu.get(pneu) || [])[0] || null;
+        const conserto = consertoPorPneu.get(pneu) || null;
+
+        let status = "NAO LOCALIZADO";
+        let local = "Nao encontrado no TransNet";
+
+        if (inativo) {
+          status = "SUCATA";
+          local = inativo.motivo || "Inativo no TransNet";
+        } else if (aloc) {
+          status = "EM CARRO";
+          local = `${aloc.prefixo} - ${aloc.posicao}`;
+        } else if (ativo && isBorrachariaLocal(ativo.localizacao)) {
+          status = "BORRACHARIA";
+          local = `${ativo.localizacao || "BORRACHARIA"}${ativo.posicao ? ` - ${ativo.posicao}` : ""}`;
+        } else if (ativo) {
+          status = "OUTRO LOCAL";
+          local = `${ativo.localizacao || "Ativo"}${ativo.posicao ? ` - ${ativo.posicao}` : ""}`;
+        }
+
+        return {
+          secao: "recapadora",
+          key: `recapadora-${pneu}`,
+          pneu,
+          ficha_estoque: estoque?.ficha_estoque || ultimaFicha,
+          data_estoque: estoque?.created_at || null,
+          marca: estoque?.marca || ativo?.marca || "",
+          situacao_inove: estoque?.situacao || "",
+          status,
+          local,
+          auditoria_texto: auditoria ? `${auditoria.prefixo} - ${auditoria.posicao}` : "Nao aparece na auditoria",
+          ficha_conserto: conserto?.ficha_conserto || "",
+          status_conserto: conserto?.status || "",
+          origem_conserto: conserto?.situacao_origem || "",
+        };
+      });
+
     return {
       fisico: fisicoRows.sort((a, b) => String(a.pneu).localeCompare(String(b.pneu), "pt-BR", { numeric: true })),
       transnet: transnetRows.sort((a, b) => String(a.pneu).localeCompare(String(b.pneu), "pt-BR", { numeric: true })),
+      recapadora: recapadoraRows.sort((a, b) => String(a.pneu).localeCompare(String(b.pneu), "pt-BR", { numeric: true })),
     };
-  }, [estoqueRows, alocacoes, ativos, inativos, auditoriaPorPneu]);
+  }, [estoqueRows, alocacoes, ativos, inativos, consertos, auditoriaPorPneu]);
 
   const estoqueFisicoFiltrado = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -582,6 +639,37 @@ export default function PCMControlePneus() {
     });
   }, [estoqueComparado, busca, filtroStatus, filtroComparacao]);
 
+  const recapadoraFiltrada = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return estoqueComparado.recapadora.filter((row) => {
+      if (q) {
+        const hay = [
+          row.pneu,
+          row.ficha_estoque,
+          row.ficha_conserto,
+          row.marca,
+          row.situacao_inove,
+          row.status,
+          row.local,
+          row.auditoria_texto,
+          row.status_conserto,
+          row.origem_conserto,
+        ].join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (filtroStatus && row.status !== filtroStatus) return false;
+      if (filtroComparacao === "CORRETO" && row.status !== "BORRACHARIA") return false;
+      if (filtroComparacao === "INCORRETO" && row.status === "BORRACHARIA") return false;
+      if (filtroDataAuditoria) {
+        if (!row.data_estoque) return false;
+        const inicio = new Date(`${filtroDataAuditoria}T00:00:00`);
+        const dataEstoque = new Date(row.data_estoque);
+        if (Number.isNaN(dataEstoque.getTime()) || dataEstoque < inicio) return false;
+      }
+      return true;
+    });
+  }, [estoqueComparado, busca, filtroStatus, filtroComparacao, filtroDataAuditoria]);
+
   const estoqueKpis = useMemo(() => {
     return {
       fisicoTotal: estoqueComparado.fisico.length,
@@ -591,6 +679,16 @@ export default function PCMControlePneus() {
       transnetNoEstoque: estoqueComparado.transnet.filter((item) => item.status === "NO ESTOQUE").length,
       transnetEmCarro: estoqueComparado.transnet.filter((item) => item.status === "EM CARRO").length,
       transnetNaoLocalizado: estoqueComparado.transnet.filter((item) => item.status === "NAO LOCALIZADO").length,
+    };
+  }, [estoqueComparado]);
+
+  const recapadoraKpis = useMemo(() => {
+    return {
+      total: estoqueComparado.recapadora.length,
+      ok: estoqueComparado.recapadora.filter((item) => item.status === "BORRACHARIA").length,
+      divergente: estoqueComparado.recapadora.filter((item) => item.status !== "BORRACHARIA").length,
+      enviar: estoqueComparado.recapadora.filter((item) => String(item.situacao_inove || "").toUpperCase().includes("ENVIAR PARA RECAPAGEM")).length,
+      recapado: estoqueComparado.recapadora.filter((item) => String(item.situacao_inove || "").toUpperCase().includes("RECAPADO")).length,
     };
   }, [estoqueComparado]);
 
@@ -723,6 +821,13 @@ export default function PCMControlePneus() {
         >
           Estoque
         </button>
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("recapadora")}
+          className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${abaAtiva === "recapadora" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
+        >
+          Recapadora
+        </button>
       </section>
 
       <section className="mb-3 flex flex-wrap gap-2">
@@ -735,7 +840,7 @@ export default function PCMControlePneus() {
             <KpiCard label="Não existe" value={kpis.naoExiste} cor="#ea580c" />
             <KpiCard label="Estoque" value={kpis.estoque} cor="#2563eb" />
           </>
-        ) : (
+        ) : abaAtiva === "estoque" ? (
           <>
             <KpiCard label="Fisico estoque" value={estoqueKpis.fisicoTotal} cor="#475569" />
             <KpiCard label="Fisico ok" value={estoqueKpis.fisicoBorracharia} cor="#7c3aed" />
@@ -744,6 +849,14 @@ export default function PCMControlePneus() {
             <KpiCard label="TransNet no estoque" value={estoqueKpis.transnetNoEstoque} cor="#16a34a" />
             <KpiCard label="TransNet no carro" value={estoqueKpis.transnetEmCarro} cor="#ca8a04" />
             <KpiCard label="TransNet nao localizado" value={estoqueKpis.transnetNaoLocalizado} cor="#ea580c" />
+          </>
+        ) : (
+          <>
+            <KpiCard label="Na recapadora" value={recapadoraKpis.total} cor="#475569" />
+            <KpiCard label="Ok no TransNet" value={recapadoraKpis.ok} cor="#16a34a" />
+            <KpiCard label="Divergente" value={recapadoraKpis.divergente} cor="#dc2626" />
+            <KpiCard label="Enviar p/ recapagem" value={recapadoraKpis.enviar} cor="#ca8a04" />
+            <KpiCard label="Recapado" value={recapadoraKpis.recapado} cor="#7c3aed" />
           </>
         )}
         <div className="min-w-[340px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
@@ -832,7 +945,15 @@ export default function PCMControlePneus() {
           title="Auditorias a partir desta data"
         />
         <span className="ml-auto text-xs text-slate-500">
-          Exibindo {abaAtiva === "veiculos" ? filtradas.length : estoqueFisicoFiltrado.length + estoqueTransnetFiltrado.length} / {abaAtiva === "veiculos" ? linhasBase.length : estoqueComparado.fisico.length + estoqueComparado.transnet.length}
+          Exibindo {abaAtiva === "veiculos"
+            ? filtradas.length
+            : abaAtiva === "estoque"
+              ? (abaEstoqueAtiva === "fisico" ? estoqueFisicoFiltrado.length : estoqueTransnetFiltrado.length)
+              : recapadoraFiltrada.length} / {abaAtiva === "veiculos"
+            ? linhasBase.length
+            : abaAtiva === "estoque"
+              ? (abaEstoqueAtiva === "fisico" ? estoqueComparado.fisico.length : estoqueComparado.transnet.length)
+              : estoqueComparado.recapadora.length}
         </span>
       </section>
 
@@ -911,100 +1032,171 @@ export default function PCMControlePneus() {
             </tbody>
           </table>
         </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white shadow">
-            <div className="border-b border-slate-200 px-3 py-2">
-              <div className="text-sm font-bold text-slate-800">Fogos na borracharia pelo fisico x TransNet</div>
-              <div className="text-xs text-slate-500">Baseado na ultima ficha de estoque fisico.</div>
-            </div>
-            <div className="max-h-[260px] overflow-auto">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
-                  <tr>
-                    <th className="px-2 py-2 text-left">Data</th>
-                    <th className="px-2 py-2 text-left">Ficha</th>
-                    <th className="px-2 py-2 text-left">Numero de fogo</th>
-                    <th className="px-2 py-2 text-left">Marca</th>
-                    <th className="px-2 py-2 text-left">Situacao fisica</th>
-                    <th className="px-2 py-2 text-left">Status TransNet</th>
-                    <th className="px-2 py-2 text-left">Onde esta no TransNet</th>
-                    <th className="px-2 py-2 text-left">Auditoria</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {estoqueFisicoFiltrado.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
-                        Nenhum fogo do estoque fisico encontrado.
-                      </td>
-                    </tr>
-                  ) : null}
-                  {estoqueFisicoFiltrado.map((row) => (
-                    <tr key={row.key} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="whitespace-nowrap px-2 py-2 text-slate-600">{fmtData(row.data_estoque)}</td>
-                      <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_estoque || "???"}</td>
-                      <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.pneu}</td>
-                      <td className="px-2 py-2 text-slate-700">{row.marca || "???"}</td>
-                      <td className="px-2 py-2 text-slate-700">{row.situacao_inove || "???"}</td>
-                      <td className="px-2 py-2">
-                        <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "BORRACHARIA" ? "#7c3aed" : row.status === "EM CARRO" ? "#ca8a04" : row.status === "OUTRO LOCAL" ? "#2563eb" : row.status === "SUCATA" ? "#dc2626" : "#ea580c" }}>
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2 text-slate-700">{row.local}</td>
-                      <td className="px-2 py-2 text-slate-700">{row.auditoria_texto}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      ) : abaAtiva === "estoque" ? (
+        <div className="space-y-3">
+          <section className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAbaEstoqueAtiva("fisico")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${abaEstoqueAtiva === "fisico" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
+            >
+              Fisico x TransNet
+            </button>
+            <button
+              type="button"
+              onClick={() => setAbaEstoqueAtiva("transnet")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${abaEstoqueAtiva === "transnet" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
+            >
+              TransNet borracharia
+            </button>
+          </section>
 
-          <div className="rounded-lg border border-slate-200 bg-white shadow">
-            <div className="border-b border-slate-200 px-3 py-2">
-              <div className="text-sm font-bold text-slate-800">Fogos que constam no TransNet como borracharia</div>
-              <div className="text-xs text-slate-500">Aqui mostramos se pelo fisico eles estao no estoque, em algum carro na auditoria ou nao aparecem em lugar nenhum.</div>
-            </div>
-            <div className="max-h-[260px] overflow-auto">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
-                  <tr>
-                    <th className="px-2 py-2 text-left">Numero de fogo</th>
-                    <th className="px-2 py-2 text-left">Marca</th>
-                    <th className="px-2 py-2 text-left">Local TransNet</th>
-                    <th className="px-2 py-2 text-left">Status confronto</th>
-                    <th className="px-2 py-2 text-left">Estoque fisico</th>
-                    <th className="px-2 py-2 text-left">Auditoria</th>
-                    <th className="px-2 py-2 text-left">Detalhe</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {estoqueTransnetFiltrado.length === 0 ? (
+          {abaEstoqueAtiva === "fisico" ? (
+            <div className="rounded-lg border border-slate-200 bg-white shadow">
+              <div className="border-b border-slate-200 px-3 py-2">
+                <div className="text-sm font-bold text-slate-800">Fogos na borracharia pelo fisico x TransNet</div>
+                <div className="text-xs text-slate-500">Baseado na ultima ficha de estoque fisico.</div>
+              </div>
+              <div className="max-h-[calc(100vh-340px)] overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
-                        Nenhum fogo da borracharia no TransNet encontrado.
-                      </td>
+                      <th className="px-2 py-2 text-left">Data</th>
+                      <th className="px-2 py-2 text-left">Ficha</th>
+                      <th className="px-2 py-2 text-left">Numero de fogo</th>
+                      <th className="px-2 py-2 text-left">Marca</th>
+                      <th className="px-2 py-2 text-left">Situacao fisica</th>
+                      <th className="px-2 py-2 text-left">Status TransNet</th>
+                      <th className="px-2 py-2 text-left">Onde esta no TransNet</th>
+                      <th className="px-2 py-2 text-left">Auditoria</th>
                     </tr>
-                  ) : null}
-                  {estoqueTransnetFiltrado.map((row) => (
-                    <tr key={row.key} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.pneu}</td>
-                      <td className="px-2 py-2 text-slate-700">{row.marca || "???"}</td>
-                      <td className="px-2 py-2 text-slate-700">{row.local}</td>
-                      <td className="px-2 py-2">
-                        <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "NO ESTOQUE" ? "#16a34a" : row.status === "EM CARRO" ? "#ca8a04" : "#ea580c" }}>
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_estoque || "???"}</td>
-                      <td className="px-2 py-2 text-slate-700">{row.auditoria_texto}</td>
-                      <td className="px-2 py-2 text-slate-700">{row.detalhe}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {estoqueFisicoFiltrado.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-400">
+                          Nenhum fogo do estoque fisico encontrado.
+                        </td>
+                      </tr>
+                    ) : null}
+                    {estoqueFisicoFiltrado.map((row) => (
+                      <tr key={row.key} className="border-t border-slate-100 hover:bg-slate-50">
+                        <td className="whitespace-nowrap px-2 py-2 text-slate-600">{fmtData(row.data_estoque)}</td>
+                        <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_estoque || "???"}</td>
+                        <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.pneu}</td>
+                        <td className="px-2 py-2 text-slate-700">{row.marca || "???"}</td>
+                        <td className="px-2 py-2 text-slate-700">{row.situacao_inove || "???"}</td>
+                        <td className="px-2 py-2">
+                          <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "BORRACHARIA" ? "#7c3aed" : row.status === "EM CARRO" ? "#ca8a04" : row.status === "OUTRO LOCAL" ? "#2563eb" : row.status === "SUCATA" ? "#dc2626" : "#ea580c" }}>
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-slate-700">{row.local}</td>
+                        <td className="px-2 py-2 text-slate-700">{row.auditoria_texto}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-white shadow">
+              <div className="border-b border-slate-200 px-3 py-2">
+                <div className="text-sm font-bold text-slate-800">Fogos que constam no TransNet como borracharia</div>
+                <div className="text-xs text-slate-500">Aqui mostramos se pelo fisico eles estao no estoque, em algum carro na auditoria ou nao aparecem em lugar nenhum.</div>
+              </div>
+              <div className="max-h-[calc(100vh-340px)] overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
+                    <tr>
+                      <th className="px-2 py-2 text-left">Numero de fogo</th>
+                      <th className="px-2 py-2 text-left">Marca</th>
+                      <th className="px-2 py-2 text-left">Local TransNet</th>
+                      <th className="px-2 py-2 text-left">Status confronto</th>
+                      <th className="px-2 py-2 text-left">Estoque fisico</th>
+                      <th className="px-2 py-2 text-left">Auditoria</th>
+                      <th className="px-2 py-2 text-left">Detalhe</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {estoqueTransnetFiltrado.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-slate-400">
+                          Nenhum fogo da borracharia no TransNet encontrado.
+                        </td>
+                      </tr>
+                    ) : null}
+                    {estoqueTransnetFiltrado.map((row) => (
+                      <tr key={row.key} className="border-t border-slate-100 hover:bg-slate-50">
+                        <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.pneu}</td>
+                        <td className="px-2 py-2 text-slate-700">{row.marca || "???"}</td>
+                        <td className="px-2 py-2 text-slate-700">{row.local}</td>
+                        <td className="px-2 py-2">
+                          <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "NO ESTOQUE" ? "#16a34a" : row.status === "EM CARRO" ? "#ca8a04" : "#ea580c" }}>
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_estoque || "???"}</td>
+                        <td className="px-2 py-2 text-slate-700">{row.auditoria_texto}</td>
+                        <td className="px-2 py-2 text-slate-700">{row.detalhe}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-slate-200 bg-white shadow">
+          <div className="border-b border-slate-200 px-3 py-2">
+            <div className="text-sm font-bold text-slate-800">Pneus na recapadora</div>
+            <div className="text-xs text-slate-500">Mostra os pneus da ultima ficha fisica com situacao ligada a recapagem e onde eles aparecem no TransNet.</div>
+          </div>
+          <div className="max-h-[calc(100vh-340px)] overflow-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
+                <tr>
+                  <th className="px-2 py-2 text-left">Data</th>
+                  <th className="px-2 py-2 text-left">Ficha estoque</th>
+                  <th className="px-2 py-2 text-left">Numero de fogo</th>
+                  <th className="px-2 py-2 text-left">Marca</th>
+                  <th className="px-2 py-2 text-left">Situacao</th>
+                  <th className="px-2 py-2 text-left">Status TransNet</th>
+                  <th className="px-2 py-2 text-left">Onde esta no TransNet</th>
+                  <th className="px-2 py-2 text-left">Auditoria</th>
+                  <th className="px-2 py-2 text-left">Ficha conserto</th>
+                  <th className="px-2 py-2 text-left">Status conserto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recapadoraFiltrada.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-8 text-center text-slate-400">
+                      Nenhum pneu da recapadora encontrado.
+                    </td>
+                  </tr>
+                ) : null}
+                {recapadoraFiltrada.map((row) => (
+                  <tr key={row.key} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="whitespace-nowrap px-2 py-2 text-slate-600">{fmtData(row.data_estoque)}</td>
+                    <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_estoque || "???"}</td>
+                    <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.pneu}</td>
+                    <td className="px-2 py-2 text-slate-700">{row.marca || "???"}</td>
+                    <td className="px-2 py-2 text-slate-700">{row.situacao_inove || "???"}</td>
+                    <td className="px-2 py-2">
+                      <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "BORRACHARIA" ? "#16a34a" : row.status === "EM CARRO" ? "#ca8a04" : row.status === "OUTRO LOCAL" ? "#2563eb" : row.status === "SUCATA" ? "#dc2626" : "#ea580c" }}>
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-slate-700">{row.local}</td>
+                    <td className="px-2 py-2 text-slate-700">{row.auditoria_texto}</td>
+                    <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_conserto || "???"}</td>
+                    <td className="px-2 py-2 text-slate-700">{row.status_conserto || row.origem_conserto || "???"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

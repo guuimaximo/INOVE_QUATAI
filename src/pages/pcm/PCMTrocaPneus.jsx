@@ -58,6 +58,11 @@ const TROCA_CONSERTO_OPTIONS = [
 ];
 
 const ORIGEM_RECEBEU_SEM_PNEU = "FICOU SEM PNEU";
+const ORIGEM_RECEBEU_OUTRO = "COLOCARAM OUTRO PNEU";
+const ORIGEM_RECEBEU_OPTIONS = [
+  ORIGEM_RECEBEU_SEM_PNEU,
+  ORIGEM_RECEBEU_OUTRO,
+];
 
 const POSICOES = [
   "DIANTEIRO DIREITO",
@@ -294,6 +299,10 @@ function createTrocaForm(nextFicha, userName) {
     fotoOrigemRecebido: null,
     fotoOrigemRecebidoUrl: "",
     fotoOrigemRecebidoPath: "",
+    numeroFogoDestinoRetirado: "",
+    fotoDestinoRetirado: null,
+    fotoDestinoRetiradoUrl: "",
+    fotoDestinoRetiradoPath: "",
     observacoes: "",
   };
 }
@@ -322,6 +331,10 @@ function createTrocaFormFromRow(row) {
     fotoOrigemRecebido: null,
     fotoOrigemRecebidoUrl: row?.foto_numero_fogo_origem_recebido_url || "",
     fotoOrigemRecebidoPath: row?.foto_numero_fogo_origem_recebido_path || "",
+    numeroFogoDestinoRetirado: row?.numero_fogo_destino_retirado || "",
+    fotoDestinoRetirado: null,
+    fotoDestinoRetiradoUrl: row?.foto_numero_fogo_destino_retirado_url || "",
+    fotoDestinoRetiradoPath: row?.foto_numero_fogo_destino_retirado_path || "",
     observacoes: row?.observacoes || "",
   };
 }
@@ -872,7 +885,7 @@ function SelectField({ label, value, onChange, options }) {
   );
 }
 
-function PhotoField({ title, file, imageUrl = "", inputId, onChange, onNativeCapture, isNativeShell }) {
+function PhotoField({ title, file, imageUrl = "", inputId, onChange, onNativeCapture, isNativeShell, readOnly = false, helperText }) {
   const [previewUrl, setPreviewUrl] = useState(imageUrl || "");
 
   useEffect(() => {
@@ -889,7 +902,9 @@ function PhotoField({ title, file, imageUrl = "", inputId, onChange, onNativeCap
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div className="text-sm font-semibold text-slate-900">{title}</div>
-      <div className="mt-1 text-xs text-slate-500">Ao tocar em inserir foto, a camera abre no celular.</div>
+      <div className="mt-1 text-xs text-slate-500">
+        {helperText || (readOnly ? "Usando a mesma foto do pneu retirado no carro de origem." : "Ao tocar em inserir foto, a camera abre no celular.")}
+      </div>
 
       <div className="mt-3 overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white">
         {previewUrl ? (
@@ -902,29 +917,33 @@ function PhotoField({ title, file, imageUrl = "", inputId, onChange, onNativeCap
         )}
       </div>
 
-      <input
-        id={inputId}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={onChange}
-      />
+      {!readOnly ? (
+        <>
+          <input
+            id={inputId}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={onChange}
+          />
 
-      <button
-        type="button"
-        onClick={() => {
-          if (isNativeShell && onNativeCapture) {
-            void onNativeCapture();
-            return;
-          }
-          document.getElementById(inputId)?.click();
-        }}
-        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
-      >
-        <FaCamera />
-        Inserir foto
-      </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (isNativeShell && onNativeCapture) {
+                void onNativeCapture();
+                return;
+              }
+              document.getElementById(inputId)?.click();
+            }}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
+          >
+            <FaCamera />
+            Inserir foto
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -1194,22 +1213,59 @@ function TrocaModal({
                 <ReadOnlyField
                   label={
                     isCarroCarro
-                      ? "Numero de fogo (colocado) — mesmo pneu retirado do origem"
+                      ? "Numero de fogo (colocado) - mesmo pneu retirado do origem"
                       : "Numero de fogo (colocado)"
                   }
-                  value={isCarroCarro ? (form.numeroFogoRetirado || "—") : form.numeroFogoColocado}
+                  value={isCarroCarro ? (form.numeroFogoRetirado || "-") : form.numeroFogoColocado}
                 />
                 <PhotoField
                   title="Foto do numero de fogo colocado"
-                  file={form.fotoColocado}
-                  imageUrl={form.fotoColocadoUrl || ""}
+                  file={form.fotoRetirado}
+                  imageUrl={form.fotoRetiradoUrl || ""}
                   inputId="troca-colocado"
-                  onChange={(event) => onFotoChange("fotoColocado", event.target.files?.[0] || null)}
-                  onNativeCapture={() => onCapturePhoto("fotoColocado", "numero_colocado")}
+                  onChange={() => {}}
                   isNativeShell={isNativeShell}
+                  readOnly
                 />
               </div>
             </SectionBlock>
+
+            <div className="xl:col-span-2">
+              <SectionBlock title="Como ficou o carro de origem">
+                <div className="grid grid-cols-1 gap-4">
+                  <SelectField
+                    label="Situacao do carro de origem"
+                    value={form.origemRecebeu}
+                    onChange={(value) => onFieldChange("origemRecebeu", value)}
+                    options={ORIGEM_RECEBEU_OPTIONS}
+                  />
+                  {form.origemRecebeu === ORIGEM_RECEBEU_OUTRO ? (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <InputField
+                        label="Numero de fogo que entrou no carro de origem"
+                        value={form.numeroFogoOrigemRecebido}
+                        onChange={(value) => onFieldChange("numeroFogoOrigemRecebido", value)}
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                      />
+                      <PhotoField
+                        title="Foto do numero de fogo que entrou no carro de origem"
+                        file={form.fotoOrigemRecebido}
+                        imageUrl={form.fotoOrigemRecebidoUrl || ""}
+                        inputId="troca-origem-recebido"
+                        onChange={(event) => onFotoChange("fotoOrigemRecebido", event.target.files?.[0] || null)}
+                        onNativeCapture={() => onCapturePhoto("fotoOrigemRecebido", "numero_origem_recebido")}
+                        isNativeShell={isNativeShell}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      No controle de pneus essa posicao vai aparecer como <b>PNEU RETIRADO</b> com a estrelinha da troca.
+                    </p>
+                  )}
+                </div>
+              </SectionBlock>
+            </div>
 
             <div className="xl:col-span-2">
               <SectionBlock title="Pneu que estava no carro de destino (vai pro estoque como CONSERTO)">
@@ -1217,18 +1273,18 @@ function TrocaModal({
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <InputField
                       label="Numero de fogo do pneu que estava no destino"
-                      value={form.numeroFogoOrigemRecebido}
-                      onChange={(value) => onFieldChange("numeroFogoOrigemRecebido", value)}
+                      value={form.numeroFogoDestinoRetirado}
+                      onChange={(value) => onFieldChange("numeroFogoDestinoRetirado", value)}
                       inputMode="numeric"
                       pattern="[0-9]*"
                     />
                     <PhotoField
                       title="Foto do numero de fogo do pneu que saiu do destino"
-                      file={form.fotoOrigemRecebido}
-                      imageUrl={form.fotoOrigemRecebidoUrl || ""}
-                      inputId="troca-origem-recebido"
-                      onChange={(event) => onFotoChange("fotoOrigemRecebido", event.target.files?.[0] || null)}
-                      onNativeCapture={() => onCapturePhoto("fotoOrigemRecebido", "numero_origem_recebido")}
+                      file={form.fotoDestinoRetirado}
+                      imageUrl={form.fotoDestinoRetiradoUrl || ""}
+                      inputId="troca-destino-retirado"
+                      onChange={(event) => onFotoChange("fotoDestinoRetirado", event.target.files?.[0] || null)}
+                      onNativeCapture={() => onCapturePhoto("fotoDestinoRetirado", "numero_destino_retirado")}
                       isNativeShell={isNativeShell}
                     />
                   </div>
@@ -1884,23 +1940,53 @@ function ConsultaModal({
           </SectionBlock>
         </div>
 
-        {row.numero_fogo_origem_recebido || row.foto_numero_fogo_origem_recebido_url || row.origem_recebeu ? (
-          <SectionBlock title={isCarroCarro ? "Pneu que saiu do carro de destino" : "O que ficou no carro de origem"}>
+        {isCarroCarro ? (
+          <>
+            <SectionBlock title="Como ficou o carro de origem">
+              <div className="grid grid-cols-1 gap-4">
+                <DetailRow label="Situacao do carro de origem" value={row.origem_recebeu || ORIGEM_RECEBEU_SEM_PNEU} />
+                {row.numero_fogo_origem_recebido ? (
+                  <DetailRow label="Numero de fogo que entrou no carro de origem" value={row.numero_fogo_origem_recebido} />
+                ) : null}
+                {row.foto_numero_fogo_origem_recebido_url ? (
+                  <ZoomableImage
+                    src={row.foto_numero_fogo_origem_recebido_url}
+                    alt="Numero de fogo que entrou no carro de origem"
+                    isNativeShell={isNativeShell}
+                  />
+                ) : null}
+              </div>
+            </SectionBlock>
+
+            {row.numero_fogo_destino_retirado || row.foto_numero_fogo_destino_retirado_url ? (
+              <SectionBlock title="Pneu que saiu do carro de destino">
+                <div className="grid grid-cols-1 gap-4">
+                  <DetailRow label="Destino" value={SITUACAO_ESTOQUE_CONSERTO} />
+                  {row.numero_fogo_destino_retirado ? (
+                    <DetailRow label="Numero de fogo que saiu do destino" value={row.numero_fogo_destino_retirado} />
+                  ) : null}
+                  {row.foto_numero_fogo_destino_retirado_url ? (
+                    <ZoomableImage
+                      src={row.foto_numero_fogo_destino_retirado_url}
+                      alt="Numero de fogo que saiu do carro de destino"
+                      isNativeShell={isNativeShell}
+                    />
+                  ) : null}
+                </div>
+              </SectionBlock>
+            ) : null}
+          </>
+        ) : row.numero_fogo_origem_recebido || row.foto_numero_fogo_origem_recebido_url || row.origem_recebeu ? (
+          <SectionBlock title="O que ficou no carro de origem">
             <div className="grid grid-cols-1 gap-4">
-              <DetailRow
-                label={isCarroCarro ? "Destino do pneu do carro de destino" : "Destino do pneu retirado"}
-                value={isCarroCarro ? SITUACAO_ESTOQUE_CONSERTO : row.origem_recebeu}
-              />
+              <DetailRow label="Destino do pneu retirado" value={row.origem_recebeu} />
               {row.numero_fogo_origem_recebido ? (
-                <DetailRow
-                  label={isCarroCarro ? "Numero de fogo que saiu do destino" : "Numero de fogo recebido"}
-                  value={row.numero_fogo_origem_recebido}
-                />
+                <DetailRow label="Numero de fogo recebido" value={row.numero_fogo_origem_recebido} />
               ) : null}
               {row.foto_numero_fogo_origem_recebido_url ? (
                 <ZoomableImage
                   src={row.foto_numero_fogo_origem_recebido_url}
-                  alt={isCarroCarro ? "Numero de fogo que saiu do carro de destino" : "Numero de fogo recebido no carro de origem"}
+                  alt="Numero de fogo recebido no carro de origem"
                   isNativeShell={isNativeShell}
                 />
               ) : null}
@@ -3025,6 +3111,10 @@ export default function PCMTrocaPneus() {
           fotoOrigemRecebido: null,
           fotoOrigemRecebidoUrl: "",
           fotoOrigemRecebidoPath: "",
+          numeroFogoDestinoRetirado: "",
+          fotoDestinoRetirado: null,
+          fotoDestinoRetiradoUrl: "",
+          fotoDestinoRetiradoPath: "",
           origemRecebeu: ORIGEM_RECEBEU_SEM_PNEU,
         };
       }
@@ -3035,6 +3125,17 @@ export default function PCMTrocaPneus() {
           tipoTroca: value,
           origemRecebeu: ORIGEM_RECEBEU_SEM_PNEU,
           numeroFogoColocado: current.numeroFogoRetirado,
+        };
+      }
+
+      if (field === "origemRecebeu" && value === ORIGEM_RECEBEU_SEM_PNEU) {
+        return {
+          ...current,
+          origemRecebeu: value,
+          numeroFogoOrigemRecebido: "",
+          fotoOrigemRecebido: null,
+          fotoOrigemRecebidoUrl: "",
+          fotoOrigemRecebidoPath: "",
         };
       }
 
@@ -3190,15 +3291,14 @@ export default function PCMTrocaPneus() {
       "numero_retirado",
       payload.fotoRetiradoFile
     );
-    const fotoColocada = await uploadFoto(
-      BUCKET_TROCA,
-      "trocas",
-      trocaId,
-      "numero_colocado",
-      payload.fotoColocadoFile
-    );
+    const fotoColocada = payload.fotoColocadoFile
+      ? await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_colocado", payload.fotoColocadoFile)
+      : fotoRetirada;
     const fotoOrigemRecebido = payload.fotoOrigemRecebidoFile
       ? await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_origem_recebido", payload.fotoOrigemRecebidoFile)
+      : { path: null, url: null };
+    const fotoDestinoRetirado = payload.fotoDestinoRetiradoFile
+      ? await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_destino_retirado", payload.fotoDestinoRetiradoFile)
       : { path: null, url: null };
 
     const insertPayload = {
@@ -3224,6 +3324,10 @@ export default function PCMTrocaPneus() {
       numero_fogo_origem_recebido: payload.numeroFogoOrigemRecebido || null,
       foto_numero_fogo_origem_recebido_path: fotoOrigemRecebido.path,
       foto_numero_fogo_origem_recebido_url: fotoOrigemRecebido.url,
+      numero_fogo_destino_retirado: payload.numeroFogoDestinoRetirado || null,
+      foto_numero_fogo_destino_retirado_path: fotoDestinoRetirado.path,
+      foto_numero_fogo_destino_retirado_url: fotoDestinoRetirado.url,
+      pneu_conserto: payload.pneuConserto || TROCA_CONSERTO_NENHUM,
       observacoes: payload.observacoes,
       criado_por_login: payload.criadoPorLogin,
       criado_por_nome: payload.criadoPorNome,
@@ -3241,15 +3345,15 @@ export default function PCMTrocaPneus() {
 
     if (
       norm(payload.tipoTroca) === TIPO_TROCA_CARRO &&
-      norm(payload.numeroFogoOrigemRecebido) &&
+      norm(payload.numeroFogoDestinoRetirado) &&
       !payload.isEditing
     ) {
       const { error: estoqueError } = await supabase.from("pcm_estoque_pneus").insert([
         {
           id: createClientUuid(),
           ficha_estoque: payload.ficha,
-          numero_pneu: payload.numeroFogoOrigemRecebido,
-          numero_fogo: payload.numeroFogoOrigemRecebido,
+          numero_pneu: payload.numeroFogoDestinoRetirado,
+          numero_fogo: payload.numeroFogoDestinoRetirado,
           marca: "Outra",
           situacao: SITUACAO_ESTOQUE_CONSERTO,
           observacoes: `Lancado automaticamente pela troca ${payload.ficha}. Pneu removido do carro de destino.`,
@@ -3274,14 +3378,20 @@ export default function PCMTrocaPneus() {
     const fotoColocada = payload.fotoColocadoFile
       ? await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_colocado", payload.fotoColocadoFile)
       : {
-        path: payload.fotoColocadoPath || null,
-        url: payload.fotoColocadoUrl || null,
+        path: payload.fotoColocadoPath || payload.fotoRetiradoPath || null,
+        url: payload.fotoColocadoUrl || payload.fotoRetiradoUrl || null,
       };
     const fotoOrigemRecebido = payload.fotoOrigemRecebidoFile
       ? await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_origem_recebido", payload.fotoOrigemRecebidoFile)
       : {
         path: payload.fotoOrigemRecebidoPath || null,
         url: payload.fotoOrigemRecebidoUrl || null,
+      };
+    const fotoDestinoRetirado = payload.fotoDestinoRetiradoFile
+      ? await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_destino_retirado", payload.fotoDestinoRetiradoFile)
+      : {
+        path: payload.fotoDestinoRetiradoPath || null,
+        url: payload.fotoDestinoRetiradoUrl || null,
       };
 
     const updatePayload = {
@@ -3306,6 +3416,9 @@ export default function PCMTrocaPneus() {
       numero_fogo_origem_recebido: payload.numeroFogoOrigemRecebido || null,
       foto_numero_fogo_origem_recebido_path: fotoOrigemRecebido.path,
       foto_numero_fogo_origem_recebido_url: fotoOrigemRecebido.url,
+      numero_fogo_destino_retirado: payload.numeroFogoDestinoRetirado || null,
+      foto_numero_fogo_destino_retirado_path: fotoDestinoRetirado.path,
+      foto_numero_fogo_destino_retirado_url: fotoDestinoRetirado.url,
       pneu_conserto: payload.pneuConserto || TROCA_CONSERTO_NENHUM,
       observacoes: payload.observacoes,
       criado_por_login: payload.criadoPorLogin,
@@ -3490,6 +3603,7 @@ export default function PCMTrocaPneus() {
         fotoRetiradoFile: await serializeFile(payload.fotoRetiradoFile),
         fotoColocadoFile: await serializeFile(payload.fotoColocadoFile),
         fotoOrigemRecebidoFile: await serializeFile(payload.fotoOrigemRecebidoFile),
+        fotoDestinoRetiradoFile: await serializeFile(payload.fotoDestinoRetiradoFile),
       },
     });
     await refreshOfflineCount();
@@ -3542,6 +3656,7 @@ export default function PCMTrocaPneus() {
             fotoRetiradoFile: base64ToFile(item.payload.fotoRetiradoFile),
             fotoColocadoFile: base64ToFile(item.payload.fotoColocadoFile),
             fotoOrigemRecebidoFile: base64ToFile(item.payload.fotoOrigemRecebidoFile),
+            fotoDestinoRetiradoFile: base64ToFile(item.payload.fotoDestinoRetiradoFile),
           });
         }
 
@@ -3599,25 +3714,38 @@ export default function PCMTrocaPneus() {
 
     if (
       (!trocaForm.fotoRetirado && !trocaForm.fotoRetiradoUrl) ||
-      (!trocaForm.fotoColocado && !trocaForm.fotoColocadoUrl)
+      (isEstoqueCarro && !trocaForm.fotoColocado && !trocaForm.fotoColocadoUrl)
     ) {
-      alert("As duas fotos do numero de fogo sao obrigatorias.");
+      alert(isEstoqueCarro ? "As duas fotos do numero de fogo sao obrigatorias." : "A foto do numero de fogo retirado e obrigatoria.");
       return;
     }
 
     const origemRecebeu = isEstoqueCarro
       ? ""
-      : ORIGEM_RECEBEU_SEM_PNEU;
+      : (safeText(trocaForm.origemRecebeu) || ORIGEM_RECEBEU_SEM_PNEU);
     const numeroFogoOrigemRecebido = safeText(trocaForm.numeroFogoOrigemRecebido);
+    const numeroFogoDestinoRetirado = safeText(trocaForm.numeroFogoDestinoRetirado);
 
     if (
       !isEstoqueCarro &&
+      (
+        !numeroFogoDestinoRetirado ||
+        (!trocaForm.fotoDestinoRetirado && !trocaForm.fotoDestinoRetiradoUrl)
+      )
+    ) {
+      alert("Informe o numero de fogo e a foto do pneu que estava no carro de destino.");
+      return;
+    }
+
+    if (
+      !isEstoqueCarro &&
+      origemRecebeu === ORIGEM_RECEBEU_OUTRO &&
       (
         !numeroFogoOrigemRecebido ||
         (!trocaForm.fotoOrigemRecebido && !trocaForm.fotoOrigemRecebidoUrl)
       )
     ) {
-      alert("Informe o numero de fogo e a foto do pneu que estava no carro de destino.");
+      alert("Informe o numero de fogo e a foto do pneu que entrou no carro de origem.");
       return;
     }
 
@@ -3634,17 +3762,21 @@ export default function PCMTrocaPneus() {
       prefixoInstalacao,
       posicaoInstalacao,
       numeroFogoColocado,
-      fotoColocadoFile: trocaForm.fotoColocado,
-      fotoColocadoUrl: trocaForm.fotoColocadoUrl,
-      fotoColocadoPath: trocaForm.fotoColocadoPath,
+      fotoColocadoFile: isEstoqueCarro ? trocaForm.fotoColocado : null,
+      fotoColocadoUrl: isEstoqueCarro ? trocaForm.fotoColocadoUrl : trocaForm.fotoRetiradoUrl,
+      fotoColocadoPath: isEstoqueCarro ? trocaForm.fotoColocadoPath : trocaForm.fotoRetiradoPath,
       pneuConserto,
       consertoId: pneuConserto !== TROCA_CONSERTO_NENHUM ? createClientUuid() : null,
       consertoFicha: pneuConserto !== TROCA_CONSERTO_NENHUM ? `CP-${ficha}` : null,
       origemRecebeu,
-      numeroFogoOrigemRecebido: !isEstoqueCarro ? numeroFogoOrigemRecebido : "",
-      fotoOrigemRecebidoFile: !isEstoqueCarro ? trocaForm.fotoOrigemRecebido : null,
-      fotoOrigemRecebidoUrl: !isEstoqueCarro ? trocaForm.fotoOrigemRecebidoUrl : "",
-      fotoOrigemRecebidoPath: !isEstoqueCarro ? trocaForm.fotoOrigemRecebidoPath : "",
+      numeroFogoOrigemRecebido: !isEstoqueCarro && origemRecebeu === ORIGEM_RECEBEU_OUTRO ? numeroFogoOrigemRecebido : "",
+      fotoOrigemRecebidoFile: !isEstoqueCarro && origemRecebeu === ORIGEM_RECEBEU_OUTRO ? trocaForm.fotoOrigemRecebido : null,
+      fotoOrigemRecebidoUrl: !isEstoqueCarro && origemRecebeu === ORIGEM_RECEBEU_OUTRO ? trocaForm.fotoOrigemRecebidoUrl : "",
+      fotoOrigemRecebidoPath: !isEstoqueCarro && origemRecebeu === ORIGEM_RECEBEU_OUTRO ? trocaForm.fotoOrigemRecebidoPath : "",
+      numeroFogoDestinoRetirado: !isEstoqueCarro ? numeroFogoDestinoRetirado : "",
+      fotoDestinoRetiradoFile: !isEstoqueCarro ? trocaForm.fotoDestinoRetirado : null,
+      fotoDestinoRetiradoUrl: !isEstoqueCarro ? trocaForm.fotoDestinoRetiradoUrl : "",
+      fotoDestinoRetiradoPath: !isEstoqueCarro ? trocaForm.fotoDestinoRetiradoPath : "",
       observacoes,
       criadoPorLogin: safeText(user?.login || user?.email),
       criadoPorNome: safeText(user?.nome),

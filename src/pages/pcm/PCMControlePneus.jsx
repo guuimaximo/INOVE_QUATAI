@@ -604,12 +604,19 @@ export default function PCMControlePneus() {
     const pneu = normalizarPneu(buscaFogo);
     if (!pneu) return null;
 
+    const ultimaFichaBusca = estoqueRows.find((item) => item.ficha_estoque)?.ficha_estoque || "";
+    const estoqueBusca = (ultimaFichaBusca
+      ? estoqueRows.filter((item) => item.ficha_estoque === ultimaFichaBusca)
+      : estoqueRows
+    ).find((item) => normalizarPneu(item.numero_fogo || item.numero_pneu) === pneu);
+    const auditoriasBusca = auditoriaPorPneu.get(pneu) || [];
+
     const matchAloc = alocacoes.find((item) => normalizarPneu(item.numero_fogo) === pneu);
     if (matchAloc) {
       return {
         status: "TRANSNET",
-        texto: `Prefixo ${matchAloc.prefixo} · ${matchAloc.posicao}`,
-        detalhe: "Pneu alocado em veículo no snapshot TransNet.",
+        texto: `Prefixo ${matchAloc.prefixo} ?? ${matchAloc.posicao}`,
+        detalhe: "Pneu alocado em ve??culo no snapshot TransNet.",
         cor: "#2563eb",
       };
     }
@@ -619,31 +626,59 @@ export default function PCMControlePneus() {
       return {
         status: "SUCATA",
         texto: "Pneu inativo / sucata",
-        detalhe: matchInativo.motivo || "Registrado como inativo no TransNet.",
+        detalhe: [
+          matchInativo.motivo || "Registrado como inativo no TransNet.",
+          estoqueBusca ? `Fisico: ficha ${estoqueBusca.ficha_estoque || ultimaFichaBusca} ?? ${estoqueBusca.situacao || "sem situacao"}.` : "",
+          auditoriasBusca[0] ? `Auditoria: carro ${auditoriasBusca[0].prefixo} ?? ${auditoriasBusca[0].posicao}.` : "",
+        ].filter(Boolean).join(" "),
         cor: "#dc2626",
       };
     }
 
     const matchAtivo = ativos.find((item) => normalizarPneu(item.numero_fogo) === pneu);
     if (matchAtivo) {
-      const local = matchAtivo.localizacao || "Local não informado";
-      const posicao = matchAtivo.posicao ? ` · ${matchAtivo.posicao}` : "";
+      const local = matchAtivo.localizacao || "Local n??o informado";
+      const posicao = matchAtivo.posicao ? ` ?? ${matchAtivo.posicao}` : "";
       const isVeiculo = /^\d{3}-[0-9A-Z]+$/i.test(local);
       return {
         status: isVeiculo ? "ATIVO" : "ESTOQUE",
         texto: `${local}${posicao}`,
-        detalhe: [matchAtivo.marca, matchAtivo.medida].filter(Boolean).join(" · ") || "Pneu ativo no TransNet.",
+        detalhe: [matchAtivo.marca, matchAtivo.medida].filter(Boolean).join(" ?? ") || "Pneu ativo no TransNet.",
         cor: isVeiculo ? "#16a34a" : "#2563eb",
+      };
+    }
+
+    if (estoqueBusca) {
+      const situacao = String(estoqueBusca.situacao || "").toUpperCase();
+      const ehSucata = situacao.includes("SUCATA");
+      return {
+        status: ehSucata ? "SUCATA FISICA" : "ESTOQUE FISICO",
+        texto: `Ficha ${estoqueBusca.ficha_estoque || ultimaFichaBusca || "sem ficha"}`,
+        detalhe: [
+          estoqueBusca.situacao ? `Situacao: ${estoqueBusca.situacao}.` : "",
+          estoqueBusca.marca ? `Marca: ${estoqueBusca.marca}.` : "",
+          auditoriasBusca[0] ? `Auditoria: carro ${auditoriasBusca[0].prefixo} ?? ${auditoriasBusca[0].posicao}.` : "",
+        ].filter(Boolean).join(" "),
+        cor: ehSucata ? "#dc2626" : "#7c3aed",
+      };
+    }
+
+    if (auditoriasBusca[0]) {
+      return {
+        status: "AUDITORIA",
+        texto: `Carro ${auditoriasBusca[0].prefixo} ?? ${auditoriasBusca[0].posicao}`,
+        detalhe: "Encontrado na auditoria, sem localizacao atual nas bases TransNet carregadas.",
+        cor: "#475569",
       };
     }
 
     return {
       status: "NAO ENCONTRADO",
-      texto: "Não localizado nas bases carregadas",
-      detalhe: "Verifique se o número de fogo está correto.",
+      texto: "N??o localizado nas bases carregadas",
+      detalhe: "Verifique se o n??mero de fogo est?? correto.",
       cor: "#ea580c",
     };
-  }, [alocacoes, ativos, inativos, buscaFogo]);
+  }, [alocacoes, ativos, inativos, buscaFogo, estoqueRows, auditoriaPorPneu]);
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-slate-100 p-3">

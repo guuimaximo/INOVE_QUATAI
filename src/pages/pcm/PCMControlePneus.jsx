@@ -658,29 +658,21 @@ export default function PCMControlePneus() {
 
     const sucataRows = [...inativosPorPneu.entries()].map(([pneu, inativo]) => {
       const estoque = latestEstoque.get(pneu) || null;
-      const aloc = alocacaoPorPneu.get(pneu) || null;
-      const ativo = ativosPorPneu.get(pneu) || null;
       const auditorias = auditoriaPorPneu.get(pneu) || [];
       const auditoria = auditorias[0] || null;
 
+      // Cruzamentos possiveis: so com fontes do INOVE. TransNet x TransNet
+      // (alocacao / ativos) e impossivel — um pneu nunca esta inativo e ativo
+      // simultaneamente no proprio TransNet.
       let status = "SO SUCATA";
       let local = inativo?.motivo || "Inativo no TransNet";
 
       if (estoque) {
         status = "EM ESTOQUE FISICO";
         local = `Ficha ${estoque.ficha_estoque || ultimaFicha}${estoque.situacao ? ` - ${estoque.situacao}` : ""}`;
-      } else if (aloc) {
-        status = "EM CARRO";
-        local = `${aloc.prefixo} - ${aloc.posicao}`;
       } else if (auditoria) {
         status = "EM AUDITORIA";
         local = `Carro ${auditoria.prefixo} - ${auditoria.posicao}`;
-      } else if (ativo && isBorrachariaLocal(ativo.localizacao)) {
-        status = "EM BORRACHARIA";
-        local = `${ativo.localizacao || "BORRACHARIA"}${ativo.posicao ? ` - ${ativo.posicao}` : ""}`;
-      } else if (ativo) {
-        status = "OUTRO LOCAL";
-        local = `${ativo.localizacao || "Ativo"}${ativo.posicao ? ` - ${ativo.posicao}` : ""}`;
       }
 
       return {
@@ -688,7 +680,7 @@ export default function PCMControlePneus() {
         key: `sucata-${pneu}`,
         pneu,
         motivo: inativo?.motivo || "",
-        marca: estoque?.marca || ativo?.marca || "",
+        marca: estoque?.marca || "",
         ficha_estoque: estoque?.ficha_estoque || "",
         situacao_inove: estoque?.situacao || "",
         status,
@@ -1012,15 +1004,20 @@ export default function PCMControlePneus() {
             <KpiCard label="Estoque" value={kpis.estoque} cor="#2563eb" />
           </>
         ) : abaAtiva === "estoque" ? (
-          <>
-            <KpiCard label="Fisico estoque" value={estoqueKpis.fisicoTotal} cor="#475569" />
-            <KpiCard label="Fisico ok" value={estoqueKpis.fisicoBorracharia} cor="#7c3aed" />
-            <KpiCard label="Fisico divergente" value={estoqueKpis.fisicoDivergente} cor="#dc2626" />
-            <KpiCard label="TransNet borracharia" value={estoqueKpis.transnetTotal} cor="#2563eb" />
-            <KpiCard label="TransNet no estoque" value={estoqueKpis.transnetNoEstoque} cor="#16a34a" />
-            <KpiCard label="TransNet no carro" value={estoqueKpis.transnetEmCarro} cor="#ca8a04" />
-            <KpiCard label="TransNet nao localizado" value={estoqueKpis.transnetNaoLocalizado} cor="#ea580c" />
-          </>
+          abaEstoqueAtiva === "fisico" ? (
+            <>
+              <KpiCard label="Fisico estoque" value={estoqueKpis.fisicoTotal} cor="#475569" />
+              <KpiCard label="Fisico ok" value={estoqueKpis.fisicoBorracharia} cor="#7c3aed" />
+              <KpiCard label="Fisico divergente" value={estoqueKpis.fisicoDivergente} cor="#dc2626" />
+            </>
+          ) : (
+            <>
+              <KpiCard label="TransNet borracharia" value={estoqueKpis.transnetTotal} cor="#2563eb" />
+              <KpiCard label="TransNet no estoque" value={estoqueKpis.transnetNoEstoque} cor="#16a34a" />
+              <KpiCard label="TransNet no carro" value={estoqueKpis.transnetEmCarro} cor="#ca8a04" />
+              <KpiCard label="TransNet nao localizado" value={estoqueKpis.transnetNaoLocalizado} cor="#ea580c" />
+            </>
+          )
         ) : abaAtiva === "recapadora" ? (
           <>
             <KpiCard label="Na recapadora" value={recapadoraKpis.total} cor="#475569" />

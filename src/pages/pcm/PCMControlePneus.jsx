@@ -354,10 +354,10 @@ export default function PCMControlePneus() {
     }
 
     const rowIndexPorPosicao = new Map();
-    for (const row of rowsRaw) {
+    for (const [index, row] of rowsRaw.entries()) {
       const chave = `${String(row.prefixo_base || row.prefixo_auditoria || "").trim()}|${normalizarPosicao(row.posicao)}`;
       if (!rowIndexPorPosicao.has(chave)) {
-        rowIndexPorPosicao.set(chave, row);
+        rowIndexPorPosicao.set(chave, { index, row });
       }
     }
 
@@ -376,8 +376,9 @@ export default function PCMControlePneus() {
 
     const rowsComTrocaOrigem = [...rowsRaw];
     for (const [chave, troca] of trocasOrigemPorPosicao.entries()) {
-      const rowBase = rowIndexPorPosicao.get(chave);
-      if (!rowBase) continue;
+      const rowBaseMeta = rowIndexPorPosicao.get(chave);
+      if (!rowBaseMeta) continue;
+      const rowBase = rowBaseMeta.row;
       const auditoriaTime = toTime(rowBase.auditoria_em);
       const trocaTime = toTime(troca.created_at);
       if (!auditoriaTime || !trocaTime || trocaTime <= auditoriaTime) continue;
@@ -396,7 +397,7 @@ export default function PCMControlePneus() {
           inativosPorPneu,
         });
 
-      rowsComTrocaOrigem.push({
+      rowsComTrocaOrigem[rowBaseMeta.index] = {
         ...rowBase,
         ficha_auditoria: rowBase.ficha_auditoria || troca.ficha_troca || "",
         numero_fogo_aud: audVisual,
@@ -407,7 +408,7 @@ export default function PCMControlePneus() {
         detalhe_troca_origem: semPneu
           ? `Troca ${troca.ficha_troca || "-"}: o carro de origem ficou sem pneu nessa posicao.`
           : `Troca ${troca.ficha_troca || "-"}: entrou o pneu ${troca.numero_fogo_origem_recebido || "-"}.`,
-      });
+      };
     }
 
     const auditoriaPorPneu = new Map();

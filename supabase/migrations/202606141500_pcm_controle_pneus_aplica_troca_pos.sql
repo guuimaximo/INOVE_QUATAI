@@ -16,6 +16,10 @@
 -- da auditoria — gera a estrelinha amarela.
 -- ============================================================================
 
+-- Drop antes do create: adicionamos numero_fogo_aud_original entre as colunas
+-- existentes, e CREATE OR REPLACE nao permite mudar nome/ordem de colunas.
+drop view if exists public.vw_pcm_controle_pneus_central;
+
 create or replace view public.vw_pcm_controle_pneus_central as
 with posicoes as (
   select 'DD' as posicao

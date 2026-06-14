@@ -58,6 +58,51 @@ function isRecapadoraSituacao(situacao) {
   return /RECAP/i.test(String(situacao || ""));
 }
 
+function isRecapadoraLocal(localizacao) {
+  return /EXTERNO|RECAP/i.test(String(localizacao || ""));
+}
+
+function toTime(valor) {
+  const time = valor ? new Date(valor).getTime() : 0;
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function normalizeSortValue(valor) {
+  if (valor === null || valor === undefined) return "";
+  return String(valor).toLocaleLowerCase("pt-BR");
+}
+
+async function fetchAll(factory, pageSize = 1000) {
+  let from = 0;
+  const rows = [];
+
+  while (true) {
+    const { data, error } = await factory().range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return rows;
+}
+
+function SortableHeader({ label, sortKey, sort, onSort }) {
+  const ativo = sort.key === sortKey;
+  const seta = !ativo ? "↕" : sort.direction === "asc" ? "↑" : "↓";
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className="inline-flex items-center gap-1 font-semibold hover:text-slate-900"
+    >
+      <span>{label}</span>
+      <span className="text-[10px]">{seta}</span>
+    </button>
+  );
+}
+
 function lerFiltrosSalvos() {
   if (typeof window === "undefined") return {};
   try {
@@ -142,6 +187,7 @@ export default function PCMControlePneus() {
   const [somenteSelecionados, setSomenteSelecionados] = useState(!!filtrosIniciais.somenteSelecionados);
   const [prefixosSelecionados, setPrefixosSelecionados] = useState(Array.isArray(filtrosIniciais.prefixosSelecionados) ? filtrosIniciais.prefixosSelecionados : []);
   const [filtroDataAuditoria, setFiltroDataAuditoria] = useState(filtrosIniciais.filtroDataAuditoria || "");
+  const [ordenacaoTabela, setOrdenacaoTabela] = useState(filtrosIniciais.ordenacaoTabela || { key: "data_estoque", direction: "desc" });
   const [disparando, setDisparando] = useState(false);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
 
@@ -150,27 +196,21 @@ export default function PCMControlePneus() {
     try {
       const [
         { data, error },
-        { data: alocData, error: alocError },
-        { data: ativosData, error: ativosError },
-        { data: inativosData, error: inativosError },
-        { data: estoqueData, error: estoqueError },
-        { data: consertosData, error: consertosError },
-      ] =
-        await Promise.all([
-          supabase.from("vw_pcm_controle_pneus_central").select("*"),
-          supabase.from("pcm_pneus_transnet_alocacao").select("prefixo, posicao, numero_fogo, snapshot_em"),
-          supabase.from("pcm_pneus_transnet_ativos").select("numero_fogo, localizacao, posicao, marca, medida"),
-          supabase.from("pcm_pneus_transnet_inativos").select("numero_fogo, motivo"),
-          supabase.from("pcm_estoque_pneus").select("id, ficha_estoque, numero_fogo, numero_pneu, marca, situacao, created_at").order("created_at", { ascending: false }),
-          supabase.from("pcm_consertos_pneus").select("id, ficha_conserto, numero_fogo, prefixo, status, situacao_origem, created_at").order("created_at", { ascending: false }),
-        ]);
+        alocData,
+        ativosData,
+        inativosData,
+        estoqueData,
+        consertosData,
+      ] = await Promise.all([
+        supabase.from("vw_pcm_controle_pneus_central").select("*"),
+        fetchAll(() => supabase.from("pcm_pneus_transnet_alocacao").select("prefixo, posicao, numero_fogo, snapshot_em")),
+        fetchAll(() => supabase.from("pcm_pneus_transnet_ativos").select("numero_fogo, localizacao, posicao, marca, medida")),
+        fetchAll(() => supabase.from("pcm_pneus_transnet_inativos").select("numero_fogo, motivo")),
+        fetchAll(() => supabase.from("pcm_estoque_pneus").select("id, ficha_estoque, numero_fogo, numero_pneu, marca, situacao, created_at").order("created_at", { ascending: false })),
+        fetchAll(() => supabase.from("pcm_consertos_pneus").select("id, ficha_conserto, numero_fogo, prefixo, status, situacao_origem, created_at").order("created_at", { ascending: false })),
+      ]);
 
       if (error) throw error;
-      if (alocError) throw alocError;
-      if (ativosError) throw ativosError;
-      if (inativosError) throw inativosError;
-      if (estoqueError) throw estoqueError;
-      if (consertosError) throw consertosError;
 
       const sorted = [...(data || [])].sort((a, b) => {
         const prefixoA = String(a?.prefixo_base || a?.prefixo_auditoria || "").localeCompare(
@@ -225,9 +265,10 @@ export default function PCMControlePneus() {
         somenteSelecionados,
         prefixosSelecionados,
         filtroDataAuditoria,
+        ordenacaoTabela,
       })
     );
-  }, [abaAtiva, abaEstoqueAtiva, busca, buscaFogo, filtroStatus, filtroComparacao, somenteSelecionados, prefixosSelecionados, filtroDataAuditoria]);
+  }, [abaAtiva, abaEstoqueAtiva, busca, buscaFogo, filtroStatus, filtroComparacao, somenteSelecionados, prefixosSelecionados, filtroDataAuditoria, ordenacaoTabela]);
 
   async function dispararBot() {
     if (disparando) return;
@@ -335,6 +376,7 @@ export default function PCMControlePneus() {
         aud: row.numero_fogo_aud,
         status: statusVisual,
         trocaApos: !!row.troca_pos_auditoria,
+        referenciaEm: row.troca_ultima_em || row.auditoria_em || null,
         detalheStatus,
       };
       if (row.troca_pos_auditoria) {
@@ -439,9 +481,12 @@ export default function PCMControlePneus() {
           prefixo: linha.prefixo,
           posicao,
           ficha: linha.ficha,
-          data: linha.auditoria_em,
+          data: linha.posicoes[posicao]?.referenciaEm || linha.auditoria_em,
         });
       }
+    }
+    for (const lista of map.values()) {
+      lista.sort((a, b) => toTime(b.data) - toTime(a.data));
     }
     return map;
   }, [linhasBase]);
@@ -495,7 +540,8 @@ export default function PCMControlePneus() {
       let local = "Nao encontrado no TransNet";
 
       if (inativo) {
-        status = "SUCATA";
+        const situacaoFisica = String(estoque?.situacao || "").toUpperCase();
+        status = situacaoFisica.includes("SUCATA") ? "SUCATA OK" : "SUCATA";
         local = inativo.motivo || "Inativo no TransNet";
       } else if (aloc) {
         status = "EM CARRO";
@@ -555,38 +601,50 @@ export default function PCMControlePneus() {
       };
     });
 
-    const recapadoraRows = [...latestEstoque.entries()]
-      .filter(([, estoque]) => isRecapadoraSituacao(estoque?.situacao))
-      .map(([pneu, estoque]) => {
-        const aloc = alocacaoPorPneu.get(pneu) || null;
-        const ativo = ativosPorPneu.get(pneu) || null;
+    const recapadoraRows = ativos
+      .filter((item) => isRecapadoraLocal(item.localizacao))
+      .map((ativo) => {
+        const pneu = normalizarPneu(ativo.numero_fogo);
+        const estoque = latestEstoque.get(pneu) || null;
         const inativo = inativosPorPneu.get(pneu) || null;
         const auditoria = (auditoriaPorPneu.get(pneu) || [])[0] || null;
         const conserto = consertoPorPneu.get(pneu) || null;
+        const evidencias = [];
+        if (estoque) {
+          evidencias.push({
+            tipo: "EM ESTOQUE FISICO",
+            data: estoque.created_at,
+            texto: `Ficha ${estoque.ficha_estoque || ultimaFicha}${estoque.situacao ? ` - ${estoque.situacao}` : ""}`,
+          });
+        }
+        if (auditoria) {
+          evidencias.push({
+            tipo: "EM AUDITORIA",
+            data: auditoria.data,
+            texto: `Carro ${auditoria.prefixo} - ${auditoria.posicao}`,
+          });
+        }
+        evidencias.sort((a, b) => toTime(b.data) - toTime(a.data));
+        const ultimaEvidencia = evidencias[0] || null;
 
-        let status = "NAO LOCALIZADO";
-        let local = "Nao encontrado no TransNet";
-
+        let status = "SO TRANSNET";
+        let local = "Nao aparece em auditoria nem estoque fisico";
         if (inativo) {
           status = "SUCATA";
           local = inativo.motivo || "Inativo no TransNet";
-        } else if (aloc) {
-          status = "EM CARRO";
-          local = `${aloc.prefixo} - ${aloc.posicao}`;
-        } else if (ativo && isBorrachariaLocal(ativo.localizacao)) {
-          status = "BORRACHARIA";
-          local = `${ativo.localizacao || "BORRACHARIA"}${ativo.posicao ? ` - ${ativo.posicao}` : ""}`;
-        } else if (ativo) {
-          status = "OUTRO LOCAL";
-          local = `${ativo.localizacao || "Ativo"}${ativo.posicao ? ` - ${ativo.posicao}` : ""}`;
+        } else if (ultimaEvidencia) {
+          status = ultimaEvidencia.tipo;
+          local = ultimaEvidencia.texto;
         }
 
         return {
           secao: "recapadora",
           key: `recapadora-${pneu}`,
           pneu,
+          local_transnet: `${ativo.localizacao || "EXTERNO"}${ativo.posicao ? ` - ${ativo.posicao}` : ""}`,
           ficha_estoque: estoque?.ficha_estoque || ultimaFicha,
           data_estoque: estoque?.created_at || null,
+          ultima_referencia_em: ultimaEvidencia?.data || null,
           marca: estoque?.marca || ativo?.marca || "",
           situacao_inove: estoque?.situacao || "",
           status,
@@ -655,8 +713,8 @@ export default function PCMControlePneus() {
         if (!hay.includes(q)) return false;
       }
       if (filtroStatus && row.status !== filtroStatus) return false;
-      if (filtroComparacao === "CORRETO" && row.status !== "BORRACHARIA") return false;
-      if (filtroComparacao === "INCORRETO" && row.status === "BORRACHARIA") return false;
+      if (filtroComparacao === "CORRETO" && !["BORRACHARIA", "SUCATA OK"].includes(row.status)) return false;
+      if (filtroComparacao === "INCORRETO" && ["BORRACHARIA", "SUCATA OK"].includes(row.status)) return false;
       if (filtroDataAuditoria) {
         if (!row.data_estoque) return false;
         const inicio = new Date(`${filtroDataAuditoria}T00:00:00`);
@@ -700,12 +758,13 @@ export default function PCMControlePneus() {
         if (!hay.includes(q)) return false;
       }
       if (filtroStatus && row.status !== filtroStatus) return false;
-      if (filtroComparacao === "CORRETO" && row.status !== "BORRACHARIA") return false;
-      if (filtroComparacao === "INCORRETO" && row.status === "BORRACHARIA") return false;
+      if (filtroComparacao === "CORRETO" && row.status !== "SO TRANSNET") return false;
+      if (filtroComparacao === "INCORRETO" && row.status === "SO TRANSNET") return false;
       if (filtroDataAuditoria) {
-        if (!row.data_estoque) return false;
+        const dataBase = row.ultima_referencia_em || row.data_estoque;
+        if (!dataBase) return false;
         const inicio = new Date(`${filtroDataAuditoria}T00:00:00`);
-        const dataEstoque = new Date(row.data_estoque);
+        const dataEstoque = new Date(dataBase);
         if (Number.isNaN(dataEstoque.getTime()) || dataEstoque < inicio) return false;
       }
       return true;
@@ -738,8 +797,8 @@ export default function PCMControlePneus() {
   const estoqueKpis = useMemo(() => {
     return {
       fisicoTotal: estoqueComparado.fisico.length,
-      fisicoBorracharia: estoqueComparado.fisico.filter((item) => item.status === "BORRACHARIA").length,
-      fisicoDivergente: estoqueComparado.fisico.filter((item) => item.status !== "BORRACHARIA").length,
+      fisicoBorracharia: estoqueComparado.fisico.filter((item) => ["BORRACHARIA", "SUCATA OK"].includes(item.status)).length,
+      fisicoDivergente: estoqueComparado.fisico.filter((item) => !["BORRACHARIA", "SUCATA OK"].includes(item.status)).length,
       transnetTotal: estoqueComparado.transnet.length,
       transnetNoEstoque: estoqueComparado.transnet.filter((item) => item.status === "NO ESTOQUE").length,
       transnetEmCarro: estoqueComparado.transnet.filter((item) => item.status === "EM CARRO").length,
@@ -750,12 +809,41 @@ export default function PCMControlePneus() {
   const recapadoraKpis = useMemo(() => {
     return {
       total: estoqueComparado.recapadora.length,
-      ok: estoqueComparado.recapadora.filter((item) => item.status === "BORRACHARIA").length,
-      divergente: estoqueComparado.recapadora.filter((item) => item.status !== "BORRACHARIA").length,
-      enviar: estoqueComparado.recapadora.filter((item) => String(item.situacao_inove || "").toUpperCase().includes("ENVIAR PARA RECAPAGEM")).length,
-      recapado: estoqueComparado.recapadora.filter((item) => String(item.situacao_inove || "").toUpperCase().includes("RECAPADO")).length,
+      soTransnet: estoqueComparado.recapadora.filter((item) => item.status === "SO TRANSNET").length,
+      auditoria: estoqueComparado.recapadora.filter((item) => item.status === "EM AUDITORIA").length,
+      estoqueFisico: estoqueComparado.recapadora.filter((item) => item.status === "EM ESTOQUE FISICO").length,
+      sucata: estoqueComparado.recapadora.filter((item) => item.status === "SUCATA").length,
+      outros: estoqueComparado.recapadora.filter((item) => !["SO TRANSNET", "EM AUDITORIA", "EM ESTOQUE FISICO", "SUCATA"].includes(item.status)).length,
     };
   }, [estoqueComparado]);
+
+  function onSortTabela(key) {
+    setOrdenacaoTabela((current) =>
+      current.key === key
+        ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { key, direction: key.includes("data") ? "desc" : "asc" }
+    );
+  }
+
+  function ordenarLinhas(rows) {
+    const { key, direction } = ordenacaoTabela || {};
+    if (!key) return rows;
+    const factor = direction === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (["data_estoque", "ultima_referencia_em"].includes(key)) {
+        return (toTime(a[key]) - toTime(b[key])) * factor;
+      }
+      return normalizeSortValue(a[key]).localeCompare(normalizeSortValue(b[key]), "pt-BR", {
+        numeric: true,
+        sensitivity: "base",
+      }) * factor;
+    });
+  }
+
+  const estoqueFisicoOrdenado = useMemo(() => ordenarLinhas(estoqueFisicoFiltrado), [estoqueFisicoFiltrado, ordenacaoTabela]);
+  const estoqueTransnetOrdenado = useMemo(() => ordenarLinhas(estoqueTransnetFiltrado), [estoqueTransnetFiltrado, ordenacaoTabela]);
+  const recapadoraOrdenada = useMemo(() => ordenarLinhas(recapadoraFiltrada), [recapadoraFiltrada, ordenacaoTabela]);
+  const sucataOrdenada = useMemo(() => ordenarLinhas(sucataFiltrada), [sucataFiltrada, ordenacaoTabela]);
 
   const sucataKpis = useMemo(() => {
     return {
@@ -936,10 +1024,11 @@ export default function PCMControlePneus() {
         ) : abaAtiva === "recapadora" ? (
           <>
             <KpiCard label="Na recapadora" value={recapadoraKpis.total} cor="#475569" />
-            <KpiCard label="Ok no TransNet" value={recapadoraKpis.ok} cor="#16a34a" />
-            <KpiCard label="Divergente" value={recapadoraKpis.divergente} cor="#dc2626" />
-            <KpiCard label="Enviar p/ recapagem" value={recapadoraKpis.enviar} cor="#ca8a04" />
-            <KpiCard label="Recapado" value={recapadoraKpis.recapado} cor="#7c3aed" />
+            <KpiCard label="So TransNet" value={recapadoraKpis.soTransnet} cor="#16a34a" />
+            <KpiCard label="Em auditoria" value={recapadoraKpis.auditoria} cor="#2563eb" />
+            <KpiCard label="Em estoque fisico" value={recapadoraKpis.estoqueFisico} cor="#ca8a04" />
+            <KpiCard label="Sucata" value={recapadoraKpis.sucata} cor="#dc2626" />
+            <KpiCard label="Outros" value={recapadoraKpis.outros} cor="#7c3aed" />
           </>
         ) : (
           <>
@@ -1011,12 +1100,21 @@ export default function PCMControlePneus() {
               <option value="EM BORRACHARIA">EM BORRACHARIA</option>
               <option value="OUTRO LOCAL">OUTRO LOCAL</option>
             </>
+          ) : abaAtiva === "recapadora" ? (
+            <>
+              <option value="SO TRANSNET">SO TRANSNET</option>
+              <option value="EM AUDITORIA">EM AUDITORIA</option>
+              <option value="EM ESTOQUE FISICO">EM ESTOQUE FISICO</option>
+              <option value="SUCATA">SUCATA</option>
+              <option value="OUTRO LOCAL">OUTRO LOCAL</option>
+            </>
           ) : (
             <>
               <option value="BORRACHARIA">BORRACHARIA</option>
               <option value="EM CARRO">EM CARRO</option>
               <option value="OUTRO LOCAL">OUTRO LOCAL</option>
               <option value="SUCATA">SUCATA</option>
+              <option value="SUCATA OK">SUCATA OK</option>
               <option value="NO ESTOQUE">NO ESTOQUE</option>
               <option value="NAO LOCALIZADO">NAO LOCALIZADO</option>
             </>
@@ -1166,25 +1264,25 @@ export default function PCMControlePneus() {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
                     <tr>
-                      <th className="px-2 py-2 text-left">Data</th>
-                      <th className="px-2 py-2 text-left">Ficha</th>
-                      <th className="px-2 py-2 text-left">Numero de fogo</th>
-                      <th className="px-2 py-2 text-left">Marca</th>
-                      <th className="px-2 py-2 text-left">Situacao fisica</th>
-                      <th className="px-2 py-2 text-left">Status TransNet</th>
-                      <th className="px-2 py-2 text-left">Onde esta no TransNet</th>
-                      <th className="px-2 py-2 text-left">Auditoria</th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Data" sortKey="data_estoque" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Ficha" sortKey="ficha_estoque" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Numero de fogo" sortKey="pneu" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Marca" sortKey="marca" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Situacao fisica" sortKey="situacao_inove" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Status TransNet" sortKey="status" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Onde esta no TransNet" sortKey="local" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Auditoria" sortKey="auditoria_texto" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {estoqueFisicoFiltrado.length === 0 ? (
+                    {estoqueFisicoOrdenado.length === 0 ? (
                       <tr>
                         <td colSpan={8} className="py-8 text-center text-slate-400">
                           Nenhum fogo do estoque fisico encontrado.
                         </td>
                       </tr>
                     ) : null}
-                    {estoqueFisicoFiltrado.map((row) => (
+                    {estoqueFisicoOrdenado.map((row) => (
                       <tr key={row.key} className="border-t border-slate-100 hover:bg-slate-50">
                         <td className="whitespace-nowrap px-2 py-2 text-slate-600">{fmtData(row.data_estoque)}</td>
                         <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_estoque || "-"}</td>
@@ -1192,7 +1290,7 @@ export default function PCMControlePneus() {
                         <td className="px-2 py-2 text-slate-700">{row.marca || "-"}</td>
                         <td className="px-2 py-2 text-slate-700">{row.situacao_inove || "-"}</td>
                         <td className="px-2 py-2">
-                          <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "BORRACHARIA" ? "#7c3aed" : row.status === "EM CARRO" ? "#ca8a04" : row.status === "OUTRO LOCAL" ? "#2563eb" : row.status === "SUCATA" ? "#dc2626" : "#ea580c" }}>
+                          <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "BORRACHARIA" ? "#7c3aed" : row.status === "SUCATA OK" ? "#16a34a" : row.status === "EM CARRO" ? "#ca8a04" : row.status === "OUTRO LOCAL" ? "#2563eb" : row.status === "SUCATA" ? "#dc2626" : "#ea580c" }}>
                             {row.status}
                           </span>
                         </td>
@@ -1214,24 +1312,24 @@ export default function PCMControlePneus() {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
                     <tr>
-                      <th className="px-2 py-2 text-left">Numero de fogo</th>
-                      <th className="px-2 py-2 text-left">Marca</th>
-                      <th className="px-2 py-2 text-left">Local TransNet</th>
-                      <th className="px-2 py-2 text-left">Status confronto</th>
-                      <th className="px-2 py-2 text-left">Estoque fisico</th>
-                      <th className="px-2 py-2 text-left">Auditoria</th>
-                      <th className="px-2 py-2 text-left">Detalhe</th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Numero de fogo" sortKey="pneu" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Marca" sortKey="marca" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Local TransNet" sortKey="local" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Status confronto" sortKey="status" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Estoque fisico" sortKey="ficha_estoque" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Auditoria" sortKey="auditoria_texto" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                      <th className="px-2 py-2 text-left"><SortableHeader label="Detalhe" sortKey="detalhe" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {estoqueTransnetFiltrado.length === 0 ? (
+                    {estoqueTransnetOrdenado.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="py-8 text-center text-slate-400">
                           Nenhum fogo da borracharia no TransNet encontrado.
                         </td>
                       </tr>
                     ) : null}
-                    {estoqueTransnetFiltrado.map((row) => (
+                    {estoqueTransnetOrdenado.map((row) => (
                       <tr key={row.key} className="border-t border-slate-100 hover:bg-slate-50">
                         <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.pneu}</td>
                         <td className="px-2 py-2 text-slate-700">{row.marca || "-"}</td>
@@ -1262,35 +1360,35 @@ export default function PCMControlePneus() {
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
                 <tr>
-                  <th className="px-2 py-2 text-left">Data</th>
-                  <th className="px-2 py-2 text-left">Ficha estoque</th>
-                  <th className="px-2 py-2 text-left">Numero de fogo</th>
-                  <th className="px-2 py-2 text-left">Marca</th>
-                  <th className="px-2 py-2 text-left">Situacao</th>
-                  <th className="px-2 py-2 text-left">Status TransNet</th>
-                  <th className="px-2 py-2 text-left">Onde esta no TransNet</th>
-                  <th className="px-2 py-2 text-left">Auditoria</th>
-                  <th className="px-2 py-2 text-left">Ficha conserto</th>
-                  <th className="px-2 py-2 text-left">Status conserto</th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Ultima data" sortKey="ultima_referencia_em" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Local TransNet" sortKey="local_transnet" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Numero de fogo" sortKey="pneu" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Marca" sortKey="marca" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Situacao fisica" sortKey="situacao_inove" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Status confronto" sortKey="status" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Onde aparece" sortKey="local" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Auditoria" sortKey="auditoria_texto" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Ficha conserto" sortKey="ficha_conserto" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Status conserto" sortKey="status_conserto" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
                 </tr>
               </thead>
               <tbody>
-                {recapadoraFiltrada.length === 0 ? (
+                {recapadoraOrdenada.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="py-8 text-center text-slate-400">
                       Nenhum pneu da recapadora encontrado.
                     </td>
                   </tr>
                 ) : null}
-                {recapadoraFiltrada.map((row) => (
+                {recapadoraOrdenada.map((row) => (
                   <tr key={row.key} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="whitespace-nowrap px-2 py-2 text-slate-600">{fmtData(row.data_estoque)}</td>
-                    <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_estoque || "-"}</td>
+                    <td className="whitespace-nowrap px-2 py-2 text-slate-600">{fmtData(row.ultima_referencia_em || row.data_estoque)}</td>
+                    <td className="px-2 py-2 text-slate-700">{row.local_transnet || "-"}</td>
                     <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.pneu}</td>
                     <td className="px-2 py-2 text-slate-700">{row.marca || "-"}</td>
                     <td className="px-2 py-2 text-slate-700">{row.situacao_inove || "-"}</td>
                     <td className="px-2 py-2">
-                      <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "BORRACHARIA" ? "#16a34a" : row.status === "EM CARRO" ? "#ca8a04" : row.status === "OUTRO LOCAL" ? "#2563eb" : row.status === "SUCATA" ? "#dc2626" : "#ea580c" }}>
+                      <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "SO TRANSNET" ? "#16a34a" : row.status === "EM AUDITORIA" ? "#2563eb" : row.status === "EM ESTOQUE FISICO" ? "#ca8a04" : row.status === "SUCATA" ? "#dc2626" : "#7c3aed" }}>
                         {row.status}
                       </span>
                     </td>
@@ -1314,25 +1412,25 @@ export default function PCMControlePneus() {
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
                 <tr>
-                  <th className="px-2 py-2 text-left">Numero de fogo</th>
-                  <th className="px-2 py-2 text-left">Motivo</th>
-                  <th className="px-2 py-2 text-left">Marca</th>
-                  <th className="px-2 py-2 text-left">Status confronto</th>
-                  <th className="px-2 py-2 text-left">Onde aparece</th>
-                  <th className="px-2 py-2 text-left">Ficha estoque</th>
-                  <th className="px-2 py-2 text-left">Situacao fisica</th>
-                  <th className="px-2 py-2 text-left">Auditoria</th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Numero de fogo" sortKey="pneu" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Motivo" sortKey="motivo" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Marca" sortKey="marca" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Status confronto" sortKey="status" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Onde aparece" sortKey="local" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Ficha estoque" sortKey="ficha_estoque" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Situacao fisica" sortKey="situacao_inove" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
+                  <th className="px-2 py-2 text-left"><SortableHeader label="Auditoria" sortKey="auditoria_texto" sort={ordenacaoTabela} onSort={onSortTabela} /></th>
                 </tr>
               </thead>
               <tbody>
-                {sucataFiltrada.length === 0 ? (
+                {sucataOrdenada.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-8 text-center text-slate-400">
                       Nenhum fogo em sucata encontrado.
                     </td>
                   </tr>
                 ) : null}
-                {sucataFiltrada.map((row) => (
+                {sucataOrdenada.map((row) => (
                   <tr key={row.key} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.pneu}</td>
                     <td className="px-2 py-2 text-slate-700">{row.motivo || "-"}</td>

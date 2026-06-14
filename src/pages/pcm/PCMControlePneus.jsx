@@ -378,6 +378,9 @@ export default function PCMControlePneus() {
     for (const [chave, troca] of trocasOrigemPorPosicao.entries()) {
       const rowBase = rowIndexPorPosicao.get(chave);
       if (!rowBase) continue;
+      const auditoriaTime = toTime(rowBase.auditoria_em);
+      const trocaTime = toTime(troca.created_at);
+      if (!auditoriaTime || !trocaTime || trocaTime <= auditoriaTime) continue;
       const origemRecebeu = String(troca.origem_recebeu || ORIGEM_RECEBEU_SEM_PNEU).trim();
       const semPneu = origemRecebeu === ORIGEM_RECEBEU_SEM_PNEU;
       const audVisual = semPneu ? LABEL_PNEU_RETIRADO : (troca.numero_fogo_origem_recebido || "");

@@ -48,7 +48,11 @@ function normalizarPneu(valor) {
   return digits.padStart(6, "0");
 }
 
-function Celula({ base, aud, status }) {
+function isBorrachariaLocal(localizacao) {
+  return /BORRACH|RECAP|CONSERT/i.test(String(localizacao || ""));
+}
+
+function Celula({ base, aud, status, trocaApos }) {
   const palette = STATUS_PALETTE[status] || {
     bg: "#f8fafc",
     border: "#cbd5e1",
@@ -66,6 +70,11 @@ function Celula({ base, aud, status }) {
         color: palette.text,
       }}
     >
+      {trocaApos ? (
+        <div className="mb-1 text-right text-sm font-bold leading-none text-amber-500" title="Teve troca depois da auditoria">
+          *
+        </div>
+      ) : null}
       <div className="grid grid-cols-[40px_1fr] items-center gap-x-2 gap-y-1">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Base</span>
         <span className="font-mono text-[13px] font-semibold leading-none">{base || "—"}</span>
@@ -232,6 +241,7 @@ export default function PCMControlePneus() {
         base: row.numero_fogo_base,
         aud: row.numero_fogo_aud,
         status: statusVisual,
+        trocaApos: !!row.troca_pos_auditoria,
       };
       if (row.troca_pos_auditoria) {
         item.troca = true;
@@ -325,8 +335,11 @@ export default function PCMControlePneus() {
   }, [linhasBase]);
 
   const estoqueComparado = useMemo(() => {
+    const ultimaFicha = estoqueRows.find((item) => item.ficha_estoque)?.ficha_estoque || "";
+    const estoqueAtual = ultimaFicha ? estoqueRows.filter((item) => item.ficha_estoque === ultimaFicha) : [];
+
     const latestEstoque = new Map();
-    for (const item of estoqueRows) {
+    for (const item of estoqueAtual) {
       const pneu = normalizarPneu(item.numero_fogo || item.numero_pneu);
       if (!pneu || latestEstoque.has(pneu)) continue;
       latestEstoque.set(pneu, item);
@@ -340,44 +353,48 @@ export default function PCMControlePneus() {
       consertoAberto.set(pneu, item);
     }
 
-    const pneus = new Set([...latestEstoque.keys(), ...consertoAberto.keys()]);
+    const ativosBorracharia = ativos.filter((item) => isBorrachariaLocal(item.localizacao));
+    const pneus = new Set([
+      ...latestEstoque.keys(),
+      ...consertoAberto.keys(),
+      ...ativosBorracharia.map((item) => normalizarPneu(item.numero_fogo)).filter(Boolean),
+    ]);
 
-    return [...pneus].map((pneu) => {
-      const estoque = latestEstoque.get(pneu) || null;
-      const conserto = consertoAberto.get(pneu) || null;
-      const aloc = alocacoes.find((item) => normalizarPneu(item.numero_fogo) === pneu) || null;
-      const ativo = ativos.find((item) => normalizarPneu(item.numero_fogo) === pneu) || null;
-      const inativo = inativos.find((item) => normalizarPneu(item.numero_fogo) === pneu) || null;
+    return [...pneus]
+      .map((pneu) => {
+        const estoque = latestEstoque.get(pneu) || null;
+        const conserto = consertoAberto.get(pneu) || null;
+        const ativo = ativos.find((item) => normalizarPneu(item.numero_fogo) === pneu) || null;
+        const inativo = inativos.find((item) => normalizarPneu(item.numero_fogo) === pneu) || null;
+        const ativoNaBorracharia = !!ativo && isBorrachariaLocal(ativo.localizacao);
 
-      let status = "NAO EXISTE";
-      let local = "Não encontrado no TransNet";
+        let status = "NAO EXISTE";
+        let local = "Nao encontrado no TransNet";
 
-      if (inativo) {
-        status = "SUCATA";
-        local = inativo.motivo || "Inativo no TransNet";
-      } else if (conserto) {
-        status = "BORRACHARIA";
-        local = `${conserto.status || "PENDENTE"}${conserto.prefixo ? ` · prefixo ${conserto.prefixo}` : ""}`;
-      } else if (aloc) {
-        status = "EM VEICULO";
-        local = `${aloc.prefixo} · ${aloc.posicao}`;
-      } else if (ativo) {
-        status = "ESTOQUE OK";
-        local = `${ativo.localizacao || "Ativo sem localização"}${ativo.posicao ? ` · ${ativo.posicao}` : ""}`;
-      }
+        if (inativo) {
+          status = "SUCATA";
+          local = inativo.motivo || "Inativo no TransNet";
+        } else if (conserto || ativoNaBorracharia) {
+          status = "BORRACHARIA";
+          local = conserto
+            ? `${conserto.status || "PENDENTE"}${conserto.prefixo ? ` - prefixo ${conserto.prefixo}` : ""}`
+            : `${ativo.localizacao || "BORRACHARIA"}${ativo.posicao ? ` - ${ativo.posicao}` : ""}`;
+        }
 
-      return {
-        pneu,
-        ficha_estoque: estoque?.ficha_estoque || "",
-        data_estoque: estoque?.created_at || conserto?.created_at || null,
-        marca: estoque?.marca || ativo?.marca || "",
-        situacao_inove: estoque?.situacao || conserto?.situacao_origem || "",
-        status,
-        local,
-        conserto_status: conserto?.status || "",
-      };
-    }).sort((a, b) => String(a.pneu).localeCompare(String(b.pneu), "pt-BR", { numeric: true }));
-  }, [estoqueRows, consertos, alocacoes, ativos, inativos]);
+        return {
+          pneu,
+          ficha_estoque: estoque?.ficha_estoque || ultimaFicha,
+          data_estoque: estoque?.created_at || conserto?.created_at || ativo?.updated_at || ativo?.created_at || null,
+          marca: estoque?.marca || ativo?.marca || "",
+          situacao_inove: estoque?.situacao || conserto?.situacao_origem || "",
+          status,
+          local,
+          conserto_status: conserto?.status || "",
+        };
+      })
+      .filter((item) => item.status === "BORRACHARIA")
+      .sort((a, b) => String(a.pneu).localeCompare(String(b.pneu), "pt-BR", { numeric: true }));
+  }, [estoqueRows, consertos, ativos, inativos]);
 
   const estoqueFiltrado = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -387,8 +404,8 @@ export default function PCMControlePneus() {
         if (!hay.includes(q)) return false;
       }
       if (filtroStatus && row.status !== filtroStatus) return false;
-      if (filtroComparacao === "CORRETO" && row.status !== "ESTOQUE OK") return false;
-      if (filtroComparacao === "INCORRETO" && row.status === "ESTOQUE OK") return false;
+      if (filtroComparacao === "CORRETO" && row.status !== "BORRACHARIA") return false;
+      if (filtroComparacao === "INCORRETO" && row.status === "BORRACHARIA") return false;
       if (somenteSelecionados) {
         const localPrefixo = String(row.local || "").match(/\d+/)?.[0] || "";
         if (!prefixosSelecionados.includes(localPrefixo)) return false;
@@ -406,9 +423,7 @@ export default function PCMControlePneus() {
   const estoqueKpis = useMemo(() => {
     return {
       total: estoqueComparado.length,
-      ok: estoqueComparado.filter((item) => item.status === "ESTOQUE OK").length,
       borracharia: estoqueComparado.filter((item) => item.status === "BORRACHARIA").length,
-      emVeiculo: estoqueComparado.filter((item) => item.status === "EM VEICULO").length,
       sucata: estoqueComparado.filter((item) => item.status === "SUCATA").length,
       naoExiste: estoqueComparado.filter((item) => item.status === "NAO EXISTE").length,
     };
@@ -514,12 +529,10 @@ export default function PCMControlePneus() {
           </>
         ) : (
           <>
-            <KpiCard label="Itens" value={estoqueKpis.total} cor="#475569" />
-            <KpiCard label="Estoque OK" value={estoqueKpis.ok} cor="#16a34a" />
+            <KpiCard label="Ultimo estoque" value={estoqueKpis.total} cor="#475569" />
             <KpiCard label="Borracharia" value={estoqueKpis.borracharia} cor="#7c3aed" />
-            <KpiCard label="Em veículo" value={estoqueKpis.emVeiculo} cor="#ca8a04" />
             <KpiCard label="Sucata" value={estoqueKpis.sucata} cor="#dc2626" />
-            <KpiCard label="Não existe" value={estoqueKpis.naoExiste} cor="#ea580c" />
+            <KpiCard label="Nao existe" value={estoqueKpis.naoExiste} cor="#ea580c" />
           </>
         )}
         <div className="min-w-[340px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
@@ -658,6 +671,7 @@ export default function PCMControlePneus() {
                         base={row.posicoes[posicao]?.base}
                         aud={row.posicoes[posicao]?.aud}
                         status={row.posicoes[posicao]?.status}
+                        trocaApos={row.posicoes[posicao]?.trocaApos}
                       />
                     </td>
                   ))}

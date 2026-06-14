@@ -4,6 +4,8 @@ import { FaSyncAlt, FaSearch, FaCarSide } from "react-icons/fa";
 
 const POSICOES = ["DD", "DE", "TEE", "TEI", "TDI", "TDE"];
 const FILTROS_STORAGE_KEY = "pcm_controle_pneus_filtros_v1";
+const ORIGEM_RECEBEU_SEM_PNEU = "FICOU SEM PNEU";
+const LABEL_PNEU_RETIRADO = "PNEU RETIRADO";
 
 const STATUS_PALETTE = {
   OK: { bg: "#dcfce7", border: "#16a34a", text: "#14532d", chip: "#16a34a" },
@@ -48,6 +50,31 @@ function normalizarPneu(valor) {
   const digits = String(valor || "").replace(/\D/g, "");
   if (!digits) return "";
   return digits.padStart(6, "0");
+}
+
+function normalizarPosicao(valor) {
+  const texto = String(valor || "").trim().toUpperCase();
+  if (texto === "DD" || texto === "DIANTEIRO DIREITO") return "DD";
+  if (texto === "DE" || texto === "DIANTEIRO ESQUERDO") return "DE";
+  if (texto === "TEE" || texto === "TRASEIRO EXTERNO ESQUERDO") return "TEE";
+  if (texto === "TEI" || texto === "TRASEIRO INTERNO ESQUERDO") return "TEI";
+  if (texto === "TDI" || texto === "TRASEIRO INTERNO DIREITO") return "TDI";
+  if (texto === "TDE" || texto === "TRASEIRO EXTERNO DIREITO") return "TDE";
+  return texto;
+}
+
+function calcularStatusComparacao({ baseNumero, audNumero, prefixo, posicao, alocacaoPorPneu, ativosPorPneu, inativosPorPneu }) {
+  if (!audNumero) return null;
+  if (normalizarPneu(baseNumero) === normalizarPneu(audNumero)) return "OK";
+  const pneu = normalizarPneu(audNumero);
+  if (!pneu) return "INCORRETO";
+  if (inativosPorPneu.has(pneu)) return "SUCATA";
+  const aloc = alocacaoPorPneu.get(pneu);
+  if (aloc && (String(aloc.prefixo || "") !== String(prefixo || "") || String(aloc.posicao || "") !== String(posicao || ""))) {
+    return "OUTRO VEICULO";
+  }
+  if (ativosPorPneu.has(pneu)) return "ESTOQUE";
+  return "NAO EXISTE";
 }
 
 function isBorrachariaLocal(localizacao) {
@@ -174,6 +201,7 @@ export default function PCMControlePneus() {
   const [abaAtiva, setAbaAtiva] = useState(filtrosIniciais.abaAtiva || "veiculos");
   const [abaEstoqueAtiva, setAbaEstoqueAtiva] = useState(filtrosIniciais.abaEstoqueAtiva || "fisico");
   const [rowsRaw, setRowsRaw] = useState([]);
+  const [trocas, setTrocas] = useState([]);
   const [alocacoes, setAlocacoes] = useState([]);
   const [ativos, setAtivos] = useState([]);
   const [inativos, setInativos] = useState([]);
@@ -196,6 +224,7 @@ export default function PCMControlePneus() {
     try {
       const [
         { data, error },
+        trocasData,
         alocData,
         ativosData,
         inativosData,
@@ -203,6 +232,11 @@ export default function PCMControlePneus() {
         consertosData,
       ] = await Promise.all([
         supabase.from("vw_pcm_controle_pneus_central").select("*"),
+        fetchAll(() =>
+          supabase
+            .from("pcm_troca_pneus")
+            .select("id, ficha_troca, tipo_troca, prefixo_retirada, posicao_retirada, prefixo_instalacao, posicao_instalacao, numero_fogo_retirado, numero_fogo_colocado, origem_recebeu, numero_fogo_origem_recebido, numero_fogo_destino_retirado, created_at")
+        ),
         fetchAll(() => supabase.from("pcm_pneus_transnet_alocacao").select("prefixo, posicao, numero_fogo, snapshot_em")),
         fetchAll(() => supabase.from("pcm_pneus_transnet_ativos").select("numero_fogo, localizacao, posicao, marca, medida")),
         fetchAll(() => supabase.from("pcm_pneus_transnet_inativos").select("numero_fogo, motivo")),
@@ -223,6 +257,7 @@ export default function PCMControlePneus() {
       });
 
       setRowsRaw(sorted);
+      setTrocas(trocasData || []);
       setAlocacoes(alocData || []);
       setAtivos(ativosData || []);
       setInativos(inativosData || []);
@@ -297,6 +332,8 @@ export default function PCMControlePneus() {
   const linhasBase = useMemo(() => {
     const map = new Map();
     const alocacaoPorPneu = new Map();
+    const ativosPorPneu = new Map();
+    const inativosPorPneu = new Map();
 
     for (const item of alocacoes) {
       const pneu = normalizarPneu(item.numero_fogo);
@@ -304,8 +341,74 @@ export default function PCMControlePneus() {
       alocacaoPorPneu.set(pneu, item);
     }
 
-    const auditoriaPorPneu = new Map();
+    for (const item of ativos) {
+      const pneu = normalizarPneu(item.numero_fogo);
+      if (!pneu || ativosPorPneu.has(pneu)) continue;
+      ativosPorPneu.set(pneu, item);
+    }
+
+    for (const item of inativos) {
+      const pneu = normalizarPneu(item.numero_fogo);
+      if (!pneu || inativosPorPneu.has(pneu)) continue;
+      inativosPorPneu.set(pneu, item);
+    }
+
+    const rowIndexPorPosicao = new Map();
     for (const row of rowsRaw) {
+      const chave = `${String(row.prefixo_base || row.prefixo_auditoria || "").trim()}|${normalizarPosicao(row.posicao)}`;
+      if (!rowIndexPorPosicao.has(chave)) {
+        rowIndexPorPosicao.set(chave, row);
+      }
+    }
+
+    const trocasOrigemPorPosicao = new Map();
+    for (const troca of trocas) {
+      if (String(troca.tipo_troca || "").trim() !== "CARRO -> CARRO") continue;
+      const prefixo = String(troca.prefixo_retirada || "").trim();
+      const posicao = normalizarPosicao(troca.posicao_retirada);
+      if (!prefixo || !posicao) continue;
+      const chave = `${prefixo}|${posicao}`;
+      const atual = trocasOrigemPorPosicao.get(chave);
+      if (!atual || toTime(troca.created_at) > toTime(atual.created_at)) {
+        trocasOrigemPorPosicao.set(chave, troca);
+      }
+    }
+
+    const rowsComTrocaOrigem = [...rowsRaw];
+    for (const [chave, troca] of trocasOrigemPorPosicao.entries()) {
+      const rowBase = rowIndexPorPosicao.get(chave);
+      if (!rowBase) continue;
+      const origemRecebeu = String(troca.origem_recebeu || ORIGEM_RECEBEU_SEM_PNEU).trim();
+      const semPneu = origemRecebeu === ORIGEM_RECEBEU_SEM_PNEU;
+      const audVisual = semPneu ? LABEL_PNEU_RETIRADO : (troca.numero_fogo_origem_recebido || "");
+      const status = semPneu
+        ? "INCORRETO"
+        : calcularStatusComparacao({
+          baseNumero: rowBase.numero_fogo_base,
+          audNumero: audVisual,
+          prefixo: rowBase.prefixo_base || rowBase.prefixo_auditoria || "",
+          posicao: rowBase.posicao,
+          alocacaoPorPneu,
+          ativosPorPneu,
+          inativosPorPneu,
+        });
+
+      rowsComTrocaOrigem.push({
+        ...rowBase,
+        ficha_auditoria: rowBase.ficha_auditoria || troca.ficha_troca || "",
+        numero_fogo_aud: audVisual,
+        status,
+        troca_pos_auditoria: true,
+        troca_ultima_em: troca.created_at || null,
+        origem_troca: true,
+        detalhe_troca_origem: semPneu
+          ? `Troca ${troca.ficha_troca || "-"}: o carro de origem ficou sem pneu nessa posicao.`
+          : `Troca ${troca.ficha_troca || "-"}: entrou o pneu ${troca.numero_fogo_origem_recebido || "-"}.`,
+      });
+    }
+
+    const auditoriaPorPneu = new Map();
+    for (const row of rowsComTrocaOrigem) {
       const pneu = normalizarPneu(row.numero_fogo_aud);
       if (!pneu || pneu === "000000") continue;
       if (!auditoriaPorPneu.has(pneu)) auditoriaPorPneu.set(pneu, []);
@@ -315,7 +418,7 @@ export default function PCMControlePneus() {
       });
     }
 
-    for (const row of rowsRaw) {
+    for (const row of rowsComTrocaOrigem) {
       const key = row.grupo_id || row.auditoria_id || row.prefixo_base || row.prefixo_auditoria;
       if (!key) continue;
 
@@ -351,7 +454,7 @@ export default function PCMControlePneus() {
         statusVisual = "INCORRETO";
       }
 
-      let detalheStatus = "";
+      let detalheStatus = row.detalhe_troca_origem || "";
       if (statusVisual === "OK" && outrasAuditoriasMesmoPneu.length > 0) {
         statusVisual = "DUPLICIDADE";
         const outra = outrasAuditoriasMesmoPneu[0];
@@ -400,7 +503,7 @@ export default function PCMControlePneus() {
         return db - da;
       }),
     }));
-  }, [rowsRaw, alocacoes]);
+  }, [rowsRaw, trocas, alocacoes, ativos, inativos]);
 
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();

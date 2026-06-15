@@ -81,7 +81,10 @@ const SITUACOES_ESTOQUE = [
   "SUCATA",
   "ENVIAR PARA RECAPAGEM",
   "RECAPADO",
+  "CONSERTO",
 ];
+
+const SITUACAO_ESTOQUE_CONSERTO = "CONSERTO";
 
 const SITUACOES_CONSERTO = ["PENDENTE", "EM CONSERTO", "CONCLUIDO"];
 const SITUACOES_RISCADO = ["ABERTO", "ACOMPANHANDO", "RESOLVIDO"];
@@ -380,6 +383,28 @@ function createAuditoriaForm(nextFicha, userName) {
     prefixo: "",
     observacoes: "",
     posicoes: createAuditPositions(),
+  };
+}
+
+function createTrocaFormFromRow(row) {
+  return {
+    ficha: row?.ficha_troca || "",
+    dataLancamento: formatDate(row?.created_at),
+    quemLancou: row?.criado_por_nome || row?.criado_por_login || "Equipe PCM",
+    tipoTroca: row?.tipo_troca || TIPO_TROCA_ESTOQUE,
+    prefixoRetirada: row?.prefixo_retirada || "",
+    posicaoRetirada: row?.posicao_retirada || POSICOES[0],
+    numeroFogoRetirado: row?.numero_fogo_retirado || "",
+    fotoRetirado: null,
+    prefixoInstalacao: row?.prefixo_instalacao || row?.prefixo || "",
+    posicaoInstalacao: row?.posicao_instalacao || row?.posicao || POSICOES[0],
+    numeroFogoColocado: row?.numero_fogo_colocado || row?.numero_fogo_pneu || "",
+    fotoColocado: null,
+    pneuConserto: row?.pneu_conserto || TROCA_CONSERTO_NENHUM,
+    origemRecebeu: row?.origem_recebeu || ORIGEM_RECEBEU_SEM_PNEU,
+    numeroFogoOrigemRecebido: row?.numero_fogo_origem_recebido || "",
+    fotoOrigemRecebido: null,
+    observacoes: row?.observacoes || "",
   };
 }
 
@@ -1153,54 +1178,35 @@ function TrocaModal({
                   onChange={(value) => onFieldChange("posicaoInstalacao", value)}
                   options={POSICOES}
                 />
-                <InputField
-                  label="Numero de fogo (colocado)"
-                  value={form.numeroFogoColocado}
-                  onChange={(value) => onFieldChange("numeroFogoColocado", value)}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                />
-                <PhotoField
-                  title="Foto do numero de fogo colocado"
-                  file={form.fotoColocado}
-                  inputId="troca-colocado"
-                  onChange={(event) => onFotoChange("fotoColocado", event.target.files?.[0] || null)}
-                  onNativeCapture={() => onCapturePhoto("fotoColocado", "numero_colocado")}
-                  isNativeShell={isNativeShell}
+                <ReadOnlyField
+                  label="Numero de fogo (colocado) — mesmo pneu retirado do origem"
+                  value={form.numeroFogoRetirado || "—"}
                 />
               </div>
             </SectionBlock>
 
             <div className="xl:col-span-2">
-              <SectionBlock title="O que ficou no carro de origem">
-                <div className="grid grid-cols-1 gap-4">
-                  <SelectField
-                    label="Posicao do pneu retirado no carro de origem"
-                    value={form.origemRecebeu}
-                    onChange={(value) => onFieldChange("origemRecebeu", value)}
-                    options={ORIGEM_RECEBEU_OPTIONS}
+              <SectionBlock title="Pneu que estava no carro de destino (vai pro estoque como CONSERTO)">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <InputField
+                    label="Numero de fogo do pneu que estava no destino"
+                    value={form.numeroFogoOrigemRecebido}
+                    onChange={(value) => onFieldChange("numeroFogoOrigemRecebido", value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
-
-                  {form.origemRecebeu === ORIGEM_RECEBEU_OUTRO ? (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <InputField
-                        label="Numero de fogo do pneu que entrou no carro de origem"
-                        value={form.numeroFogoOrigemRecebido}
-                        onChange={(value) => onFieldChange("numeroFogoOrigemRecebido", value)}
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                      />
-                      <PhotoField
-                        title="Foto do numero de fogo do pneu que entrou no carro de origem"
-                        file={form.fotoOrigemRecebido}
-                        inputId="troca-origem-recebido"
-                        onChange={(event) => onFotoChange("fotoOrigemRecebido", event.target.files?.[0] || null)}
-                        onNativeCapture={() => onCapturePhoto("fotoOrigemRecebido", "numero_origem_recebido")}
-                        isNativeShell={isNativeShell}
-                      />
-                    </div>
-                  ) : null}
+                  <PhotoField
+                    title="Foto do numero de fogo do pneu que saiu do destino"
+                    file={form.fotoOrigemRecebido}
+                    inputId="troca-origem-recebido"
+                    onChange={(event) => onFotoChange("fotoOrigemRecebido", event.target.files?.[0] || null)}
+                    onNativeCapture={() => onCapturePhoto("fotoOrigemRecebido", "numero_origem_recebido")}
+                    isNativeShell={isNativeShell}
+                  />
                 </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Esse pneu será lançado automaticamente no estoque com a situação <b>CONSERTO</b>.
+                </p>
               </SectionBlock>
             </div>
           </div>
@@ -1738,11 +1744,13 @@ function ConsultaModal({
   tab,
   row,
   canEditAuditoriaCompleta,
+  canEditTrocaCompleta,
   transnetSaving,
   checkingStatusKey,
   isNativeShell,
   onClose,
   onEditarAuditoriaCompleta,
+  onEditarTrocaCompleta,
   onMarcarTransnet,
   onMarcarAuditoriaStatus,
   onMarcarEstoqueStatus,
@@ -1896,6 +1904,15 @@ function ConsultaModal({
           >
             Fechar
           </button>
+          {canEditTrocaCompleta ? (
+            <button
+              type="button"
+              onClick={onEditarTrocaCompleta}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600"
+            >
+              Editar todos os campos
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onMarcarTransnet}
@@ -2313,6 +2330,7 @@ export default function PCMTrocaPneus() {
   const [consertoOpen, setConsertoOpen] = useState(false);
   const [riscadoOpen, setRiscadoOpen] = useState(false);
   const [auditoriaEditId, setAuditoriaEditId] = useState(null);
+  const [trocaEditId, setTrocaEditId] = useState(null);
 
   const [consulta, setConsulta] = useState({ open: false, tab: TAB_TROCA, row: null });
 
@@ -2866,6 +2884,14 @@ export default function PCMTrocaPneus() {
     setAuditoriaOpen(true);
   }
 
+  function handleEditarTrocaCompleta() {
+    if (!isAdmin || consulta.tab !== TAB_TROCA || !consulta.row) return;
+    setTrocaEditId(consulta.row.id);
+    setTrocaForm(createTrocaFormFromRow(consulta.row));
+    setConsulta((current) => ({ ...current, open: false }));
+    setTrocaOpen(true);
+  }
+
   function limparFiltrosAtivos() {
     if (activeTab === TAB_TROCA) {
       setTrocaFiltros({
@@ -3116,6 +3142,14 @@ export default function PCMTrocaPneus() {
       ? await uploadFoto(BUCKET_TROCA, "trocas", trocaId, "numero_origem_recebido", payload.fotoOrigemRecebidoFile)
       : { path: null, url: null };
 
+    // CARRO -> CARRO: o mesmo pneu retirado e instalado no destino, e a origem
+    // fica sem pneu. O Y que estava no destino vai pro estoque como CONSERTO.
+    const isCarroCarro = norm(payload.tipoTroca) === TIPO_TROCA_CARRO;
+    const numeroFogoColocadoFinal = isCarroCarro
+      ? payload.numeroFogoRetirado
+      : payload.numeroFogoColocado;
+    const origemRecebeuFinal = isCarroCarro ? ORIGEM_RECEBEU_SEM_PNEU : payload.origemRecebeu || null;
+
     const insertPayload = {
       id: trocaId,
       ficha_troca: payload.ficha,
@@ -3129,13 +3163,13 @@ export default function PCMTrocaPneus() {
       foto_numero_fogo_retirado_url: fotoRetirada.url,
       prefixo_instalacao: payload.prefixoInstalacao,
       posicao_instalacao: payload.posicaoInstalacao,
-      numero_fogo_colocado: payload.numeroFogoColocado,
+      numero_fogo_colocado: numeroFogoColocadoFinal,
       foto_numero_fogo_colocado_path: fotoColocada.path,
       foto_numero_fogo_colocado_url: fotoColocada.url,
-      numero_fogo_pneu: payload.numeroFogoColocado,
+      numero_fogo_pneu: numeroFogoColocadoFinal,
       foto_numero_fogo_path: fotoColocada.path,
       foto_numero_fogo_url: fotoColocada.url,
-      origem_recebeu: payload.origemRecebeu || null,
+      origem_recebeu: origemRecebeuFinal,
       numero_fogo_origem_recebido: payload.numeroFogoOrigemRecebido || null,
       foto_numero_fogo_origem_recebido_path: fotoOrigemRecebido.path,
       foto_numero_fogo_origem_recebido_url: fotoOrigemRecebido.url,
@@ -3148,6 +3182,29 @@ export default function PCMTrocaPneus() {
 
     const { error } = await supabase.from("pcm_troca_pneus").upsert([insertPayload], { onConflict: "id" });
     if (error) throw error;
+
+    // CARRO -> CARRO: lanca o pneu Y (que saiu do destino) no estoque como CONSERTO.
+    if (isCarroCarro && safeText(payload.numeroFogoOrigemRecebido)) {
+      const { data: estoquesExistentes } = await supabase
+        .from("pcm_estoque_pneus")
+        .select("ficha_estoque");
+      const nextFicha = buildNextFicha(estoquesExistentes || [], "ficha_estoque", "EP");
+      const estoqueRow = {
+        id: createClientUuid(),
+        ficha_estoque: nextFicha,
+        numero_pneu: payload.numeroFogoOrigemRecebido,
+        numero_fogo: payload.numeroFogoOrigemRecebido,
+        marca: "",
+        situacao: SITUACAO_ESTOQUE_CONSERTO,
+        observacoes: `Lancado automaticamente pela troca ${payload.ficha} (pneu deslocado do destino).`,
+        criado_por_login: payload.criadoPorLogin,
+        criado_por_nome: payload.criadoPorNome,
+        criado_por_id: payload.criadoPorId,
+        origem: "INOVE_WEB_APP",
+      };
+      const { error: errEstoque } = await supabase.from("pcm_estoque_pneus").insert([estoqueRow]);
+      if (errEstoque) throw errEstoque;
+    }
 
     const consertoPayload = resolveTrocaConsertoPayload({ ...payload, id: trocaId });
     if (consertoPayload) {
@@ -3450,8 +3507,9 @@ export default function PCMTrocaPneus() {
       }
     }
 
+    const isCarroCarro = tipoTroca === TIPO_TROCA_CARRO;
     const payload = {
-      id: createClientUuid(),
+      id: trocaEditId || createClientUuid(),
       ficha,
       tipoTroca,
       prefixoRetirada,
@@ -3460,14 +3518,22 @@ export default function PCMTrocaPneus() {
       fotoRetiradoFile: trocaForm.fotoRetirado,
       prefixoInstalacao,
       posicaoInstalacao,
-      numeroFogoColocado,
+      numeroFogoColocado: isCarroCarro ? numeroFogoRetirado : numeroFogoColocado,
       fotoColocadoFile: trocaForm.fotoColocado,
       pneuConserto,
       consertoId: pneuConserto !== TROCA_CONSERTO_NENHUM ? createClientUuid() : null,
       consertoFicha: pneuConserto !== TROCA_CONSERTO_NENHUM ? `CP-${ficha}` : null,
       origemRecebeu,
-      numeroFogoOrigemRecebido: origemRecebeu === ORIGEM_RECEBEU_OUTRO ? numeroFogoOrigemRecebido : "",
-      fotoOrigemRecebidoFile: origemRecebeu === ORIGEM_RECEBEU_OUTRO ? trocaForm.fotoOrigemRecebido : null,
+      numeroFogoOrigemRecebido: isCarroCarro
+        ? numeroFogoOrigemRecebido
+        : origemRecebeu === ORIGEM_RECEBEU_OUTRO
+          ? numeroFogoOrigemRecebido
+          : "",
+      fotoOrigemRecebidoFile: isCarroCarro
+        ? trocaForm.fotoOrigemRecebido
+        : origemRecebeu === ORIGEM_RECEBEU_OUTRO
+          ? trocaForm.fotoOrigemRecebido
+          : null,
       observacoes,
       criadoPorLogin: safeText(user?.login || user?.email),
       criadoPorNome: safeText(user?.nome),
@@ -3494,6 +3560,7 @@ export default function PCMTrocaPneus() {
       }
 
       setTrocaOpen(false);
+      setTrocaEditId(null);
       if (mode === "offline" || !window.navigator.onLine) {
         setTrocaForm(createTrocaForm(trocaForm.ficha, userName));
         alert("Ficha salva offline. Ela sera enviada quando a internet voltar.");
@@ -3510,6 +3577,7 @@ export default function PCMTrocaPneus() {
       if (mode !== "offline" && isNetworkError(error)) {
         await queueTrocaSubmission(payload);
         setTrocaOpen(false);
+        setTrocaEditId(null);
         setTrocaForm(createTrocaForm(trocaForm.ficha, userName));
         alert("Sem internet no envio. A ficha foi guardada offline e sera enviada depois.");
         return;
@@ -4990,7 +5058,7 @@ export default function PCMTrocaPneus() {
         open={trocaOpen}
         form={trocaForm}
         saving={saving}
-        onClose={() => setTrocaOpen(false)}
+        onClose={() => { setTrocaOpen(false); setTrocaEditId(null); }}
         onFieldChange={updateTrocaField}
         onFotoChange={updateTrocaFoto}
         onCapturePhoto={captureTrocaPhoto}
@@ -5064,11 +5132,13 @@ export default function PCMTrocaPneus() {
         tab={consulta.tab}
         row={consulta.row}
         canEditAuditoriaCompleta={consulta.tab === TAB_AUDITORIA && isAdmin}
+        canEditTrocaCompleta={consulta.tab === TAB_TROCA && isAdmin}
         transnetSaving={transnetSaving}
         checkingStatusKey={checkingStatusKey}
         isNativeShell={isNativeShell}
         onClose={closeConsulta}
         onEditarAuditoriaCompleta={handleEditarAuditoriaCompleta}
+        onEditarTrocaCompleta={handleEditarTrocaCompleta}
         onMarcarTransnet={marcarTransnet}
         onMarcarAuditoriaStatus={marcarAuditoriaStatus}
         onMarcarEstoqueStatus={marcarEstoqueStatus}

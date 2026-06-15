@@ -1842,10 +1842,13 @@ function ConsultaModal({
   onMarcarConsertoStatus,
   onEnviarConserto,
   onAbrirRiscado,
+  onSalvarEstoqueItem,
   getConsertoSourceMeta,
 }) {
   const [auditoriaEditando, setAuditoriaEditando] = useState({});
   const [estoqueEditando, setEstoqueEditando] = useState({});
+  const [estoqueItemForm, setEstoqueItemForm] = useState({});
+  const [estoqueItemSavingId, setEstoqueItemSavingId] = useState("");
 
   if (!open || !row) return null;
 
@@ -2214,96 +2217,119 @@ function ConsultaModal({
 
         <div className="space-y-4">
           {(row.itens || []).map((item, index) => {
-            const temConferencia = !!item.transnet_status;
-            const editando = !!estoqueEditando[item.id] || !temConferencia;
+            const editandoItem = !!estoqueItemForm[item.id];
+            const draft = estoqueItemForm[item.id] || {};
+            const salvando = estoqueItemSavingId === item.id;
 
             return (
               <SectionBlock key={item.id || `${item.numero_pneu}-${index}`} title={`Pneu ${index + 1} · ${item.numero_pneu || "Sem numero"}`}>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <DetailRow label="Numero de fogo" value={item.numero_fogo || item.numero_pneu} />
-                  <DetailRow label="Marca" value={item.marca} />
-                  <DetailRow label="Situacao" value={item.situacao} />
-                </div>
-                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <DetailRow label="Conferencia" value={item.transnet_status || "Pendente"} />
-
-                  {editando ? (
-                    <>
+                {editandoItem ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <InputField
+                        label="Numero de fogo"
+                        value={draft.numero_fogo}
+                        onChange={(value) =>
+                          setEstoqueItemForm((current) => ({
+                            ...current,
+                            [item.id]: { ...current[item.id], numero_fogo: value },
+                          }))
+                        }
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                      />
+                      <InputField
+                        label="Marca"
+                        value={draft.marca}
+                        onChange={(value) =>
+                          setEstoqueItemForm((current) => ({
+                            ...current,
+                            [item.id]: { ...current[item.id], marca: value },
+                          }))
+                        }
+                      />
+                      <SelectField
+                        label="Situacao"
+                        value={draft.situacao}
+                        onChange={(value) =>
+                          setEstoqueItemForm((current) => ({
+                            ...current,
+                            [item.id]: { ...current[item.id], situacao: value },
+                          }))
+                        }
+                        options={SITUACOES_ESTOQUE}
+                      />
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                       <button
                         type="button"
                         onClick={async () => {
-                          await onMarcarEstoqueStatus(item.id, "OK");
-                          setEstoqueEditando((current) => ({ ...current, [item.id]: false }));
+                          if (!onSalvarEstoqueItem) return;
+                          setEstoqueItemSavingId(item.id);
+                          try {
+                            await onSalvarEstoqueItem(item.id, {
+                              numero_fogo: draft.numero_fogo,
+                              numero_pneu: draft.numero_fogo,
+                              marca: draft.marca,
+                              situacao: draft.situacao,
+                            });
+                            setEstoqueItemForm((current) => {
+                              const next = { ...current };
+                              delete next[item.id];
+                              return next;
+                            });
+                          } finally {
+                            setEstoqueItemSavingId("");
+                          }
                         }}
-                        disabled={checkingStatusKey === `estoque:${item.id}`}
+                        disabled={salvando}
                         className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                       >
-                        OK
+                        {salvando ? "Salvando..." : "Salvar"}
                       </button>
                       <button
                         type="button"
-                        onClick={async () => {
-                          await onMarcarEstoqueStatus(item.id, "INCORRETO");
-                          setEstoqueEditando((current) => ({ ...current, [item.id]: false }));
-                        }}
-                        disabled={checkingStatusKey === `estoque:${item.id}`}
-                        className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                        onClick={() =>
+                          setEstoqueItemForm((current) => {
+                            const next = { ...current };
+                            delete next[item.id];
+                            return next;
+                          })
+                        }
+                        disabled={salvando}
+                        className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-60"
                       >
-                        Incorreto
+                        Cancelar
                       </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setEstoqueEditando((current) => ({ ...current, [item.id]: true }))}
-                      className="md:col-span-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-                    >
-                      Editar conferencia
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onEnviarConserto({
-                        origemTab: TAB_ESTOQUE,
-                        origemItemId: item.id,
-                        prefixo: "",
-                        numeroFogo: item.numero_fogo || item.numero_pneu,
-                        situacaoOrigem: item.transnet_status || item.situacao || "PENDENTE",
-                        observacoes: `Enviado a partir do estoque ${row.ficha_estoque}.`,
-                      })
-                    }
-                    className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
-                  >
-                    <FaWrench className="inline mr-2" />
-                    Enviar para conserto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onAbrirRiscado({
-                        prefixo: "",
-                        numeroFogo: item.numero_fogo || item.numero_pneu,
-                        marca: item.marca,
-                        observacoes: `Registrado a partir do estoque ${row.ficha_estoque}.`,
-                      })
-                    }
-                    className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700"
-                  >
-                    <FaExclamationTriangle className="inline mr-2" />
-                    Lançar riscado
-                  </button>
-                </div>
-
-                {item.transnet_conferido_por_nome || item.transnet_conferido_por_login ? (
-                  <DetailRow
-                    label="Conferido por"
-                    value={`${item.transnet_conferido_por_nome || item.transnet_conferido_por_login} em ${formatDate(item.transnet_conferido_em)}`}
-                  />
-                ) : null}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <DetailRow label="Numero de fogo" value={item.numero_fogo || item.numero_pneu} />
+                      <DetailRow label="Marca" value={item.marca} />
+                      <DetailRow label="Situacao" value={item.situacao} />
+                    </div>
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEstoqueItemForm((current) => ({
+                            ...current,
+                            [item.id]: {
+                              numero_fogo: item.numero_fogo || item.numero_pneu || "",
+                              marca: item.marca || "",
+                              situacao: item.situacao || "",
+                            },
+                          }))
+                        }
+                        className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                      >
+                        Editar pneu
+                      </button>
+                    </div>
+                  </>
+                )}
               </SectionBlock>
             );
           })}
@@ -4231,6 +4257,38 @@ export default function PCMTrocaPneus() {
     }
   }
 
+  async function salvarEstoqueItem(itemId, patch) {
+    if (!itemId) return;
+    const payload = {
+      numero_fogo: safeText(patch.numero_fogo),
+      numero_pneu: safeText(patch.numero_pneu ?? patch.numero_fogo),
+      marca: safeText(patch.marca),
+      situacao: safeText(patch.situacao),
+    };
+    try {
+      const { error } = await supabase.from("pcm_estoque_pneus").update(payload).eq("id", itemId);
+      if (error) throw error;
+
+      setEstoqueRows((current) =>
+        current.map((item) => (item.id === itemId ? { ...item, ...payload } : item))
+      );
+
+      setConsulta((current) => {
+        if (!current?.row) return current;
+        const updatedGroup = {
+          ...current.row,
+          itens: (current.row.itens || []).map((item) =>
+            item.id === itemId ? { ...item, ...payload } : item
+          ),
+        };
+        return { ...current, row: updatedGroup };
+      });
+    } catch (error) {
+      console.error("Erro ao salvar pneu do estoque:", error);
+      alert(error?.message || "Nao foi possivel salvar o pneu do estoque.");
+    }
+  }
+
   async function marcarConsertoStatus(itemId, status) {
     if (!itemId) return;
 
@@ -5412,6 +5470,7 @@ export default function PCMTrocaPneus() {
         onMarcarConsertoStatus={marcarConsertoStatus}
         onEnviarConserto={abrirConsertoPreenchido}
         onAbrirRiscado={abrirRiscadoPreenchido}
+        onSalvarEstoqueItem={salvarEstoqueItem}
         getConsertoSourceMeta={getConsertoSourceMeta}
       />
 

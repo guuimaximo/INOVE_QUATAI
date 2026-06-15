@@ -1,0 +1,43 @@
+[sucata]     inicio  36 pneus | DRY_RUN=False | HEADLESS=True
+[sucata]      login  abrindo tela de login
+[sucata]       pneu  [1/36] 001828
+[sucata]      achou  001828 -> stIdPneu=116714 stIdMov=1298550
+[sucata]      click  Incluir localizado por xpath=//a[contains(., 'Incluir') or contains(@href, 'incluir') or contains(@onclick, 'incluir')]
+[sucata]      click  fallback direto para form: https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdMovimentacao=1298550&stIdEmpresa=046&stIdPneu=116714
+[sucata]       form  abriu fm_movimentacaopneu, url=https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdMovimentacao=1298550&stIdEmpresa=046&stIdPneu=116714
+[sucata]       ERRO  001828: erro TransNet: O PNEU JÁ SE ENCONTRA NESTE CENTRO DE CUSTO!&amp;edtKmInicial=0&amp;edtKmFinal=0&amp;edtMotivoMov=005&amp;cbxMotivoMov=005&amp;memObservacao=Sucateamento em lote&amp;edtDataMov=15/06/2026&amp;edtHoraM
+[sucata]       pneu  [2/36] 080001
+[sucata]      achou  080001 -> stIdPneu=197484 stIdMov=1298551
+[sucata]      click  Incluir localizado por xpath=//a[contains(., 'Incluir') or contains(@href, 'incluir') or contains(@onclick, 'incluir')]
+[sucata]       form  abriu fm_movimentacaopneu, url=https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdPneu=197484&stIdEmpresa=046&stIdMovimentacao=1298551
+[sucata]       ERRO  080001: erro TransNet: O PNEU JÁ SE ENCONTRA NESTE CENTRO DE CUSTO!&amp;edtKmInicial=0&amp;edtKmFinal=0&amp;edtMotivoMov=005&amp;cbxMotivoMov=005&amp;memObservacao=Sucateamento em lote&amp;edtDataMov=15/06/2026&amp;edtHoraM
+[sucata]       pneu  [3/36] 209225
+[sucata]      achou  209225 -> stIdPneu=132310 stIdMov=1298552
+[sucata]      click  Incluir localizado por xpath=//a[contains(., 'Incluir') or contains(@href, 'incluir') or contains(@onclick, 'incluir')]
+[sucata]       form  abriu fm_movimentacaopneu, url=https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdPneu=132310&stIdEmpresa=046&stIdMovimentacao=1298552
+[sucata]       ERRO  209225: erro TransNet: O PNEU JÁ SE ENCONTRA NESTE CENTRO DE CUSTO!&amp;edtKmInicial=0&amp;edtKmFinal=0&amp;edtMotivoMov=005&amp;cbxMotivoMov=005&amp;memObservacao=Sucateamento em lote&amp;edtDataMov=15/06/2026&amp;edtHoraM
+[sucata]       pneu  [4/36] 209268
+[sucata]      achou  209268 -> stIdPneu=136217 stIdMov=1298553
+[sucata]      click  Incluir localizado por xpath=//a[contains(., 'Incluir') or contains(@href, 'incluir') or contains(@onclick, 'incluir')]
+[sucata]       form  abriu fm_movimentacaopneu, url=https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdPneu=136217&stIdEmpresa=046&stIdMovimentacao=1298553
+[sucata]       ERRO  209268: erro TransNet: O PNEU JÁ SE ENCONTRA NESTE CENTRO DE CUSTO!&amp;edtKmInicial=0&amp;edtKmFinal=0&amp;edtMotivoMov=005&amp;cbxMotivoMov=005&amp;memObservacao=Sucateamento em lote&amp;edtDataMov=15/06/2026&amp;edtHoraM
+[sucata]       pneu  [5/36] 209269
+[sucata]      achou  209269 -> stIdPneu=136216 stIdMov=1298554
+[sucata]      click  Incluir localizado por xpath=//a[contains(., 'Incluir') or contains(@href, 'incluir') or contains(@onclick, 'incluir')]
+[sucata]      click  fallback direto para form: https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdMovimentacao=1298554&stIdEmpresa=046&stIdPneu=136216
+[sucata]       form  abriu fm_movimentacaopneu, url=https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdMovimentacao=1298554&stIdEmpresa=046&stIdPneu=136216
+[sucata]       ERRO  209269: erro TransNet: O PNEU JÁ SE ENCONTRA NESTE CENTRO DE CUSTO!&amp;edtKmInicial=0&amp;edtKmFinal=0&amp;edtMotivoMov=005&amp;cbxMotivoMov=005&amp;memObservacao=Sucateamento em lote&amp;edtDataMov=15/06/2026&amp;edtHoraM
+[sucata]       pneu  [6/36] 209310
+[sucata]      achou  209310 -> stIdPneu=139079 stIdMov=1298555
+[sucata]      click  Incluir localizado por xpath=//a[contains(., 'Incluir') or contains(@href, 'incluir') or contains(@onclick, 'incluir')]
+[sucata]       form  abriu fm_movimentacaopneu, url=https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdPneu=139079&stIdEmpresa=046&stIdMovimentacao=1298555
+[sucata]       ERRO  209310: erro TransNet: O PNEU JÁ SE ENCONTRA NESTE CENTRO DE CUSTO!&amp;edtKmInicial=0&amp;edtKmFinal=0&amp;edtMotivoMov=005&amp;cbxMotivoMov=005&amp;memObservacao=Sucateamento em lote&amp;edtDataMov=15/06/2026&amp;edtHoraM
+[sucata]       pneu  [7/36] 209338
+[sucata]      achou  209338 -> stIdPneu=140396 stIdMov=1298556
+[sucata]      click  Incluir localizado por xpath=//a[contains(., 'Incluir') or contains(@href, 'incluir') or contains(@onclick, 'incluir')]
+[sucata]       form  abriu fm_movimentacaopneu, url=https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdPneu=140396&stIdEmpresa=046&stIdMovimentacao=1298556
+[sucata]       ERRO  209338: erro TransNet: O PNEU JÁ SE ENCONTRA NESTE CENTRO DE CUSTO!&amp;edtKmInicial=0&amp;edtKmFinal=0&amp;edtMotivoMov=005&amp;cbxMotivoMov=005&amp;memObservacao=Sucateamento em lote&amp;edtDataMov=15/06/2026&amp;edtHoraM
+[sucata]       pneu  [8/36] 209343
+[sucata]      achou  209343 -> stIdPneu=140401 stIdMov=1298557
+[sucata]      click  Incluir localizado por xpath=//a[contains(., 'Incluir') or contains(@href, 'incluir') or contains(@onclick, 'incluir')]
+[sucata]       form  abriu fm_movimentacaopneu, url=https://transnet.grupocsc.com.br/sgtweb/sgt/pneu/fm_movimentacaopneu.php?operacao=incluir&stIdPneu=140401&stIdEmpresa=046&stIdMovimentacao=1298557

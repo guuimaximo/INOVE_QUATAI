@@ -28,6 +28,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { useMobileTabBadges } from "../../context/MobileTabBadgesContext";
 import CampoPrefixo from "../../components/CampoPrefixo";
 import { supabase } from "../../supabase";
+import { printAuditoriaFicha, printTrocaFicha } from "../../utils/pcmFichaPdf";
 import {
   base64ToFile,
   enqueueSubmission,
@@ -88,6 +89,19 @@ const SITUACOES_CONSERTO = ["PENDENTE", "EM CONSERTO", "CONCLUIDO"];
 const SITUACOES_RISCADO = ["ABERTO", "ACOMPANHANDO", "RESOLVIDO"];
 
 const MARCAS_PNEU = ["Michelin", "Goodyear", "Pirelli", "Outra"];
+
+async function fetchAll(factory, pageSize = 1000) {
+  let from = 0;
+  const rows = [];
+  while (true) {
+    const { data, error } = await factory().range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return rows;
+}
 
 function norm(value) {
   return String(value || "").trim();
@@ -2033,6 +2047,14 @@ function ConsultaModal({
           ) : null}
           <button
             type="button"
+            onClick={() => printTrocaFicha(row)}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <FaDownload />
+            Baixar PDF
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
           >
@@ -2065,9 +2087,6 @@ function ConsultaModal({
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           {getAuditoriaPosicoes(row).map((item) => {
-            const temConferencia = !!item.conferencia_status;
-            const editando = !!auditoriaEditando[item.posicao] || !temConferencia;
-
             return (
               <SectionBlock key={item.posicao} title={item.posicao}>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -2084,46 +2103,7 @@ function ConsultaModal({
                   />
                 ) : null}
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <DetailRow label="Conferencia" value={item.conferencia_status || "Pendente"} />
-
-                  {editando ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await onMarcarAuditoriaStatus(item.posicao, "OK");
-                          setAuditoriaEditando((current) => ({ ...current, [item.posicao]: false }));
-                        }}
-                        disabled={checkingStatusKey === `auditoria:${item.posicao}`}
-                        className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                      >
-                        OK
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await onMarcarAuditoriaStatus(item.posicao, "INCORRETO");
-                          setAuditoriaEditando((current) => ({ ...current, [item.posicao]: false }));
-                        }}
-                        disabled={checkingStatusKey === `auditoria:${item.posicao}`}
-                        className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
-                      >
-                        Incorreto
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setAuditoriaEditando((current) => ({ ...current, [item.posicao]: true }))}
-                      className="md:col-span-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-                    >
-                      Editar conferencia
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="flex justify-end">
                   <button
                     type="button"
                     onClick={() =>
@@ -2141,28 +2121,8 @@ function ConsultaModal({
                     <FaWrench className="inline mr-2" />
                     Enviar para conserto
                   </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onAbrirRiscado({
-                        prefixo: row.prefixo,
-                        numeroFogo: item.numero_fogo,
-                        observacoes: `Registrado a partir da auditoria ${row.ficha_auditoria} · ${item.posicao}.`,
-                      })
-                    }
-                    className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700"
-                  >
-                    <FaExclamationTriangle className="inline mr-2" />
-                    Lançar riscado
-                  </button>
                 </div>
 
-                {item.conferencia_por_nome || item.conferencia_por_login ? (
-                  <DetailRow
-                    label="Conferido por"
-                    value={`${item.conferencia_por_nome || item.conferencia_por_login} em ${formatDate(item.conferencia_em)}`}
-                  />
-                ) : null}
               </SectionBlock>
             );
           })}
@@ -2183,6 +2143,14 @@ function ConsultaModal({
             Editar todos os campos
           </button>
         ) : null}
+        <button
+          type="button"
+          onClick={() => printAuditoriaFicha(row)}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          <FaDownload />
+          Baixar PDF
+        </button>
         <button
           type="button"
           onClick={onClose}
@@ -2525,27 +2493,19 @@ export default function PCMTrocaPneus() {
   }
 
   async function carregarTrocas() {
-    const { data, error } = await supabase
-      .from("pcm_troca_pneus")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(300);
-
-    if (error) throw error;
-    setTrocas(data || []);
-    return data || [];
+    const data = await fetchAll(() =>
+      supabase.from("pcm_troca_pneus").select("*").order("created_at", { ascending: false })
+    );
+    setTrocas(data);
+    return data;
   }
 
   async function carregarAuditorias() {
-    const { data, error } = await supabase
-      .from("pcm_auditoria_pneus")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(300);
-
-    if (error) throw error;
-    setAuditorias(data || []);
-    return data || [];
+    const data = await fetchAll(() =>
+      supabase.from("pcm_auditoria_pneus").select("*").order("created_at", { ascending: false })
+    );
+    setAuditorias(data);
+    return data;
   }
 
   async function carregarPrefixos() {
@@ -2560,39 +2520,27 @@ export default function PCMTrocaPneus() {
   }
 
   async function carregarEstoque() {
-    const { data, error } = await supabase
-      .from("pcm_estoque_pneus")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(300);
-
-    if (error) throw error;
-    setEstoqueRows(data || []);
-    return data || [];
+    const data = await fetchAll(() =>
+      supabase.from("pcm_estoque_pneus").select("*").order("created_at", { ascending: false })
+    );
+    setEstoqueRows(data);
+    return data;
   }
 
   async function carregarConsertos() {
-    const { data, error } = await supabase
-      .from("pcm_consertos_pneus")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(300);
-
-    if (error) throw error;
-    setConsertos(data || []);
-    return data || [];
+    const data = await fetchAll(() =>
+      supabase.from("pcm_consertos_pneus").select("*").order("created_at", { ascending: false })
+    );
+    setConsertos(data);
+    return data;
   }
 
   async function carregarRiscados() {
-    const { data, error } = await supabase
-      .from("pcm_riscados_pneus")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(300);
-
-    if (error) throw error;
-    setRiscados(data || []);
-    return data || [];
+    const data = await fetchAll(() =>
+      supabase.from("pcm_riscados_pneus").select("*").order("created_at", { ascending: false })
+    );
+    setRiscados(data);
+    return data;
   }
 
   async function aplicar() {
@@ -4611,26 +4559,8 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
-      {activeTab === TAB_TROCA ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          <CardResumo label="Total" value={cardsTroca.total} color="text-slate-900" compact={isNativeShell} />
-          <CardResumo label="Lançadas Transnet" value={cardsTroca.transnetLancadas} color="text-emerald-600" compact={isNativeShell} />
-          <CardResumo label="Pendentes Transnet" value={cardsTroca.transnetPendentes} color="text-rose-600" compact={isNativeShell} />
-          <CardResumo label="Estoque para carro" value={cardsTroca.estoqueCarro} color="text-blue-600" compact={isNativeShell} />
-          <CardResumo label="Carro para carro" value={cardsTroca.carroCarro} color="text-orange-600" compact={isNativeShell} />
-        </div>
-      ) : null}
-
       {activeTab === TAB_AUDITORIA ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-            <CardResumo label="Total" value={cardsAuditoria.total} color="text-slate-900" compact={isNativeShell} />
-            <CardResumo label="Pendentes" value={cardsAuditoria.pendentes} color="text-amber-600" compact={isNativeShell} />
-            <CardResumo label="Concluídas" value={cardsAuditoria.concluidas} color="text-emerald-600" compact={isNativeShell} />
-            <CardResumo label="Com incorreto" value={cardsAuditoria.incorretas} color="text-rose-600" compact={isNativeShell} />
-            <CardResumo label="30+ dias sem auditoria" value={auditoriasAtrasadas.length} color="text-rose-600" compact={isNativeShell} />
-          </div>
-
           {auditoriasAtrasadas.length ? (
             <div className="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-900 md:flex-row md:items-center md:justify-between">
               <div>
@@ -4646,43 +4576,6 @@ export default function PCMTrocaPneus() {
               </button>
             </div>
           ) : null}
-        </div>
-      ) : null}
-
-      {activeTab === TAB_ESTOQUE ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          <CardResumo label="Última ficha" value={cardsEstoque.ficha} color="text-slate-900" compact={isNativeShell} />
-          <CardResumo label="Pneus na última" value={cardsEstoque.total} color="text-blue-600" compact={isNativeShell} />
-          <CardResumo label="OK" value={cardsEstoque.ok} color="text-emerald-600" compact={isNativeShell} />
-          <CardResumo label="Incorretos" value={cardsEstoque.incorretos} color="text-rose-600" compact={isNativeShell} />
-          <CardResumo label="Pendentes" value={cardsEstoque.pendentes} color="text-amber-600" compact={isNativeShell} />
-          </div>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-            <CardResumo label="Novo" value={cardsEstoque.novo} color="text-blue-600" compact={isNativeShell} />
-            <CardResumo label="Para uso" value={cardsEstoque.uso} color="text-emerald-600" compact={isNativeShell} />
-            <CardResumo label="Recapagem" value={cardsEstoque.recapagem} color="text-amber-600" compact={isNativeShell} />
-            <CardResumo label="Recapado" value={cardsEstoque.recapado} color="text-violet-600" compact={isNativeShell} />
-            <CardResumo label="Sucata" value={cardsEstoque.sucata} color="text-rose-600" compact={isNativeShell} />
-          </div>
-        </div>
-      ) : null}
-
-      {activeTab === TAB_CONSERTOS ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <CardResumo label="Total" value={cardsConsertos.total} color="text-slate-900" compact={isNativeShell} />
-          <CardResumo label="Pendentes" value={cardsConsertos.pendentes} color="text-amber-600" compact={isNativeShell} />
-          <CardResumo label="Em conserto" value={cardsConsertos.emConserto} color="text-blue-600" compact={isNativeShell} />
-          <CardResumo label="Concluídos" value={cardsConsertos.concluidos} color="text-emerald-600" compact={isNativeShell} />
-        </div>
-      ) : null}
-
-      {activeTab === TAB_RISCADOS ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <CardResumo label="Total" value={cardsRiscados.total} color="text-slate-900" compact={isNativeShell} />
-          <CardResumo label="Abertos" value={cardsRiscados.abertos} color="text-rose-600" compact={isNativeShell} />
-          <CardResumo label="Acompanhando" value={cardsRiscados.acompanhando} color="text-blue-600" compact={isNativeShell} />
-          <CardResumo label="Com 10+ dias" value={cardsRiscados.vencidos10Dias} color="text-amber-600" compact={isNativeShell} />
         </div>
       ) : null}
 

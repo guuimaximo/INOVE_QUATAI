@@ -1,0 +1,86 @@
+[sucata]     inicio  36 pneus | DRY_RUN=True | HEADLESS=False
+[sucata]      login  abrindo tela de login
+[sucata]       pneu  [1/36] 001828
+[sucata]      achou  001828 -> stIdPneu=116714 stIdMov=1228099
+[sucata]       pneu  [2/36] 080001
+[sucata]      achou  080001 -> stIdPneu=197484 stIdMov=1298092
+[sucata]       pneu  [3/36] 209225
+[sucata]      achou  209225 -> stIdPneu=132310 stIdMov=1296827
+[sucata]       pneu  [4/36] 209268
+[sucata]      achou  209268 -> stIdPneu=136217 stIdMov=1297462
+[sucata]       pneu  [5/36] 209269
+[sucata]      achou  209269 -> stIdPneu=136216 stIdMov=1295663
+[sucata]       pneu  [6/36] 209310
+[sucata]      achou  209310 -> stIdPneu=139079 stIdMov=1295270
+[sucata]       pneu  [7/36] 209338
+[sucata]       ERRO  209338: Message: no such window: target window already closed
+from unknown error: web view not found
+  (Session info: chrome=149.0.7827.104)
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff6141afd95+15395]
+	chromedriver!GetHandleVerifier [0x7ff6141afdf0+153f0]
+	chromedriver!(No symbol) [0x7ff613ce78fd]
+	chromedriver!(No symbol) [0x7ff613cbe362]
+	chromedriver!(No symbol) [0x7ff613d71226]
+	chromedriver!(No symbol) [0x7ff613d8e3d2]
+	chromedriver!(No symbol) [0x7ff613d33a58]
+	chromedriver!(No symbol) [0x7ff613d34953]
+	chromedriver!GetHandleVerifier [0x7ff614775511+5dab11]
+	chromedriver!GetHandleVerifier [0x7ff61476f8fb+5d4efb]
+	chromedriver!GetHandleVerifier [0x7ff614793205+5f8805]
+	chromedriver!GetHandleVerifier [0x7ff6141ccc6e+3226e]
+	chromedriver!GetHandleVerifier [0x7ff6141d562c+3ac2c]
+	chromedriver!GetHandleVerifier [0x7ff6141b9984+1ef84]
+	chromedriver!GetHandleVerifier [0x7ff6141b9b14+1f114]
+	chromedriver!GetHandleVerifier [0x7ff61419ca77+2077]
+	KERNEL32!BaseThreadInitThunk [0x7ff98c67e957+17]
+	ntdll!RtlUserThreadStart [0x7ff98d587c1c+2c]
+
+[sucata]       pneu  [8/36] 209343
+[sucata]       ERRO  209343: Message: no such window: target window already closed
+from unknown error: web view not found
+  (Session info: chrome=149.0.7827.104)
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff6141afd95+15395]
+	chromedriver!GetHandleVerifier [0x7ff6141afdf0+153f0]
+	chromedriver!(No symbol) [0x7ff613ce78fd]
+	chromedriver!(No symbol) [0x7ff613cbe362]
+	chromedriver!(No symbol) [0x7ff613d71226]
+	chromedriver!(No symbol) [0x7ff613d8e3d2]
+	chromedriver!(No symbol) [0x7ff613d33a58]
+	chromedriver!(No symbol) [0x7ff613d34953]
+	chromedriver!GetHandleVerifier [0x7ff614775511+5dab11]
+	chromedriver!GetHandleVerifier [0x7ff61476f8fb+5d4efb]
+	chromedriver!GetHandleVerifier [0x7ff614793205+5f8805]
+	chromedriver!GetHandleVerifier [0x7ff6141ccc6e+3226e]
+	chromedriver!GetHandleVerifier [0x7ff6141d562c+3ac2c]
+	chromedriver!GetHandleVerifier [0x7ff6141b9984+1ef84]
+	chromedriver!GetHandleVerifier [0x7ff6141b9b14+1f114]
+	chromedriver!GetHandleVerifier [0x7ff61419ca77+2077]
+	KERNEL32!BaseThreadInitThunk [0x7ff98c67e957+17]
+	ntdll!RtlUserThreadStart [0x7ff98d587c1c+2c]
+
+[sucata]       pneu  [9/36] 209352
+[sucata]       ERRO  209352: Message: no such window: target window already closed
+from unknown error: web view not found
+  (Session info: chrome=149.0.7827.104)
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff6141afd95+15395]
+	chromedriver!GetHandleVerifier [0x7ff6141afdf0+153f0]
+	chromedriver!(No symbol) [0x7ff613ce78fd]
+	chromedriver!(No symbol) [0x7ff613cbe362]
+	chromedriver!(No symbol) [0x7ff613d71226]
+	chromedriver!(No symbol) [0x7ff613d8e3d2]
+	chromedriver!(No symbol) [0x7ff613d33a58]
+	chromedriver!(No symbol) [0x7ff613d34953]
+	chromedriver!GetHandleVerifier [0x7ff614775511+5dab11]
+	chromedriver!GetHandleVerifier [0x7ff61476f8fb+5d4efb]
+	chromedriver!GetHandleVerifier [0x7ff614793205+5f8805]
+	chromedriver!GetHandleVerifier [0x7ff6141ccc6e+3226e]
+	chromedriver!GetHandleVerifier [0x7ff6141d562c+3ac2c]
+	chromedriver!GetHandleVerifier [0x7ff6141b9984+1ef84]
+	chromedriver!GetHandleVerifier [0x7ff6141b9b14+1f114]
+	chromedriver!GetHandleVerifier [0x7ff61419ca77+2077]
+	KERNEL32!BaseThreadInitThunk [0x7ff98c67e957+17]
+	ntdll!RtlUserThreadStart [0x7ff98d587c1c+2c]
+

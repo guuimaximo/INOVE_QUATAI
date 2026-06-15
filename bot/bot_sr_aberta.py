@@ -147,9 +147,19 @@ def listar_srs_abertas_hoje(driver: webdriver.Chrome) -> list[dict]:
     log("lista", "pesquisa inicial + ajusta paginador=1500")
     try:
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table[id^='listavreclamacoes']")))
-        # Filtro Nao Atendida e primeira pesquisa (popula paginador).
+        # Filtro Nao Atendida + LIMPA filtros de data (TransNet lembra da sessao
+        # anterior e isso fazia o bot so pegar SRs de datas antigas).
+        # Limpa tambem cdReclamacao e idEquipamento por garantia.
         driver.execute_script(
-            "const f = document.formulario; if (f && f.csReclamacao) f.csReclamacao.value = 'N';"
+            "const f = document.formulario;"
+            "if (f) {"
+            "  if (f.csReclamacao) f.csReclamacao.value = 'N';"
+            "  if (f.dtReclamacao) f.dtReclamacao.value = '';"
+            "  if (f.dtFimReclamacao) f.dtFimReclamacao.value = '';"
+            "  if (f.cdReclamacao) f.cdReclamacao.value = '';"
+            "  if (f.idFuncionario) f.idFuncionario.value = '';"
+            "  if (f.idEquipamento) f.idEquipamento.value = '';"
+            "}"
             "pesquisar(true, 1, 1);"
         )
         # Espera o paginador aparecer.
@@ -182,40 +192,54 @@ def listar_srs_abertas_hoje(driver: webdriver.Chrome) -> list[dict]:
         log("lista", "tabela continua sem registros")
         return []
 
-    rows_raw = driver.find_elements(
-        By.CSS_SELECTOR,
-        "table[id^='listavreclamacoes'] tr.linha1, table[id^='listavreclamacoes'] tr.linha2",
-    )
-    log("lista", f"linhas brutas: {len(rows_raw)}")
+    # Parser via page_source: imune a StaleElementReferenceException quando
+    # o ajax do paginador re-renderiza a tabela durante a iteracao.
+    html = driver.page_source or ""
 
     # DEBUG: salva pagina pra inspecao
     try:
         from pathlib import Path
         dump = Path(__file__).parent / "downloads" / "sr_aberta_debug.html"
-        dump.write_text(driver.page_source or "", encoding="utf-8", errors="ignore")
+        dump.write_text(html, encoding="utf-8", errors="ignore")
         log("lista", f"debug html: {dump}")
     except Exception:
         pass
 
-    out: list[dict] = []
-    for tr in rows_raw:
-        tds = tr.find_elements(By.TAG_NAME, "td")
-        if len(tds) < 6:
-            continue
-        try:
-            href = tds[0].find_element(By.TAG_NAME, "a").get_attribute("href") or ""
-        except Exception:
-            href = ""
-        m = re.search(r"idReclamacao=(\d+)", href)
-        if not m:
-            continue
-        id_rec = int(m.group(1))
+    # Captura apenas o trecho da tabela de SRs.
+    m_tabela = re.search(
+        r'<table id="listavreclamacoes[^"]*".*?</table>',
+        html,
+        re.S,
+    )
+    rows_html = []
+    if m_tabela:
+        rows_html = re.findall(
+            r'<tr class="linha[12]"[^>]*>(.*?)</tr>',
+            m_tabela.group(0),
+            re.S,
+        )
+    log("lista", f"linhas brutas: {len(rows_html)}")
 
-        codigo = tds[1].text.strip()
-        usuario = tds[2].text.strip()
-        equipamento = tds[3].text.strip()
-        situacao = tds[4].text.strip()
-        data_txt = tds[5].text.strip()
+    out: list[dict] = []
+    for tr_html in rows_html:
+        # tds com texto plano (strip de tags internas)
+        tds_raw = re.findall(r'<td[^>]*>(.*?)</td>', tr_html, re.S)
+        if len(tds_raw) < 6:
+            continue
+        # primeira td tem o link com idReclamacao
+        m_id = re.search(r'idReclamacao=(\d+)', tds_raw[0])
+        if not m_id:
+            continue
+        id_rec = int(m_id.group(1))
+
+        def _txt(s: str) -> str:
+            return re.sub(r'<[^>]+>', '', s).replace('&nbsp;', ' ').strip()
+
+        codigo = _txt(tds_raw[1])
+        usuario = _txt(tds_raw[2])
+        equipamento = _txt(tds_raw[3])
+        situacao = _txt(tds_raw[4])
+        data_txt = _txt(tds_raw[5])
 
         # Filtra apenas SRs com situacao "Nao Atendida" (em aberto),
         # independente da data de abertura.
@@ -299,7 +323,12 @@ def carregar_existentes(sb) -> dict[int, dict]:
 
 def marcar_fechadas(sb, ids_atuais: set[int]):
     """Seta fechado_em=now() pras SRs que estavam abertas no banco mas nao
-    aparecem mais na listagem do TransNet."""
+    aparecem mais na listagem do TransNet.
+
+    Salvaguarda: se a coleta retornou MUITO menos SRs do que ja existem no banco,
+    desconfia de paginacao parcial e NAO marca ninguem como fechado. Threshold:
+    coleta tem que ter pelo menos metade do que ha no banco em aberto.
+    """
     existentes = (
         sb.table("solicitacao_reparo_aberta")
         .select("id_reclamacao")
@@ -307,6 +336,16 @@ def marcar_fechadas(sb, ids_atuais: set[int]):
         .execute()
     )
     abertos_db = {r["id_reclamacao"] for r in (existentes.data or [])}
+
+    # Salvaguarda contra paginacao parcial.
+    if abertos_db and len(ids_atuais) < max(20, len(abertos_db) // 2):
+        log(
+            "fechar",
+            f"ABORTADO: raspados={len(ids_atuais)} vs banco={len(abertos_db)}. "
+            "Suspeita paginacao parcial — nao marca nada como fechado.",
+        )
+        return
+
     sumiram = abertos_db - ids_atuais
     if not sumiram:
         return

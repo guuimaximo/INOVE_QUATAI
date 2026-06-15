@@ -2695,6 +2695,7 @@ export default function PCMTrocaPneus() {
       recapagem: itens.filter((item) => norm(item.situacao) === "ENVIAR PARA RECAPAGEM").length,
       recapado: itens.filter((item) => norm(item.situacao) === "RECAPADO").length,
       sucata: itens.filter((item) => norm(item.situacao) === "SUCATA").length,
+      conserto: itens.filter((item) => norm(item.situacao) === "CONSERTO").length,
     };
   }, [estoqueAgrupado]);
 
@@ -4555,6 +4556,28 @@ export default function PCMTrocaPneus() {
                 <div className="mt-1 text-sm text-slate-600">{alerta.message}</div>
               </div>
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === TAB_TROCA ? (
+        <div className="grid grid-cols-3 gap-4">
+          <CardResumo label="Total" value={cardsTroca.total} color="text-slate-900" compact={isNativeShell} />
+          <CardResumo label="Lançado Transnet" value={cardsTroca.transnetLancadas} color="text-emerald-600" compact={isNativeShell} />
+          <CardResumo label="Pendente" value={cardsTroca.transnetPendentes} color="text-rose-600" compact={isNativeShell} />
+        </div>
+      ) : null}
+
+      {activeTab === TAB_ESTOQUE ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+            <CardResumo label={`Total · ${cardsEstoque.ficha}`} value={cardsEstoque.total} color="text-slate-900" compact={isNativeShell} />
+            <CardResumo label="Novo" value={cardsEstoque.novo} color="text-blue-600" compact={isNativeShell} />
+            <CardResumo label="Para uso" value={cardsEstoque.uso} color="text-emerald-600" compact={isNativeShell} />
+            <CardResumo label="Recapagem" value={cardsEstoque.recapagem} color="text-amber-600" compact={isNativeShell} />
+            <CardResumo label="Recapado" value={cardsEstoque.recapado} color="text-violet-600" compact={isNativeShell} />
+            <CardResumo label="Sucata" value={cardsEstoque.sucata} color="text-rose-600" compact={isNativeShell} />
+            <CardResumo label="Conserto" value={cardsEstoque.conserto} color="text-orange-600" compact={isNativeShell} />
           </div>
         </div>
       ) : null}

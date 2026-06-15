@@ -106,6 +106,21 @@ const BASE_STYLES = `
     border: 1px solid #cbd5e1; border-radius: 3px; padding: 8px 10px;
     background: #f8fafc; min-height: 42px; font-size: 11px; white-space: pre-wrap;
   }
+  .photo-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    margin-top: 8px;
+  }
+  .photo-card {
+    border: 1px solid #cbd5e1; border-radius: 3px; overflow: hidden;
+    background: #f8fafc; padding: 4px; text-align: center;
+  }
+  .photo-card img {
+    width: 100%; height: 90px; object-fit: cover; display: block; border-radius: 2px;
+  }
+  .photo-cap {
+    font-size: 8.5px; color: #475569; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; margin-top: 3px;
+  }
   .signature-box { text-align: center; }
   .signature-line {
     border-top: 1px solid #0f172a; margin: 40px 8px 4px 8px; padding-top: 3px;
@@ -170,6 +185,22 @@ export function printAuditoriaFicha(row) {
     </tr>`)
     .join("");
 
+  const fotosPosicoes = posicoes.filter((p) => p.foto_url);
+  const fotosHtml = fotosPosicoes.length
+    ? `<section class="mb-3 nobreak">
+        <div class="section-title">3. Fotos das posições</div>
+        <div class="photo-row">
+          ${fotosPosicoes
+            .map((p) => `<div class="photo-card">
+              <img src="${esc(p.foto_url)}" alt="${esc(p.posicao)}" />
+              <div class="photo-cap">${esc(p.posicao || "-")} · ${esc(p.numero_fogo || "-")}</div>
+            </div>`)
+            .join("")}
+        </div>
+      </section>`
+    : "";
+  const nextNum = fotosPosicoes.length ? 4 : 3;
+
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/>
 <title>Auditoria de Pneus ${esc(numero)}</title>
 <style>${BASE_STYLES}</style></head><body>
@@ -201,14 +232,16 @@ export function printAuditoriaFicha(row) {
     </table>
   </section>
 
+  ${fotosHtml}
+
   ${row.observacoes ? `
   <section class="mb-3 nobreak">
-    <div class="section-title">3. Observações</div>
+    <div class="section-title">${nextNum}. Observações</div>
     <div class="note-box">${esc(row.observacoes)}</div>
   </section>` : ""}
 
   <section class="mt-4 nobreak">
-    <div class="section-title">${row.observacoes ? "4" : "3"}. Assinaturas</div>
+    <div class="section-title">${row.observacoes ? nextNum + 1 : nextNum}. Assinaturas</div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px 26px;margin-top:8px">
       <div class="signature-box">
         <div class="signature-line">Auditor</div>
@@ -236,6 +269,37 @@ export function printTrocaFicha(row) {
   const numero = row.ficha_troca || `TP-${String(row.id || "").slice(0, 6)}`;
   const lancado = row.criado_por_nome || row.criado_por_login || "-";
   const tipo = row.tipo_troca || "-";
+
+  const fotos = [
+    { url: row.foto_numero_fogo_retirado_url, label: `Retirado · ${row.numero_fogo_retirado || "-"}` },
+    {
+      url: row.foto_numero_fogo_colocado_url || row.foto_numero_fogo_url,
+      label: `Colocado · ${row.numero_fogo_colocado || "-"}`,
+    },
+    {
+      url: row.foto_numero_fogo_origem_recebido_url,
+      label: `Origem recebeu · ${row.numero_fogo_origem_recebido || "-"}`,
+    },
+    {
+      url: row.foto_numero_fogo_destino_retirado_url,
+      label: `Saiu do destino · ${row.numero_fogo_destino_retirado || "-"}`,
+    },
+  ].filter((f) => !!f.url);
+
+  const fotosHtml = fotos.length
+    ? `<section class="mb-3 nobreak">
+        <div class="section-title">4. Fotos</div>
+        <div class="photo-row">
+          ${fotos
+            .map((f) => `<div class="photo-card">
+              <img src="${esc(f.url)}" alt="${esc(f.label)}" />
+              <div class="photo-cap">${esc(f.label)}</div>
+            </div>`)
+            .join("")}
+        </div>
+      </section>`
+    : "";
+  const nextNum = fotos.length ? 5 : 4;
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/>
 <title>Troca de Pneu ${esc(numero)}</title>
@@ -274,14 +338,16 @@ export function printTrocaFicha(row) {
     </div>
   </section>
 
+  ${fotosHtml}
+
   ${row.observacoes ? `
   <section class="mb-3 nobreak">
-    <div class="section-title">4. Observações</div>
+    <div class="section-title">${nextNum}. Observações</div>
     <div class="note-box">${esc(row.observacoes)}</div>
   </section>` : ""}
 
   <section class="mt-4 nobreak">
-    <div class="section-title">${row.observacoes ? "5" : "4"}. Assinaturas</div>
+    <div class="section-title">${row.observacoes ? nextNum + 1 : nextNum}. Assinaturas</div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px 26px;margin-top:8px">
       <div class="signature-box">
         <div class="signature-line">Responsável pela troca</div>

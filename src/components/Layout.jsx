@@ -279,7 +279,9 @@ export default function Layout() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-600">
               Inove mobile
             </p>
-            <p className="truncate text-base font-semibold text-slate-900">{pageTitle}</p>
+            <p className="truncate text-[13px] font-extrabold uppercase tracking-[0.16em] text-slate-900">
+              {pageTitle}
+            </p>
           </button>
 
           {isNativeShell ? null : (

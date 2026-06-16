@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
-import { FaSyncAlt, FaSearch, FaCarSide } from "react-icons/fa";
+import { FaSyncAlt, FaSearch, FaCarSide, FaBarcode, FaTimes } from "react-icons/fa";
+import { printEtiquetasPneus } from "../../utils/pneuEtiquetaPdf";
 
 const POSICOES = ["DD", "DE", "TEE", "TEI", "TDI", "TDE"];
 const FILTROS_STORAGE_KEY = "pcm_controle_pneus_filtros_v1";
@@ -200,6 +201,8 @@ export default function PCMControlePneus() {
   const filtrosIniciais = lerFiltrosSalvos();
   const [abaAtiva, setAbaAtiva] = useState(filtrosIniciais.abaAtiva || "veiculos");
   const [abaEstoqueAtiva, setAbaEstoqueAtiva] = useState(filtrosIniciais.abaEstoqueAtiva || "fisico");
+  const [etiquetaModalOpen, setEtiquetaModalOpen] = useState(false);
+  const [etiquetaBusca, setEtiquetaBusca] = useState("");
   const [rowsRaw, setRowsRaw] = useState([]);
   const [trocas, setTrocas] = useState([]);
   const [alocacoes, setAlocacoes] = useState([]);
@@ -1341,7 +1344,7 @@ export default function PCMControlePneus() {
         </div>
       ) : abaAtiva === "estoque" ? (
         <div className="space-y-3">
-          <section className="flex items-center gap-2">
+          <section className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setAbaEstoqueAtiva("fisico")}
@@ -1355,6 +1358,14 @@ export default function PCMControlePneus() {
               className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${abaEstoqueAtiva === "transnet" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
             >
               TransNet borracharia
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEtiquetaBusca(""); setEtiquetaModalOpen(true); }}
+              className="ml-auto inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              <FaBarcode />
+              Gerador de etiqueta
             </button>
           </section>
 
@@ -1572,6 +1583,104 @@ export default function PCMControlePneus() {
         Status: OK = bate · SUCATA = pneu inativo · OUTRO VEICULO = pneu alocado noutro carro · NAO EXISTE = não achado ·
         ESTOQUE = ativo sem alocação.
       </p>
+
+      {etiquetaModalOpen ? (() => {
+        const buscaNorm = String(etiquetaBusca || "").replace(/\D/g, "");
+        const fonteRows = estoqueFisicoFiltrado || [];
+        const matches = buscaNorm
+          ? fonteRows.filter((r) => String(r.pneu || "").replace(/\D/g, "").includes(buscaNorm)).slice(0, 12)
+          : [];
+        return (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+            <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">PCM · Estoque</div>
+                  <h2 className="text-lg font-semibold text-slate-900">Gerador de etiquetas</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEtiquetaModalOpen(false)}
+                  className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+              <div className="space-y-4 overflow-y-auto px-5 py-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-sm font-semibold text-slate-800">Todo o estoque físico atual</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Imprime uma etiqueta pra cada pneu da última ficha de estoque ({fonteRows.length} pneu(s)).
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      printEtiquetasPneus(fonteRows);
+                      setEtiquetaModalOpen(false);
+                    }}
+                    disabled={!fonteRows.length}
+                    className="mt-2 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    <FaBarcode /> Gerar todas
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-sm font-semibold text-slate-800">Etiqueta única</div>
+                  <div className="mt-1 text-xs text-slate-500">Busca pelo número de fogo (digite parte do número).</div>
+                  <input
+                    type="text"
+                    value={etiquetaBusca}
+                    onChange={(e) => setEtiquetaBusca(e.target.value)}
+                    placeholder="Ex: 001828"
+                    inputMode="numeric"
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                  {buscaNorm ? (
+                    matches.length ? (
+                      <ul className="mt-2 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+                        {matches.map((r) => (
+                          <li key={r.key || r.pneu} className="flex items-center justify-between gap-3 px-3 py-2">
+                            <div className="min-w-0 text-xs">
+                              <div className="font-mono font-bold text-slate-900">{r.pneu}</div>
+                              <div className="truncate text-slate-500">
+                                {r.marca || "Sem marca"} · {r.situacao_inove || "-"} · {r.local || ""}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                printEtiquetasPneus([r]);
+                                setEtiquetaModalOpen(false);
+                              }}
+                              className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
+                              <FaBarcode /> Gerar
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="mt-2 rounded-lg border border-dashed border-slate-300 bg-white p-3 text-center text-xs text-slate-500">
+                        Nenhum pneu encontrado com esse número no estoque atual.
+                      </div>
+                    )
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex justify-end border-t border-slate-200 px-5 py-3">
+                <button
+                  type="button"
+                  onClick={() => setEtiquetaModalOpen(false)}
+                  className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
     </div>
   );
 }

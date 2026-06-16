@@ -19,6 +19,7 @@ import {
   FaSave,
   FaSearch,
   FaTimes,
+  FaArrowLeft,
   FaTools,
   FaWarehouse,
   FaWrench,
@@ -65,7 +66,10 @@ const ORIGEM_RECEBEU_OPTIONS = [
   ORIGEM_RECEBEU_OUTRO,
 ];
 
-const POSICOES = [
+// Ordem padrão (web): DD, DE, TDI, TEI, TDE, TEE.
+// APK (Capacitor nativo): DD, TDE, TDI, DE, TEE, TEI — pedido pra fluxo
+// de auditoria no celular (lado direito completo antes de ir pro esquerdo).
+const POSICOES_WEB = [
   "DIANTEIRO DIREITO",
   "DIANTEIRO ESQUERDO",
   "TRASEIRO INTERNO DIREITO",
@@ -73,6 +77,16 @@ const POSICOES = [
   "TRASEIRO EXTERNO DIREITO",
   "TRASEIRO EXTERNO ESQUERDO",
 ];
+const POSICOES_APK = [
+  "DIANTEIRO DIREITO",
+  "TRASEIRO EXTERNO DIREITO",
+  "TRASEIRO INTERNO DIREITO",
+  "DIANTEIRO ESQUERDO",
+  "TRASEIRO EXTERNO ESQUERDO",
+  "TRASEIRO INTERNO ESQUERDO",
+];
+const POSICOES = Capacitor.isNativePlatform() ? POSICOES_APK : POSICOES_WEB;
+const IS_NATIVE = Capacitor.isNativePlatform();
 
 const SITUACOES_ESTOQUE = [
   "NOVO",
@@ -578,7 +592,13 @@ function buildTrocaResumo(row) {
 }
 
 function getAuditoriaPosicoes(row) {
-  return Array.isArray(row?.posicoes) ? row.posicoes : [];
+  const arr = Array.isArray(row?.posicoes) ? row.posicoes : [];
+  // Ordena pela ordem do POSICOES atual (web ou APK) pra render/PDF
+  // refletirem o fluxo escolhido independente da ordem salva no DB.
+  const order = new Map(POSICOES.map((p, i) => [norm(p), i]));
+  return [...arr].sort(
+    (a, b) => (order.get(norm(a?.posicao)) ?? 99) - (order.get(norm(b?.posicao)) ?? 99)
+  );
 }
 
 function buildAuditoriaResumo(row) {
@@ -794,18 +814,75 @@ function groupEstoqueRows(rows) {
   return [...groups.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
-function CardResumo({ label, value, color, compact = false }) {
+// Mapa color (text-XXX-600) -> classes de fundo (gradient pastel) + borda.
+const CARD_TONES = {
+  slate: "from-slate-50 to-white border-slate-200",
+  blue: "from-sky-50 to-white border-sky-200",
+  emerald: "from-emerald-50 to-white border-emerald-200",
+  rose: "from-rose-50 to-white border-rose-200",
+  amber: "from-amber-50 to-white border-amber-200",
+  violet: "from-violet-50 to-white border-violet-200",
+  orange: "from-orange-50 to-white border-orange-200",
+};
+
+function CardResumo({ label, value, color, compact = false, icon = null, subtitle = "" }) {
+  const tone = (color || "text-slate-900").replace(/^text-/, "").split("-")[0];
+  const toneClasses = CARD_TONES[tone] || CARD_TONES.slate;
   return (
-    <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${compact ? "p-3.5" : "p-5"}`}>
-      <div className={`${compact ? "text-[10px] tracking-[0.16em]" : "text-[11px] tracking-[0.22em]"} font-bold uppercase text-slate-400`}>
-        {label}
+    <div className={`rounded-xl border bg-gradient-to-br ${toneClasses} px-3 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.05)]`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+          <p className={`font-black tracking-tight ${color}`} style={{ fontSize: "1.15rem", lineHeight: 1.15 }}>
+            {value}
+          </p>
+          {subtitle ? (
+            <p className="line-clamp-1 text-[10px] font-medium text-slate-500">{subtitle}</p>
+          ) : null}
+        </div>
+        {icon ? (
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/80 text-[11px] text-slate-700 shadow-sm">
+            {icon}
+          </div>
+        ) : null}
       </div>
-      <div className={`mt-2 font-black ${compact ? "text-2xl" : "text-3xl"} ${color}`}>{value}</div>
     </div>
   );
 }
 
 function ModalShell({ title, subtitle, onClose, children, footer, maxWidth = "max-w-5xl" }) {
+  if (IS_NATIVE) {
+    // No APK abrimos como pagina cheia: header compacto fixo no topo
+    // (com "INOVE MOBILE" + back), conteudo rolavel, footer fixo embaixo.
+    return (
+      <div
+        className="fixed inset-0 z-[80] flex flex-col bg-slate-50"
+        style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-1.5 text-slate-500 hover:bg-slate-100"
+            aria-label="Voltar"
+          >
+            <FaArrowLeft />
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-600">INOVE MOBILE</div>
+            <div className="truncate text-sm font-bold text-slate-900">{title}</div>
+          </div>
+          {subtitle ? (
+            <div className="hidden truncate text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:block">
+              {subtitle}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex-1 overflow-y-auto px-3 py-3">{children}</div>
+        <div className="border-t border-slate-200 bg-white px-3 py-2">{footer}</div>
+      </div>
+    );
+  }
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
       <div className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${maxWidth}`}>
@@ -833,14 +910,24 @@ function ModalShell({ title, subtitle, onClose, children, footer, maxWidth = "ma
 
 function SectionBlock({ title, children }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="mb-4 text-sm font-black uppercase tracking-wide text-slate-700">{title}</div>
-      <div className="space-y-4">{children}</div>
+    <div className={`rounded-xl border border-slate-200 bg-white ${IS_NATIVE ? "p-3" : "p-4"}`}>
+      <div className={`${IS_NATIVE ? "mb-2 text-[11px]" : "mb-4 text-sm"} font-black uppercase tracking-wide text-slate-700`}>
+        {title}
+      </div>
+      <div className={IS_NATIVE ? "space-y-2.5" : "space-y-4"}>{children}</div>
     </div>
   );
 }
 
 function DetailRow({ label, value }) {
+  if (IS_NATIVE) {
+    return (
+      <div className="min-w-0 rounded-lg bg-slate-100 px-2.5 py-1.5">
+        <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+        <div className="truncate text-[12px] font-semibold text-slate-800">{value || "-"}</div>
+      </div>
+    );
+  }
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
       <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
@@ -850,6 +937,15 @@ function DetailRow({ label, value }) {
 }
 
 function ReadOnlyField({ label, value }) {
+  if (IS_NATIVE) {
+    // No APK renderiza como pílula compacta — sem input/borda.
+    return (
+      <div className="min-w-0 rounded-lg bg-slate-100 px-2.5 py-1.5">
+        <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+        <div className="truncate text-[12px] font-semibold text-slate-800">{value || "-"}</div>
+      </div>
+    );
+  }
   return (
     <label className="flex flex-col gap-2">
       <span className="text-sm text-gray-600">{label}</span>
@@ -863,10 +959,13 @@ function ReadOnlyField({ label, value }) {
   );
 }
 
-function InputField({ label, value, onChange, placeholder = "", inputMode = "text", pattern, type = "text" }) {
+function InputField({ label, value, onChange, placeholder = "", inputMode = "text", pattern, type = "text", error = "" }) {
+  const hasError = !!error;
   return (
-    <label className="flex flex-col gap-2">
-      <span className="text-sm text-gray-600">{label}</span>
+    <label className={`flex flex-col ${IS_NATIVE ? "gap-1" : "gap-2"}`}>
+      <span className={`${IS_NATIVE ? "text-[11px]" : "text-sm"} font-medium ${hasError ? "text-rose-600" : "text-gray-600"}`}>
+        {label}
+      </span>
       <input
         type={type}
         value={value}
@@ -874,20 +973,23 @@ function InputField({ label, value, onChange, placeholder = "", inputMode = "tex
         inputMode={inputMode}
         pattern={pattern}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        className={`w-full rounded-lg border bg-white text-slate-800 shadow-sm focus:outline-none focus:ring-2 ${hasError ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : "border-slate-300 focus:border-blue-500 focus:ring-blue-500/20"} ${IS_NATIVE ? "px-3 py-1.5 text-[13px]" : "px-3 py-2 text-sm"}`}
       />
+      {hasError ? (
+        <span className="text-[11px] font-semibold text-rose-600">{error}</span>
+      ) : null}
     </label>
   );
 }
 
 function SelectField({ label, value, onChange, options }) {
   return (
-    <label className="flex flex-col gap-2">
-      <span className="text-sm text-gray-600">{label}</span>
+    <label className={`flex flex-col ${IS_NATIVE ? "gap-1" : "gap-2"}`}>
+      <span className={`${IS_NATIVE ? "text-[11px]" : "text-sm"} font-medium text-gray-600`}>{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        className={`w-full rounded-lg border border-slate-300 bg-white text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${IS_NATIVE ? "px-3 py-1.5 text-[13px]" : "px-3 py-2 text-sm"}`}
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -1047,7 +1149,7 @@ function TrocaModal({
       subtitle="PCM · Solicitacao"
       onClose={onClose}
       footer={
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-nowrap items-center justify-end gap-1.5 overflow-x-auto">
           <button
             type="button"
             onClick={onClose}
@@ -1079,10 +1181,10 @@ function TrocaModal({
       }
     >
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <ReadOnlyField label="Numero da ficha" value={form.ficha} />
+        <div className={IS_NATIVE ? "grid grid-cols-3 gap-1.5" : "grid grid-cols-1 gap-4 md:grid-cols-3"}>
+          <ReadOnlyField label="Ficha" value={form.ficha} />
           <ReadOnlyField label="Data" value={form.dataLancamento} />
-          <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
+          <ReadOnlyField label="Lancou" value={form.quemLancou} />
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1338,7 +1440,7 @@ function AuditoriaModal({
       onClose={onClose}
       maxWidth="max-w-6xl"
       footer={
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-nowrap items-center justify-end gap-1.5 overflow-x-auto">
           <button
             type="button"
             onClick={onClose}
@@ -1370,10 +1472,10 @@ function AuditoriaModal({
       }
     >
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <ReadOnlyField label="Numero da ficha" value={form.ficha} />
+        <div className={IS_NATIVE ? "grid grid-cols-3 gap-1.5" : "grid grid-cols-1 gap-4 md:grid-cols-3"}>
+          <ReadOnlyField label="Ficha" value={form.ficha} />
           <ReadOnlyField label="Data" value={form.dataLancamento} />
-          <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
+          <ReadOnlyField label="Lancou" value={form.quemLancou} />
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1404,7 +1506,7 @@ function AuditoriaModal({
                 pattern="[0-9]*"
               />
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-2 gap-2 md:gap-4">
                 <InputField
                   label="Calibragem"
                   value={posicao.calibragem}
@@ -1459,7 +1561,7 @@ function EstoqueModal({
       subtitle="PCM · Estoque"
       onClose={onClose}
       footer={
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-nowrap items-center justify-end gap-1.5 overflow-x-auto">
           <button
             type="button"
             onClick={onClose}
@@ -1489,10 +1591,10 @@ function EstoqueModal({
       }
     >
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <ReadOnlyField label="Numero da ficha" value={form.ficha} />
+        <div className={IS_NATIVE ? "grid grid-cols-3 gap-1.5" : "grid grid-cols-1 gap-4 md:grid-cols-3"}>
+          <ReadOnlyField label="Ficha" value={form.ficha} />
           <ReadOnlyField label="Data" value={form.dataLancamento} />
-          <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
+          <ReadOnlyField label="Lancou" value={form.quemLancou} />
         </div>
 
         <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -1517,8 +1619,17 @@ function EstoqueModal({
         </div>
 
         <div className="space-y-4">
-          {form.itens.map((item, index) => (
-            <SectionBlock key={`estoque-item-${index}`} title={`Pneu ${index + 1}`}>
+          {(() => {
+            const norms = form.itens.map((it) => String(it.numeroFogo || "").replace(/\D/g, ""));
+            const counts = norms.reduce((acc, n) => {
+              if (!n) return acc;
+              acc[n] = (acc[n] || 0) + 1;
+              return acc;
+            }, {});
+            return form.itens.map((item, index) => {
+              const dup = norms[index] && counts[norms[index]] > 1;
+              return (
+            <SectionBlock key={`estoque-item-${index}`} title={`Pneu ${index + 1}${dup ? " · DUPLICADO" : ""}`}>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <InputField
                   label="Numero de fogo"
@@ -1526,6 +1637,7 @@ function EstoqueModal({
                   onChange={(value) => onItemChange(index, "numeroFogo", value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
+                  error={dup ? "Já lançado neste estoque" : ""}
                 />
                 <SelectField
                   label="Marca"
@@ -1560,7 +1672,9 @@ function EstoqueModal({
                 </div>
               </div>
             </SectionBlock>
-          ))}
+              );
+            });
+          })()}
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1592,7 +1706,7 @@ function ConsertoModal({
       subtitle="PCM · Consertos"
       onClose={onClose}
       footer={
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-nowrap items-center justify-end gap-1.5 overflow-x-auto">
           <button
             type="button"
             onClick={onClose}
@@ -1613,10 +1727,10 @@ function ConsertoModal({
       }
     >
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <ReadOnlyField label="Numero da ficha" value={form.ficha} />
+        <div className={IS_NATIVE ? "grid grid-cols-3 gap-1.5" : "grid grid-cols-1 gap-4 md:grid-cols-3"}>
+          <ReadOnlyField label="Ficha" value={form.ficha} />
           <ReadOnlyField label="Data" value={form.dataLancamento} />
-          <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
+          <ReadOnlyField label="Lancou" value={form.quemLancou} />
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1678,7 +1792,7 @@ function RiscadoModal({
       subtitle="PCM · Riscados"
       onClose={onClose}
       footer={
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-nowrap items-center justify-end gap-1.5 overflow-x-auto">
           <button
             type="button"
             onClick={onClose}
@@ -1699,10 +1813,10 @@ function RiscadoModal({
       }
     >
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <ReadOnlyField label="Numero da ficha" value={form.ficha} />
+        <div className={IS_NATIVE ? "grid grid-cols-3 gap-1.5" : "grid grid-cols-1 gap-4 md:grid-cols-3"}>
+          <ReadOnlyField label="Ficha" value={form.ficha} />
           <ReadOnlyField label="Data" value={form.dataLancamento} />
-          <ReadOnlyField label="Quem lancou" value={form.quemLancou} />
+          <ReadOnlyField label="Lancou" value={form.quemLancou} />
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1878,13 +1992,13 @@ function ConsultaModal({
     title = row.ficha_troca || "Ficha de troca";
     content = (
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className={IS_NATIVE ? "grid grid-cols-2 gap-1.5" : "grid grid-cols-1 gap-4 md:grid-cols-4"}>
           <DetailRow label="Data" value={formatDate(row.created_at)} />
-          <DetailRow label="Quem lancou" value={row.criado_por_nome || row.criado_por_login} />
-          <DetailRow label="Tipo de troca" value={row.tipo_troca} />
+          <DetailRow label="Lancou" value={row.criado_por_nome || row.criado_por_login} />
+          <DetailRow label="Tipo" value={row.tipo_troca} />
           <DetailRow
             label="Transnet"
-            value={transnetLancado ? `Lancado em ${formatDate(row.transnet_lancado_em)}` : "Pendente"}
+            value={transnetLancado ? `Lancado ${formatDate(row.transnet_lancado_em)}` : "Pendente"}
           />
         </div>
 
@@ -2054,13 +2168,15 @@ function ConsultaModal({
             <FaDownload />
             Baixar PDF
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
-          >
-            Fechar
-          </button>
+          {IS_NATIVE ? null : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
+            >
+              Fechar
+            </button>
+          )}
           <button
             type="button"
             onClick={onMarcarTransnet}
@@ -2079,9 +2195,9 @@ function ConsultaModal({
     title = row.ficha_auditoria || "Auditoria de pneus";
     content = (
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className={IS_NATIVE ? "grid grid-cols-2 gap-1.5" : "grid grid-cols-1 gap-4 md:grid-cols-4"}>
           <DetailRow label="Data" value={formatDate(row.created_at)} />
-          <DetailRow label="Quem lancou" value={row.criado_por_nome || row.criado_por_login} />
+          <DetailRow label="Lancou" value={row.criado_por_nome || row.criado_por_login} />
           <DetailRow label="Prefixo" value={row.prefixo} />
           <DetailRow label="Resumo" value={buildAuditoriaResumo(row)} />
         </div>
@@ -2152,13 +2268,15 @@ function ConsultaModal({
           <FaDownload />
           Baixar PDF
         </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
-        >
-          Fechar
-        </button>
+        {IS_NATIVE ? null : (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
+          >
+            Fechar
+          </button>
+        )}
       </div>
     );
   }
@@ -2167,10 +2285,10 @@ function ConsultaModal({
     title = row.ficha_estoque || "Estoque de pneus";
     content = (
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className={IS_NATIVE ? "grid grid-cols-2 gap-1.5" : "grid grid-cols-1 gap-4 md:grid-cols-4"}>
           <DetailRow label="Data" value={formatDate(row.created_at)} />
-          <DetailRow label="Quem lancou" value={row.criado_por_nome || row.criado_por_login} />
-          <DetailRow label="Quantidade de pneus" value={String(row.itens?.length || 0)} />
+          <DetailRow label="Lancou" value={row.criado_por_nome || row.criado_por_login} />
+          <DetailRow label="Qtd" value={String(row.itens?.length || 0)} />
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Conferencia</div>
             <div className="mt-2">
@@ -2308,7 +2426,7 @@ function ConsultaModal({
       </div>
     );
 
-    footer = (
+    footer = IS_NATIVE ? null : (
       <div className="flex justify-end">
         <button
           type="button"
@@ -2327,10 +2445,10 @@ function ConsultaModal({
     title = row.ficha_conserto || "Conserto de pneu";
     content = (
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className={IS_NATIVE ? "grid grid-cols-2 gap-1.5" : "grid grid-cols-1 gap-4 md:grid-cols-4"}>
           <DetailRow label="Data" value={formatDate(row.created_at)} />
-          <DetailRow label="Quem lancou" value={row.criado_por_nome || row.criado_por_login} />
-          <DetailRow label="Numero de fogo" value={row.numero_fogo || "-"} />
+          <DetailRow label="Lancou" value={row.criado_por_nome || row.criado_por_login} />
+          <DetailRow label="Nº fogo" value={row.numero_fogo || "-"} />
           <DetailRow label="Status" value={row.status || "PENDENTE"} />
         </div>
 
@@ -2366,13 +2484,15 @@ function ConsultaModal({
           Atualize quando o borracheiro receber ou concluir esse conserto.
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
-          >
-            Fechar
-          </button>
+          {IS_NATIVE ? null : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
+            >
+              Fechar
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onMarcarConsertoStatus?.(row.id, "EM CONSERTO")}
@@ -4477,15 +4597,17 @@ export default function PCMTrocaPneus() {
       style={nativePageStyle}
     >
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
-            <FaClipboardList className="text-blue-600" />
-            Central de Pneus PCM
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Troca, auditoria e estoque em uma central so, com filtros e exportacao.
-          </p>
-        </div>
+        {IS_NATIVE ? null : (
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
+              <FaClipboardList className="text-blue-600" />
+              Central de Pneus PCM
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Troca, auditoria e estoque em uma central so, com filtros e exportacao.
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-col gap-3 sm:flex-row">
           {!isNativeShell ? (
@@ -4591,14 +4713,14 @@ export default function PCMTrocaPneus() {
       ) : null}
 
       {activeTab === TAB_ESTOQUE ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <CardResumo label={`Total · ${cardsEstoque.ficha}`} value={cardsEstoque.total} color="text-slate-900" compact={isNativeShell} />
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2">
+              <CardResumo label={`Total · ${cardsEstoque.ficha}`} value={cardsEstoque.total} color="text-slate-900" compact={isNativeShell} />
+            </div>
             <CardResumo label="Novo" value={cardsEstoque.novo} color="text-blue-600" compact={isNativeShell} />
             <CardResumo label="Para uso" value={cardsEstoque.uso} color="text-emerald-600" compact={isNativeShell} />
             <CardResumo label="Recapagem" value={cardsEstoque.recapagem} color="text-amber-600" compact={isNativeShell} />
-          </div>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
             <CardResumo label="Recapado" value={cardsEstoque.recapado} color="text-violet-600" compact={isNativeShell} />
             <CardResumo label="Sucata" value={cardsEstoque.sucata} color="text-rose-600" compact={isNativeShell} />
             <CardResumo label="Conserto" value={cardsEstoque.conserto} color="text-orange-600" compact={isNativeShell} />
@@ -4626,8 +4748,8 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-800">Filtros</h2>
+      <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${IS_NATIVE ? "p-2.5" : "p-5"}`}>
+        <h2 className={`font-bold uppercase tracking-wider text-slate-800 ${IS_NATIVE ? "mb-2 text-[11px]" : "mb-4 text-sm"}`}>Filtros</h2>
 
         {activeTab === TAB_TROCA ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-5">

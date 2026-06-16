@@ -80,32 +80,43 @@ export default function MobileHome() {
 
   const nivelLabel = user?.nivel || "(sem nivel)";
 
+  // Pega primeiro nome para nao ficar gigante no celular.
+  const fullName = user?.nome || user?.login || "Operador";
+  const firstName = String(fullName).split(/\s+/)[0];
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 py-6">
-      <div className="mx-auto max-w-md space-y-6">
-        <header>
-          <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">INOVE Quatai</div>
-          <h1 className="text-2xl font-black text-slate-900">Ola, {user?.nome || user?.login || "Operador"}</h1>
-          <p className="text-sm text-slate-500">
-            Nivel: <strong className="text-slate-700">{nivelLabel}</strong>
-            {accessLoading ? " · carregando permissoes..." : ""}
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-3 py-3">
+      <div className="mx-auto max-w-md space-y-3">
+        <header className="rounded-2xl bg-white border border-slate-200 px-4 py-3 shadow-sm">
+          <h1 className="text-base font-extrabold text-slate-900">
+            Olá, {firstName}
+          </h1>
+          <p className="text-[11px] text-slate-500">
+            Nível: <strong className="text-slate-700">{nivelLabel}</strong>
+            {accessLoading ? " · carregando..." : ""}
           </p>
         </header>
 
-        <p className="text-sm text-slate-500">Escolha um modulo para comecar.</p>
+        <p className="px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+          Escolha um modulo
+        </p>
 
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-2.5">
           {liberacoes.filter((m) => m.liberado).map((m) => (
             <Link
               key={m.key}
               to={m.path}
-              className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${m.gradient} px-5 py-6 text-white shadow-lg transition-transform active:scale-[0.98]`}
+              className={`group relative overflow-hidden rounded-xl bg-gradient-to-br ${m.gradient} px-3 py-3 text-white shadow active:scale-[0.98] transition-transform`}
             >
-              <div className="flex items-start gap-4">
-                <div className="rounded-2xl bg-white/15 p-4 text-3xl">{m.icon}</div>
-                <div className="flex-1">
-                  <div className="text-lg font-black">{m.title}</div>
-                  <div className="mt-1 text-sm text-white/85">{m.description}</div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15 text-lg">
+                  {m.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-black leading-tight">{m.title}</div>
+                  <div className="mt-0.5 text-[11px] text-white/85 line-clamp-2 leading-snug">
+                    {m.description}
+                  </div>
                 </div>
               </div>
             </Link>
@@ -126,11 +137,11 @@ export default function MobileHome() {
         ) : null}
 
         {logout ? (
-          <div className="pt-6">
+          <div className="pt-2">
             <button
               type="button"
               onClick={logout}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm font-black text-rose-700 shadow-sm transition active:scale-[0.99]"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-700 shadow-sm transition active:scale-[0.99]"
             >
               <FaSignOutAlt /> Sair do INOVE
             </button>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import logoInova from "../../assets/logoInovaQuatai.png";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import {
@@ -816,7 +817,40 @@ export default function Login() {
   );
 
   return (
-    <div className="min-h-screen flex bg-slate-50 font-sans">
+    <div
+      className="min-h-screen flex font-sans bg-slate-50"
+      style={{
+        paddingTop: Capacitor.isNativePlatform()
+          ? "calc(env(safe-area-inset-top, 0px) + 24px)"
+          : "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
+    >
+      {/* MOBILE: hero azul ocupando topo + onda branca, sem fundo extra */}
+      <div className="lg:hidden absolute inset-x-0 top-0 -z-0 h-[34vh] overflow-hidden bg-gradient-to-b from-blue-700 to-blue-600">
+        <div className="absolute -top-16 -right-12 h-48 w-48 rounded-full bg-blue-400/40 blur-2xl" />
+        <div className="absolute top-20 -left-10 h-32 w-32 rounded-full bg-blue-300/40 blur-2xl" />
+        <svg
+          className="absolute -bottom-1 left-0 w-full"
+          viewBox="0 0 1440 120"
+          preserveAspectRatio="none"
+          style={{ height: 50 }}
+        >
+          <path
+            d="M0,80 C240,128 480,32 720,48 C960,64 1200,128 1440,80 L1440,120 L0,120 Z"
+            fill="#f8fafc"
+          />
+        </svg>
+        <div className="relative z-10 flex h-full flex-col items-center justify-center px-6 pb-12 text-center text-white">
+          <img
+            src={logoInova}
+            alt="INOVE"
+            className="w-20 h-auto drop-shadow-[0_4px_18px_rgba(0,0,0,0.25)]"
+          />
+          <h1 className="mt-3 text-2xl font-extrabold tracking-tight">Bem-vindo</h1>
+          <p className="mt-0.5 text-xs text-blue-100">Portal de gestão · Grupo CSC</p>
+        </div>
+      </div>
       <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
 
@@ -842,31 +876,23 @@ export default function Login() {
         </div>
       </div>
 
-      <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
-        <div className="w-full max-w-md space-y-6">
-          <div className="lg:hidden text-center">
-            <img
-              src={logoInova}
-              alt="Logo InovaQuatai"
-              className="mx-auto mb-4 w-32 h-auto"
-            />
-          </div>
-
+      <div className="relative z-10 w-full lg:w-7/12 min-h-screen flex items-center justify-center px-4 pt-[34vh] pb-8 lg:min-h-0 lg:px-12 lg:py-12 lg:pt-12 overflow-y-auto">
+        <div className="w-full max-w-md space-y-4 lg:space-y-6 rounded-2xl bg-white p-5 shadow-xl ring-1 ring-slate-100 lg:shadow-none lg:ring-0 lg:bg-transparent lg:p-0">
           <div className="text-center lg:text-left">
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
               {isCadastro ? "Criar nova conta" : "Acesse sua conta"}
             </h1>
 
             {redirectParam && (
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 font-medium">
+              <div className="mt-2 p-2.5 bg-blue-50 border border-blue-100 rounded-lg text-xs lg:text-sm text-blue-700 font-medium">
                 Conectando ao Farol Tatico... (faca login para continuar)
               </div>
             )}
 
-            <p className="mt-2 text-slate-500">
+            <p className="mt-1 text-xs lg:text-base text-slate-500">
               {isCadastro
-                ? "Novos cadastros ficam pendentes ate aprovacao do administrador."
-                : "Entre com seu apelido ou e-mail para continuar."}
+                ? "Cadastros ficam pendentes ate aprovacao do admin."
+                : "Entre com seu apelido ou e-mail."}
             </p>
           </div>
 
@@ -952,7 +978,7 @@ export default function Login() {
                     placeholder="Apelido ou e-mail"
                     value={loginInput}
                     onChange={(event) => setLoginInput(event.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
+                    className="w-full pl-10 pr-4 py-2.5 lg:py-3 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
                   />
                 </div>
 
@@ -964,7 +990,7 @@ export default function Login() {
                     placeholder="Senha"
                     value={senha}
                     onChange={(event) => setSenha(event.target.value)}
-                    className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
+                    className="w-full pl-10 pr-12 py-2.5 lg:py-3 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
                     autoComplete="current-password"
                   />
 
@@ -1081,10 +1107,10 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 active:scale-[0.98] text-white font-bold py-3 lg:py-3.5 text-sm lg:text-base rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70"
             >
               {loading ? (
-                <Loader2 className="animate-spin" size={22} />
+                <Loader2 className="animate-spin" size={20} />
               ) : isCadastro ? (
                 "Solicitar cadastro"
               ) : (
@@ -1095,11 +1121,11 @@ export default function Login() {
           )}
 
           {!forceResetUser && !isCadastro && (
-            <div className="grid gap-3">
+            <div className="grid gap-2 lg:gap-3">
               <button
                 type="button"
                 onClick={() => setShowReset((prev) => !prev)}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 lg:py-3 text-xs lg:text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700"
               >
                 <KeyRound size={16} />
                 Esqueci minha senha

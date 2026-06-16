@@ -1,7 +1,6 @@
 name: Bot Pneus · Snapshot TransNet
 
 on:
-  # Disparado pelo INOVE via dispatch-bot Edge Function (tipo: "pneus").
   workflow_dispatch:
 
 concurrency:
@@ -44,6 +43,8 @@ jobs:
           TRANSNET_URL: ${{ secrets.TRANSNET_URL }}
           TRANSNET_USER: ${{ secrets.TRANSNET_USER }}
           TRANSNET_PASSWORD: ${{ secrets.TRANSNET_PASSWORD }}
+          TRANSNET_EMPRESA: ${{ secrets.TRANSNET_EMPRESA }}
+          TRANSNET_EMPRESA_NOME: ${{ secrets.TRANSNET_EMPRESA_NOME }}
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
           HEADLESS: "true"
         run: python -u bot_pneus.py

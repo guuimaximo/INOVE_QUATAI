@@ -3,16 +3,6 @@
 // Edge Function que dispara um workflow do GitHub Actions sob demanda.
 // Chamada pelo app logo apos inserir um job em suprimentos_bot_jobs,
 // pra nao esperar o cron de 5 min.
-//
-// Espera body JSON:
-//   { tipo: "diaria" | "semanal", data_alvo?: "YYYY-MM-DD" }
-//
-// Env vars que precisam estar configuradas no projeto Supabase
-// (Project Settings -> Edge Functions -> Secrets):
-//   GITHUB_TOKEN        -> Personal Access Token com scope actions:write
-//   GITHUB_REPO_OWNER   -> ex.: guuimaximo
-//   GITHUB_REPO_NAME    -> ex.: INOVE_QUATAI
-//   GITHUB_REF          -> branch/ref (ex.: main ou codex/diesel-organograma-highlights)
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
@@ -37,13 +27,10 @@ function json(body: unknown, status = 200) {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-// Verifica se já existe um job (pendente, processando, OU concluido) pro mesmo lote_id.
-// Se sim, NÃO dispara — esse lote já foi enfileirado/processado.
-// Se não vier lote_id, faz fallback antigo por (data_alvo, tipo_contagem).
 async function jobAtivoExistente(
   tipo: string,
   data_alvo: string,
-  lote_id?: string
+  lote_id?: string,
 ): Promise<any | null> {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return null;
   const url = new URL(`${SUPABASE_URL}/rest/v1/suprimentos_bot_jobs`);
@@ -52,10 +39,8 @@ async function jobAtivoExistente(
   url.searchParams.set("limit", "1");
 
   if (lote_id) {
-    // Lote já tem job em qualquer status -> não dispara de novo
     url.searchParams.set("lote_id", `eq.${lote_id}`);
   } else {
-    // Fallback: tipo+data, só considera ativos
     url.searchParams.set("data_alvo", `eq.${data_alvo}`);
     url.searchParams.set("tipo_contagem", `eq.${tipo}`);
     url.searchParams.set("status", "in.(pendente,processando)");
@@ -103,7 +88,6 @@ serve(async (req: Request) => {
   };
   const workflow = WORKFLOWS[tipo] ?? WORKFLOWS.diaria;
 
-  // SR Aberta / Pneus: sem debounce nem job tracking — dispara direto.
   if (tipo === "sr_aberta" || tipo === "pneus") {
     const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${workflow}/dispatches`;
     const ghResp = await fetch(url, {
@@ -123,7 +107,6 @@ serve(async (req: Request) => {
     return json({ ok: true, workflow, ref: REF });
   }
 
-  // Debounce por lote (se vier) ou por (data, tipo)
   if (!force && (lote_id || data_alvo)) {
     const existente = await jobAtivoExistente(tipo, data_alvo, lote_id);
     if (existente) {
@@ -137,7 +120,6 @@ serve(async (req: Request) => {
     }
   }
 
-  // Cria o job em suprimentos_bot_jobs (pra debounce nas chamadas seguintes funcionar)
   if (SUPABASE_URL && SUPABASE_SERVICE_KEY && data_alvo) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/suprimentos_bot_jobs`, {
@@ -158,7 +140,7 @@ serve(async (req: Request) => {
         }),
       });
     } catch (_) {
-      /* ignora — workflow ainda vai rodar */
+      // ignora -- workflow ainda vai rodar
     }
   }
 
@@ -179,10 +161,7 @@ serve(async (req: Request) => {
 
   if (!ghResp.ok) {
     const text = await ghResp.text();
-    return json(
-      { ok: false, status: ghResp.status, workflow, ref: REF, error: text },
-      502
-    );
+    return json({ ok: false, status: ghResp.status, workflow, ref: REF, error: text }, 502);
   }
   return json({ ok: true, workflow, ref: REF, inputs });
 });

@@ -72,7 +72,7 @@ export function printEtiquetasPneus(rows) {
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/>
 <title>Etiquetas de pneu (${lista.length})</title>
 <style>
-  @page { size: A4; margin: 6mm; }
+  @page { size: A4; margin: 10mm; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html, body { margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; color: #0f172a; }

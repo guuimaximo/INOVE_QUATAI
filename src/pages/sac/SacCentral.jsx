@@ -77,6 +77,7 @@ function SacModal({ row, onClose, onReload }) {
   const [canceladoMotivo, setCanceladoMotivo] = useState(row?.cancelado_motivo || "");
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [tratativaDetalhe, setTratativaDetalhe] = useState(null);
 
   useEffect(() => {
     if (!row?.id) return;
@@ -87,6 +88,18 @@ function SacModal({ row, onClose, onReload }) {
       .order("created_at", { ascending: false })
       .then(({ data }) => setMovs(data || []));
   }, [row?.id]);
+
+  useEffect(() => {
+    if (!row?.tratativa_id) return;
+    supabase
+      .from("tratativas_detalhes")
+      .select("id, created_at, acao_aplicada, observacoes, tratado_por_nome, tratado_por_login")
+      .eq("tratativa_id", row.tratativa_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setTratativaDetalhe(data || null));
+  }, [row?.tratativa_id]);
 
   async function adicionarMovimentacao() {
     if (!descricao.trim()) {
@@ -167,7 +180,7 @@ function SacModal({ row, onClose, onReload }) {
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 <span className={`rounded-full border px-3 py-1 text-xs font-black ${statusTone(row.status)}`}>{row.status}</span>
                 {row.tratativa_id ? (
-                  <Link to={`/tratar/${row.tratativa_id}`} className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-black text-violet-700">
+                  <Link to={`/consultar/${row.tratativa_id}`} className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-black text-violet-700">
                     Tratativa vinculada
                   </Link>
                 ) : null}
@@ -193,6 +206,24 @@ function SacModal({ row, onClose, onReload }) {
               <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Evidencias</h3>
               <div className="mt-3"><FileList urls={row.evidencias_urls} onOpen={setPreview} /></div>
             </section>
+
+            {tratativaDetalhe ? (
+              <section className="rounded-3xl border-2 border-emerald-200 bg-emerald-50/30 p-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black uppercase tracking-wide text-emerald-800">Conclusao da Tratativa</h3>
+                  <span className="text-xs font-semibold text-emerald-700">
+                    {new Date(tratativaDetalhe.created_at).toLocaleString("pt-BR")}
+                  </span>
+                </div>
+                <div className="mt-3 rounded-2xl border border-emerald-200 bg-white p-4">
+                  <div className="text-sm font-bold text-slate-800">{tratativaDetalhe.acao_aplicada || "—"}</div>
+                  <div className="mt-1 text-xs font-semibold text-slate-500">
+                    <span className="font-bold">Quem tratou:</span> {tratativaDetalhe.tratado_por_nome || tratativaDetalhe.tratado_por_login || "—"}
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{tratativaDetalhe.observacoes || "Sem observacoes registradas."}</p>
+                </div>
+              </section>
+            ) : null}
 
             <section className="rounded-3xl border border-slate-200 p-5">
               <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Nova movimentacao</h3>
@@ -234,7 +265,7 @@ function SacModal({ row, onClose, onReload }) {
                 </p>
                 {row.tratativa_id ? (
                   <Link
-                    to={`/tratar/${row.tratativa_id}`}
+                    to={`/consultar/${row.tratativa_id}`}
                     className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-600 px-3 py-2 text-xs font-black text-white hover:bg-amber-700"
                   >
                     Ver tratativa →

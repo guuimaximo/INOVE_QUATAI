@@ -1850,6 +1850,7 @@ function ConsultaModal({
   onClose,
   onEditarTrocaCompleta,
   onEditarAuditoriaCompleta,
+  onBaixarPdfAuditoria,
   onMarcarTransnet,
   onMarcarAuditoriaStatus,
   onMarcarEstoqueStatus,
@@ -2145,7 +2146,7 @@ function ConsultaModal({
         ) : null}
         <button
           type="button"
-          onClick={() => printAuditoriaFicha(row)}
+          onClick={onBaixarPdfAuditoria}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
         >
           <FaDownload />
@@ -2971,6 +2972,27 @@ export default function PCMTrocaPneus() {
   function handleTabChange(tab) {
     setActiveTab(tab);
     setSearchParams({ aba: tab });
+  }
+
+  async function baixarPdfAuditoria() {
+    const row = consulta.row;
+    if (!row) return;
+    let statusByPosicao = {};
+    try {
+      if (row.prefixo) {
+        const { data, error } = await supabase
+          .from("vw_pcm_controle_pneus_central")
+          .select("posicao, status")
+          .eq("prefixo_base", row.prefixo);
+        if (error) throw error;
+        for (const r of data || []) {
+          if (r.posicao && r.status) statusByPosicao[r.posicao] = r.status;
+        }
+      }
+    } catch (e) {
+      console.error("Falha buscando status TransNet para PDF:", e);
+    }
+    printAuditoriaFicha(row, statusByPosicao);
   }
 
   function handleEditarAuditoriaCompleta() {
@@ -4570,11 +4592,13 @@ export default function PCMTrocaPneus() {
 
       {activeTab === TAB_ESTOQUE ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <CardResumo label={`Total · ${cardsEstoque.ficha}`} value={cardsEstoque.total} color="text-slate-900" compact={isNativeShell} />
             <CardResumo label="Novo" value={cardsEstoque.novo} color="text-blue-600" compact={isNativeShell} />
             <CardResumo label="Para uso" value={cardsEstoque.uso} color="text-emerald-600" compact={isNativeShell} />
             <CardResumo label="Recapagem" value={cardsEstoque.recapagem} color="text-amber-600" compact={isNativeShell} />
+          </div>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
             <CardResumo label="Recapado" value={cardsEstoque.recapado} color="text-violet-600" compact={isNativeShell} />
             <CardResumo label="Sucata" value={cardsEstoque.sucata} color="text-rose-600" compact={isNativeShell} />
             <CardResumo label="Conserto" value={cardsEstoque.conserto} color="text-orange-600" compact={isNativeShell} />
@@ -5380,6 +5404,7 @@ export default function PCMTrocaPneus() {
         onClose={closeConsulta}
         onEditarTrocaCompleta={handleEditarTrocaCompleta}
         onEditarAuditoriaCompleta={handleEditarAuditoriaCompleta}
+        onBaixarPdfAuditoria={baixarPdfAuditoria}
         onMarcarTransnet={marcarTransnet}
         onMarcarAuditoriaStatus={marcarAuditoriaStatus}
         onMarcarEstoqueStatus={marcarEstoqueStatus}

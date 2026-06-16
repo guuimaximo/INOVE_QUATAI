@@ -115,7 +115,8 @@ const BASE_STYLES = `
     background: #f8fafc; padding: 4px; text-align: center;
   }
   .photo-card img {
-    width: 100%; height: 90px; object-fit: cover; display: block; border-radius: 2px;
+    width: 100%; height: 140px; object-fit: contain; display: block; border-radius: 2px;
+    background: #ffffff;
   }
   .photo-cap {
     font-size: 8.5px; color: #475569; font-weight: 600; text-transform: uppercase;
@@ -168,21 +169,27 @@ function abrirEPrint(html) {
 }
 
 // ─── Auditoria ───────────────────────────────────────────────
-export function printAuditoriaFicha(row) {
+// statusByPosicao: { [posicao]: "OK" | "SUCATA" | "OUTRO VEICULO" | "ESTOQUE" | "NAO EXISTE" }
+// Quando ausente, cai no conferencia_status do item.
+export function printAuditoriaFicha(row, statusByPosicao = {}) {
   if (!row) return;
   const posicoes = Array.isArray(row.posicoes) ? row.posicoes : [];
   const numero = row.ficha_auditoria || `AP-${String(row.id || "").slice(0, 6)}`;
   const lancado = row.criado_por_nome || row.criado_por_login || "-";
 
   const itensHtml = posicoes
-    .map((p, i) => `<tr>
-      <td>${i + 1}</td>
-      <td><strong>${esc(p.posicao || "-")}</strong></td>
-      <td>${esc(p.numero_fogo || "-")}</td>
-      <td>${esc(p.calibragem || "-")}</td>
-      <td>${esc(p.sulco || "-")}</td>
-      <td>${esc(p.conferencia_status || "Pendente")}</td>
-    </tr>`)
+    .map((p, i) => {
+      const statusTransnet = statusByPosicao[p.posicao] || statusByPosicao[String(p.posicao || "").toUpperCase()] || "";
+      const status = statusTransnet || p.conferencia_status || "Pendente";
+      return `<tr>
+        <td>${i + 1}</td>
+        <td><strong>${esc(p.posicao || "-")}</strong></td>
+        <td>${esc(p.numero_fogo || "-")}</td>
+        <td>${esc(p.calibragem || "-")}</td>
+        <td>${esc(p.sulco || "-")}</td>
+        <td>${esc(status)}</td>
+      </tr>`;
+    })
     .join("");
 
   const fotosPosicoes = posicoes.filter((p) => p.foto_url);
@@ -226,7 +233,7 @@ export function printAuditoriaFicha(row) {
         <th>Número de fogo</th>
         <th style="width:80px">Calibragem</th>
         <th style="width:70px">Sulco</th>
-        <th style="width:100px">Conferência</th>
+        <th style="width:110px">Status (TransNet)</th>
       </tr></thead>
       <tbody>${itensHtml || '<tr><td colspan="6" style="text-align:center;padding:8px">Nenhuma posição.</td></tr>'}</tbody>
     </table>

@@ -10,8 +10,8 @@ export const SAC_STATUS = [
 export const SAC_ORIGENS = ["WhatsApp", "Ligacao", "Email", "Prefeitura", "Presencial", "Redes sociais"];
 
 export const SAC_MOTIVOS = {
-  Reclamacao: ["Intervalo de atendimento", "Cartao", "Conduta do operador", "Direcao perigosa", "Lotacao", "Horario", "Limpeza", "Acessibilidade"],
-  Informacao: ["Itinerario", "Horarios", "Cartao", "Tarifas", "Achados e perdidos", "Envio de curriculo"],
+  Reclamacao: ["Nao atendeu sinal de embarque/desembarque", "Atraso/adiantamento", "Manutencao", "Letreiro", "Intervalo de atendimento", "Cartao", "Conduta do operador", "Direcao perigosa", "Lotacao", "Horario", "Limpeza", "Acessibilidade", "Outros"],
+  Informacao: ["Integracao", "Recadastro", "Loja", "Itinerario", "Horarios", "Cartao", "Tarifas", "Achados e perdidos", "Envio de curriculo", "Outros"],
   Denuncia: ["Evasao", "Conduta indevida", "Seguranca", "Fraude"],
   Elogio: ["Operador", "Linha", "Atendimento", "Conservacao"],
   Sugestao: ["Linha", "Horario", "Ponto", "Aplicativo", "Atendimento"],

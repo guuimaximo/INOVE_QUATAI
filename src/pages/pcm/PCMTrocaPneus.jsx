@@ -1557,26 +1557,60 @@ function EstoqueModal({
   onSalvar,
 }) {
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [fluxoContagem, setFluxoContagem] = useState(false);
+  const [fluxoAtivo, setFluxoAtivo] = useState(false);
+  const [fluxoItem, setFluxoItem] = useState(null);
+  const [fluxoAviso, setFluxoAviso] = useState("");
   const [scanCount, setScanCount] = useState(0);
   if (!open) return null;
 
-  function iniciarFluxoContagem() {
-    setFluxoContagem(true);
+  function iniciarFluxo() {
+    setFluxoAtivo(true);
+    setFluxoItem(null);
+    setFluxoAviso("");
     setScanCount(0);
-    setScannerOpen(true);
+    setTimeout(() => setScannerOpen(true), 150);
   }
 
   function handleScanFluxo(codigo) {
     setScannerOpen(false);
-    onEscanearCodigo?.(codigo);
+    const numeroFogo = String(codigo || "").replace(/\D/g, "");
+    if (!numeroFogo) {
+      setFluxoAviso("Codigo invalido. Tente novamente.");
+      setTimeout(() => setScannerOpen(true), 400);
+      return;
+    }
+    const fogoKey = numeroFogo.padStart(6, "0");
+    const jaTem = form.itens.some((it) => {
+      const n = String(it.numeroFogo || "").replace(/\D/g, "").padStart(6, "0");
+      return n === fogoKey;
+    });
+    if (jaTem) {
+      setFluxoAviso(`Pneu ${fogoKey} ja foi lancado neste estoque.`);
+      setFluxoItem(null);
+      return;
+    }
+    setFluxoAviso("");
+    setFluxoItem({ numeroFogo, fogoKey });
+  }
+
+  function fluxoProximo() {
+    if (!fluxoItem) return;
+    onEscanearCodigo?.(fluxoItem.numeroFogo);
     setScanCount((c) => c + 1);
+    setFluxoItem(null);
+    setFluxoAviso("Pneu adicionado. Aponte o proximo codigo.");
     setTimeout(() => setScannerOpen(true), 300);
   }
 
-  function finalizarFluxoContagem() {
+  function finalizarFluxo() {
+    if (fluxoItem) {
+      onEscanearCodigo?.(fluxoItem.numeroFogo);
+      setScanCount((c) => c + 1);
+    }
     setScannerOpen(false);
-    setFluxoContagem(false);
+    setFluxoAtivo(false);
+    setFluxoItem(null);
+    setFluxoAviso("");
   }
 
   return (
@@ -1621,35 +1655,18 @@ function EstoqueModal({
           <ReadOnlyField label="Lancou" value={form.quemLancou} />
         </div>
 
-        <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
           <div className="text-sm font-bold uppercase tracking-wide text-slate-700">Pneus do lancamento</div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              onClick={onCopiarEstoqueAnterior}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-            >
-              Copiar estoque anterior
-            </button>
+          <div className="grid grid-cols-2 gap-2">
             {onEscanearCodigo ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setScannerOpen(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                >
-                  <FaBarcode />
-                  Escanear código
-                </button>
-                <button
-                  type="button"
-                  onClick={iniciarFluxoContagem}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-700"
-                >
-                  <FaBarcode />
-                  Contagem continua
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={iniciarFluxo}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+              >
+                <FaBarcode />
+                Contagem do estoque
+              </button>
             ) : null}
             <button
               type="button"
@@ -1662,31 +1679,63 @@ function EstoqueModal({
           </div>
         </div>
 
-        {fluxoContagem ? (
-          <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-center">
-            <p className="text-sm font-black text-teal-800">Contagem continua ativa</p>
-            <p className="mt-1 text-xs font-semibold text-teal-600">
-              {scanCount} pneu(s) escaneado(s). A camera reabre automaticamente apos cada leitura.
+        {fluxoAtivo ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Contagem do estoque</p>
+            <p className="mt-1 text-sm font-bold text-emerald-800">
+              {scanCount} pneu(s) adicionado(s)
             </p>
-            <button
-              type="button"
-              onClick={finalizarFluxoContagem}
-              className="mt-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800"
-            >
-              Finalizar contagem
-            </button>
+
+            {fluxoAviso ? (
+              <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                {fluxoAviso}
+              </div>
+            ) : null}
+
+            {fluxoItem ? (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Pneu escaneado</p>
+                <p className="mt-1 text-lg font-black text-slate-900">{fluxoItem.fogoKey}</p>
+              </div>
+            ) : null}
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={finalizarFluxo}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-black text-slate-700"
+              >
+                Finalizar
+              </button>
+              {fluxoItem ? (
+                <button
+                  type="button"
+                  onClick={fluxoProximo}
+                  className="rounded-xl bg-emerald-600 px-3 py-3 text-xs font-black text-white shadow-sm"
+                >
+                  Proximo
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setFluxoAviso(""); setScannerOpen(true); }}
+                  className="rounded-xl bg-emerald-600 px-3 py-3 text-xs font-black text-white shadow-sm"
+                >
+                  Escanear
+                </button>
+              )}
+            </div>
           </div>
         ) : null}
 
         <BarcodeScannerOverlay
           open={scannerOpen}
           subtitle="PCM · Estoque"
-          title={fluxoContagem ? `Pneu ${scanCount + 1} — aponte para o codigo` : "Aponte para o código de barras do pneu"}
+          title={fluxoAtivo ? `Pneu ${scanCount + 1} — aponte para o codigo` : "Aponte para o código de barras do pneu"}
           onClose={() => {
             setScannerOpen(false);
-            if (fluxoContagem) setFluxoContagem(false);
           }}
-          onScan={fluxoContagem ? handleScanFluxo : (codigo) => {
+          onScan={fluxoAtivo ? handleScanFluxo : (codigo) => {
             setScannerOpen(false);
             onEscanearCodigo?.(codigo);
           }}

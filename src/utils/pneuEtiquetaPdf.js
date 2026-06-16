@@ -72,24 +72,27 @@ export function printEtiquetasPneus(rows) {
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/>
 <title>Etiquetas de pneu (${lista.length})</title>
 <style>
-  @page { size: A4; margin: 8mm; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: Arial, sans-serif; color: #0f172a; }
+  @page { size: A4; margin: 6mm; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; color: #0f172a; }
   .sheet {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 6mm;
+    grid-auto-rows: 60mm;
+    gap: 4mm;
   }
   .etiqueta {
     border: 1.5px solid #0f172a;
     border-radius: 6px;
-    padding: 8px 10px;
+    padding: 6px 8px;
     background: #fff;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
     display: flex;
     flex-direction: column;
-    min-height: 70mm;
+    height: 60mm;
+    overflow: hidden;
   }
   .brand {
     font-size: 10px;

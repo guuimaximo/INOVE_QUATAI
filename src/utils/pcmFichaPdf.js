@@ -1,6 +1,12 @@
 // PDF "ficha" para Auditoria e Troca de Pneus.
 // Mesmo visual da ficha de Serviço Externo (SuprimentosServicoExterno.jsx).
+//
+// Web: abre janela e dispara window.print().
+// Capacitor (APK): renderiza HTML offscreen, gera PDF via jsPDF.html(),
+//   salva em Filesystem.Cache e abre o Share sheet do Android pra usuário
+//   "Salvar em Downloads", mandar pelo WhatsApp, etc.
 
+import { Capacitor } from "@capacitor/core";
 import logoInove from "../assets/logoInovaQuatai.png";
 
 function esc(value) {
@@ -156,7 +162,65 @@ function buildHeader(title, subtitle, numero, statusLabel) {
   </header>`;
 }
 
-function abrirEPrint(html) {
+async function gerarPdfCapacitor(html, filename) {
+  // Lazy imports pra nao penalizar o bundle do web.
+  const [{ jsPDF }, { Filesystem, Directory }, { Share }] = await Promise.all([
+    import("jspdf"),
+    import("@capacitor/filesystem"),
+    import("@capacitor/share"),
+  ]);
+
+  // Extrai o conteudo do <body> e injeta num container offscreen no DOM atual.
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const bodyHtml = bodyMatch ? bodyMatch[1] : html;
+  const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+  const styleCss = styleMatch ? styleMatch[1] : "";
+
+  const container = document.createElement("div");
+  container.style.cssText =
+    "position:fixed;left:-99999px;top:0;width:794px;background:#ffffff;color:#0f172a;font-family:Arial,sans-serif;";
+  container.innerHTML = `<style>${styleCss}</style>${bodyHtml}`;
+  document.body.appendChild(container);
+
+  try {
+    const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "p" });
+    await doc.html(container, {
+      margin: [10, 10, 10, 10],
+      autoPaging: "text",
+      width: 190,
+      windowWidth: 794,
+      html2canvas: { scale: 1, useCORS: true, allowTaint: true, logging: false },
+    });
+
+    // Pega o PDF como base64 puro.
+    const base64 = doc.output("datauristring").split(",")[1];
+
+    const written = await Filesystem.writeFile({
+      path: filename,
+      data: base64,
+      directory: Directory.Cache,
+      recursive: true,
+    });
+
+    await Share.share({
+      title: filename,
+      text: filename,
+      url: written.uri,
+      dialogTitle: "Salvar PDF",
+    });
+  } catch (e) {
+    console.error("Falha gerando PDF no Capacitor:", e);
+    alert("Nao consegui gerar o PDF: " + (e?.message || e));
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+function abrirEPrint(html, filename = "ficha.pdf") {
+  if (Capacitor.isNativePlatform()) {
+    gerarPdfCapacitor(html, filename);
+    return;
+  }
   const w = window.open("", "_blank", "width=900,height=700");
   if (!w) {
     alert("Permita pop-ups para imprimir a ficha.");
@@ -267,7 +331,7 @@ export function printAuditoriaFicha(row, statusByPosicao = {}) {
   </div>
 </body></html>`;
 
-  abrirEPrint(html);
+  abrirEPrint(html, `INOVE_Auditoria_${numero}.pdf`);
 }
 
 // ─── Troca de Pneu ───────────────────────────────────────────
@@ -373,5 +437,5 @@ export function printTrocaFicha(row) {
   </div>
 </body></html>`;
 
-  abrirEPrint(html);
+  abrirEPrint(html, `INOVE_Troca_${numero}.pdf`);
 }

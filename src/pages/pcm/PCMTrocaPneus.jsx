@@ -6,6 +6,7 @@ import { App as CapacitorApp } from "@capacitor/app";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { useSearchParams } from "react-router-dom";
 import {
+  FaBarcode,
   FaBell,
   FaCamera,
   FaCheckCircle,
@@ -30,6 +31,7 @@ import { useMobileTabBadges } from "../../context/MobileTabBadgesContext";
 import CampoPrefixo from "../../components/CampoPrefixo";
 import { supabase } from "../../supabase";
 import { printAuditoriaFicha, printTrocaFicha } from "../../utils/pcmFichaPdf";
+import BarcodeScannerOverlay from "../../components/BarcodeScannerOverlay";
 import {
   base64ToFile,
   enqueueSubmission,
@@ -1550,9 +1552,11 @@ function EstoqueModal({
   onAddItem,
   onRemoveItem,
   onCopiarEstoqueAnterior,
+  onEscanearCodigo,
   onSalvarOffline,
   onSalvar,
 }) {
+  const [scannerOpen, setScannerOpen] = useState(false);
   if (!open) return null;
 
   return (
@@ -1607,6 +1611,16 @@ function EstoqueModal({
             >
               Copiar estoque anterior
             </button>
+            {onEscanearCodigo ? (
+              <button
+                type="button"
+                onClick={() => setScannerOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+              >
+                <FaBarcode />
+                Escanear código
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onAddItem}
@@ -1617,6 +1631,17 @@ function EstoqueModal({
             </button>
           </div>
         </div>
+
+        <BarcodeScannerOverlay
+          open={scannerOpen}
+          subtitle="PCM · Estoque"
+          title="Aponte para o código de barras do pneu"
+          onClose={() => setScannerOpen(false)}
+          onScan={(codigo) => {
+            setScannerOpen(false);
+            onEscanearCodigo?.(codigo);
+          }}
+        />
 
         <div className="space-y-4">
           {(() => {
@@ -3349,6 +3374,42 @@ export default function PCMTrocaPneus() {
       ...current,
       itens: [...current.itens, createEstoqueItem()],
     }));
+  }
+
+  function escanearEstoqueItem(codigo) {
+    const numeroFogo = String(codigo || "").replace(/\D/g, "");
+    if (!numeroFogo) return;
+    const fogoKey = numeroFogo.padStart(6, "0");
+
+    // Procura o pneu na base pra trazer marca/situacao.
+    const matchEstoque = estoqueRows.find((row) => {
+      const n = String(row.numero_fogo || row.numero_pneu || "").replace(/\D/g, "").padStart(6, "0");
+      return n === fogoKey;
+    });
+    const marcaSugerida = safeText(matchEstoque?.marca) || "";
+    const situacaoSugerida = safeText(matchEstoque?.situacao) || "";
+
+    setEstoqueForm((current) => {
+      const itens = [...current.itens];
+      // Se ja existe item com esse numero, nao duplica — so foca nele.
+      const jaTem = itens.some((it) => String(it.numeroFogo || "").replace(/\D/g, "") === numeroFogo);
+      if (jaTem) return current;
+
+      // Procura primeiro slot vazio. Se nao tem, adiciona novo.
+      const slotVazio = itens.findIndex((it) => !norm(it.numeroFogo) && !norm(it.marca));
+      const target = {
+        ...createEstoqueItem(),
+        numeroFogo,
+        marca: marcaSugerida || "Michelin",
+        situacao: situacaoSugerida || itens[0]?.situacao || "USADO ( PARA USO )",
+      };
+      if (slotVazio >= 0) {
+        itens[slotVazio] = { ...itens[slotVazio], ...target };
+      } else {
+        itens.push(target);
+      }
+      return { ...current, itens };
+    });
   }
 
   function removeEstoqueItem(index) {
@@ -5482,6 +5543,7 @@ export default function PCMTrocaPneus() {
         onAddItem={addEstoqueItem}
         onRemoveItem={removeEstoqueItem}
         onCopiarEstoqueAnterior={copiarEstoqueAnterior}
+        onEscanearCodigo={escanearEstoqueItem}
         onSalvarOffline={() => salvarEstoque("offline")}
         onSalvar={salvarEstoque}
       />

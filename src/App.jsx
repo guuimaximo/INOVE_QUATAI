@@ -57,6 +57,8 @@ const SOSDashboard = lazy(() => import("./pages/intervencoes/SOSDashboard"));
 const SOS_Resumo = lazy(() => import("./pages/intervencoes/SOS_Resumo"));
 const KMRodado = lazy(() => import("./pages/intervencoes/KMRodado"));
 
+const MonitoramentoCentral = lazy(() => import("./pages/monitoramento/MonitoramentoCentral"));
+
 const PCMInicio = lazy(() => import("./pages/pcm/PCMInicio"));
 const PCMDiario = lazy(() => import("./pages/pcm/PCMDiario"));
 const PCMResumo = lazy(() => import("./pages/pcm/PCMResumo"));
@@ -335,6 +337,9 @@ export default function App() {
               <Route path="/acidentes/imagens" element={<AcidentesImagens />} />
               <Route path="/acidentes/central" element={<AcidentesCentral />} />
               <Route path="/acidentes" element={<Navigate to="/acidentes/central" replace />} />
+
+              {/* Monitoramento Vision */}
+              <Route path="/monitoramento" element={<MonitoramentoCentral />} />
 
               {/* SAC */}
               <Route path="/sac/lancamento" element={<SacLancamento />} />

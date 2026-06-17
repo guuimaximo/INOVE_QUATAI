@@ -961,7 +961,7 @@ function ReadOnlyField({ label, value }) {
   );
 }
 
-function InputField({ label, value, onChange, placeholder = "", inputMode = "text", pattern, type = "text", error = "" }) {
+function InputField({ label, value, onChange, placeholder = "", inputMode = "text", pattern, type = "text", error = "", maxLength }) {
   const hasError = !!error;
   return (
     <label className={`flex flex-col ${IS_NATIVE ? "gap-1" : "gap-2"}`}>
@@ -974,7 +974,12 @@ function InputField({ label, value, onChange, placeholder = "", inputMode = "tex
         placeholder={placeholder}
         inputMode={inputMode}
         pattern={pattern}
-        onChange={(event) => onChange(event.target.value)}
+        maxLength={maxLength}
+        onChange={(event) => {
+          let v = event.target.value;
+          if (maxLength && v.length > maxLength) v = v.slice(0, maxLength);
+          onChange(v);
+        }}
         className={`w-full rounded-lg border bg-white text-slate-800 shadow-sm focus:outline-none focus:ring-2 ${hasError ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : "border-slate-300 focus:border-blue-500 focus:ring-blue-500/20"} ${IS_NATIVE ? "px-3 py-1.5 text-[13px]" : "px-3 py-2 text-sm"}`}
       />
       {hasError ? (
@@ -1245,6 +1250,7 @@ function TrocaModal({
                   onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
+                  maxLength={6}
                 />
                 <PhotoField
                   title="Foto do numero de fogo retirado"
@@ -1264,6 +1270,7 @@ function TrocaModal({
                   onChange={(value) => onFieldChange("numeroFogoColocado", value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
+                  maxLength={6}
                 />
                 <PhotoField
                   title="Foto do numero de fogo colocado"
@@ -1300,6 +1307,7 @@ function TrocaModal({
                   onChange={(value) => onFieldChange("numeroFogoRetirado", value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
+                  maxLength={6}
                 />
                 <PhotoField
                   title="Foto do numero de fogo retirado"
@@ -1365,6 +1373,7 @@ function TrocaModal({
                         onChange={(value) => onFieldChange("numeroFogoOrigemRecebido", value)}
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        maxLength={6}
                       />
                       <PhotoField
                         title="Foto do numero de fogo que entrou no carro de origem"
@@ -1395,6 +1404,7 @@ function TrocaModal({
                       onChange={(value) => onFieldChange("numeroFogoDestinoRetirado", value)}
                       inputMode="numeric"
                       pattern="[0-9]*"
+                      maxLength={6}
                     />
                     <PhotoField
                       title="Foto do numero de fogo do pneu que saiu do destino"
@@ -1506,6 +1516,7 @@ function AuditoriaModal({
                 onChange={(value) => onPosicaoChange(index, "numeroFogo", value)}
                 inputMode="numeric"
                 pattern="[0-9]*"
+                maxLength={6}
               />
 
               <div className="grid grid-cols-2 gap-2 md:gap-4">
@@ -1555,6 +1566,7 @@ function EstoqueModal({
   onEscanearCodigo,
   onSalvarOffline,
   onSalvar,
+  pneusConhecidos,
 }) {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [fluxoAtivo, setFluxoAtivo] = useState(false);
@@ -1573,7 +1585,7 @@ function EstoqueModal({
 
   function handleScanFluxo(codigo) {
     setScannerOpen(false);
-    const numeroFogo = String(codigo || "").replace(/\D/g, "");
+    const numeroFogo = String(codigo || "").replace(/\D/g, "").slice(0, 6);
     if (!numeroFogo) {
       setFluxoAviso("Codigo invalido. Tente novamente.");
       setTimeout(() => setScannerOpen(true), 400);
@@ -1589,7 +1601,8 @@ function EstoqueModal({
       setFluxoItem(null);
       return;
     }
-    setFluxoAviso("");
+    const naoExiste = pneusConhecidos && pneusConhecidos.size > 0 && !pneusConhecidos.has(fogoKey);
+    setFluxoAviso(naoExiste ? `⚠ Pneu ${fogoKey} NAO EXISTE no sistema.` : "");
     setFluxoItem({ numeroFogo, fogoKey });
   }
 
@@ -1760,6 +1773,7 @@ function EstoqueModal({
                   onChange={(value) => onItemChange(index, "numeroFogo", value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
+                  maxLength={6}
                   error={dup ? "Já lançado neste estoque" : ""}
                 />
                 <SelectField
@@ -1876,6 +1890,7 @@ function ConsertoModal({
             onChange={(value) => onFieldChange("numeroFogo", value)}
             inputMode="numeric"
             pattern="[0-9]*"
+            maxLength={6}
           />
           <InputField
             label="Situacao de origem"
@@ -1962,6 +1977,7 @@ function RiscadoModal({
             onChange={(value) => onFieldChange("numeroFogo", value)}
             inputMode="numeric"
             pattern="[0-9]*"
+            maxLength={6}
           />
           <SelectField
             label="Marca"
@@ -2447,6 +2463,7 @@ function ConsultaModal({
                         }
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        maxLength={6}
                       />
                       <InputField
                         label="Marca"
@@ -2674,6 +2691,7 @@ export default function PCMTrocaPneus() {
   const [consertos, setConsertos] = useState([]);
   const [riscados, setRiscados] = useState([]);
   const [prefixos, setPrefixos] = useState([]);
+  const [pneusConhecidos, setPneusConhecidos] = useState(new Set());
   const [alertasAbertos, setAlertasAbertos] = useState([]);
   const [auditoriaPendenciasOpen, setAuditoriaPendenciasOpen] = useState(false);
   const [auditoriaPendenciasAck, setAuditoriaPendenciasAck] = useState("");
@@ -2787,6 +2805,17 @@ export default function PCMTrocaPneus() {
     return data;
   }
 
+  async function carregarPneusConhecidos() {
+    const [ativos, inativos] = await Promise.all([
+      fetchAll(() => supabase.from("pcm_pneus_transnet_ativos").select("numero_fogo")),
+      fetchAll(() => supabase.from("pcm_pneus_transnet_inativos").select("numero_fogo")),
+    ]);
+    const set = new Set();
+    for (const r of ativos) if (r.numero_fogo) set.add(String(r.numero_fogo).replace(/\D/g, "").padStart(6, "0"));
+    for (const r of inativos) if (r.numero_fogo) set.add(String(r.numero_fogo).replace(/\D/g, "").padStart(6, "0"));
+    setPneusConhecidos(set);
+  }
+
   async function aplicar() {
     setLoading(true);
     try {
@@ -2797,6 +2826,7 @@ export default function PCMTrocaPneus() {
         carregarConsertos(),
         carregarRiscados(),
         carregarPrefixos(),
+        carregarPneusConhecidos(),
       ]);
     } catch (error) {
       console.error("Erro ao carregar central de pneus:", error);
@@ -3475,7 +3505,7 @@ export default function PCMTrocaPneus() {
   }
 
   function escanearEstoqueItem(codigo) {
-    const numeroFogo = String(codigo || "").replace(/\D/g, "");
+    const numeroFogo = String(codigo || "").replace(/\D/g, "").slice(0, 6);
     if (!numeroFogo) return;
     const fogoKey = numeroFogo.padStart(6, "0");
 
@@ -3494,7 +3524,7 @@ export default function PCMTrocaPneus() {
       if (jaTem) return current;
 
       // Procura primeiro slot vazio. Se nao tem, adiciona novo.
-      const slotVazio = itens.findIndex((it) => !norm(it.numeroFogo) && !norm(it.marca));
+      const slotVazio = itens.findIndex((it) => !norm(it.numeroFogo));
       const target = {
         ...createEstoqueItem(),
         numeroFogo,
@@ -5644,6 +5674,7 @@ export default function PCMTrocaPneus() {
         onEscanearCodigo={escanearEstoqueItem}
         onSalvarOffline={() => salvarEstoque("offline")}
         onSalvar={salvarEstoque}
+        pneusConhecidos={pneusConhecidos}
       />
 
       <ConsertoModal

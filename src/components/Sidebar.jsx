@@ -784,6 +784,13 @@ export default function Sidebar() {
           </>
         )}
 
+        {canSee("/monitoramento") && (
+          <NavLink to="/monitoramento" className={navLinkClass}>
+            <FaCamera />
+            <span className="whitespace-nowrap">Monitoramento</span>
+          </NavLink>
+        )}
+
         {showConfig && (
           <>
             <hr className="my-3 border-blue-500" />

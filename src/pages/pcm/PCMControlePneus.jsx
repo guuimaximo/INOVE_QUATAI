@@ -203,6 +203,7 @@ export default function PCMControlePneus() {
   const [abaEstoqueAtiva, setAbaEstoqueAtiva] = useState(filtrosIniciais.abaEstoqueAtiva || "fisico");
   const [etiquetaModalOpen, setEtiquetaModalOpen] = useState(false);
   const [etiquetaBusca, setEtiquetaBusca] = useState("");
+  const [etiquetaSelecionadas, setEtiquetaSelecionadas] = useState(new Set());
   const [rowsRaw, setRowsRaw] = useState([]);
   const [trocas, setTrocas] = useState([]);
   const [alocacoes, setAlocacoes] = useState([]);
@@ -1361,7 +1362,7 @@ export default function PCMControlePneus() {
             </button>
             <button
               type="button"
-              onClick={() => { setEtiquetaBusca(""); setEtiquetaModalOpen(true); }}
+              onClick={() => { setEtiquetaBusca(""); setEtiquetaSelecionadas(new Set()); setEtiquetaModalOpen(true); }}
               className="ml-auto inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
             >
               <FaBarcode />
@@ -1626,8 +1627,8 @@ export default function PCMControlePneus() {
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-sm font-semibold text-slate-800">Etiqueta única</div>
-                  <div className="mt-1 text-xs text-slate-500">Busca pelo número de fogo (digite parte do número).</div>
+                  <div className="text-sm font-semibold text-slate-800">Selecionar pneus</div>
+                  <div className="mt-1 text-xs text-slate-500">Busque e marque os pneus desejados (digite parte do número).</div>
                   <input
                     type="text"
                     value={etiquetaBusca}
@@ -1639,32 +1640,51 @@ export default function PCMControlePneus() {
                   {buscaNorm ? (
                     matches.length ? (
                       <ul className="mt-2 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-                        {matches.map((r) => (
-                          <li key={r.key || r.pneu} className="flex items-center justify-between gap-3 px-3 py-2">
-                            <div className="min-w-0 text-xs">
-                              <div className="font-mono font-bold text-slate-900">{r.pneu}</div>
-                              <div className="truncate text-slate-500">
-                                {r.marca || "Sem marca"} · {r.situacao_inove || "-"} · {r.local || ""}
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                printEtiquetasPneus([r]);
-                                setEtiquetaModalOpen(false);
-                              }}
-                              className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                        {matches.map((r) => {
+                          const k = r.key || r.pneu;
+                          const checked = etiquetaSelecionadas.has(k);
+                          return (
+                            <li
+                              key={k}
+                              onClick={() => setEtiquetaSelecionadas((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(k)) next.delete(k); else next.add(k);
+                                return next;
+                              })}
+                              className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-blue-50 ${checked ? "bg-blue-50" : ""}`}
                             >
-                              <FaBarcode /> Gerar
-                            </button>
-                          </li>
-                        ))}
+                              <input type="checkbox" checked={checked} readOnly className="accent-blue-600 shrink-0" />
+                              <div className="min-w-0 text-xs">
+                                <div className="font-mono font-bold text-slate-900">{r.pneu}</div>
+                                <div className="truncate text-slate-500">
+                                  {r.marca || "Sem marca"} · {r.situacao_inove || "-"} · {r.local || ""}
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
                       </ul>
                     ) : (
                       <div className="mt-2 rounded-lg border border-dashed border-slate-300 bg-white p-3 text-center text-xs text-slate-500">
                         Nenhum pneu encontrado com esse número no estoque atual.
                       </div>
                     )
+                  ) : null}
+
+                  {etiquetaSelecionadas.size > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selecionados = fonteRows.filter((r) => etiquetaSelecionadas.has(r.key || r.pneu));
+                        if (selecionados.length) {
+                          printEtiquetasPneus(selecionados);
+                          setEtiquetaModalOpen(false);
+                        }
+                      }}
+                      className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      <FaBarcode /> Gerar {etiquetaSelecionadas.size} etiqueta{etiquetaSelecionadas.size > 1 ? "s" : ""}
+                    </button>
                   ) : null}
                 </div>
               </div>

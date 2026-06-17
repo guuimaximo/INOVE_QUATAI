@@ -86,18 +86,50 @@ export default function CampoPrefixo({
     setOpen(false);
   }
 
+  const [aviso, setAviso] = useState("");
+
   function handleInputChange(nextValue) {
-    setQ(nextValue);
-    onChange?.(nextValue);
+    const truncated = String(nextValue || "").slice(0, 6);
+    setQ(truncated);
+    onChange?.(truncated);
+    setAviso("");
 
     if (onChangeCluster) {
       const row =
-        mapByCodigo.get(String(nextValue || "").trim()) ||
-        mapByCodigo.get(normalizePrefixSearch(nextValue));
+        mapByCodigo.get(String(truncated || "").trim()) ||
+        mapByCodigo.get(normalizePrefixSearch(truncated));
       onChangeCluster(String(row?.cluster || "").trim());
     }
 
-    setOpen(buildMatches(nextValue, todos).length > 0);
+    setOpen(buildMatches(truncated, todos).length > 0);
+  }
+
+  function handleBlur() {
+    setTimeout(() => setOpen(false), 150);
+    const raw = String(q || "").trim();
+    if (!raw || todos.length === 0) { setAviso(""); return; }
+    const exact = mapByCodigo.get(raw) || mapByCodigo.get(normalizePrefixSearch(raw));
+    if (exact) {
+      if (exact.codigo !== raw) {
+        setQ(exact.codigo);
+        onChange?.(exact.codigo);
+        if (onChangeCluster) onChangeCluster(String(exact.cluster || "").trim());
+      }
+      setAviso("");
+      return;
+    }
+    const numOnly = raw.replace(/\D/g, "");
+    if (numOnly) {
+      const match = todos.find((p) => String(p.codigo || "").replace(/\D/g, "") === numOnly);
+      if (match) {
+        setQ(match.codigo);
+        onChange?.(match.codigo);
+        if (onChangeCluster) onChangeCluster(String(match.cluster || "").trim());
+        setAviso("");
+        return;
+      }
+    }
+    setAviso("Veiculo nao encontrado no sistema.");
   }
 
   return (
@@ -105,20 +137,22 @@ export default function CampoPrefixo({
       {label ? <label className="mb-1 block text-sm text-gray-600">{label}</label> : null}
 
       <input
-        className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className={`w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${aviso ? "border-red-400" : "border-gray-300"}`}
         placeholder={errorLoading ? "Erro ao carregar" : placeholder}
         value={q}
+        maxLength={6}
         inputMode={inputMode}
         pattern={pattern}
         onChange={(e) => handleInputChange(e.target.value)}
         onFocus={() => {
           if (q && filtrados.length > 0) setOpen(true);
         }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onBlur={handleBlur}
         required
         disabled={Boolean(errorLoading)}
       />
 
+      {aviso ? <div className="mt-1 text-xs text-red-600">{aviso}</div> : null}
       {errorLoading ? <div className="mt-1 text-xs text-red-600">{errorLoading}</div> : null}
 
       {open && filtrados.length > 0 ? (

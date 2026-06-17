@@ -785,9 +785,13 @@ export default function Sidebar() {
         )}
 
         {canSee("/monitoramento") && (
-          <NavLink to="/monitoramento" className={navLinkClass}>
-            <FaCamera />
-            <span className="whitespace-nowrap">Monitoramento</span>
+          <NavLink
+            to="/monitoramento"
+            className={({ isActive }) =>
+              `w-full flex items-center gap-3 px-3 py-2 rounded-lg mb-2 ${isActive ? "bg-blue-500 shadow-sm" : "hover:bg-blue-600"}`
+            }
+          >
+            <FaCamera /> <span>Monitoramento</span>
           </NavLink>
         )}
 

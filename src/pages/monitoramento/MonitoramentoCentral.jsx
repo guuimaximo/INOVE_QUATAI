@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaCamera,
   FaCheckCircle,
-  FaExclamationTriangle,
   FaQuestionCircle,
   FaSearch,
   FaTimesCircle,
@@ -41,74 +41,12 @@ function ScoreBar({ score }) {
   );
 }
 
-function DetailModal({ row, onClose }) {
-  if (!row) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" onClick={onClose}>
-      <div
-        className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h2 className="text-xl font-black text-slate-900">{row.nome || "Sem nome"}</h2>
-            <p className="text-sm text-slate-500">Registro {row.registro} • {row.data_hora_evento || "—"}</p>
-          </div>
-          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
-        </div>
-
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="text-center">
-            <p className="mb-2 text-xs font-black uppercase tracking-widest text-blue-600">Foto Cadastro</p>
-            {row.img_cadastro_url ? (
-              <img src={row.img_cadastro_url} alt="Cadastro" className="mx-auto max-h-72 rounded-2xl border shadow" />
-            ) : (
-              <div className="flex h-48 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">Sem imagem</div>
-            )}
-          </div>
-          <div className="text-center">
-            <p className="mb-2 text-xs font-black uppercase tracking-widest text-blue-600">Foto Câmera</p>
-            {row.img_camera_url ? (
-              <img src={row.img_camera_url} alt="Câmera" className="mx-auto max-h-72 rounded-2xl border shadow" />
-            ) : (
-              <div className="flex h-48 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">Sem imagem</div>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-          <div><span className="text-xs font-bold text-slate-500">Score</span><ScoreBar score={row.score} /></div>
-          <div><span className="text-xs font-bold text-slate-500">Categoria</span><p className="font-bold">{row.categoria || "—"}</p></div>
-          <div><span className="text-xs font-bold text-slate-500">Confiança</span><p className="font-bold">{row.confianca || "—"}</p></div>
-          <div><span className="text-xs font-bold text-slate-500">Rosto Visível</span><p className="font-bold">{row.rosto_visivel ? "Sim" : "Não"}</p></div>
-        </div>
-
-        <div className="mt-4">
-          <span className="text-xs font-bold text-slate-500">Motivo</span>
-          <p className="mt-1 rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">{row.motivo || "—"}</p>
-        </div>
-
-        <div className="mt-4 flex items-center gap-3">
-          <span className="text-xs font-bold text-slate-500">Ação:</span>
-          <Badge acao={row.acao_prevista} />
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
-          <div><span className="text-xs font-bold text-slate-500">Código Usuário</span><p>{row.codigo_usuario || "—"}</p></div>
-          <div><span className="text-xs font-bold text-slate-500">Código Cartão</span><p>{row.codigo_cartao || "—"}</p></div>
-          <div><span className="text-xs font-bold text-slate-500">Tipo Cartão</span><p>{row.tipo_cartao || "—"}</p></div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function MonitoramentoCentral() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filtroAcao, setFiltroAcao] = useState("");
-  const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -201,7 +139,7 @@ export default function MonitoramentoCentral() {
               <button
                 key={row.id}
                 type="button"
-                onClick={() => setSelected(row)}
+                onClick={() => navigate(`/monitoramento/${row.id}`)}
                 className="flex w-full items-center gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition hover:border-blue-200 hover:shadow-sm"
               >
                 {row.img_cadastro_url ? (
@@ -229,8 +167,6 @@ export default function MonitoramentoCentral() {
           </div>
         )}
       </InoveSection>
-
-      {selected && <DetailModal row={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }

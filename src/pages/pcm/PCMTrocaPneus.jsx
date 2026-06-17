@@ -1395,11 +1395,11 @@ function TrocaModal({
             </div>
 
             <div className="xl:col-span-2">
-              <SectionBlock title="Pneu que estava no carro de destino (vai pro estoque como CONSERTO)">
+              <SectionBlock title="Pneu retirado do carro de destino">
                 <div className="grid grid-cols-1 gap-4">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <InputField
-                      label="Numero de fogo do pneu que estava no destino"
+                      label="Numero de fogo (retirado do destino)"
                       value={form.numeroFogoDestinoRetirado}
                       onChange={(value) => onFieldChange("numeroFogoDestinoRetirado", value)}
                       inputMode="numeric"
@@ -1407,7 +1407,7 @@ function TrocaModal({
                       maxLength={6}
                     />
                     <PhotoField
-                      title="Foto do numero de fogo do pneu que saiu do destino"
+                      title="Foto do numero de fogo retirado do destino"
                       file={form.fotoDestinoRetirado}
                       imageUrl={form.fotoDestinoRetiradoUrl || ""}
                       inputId="troca-destino-retirado"
@@ -2230,11 +2230,11 @@ function ConsultaModal({
             </SectionBlock>
 
             {row.numero_fogo_destino_retirado || row.foto_numero_fogo_destino_retirado_url ? (
-              <SectionBlock title="Pneu que saiu do carro de destino">
+              <SectionBlock title="Pneu retirado do carro de destino">
                 <div className="grid grid-cols-1 gap-4">
                   <DetailRow label="Destino" value={SITUACAO_ESTOQUE_CONSERTO} />
                   {row.numero_fogo_destino_retirado ? (
-                    <DetailRow label="Numero de fogo que saiu do destino" value={row.numero_fogo_destino_retirado} />
+                    <DetailRow label="Numero de fogo (retirado do destino)" value={row.numero_fogo_destino_retirado} />
                   ) : null}
                   {row.foto_numero_fogo_destino_retirado_url ? (
                     <ZoomableImage
@@ -4039,7 +4039,7 @@ export default function PCMTrocaPneus() {
         (!trocaForm.fotoDestinoRetirado && !trocaForm.fotoDestinoRetiradoUrl)
       )
     ) {
-      alert("Informe o numero de fogo e a foto do pneu que estava no carro de destino.");
+      alert("Informe o numero de fogo e a foto do pneu retirado do carro de destino.");
       return;
     }
 

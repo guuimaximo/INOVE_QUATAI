@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaCamera,
   FaCheckCircle,
   FaChartBar,
   FaCode,
+  FaCalendarAlt,
   FaList,
   FaQuestionCircle,
   FaSearch,
@@ -45,6 +46,66 @@ function ScoreBar({ score }) {
       <span className="text-sm font-black text-slate-700">{score}</span>
     </div>
   );
+}
+
+function parseEventoDate(row) {
+  const raw = String(row?.data_hora_evento || "").trim();
+  const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  if (row?.created_at) {
+    const d = new Date(row.created_at);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  return "";
+}
+
+function formatDateBR(isoDate) {
+  if (!isoDate) return "-";
+  const match = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return isoDate;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function getPrefixo(row) {
+  return String(row?.prefixo || row?.codigo_cartao || row?.codigo_usuario || "SEM_PREFIXO").trim() || "SEM_PREFIXO";
+}
+
+function getCameraIssue(row) {
+  const arr = Array.isArray(row?.problemas_enquadramento_camera) ? row.problemas_enquadramento_camera : [];
+  const tokens = arr.map((item) => String(item || "").toUpperCase());
+  const texto = `${String(row?.camera_enquadramento || "")} ${String(row?.camera_recomendacao || row?.recomendacao_camera || "")}`.toUpperCase();
+  const hasExact = (values) => tokens.some((t) => values.includes(t)) || values.some((v) => texto.includes(v));
+
+  if (hasExact(["ROSTO_MUITO_BAIXO", "MUITO_BAIXO", "ROSTO_BAIXO", "BAIXO", "AJUSTAR_PARA_BAIXO", "PARA BAIXO"])) {
+    return "muito_acima";
+  }
+  if (hasExact(["ROSTO_MUITO_ALTO", "MUITO_ALTO", "ROSTO_ALTO", "ALTO", "AJUSTAR_PARA_CIMA", "PARA CIMA"])) {
+    return "muito_abaixo";
+  }
+  if (hasExact(["CORTADO", "INADEQUADO", "DISTANTE", "PEQUENO"])) {
+    return "outro";
+  }
+  return "";
+}
+
+function IssuePill({ issue }) {
+  const tone =
+    issue === "muito_acima"
+      ? "bg-rose-50 text-rose-700 border-rose-200"
+      : issue === "muito_abaixo"
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : issue === "outro"
+          ? "bg-slate-100 text-slate-600 border-slate-200"
+          : "bg-emerald-50 text-emerald-700 border-emerald-200";
+  const label =
+    issue === "muito_acima"
+      ? "Camera muito acima"
+      : issue === "muito_abaixo"
+        ? "Camera muito abaixo"
+        : issue === "outro"
+          ? "Outros ajustes"
+          : "Sem ajuste";
+  return <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black ${tone}`}>{label}</span>;
 }
 
 function TabButton({ active, onClick, icon, label }) {
@@ -184,6 +245,182 @@ function DashboardTab({ rows }) {
   );
 }
 
+function InsightsTab({ rows }) {
+  const [filtroDia, setFiltroDia] = useState("");
+  const [topN, setTopN] = useState(15);
+
+  const rowsDoDia = useMemo(() => {
+    if (!filtroDia) return rows;
+    return rows.filter((r) => parseEventoDate(r) === filtroDia);
+  }, [rows, filtroDia]);
+
+  const stats = useMemo(() => {
+    const total = rowsDoDia.length;
+    const porPrefixo = new Map();
+    const porPrefixoProblema = new Map();
+    let totalAcima = 0;
+    let totalAbaixo = 0;
+    let totalOutros = 0;
+
+    rowsDoDia.forEach((row) => {
+      const prefixo = getPrefixo(row);
+      const issue = getCameraIssue(row);
+      const atual = porPrefixo.get(prefixo) || {
+        prefixo,
+        total: 0,
+        muito_acima: 0,
+        muito_abaixo: 0,
+        outro: 0,
+      };
+
+      atual.total += 1;
+      if (issue === "muito_acima") {
+        atual.muito_acima += 1;
+        totalAcima += 1;
+      } else if (issue === "muito_abaixo") {
+        atual.muito_abaixo += 1;
+        totalAbaixo += 1;
+      } else if (issue === "outro") {
+        atual.outro += 1;
+        totalOutros += 1;
+      }
+      porPrefixo.set(prefixo, atual);
+
+      const chaveProblema = `${prefixo}::${issue || "sem_ajuste"}`;
+      porPrefixoProblema.set(chaveProblema, (porPrefixoProblema.get(chaveProblema) || 0) + 1);
+    });
+
+    const ranking = Array.from(porPrefixo.values()).sort((a, b) => {
+      const dif = (b.muito_acima + b.muito_abaixo + b.outro) - (a.muito_acima + a.muito_abaixo + a.outro);
+      if (dif !== 0) return dif;
+      return b.total - a.total;
+    });
+
+    const carrosComAjuste = ranking.filter((item) => item.muito_acima || item.muito_abaixo || item.outro);
+    return {
+      total,
+      totalAcima,
+      totalAbaixo,
+      totalOutros,
+      ranking,
+      carrosComAjuste,
+      porPrefixoProblema,
+    };
+  }, [rowsDoDia]);
+
+  const maxRows = Math.max(1, Number(topN) || 15);
+  const rankingVisivel = stats.ranking.slice(0, maxRows);
+  const totalAjustes = stats.totalAcima + stats.totalAbaixo + stats.totalOutros;
+
+  return (
+    <div className="space-y-5">
+      <InoveSection>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Insights por Prefixo</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Veja quais carros concentram cameras muito acima, muito abaixo ou outros ajustes de enquadramento.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <label className="text-xs font-bold uppercase text-slate-500">
+              <span className="mb-1 block">Dia do evento</span>
+              <input
+                type="date"
+                value={filtroDia}
+                onChange={(e) => setFiltroDia(e.target.value)}
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none"
+              />
+            </label>
+            <label className="text-xs font-bold uppercase text-slate-500">
+              <span className="mb-1 block">Top carros</span>
+              <select
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value) || 15)}
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none"
+              >
+                {[10, 15, 20, 30].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      </InoveSection>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <InoveStatCard title="Total do dia" value={stats.total} icon={<FaCalendarAlt />} tone="blue" />
+        <InoveStatCard title="Camera muito acima" value={stats.totalAcima} icon={<FaTimesCircle />} tone="rose" />
+        <InoveStatCard title="Camera muito abaixo" value={stats.totalAbaixo} icon={<FaWrench />} tone="amber" />
+        <InoveStatCard title="Outros ajustes" value={stats.totalOutros} icon={<FaCamera />} tone="slate" />
+      </div>
+
+      <InoveSection>
+        <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-500">
+          Carros com mais ocorrencias de ajuste
+        </h3>
+        {rankingVisivel.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-400">Nenhum dado para o filtro selecionado.</p>
+        ) : (
+          <div className="space-y-2">
+            {rankingVisivel.map((item) => {
+              const ajuste = item.muito_acima + item.muito_abaixo + item.outro;
+              const pctDoDia = stats.total ? Math.round((item.total / stats.total) * 100) : 0;
+              const pctAjuste = stats.total ? Math.round((ajuste / stats.total) * 100) : 0;
+              const dominante =
+                item.muito_acima >= item.muito_abaixo && item.muito_acima >= item.outro
+                  ? "muito_acima"
+                  : item.muito_abaixo >= item.outro
+                    ? "muito_abaixo"
+                    : "outro";
+
+              return (
+                <div key={item.prefixo} className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-lg font-black text-slate-900">{item.prefixo}</p>
+                      <p className="text-xs text-slate-500">
+                        {item.total} imagens no dia{filtroDia ? ` ${formatDateBR(filtroDia)}` : ""} | {pctDoDia}% do total do dia
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <IssuePill issue={dominante} />
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
+                        Ajustes: {ajuste} ({pctAjuste}%)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+                    <div className="rounded-xl bg-rose-50 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase text-rose-600">Muito acima</p>
+                      <p className="text-xl font-black text-rose-700">{item.muito_acima}</p>
+                    </div>
+                    <div className="rounded-xl bg-amber-50 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase text-amber-600">Muito abaixo</p>
+                      <p className="text-xl font-black text-amber-700">{item.muito_abaixo}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase text-slate-500">Outros</p>
+                      <p className="text-xl font-black text-slate-700">{item.outro}</p>
+                    </div>
+                    <div className="rounded-xl bg-blue-50 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase text-blue-600">Total</p>
+                      <p className="text-xl font-black text-blue-700">{item.total}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </InoveSection>
+    </div>
+  );
+}
+
 function PromptTab() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(true);
@@ -224,16 +461,74 @@ export default function MonitoramentoCentral() {
   const [selected, setSelected] = useState(new Set());
   const [tab, setTab] = useState("laudos");
   const [deleting, setDeleting] = useState(false);
+  const realtimeChannelRef = useRef(null);
+  const reloadTimerRef = useRef(null);
 
   const fetchRows = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("vision_inspecoes").select("*").order("created_at", { ascending: false }).limit(1000);
-    if (!error && data) setRows(data);
+    const pageSize = 500;
+    let from = 0;
+    let allRows = [];
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from("vision_inspecoes")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        console.error("Erro ao carregar vision_inspecoes:", error);
+        break;
+      }
+
+      const chunk = data || [];
+      allRows = allRows.concat(chunk);
+      hasMore = chunk.length === pageSize;
+      from += pageSize;
+    }
+
+    setRows(allRows);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchRows();
+  }, [fetchRows]);
+
+  useEffect(() => {
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
+    }
+
+    const scheduleReload = () => {
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+      reloadTimerRef.current = setTimeout(() => {
+        fetchRows();
+      }, 700);
+    };
+
+    realtimeChannelRef.current = supabase
+      .channel("vision-inspecoes-monitoramento")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "vision_inspecoes" },
+        () => scheduleReload()
+      )
+      .subscribe();
+
+    return () => {
+      if (reloadTimerRef.current) {
+        clearTimeout(reloadTimerRef.current);
+        reloadTimerRef.current = null;
+      }
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
+    };
   }, [fetchRows]);
 
   const filtered = useMemo(() => {
@@ -317,11 +612,13 @@ export default function MonitoramentoCentral() {
 
       <div className="flex gap-2">
         <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<FaChartBar />} label="Dashboard" />
+        <TabButton active={tab === "insights"} onClick={() => setTab("insights")} icon={<FaCalendarAlt />} label="Insights Prefixo" />
         <TabButton active={tab === "laudos"} onClick={() => setTab("laudos")} icon={<FaList />} label="Laudos" />
         <TabButton active={tab === "prompt"} onClick={() => setTab("prompt")} icon={<FaCode />} label="Prompt Gemini" />
       </div>
 
       {tab === "dashboard" && <DashboardTab rows={rows} />}
+      {tab === "insights" && <InsightsTab rows={rows} />}
       {tab === "prompt" && <PromptTab />}
 
       {tab === "laudos" && (

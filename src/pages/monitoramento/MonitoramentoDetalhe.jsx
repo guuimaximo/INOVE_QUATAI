@@ -183,6 +183,23 @@ function VarianteLista({ variantes }) {
   );
 }
 
+function TextoCorto({ value, lines = 3 }) {
+  if (!value) return <span className="text-sm text-slate-400">-</span>;
+  return (
+    <p
+      className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm leading-relaxed text-slate-700"
+      style={{
+        display: "-webkit-box",
+        WebkitLineClamp: lines,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden",
+      }}
+    >
+      {value}
+    </p>
+  );
+}
+
 export default function MonitoramentoDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -227,7 +244,7 @@ export default function MonitoramentoDetalhe() {
       <InovePageHeader
         eyebrow="Laudo de Inspecao"
         title={row.nome || "Sem nome"}
-        description={`Registro ${row.registro} - ${row.data_hora_evento || "-"}`}
+        description={`Registro ${row.registro} - ${row.data_hora_evento || "-"}${row.prefixo ? ` | Prefixo ${row.prefixo}` : ""}`}
         icon={<FaExclamationTriangle className="text-xl" />}
         tone="blue"
         actions={<Badge acao={row.acao_prevista} />}
@@ -251,6 +268,16 @@ export default function MonitoramentoDetalhe() {
           )}
         </div>
       </div>
+
+      <InoveSection>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Ponto de Controle</h2>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <InfoField label="Prefixo" value={row.prefixo} />
+          <InfoField label="Codigo Usuario" value={row.codigo_usuario} />
+          <InfoField label="Codigo Cartao" value={row.codigo_cartao} />
+          <InfoField label="Tipo Cartao" value={row.tipo_cartao} />
+        </div>
+      </InoveSection>
 
       <InoveSection>
         <h2 className="mb-4 text-lg font-black text-slate-900">Resultado da Analise</h2>
@@ -286,19 +313,15 @@ export default function MonitoramentoDetalhe() {
         <div className="grid gap-4">
           <div>
             <p className="text-xs font-bold uppercase text-slate-500">Descricao Profissional</p>
-            <p className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">{row.descricao_profissional || "-"}</p>
+            <TextoCorto value={row.descricao_profissional} lines={3} />
           </div>
           <div>
             <p className="text-xs font-bold uppercase text-slate-500">Motivo</p>
-            <p className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">{row.motivo || "-"}</p>
+            <TextoCorto value={row.motivo} lines={2} />
           </div>
           <div>
             <p className="text-xs font-bold uppercase text-slate-500">Motivo Face Mesh</p>
-            <p className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">{row.motivo_face_mesh || "-"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Motivo Biometrico</p>
-            <p className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">{row.motivo_biometrico || "-"}</p>
+            <TextoCorto value={row.motivo_face_mesh} lines={2} />
           </div>
           <JsonList label="Indicios de Semelhanca" items={row.indicios_semelhanca} />
           <JsonList label="Indicios de Diferenca" items={row.indicios_diferenca} />
@@ -321,26 +344,14 @@ export default function MonitoramentoDetalhe() {
       </InoveSection>
 
       <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">Biometria InsightFace</h2>
-        <BiometriaDetalhes detalhes={row.biometria_detalhes} />
-        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3">
-          <InfoField label="Variante Face Mesh" value={row.variante_face_mesh} />
-          <InfoField label="Variante Prioritaria" value={row.variante_face_mesh_prioritaria} />
-        </div>
-        <div className="mt-4">
-          <VarianteLista variantes={row.variantes_face_mesh_testadas} />
-        </div>
-      </InoveSection>
-
-      <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">Avaliacao da Camera</h2>
+        <h2 className="mb-4 text-lg font-black text-slate-900">camera_</h2>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <InfoField label="Enquadramento" value={row.camera_enquadramento} />
-          <InfoField label="Area Rosto (%)" value={row.camera_area_rosto_percentual} />
-          <InfoField label="Posicao Rosto" value={row.camera_posicao_rosto} />
-          <InfoField label="Avaliacao" value={row.avaliacao_camera} full />
-          <InfoField label="Recomendacao Camera" value={row.camera_recomendacao || row.recomendacao_camera} full />
-          <JsonList label="Problemas Enquadramento" items={row.problemas_enquadramento_camera} />
+          <InfoField label="camera_enquadramento" value={row.camera_enquadramento} />
+          <InfoField label="camera_area_rosto_percentual" value={row.camera_area_rosto_percentual} />
+          <InfoField label="camera_posicao_rosto" value={row.camera_posicao_rosto} />
+          <InfoField label="camera_avaliacao" value={row.avaliacao_camera} full />
+          <InfoField label="camera_recomendacao" value={row.camera_recomendacao || row.recomendacao_camera} full />
+          <JsonList label="camera_problemas_enquadramento" items={row.problemas_enquadramento_camera} />
         </div>
       </InoveSection>
 

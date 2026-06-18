@@ -6,20 +6,21 @@ import {
   FaExclamationTriangle,
   FaQuestionCircle,
   FaTimesCircle,
+  FaTrash,
   FaWrench,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
-import { InovePageHeader } from "../../components/InovePage";
+import { InovePageHeader, InoveSection } from "../../components/InovePage";
 
 const ACAO_TONE = {
   "Confirmar Similaridade": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-300", icon: <FaCheckCircle /> },
   "Confirmar Irregularidade": { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-300", icon: <FaTimesCircle /> },
   "Confirmar Inconclusivo": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-300", icon: <FaQuestionCircle /> },
-  "Inconsistência Técnica": { bg: "bg-slate-100", text: "text-slate-600", border: "border-slate-300", icon: <FaWrench /> },
+  "Inconsistencia Tecnica": { bg: "bg-slate-100", text: "text-slate-600", border: "border-slate-300", icon: <FaWrench /> },
 };
 
 function Badge({ acao }) {
-  const t = ACAO_TONE[acao] || ACAO_TONE["Inconsistência Técnica"];
+  const t = ACAO_TONE[acao] || ACAO_TONE["Inconsistencia Tecnica"];
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-black ${t.bg} ${t.text} ${t.border}`}>
       {t.icon} {acao}
@@ -27,16 +28,132 @@ function Badge({ acao }) {
   );
 }
 
-function ScoreBar({ score }) {
-  if (score == null || score < 0) return <span className="text-sm text-slate-400">—</span>;
+function ScoreBar({ score, label }) {
+  if (score == null || score < 0) return <span className="text-sm text-slate-400">-</span>;
   const pct = Math.min(score, 100);
   const color = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-rose-500";
   return (
-    <div className="flex items-center gap-3">
-      <div className="h-3 w-32 overflow-hidden rounded-full bg-slate-200">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+    <div>
+      {label && <p className="mb-1 text-xs font-bold uppercase text-slate-500">{label}</p>}
+      <div className="flex items-center gap-3">
+        <div className="h-3 w-32 overflow-hidden rounded-full bg-slate-200">
+          <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-2xl font-black text-slate-700">{score}</span>
       </div>
-      <span className="text-2xl font-black text-slate-700">{score}</span>
+    </div>
+  );
+}
+
+function InfoField({ label, value, full }) {
+  return (
+    <div className={full ? "col-span-full" : ""}>
+      <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-800">{value || "-"}</p>
+    </div>
+  );
+}
+
+function JsonList({ label, items }) {
+  if (!items || !Array.isArray(items) || items.length === 0) return null;
+  return (
+    <div className="col-span-full">
+      <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
+      <ul className="mt-1 list-inside list-disc space-y-0.5">
+        {items.map((item, i) => (
+          <li key={i} className="text-sm text-slate-700">
+            {String(item)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const MAPA_STATUS_COLOR = {
+  COMPATIVEL: "bg-emerald-100 text-emerald-700",
+  PARCIALMENTE_COMPATIVEL: "bg-amber-100 text-amber-700",
+  INCOMPATIVEL: "bg-rose-100 text-rose-700",
+  NAO_VISIVEL: "bg-slate-100 text-slate-500",
+};
+
+function MapaFacialVisual({ mapa }) {
+  if (!mapa || typeof mapa !== "object") return null;
+  const entries = Object.entries(mapa);
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="col-span-full">
+      <p className="mb-2 text-xs font-bold uppercase text-slate-500">Mapa Facial Visual</p>
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 lg:grid-cols-4">
+        {entries.map(([key, val]) => {
+          const status = String(val).toUpperCase().replace(/ /g, "_");
+          const colors = MAPA_STATUS_COLOR[status] || MAPA_STATUS_COLOR.NAO_VISIVEL;
+          return (
+            <div key={key} className={`rounded-xl px-3 py-2 ${colors}`}>
+              <p className="text-[10px] font-bold uppercase">{key.replace(/_/g, " ")}</p>
+              <p className="text-xs font-black">{String(val)}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MapaFacialTecnico({ mapa }) {
+  if (!mapa || typeof mapa !== "object") return null;
+  const entries = Object.entries(mapa);
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="col-span-full">
+      <p className="mb-2 text-xs font-bold uppercase text-slate-500">Mapa Facial Tecnico (Face Mesh)</p>
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3">
+        {entries.map(([key, val]) => {
+          const status = val?.status || "NAO_VISIVEL";
+          const colors = MAPA_STATUS_COLOR[status] || MAPA_STATUS_COLOR.NAO_VISIVEL;
+          return (
+            <div key={key} className={`rounded-xl px-3 py-2 ${colors}`}>
+              <p className="text-[10px] font-bold uppercase">{key.replace(/_/g, " ")}</p>
+              <p className="text-xs font-black">{status}</p>
+              {val?.distancia != null && <p className="text-[10px]">dist: {val.distancia}</p>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BiometriaDetalhes({ detalhes }) {
+  if (!detalhes || !Array.isArray(detalhes) || detalhes.length === 0) return null;
+
+  return (
+    <div className="col-span-full">
+      <p className="mb-2 text-xs font-bold uppercase text-slate-500">Detalhes Biometria por Variante</p>
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-3 py-2 font-bold text-slate-600">Variante</th>
+              <th className="px-3 py-2 font-bold text-slate-600">Faces</th>
+              <th className="px-3 py-2 font-bold text-slate-600">Similaridade</th>
+              <th className="px-3 py-2 font-bold text-slate-600">Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {detalhes.map((d, i) => (
+              <tr key={i} className="border-t border-slate-100">
+                <td className="px-3 py-2 font-semibold">{d.variante}</td>
+                <td className="px-3 py-2">{d.faces_detectadas}</td>
+                <td className="px-3 py-2">{d.melhor_similaridade ?? "-"}</td>
+                <td className="px-3 py-2 font-black">{d.score ?? "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -50,18 +167,20 @@ export default function MonitoramentoDetalhe() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("vision_inspecoes")
-        .select("*")
-        .eq("id", id)
-        .single();
+      const { data, error } = await supabase.from("vision_inspecoes").select("*").eq("id", id).single();
       if (!error && data) setRow(data);
       setLoading(false);
     })();
   }, [id]);
 
+  const excluir = async () => {
+    if (!window.confirm("Excluir este laudo?")) return;
+    await supabase.from("vision_inspecoes").delete().eq("id", id);
+    navigate("/monitoramento");
+  };
+
   if (loading) return <div className="p-8 text-center text-slate-400">Carregando...</div>;
-  if (!row) return <div className="p-8 text-center text-slate-400">Laudo não encontrado.</div>;
+  if (!row) return <div className="p-8 text-center text-slate-400">Laudo nao encontrado.</div>;
 
   return (
     <div className="space-y-5 p-4 md:p-6">
@@ -72,12 +191,18 @@ export default function MonitoramentoDetalhe() {
         >
           <FaArrowLeft /> Voltar
         </button>
+        <button
+          onClick={excluir}
+          className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-bold text-rose-600 shadow-sm transition hover:bg-rose-50"
+        >
+          <FaTrash /> Excluir
+        </button>
       </div>
 
       <InovePageHeader
-        eyebrow="Laudo de Inspeção"
+        eyebrow="Laudo de Inspecao"
         title={row.nome || "Sem nome"}
-        description={`Registro ${row.registro} • ${row.data_hora_evento || "—"}`}
+        description={`Registro ${row.registro} - ${row.data_hora_evento || "-"}`}
         icon={<FaExclamationTriangle className="text-xl" />}
         tone="blue"
         actions={<Badge acao={row.acao_prevista} />}
@@ -93,71 +218,105 @@ export default function MonitoramentoDetalhe() {
           )}
         </div>
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="mb-3 text-center text-xs font-black uppercase tracking-widest text-blue-600">Foto Câmera</p>
+          <p className="mb-3 text-center text-xs font-black uppercase tracking-widest text-blue-600">Foto Camera</p>
           {row.img_camera_url ? (
-            <img src={row.img_camera_url} alt="Câmera" className="mx-auto max-h-96 rounded-2xl border shadow" />
+            <img src={row.img_camera_url} alt="Camera" className="mx-auto max-h-96 rounded-2xl border shadow" />
           ) : (
             <div className="flex h-64 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">Sem imagem</div>
           )}
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 text-lg font-black text-slate-900">Resultado da Análise</h2>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <InoveSection>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Resultado da Analise</h2>
+        <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
+          <ScoreBar score={row.score} label="Score Final" />
+          <ScoreBar score={row.score_biometrico} label="Score Biometrico" />
+          <ScoreBar score={row.score_face_mesh} label="Face Mesh" />
           <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Score</p>
-            <div className="mt-1"><ScoreBar score={row.score} /></div>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Categoria</p>
-            <p className="mt-1 text-sm font-black text-slate-800">{row.categoria || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Confiança</p>
-            <p className="mt-1 text-sm font-black text-slate-800">{row.confianca || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Rosto Visível</p>
-            <p className="mt-1 text-sm font-black text-slate-800">{row.rosto_visivel ? "Sim" : "Não"}</p>
+            <p className="text-xs font-bold uppercase text-slate-500">ArcFace</p>
+            <p className="mt-1 text-2xl font-black text-slate-700">{row.similaridade_arcface ?? "-"}</p>
           </div>
         </div>
 
-        <div className="mt-4">
-          <p className="text-xs font-bold uppercase text-slate-500">Motivo</p>
-          <p className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">{row.motivo || "—"}</p>
+        <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
+          <InfoField label="Categoria" value={row.categoria} />
+          <InfoField label="Confianca" value={row.confianca} />
+          <InfoField label="Rosto Visivel" value={row.rosto_visivel ? "Sim" : "Nao"} />
+          <InfoField label="Quantidade Rostos Camera" value={row.quantidade_rostos_camera} />
+          <InfoField label="Qualidade Camera" value={row.qualidade_imagem_camera} />
+          <InfoField label="Categoria Biometrica" value={row.categoria_biometrica} />
+          <InfoField label="Confianca Biometrica" value={row.confianca_biometrica} />
+          <InfoField label="Decisao Biometrica" value={row.decisao_biometrica} />
+          <InfoField label="Melhor Variante" value={row.melhor_variante_biometrica} />
+          <InfoField label="Recomendacao Operacional" value={row.recomendacao_operacional} />
+          <InfoField label="Pontos Compativeis" value={row.pontos_compativeis} />
+          <InfoField label="Pontos Divergentes" value={row.pontos_divergentes} />
+          <InfoField label="Pontos Nao Visiveis" value={row.pontos_nao_visiveis} />
         </div>
-      </div>
+      </InoveSection>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 text-lg font-black text-slate-900">Dados do Cartão</h2>
+      <InoveSection>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Laudo Pericial</h2>
+        <div className="grid gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase text-slate-500">Descricao Profissional</p>
+            <p className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">{row.descricao_profissional || "-"}</p>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase text-slate-500">Motivo</p>
+            <p className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">{row.motivo || "-"}</p>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase text-slate-500">Motivo Face Mesh</p>
+            <p className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">{row.motivo_face_mesh || "-"}</p>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase text-slate-500">Motivo Biometrico</p>
+            <p className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">{row.motivo_biometrico || "-"}</p>
+          </div>
+          <JsonList label="Indicios de Semelhanca" items={row.indicios_semelhanca} />
+          <JsonList label="Indicios de Diferenca" items={row.indicios_diferenca} />
+          <JsonList label="Limitacoes" items={row.limitacoes} />
+        </div>
+      </InoveSection>
+
+      <InoveSection>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Mapa Facial</h2>
+        <div className="grid gap-4">
+          <MapaFacialVisual mapa={row.mapa_facial_visual} />
+          <MapaFacialTecnico mapa={row.mapa_facial_tecnico} />
+        </div>
+      </InoveSection>
+
+      <InoveSection>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Biometria InsightFace</h2>
+        <BiometriaDetalhes detalhes={row.biometria_detalhes} />
+      </InoveSection>
+
+      <InoveSection>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Avaliacao da Camera</h2>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Código Usuário</p>
-            <p className="mt-1 text-sm font-semibold">{row.codigo_usuario || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Código Cartão</p>
-            <p className="mt-1 text-sm font-semibold">{row.codigo_cartao || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Tipo Cartão</p>
-            <p className="mt-1 text-sm font-semibold">{row.tipo_cartao || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Status Cartão</p>
-            <p className="mt-1 text-sm font-semibold">{row.status_cartao || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Status Inspeção</p>
-            <p className="mt-1 text-sm font-semibold">{row.status_inspecao || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Data/Hora Evento</p>
-            <p className="mt-1 text-sm font-semibold">{row.data_hora_evento || "—"}</p>
-          </div>
+          <InfoField label="Enquadramento" value={row.camera_enquadramento} />
+          <InfoField label="Area Rosto (%)" value={row.camera_area_rosto_percentual} />
+          <InfoField label="Posicao Rosto" value={row.camera_posicao_rosto} />
+          <InfoField label="Avaliacao" value={row.avaliacao_camera} full />
+          <InfoField label="Recomendacao Camera" value={row.camera_recomendacao || row.recomendacao_camera} full />
+          <JsonList label="Problemas Enquadramento" items={row.problemas_enquadramento_camera} />
         </div>
-      </div>
+      </InoveSection>
+
+      <InoveSection>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Dados do Cartao</h2>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <InfoField label="Codigo Usuario" value={row.codigo_usuario} />
+          <InfoField label="Codigo Cartao" value={row.codigo_cartao} />
+          <InfoField label="Tipo Cartao" value={row.tipo_cartao} />
+          <InfoField label="Status Cartao" value={row.status_cartao} />
+          <InfoField label="Status Inspecao" value={row.status_inspecao} />
+          <InfoField label="Data/Hora Evento" value={row.data_hora_evento} />
+        </div>
+      </InoveSection>
     </div>
   );
 }

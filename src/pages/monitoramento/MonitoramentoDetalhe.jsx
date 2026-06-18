@@ -158,6 +158,31 @@ function BiometriaDetalhes({ detalhes }) {
   );
 }
 
+function VarianteLista({ variantes }) {
+  if (!variantes || !Array.isArray(variantes) || variantes.length === 0) return null;
+
+  return (
+    <div className="col-span-full">
+      <p className="text-xs font-bold uppercase text-slate-500">Variantes Face Mesh Analisadas</p>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        {variantes.map((item, idx) => (
+          <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-black text-slate-800">{item.variante || "-"}</span>
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">
+                Score {item.score_face_mesh ?? "-"}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Cadastro: {item.rosto_cadastro ? "sim" : "nao"} | Camera: {item.rosto_camera ? "sim" : "nao"} | Rostos na camera: {item.quantidade_rostos_camera ?? 0}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function MonitoramentoDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -284,6 +309,12 @@ export default function MonitoramentoDetalhe() {
       <InoveSection>
         <h2 className="mb-4 text-lg font-black text-slate-900">Mapa Facial</h2>
         <div className="grid gap-4">
+          {row.mapa_facial_visual_url ? (
+            <div className="col-span-full rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="mb-3 text-xs font-black uppercase tracking-widest text-blue-600">Mapa Facial Visual</p>
+              <img src={row.mapa_facial_visual_url} alt="Mapa facial visual" className="w-full rounded-2xl border" />
+            </div>
+          ) : null}
           <MapaFacialVisual mapa={row.mapa_facial_visual} />
           <MapaFacialTecnico mapa={row.mapa_facial_tecnico} />
         </div>
@@ -292,6 +323,12 @@ export default function MonitoramentoDetalhe() {
       <InoveSection>
         <h2 className="mb-4 text-lg font-black text-slate-900">Biometria InsightFace</h2>
         <BiometriaDetalhes detalhes={row.biometria_detalhes} />
+        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3">
+          <InfoField label="Variante Face Mesh" value={row.variante_face_mesh} />
+        </div>
+        <div className="mt-4">
+          <VarianteLista variantes={row.variantes_face_mesh_testadas} />
+        </div>
       </InoveSection>
 
       <InoveSection>

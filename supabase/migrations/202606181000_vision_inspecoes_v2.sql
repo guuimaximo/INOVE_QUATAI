@@ -39,6 +39,7 @@ alter table public.vision_inspecoes add column if not exists camera_recomendacao
 alter table public.vision_inspecoes add column if not exists camera_area_rosto_percentual real;
 alter table public.vision_inspecoes add column if not exists camera_posicao_rosto varchar(50);
 alter table public.vision_inspecoes add column if not exists variante_face_mesh varchar(100);
+alter table public.vision_inspecoes add column if not exists variante_face_mesh_prioritaria varchar(100);
 alter table public.vision_inspecoes add column if not exists variantes_face_mesh_testadas jsonb;
 
 -- Tabela para configuracao do prompt Gemini (editavel pelo admin)

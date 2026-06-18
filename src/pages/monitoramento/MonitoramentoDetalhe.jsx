@@ -325,6 +325,7 @@ export default function MonitoramentoDetalhe() {
         <BiometriaDetalhes detalhes={row.biometria_detalhes} />
         <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3">
           <InfoField label="Variante Face Mesh" value={row.variante_face_mesh} />
+          <InfoField label="Variante Prioritaria" value={row.variante_face_mesh_prioritaria} />
         </div>
         <div className="mt-4">
           <VarianteLista variantes={row.variantes_face_mesh_testadas} />

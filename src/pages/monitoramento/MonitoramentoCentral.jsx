@@ -13,8 +13,6 @@ import {
   FaTimesCircle,
   FaTrash,
   FaWrench,
-  FaSave,
-  FaEdit,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { InovePageHeader, InoveSection, InoveStatCard } from "../../components/InovePage";
@@ -189,31 +187,16 @@ function DashboardTab({ rows }) {
 function PromptTab() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       const { data } = await supabase.from("vision_config").select("valor").eq("chave", "prompt_gemini").single();
       if (data?.valor) setPrompt(data.valor);
-      else setPrompt("(Prompt ainda nao salvo no banco. Execute o bot ou salve manualmente.)");
+      else setPrompt("Aguardando sincronizacao do bot para publicar o prompt.");
       setLoading(false);
     })();
   }, []);
-
-  const salvar = async () => {
-    setSaving(true);
-    const { data: existing } = await supabase.from("vision_config").select("id").eq("chave", "prompt_gemini").single();
-
-    if (existing) {
-      await supabase.from("vision_config").update({ valor: prompt, updated_at: new Date().toISOString() }).eq("chave", "prompt_gemini");
-    } else {
-      await supabase.from("vision_config").insert({ chave: "prompt_gemini", valor: prompt });
-    }
-    setSaving(false);
-    setEditing(false);
-  };
 
   if (loading) return <p className="py-12 text-center text-sm text-slate-400">Carregando prompt...</p>;
 
@@ -221,37 +204,10 @@ function PromptTab() {
     <InoveSection>
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Prompt Gemini Vision</h3>
-        <div className="flex gap-2">
-          {editing ? (
-            <button
-              onClick={salvar}
-              disabled={saving}
-              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              <FaSave /> {saving ? "Salvando..." : "Salvar"}
-            </button>
-          ) : (
-            <button
-              onClick={() => setEditing(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700"
-            >
-              <FaEdit /> Editar
-            </button>
-          )}
-        </div>
       </div>
-      {editing ? (
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          rows={28}
-          className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-relaxed text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
-        />
-      ) : (
-        <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 font-mono text-xs leading-relaxed text-slate-700">
-          {prompt}
-        </pre>
-      )}
+      <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 font-mono text-xs leading-relaxed text-slate-700">
+        {prompt}
+      </pre>
     </InoveSection>
   );
 }

@@ -259,7 +259,7 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "Gestor",
     descricao: "Gestao operacional ampliada.",
     ativo: true,
-    paginas: APP_ACCESS_PAGES.map((page) => page.key).filter((key) => key !== "config_niveis"),
+    paginas: APP_ACCESS_PAGES.map((page) => page.key).filter((key) => key !== "config_niveis" && key !== "monitoramento"),
     farol_liberado: true,
   },
   {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FaCalendarAlt, FaCar, FaChartBar, FaChevronLeft, FaChevronRight, FaMagic } from "react-icons/fa";
 import { supabase } from "../../supabase";
 
@@ -118,6 +119,7 @@ function HeaderTab({ active, icon, label }) {
 }
 
 export default function MonitoramentoCentral() {
+  const navigate = useNavigate();
   const persistedState = useMemo(() => readPersistedState(), []);
   const [calendarMonth, setCalendarMonth] = useState(() =>
     startOfMonthIso(persistedState.calendarMonth || persistedState.selectedDay || toIsoDate(new Date()))
@@ -197,6 +199,7 @@ export default function MonitoramentoCentral() {
     if (!day) return;
     setSelectedDay(day);
     setCalendarMonth(startOfMonthIso(day));
+    navigate(`/monitoramento/dia/${day}`);
   };
 
   const topTabs = [

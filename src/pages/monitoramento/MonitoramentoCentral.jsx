@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaCamera,
@@ -7,6 +7,7 @@ import {
   FaCode,
   FaCalendarAlt,
   FaList,
+  FaDownload,
   FaQuestionCircle,
   FaSearch,
   FaSortAmountDown,
@@ -15,8 +16,78 @@ import {
   FaTrash,
   FaWrench,
 } from "react-icons/fa";
+import * as XLSX from "xlsx";
 import { supabase } from "../../supabase";
 import { InovePageHeader, InoveSection, InoveStatCard } from "../../components/InovePage";
+
+const PAGE_SIZE = 200;
+const STATE_KEY = "inove.monitoramento.state.v1";
+const VISUAL_COLUMNS = [
+  "id",
+  "created_at",
+  "data_hora_evento",
+  "nome",
+  "registro",
+  "acao_prevista",
+  "categoria",
+  "categoria_biometrica",
+  "score",
+  "score_biometrico",
+  "similaridade_arcface",
+  "quantidade_rostos_camera",
+  "img_cadastro_url",
+  "img_camera_url",
+  "prefixo",
+  "veiculo",
+  "codigo_cartao",
+  "codigo_usuario",
+  "camera_enquadramento",
+  "camera_recomendacao",
+  "recomendacao_camera",
+  "problemas_enquadramento_camera",
+].join(", ");
+
+function readPersistedState() {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(STATE_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
+
+function writePersistedState(next) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STATE_KEY, JSON.stringify(next));
+  } catch {
+    // Ignora falha de storage; o app continua funcional.
+  }
+}
+
+function applyMonitoramentoFilters(rows, { search, filtroAcao, filtroCategoria, sortField, sortAsc }) {
+  let list = rows;
+  if (filtroAcao) list = list.filter((r) => r.acao_prevista === filtroAcao);
+  if (filtroCategoria) list = list.filter((r) => r.categoria === filtroCategoria);
+
+  if (search?.trim()) {
+    const q = search.toLowerCase();
+    list = list.filter(
+      (r) =>
+        (r.nome || "").toLowerCase().includes(q) ||
+        (r.codigo_cartao || "").includes(q) ||
+        (r.codigo_usuario || "").includes(q) ||
+        (r.registro || "").includes(q)
+    );
+  }
+
+  return [...list].sort((a, b) => {
+    const va = a[sortField] ?? "";
+    const vb = b[sortField] ?? "";
+    if (typeof va === "number" && typeof vb === "number") return sortAsc ? va - vb : vb - va;
+    return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+}
 
 const ACAO_TONE = {
   "Confirmar Similaridade": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-300", icon: <FaCheckCircle /> },
@@ -48,6 +119,23 @@ function ScoreBar({ score }) {
   );
 }
 
+function MiniMetric({ label, value, tone = "slate" }) {
+  const tones = {
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    rose: "border-rose-200 bg-rose-50 text-rose-700",
+  };
+
+  return (
+    <div className={`rounded-2xl border px-3 py-2 ${tones[tone] || tones.slate}`}>
+      <p className="text-[10px] font-black uppercase tracking-[0.16em] opacity-75">{label}</p>
+      <p className="mt-0.5 text-sm font-black">{value}</p>
+    </div>
+  );
+}
+
 function parseEventoDate(row) {
   const raw = String(row?.data_hora_evento || "").trim();
   const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
@@ -67,7 +155,7 @@ function formatDateBR(isoDate) {
 }
 
 function getPrefixo(row) {
-  return String(row?.prefixo || row?.codigo_cartao || row?.codigo_usuario || "SEM_PREFIXO").trim() || "SEM_PREFIXO";
+  return String(row?.prefixo || row?.veiculo || row?.codigo_cartao || row?.codigo_usuario || "SEM_PREFIXO").trim() || "SEM_PREFIXO";
 }
 
 function getCameraIssue(row) {
@@ -113,8 +201,10 @@ function TabButton({ active, onClick, icon, label }) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${
-        active ? "bg-blue-600 text-white shadow-md" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+      className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold transition ${
+        active
+          ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
+          : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
       }`}
     >
       {icon} {label}
@@ -450,51 +540,81 @@ function PromptTab() {
 }
 
 export default function MonitoramentoCentral() {
+  const persistedState = useMemo(() => readPersistedState(), []);
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [filtroAcao, setFiltroAcao] = useState("");
-  const [filtroCategoria, setFiltroCategoria] = useState("");
-  const [sortField, setSortField] = useState("created_at");
-  const [sortAsc, setSortAsc] = useState(false);
+  const [search, setSearch] = useState(() => persistedState.search || "");
+  const [filtroAcao, setFiltroAcao] = useState(() => persistedState.filtroAcao || "");
+  const [filtroCategoria, setFiltroCategoria] = useState(() => persistedState.filtroCategoria || "");
+  const [sortField, setSortField] = useState(() => persistedState.sortField || "created_at");
+  const [sortAsc, setSortAsc] = useState(() => Boolean(persistedState.sortAsc));
   const [selected, setSelected] = useState(new Set());
-  const [tab, setTab] = useState("laudos");
+  const [tab, setTab] = useState(() => persistedState.tab || "laudos");
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const realtimeChannelRef = useRef(null);
   const reloadTimerRef = useRef(null);
+  const rowLimitRef = useRef(Math.max(PAGE_SIZE, Number(persistedState.rowLimit) || PAGE_SIZE));
+  const deferredSearch = useDeferredValue(search);
 
-  const fetchRows = useCallback(async () => {
-    setLoading(true);
-    const pageSize = 500;
-    let from = 0;
-    let allRows = [];
-    let hasMore = true;
-
-    while (hasMore) {
+  const fetchRows = useCallback(async (limit = rowLimitRef.current, options = {}) => {
+    const { background = false } = options;
+    const safeLimit = Math.max(PAGE_SIZE, Number(limit) || PAGE_SIZE);
+    if (!background) setLoading(true);
+    try {
       const { data, error } = await supabase
         .from("vision_inspecoes")
-        .select("*")
+        .select(VISUAL_COLUMNS)
         .order("created_at", { ascending: false })
-        .range(from, from + pageSize - 1);
+        .range(0, safeLimit);
 
       if (error) {
         console.error("Erro ao carregar vision_inspecoes:", error);
-        break;
+        return;
       }
 
       const chunk = data || [];
-      allRows = allRows.concat(chunk);
-      hasMore = chunk.length === pageSize;
-      from += pageSize;
+      setRows(chunk.length > safeLimit ? chunk.slice(0, safeLimit) : chunk);
+      setHasMore(chunk.length > safeLimit);
+    } finally {
+      if (!background) setLoading(false);
     }
-
-    setRows(allRows);
-    setLoading(false);
   }, []);
 
+  const loadMore = () => {
+    if (loading || loadingMore || !hasMore) return;
+    const nextLimit = rowLimitRef.current + PAGE_SIZE;
+    rowLimitRef.current = nextLimit;
+    writePersistedState({
+      search,
+      filtroAcao,
+      filtroCategoria,
+      sortField,
+      sortAsc,
+      tab,
+      rowLimit: nextLimit,
+    });
+    setLoadingMore(true);
+    fetchRows(nextLimit, { background: true }).finally(() => setLoadingMore(false));
+  };
+
   useEffect(() => {
-    fetchRows();
+    writePersistedState({
+      search,
+      filtroAcao,
+      filtroCategoria,
+      sortField,
+      sortAsc,
+      tab,
+      rowLimit: rowLimitRef.current,
+    });
+  }, [search, filtroAcao, filtroCategoria, sortField, sortAsc, tab]);
+
+  useEffect(() => {
+    fetchRows(rowLimitRef.current);
   }, [fetchRows]);
 
   useEffect(() => {
@@ -506,7 +626,7 @@ export default function MonitoramentoCentral() {
     const scheduleReload = () => {
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
       reloadTimerRef.current = setTimeout(() => {
-        fetchRows();
+        fetchRows(rowLimitRef.current, { background: true });
       }, 700);
     };
 
@@ -531,28 +651,17 @@ export default function MonitoramentoCentral() {
     };
   }, [fetchRows]);
 
-  const filtered = useMemo(() => {
-    let list = rows;
-    if (filtroAcao) list = list.filter((r) => r.acao_prevista === filtroAcao);
-    if (filtroCategoria) list = list.filter((r) => r.categoria === filtroCategoria);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (r) =>
-          (r.nome || "").toLowerCase().includes(q) ||
-          (r.codigo_cartao || "").includes(q) ||
-          (r.codigo_usuario || "").includes(q) ||
-          (r.registro || "").includes(q)
-      );
-    }
-    list = [...list].sort((a, b) => {
-      const va = a[sortField] ?? "";
-      const vb = b[sortField] ?? "";
-      if (typeof va === "number" && typeof vb === "number") return sortAsc ? va - vb : vb - va;
-      return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
-    });
-    return list;
-  }, [rows, filtroAcao, filtroCategoria, search, sortField, sortAsc]);
+  const filtered = useMemo(
+    () =>
+      applyMonitoramentoFilters(rows, {
+        search: deferredSearch,
+        filtroAcao,
+        filtroCategoria,
+        sortField,
+        sortAsc,
+      }),
+    [rows, deferredSearch, filtroAcao, filtroCategoria, sortField, sortAsc]
+  );
 
   const stats = useMemo(() => {
     const s = { similar: 0, irregular: 0, inconclusivo: 0, tecnica: 0 };
@@ -594,8 +703,83 @@ export default function MonitoramentoCentral() {
     const ids = Array.from(selected);
     await supabase.from("vision_inspecoes").delete().in("id", ids);
     setSelected(new Set());
-    await fetchRows();
+    await fetchRows(rowLimitRef.current);
     setDeleting(false);
+  };
+
+  const exportarExcel = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const pageSize = 500;
+      let from = 0;
+      let allRows = [];
+      let hasMoreData = true;
+
+      while (hasMoreData) {
+        const { data, error } = await supabase
+          .from("vision_inspecoes")
+          .select(VISUAL_COLUMNS)
+          .order("created_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          throw error;
+        }
+
+        const chunk = data || [];
+        allRows = allRows.concat(chunk);
+        hasMoreData = chunk.length === pageSize;
+        from += pageSize;
+      }
+
+      const exportRows = applyMonitoramentoFilters(allRows, {
+        search: deferredSearch,
+        filtroAcao,
+        filtroCategoria,
+        sortField,
+        sortAsc,
+      }).map((row) => ({
+        ID: row.id,
+        "Criado em": row.created_at || "",
+        "Data evento": row.data_hora_evento || "",
+        Nome: row.nome || "",
+        Registro: row.registro || "",
+        Prefixo: row.prefixo || row.veiculo || "",
+        Veiculo: row.veiculo || "",
+        "Codigo cartao": row.codigo_cartao || "",
+        "Codigo usuario": row.codigo_usuario || "",
+        Acao: row.acao_prevista || "",
+        Categoria: row.categoria || "",
+        "Categoria biometrica": row.categoria_biometrica || "",
+        Score: row.score ?? "",
+        "Score biometrico": row.score_biometrico ?? "",
+        ArcFace: row.similaridade_arcface ?? "",
+        "Rostos camera": row.quantidade_rostos_camera ?? "",
+        "Camera enquadramento": row.camera_enquadramento || "",
+      }));
+
+      if (exportRows.length === 0) {
+        window.alert("Nenhum laudo encontrado para exportar com os filtros atuais.");
+        return;
+      }
+
+      const worksheet = XLSX.utils.json_to_sheet(exportRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Monitoramento");
+      worksheet["!cols"] = Object.keys(exportRows[0]).map((key) => ({
+        wch: Math.min(Math.max(String(key).length + 2, 14), 28),
+      }));
+
+      const now = new Date();
+      const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      XLSX.writeFile(workbook, `monitoramento_${stamp}.xlsx`);
+    } catch (error) {
+      console.error("Erro ao exportar Excel:", error);
+      window.alert("Nao foi possivel gerar o Excel agora.");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const SortIcon = sortAsc ? FaSortAmountUp : FaSortAmountDown;
@@ -610,7 +794,7 @@ export default function MonitoramentoCentral() {
         tone="blue"
       />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<FaChartBar />} label="Dashboard" />
         <TabButton active={tab === "insights"} onClick={() => setTab("insights")} icon={<FaCalendarAlt />} label="Insights Prefixo" />
         <TabButton active={tab === "laudos"} onClick={() => setTab("laudos")} icon={<FaList />} label="Laudos" />
@@ -630,22 +814,38 @@ export default function MonitoramentoCentral() {
             <InoveStatCard title="Tecnica" value={stats.tecnica} icon={<FaWrench />} tone="slate" />
           </div>
 
-          <InoveSection>
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
-              <div className="relative flex-1">
-                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <InoveSection className="overflow-hidden">
+            <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-gradient-to-br from-slate-50 via-white to-blue-50/40 p-4 md:p-5">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.06),transparent_28%)]" />
+              <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.7fr))] lg:items-end">
+                <div className="space-y-1.5">
+                  <p className="text-xs font-black uppercase tracking-[0.26em] text-blue-600">Painel Operacional</p>
+                  <h2 className="text-2xl font-black text-slate-900">Fila de monitoramento e busca inteligente</h2>
+                  <p className="max-w-3xl text-sm leading-relaxed text-slate-600">
+                    O painel mostra os laudos recentes, as métricas principais e os filtros mais usados sem pesar a navegação.
+                  </p>
+                </div>
+                <MiniMetric label="Carregados" value={rows.length} tone="blue" />
+                <MiniMetric label="Visíveis" value={filtered.length} tone="emerald" />
+                <MiniMetric label="Selecionados" value={selected.size} tone="rose" />
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_220px_220px]">
+              <div className="relative">
+                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Buscar por nome, cartao, usuario ou registro..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-3 text-sm font-semibold outline-none transition focus:border-blue-400 focus:bg-white"
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm font-semibold outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
                 />
               </div>
               <select
                 value={filtroAcao}
                 onChange={(e) => setFiltroAcao(e.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none"
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-3.5 text-sm font-semibold outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
               >
                 <option value="">Todas as acoes</option>
                 <option value="Confirmar Similaridade">Similaridade</option>
@@ -656,7 +856,7 @@ export default function MonitoramentoCentral() {
               <select
                 value={filtroCategoria}
                 onChange={(e) => setFiltroCategoria(e.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold outline-none"
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-3.5 text-sm font-semibold outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
               >
                 <option value="">Todas categorias</option>
                 <option value="PESSOA_VISIVEL_SIMILAR">Similar</option>
@@ -667,42 +867,77 @@ export default function MonitoramentoCentral() {
               </select>
             </div>
 
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold text-slate-500">Ordenar:</span>
-              {[
-                { field: "created_at", label: "Data" },
-                { field: "score", label: "Score" },
-                { field: "score_biometrico", label: "Biometria" },
-                { field: "nome", label: "Nome" },
-              ].map((s) => (
-                <button
-                  key={s.field}
-                  onClick={() => toggleSort(s.field)}
-                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
-                    sortField === s.field ? "bg-blue-100 text-blue-700" : "bg-slate-50 text-slate-500 hover:bg-slate-100"
-                  }`}
-                >
-                  {s.label} {sortField === s.field && <SortIcon className="text-[10px]" />}
-                </button>
-              ))}
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Ordenar</span>
+                {[
+                  { field: "created_at", label: "Data" },
+                  { field: "score", label: "Score" },
+                  { field: "score_biometrico", label: "Biometria" },
+                  { field: "nome", label: "Nome" },
+                ].map((s) => (
+                  <button
+                    key={s.field}
+                    onClick={() => toggleSort(s.field)}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                      sortField === s.field
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {s.label} {sortField === s.field && <SortIcon className="text-[10px]" />}
+                  </button>
+                ))}
+              </div>
 
-              {selected.size > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {selected.size > 0 && (
+                  <button
+                    onClick={excluirSelecionados}
+                    disabled={deleting}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                    <FaTrash /> {deleting ? "Excluindo..." : `Excluir (${selected.size})`}
+                  </button>
+                )}
                 <button
-                  onClick={excluirSelecionados}
-                  disabled={deleting}
-                  className="ml-auto flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+                  type="button"
+                  onClick={exportarExcel}
+                  disabled={exporting || loading}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <FaTrash /> {deleting ? "Excluindo..." : `Excluir (${selected.size})`}
+                  <FaDownload /> {exporting ? "Gerando Excel..." : "Baixar Excel"}
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loading || loadingMore || !hasMore}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loadingMore ? "Carregando mais..." : hasMore ? `Carregar mais ${PAGE_SIZE}` : "Tudo carregado"}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
+              <p className="text-xs font-semibold text-slate-500">
+                Mostrando {rows.length} laudo(s) carregado(s)
+                {hasMore ? " e ainda ha mais resultados." : "."}
+              </p>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+                Filtros salvos ao sair e voltar
+              </p>
             </div>
 
             {loading ? (
               <p className="py-12 text-center text-sm text-slate-400">Carregando laudos...</p>
             ) : filtered.length === 0 ? (
-              <p className="py-12 text-center text-sm text-slate-400">Nenhum laudo encontrado.</p>
+              <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 py-14 text-center">
+                <p className="text-sm font-bold text-slate-700">Nenhum laudo encontrado.</p>
+                <p className="mt-1 text-sm text-slate-500">Tente ajustar os filtros ou ampliar a busca.</p>
+              </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2 px-2 pb-1">
                   <input
                     type="checkbox"
@@ -715,50 +950,76 @@ export default function MonitoramentoCentral() {
                 {filtered.map((row) => (
                   <div
                     key={row.id}
-                    className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 transition hover:border-blue-200 hover:shadow-sm"
+                    className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg"
                   >
-                    <input
-                      type="checkbox"
-                      checked={selected.has(row.id)}
-                      onChange={() => toggleSelect(row.id)}
-                      className="h-4 w-4 flex-shrink-0 rounded border-slate-300"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/monitoramento/${row.id}`)}
-                      className="flex min-w-0 flex-1 items-center gap-4 text-left"
-                    >
-                      {row.img_cadastro_url ? (
-                        <img src={row.img_cadastro_url} alt="" className="h-14 w-14 rounded-xl border object-cover" />
-                      ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-                          <FaCamera />
+                    <div className="flex gap-4 p-4">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(row.id)}
+                        onChange={() => toggleSelect(row.id)}
+                        className="mt-1 h-4 w-4 flex-shrink-0 rounded border-slate-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/monitoramento/${row.id}`)}
+                        className="flex min-w-0 flex-1 items-stretch gap-4 text-left"
+                      >
+                        <div className="flex gap-2">
+                          {row.img_cadastro_url ? (
+                            <img
+                              src={row.img_cadastro_url}
+                              alt=""
+                              className="h-16 w-16 rounded-2xl border border-slate-200 object-cover ring-1 ring-white transition group-hover:scale-[1.02]"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-slate-400">
+                              <FaCamera />
+                            </div>
+                          )}
+                          {row.img_camera_url ? (
+                            <img
+                              src={row.img_camera_url}
+                              alt=""
+                              className="h-16 w-16 rounded-2xl border border-slate-200 object-cover ring-1 ring-white transition group-hover:scale-[1.02]"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-slate-400">
+                              <FaCamera />
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {row.img_camera_url ? (
-                        <img src={row.img_camera_url} alt="" className="h-14 w-14 rounded-xl border object-cover" />
-                      ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-                          <FaCamera />
+
+                        <div className="min-w-0 flex-1 space-y-3">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="truncate text-base font-black text-slate-900">{row.nome || "Sem nome"}</p>
+                              <p className="text-xs font-medium text-slate-500">
+                                <span className="font-bold text-slate-700">{row.registro || "Sem registro"}</span>
+                                <span className="mx-2 text-slate-300">|</span>
+                                {row.data_hora_evento || "-"}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge acao={row.acao_prevista} />
+                              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">
+                                {row.categoria || "SEM CATEGORIA"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-2 md:grid-cols-4">
+                            <MiniMetric label="Score final" value={row.score ?? "-"} tone="blue" />
+                            <MiniMetric label="Biometria" value={row.score_biometrico ?? "-"} tone="emerald" />
+                            <MiniMetric label="ArcFace" value={row.similaridade_arcface ?? "-"} tone="amber" />
+                            <MiniMetric label="Rostos" value={row.quantidade_rostos_camera ?? "-"} tone="slate" />
+                          </div>
                         </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-black text-slate-900">{row.nome || "Sem nome"}</p>
-                        <p className="text-xs text-slate-500">
-                          {row.registro} &bull; {row.data_hora_evento || "-"}
-                        </p>
-                        {row.quantidade_rostos_camera != null && (
-                          <p className="text-xs text-slate-500">Rostos na camera: {row.quantidade_rostos_camera}</p>
-                        )}
-                        {row.score_biometrico != null && (
-                          <p className="text-xs text-blue-500">
-                            Bio: {row.score_biometrico} &bull; ArcFace: {row.similaridade_arcface ?? "-"}
-                          </p>
-                        )}
-                      </div>
-                      <ScoreBar score={row.score} />
-                      <Badge acao={row.acao_prevista} />
-                    </button>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

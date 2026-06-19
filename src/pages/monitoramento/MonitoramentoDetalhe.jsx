@@ -244,7 +244,7 @@ export default function MonitoramentoDetalhe() {
       <InovePageHeader
         eyebrow="Laudo de Inspecao"
         title={row.nome || "Sem nome"}
-        description={`Registro ${row.registro} - ${row.data_hora_evento || "-"}${row.prefixo ? ` | Prefixo ${row.prefixo}` : ""}`}
+        description={`Registro ${row.registro} - ${row.data_hora_evento || "-"}${row.prefixo || row.veiculo ? ` | Prefixo ${row.prefixo || row.veiculo}` : ""}`}
         icon={<FaExclamationTriangle className="text-xl" />}
         tone="blue"
         actions={<Badge acao={row.acao_prevista} />}
@@ -273,6 +273,7 @@ export default function MonitoramentoDetalhe() {
         <h2 className="mb-4 text-lg font-black text-slate-900">Ponto de Controle</h2>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <InfoField label="Prefixo" value={row.prefixo} />
+          <InfoField label="Veiculo" value={row.veiculo} />
           <InfoField label="Codigo Usuario" value={row.codigo_usuario} />
           <InfoField label="Codigo Cartao" value={row.codigo_cartao} />
           <InfoField label="Tipo Cartao" value={row.tipo_cartao} />

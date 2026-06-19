@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { FaCalendarAlt, FaCar, FaChartBar, FaChevronLeft, FaChevronRight, FaMagic } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import { FaCalendarAlt, FaChevronLeft, FaChevronRight } from "react-icons/fa";
 import { supabase } from "../../supabase";
+import { MonitoramentoFrame, MonitoramentoSection } from "./MonitoramentoShell";
 
-const STATE_KEY = "inove.monitoramento.state.v4";
+const STATE_KEY = "inove.monitoramento.state.v5";
 const MONTHS = ["Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const WEEKDAYS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
 
@@ -91,20 +92,6 @@ function getCalendarTone(item, active = false) {
   };
 }
 
-function HeaderTab({ active, icon, label, to }) {
-  return (
-    <Link
-      to={to}
-      className={`flex min-h-[68px] items-center justify-center gap-3 px-4 py-4 text-sm font-bold transition md:px-6 ${
-        active ? "bg-white text-blue-600 shadow-[inset_0_-4px_0_0_#1d4ed8]" : "bg-white text-slate-500 hover:bg-slate-50"
-      }`}
-    >
-      <span className={`text-lg ${active ? "text-blue-600" : "text-slate-400"}`}>{icon}</span>
-      <span>{label}</span>
-    </Link>
-  );
-}
-
 export default function MonitoramentoCentral() {
   const navigate = useNavigate();
   const persistedState = useMemo(() => readPersistedState(), []);
@@ -189,124 +176,92 @@ export default function MonitoramentoCentral() {
     navigate(`/monitoramento/dia/${day}`);
   };
 
-  const topTabs = [
-    { id: "dashboard", label: "Dashboard", icon: <FaChartBar />, to: "/painel" },
-    { id: "veiculos", label: "Veiculos", icon: <FaCar />, to: "/embarcados-central" },
-    { id: "prompt", label: "Prompt GEMINI", icon: <FaMagic />, to: "/monitoramento/prompt-gemini" },
-  ];
-
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-5">
-        <header className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-sm">
-                <FaCalendarAlt className="text-lg" />
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">VISION WEB</p>
-                <h1 className="mt-2 text-[28px] font-black tracking-tight text-slate-900 md:text-[34px]">
-                  Monitoramento de Inspeções
-                </h1>
-              </div>
-            </div>
-
-            <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:min-w-[640px] lg:grid-cols-3">
-              {topTabs.map((tab, index) => (
-                <div key={tab.id} className={`${index > 0 ? "border-l border-slate-200" : ""}`}>
-                  <HeaderTab active={false} icon={tab.icon} label={tab.label} to={tab.to} />
-                </div>
-              ))}
-            </div>
+    <MonitoramentoFrame
+      title="Monitoramento de Inspeções"
+      icon={<FaCalendarAlt className="text-lg" />}
+      activeTab="laudos"
+      description="Escolha o dia no calendário para abrir os laudos daquele período. As cores indicam a situação de cada dia."
+      actions={
+        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+          <span className={`h-2.5 w-2.5 rounded-full ${loadingCalendar ? "bg-amber-400" : "bg-emerald-500"}`} />
+          {loadingCalendar ? "Atualizando calendário" : "Calendário pronto"}
+        </div>
+      }
+    >
+      <MonitoramentoSection
+        title="Calendário de Monitoramento"
+        subtitle="Dias em vermelho sem laudo, amarelo com laudo aberto e verde já inspecionado e fechado"
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCalendarMonth(shiftMonthIso(calendarMonth, -1))}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <FaChevronLeft className="text-xs" />
+              Mês anterior
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarMonth(startOfMonthIso(toIsoDate(new Date())))}
+              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              Hoje
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarMonth(shiftMonthIso(calendarMonth, 1))}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              Próximo mês
+              <FaChevronRight className="text-xs" />
+            </button>
           </div>
-        </header>
+        }
+      >
+        <div className="border-t border-slate-200 pt-5">
+          <h3 className="text-2xl font-black tracking-tight text-slate-900">{formatMonthLabel(calendarMonth)}</h3>
 
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_60px_rgba(15,23,42,0.08)] md:p-7">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 shadow-sm">
-                <FaCalendarAlt className="text-xl" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-[28px]">Calendário de Monitoramento</h2>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => setCalendarMonth(shiftMonthIso(calendarMonth, -1))}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                <FaChevronLeft className="text-xs" />
-                Mês anterior
-              </button>
-              <button
-                type="button"
-                onClick={() => setCalendarMonth(startOfMonthIso(toIsoDate(new Date())))}
-                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                Hoje
-              </button>
-              <button
-                type="button"
-                onClick={() => setCalendarMonth(shiftMonthIso(calendarMonth, 1))}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                Próximo mês
-                <FaChevronRight className="text-xs" />
-              </button>
-            </div>
+          <div className="mt-4 grid grid-cols-7 gap-2 text-center text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
+            {WEEKDAYS.map((label) => (
+              <span key={label}>{label}</span>
+            ))}
           </div>
 
-          <div className="mt-6 border-t border-slate-200 pt-8">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <h3 className="text-[28px] font-black tracking-tight text-slate-900 md:text-[31px]">{formatMonthLabel(calendarMonth)}</h3>
-            </div>
+          <div className="mt-3 grid grid-cols-7 gap-2">
+            {calendarGrid.map((day, index) => {
+              if (!day) {
+                return <div key={`blank-${index}`} className="min-h-[80px] rounded-2xl border border-dashed border-slate-200 bg-slate-50/40" />;
+              }
 
-            <div className="mt-6 grid grid-cols-7 gap-3 text-center text-[12px] font-black uppercase tracking-[0.16em] text-slate-400">
-              {WEEKDAYS.map((label) => (
-                <span key={label}>{label}</span>
-              ))}
-            </div>
+              const item = calendarMap.get(day);
+              const active = selectedDay === day;
+              const tone = getCalendarTone(item, active);
+              const hasData = Boolean(item?.total_laudos);
 
-            <div className="mt-5 grid grid-cols-7 gap-3">
-              {calendarGrid.map((day, index) => {
-                if (!day) {
-                  return <div key={`blank-${index}`} className="min-h-[96px] rounded-2xl border border-dashed border-slate-200 bg-slate-50/40" />;
-                }
-
-                const item = calendarMap.get(day);
-                const active = selectedDay === day;
-                const tone = getCalendarTone(item, active);
-                const hasData = Boolean(item?.total_laudos);
-
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => selecionarDia(day)}
-                    className={`min-h-[96px] rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${tone.cell}`}
-                  >
-                    <div className="flex h-full flex-col justify-between">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-lg font-black leading-none">{day.slice(8, 10)}</p>
-                        </div>
-                      </div>
-                      <div>
-                        <p className={`text-sm font-bold ${hasData ? "" : "text-rose-600"}`}>{item?.total_laudos ? `${item.total_laudos} laudo(s)` : "Sem laudo"}</p>
-                        {active ? <p className="mt-1 text-[11px] font-black uppercase tracking-[0.16em]">Selecionado</p> : null}
-                      </div>
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => selecionarDia(day)}
+                  className={`min-h-[80px] rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${tone.cell}`}
+                >
+                  <div className="flex h-full flex-col justify-between">
+                    <p className="text-base font-black leading-none">{day.slice(8, 10)}</p>
+                    <div>
+                      <p className={`text-[13px] font-bold ${hasData ? "" : "text-rose-600"}`}>
+                        {item?.total_laudos ? `${item.total_laudos} laudo(s)` : "Sem laudo"}
+                      </p>
+                      {active ? <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em]">{tone.label}</p> : null}
                     </div>
-                  </button>
-                );
-              })}
-            </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        </section>
-      </div>
-    </div>
+        </div>
+      </MonitoramentoSection>
+    </MonitoramentoFrame>
   );
 }

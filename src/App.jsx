@@ -58,7 +58,9 @@ const SOS_Resumo = lazy(() => import("./pages/intervencoes/SOS_Resumo"));
 const KMRodado = lazy(() => import("./pages/intervencoes/KMRodado"));
 
 const MonitoramentoCentral = lazy(() => import("./pages/monitoramento/MonitoramentoCentral"));
+const MonitoramentoDashboard = lazy(() => import("./pages/monitoramento/MonitoramentoDashboard"));
 const MonitoramentoDia = lazy(() => import("./pages/monitoramento/MonitoramentoDia"));
+const MonitoramentoVeiculos = lazy(() => import("./pages/monitoramento/MonitoramentoVeiculos"));
 const MonitoramentoPrompt = lazy(() => import("./pages/monitoramento/MonitoramentoPrompt"));
 const MonitoramentoDetalhe = lazy(() => import("./pages/monitoramento/MonitoramentoDetalhe"));
 
@@ -343,6 +345,8 @@ export default function App() {
 
               {/* Monitoramento Vision */}
               <Route path="/monitoramento" element={<MonitoramentoCentral />} />
+              <Route path="/monitoramento/dashboard" element={<MonitoramentoDashboard />} />
+              <Route path="/monitoramento/veiculos" element={<MonitoramentoVeiculos />} />
               <Route path="/monitoramento/dia/:dia" element={<MonitoramentoDia />} />
               <Route path="/monitoramento/prompt-gemini" element={<MonitoramentoPrompt />} />
               <Route path="/monitoramento/:id" element={<MonitoramentoDetalhe />} />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FaCopy, FaMagic } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { MonitoramentoFrame, MonitoramentoSection } from "./MonitoramentoShell";
@@ -38,14 +38,14 @@ export default function MonitoramentoPrompt() {
     } catch {}
   };
 
-  const helper = useMemo(() => (prompt ? `${prompt.length.toLocaleString("pt-BR")} caracteres` : ""), [prompt]);
+  const helper = useMemo(() => (prompt ? `${prompt.length.toLocaleString("pt-BR")} caracteres` : "Prompt pronto para consulta."), [prompt]);
 
   return (
     <MonitoramentoFrame
       title="Prompt GEMINI"
       icon={<FaMagic className="text-lg" />}
       activeTab="prompt"
-      description="Aqui fica o texto-base usado pelo assistente do monitoramento. A tela foi deixada mais limpa para consulta rápida."
+      description="Texto-base usado pelo assistente do monitoramento. A tela foi compactada para não estourar a largura."
       actions={
         <button
           type="button"
@@ -58,12 +58,12 @@ export default function MonitoramentoPrompt() {
         </button>
       }
     >
-      <MonitoramentoSection title="Configuração atual" subtitle={helper}>
-        <div className="rounded-2xl border border-slate-200 bg-slate-950 p-4 text-slate-100">
+      <MonitoramentoSection title="Configuração atual" subtitle={helper} className="overflow-hidden">
+        <div className="max-w-[1100px] rounded-2xl border border-slate-200 bg-slate-950 p-4 text-slate-100">
           {loading ? (
             <div className="py-10 text-center text-sm font-semibold text-slate-400">Carregando prompt...</div>
           ) : prompt ? (
-            <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed">{prompt}</pre>
+            <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed">{prompt}</pre>
           ) : (
             <div className="py-10 text-center text-sm font-semibold text-slate-400">
               Nenhum prompt encontrado em <span className="font-black text-slate-200">vision_config.prompt_gemini</span>.

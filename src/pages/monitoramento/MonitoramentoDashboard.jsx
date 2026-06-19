@@ -4,18 +4,6 @@ import { FaChartLine, FaClipboard } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { MonitoramentoFrame, MonitoramentoSection, MonitoramentoStatCard } from "./MonitoramentoShell";
 
-function ymd(value) {
-  if (!value) return "";
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 10);
-}
-
-function monthStartIso() {
-  const today = new Date();
-  return ymd(new Date(today.getFullYear(), today.getMonth(), 1));
-}
-
 function formatBR(isoDate) {
   if (!isoDate) return "-";
   const [year, month, day] = String(isoDate).split("-");
@@ -34,35 +22,25 @@ function TrendTooltip({ active, payload, label }) {
 
 export default function MonitoramentoDashboard() {
   const [loading, setLoading] = useState(true);
-  const [dailyRows, setDailyRows] = useState([]);
-  const [calendarRows, setCalendarRows] = useState([]);
+  const [rows, setRows] = useState([]);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
-      const start = monthStartIso();
-      const end = ymd(new Date());
-
-      const [dailyResult, calendarResult] = await Promise.all([
-        supabase
-          .from("vw_monitoramento_inspecoes_diario")
-          .select("dt_evento,total_laudos,total_similaridade,total_irregularidade,total_inconclusivo,total_tecnica,total_rostos_camera,score_medio,score_medio_biometrico,score_medio_face_mesh,prefixos_distintos")
-          .gte("dt_evento", start)
-          .lte("dt_evento", end)
-          .order("dt_evento", { ascending: true }),
-        supabase
-          .from("vw_monitoramento_inspecoes_calendario")
-          .select("dt_evento,total_laudos,inspecionado")
-          .gte("dt_evento", start)
-          .lte("dt_evento", end)
-          .order("dt_evento", { ascending: true }),
-      ]);
+      const { data, error } = await supabase
+        .from("vw_monitoramento_inspecoes_dashboard")
+        .select("dt_evento,total_laudos,total_similaridade,total_irregularidade,total_inconclusivo,total_tecnica,total_rostos_camera,score_medio,score_medio_biometrico,score_medio_face_mesh,inspecionado")
+        .order("dt_evento", { ascending: true });
 
       if (!alive) return;
 
-      setDailyRows(Array.isArray(dailyResult.data) ? dailyResult.data : []);
-      setCalendarRows(Array.isArray(calendarResult.data) ? calendarResult.data : []);
+      if (error) {
+        console.error("Erro ao carregar dashboard do monitoramento:", error);
+        setRows([]);
+      } else {
+        setRows(Array.isArray(data) ? data : []);
+      }
       setLoading(false);
     })();
 
@@ -72,15 +50,15 @@ export default function MonitoramentoDashboard() {
   }, []);
 
   const stats = useMemo(() => {
-    const totalLaudos = dailyRows.reduce((sum, row) => sum + Number(row.total_laudos || 0), 0);
-    const totalSimilaridade = dailyRows.reduce((sum, row) => sum + Number(row.total_similaridade || 0), 0);
-    const totalIrregularidade = dailyRows.reduce((sum, row) => sum + Number(row.total_irregularidade || 0), 0);
-    const totalInconclusivo = dailyRows.reduce((sum, row) => sum + Number(row.total_inconclusivo || 0), 0);
-    const totalTecnica = dailyRows.reduce((sum, row) => sum + Number(row.total_tecnica || 0), 0);
-    const diasComLaudo = calendarRows.filter((row) => Number(row.total_laudos || 0) > 0).length;
-    const diasFechados = calendarRows.filter((row) => row.inspecionado).length;
-    const diasPendentes = calendarRows.filter((row) => Number(row.total_laudos || 0) > 0 && !row.inspecionado).length;
-    const validScores = dailyRows.filter((row) => Number(row.score_medio || 0) > 0);
+    const totalLaudos = rows.reduce((sum, row) => sum + Number(row.total_laudos || 0), 0);
+    const totalSimilaridade = rows.reduce((sum, row) => sum + Number(row.total_similaridade || 0), 0);
+    const totalIrregularidade = rows.reduce((sum, row) => sum + Number(row.total_irregularidade || 0), 0);
+    const totalInconclusivo = rows.reduce((sum, row) => sum + Number(row.total_inconclusivo || 0), 0);
+    const totalTecnica = rows.reduce((sum, row) => sum + Number(row.total_tecnica || 0), 0);
+    const diasComLaudo = rows.filter((row) => Number(row.total_laudos || 0) > 0).length;
+    const diasFechados = rows.filter((row) => row.inspecionado).length;
+    const diasPendentes = rows.filter((row) => Number(row.total_laudos || 0) > 0 && !row.inspecionado).length;
+    const validScores = rows.filter((row) => Number(row.score_medio || 0) > 0);
     const scoreMedio = validScores.length
       ? (validScores.reduce((sum, row) => sum + Number(row.score_medio || 0), 0) / validScores.length).toFixed(1)
       : "0.0";
@@ -96,11 +74,11 @@ export default function MonitoramentoDashboard() {
       diasPendentes,
       scoreMedio,
     };
-  }, [dailyRows, calendarRows]);
+  }, [rows]);
 
   const trendData = useMemo(
     () =>
-      dailyRows.map((row) => ({
+      rows.map((row) => ({
         dia: formatBR(row.dt_evento),
         laudos: Number(row.total_laudos || 0),
         similares: Number(row.total_similaridade || 0),
@@ -108,16 +86,16 @@ export default function MonitoramentoDashboard() {
         inconclusivos: Number(row.total_inconclusivo || 0),
         tecnicas: Number(row.total_tecnica || 0),
       })),
-    [dailyRows]
+    [rows]
   );
 
   const statusData = useMemo(
     () => [
-      { nome: "Sem laudo", valor: calendarRows.filter((row) => Number(row.total_laudos || 0) === 0).length, tone: "rose" },
-      { nome: "Com laudo", valor: calendarRows.filter((row) => Number(row.total_laudos || 0) > 0 && !row.inspecionado).length, tone: "amber" },
-      { nome: "Fechado", valor: calendarRows.filter((row) => row.inspecionado).length, tone: "emerald" },
+      { nome: "Com laudo", valor: stats.diasComLaudo, tone: "emerald" },
+      { nome: "Pendentes", valor: stats.diasPendentes, tone: "amber" },
+      { nome: "Fechados", valor: stats.diasFechados, tone: "rose" },
     ],
-    [calendarRows]
+    [stats.diasComLaudo, stats.diasFechados, stats.diasPendentes]
   );
 
   const actionData = useMemo(
@@ -132,12 +110,12 @@ export default function MonitoramentoDashboard() {
 
   return (
     <MonitoramentoFrame
-      title="Monitoramento de Inspeções"
+      title="Dashboard"
       icon={<FaChartLine className="text-lg" />}
       activeTab="dashboard"
-      description="Resumo compacto do monitoramento com visão do mês atual, status dos dias e distribuição das ocorrências."
+      description="Resumo enxuto do monitoramento com base nos últimos 1000 laudos processados. A ideia aqui é enxergar a operação sem varrer o banco inteiro."
     >
-      <MonitoramentoSection title="Resumo do período" subtitle="Indicadores do mês corrente e fechamento dos dias">
+      <MonitoramentoSection title="Resumo do período" subtitle="Indicadores consolidados do recorte recente">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <MonitoramentoStatCard title="Total de laudos" value={stats.totalLaudos.toLocaleString("pt-BR")} tone="blue" />
           <MonitoramentoStatCard title="Dias com laudo" value={stats.diasComLaudo.toLocaleString("pt-BR")} tone="emerald" />
@@ -147,14 +125,11 @@ export default function MonitoramentoDashboard() {
       </MonitoramentoSection>
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
-        <MonitoramentoSection
-          title="Tendência diária"
-          subtitle="Volume de laudos no mês com recorte por tipo de resultado"
-        >
+        <MonitoramentoSection title="Tendência diária" subtitle="Volume dos laudos processados no recorte recente">
           <div className="h-[300px]">
             {loading ? (
               <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm font-semibold text-slate-400">
-                Carregando resumo...
+                Carregando dashboard...
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -172,7 +147,7 @@ export default function MonitoramentoDashboard() {
           </div>
         </MonitoramentoSection>
 
-        <MonitoramentoSection title="Status dos dias" subtitle="Cores do calendário no mês atual">
+        <MonitoramentoSection title="Status dos dias" subtitle="Situação dos dias no recorte recente">
           <div className="space-y-3">
             {statusData.map((item) => (
               <div key={item.nome} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -208,10 +183,10 @@ export default function MonitoramentoDashboard() {
 
       <MonitoramentoSection
         title="Leitura rápida"
-        subtitle="Visão de operação para acompanhar o mês sem abrir os laudos"
+        subtitle="Painel compacto com os números que ajudam na operação"
         actions={
           <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600">
-            <FaClipboard /> {stats.totalLaudos.toLocaleString("pt-BR")} laudos no mês
+            <FaClipboard /> {stats.totalLaudos.toLocaleString("pt-BR")} laudos no recorte
           </span>
         }
       >

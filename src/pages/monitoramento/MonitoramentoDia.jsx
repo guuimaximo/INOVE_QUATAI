@@ -7,9 +7,7 @@ import {
   FaChevronLeft,
   FaChevronRight,
   FaDownload,
-  FaEllipsisH,
   FaFileAlt,
-  FaFilter,
   FaQuestionCircle,
   FaSearch,
   FaSortAmountDown,
@@ -105,16 +103,6 @@ function FilterBadge({ children, tone = "slate" }) {
     <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-black ${toneClasses(tone)}`}>
       {children}
     </span>
-  );
-}
-
-function Thumb({ src, alt }) {
-  return src ? (
-    <img src={src} alt={alt} className="h-14 w-14 rounded-xl border border-slate-200 object-cover" loading="lazy" decoding="async" />
-  ) : (
-    <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-slate-400">
-      <FaFileAlt />
-    </div>
   );
 }
 
@@ -292,12 +280,6 @@ export default function MonitoramentoDia() {
     XLSX.writeFile(wb, `monitoramento_${dia || "dia"}_${String(new Date().toISOString().slice(0, 10))}.xlsx`);
   };
 
-  const clearFilters = () => {
-    setSearch("");
-    setAcao("");
-    setCategoria("");
-  };
-
   const orderButtons = [
     { field: "created_at", label: "Data" },
     { field: "score", label: "Score" },
@@ -454,19 +436,14 @@ export default function MonitoramentoDia() {
             <div className="space-y-3">
               {pageRows.map((row) => {
                 const actionTone = ACTION_TONES[row.acao_prevista] || "slate";
-                const categoryTone = CATEGORY_TONES[row.categoria] || "slate";
 
                 return (
-                  <article key={row.id} className="rounded-[20px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                    <div className="flex flex-col gap-3 p-3 xl:flex-row xl:items-center">
-                      <div className="flex items-start gap-3">
-                        <input type="checkbox" className="mt-4 h-4 w-4 rounded border-slate-300" />
-                        <div className="flex gap-2">
-                          <Thumb src={row.img_cadastro_url} alt="Cadastro" />
-                          <Thumb src={row.img_camera_url} alt="Camera" />
-                        </div>
-                      </div>
-
+                  <Link
+                    key={row.id}
+                    to={`/monitoramento/${row.id}?dia=${dia}`}
+                    className="block rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-base font-black text-slate-900">{row.nome || "Sem nome"}</p>
                         <p className="mt-1 text-xs font-semibold text-slate-500">
@@ -474,26 +451,12 @@ export default function MonitoramentoDia() {
                         </p>
                       </div>
 
-                      <div className="grid gap-2 md:grid-cols-2 xl:min-w-[560px] xl:grid-cols-4">
-                        <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
-                          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-blue-600">Score Final</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-2">
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-600">Score Final</p>
                           <p className="mt-1 text-xl font-black text-blue-600">{row.score ?? "-"}</p>
                         </div>
-                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
-                          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700">Biometria</p>
-                          <p className="mt-1 text-xl font-black text-emerald-700">{row.score_biometrico ?? "-"}</p>
-                        </div>
-                        <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3">
-                          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-700">ArcFace</p>
-                          <p className="mt-1 text-xl font-black text-amber-700">{row.similaridade_arcface ?? "-"}</p>
-                        </div>
-                        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Rostos</p>
-                          <p className="mt-1 text-xl font-black text-slate-900">{row.quantidade_rostos_camera ?? 0}</p>
-                        </div>
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
                         <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-black ${toneClasses(actionTone)}`}>
                           {row.acao_prevista === "Confirmar Similaridade" ? (
                             <FaCheckCircle />
@@ -506,21 +469,9 @@ export default function MonitoramentoDia() {
                           )}
                           {row.acao_prevista || "-"}
                         </span>
-
-                        <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-black ${toneClasses(categoryTone)}`}>
-                          {row.categoria || "-"}
-                        </span>
-
-                        <Link
-                          to={`/monitoramento/${row.id}`}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
-                          title="Abrir laudo"
-                        >
-                          <FaEllipsisH />
-                        </Link>
                       </div>
                     </div>
-                  </article>
+                  </Link>
                 );
               })}
             </div>

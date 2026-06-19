@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
   FaCheckCircle,
@@ -203,8 +203,14 @@ function TextoCorto({ value, lines = 3 }) {
 export default function MonitoramentoDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [row, setRow] = useState(null);
   const [loading, setLoading] = useState(true);
+  const backTarget = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const dia = params.get("dia");
+    return dia ? `/monitoramento/dia/${dia}` : "/monitoramento";
+  }, [location.search]);
 
   useEffect(() => {
     (async () => {
@@ -218,7 +224,7 @@ export default function MonitoramentoDetalhe() {
   const excluir = async () => {
     if (!window.confirm("Excluir este laudo?")) return;
     await supabase.from("vision_inspecoes").delete().eq("id", id);
-    navigate("/monitoramento");
+    navigate(backTarget);
   };
 
   if (loading) return <div className="p-8 text-center text-slate-400">Carregando...</div>;
@@ -228,7 +234,7 @@ export default function MonitoramentoDetalhe() {
     <div className="space-y-5 p-4 md:p-6">
       <div className="flex items-center gap-3">
         <button
-          onClick={() => navigate("/monitoramento")}
+          onClick={() => navigate(backTarget)}
           className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
         >
           <FaArrowLeft /> Voltar

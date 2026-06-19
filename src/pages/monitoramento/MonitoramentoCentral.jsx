@@ -25,6 +25,7 @@ const STATE_KEY = "inove.monitoramento.state.v1";
 const VISUAL_COLUMNS = [
   "id",
   "created_at",
+  "dt_evento",
   "data_hora_evento",
   "nome",
   "registro",
@@ -41,11 +42,17 @@ const VISUAL_COLUMNS = [
   "veiculo",
   "codigo_cartao",
   "codigo_usuario",
+  "prefixo_resolvido",
   "camera_enquadramento",
   "camera_recomendacao",
   "recomendacao_camera",
   "problemas_enquadramento_camera",
 ].join(", ");
+
+const SUMMARY_COLUMNS =
+  "dt_evento,total_laudos,total_similaridade,total_irregularidade,total_inconclusivo,total_tecnica,total_rostos_camera,score_medio,score_medio_biometrico,score_medio_face_mesh,prefixos_distintos";
+const PREFIX_COLUMNS =
+  "dt_evento,prefixo,total_laudos,total_similaridade,total_irregularidade,total_inconclusivo,total_tecnica,score_medio,score_medio_biometrico,score_medio_face_mesh,total_rostos_camera";
 
 function readPersistedState() {
   if (typeof window === "undefined") return {};
@@ -155,7 +162,16 @@ function formatDateBR(isoDate) {
 }
 
 function getPrefixo(row) {
-  return String(row?.prefixo || row?.veiculo || row?.codigo_cartao || row?.codigo_usuario || "SEM_PREFIXO").trim() || "SEM_PREFIXO";
+  return (
+    String(
+      row?.prefixo_resolvido ||
+        row?.prefixo ||
+        row?.veiculo ||
+        row?.codigo_cartao ||
+        row?.codigo_usuario ||
+        "SEM_PREFIXO"
+    ).trim() || "SEM_PREFIXO"
+  );
 }
 
 function getCameraIssue(row) {
@@ -555,37 +571,89 @@ export default function MonitoramentoCentral() {
   const [exporting, setExporting] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [availableDays, setAvailableDays] = useState([]);
+  const [diaFiltro, setDiaFiltro] = useState(() => persistedState.diaFiltro || "");
+  const [diaAplicado, setDiaAplicado] = useState(() => persistedState.diaAplicado || "");
+  const [resumoDia, setResumoDia] = useState(null);
+  const [prefixosDia, setPrefixosDia] = useState([]);
+  const [loadingResumo, setLoadingResumo] = useState(false);
+  const [aplicandoFiltro, setAplicandoFiltro] = useState(false);
   const realtimeChannelRef = useRef(null);
   const reloadTimerRef = useRef(null);
   const rowLimitRef = useRef(Math.max(PAGE_SIZE, Number(persistedState.rowLimit) || PAGE_SIZE));
   const deferredSearch = useDeferredValue(search);
 
-  const fetchRows = useCallback(async (limit = rowLimitRef.current, options = {}) => {
-    const { background = false } = options;
-    const safeLimit = Math.max(PAGE_SIZE, Number(limit) || PAGE_SIZE);
-    if (!background) setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("vision_inspecoes")
-        .select(VISUAL_COLUMNS)
-        .order("created_at", { ascending: false })
-        .range(0, safeLimit);
-
-      if (error) {
-        console.error("Erro ao carregar vision_inspecoes:", error);
-        return;
-      }
-
-      const chunk = data || [];
-      setRows(chunk.length > safeLimit ? chunk.slice(0, safeLimit) : chunk);
-      setHasMore(chunk.length > safeLimit);
-    } finally {
-      if (!background) setLoading(false);
+  const fetchAvailableDays = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("vw_monitoramento_inspecoes_diario")
+      .select("dt_evento,total_laudos")
+      .order("dt_evento", { ascending: false });
+    if (!error && Array.isArray(data)) {
+      setAvailableDays(data);
     }
   }, []);
 
+  const fetchDayData = useCallback(
+    async (day, limit = rowLimitRef.current, options = {}) => {
+      const { background = false } = options;
+      if (!day) {
+        setRows([]);
+        setResumoDia(null);
+        setPrefixosDia([]);
+        setHasMore(false);
+        setLoading(false);
+        return;
+      }
+
+      const safeLimit = Math.max(PAGE_SIZE, Number(limit) || PAGE_SIZE);
+      if (!background) {
+        setLoading(true);
+        setLoadingResumo(true);
+      }
+
+      try {
+        const [rowsResp, resumoResp, prefixResp] = await Promise.all([
+          supabase
+            .from("vw_monitoramento_inspecoes_base")
+            .select(VISUAL_COLUMNS)
+            .eq("dt_evento", day)
+            .order("created_at", { ascending: false })
+            .range(0, safeLimit),
+          supabase
+            .from("vw_monitoramento_inspecoes_diario")
+            .select(SUMMARY_COLUMNS)
+            .eq("dt_evento", day)
+            .maybeSingle(),
+          supabase
+            .from("vw_monitoramento_inspecoes_prefixos")
+            .select(PREFIX_COLUMNS)
+            .eq("dt_evento", day)
+            .order("total_laudos", { ascending: false })
+            .range(0, 50),
+        ]);
+
+        if (rowsResp.error) {
+          console.error("Erro ao carregar monitoramento:", rowsResp.error);
+          return;
+        }
+
+        const loadedRows = rowsResp.data || [];
+        setRows(loadedRows.length > safeLimit ? loadedRows.slice(0, safeLimit) : loadedRows);
+        setHasMore(loadedRows.length > safeLimit);
+        setResumoDia(!resumoResp.error ? resumoResp.data || null : null);
+        setPrefixosDia(!prefixResp.error ? prefixResp.data || [] : []);
+      } finally {
+        if (!background) {
+          setLoading(false);
+          setLoadingResumo(false);
+        }
+      }
+    },
+    []
+  );
+
   const loadMore = () => {
-    if (loading || loadingMore || !hasMore) return;
+    if (loading || loadingMore || !hasMore || !diaAplicado) return;
     const nextLimit = rowLimitRef.current + PAGE_SIZE;
     rowLimitRef.current = nextLimit;
     writePersistedState({
@@ -595,10 +663,12 @@ export default function MonitoramentoCentral() {
       sortField,
       sortAsc,
       tab,
+      diaFiltro,
+      diaAplicado,
       rowLimit: nextLimit,
     });
     setLoadingMore(true);
-    fetchRows(nextLimit, { background: true }).finally(() => setLoadingMore(false));
+    fetchDayData(diaAplicado, nextLimit, { background: true }).finally(() => setLoadingMore(false));
   };
 
   useEffect(() => {
@@ -609,13 +679,28 @@ export default function MonitoramentoCentral() {
       sortField,
       sortAsc,
       tab,
+      diaFiltro,
+      diaAplicado,
       rowLimit: rowLimitRef.current,
     });
-  }, [search, filtroAcao, filtroCategoria, sortField, sortAsc, tab]);
+  }, [search, filtroAcao, filtroCategoria, sortField, sortAsc, tab, diaFiltro, diaAplicado]);
 
   useEffect(() => {
-    fetchRows(rowLimitRef.current);
-  }, [fetchRows]);
+    fetchAvailableDays();
+  }, [fetchAvailableDays]);
+
+  useEffect(() => {
+    if (!diaAplicado) {
+      setRows([]);
+      setResumoDia(null);
+      setPrefixosDia([]);
+      setHasMore(false);
+      setLoading(false);
+      setLoadingResumo(false);
+      return;
+    }
+    fetchDayData(diaAplicado, rowLimitRef.current);
+  }, [diaAplicado, fetchDayData, persistedState.rowLimit]);
 
   useEffect(() => {
     if (realtimeChannelRef.current) {
@@ -626,7 +711,9 @@ export default function MonitoramentoCentral() {
     const scheduleReload = () => {
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
       reloadTimerRef.current = setTimeout(() => {
-        fetchRows(rowLimitRef.current, { background: true });
+        if (diaAplicado) {
+          fetchDayData(diaAplicado, rowLimitRef.current, { background: true });
+        }
       }, 700);
     };
 
@@ -649,7 +736,7 @@ export default function MonitoramentoCentral() {
         realtimeChannelRef.current = null;
       }
     };
-  }, [fetchRows]);
+  }, [fetchDayData, diaAplicado]);
 
   const filtered = useMemo(
     () =>
@@ -703,23 +790,52 @@ export default function MonitoramentoCentral() {
     const ids = Array.from(selected);
     await supabase.from("vision_inspecoes").delete().in("id", ids);
     setSelected(new Set());
-    await fetchRows(rowLimitRef.current);
+    if (diaAplicado) {
+      await fetchDayData(diaAplicado, rowLimitRef.current);
+    }
     setDeleting(false);
   };
 
+  const aplicarFiltroDia = async () => {
+    if (!diaFiltro) {
+      window.alert("Escolha um dia para carregar os indicadores e os laudos.");
+      return;
+    }
+    setAplicandoFiltro(true);
+    try {
+      rowLimitRef.current = PAGE_SIZE;
+      setSelected(new Set());
+      setDiaAplicado(diaFiltro);
+    } finally {
+      setAplicandoFiltro(false);
+    }
+  };
+
+  const limparFiltroDia = () => {
+    setDiaFiltro("");
+    setDiaAplicado("");
+    setRows([]);
+    setResumoDia(null);
+    setPrefixosDia([]);
+    setSelected(new Set());
+    setHasMore(false);
+    rowLimitRef.current = PAGE_SIZE;
+  };
+
   const exportarExcel = async () => {
-    if (exporting) return;
+    if (exporting || !diaAplicado) return;
     setExporting(true);
     try {
-      const pageSize = 500;
+      const pageSize = 1000;
       let from = 0;
-      let allRows = [];
+      let exportBase = [];
       let hasMoreData = true;
 
       while (hasMoreData) {
         const { data, error } = await supabase
-          .from("vision_inspecoes")
+          .from("vw_monitoramento_inspecoes_base")
           .select(VISUAL_COLUMNS)
+          .eq("dt_evento", diaAplicado)
           .order("created_at", { ascending: false })
           .range(from, from + pageSize - 1);
 
@@ -728,12 +844,12 @@ export default function MonitoramentoCentral() {
         }
 
         const chunk = data || [];
-        allRows = allRows.concat(chunk);
+        exportBase = exportBase.concat(chunk);
         hasMoreData = chunk.length === pageSize;
         from += pageSize;
       }
 
-      const exportRows = applyMonitoramentoFilters(allRows, {
+      const exportRows = applyMonitoramentoFilters(exportBase, {
         search: deferredSearch,
         filtroAcao,
         filtroCategoria,
@@ -794,6 +910,64 @@ export default function MonitoramentoCentral() {
         tone="blue"
       />
 
+      <InoveSection className="overflow-hidden">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)_auto] lg:items-end">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Filtro obrigatório</p>
+            <h2 className="mt-1 text-xl font-black text-slate-900">Escolha um dia para carregar indicadores e laudos</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              O painel só carrega a base do dia aplicado. Isso mantém a navegação leve mesmo com milhares de registros por dia.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Dia</label>
+            <input
+              type="date"
+              value={diaFiltro}
+              onChange={(e) => setDiaFiltro(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            />
+            <p className="text-xs text-slate-500">
+              {availableDays.length > 0
+                ? `${availableDays.length} dia(s) com monitoramento disponível.`
+                : "Carregando dias disponíveis..."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={aplicarFiltroDia}
+              disabled={aplicandoFiltro || !diaFiltro}
+              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {aplicandoFiltro ? "Aplicando..." : "Aplicar filtro"}
+            </button>
+            <button
+              type="button"
+              onClick={limparFiltroDia}
+              disabled={aplicandoFiltro && !diaAplicado}
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Limpar
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+            Dia aplicado: {diaAplicado ? formatDateBR(diaAplicado) : "nenhum"}
+          </span>
+          <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">
+            Base carregada: {rows.length} registro(s)
+          </span>
+          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+            Indicadores: {loadingResumo ? "carregando..." : diaAplicado ? "prontos" : "aguardando filtro"}
+          </span>
+        </div>
+      </InoveSection>
+
       <div className="flex flex-wrap gap-2">
         <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<FaChartBar />} label="Dashboard" />
         <TabButton active={tab === "insights"} onClick={() => setTab("insights")} icon={<FaCalendarAlt />} label="Insights Prefixo" />
@@ -801,20 +975,69 @@ export default function MonitoramentoCentral() {
         <TabButton active={tab === "prompt"} onClick={() => setTab("prompt")} icon={<FaCode />} label="Prompt Gemini" />
       </div>
 
-      {tab === "dashboard" && <DashboardTab rows={rows} />}
-      {tab === "insights" && <InsightsTab rows={rows} />}
       {tab === "prompt" && <PromptTab />}
-
-      {tab === "laudos" && (
+      {diaAplicado ? (
         <>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <InoveStatCard title="Similaridade" value={stats.similar} icon={<FaCheckCircle />} tone="emerald" />
-            <InoveStatCard title="Irregularidade" value={stats.irregular} icon={<FaTimesCircle />} tone="rose" />
-            <InoveStatCard title="Inconclusivo" value={stats.inconclusivo} icon={<FaQuestionCircle />} tone="amber" />
-            <InoveStatCard title="Tecnica" value={stats.tecnica} icon={<FaWrench />} tone="slate" />
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+            <InoveStatCard title="Total do dia" value={resumoDia?.total_laudos ?? rows.length} icon={<FaCalendarAlt />} tone="blue" />
+            <InoveStatCard title="Similaridade" value={resumoDia?.total_similaridade ?? stats.similar} icon={<FaCheckCircle />} tone="emerald" />
+            <InoveStatCard title="Irregularidade" value={resumoDia?.total_irregularidade ?? stats.irregular} icon={<FaTimesCircle />} tone="rose" />
+            <InoveStatCard title="Inconclusivo" value={resumoDia?.total_inconclusivo ?? stats.inconclusivo} icon={<FaQuestionCircle />} tone="amber" />
+            <InoveStatCard title="Tecnica" value={resumoDia?.total_tecnica ?? stats.tecnica} icon={<FaWrench />} tone="slate" />
+            <InoveStatCard title="Prefixos" value={resumoDia?.prefixos_distintos ?? "—"} icon={<FaList />} tone="indigo" />
           </div>
 
-          <InoveSection className="overflow-hidden">
+          <InoveSection>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-[0.22em] text-slate-500">Resumo do dia</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Os indicadores abaixo vêm da view diária e servem como leitura rápida antes de abrir os laudos.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[340px] lg:grid-cols-3">
+                <MiniMetric label="Score médio" value={resumoDia?.score_medio ?? "—"} tone="blue" />
+                <MiniMetric label="Score bio" value={resumoDia?.score_medio_biometrico ?? "—"} tone="emerald" />
+                <MiniMetric label="Face Mesh" value={resumoDia?.score_medio_face_mesh ?? "—"} tone="amber" />
+              </div>
+            </div>
+          </InoveSection>
+
+          <InoveSection>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-[0.22em] text-slate-500">Ranking por Prefixo</h3>
+                <p className="mt-1 text-sm text-slate-500">Resumo diário por prefixo para identificar rapidamente onde concentrar a análise.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+                {prefixosDia.length} prefixo(s)
+              </span>
+            </div>
+            {prefixosDia.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400">Nenhum prefixo encontrado para o dia selecionado.</p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {prefixosDia.slice(0, 6).map((item) => (
+                  <div key={item.prefixo} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-base font-black text-slate-900">{item.prefixo}</p>
+                    <p className="mt-1 text-xs text-slate-500">{item.total_laudos} laudo(s) no dia</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <MiniMetric label="Similar" value={item.total_similaridade ?? 0} tone="emerald" />
+                      <MiniMetric label="Irregular" value={item.total_irregularidade ?? 0} tone="rose" />
+                      <MiniMetric label="Inconclusivo" value={item.total_inconclusivo ?? 0} tone="amber" />
+                      <MiniMetric label="Tecnica" value={item.total_tecnica ?? 0} tone="slate" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </InoveSection>
+
+          {tab === "dashboard" && <DashboardTab rows={rows} />}
+          {tab === "insights" && <InsightsTab rows={rows} />}
+
+          {tab === "laudos" && (
+            <InoveSection className="overflow-hidden">
             <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-gradient-to-br from-slate-50 via-white to-blue-50/40 p-4 md:p-5">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.06),transparent_28%)]" />
               <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.7fr))] lg:items-end">
@@ -903,7 +1126,7 @@ export default function MonitoramentoCentral() {
                 <button
                   type="button"
                   onClick={exportarExcel}
-                  disabled={exporting || loading}
+                  disabled={exporting || loading || !diaAplicado}
                   className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <FaDownload /> {exporting ? "Gerando Excel..." : "Baixar Excel"}
@@ -1024,8 +1247,16 @@ export default function MonitoramentoCentral() {
                 ))}
               </div>
             )}
-          </InoveSection>
+            </InoveSection>
+          )}
         </>
+      ) : tab === "prompt" ? null : (
+        <InoveSection>
+          <div className="py-12 text-center">
+            <p className="text-sm font-bold text-slate-800">Selecione um dia e aplique o filtro para liberar os indicadores e os laudos.</p>
+            <p className="mt-1 text-sm text-slate-500">Enquanto isso, a tela não carrega registros pesados desnecessariamente.</p>
+          </div>
+        </InoveSection>
       )}
     </div>
   );

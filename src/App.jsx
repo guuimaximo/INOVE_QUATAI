@@ -59,6 +59,7 @@ const KMRodado = lazy(() => import("./pages/intervencoes/KMRodado"));
 
 const MonitoramentoCentral = lazy(() => import("./pages/monitoramento/MonitoramentoCentral"));
 const MonitoramentoDia = lazy(() => import("./pages/monitoramento/MonitoramentoDia"));
+const MonitoramentoPrompt = lazy(() => import("./pages/monitoramento/MonitoramentoPrompt"));
 const MonitoramentoDetalhe = lazy(() => import("./pages/monitoramento/MonitoramentoDetalhe"));
 
 const PCMInicio = lazy(() => import("./pages/pcm/PCMInicio"));
@@ -343,6 +344,7 @@ export default function App() {
               {/* Monitoramento Vision */}
               <Route path="/monitoramento" element={<MonitoramentoCentral />} />
               <Route path="/monitoramento/dia/:dia" element={<MonitoramentoDia />} />
+              <Route path="/monitoramento/prompt-gemini" element={<MonitoramentoPrompt />} />
               <Route path="/monitoramento/:id" element={<MonitoramentoDetalhe />} />
 
               {/* SAC */}

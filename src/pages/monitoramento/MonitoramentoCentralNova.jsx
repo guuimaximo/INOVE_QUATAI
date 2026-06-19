@@ -1,23 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { FaCalendarAlt, FaCar, FaChartBar, FaChevronLeft, FaChevronRight, FaMagic } from "react-icons/fa";
 import { supabase } from "../../supabase";
 
 const STATE_KEY = "inove.monitoramento.state.v4";
-const MONTHS = [
-  "Janeiro",
-  "Fevereiro",
-  "Marco",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
-];
+const MONTHS = ["Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const WEEKDAYS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
 
 function readPersistedState() {
@@ -104,17 +91,17 @@ function getCalendarTone(item, active = false) {
   };
 }
 
-function HeaderTab({ active, icon, label }) {
+function HeaderTab({ active, icon, label, to }) {
   return (
-    <button
-      type="button"
+    <Link
+      to={to}
       className={`flex min-h-[68px] items-center justify-center gap-3 px-4 py-4 text-sm font-bold transition md:px-6 ${
         active ? "bg-white text-blue-600 shadow-[inset_0_-4px_0_0_#1d4ed8]" : "bg-white text-slate-500 hover:bg-slate-50"
       }`}
     >
       <span className={`text-lg ${active ? "text-blue-600" : "text-slate-400"}`}>{icon}</span>
       <span>{label}</span>
-    </button>
+    </Link>
   );
 }
 
@@ -203,9 +190,9 @@ export default function MonitoramentoCentral() {
   };
 
   const topTabs = [
-    { id: "dashboard", label: "Dashboard", icon: <FaChartBar /> },
-    { id: "veiculos", label: "Veículos", icon: <FaCar /> },
-    { id: "prompt", label: "Prompt GEMINI", icon: <FaMagic /> },
+    { id: "dashboard", label: "Dashboard", icon: <FaChartBar />, to: "/painel" },
+    { id: "veiculos", label: "Veiculos", icon: <FaCar />, to: "/embarcados-central" },
+    { id: "prompt", label: "Prompt GEMINI", icon: <FaMagic />, to: "/monitoramento/prompt-gemini" },
   ];
 
   return (
@@ -228,7 +215,7 @@ export default function MonitoramentoCentral() {
             <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:min-w-[640px] lg:grid-cols-3">
               {topTabs.map((tab, index) => (
                 <div key={tab.id} className={`${index > 0 ? "border-l border-slate-200" : ""}`}>
-                  <HeaderTab active={index === 0} icon={tab.icon} label={tab.label} />
+                  <HeaderTab active={false} icon={tab.icon} label={tab.label} to={tab.to} />
                 </div>
               ))}
             </div>
@@ -242,9 +229,7 @@ export default function MonitoramentoCentral() {
                 <FaCalendarAlt className="text-xl" />
               </div>
               <div>
-                <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-[28px]">
-                  Calendário de Monitoramento
-                </h2>
+                <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-[28px]">Calendário de Monitoramento</h2>
               </div>
             </div>
 
@@ -277,9 +262,7 @@ export default function MonitoramentoCentral() {
 
           <div className="mt-6 border-t border-slate-200 pt-8">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <h3 className="text-[28px] font-black tracking-tight text-slate-900 md:text-[31px]">
-                {formatMonthLabel(calendarMonth)}
-              </h3>
+              <h3 className="text-[28px] font-black tracking-tight text-slate-900 md:text-[31px]">{formatMonthLabel(calendarMonth)}</h3>
             </div>
 
             <div className="mt-6 grid grid-cols-7 gap-3 text-center text-[12px] font-black uppercase tracking-[0.16em] text-slate-400">
@@ -291,12 +274,7 @@ export default function MonitoramentoCentral() {
             <div className="mt-5 grid grid-cols-7 gap-3">
               {calendarGrid.map((day, index) => {
                 if (!day) {
-                  return (
-                    <div
-                      key={`blank-${index}`}
-                      className="min-h-[96px] rounded-2xl border border-dashed border-slate-200 bg-slate-50/40"
-                    />
-                  );
+                  return <div key={`blank-${index}`} className="min-h-[96px] rounded-2xl border border-dashed border-slate-200 bg-slate-50/40" />;
                 }
 
                 const item = calendarMap.get(day);
@@ -318,9 +296,7 @@ export default function MonitoramentoCentral() {
                         </div>
                       </div>
                       <div>
-                        <p className={`text-sm font-bold ${hasData ? "" : "text-rose-600"}`}>
-                          {item?.total_laudos ? `${item.total_laudos} laudo(s)` : "Sem laudo"}
-                        </p>
+                        <p className={`text-sm font-bold ${hasData ? "" : "text-rose-600"}`}>{item?.total_laudos ? `${item.total_laudos} laudo(s)` : "Sem laudo"}</p>
                         {active ? <p className="mt-1 text-[11px] font-black uppercase tracking-[0.16em]">Selecionado</p> : null}
                       </div>
                     </div>

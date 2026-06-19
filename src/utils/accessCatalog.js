@@ -88,7 +88,7 @@ export const APP_ACCESS_PAGES = [
   { key: "pessoas_vagas", label: "Vagas", category: "Pessoas", path: "/vagas", patterns: ["/vagas"] },
   { key: "config_niveis", label: "Configuracoes Niveis", category: "Configuracoes", path: "/niveis-acesso", patterns: ["/niveis-acesso"] },
   { key: "config_controle_dados", label: "Controle de Dados", category: "Configuracoes", path: "/controle-dados", patterns: ["/controle-dados"] },
-  { key: "monitoramento", label: "Monitoramento Vision", category: "Monitoramento", path: "/monitoramento", patterns: ["/monitoramento", "/monitoramento/dia/:dia", "/monitoramento/:id"] },
+  { key: "monitoramento", label: "Monitoramento Vision", category: "Monitoramento", path: "/monitoramento", patterns: ["/monitoramento", "/monitoramento/dia/:dia", "/monitoramento/prompt-gemini", "/monitoramento/:id"] },
 ];
 
 export const MOBILE_NAV_PRIORITY = [

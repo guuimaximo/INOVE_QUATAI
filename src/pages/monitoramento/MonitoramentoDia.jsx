@@ -99,6 +99,15 @@ function topTabClass(active) {
     : "text-slate-500 bg-white hover:bg-slate-50";
 }
 
+function NavTab({ to, icon, label, active = false }) {
+  return (
+    <Link to={to} className={`flex min-h-[68px] items-center justify-center gap-3 px-4 py-4 text-sm font-bold transition ${topTabClass(active)}`}>
+      <span className={`text-lg ${active ? "text-blue-600" : "text-slate-400"}`}>{icon}</span>
+      <span>{label}</span>
+    </Link>
+  );
+}
+
 function SummaryCard({ title, value, tone = "blue" }) {
   return (
     <div className={`rounded-[18px] border p-4 shadow-sm ${toneClasses(tone)}`}>
@@ -331,22 +340,10 @@ export default function MonitoramentoDia() {
             </div>
 
             <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:min-w-[760px] lg:grid-cols-4">
-              <button type="button" className={`flex min-h-[68px] items-center justify-center gap-3 px-4 py-4 text-sm font-bold transition ${topTabClass(false)}`}>
-                <FaHome className="text-lg text-slate-400" />
-                <span>Dashboard</span>
-              </button>
-              <button type="button" className={`flex min-h-[68px] items-center justify-center gap-3 px-4 py-4 text-sm font-bold transition ${topTabClass(true)}`}>
-                <FaFileAlt className="text-lg text-blue-600" />
-                <span>Laudos</span>
-              </button>
-              <button type="button" className={`flex min-h-[68px] items-center justify-center gap-3 px-4 py-4 text-sm font-bold transition ${topTabClass(false)}`}>
-                <FaCar className="text-lg text-slate-400" />
-                <span>Veículos</span>
-              </button>
-              <button type="button" className={`flex min-h-[68px] items-center justify-center gap-3 px-4 py-4 text-sm font-bold transition ${topTabClass(false)}`}>
-                <FaMagic className="text-lg text-slate-400" />
-                <span>Prompt GEMINI</span>
-              </button>
+              <NavTab to="/painel" icon={<FaHome />} label="Dashboard" />
+              <NavTab to={`/monitoramento/dia/${dia}`} icon={<FaFileAlt />} label="Laudos" active />
+              <NavTab to="/embarcados-central" icon={<FaCar />} label="Veículos" />
+              <NavTab to="/monitoramento/prompt-gemini" icon={<FaMagic />} label="Prompt GEMINI" />
             </div>
           </div>
         </header>

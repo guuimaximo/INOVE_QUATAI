@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   FaArrowLeft,
-  FaCar,
   FaCheckCircle,
   FaChevronDown,
   FaChevronLeft,
@@ -11,8 +10,6 @@ import {
   FaEllipsisH,
   FaFileAlt,
   FaFilter,
-  FaHome,
-  FaMagic,
   FaQuestionCircle,
   FaSearch,
   FaSortAmountDown,
@@ -22,9 +19,10 @@ import {
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
 import { supabase } from "../../supabase";
+import { MonitoramentoFrame, MonitoramentoSection, MonitoramentoStatCard } from "./MonitoramentoShell";
 
-const STORAGE_KEY = "inove.monitoramento.dia.filters.v2";
-const PAGE_SIZE = 200;
+const STORAGE_KEY = "inove.monitoramento.dia.filters.v3";
+const PAGE_SIZE = 120;
 
 const ACTION_TONES = {
   "Confirmar Similaridade": "emerald",
@@ -41,8 +39,8 @@ const CATEGORY_TONES = {
   ERRO: "slate",
 };
 
-function normalizeText(value) {
-  return String(value || "")
+function normalizeText(value = "") {
+  return String(value)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
@@ -65,8 +63,8 @@ function writeSavedState(day, state) {
 }
 
 function formatDateBR(isoDate) {
-  const m = String(isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : isoDate || "-";
+  const match = String(isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : isoDate || "-";
 }
 
 function formatWeekdayBR(isoDate) {
@@ -93,26 +91,11 @@ function toneClasses(tone) {
   return map[tone] || map.slate;
 }
 
-function topTabClass(active) {
-  return active
-    ? "border-b-4 border-blue-600 text-blue-600 bg-white"
-    : "text-slate-500 bg-white hover:bg-slate-50";
-}
-
-function NavTab({ to, icon, label, active = false }) {
-  return (
-    <Link to={to} className={`flex min-h-[68px] items-center justify-center gap-3 px-4 py-4 text-sm font-bold transition ${topTabClass(active)}`}>
-      <span className={`text-lg ${active ? "text-blue-600" : "text-slate-400"}`}>{icon}</span>
-      <span>{label}</span>
-    </Link>
-  );
-}
-
 function SummaryCard({ title, value, tone = "blue" }) {
   return (
-    <div className={`rounded-[18px] border p-4 shadow-sm ${toneClasses(tone)}`}>
-      <p className="text-[11px] font-black uppercase tracking-[0.18em] opacity-85">{title}</p>
-      <p className="mt-3 text-[34px] font-black leading-none text-slate-900">{value}</p>
+    <div className={`rounded-[16px] border p-3 shadow-sm ${toneClasses(tone)}`}>
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-85">{title}</p>
+      <p className="mt-2 text-[26px] font-black leading-none text-slate-900">{value}</p>
     </div>
   );
 }
@@ -127,9 +110,9 @@ function FilterBadge({ children, tone = "slate" }) {
 
 function Thumb({ src, alt }) {
   return src ? (
-    <img src={src} alt={alt} className="h-16 w-16 rounded-2xl border border-slate-200 object-cover" loading="lazy" decoding="async" />
+    <img src={src} alt={alt} className="h-14 w-14 rounded-xl border border-slate-200 object-cover" loading="lazy" decoding="async" />
   ) : (
-    <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-slate-400">
+    <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-slate-400">
       <FaFileAlt />
     </div>
   );
@@ -175,7 +158,7 @@ export default function MonitoramentoDia() {
     if (summaryError || rowsError) {
       setSummary(null);
       setRows([]);
-      setError(summaryError?.message || rowsError?.message || "Nao foi possivel carregar os laudos do dia.");
+      setError(summaryError?.message || rowsError?.message || "Não foi possível carregar os laudos do dia.");
       setLoading(false);
       return;
     }
@@ -323,288 +306,253 @@ export default function MonitoramentoDia() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
-        <header className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-sm">
-                <FaFileAlt className="text-lg" />
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">VISION WEB</p>
-                <h1 className="mt-2 text-[28px] font-black tracking-tight text-slate-900 md:text-[34px]">
-                  Monitoramento de Inspeções
-                </h1>
-              </div>
-            </div>
+    <MonitoramentoFrame
+      title="Monitoramento de Inspeções"
+      icon={<FaFileAlt className="text-lg" />}
+      activeTab="laudos"
+      description={`Laudos do dia ${formatDateBR(dia)}. Use os filtros abaixo para abrir só o que você quer ver.`}
+    >
+      <MonitoramentoSection
+        title={`Laudos do dia ${formatDateBR(dia)}`}
+        subtitle={formatWeekdayBR(dia)}
+        actions={
+          <button
+            type="button"
+            onClick={() => navigate("/monitoramento")}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            <FaArrowLeft /> Voltar para o calendário
+          </button>
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <SummaryCard title="Total de laudos" value={kpis.total} tone="blue" />
+          <SummaryCard title="Similaridade" value={kpis.similaridade} tone="emerald" />
+          <SummaryCard title="Irregularidade" value={kpis.irregularidade} tone="rose" />
+          <SummaryCard title="Inconclusivo" value={kpis.inconclusivo} tone="amber" />
+          <SummaryCard title="Técnica" value={kpis.tecnica} tone="slate" />
+        </div>
+      </MonitoramentoSection>
 
-            <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:min-w-[760px] lg:grid-cols-4">
-              <NavTab to="/painel" icon={<FaHome />} label="Dashboard" />
-              <NavTab to={`/monitoramento/dia/${dia}`} icon={<FaFileAlt />} label="Laudos" active />
-              <NavTab to="/embarcados-central" icon={<FaCar />} label="Veículos" />
-              <NavTab to="/monitoramento/prompt-gemini" icon={<FaMagic />} label="Prompt GEMINI" />
-            </div>
+      <MonitoramentoSection
+        title="Filtros"
+        subtitle="A busca, ação e categoria ficam salvos para o dia escolhido."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">Filtros salvos</span>
+            {error ? <span className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-black text-rose-700">{error}</span> : null}
           </div>
-        </header>
+        }
+      >
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_200px_200px]">
+          <label className="relative block">
+            <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Buscar</span>
+            <FaSearch className="pointer-events-none absolute left-4 top-[38px] text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nome, cartão, usuário ou registro..."
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-11 pr-4 text-sm font-semibold outline-none transition focus:border-blue-400 focus:bg-white"
+            />
+          </label>
 
-        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] md:p-6">
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => navigate("/monitoramento")}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+          <label className="block">
+            <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ação</span>
+            <div className="relative">
+              <select
+                value={acao}
+                onChange={(e) => setAcao(e.target.value)}
+                className="w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 pr-10 text-sm font-semibold outline-none transition focus:border-blue-400 focus:bg-white"
               >
-                <FaArrowLeft /> Voltar para o calendário
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 shadow-sm">
-                  <FaFileAlt className="text-xl" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-[28px]">
-                    Laudos do dia {formatDateBR(dia)}
-                  </h2>
-                  <p className="text-sm font-semibold text-slate-500">{formatWeekdayBR(dia)}</p>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                <SummaryCard title="Total de laudos" value={kpis.total} tone="blue" />
-                <SummaryCard title="Similaridade" value={kpis.similaridade} tone="emerald" />
-                <SummaryCard title="Irregularidade" value={kpis.irregularidade} tone="rose" />
-                <SummaryCard title="Inconclusivo" value={kpis.inconclusivo} tone="amber" />
-                <SummaryCard title="Técnica" value={kpis.tecnica} tone="slate" />
-              </div>
-            </div>
-
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px_220px]">
-              <label className="relative block">
-                <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">Buscar</span>
-                <FaSearch className="pointer-events-none absolute left-4 top-[42px] text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por nome, cartão, usuário ou registro..."
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-semibold outline-none transition focus:border-blue-400 focus:bg-white"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">Ação</span>
-                <div className="relative">
-                  <select
-                    value={acao}
-                    onChange={(e) => setAcao(e.target.value)}
-                    className="w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-semibold outline-none transition focus:border-blue-400 focus:bg-white"
-                  >
-                    <option value="">Todas</option>
-                    {actionOptions.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                  <FaChevronDown className="pointer-events-none absolute right-4 top-4 text-xs text-slate-400" />
-                </div>
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">Categoria</span>
-                <div className="relative">
-                  <select
-                    value={categoria}
-                    onChange={(e) => setCategoria(e.target.value)}
-                    className="w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-semibold outline-none transition focus:border-blue-400 focus:bg-white"
-                  >
-                    <option value="">Todas</option>
-                    {categoryOptions.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                  <FaChevronDown className="pointer-events-none absolute right-4 top-4 text-xs text-slate-400" />
-                </div>
-              </label>
-            </div>
-
-            <div className="flex flex-col gap-3 rounded-[22px] border border-slate-100 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-black text-slate-500">Ordenar por:</span>
-                {orderButtons.map((item) => (
-                  <button
-                    key={item.field}
-                    type="button"
-                    onClick={() => {
-                      if (sortField === item.field) setSortAsc((v) => !v);
-                      else {
-                        setSortField(item.field);
-                        setSortAsc(false);
-                      }
-                    }}
-                    className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-black transition ${
-                      sortField === item.field ? "bg-slate-900 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    {item.label}
-                    {sortField === item.field ? sortAsc ? <FaSortAmountUp className="text-[11px]" /> : <FaSortAmountDown className="text-[11px]" /> : null}
-                  </button>
+                <option value="">Todas</option>
+                {actionOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
                 ))}
-              </div>
+              </select>
+              <FaChevronDown className="pointer-events-none absolute right-4 top-4 text-xs text-slate-400" />
+            </div>
+          </label>
 
-              <button
-                type="button"
-                onClick={exportExcel}
-                disabled={!orderedRows.length}
-                className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-black text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+          <label className="block">
+            <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Categoria</span>
+            <div className="relative">
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                className="w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 pr-10 text-sm font-semibold outline-none transition focus:border-blue-400 focus:bg-white"
               >
-                <FaDownload /> Baixar Excel
+                <option value="">Todas</option>
+                {categoryOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+              <FaChevronDown className="pointer-events-none absolute right-4 top-4 text-xs text-slate-400" />
+            </div>
+          </label>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-3 rounded-[20px] border border-slate-100 bg-slate-50/80 p-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-black text-slate-500">Ordenar por:</span>
+            {orderButtons.map((item) => (
+              <button
+                key={item.field}
+                type="button"
+                onClick={() => {
+                  if (sortField === item.field) setSortAsc((v) => !v);
+                  else {
+                    setSortField(item.field);
+                    setSortAsc(false);
+                  }
+                }}
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-black transition ${
+                  sortField === item.field ? "bg-slate-900 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {item.label}
+                {sortField === item.field ? (sortAsc ? <FaSortAmountUp className="text-[11px]" /> : <FaSortAmountDown className="text-[11px]" />) : null}
               </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={exportExcel}
+            disabled={!orderedRows.length}
+            className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FaDownload /> Baixar Excel
+          </button>
+        </div>
+      </MonitoramentoSection>
+
+      <MonitoramentoSection
+        title="Resultados"
+        subtitle={`${orderedRows.length.toLocaleString("pt-BR")} laudo(s) encontrados`}
+      >
+        {loading ? (
+          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 py-14 text-center text-sm font-bold text-slate-400">
+            Carregando laudos do dia...
+          </div>
+        ) : orderedRows.length === 0 ? (
+          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 py-14 text-center">
+            <p className="text-sm font-bold text-slate-700">Nenhum laudo encontrado com os filtros atuais.</p>
+            <p className="mt-1 text-sm text-slate-500">Tente limpar os filtros ou revisar a data selecionada.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 px-2 text-xs font-semibold text-slate-500">
+              <span>{pageRows.length} laudo(s) nesta página</span>
+              {acao ? <FilterBadge tone={ACTION_TONES[acao] || "slate"}>{acao}</FilterBadge> : null}
+              {categoria ? <FilterBadge tone={CATEGORY_TONES[categoria] || "slate"}>{categoria}</FilterBadge> : null}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-600">
+            <div className="space-y-3">
+              {pageRows.map((row) => {
+                const actionTone = ACTION_TONES[row.acao_prevista] || "slate";
+                const categoryTone = CATEGORY_TONES[row.categoria] || "slate";
+
+                return (
+                  <article key={row.id} className="rounded-[20px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <div className="flex flex-col gap-3 p-3 xl:flex-row xl:items-center">
+                      <div className="flex items-start gap-3">
+                        <input type="checkbox" className="mt-4 h-4 w-4 rounded border-slate-300" />
+                        <div className="flex gap-2">
+                          <Thumb src={row.img_cadastro_url} alt="Cadastro" />
+                          <Thumb src={row.img_camera_url} alt="Camera" />
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-base font-black text-slate-900">{row.nome || "Sem nome"}</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">
+                          {row.registro || "-"} <span className="mx-2 text-slate-300">|</span> {formatDateTimeBR(row.data_hora_evento || row.created_at)}
+                        </p>
+                      </div>
+
+                      <div className="grid gap-2 md:grid-cols-2 xl:min-w-[560px] xl:grid-cols-4">
+                        <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
+                          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-blue-600">Score Final</p>
+                          <p className="mt-1 text-xl font-black text-blue-600">{row.score ?? "-"}</p>
+                        </div>
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
+                          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700">Biometria</p>
+                          <p className="mt-1 text-xl font-black text-emerald-700">{row.score_biometrico ?? "-"}</p>
+                        </div>
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3">
+                          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-700">ArcFace</p>
+                          <p className="mt-1 text-xl font-black text-amber-700">{row.similaridade_arcface ?? "-"}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Rostos</p>
+                          <p className="mt-1 text-xl font-black text-slate-900">{row.quantidade_rostos_camera ?? 0}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-black ${toneClasses(actionTone)}`}>
+                          {row.acao_prevista === "Confirmar Similaridade" ? (
+                            <FaCheckCircle />
+                          ) : row.acao_prevista === "Confirmar Irregularidade" ? (
+                            <FaTimesCircle />
+                          ) : row.acao_prevista === "Confirmar Inconclusivo" ? (
+                            <FaQuestionCircle />
+                          ) : (
+                            <FaWrench />
+                          )}
+                          {row.acao_prevista || "-"}
+                        </span>
+
+                        <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-black ${toneClasses(categoryTone)}`}>
+                          {row.categoria || "-"}
+                        </span>
+
+                        <Link
+                          to={`/monitoramento/${row.id}`}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                          title="Abrir laudo"
+                        >
+                          <FaEllipsisH />
+                        </Link>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
+              <p className="text-xs font-semibold text-slate-600">
                 Mostrando {orderedRows.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0} a {Math.min(currentPage * PAGE_SIZE, orderedRows.length)} de {orderedRows.length} resultados
               </p>
+
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">Filtros salvos</span>
-                {error ? <span className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-black text-rose-700">{error}</span> : null}
                 <button
                   type="button"
-                  onClick={clearFilters}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  onClick={() => setPage((v) => Math.max(1, v - 1))}
+                  disabled={currentPage <= 1}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <FaFilter /> Limpar filtros
+                  <FaChevronLeft /> Anterior
+                </button>
+                <span className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-black text-white">{currentPage}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Próxima <FaChevronRight />
                 </button>
               </div>
             </div>
-
-            {loading ? (
-              <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 py-16 text-center text-sm font-bold text-slate-400">
-                Carregando laudos do dia...
-              </div>
-            ) : orderedRows.length === 0 ? (
-              <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 py-16 text-center">
-                <p className="text-sm font-bold text-slate-700">Nenhum laudo encontrado com os filtros atuais.</p>
-                <p className="mt-1 text-sm text-slate-500">Tente limpar os filtros ou revisar a data selecionada.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2 px-2 text-xs font-semibold text-slate-500">
-                  <span>{pageRows.length} laudo(s) nesta página</span>
-                  {acao ? <FilterBadge tone={ACTION_TONES[acao] || "slate"}>{acao}</FilterBadge> : null}
-                  {categoria ? <FilterBadge tone={CATEGORY_TONES[categoria] || "slate"}>{categoria}</FilterBadge> : null}
-                </div>
-
-                <div className="space-y-3">
-                  {pageRows.map((row) => {
-                    const actionTone = ACTION_TONES[row.acao_prevista] || "slate";
-                    const categoryTone = CATEGORY_TONES[row.categoria] || "slate";
-
-                    return (
-                      <article key={row.id} className="rounded-[22px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-                        <div className="flex flex-col gap-4 p-4 xl:flex-row xl:items-center">
-                          <div className="flex items-start gap-3">
-                            <input type="checkbox" className="mt-5 h-4 w-4 rounded border-slate-300" />
-                            <div className="flex gap-2">
-                              <Thumb src={row.img_cadastro_url} alt="Cadastro" />
-                              <Thumb src={row.img_camera_url} alt="Camera" />
-                            </div>
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-lg font-black text-slate-900">{row.nome || "Sem nome"}</p>
-                            <p className="mt-1 text-sm font-semibold text-slate-500">
-                              {row.registro || "-"} <span className="mx-2 text-slate-300">|</span> {formatDateTimeBR(row.data_hora_evento || row.created_at)}
-                            </p>
-                          </div>
-
-                          <div className="grid gap-2 md:grid-cols-2 xl:min-w-[640px] xl:grid-cols-4">
-                            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
-                              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-blue-600">Score Final</p>
-                              <p className="mt-1 text-2xl font-black text-blue-600">{row.score ?? "-"}</p>
-                            </div>
-                            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
-                              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700">Biometria</p>
-                              <p className="mt-1 text-2xl font-black text-emerald-700">{row.score_biometrico ?? "-"}</p>
-                            </div>
-                            <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3">
-                              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-700">ArcFace</p>
-                              <p className="mt-1 text-2xl font-black text-amber-700">{row.similaridade_arcface ?? "-"}</p>
-                            </div>
-                            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Rostos</p>
-                              <p className="mt-1 text-2xl font-black text-slate-900">{row.quantidade_rostos_camera ?? 0}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <span className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-black ${toneClasses(actionTone)}`}>
-                              {row.acao_prevista === "Confirmar Similaridade" ? (
-                                <FaCheckCircle />
-                              ) : row.acao_prevista === "Confirmar Irregularidade" ? (
-                                <FaTimesCircle />
-                              ) : row.acao_prevista === "Confirmar Inconclusivo" ? (
-                                <FaQuestionCircle />
-                              ) : (
-                                <FaWrench />
-                              )}
-                              {row.acao_prevista || "-"}
-                            </span>
-
-                            <span className={`inline-flex items-center rounded-full border px-4 py-2 text-sm font-black ${toneClasses(categoryTone)}`}>
-                              {row.categoria || "-"}
-                            </span>
-
-                            <Link
-                              to={`/monitoramento/${row.id}`}
-                              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
-                              title="Abrir laudo"
-                            >
-                              <FaEllipsisH />
-                            </Link>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-
-                <div className="flex flex-col gap-3 rounded-[22px] border border-slate-200 bg-white px-4 py-4 shadow-sm md:flex-row md:items-center md:justify-between">
-                  <p className="text-sm font-semibold text-slate-600">
-                    Mostrando {orderedRows.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0} a {Math.min(currentPage * PAGE_SIZE, orderedRows.length)} de {orderedRows.length} resultados
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPage((v) => Math.max(1, v - 1))}
-                      disabled={currentPage <= 1}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <FaChevronLeft /> Anterior
-                    </button>
-                    <span className="rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white">{currentPage}</span>
-                    <button
-                      type="button"
-                      onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
-                      disabled={currentPage >= totalPages}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Próxima <FaChevronRight />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-        </section>
-      </div>
-    </div>
+        )}
+      </MonitoramentoSection>
+    </MonitoramentoFrame>
   );
 }

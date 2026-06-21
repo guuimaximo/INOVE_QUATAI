@@ -4,6 +4,7 @@ import {
   FaArrowLeft,
   FaCheckCircle,
   FaExclamationTriangle,
+  FaDownload,
   FaQuestionCircle,
   FaTimesCircle,
   FaTrash,
@@ -11,6 +12,7 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { InovePageHeader, InoveSection } from "../../components/InovePage";
+import { gerarLaudoInovePdf } from "../../utils/monitoramentoLaudoPdf";
 
 const ACAO_TONE = {
   "Confirmar Similaridade": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-300", icon: <FaCheckCircle /> },
@@ -206,6 +208,7 @@ export default function MonitoramentoDetalhe() {
   const location = useLocation();
   const [row, setRow] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [salvandoPdf, setSalvandoPdf] = useState(false);
   const backTarget = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const dia = params.get("dia");
@@ -227,6 +230,16 @@ export default function MonitoramentoDetalhe() {
     navigate(backTarget);
   };
 
+  const baixarPdf = async () => {
+    if (!row || salvandoPdf) return;
+    setSalvandoPdf(true);
+    try {
+      await gerarLaudoInovePdf(row);
+    } finally {
+      setSalvandoPdf(false);
+    }
+  };
+
   if (loading) return <div className="p-8 text-center text-slate-400">Carregando...</div>;
   if (!row) return <div className="p-8 text-center text-slate-400">Laudo nao encontrado.</div>;
 
@@ -238,6 +251,13 @@ export default function MonitoramentoDetalhe() {
           className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
         >
           <FaArrowLeft /> Voltar
+        </button>
+        <button
+          onClick={baixarPdf}
+          disabled={salvandoPdf}
+          className="flex items-center gap-2 rounded-2xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-bold text-blue-600 shadow-sm transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <FaDownload /> {salvandoPdf ? "Gerando PDF..." : "Baixar PDF"}
         </button>
         <button
           onClick={excluir}

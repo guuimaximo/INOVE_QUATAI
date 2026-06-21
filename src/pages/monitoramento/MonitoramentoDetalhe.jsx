@@ -5,6 +5,7 @@ import {
   FaCheckCircle,
   FaExclamationTriangle,
   FaDownload,
+  FaImage,
   FaQuestionCircle,
   FaTimesCircle,
   FaTrash,
@@ -202,6 +203,50 @@ function TextoCorto({ value, lines = 3 }) {
   );
 }
 
+function MediaCard({ title, subtitle, url, fallbackLabel = "Sem imagem", tone = "blue" }) {
+  const tones = {
+    blue: "text-blue-600",
+    emerald: "text-emerald-600",
+    amber: "text-amber-600",
+    rose: "text-rose-600",
+    slate: "text-slate-500",
+  };
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className={`text-xs font-black uppercase tracking-widest ${tones[tone] || tones.blue}`}>{title}</p>
+          {subtitle ? <p className="mt-1 text-xs font-semibold text-slate-500">{subtitle}</p> : null}
+        </div>
+        <FaImage className={`${tones[tone] || tones.blue}`} />
+      </div>
+      {url ? (
+        <img src={url} alt={title} className="mx-auto max-h-96 w-full rounded-2xl border object-contain bg-slate-50" />
+      ) : (
+        <div className="flex h-64 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">{fallbackLabel}</div>
+      )}
+    </div>
+  );
+}
+
+function DecisionCard({ label, value, full = false, tone = "slate" }) {
+  const tones = {
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    rose: "border-rose-200 bg-rose-50 text-rose-700",
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+  };
+
+  return (
+    <div className={`${full ? "col-span-full" : ""} rounded-2xl border p-4 shadow-sm ${tones[tone] || tones.slate}`}>
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-80">{label}</p>
+      <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-900">{value || "-"}</p>
+    </div>
+  );
+}
+
 export default function MonitoramentoDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -243,6 +288,17 @@ export default function MonitoramentoDetalhe() {
   if (loading) return <div className="p-8 text-center text-slate-400">Carregando...</div>;
   if (!row) return <div className="p-8 text-center text-slate-400">Laudo nao encontrado.</div>;
 
+  const varianteEscolhida =
+    row.variante_face_mesh ||
+    row.variante_face_mesh_prioritaria ||
+    (Array.isArray(row.variantes_face_mesh_testadas) && row.variantes_face_mesh_testadas[0]?.variante) ||
+    row.melhor_variante_biometrica ||
+    "camera_melhorada";
+
+  const totalVariantesFaceMesh = Array.isArray(row.variantes_face_mesh_testadas) ? row.variantes_face_mesh_testadas.length : 0;
+  const imagemTratadaUrl = row.img_camera_tratada_url || row.img_camera_url;
+  const imagemTratadaLabel = row.img_camera_tratada_url ? "Imagem tratada escolhida pelo bot" : "Imagem original usada na analise";
+
   return (
     <div className="space-y-5 p-4 md:p-6">
       <div className="flex items-center gap-3">
@@ -276,23 +332,24 @@ export default function MonitoramentoDetalhe() {
         actions={<Badge acao={row.acao_prevista} />}
       />
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="mb-3 text-center text-xs font-black uppercase tracking-widest text-blue-600">Foto Cadastro</p>
-          {row.img_cadastro_url ? (
-            <img src={row.img_cadastro_url} alt="Cadastro" className="mx-auto max-h-96 rounded-2xl border shadow" />
-          ) : (
-            <div className="flex h-64 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">Sem imagem</div>
-          )}
+      <InoveSection>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Leitura do Bot</h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <DecisionCard label="Veredito final" value={row.recomendacao_operacional} tone="blue" />
+          <DecisionCard label="Recomendacao da camera" value={row.camera_recomendacao || row.recomendacao_camera} tone="amber" />
+          <DecisionCard label="Avaliacao da camera" value={row.avaliacao_camera} tone="slate" />
+          <DecisionCard label="Variante escolhida" value={varianteEscolhida} tone="emerald" />
+          <DecisionCard label="Variante testada" value={row.variante_face_mesh || "-"} tone="slate" />
+          <DecisionCard label="Variantes Face Mesh" value={totalVariantesFaceMesh} tone="slate" />
+          <DecisionCard label="Motivo Face Mesh" value={row.motivo_face_mesh} full tone="rose" />
+          <DecisionCard label="Descricao profissional" value={row.descricao_profissional} full tone="slate" />
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="mb-3 text-center text-xs font-black uppercase tracking-widest text-blue-600">Foto Camera</p>
-          {row.img_camera_url ? (
-            <img src={row.img_camera_url} alt="Camera" className="mx-auto max-h-96 rounded-2xl border shadow" />
-          ) : (
-            <div className="flex h-64 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">Sem imagem</div>
-          )}
-        </div>
+      </InoveSection>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <MediaCard title="Foto Cadastro" subtitle="Imagem de referencia do cadastro" url={row.img_cadastro_url} tone="blue" />
+        <MediaCard title="Foto Camera" subtitle="Imagem original capturada" url={row.img_camera_url} tone="slate" />
+        <MediaCard title="Imagem Tratada" subtitle={imagemTratadaLabel} url={imagemTratadaUrl} tone="emerald" />
       </div>
 
       <InoveSection>

@@ -46,7 +46,7 @@ export default function MonitoramentoVeiculoDetalhe() {
         supabase
           .from("vw_monitoramento_inspecoes_base")
           .select(
-            "id,created_at,dt_evento,nome,veiculo,prefixo_resolvido,score,score_biometrico,score_face_mesh,acao_prevista,categoria,camera_enquadramento,camera_posicao_rosto,camera_area_rosto_percentual,qualidade_imagem_camera,camera_recomendacao,descricao_profissional,problemas_enquadramento_camera"
+            "id,created_at,dt_evento,nome,veiculo,prefixo_resolvido,score,score_biometrico,score_face_mesh,acao_prevista,categoria,camera_enquadramento,camera_posicao_rosto,camera_area_rosto_percentual,qualidade_imagem_camera,camera_recomendacao,descricao_profissional,problemas_enquadramento_camera,quantidade_rostos_camera,rosto_visivel"
           )
           .eq("prefixo_resolvido", decodedPrefixo)
           .order("created_at", { ascending: false })
@@ -86,6 +86,57 @@ export default function MonitoramentoVeiculoDetalhe() {
     return { total, similares, inconclusivos, tecnicas };
   }, [recentRows]);
 
+  const diagnosticoDireto = useMemo(() => {
+    const total = recentRows.length;
+    const semRosto = recentRows.filter((row) => Number(row.quantidade_rostos_camera || 0) === 0).length;
+    const muitosSemRosto = total > 0 && semRosto / total >= 0.6;
+    const posicao = String(summary?.ultima_camera_posicao || "").toLowerCase();
+    const enquadramento = String(summary?.ultima_camera_enquadramento || "").toLowerCase();
+    const recomendacao = summary?.ultima_recomendacao_camera || summary?.ultima_descricao_profissional || summary?.problema_principal || "-";
+
+    if (muitosSemRosto) {
+      return {
+        titulo: "Problema técnico provável",
+        acao: "A câmera nao esta pegando o rosto com consistencia. O ajuste mais provavel e de posicao / inclinacao da camera.",
+        detalhe: `Em ${semRosto} de ${total} laudos o rosto nao apareceu.`,
+      };
+    }
+
+    if (posicao.includes("baixo") || posicao.includes("alto")) {
+      return {
+        titulo: "Ajuste de posicao",
+        acao: posicao.includes("baixo")
+          ? "Abaixar a camera ou inclinar para baixo para trazer o rosto para o centro."
+          : "Subir a camera ou inclinar para cima para centralizar melhor o rosto.",
+        detalhe: recomendacao,
+      };
+    }
+
+    if (posicao.includes("esquerda") || posicao.includes("direita")) {
+      return {
+        titulo: "Ajuste lateral",
+        acao: posicao.includes("esquerda")
+          ? "Mover a camera para a esquerda ou reposicionar o carro para levar o rosto ao centro."
+          : "Mover a camera para a direita ou reposicionar o carro para levar o rosto ao centro.",
+        detalhe: recomendacao,
+      };
+    }
+
+    if (enquadramento.includes("inadequado")) {
+      return {
+        titulo: "Enquadramento ruim",
+        acao: "Ajustar enquadramento e campo de visao da camera.",
+        detalhe: recomendacao,
+      };
+    }
+
+    return {
+      titulo: "Leitura inconclusiva",
+      acao: "Ainda nao ha indicio forte o suficiente para cravar um ajuste unico.",
+      detalhe: recomendacao,
+    };
+  }, [recentRows, summary]);
+
   const title = summary?.prefixo || decodeURIComponent(prefixo || "");
 
   return (
@@ -114,17 +165,25 @@ export default function MonitoramentoVeiculoDetalhe() {
       </MonitoramentoSection>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <MonitoramentoSection title="Leitura operacional" subtitle="O que a fila está dizendo para mexer">
-          <div className="grid gap-3 md:grid-cols-2">
-            <DetailBox label="Problema principal" value={summary?.problema_principal || "-"} tone={badgeTone(summary?.problema_principal)} />
-            <DetailBox label="Ação sugerida" value={summary?.acao_sugerida || "-"} tone={badgeTone(summary?.acao_sugerida)} />
-            <DetailBox label="Última recomendação" value={summary?.ultima_recomendacao_camera || "-"} tone="slate" />
-            <DetailBox label="Resumo técnico" value={summary?.ultima_descricao_profissional || "-"} tone="slate" />
-          </div>
-        </MonitoramentoSection>
+      <MonitoramentoSection title="Leitura operacional" subtitle="O que a fila está dizendo para mexer">
+        <div className="grid gap-3 md:grid-cols-2">
+          <DetailBox label="Problema principal" value={summary?.problema_principal || "-"} tone={badgeTone(summary?.problema_principal)} />
+          <DetailBox label="Ação sugerida" value={summary?.acao_sugerida || "-"} tone={badgeTone(summary?.acao_sugerida)} />
+          <DetailBox label="Última recomendação" value={summary?.ultima_recomendacao_camera || "-"} tone="slate" />
+          <DetailBox label="Resumo técnico" value={summary?.ultima_descricao_profissional || "-"} tone="slate" />
+        </div>
+      </MonitoramentoSection>
 
-        <MonitoramentoSection title="Sinais recentes" subtitle="Última leitura do bot e os indícios de câmera">
-          <div className="grid gap-3 md:grid-cols-2">
+      <MonitoramentoSection title="Diagnóstico direto" subtitle="Sem mistério: o que isso quer dizer na prática">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <DetailBox label="Leitura" value={diagnosticoDireto.titulo} tone={badgeTone(diagnosticoDireto.titulo)} />
+          <DetailBox label="O que fazer" value={diagnosticoDireto.acao} tone="amber" />
+          <DetailBox label="Base da leitura" value={diagnosticoDireto.detalhe} tone="slate" />
+        </div>
+      </MonitoramentoSection>
+
+      <MonitoramentoSection title="Sinais recentes" subtitle="Última leitura do bot e os indícios de câmera">
+        <div className="grid gap-3 md:grid-cols-2">
             <DetailBox label="Enquadramento" value={summary?.ultima_camera_enquadramento || "-"} tone="slate" />
             <DetailBox label="Qualidade" value={summary?.ultima_qualidade_camera || "-"} tone="slate" />
             <DetailBox label="Posição do rosto" value={summary?.ultima_camera_posicao || "-"} tone="slate" />

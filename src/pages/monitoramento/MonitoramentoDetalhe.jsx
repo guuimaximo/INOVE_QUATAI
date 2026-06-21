@@ -15,6 +15,30 @@ import { supabase } from "../../supabase";
 import { InovePageHeader, InoveSection } from "../../components/InovePage";
 import { gerarLaudoInovePdf } from "../../utils/monitoramentoLaudoPdf";
 
+// Traduz o nome tecnico da variante de imagem usada pela biometria para algo legivel.
+function nomeVarianteLegivel(variante) {
+  if (!variante) return "";
+  const mapa = {
+    camera_original: "Imagem original",
+    camera_melhorada: "Imagem melhorada",
+    camera_clahe: "Contraste (CLAHE)",
+    camera_pb_equalizada: "P&B equalizada",
+    camera_tratada_biometria: "Tratada p/ biometria",
+    camera_tratada_biometria_clahe: "Tratada + contraste",
+    camera_crop_rosto_arcface: "Recorte do rosto",
+    camera_crop_rosto_arcface_tratado: "Recorte do rosto (tratado)",
+    camera_crop_rosto_arcface_melhorado: "Recorte do rosto (melhorado)",
+    camera_crop_rosto_arcface_clahe: "Recorte do rosto (contraste)",
+    camera_crop_inferior_total: "Recorte inferior",
+    camera_crop_direita_inferior: "Recorte direita-inferior",
+    camera_crop_esquerda_inferior: "Recorte esquerda-inferior",
+    camera_crop_centro_direita: "Recorte centro-direita",
+    camera_crop_direita_baixa_fechado: "Recorte direita-baixa",
+    camera_zoom_regiao_pessoa: "Zoom na pessoa",
+  };
+  return mapa[variante] || variante;
+}
+
 const ACAO_TONE = {
   "Confirmar Similaridade": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-300", icon: <FaCheckCircle /> },
   "Confirmar Irregularidade": { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-300", icon: <FaTimesCircle /> },
@@ -297,7 +321,12 @@ export default function MonitoramentoDetalhe() {
 
   const totalVariantesFaceMesh = Array.isArray(row.variantes_face_mesh_testadas) ? row.variantes_face_mesh_testadas.length : 0;
   const imagemTratadaUrl = row.img_camera_tratada_url || row.img_camera_url;
-  const imagemTratadaLabel = row.img_camera_tratada_url ? "Imagem tratada escolhida pelo bot" : "Imagem original usada na analise";
+  const varianteUsada = row.variante_imagem_usada_biometria || row.melhor_variante_biometrica;
+  const varianteUsadaLabel = nomeVarianteLegivel(varianteUsada);
+  const imagemTratadaLabel = row.img_camera_tratada_url
+    ? `Tratada final usada na biometria${varianteUsadaLabel ? ` - ${varianteUsadaLabel}` : ""}`
+    : "Imagem original usada na analise";
+  const cropUsadoUrl = row.img_crop_biometria_url;
 
   return (
     <div className="space-y-5 p-4 md:p-6">
@@ -338,18 +367,24 @@ export default function MonitoramentoDetalhe() {
           <DecisionCard label="Veredito final" value={row.recomendacao_operacional} tone="blue" />
           <DecisionCard label="Recomendacao da camera" value={row.camera_recomendacao || row.recomendacao_camera} tone="amber" />
           <DecisionCard label="Avaliacao da camera" value={row.avaliacao_camera} tone="slate" />
-          <DecisionCard label="Variante escolhida" value={varianteEscolhida} tone="emerald" />
-          <DecisionCard label="Variante testada" value={row.variante_face_mesh || "-"} tone="slate" />
+          <DecisionCard label="Imagem usada na biometria" value={varianteUsadaLabel || varianteEscolhida} tone="emerald" />
           <DecisionCard label="Variantes Face Mesh" value={totalVariantesFaceMesh} tone="slate" />
           <DecisionCard label="Motivo Face Mesh" value={row.motivo_face_mesh} full tone="rose" />
           <DecisionCard label="Descricao profissional" value={row.descricao_profissional} full tone="slate" />
         </div>
       </InoveSection>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
         <MediaCard title="Foto Cadastro" subtitle="Imagem de referencia do cadastro" url={row.img_cadastro_url} tone="blue" />
         <MediaCard title="Foto Camera" subtitle="Imagem original capturada" url={row.img_camera_url} tone="slate" />
         <MediaCard title="Imagem Tratada" subtitle={imagemTratadaLabel} url={imagemTratadaUrl} tone="emerald" />
+        <MediaCard
+          title="Rosto Comparado"
+          subtitle="Recorte exato do rosto que o bot usou no ArcFace"
+          url={cropUsadoUrl}
+          fallbackLabel="Sem recorte de rosto"
+          tone="amber"
+        />
       </div>
 
       <InoveSection>

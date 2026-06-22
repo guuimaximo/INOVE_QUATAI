@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FaCar, FaChartBar, FaClipboard, FaMagic } from "react-icons/fa";
+import { FaCar, FaChartBar, FaChartPie, FaClipboard, FaMagic } from "react-icons/fa";
 
 const TAB_CLASS =
   "flex min-h-[56px] items-center justify-center gap-2 px-3 py-3 text-[13px] font-bold transition";
@@ -7,13 +7,14 @@ const TAB_CLASS =
 export function MonitoramentoTabs({ active = "laudos" }) {
   const tabs = [
     { key: "dashboard", label: "Dashboard", icon: <FaChartBar />, to: "/monitoramento/dashboard" },
+    { key: "insights", label: "Insights", icon: <FaChartPie />, to: "/monitoramento/insights" },
     { key: "laudos", label: "Laudos", icon: <FaClipboard />, to: "/monitoramento" },
     { key: "veiculos", label: "Veículos", icon: <FaCar />, to: "/monitoramento/veiculos" },
     { key: "prompt", label: "Prompt GEMINI", icon: <FaMagic />, to: "/monitoramento/prompt-gemini" },
   ];
 
   return (
-    <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
+    <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-5">
       {tabs.map((tab, index) => {
         const isActive = tab.key === active;
 

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
   FaCheckCircle,
+  FaChevronLeft,
+  FaChevronRight,
   FaExclamationTriangle,
   FaDownload,
   FaImage,
@@ -15,16 +17,16 @@ import { supabase } from "../../supabase";
 import { InovePageHeader, InoveSection } from "../../components/InovePage";
 import { gerarLaudoInovePdf } from "../../utils/monitoramentoLaudoPdf";
 
-// Traduz o nome tecnico da variante de imagem usada pela biometria para algo legivel.
+// Nome legivel da variante de imagem usada pela biometria (sem jargao tecnico).
 function nomeVarianteLegivel(variante) {
   if (!variante) return "";
   const mapa = {
     camera_original: "Imagem original",
     camera_melhorada: "Imagem melhorada",
-    camera_clahe: "Contraste (CLAHE)",
-    camera_pb_equalizada: "P&B equalizada",
-    camera_tratada_biometria: "Tratada p/ biometria",
-    camera_tratada_biometria_clahe: "Tratada + contraste",
+    camera_clahe: "Contraste realcado",
+    camera_pb_equalizada: "Preto e branco equalizado",
+    camera_tratada_biometria: "Imagem tratada",
+    camera_tratada_biometria_clahe: "Imagem tratada (contraste)",
     camera_crop_rosto_arcface: "Recorte do rosto",
     camera_crop_rosto_arcface_tratado: "Recorte do rosto (tratado)",
     camera_crop_rosto_arcface_melhorado: "Recorte do rosto (melhorado)",
@@ -39,11 +41,40 @@ function nomeVarianteLegivel(variante) {
   return mapa[variante] || variante;
 }
 
+// Veredito em linguagem clara para quem audita.
+function vereditoLegivel(categoria) {
+  const c = String(categoria || "").toUpperCase();
+  if (c.includes("SIMILAR")) return { texto: "Mesma pessoa", desc: "Compatibilidade facial confirmada", tone: "emerald", icon: <FaCheckCircle /> };
+  if (c.includes("DIFERENTE")) return { texto: "Pessoa diferente", desc: "Possivel irregularidade", tone: "rose", icon: <FaTimesCircle /> };
+  if (c.includes("SEM_PESSOA") || c.includes("SEM_FACE")) return { texto: "Sem rosto comparavel", desc: "Nao foi possivel comparar", tone: "slate", icon: <FaQuestionCircle /> };
+  return { texto: "Inconclusivo", desc: "Evidencias insuficientes para confirmar", tone: "amber", icon: <FaQuestionCircle /> };
+}
+
+// Interpreta a similaridade ArcFace (0 a 1) em texto util ao analista.
+function interpretarSimilaridade(sim) {
+  if (sim == null || sim === "") return { texto: "Nao disponivel", tone: "slate", pct: 0 };
+  const s = Number(sim);
+  if (!Number.isFinite(s)) return { texto: "Nao disponivel", tone: "slate", pct: 0 };
+  const pct = Math.max(0, Math.min(100, Math.round(s * 100)));
+  if (s >= 0.45) return { texto: "Alta compatibilidade — provavelmente a mesma pessoa", tone: "emerald", pct };
+  if (s >= 0.35) return { texto: "Compatibilidade moderada — analise visual recomendada", tone: "amber", pct };
+  if (s >= 0.15) return { texto: "Baixa compatibilidade — identidade incerta", tone: "amber", pct };
+  return { texto: "Incompativel — provavelmente pessoa diferente", tone: "rose", pct };
+}
+
 const ACAO_TONE = {
   "Confirmar Similaridade": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-300", icon: <FaCheckCircle /> },
   "Confirmar Irregularidade": { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-300", icon: <FaTimesCircle /> },
   "Confirmar Inconclusivo": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-300", icon: <FaQuestionCircle /> },
   "Inconsistencia Tecnica": { bg: "bg-slate-100", text: "text-slate-600", border: "border-slate-300", icon: <FaWrench /> },
+};
+
+const TONE_CLASSES = {
+  emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  amber: "border-amber-200 bg-amber-50 text-amber-700",
+  rose: "border-rose-200 bg-rose-50 text-rose-700",
+  blue: "border-blue-200 bg-blue-50 text-blue-700",
+  slate: "border-slate-200 bg-slate-50 text-slate-700",
 };
 
 function Badge({ acao }) {
@@ -55,41 +86,26 @@ function Badge({ acao }) {
   );
 }
 
-function ScoreBar({ score, label }) {
-  if (score == null || score < 0) return <span className="text-sm text-slate-400">-</span>;
-  const pct = Math.min(score, 100);
-  const color = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-rose-500";
-  return (
-    <div>
-      {label && <p className="mb-1 text-xs font-bold uppercase text-slate-500">{label}</p>}
-      <div className="flex items-center gap-3">
-        <div className="h-3 w-32 overflow-hidden rounded-full bg-slate-200">
-          <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-        </div>
-        <span className="text-2xl font-black text-slate-700">{score}</span>
-      </div>
-    </div>
-  );
-}
-
 function InfoField({ label, value, full }) {
   return (
     <div className={full ? "col-span-full" : ""}>
       <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-800">{value || "-"}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-800">{value || value === 0 ? value : "-"}</p>
     </div>
   );
 }
 
-function JsonList({ label, items }) {
+function JsonList({ label, items, tone = "slate" }) {
   if (!items || !Array.isArray(items) || items.length === 0) return null;
+  const dot = tone === "rose" ? "text-rose-400" : tone === "emerald" ? "text-emerald-500" : "text-slate-400";
   return (
-    <div className="col-span-full">
+    <div>
       <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
-      <ul className="mt-1 list-inside list-disc space-y-0.5">
+      <ul className="mt-1.5 space-y-1">
         {items.map((item, i) => (
-          <li key={i} className="text-sm text-slate-700">
-            {String(item)}
+          <li key={i} className="flex gap-2 text-sm text-slate-700">
+            <span className={`mt-1 ${dot}`}>•</span>
+            <span>{String(item)}</span>
           </li>
         ))}
       </ul>
@@ -97,145 +113,13 @@ function JsonList({ label, items }) {
   );
 }
 
-const MAPA_STATUS_COLOR = {
-  COMPATIVEL: "bg-emerald-100 text-emerald-700",
-  PARCIALMENTE_COMPATIVEL: "bg-amber-100 text-amber-700",
-  INCOMPATIVEL: "bg-rose-100 text-rose-700",
-  NAO_VISIVEL: "bg-slate-100 text-slate-500",
-};
-
-function MapaFacialVisual({ mapa }) {
-  if (!mapa || typeof mapa !== "object") return null;
-  const entries = Object.entries(mapa);
-  if (entries.length === 0) return null;
-
-  return (
-    <div className="col-span-full">
-      <p className="mb-2 text-xs font-bold uppercase text-slate-500">Mapa Facial Visual</p>
-      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 lg:grid-cols-4">
-        {entries.map(([key, val]) => {
-          const status = String(val).toUpperCase().replace(/ /g, "_");
-          const colors = MAPA_STATUS_COLOR[status] || MAPA_STATUS_COLOR.NAO_VISIVEL;
-          return (
-            <div key={key} className={`rounded-xl px-3 py-2 ${colors}`}>
-              <p className="text-[10px] font-bold uppercase">{key.replace(/_/g, " ")}</p>
-              <p className="text-xs font-black">{String(val)}</p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function MapaFacialTecnico({ mapa }) {
-  if (!mapa || typeof mapa !== "object") return null;
-  const entries = Object.entries(mapa);
-  if (entries.length === 0) return null;
-
-  return (
-    <div className="col-span-full">
-      <p className="mb-2 text-xs font-bold uppercase text-slate-500">Mapa Facial Tecnico (Face Mesh)</p>
-      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3">
-        {entries.map(([key, val]) => {
-          const status = val?.status || "NAO_VISIVEL";
-          const colors = MAPA_STATUS_COLOR[status] || MAPA_STATUS_COLOR.NAO_VISIVEL;
-          return (
-            <div key={key} className={`rounded-xl px-3 py-2 ${colors}`}>
-              <p className="text-[10px] font-bold uppercase">{key.replace(/_/g, " ")}</p>
-              <p className="text-xs font-black">{status}</p>
-              {val?.distancia != null && <p className="text-[10px]">dist: {val.distancia}</p>}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function BiometriaDetalhes({ detalhes }) {
-  if (!detalhes || !Array.isArray(detalhes) || detalhes.length === 0) return null;
-
-  return (
-    <div className="col-span-full">
-      <p className="mb-2 text-xs font-bold uppercase text-slate-500">Detalhes Biometria por Variante</p>
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-3 py-2 font-bold text-slate-600">Variante</th>
-              <th className="px-3 py-2 font-bold text-slate-600">Faces</th>
-              <th className="px-3 py-2 font-bold text-slate-600">Similaridade</th>
-              <th className="px-3 py-2 font-bold text-slate-600">Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {detalhes.map((d, i) => (
-              <tr key={i} className="border-t border-slate-100">
-                <td className="px-3 py-2 font-semibold">{d.variante}</td>
-                <td className="px-3 py-2">{d.faces_detectadas}</td>
-                <td className="px-3 py-2">{d.melhor_similaridade ?? "-"}</td>
-                <td className="px-3 py-2 font-black">{d.score ?? "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function VarianteLista({ variantes }) {
-  if (!variantes || !Array.isArray(variantes) || variantes.length === 0) return null;
-
-  return (
-    <div className="col-span-full">
-      <p className="text-xs font-bold uppercase text-slate-500">Variantes Face Mesh Analisadas</p>
-      <div className="mt-2 grid gap-2 md:grid-cols-2">
-        {variantes.map((item, idx) => (
-          <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-black text-slate-800">{item.variante || "-"}</span>
-              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">
-                Score {item.score_face_mesh ?? "-"}
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-slate-500">
-              Cadastro: {item.rosto_cadastro ? "sim" : "nao"} | Camera: {item.rosto_camera ? "sim" : "nao"} | Rostos na camera: {item.quantidade_rostos_camera ?? 0}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TextoCorto({ value, lines = 3 }) {
-  if (!value) return <span className="text-sm text-slate-400">-</span>;
-  return (
-    <p
-      className="mt-1 rounded-2xl bg-slate-50 p-4 text-sm leading-relaxed text-slate-700"
-      style={{
-        display: "-webkit-box",
-        WebkitLineClamp: lines,
-        WebkitBoxOrient: "vertical",
-        overflow: "hidden",
-      }}
-    >
-      {value}
-    </p>
-  );
+function Paragrafo({ value }) {
+  if (!value) return null;
+  return <p className="rounded-2xl bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">{value}</p>;
 }
 
 function MediaCard({ title, subtitle, url, fallbackLabel = "Sem imagem", tone = "blue" }) {
-  const tones = {
-    blue: "text-blue-600",
-    emerald: "text-emerald-600",
-    amber: "text-amber-600",
-    rose: "text-rose-600",
-    slate: "text-slate-500",
-  };
-
+  const tones = { blue: "text-blue-600", emerald: "text-emerald-600", amber: "text-amber-600", rose: "text-rose-600", slate: "text-slate-500" };
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -255,16 +139,8 @@ function MediaCard({ title, subtitle, url, fallbackLabel = "Sem imagem", tone = 
 }
 
 function DecisionCard({ label, value, full = false, tone = "slate" }) {
-  const tones = {
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-    rose: "border-rose-200 bg-rose-50 text-rose-700",
-    slate: "border-slate-200 bg-slate-50 text-slate-700",
-  };
-
   return (
-    <div className={`${full ? "col-span-full" : ""} rounded-2xl border p-4 shadow-sm ${tones[tone] || tones.slate}`}>
+    <div className={`${full ? "col-span-full" : ""} rounded-2xl border p-4 shadow-sm ${TONE_CLASSES[tone] || TONE_CLASSES.slate}`}>
       <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-80">{label}</p>
       <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-900">{value || "-"}</p>
     </div>
@@ -278,12 +154,12 @@ export default function MonitoramentoDetalhe() {
   const [row, setRow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [salvandoPdf, setSalvandoPdf] = useState(false);
-  const backTarget = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    const dia = params.get("dia");
-    return dia ? `/monitoramento/dia/${dia}` : "/monitoramento";
-  }, [location.search]);
+  const [lista, setLista] = useState([]);
 
+  const dia = useMemo(() => new URLSearchParams(location.search).get("dia"), [location.search]);
+  const backTarget = useMemo(() => (dia ? `/monitoramento/dia/${dia}` : "/monitoramento"), [dia]);
+
+  // Carrega o laudo atual.
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -292,6 +168,38 @@ export default function MonitoramentoDetalhe() {
       setLoading(false);
     })();
   }, [id]);
+
+  // Carrega a sequencia de laudos (do dia) para navegar com as setas.
+  useEffect(() => {
+    (async () => {
+      let q = supabase.from("vision_inspecoes").select("id,nome").order("created_at", { ascending: false });
+      if (dia) q = q.eq("dt_evento", dia);
+      else q = q.limit(500);
+      const { data } = await q;
+      if (Array.isArray(data)) setLista(data);
+    })();
+  }, [dia]);
+
+  const idx = useMemo(() => lista.findIndex((l) => String(l.id) === String(id)), [lista, id]);
+  const irPara = useCallback(
+    (delta) => {
+      if (idx < 0) return;
+      const alvo = lista[idx + delta];
+      if (!alvo) return;
+      navigate(`/monitoramento/${alvo.id}${dia ? `?dia=${dia}` : ""}`);
+    },
+    [idx, lista, dia, navigate],
+  );
+
+  // Setas do teclado para navegar.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "ArrowLeft") irPara(-1);
+      if (e.key === "ArrowRight") irPara(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [irPara]);
 
   const excluir = async () => {
     if (!window.confirm("Excluir este laudo?")) return;
@@ -312,25 +220,17 @@ export default function MonitoramentoDetalhe() {
   if (loading) return <div className="p-8 text-center text-slate-400">Carregando...</div>;
   if (!row) return <div className="p-8 text-center text-slate-400">Laudo nao encontrado.</div>;
 
-  const varianteEscolhida =
-    row.variante_face_mesh ||
-    row.variante_face_mesh_prioritaria ||
-    (Array.isArray(row.variantes_face_mesh_testadas) && row.variantes_face_mesh_testadas[0]?.variante) ||
-    row.melhor_variante_biometrica ||
-    "camera_melhorada";
-
-  const totalVariantesFaceMesh = Array.isArray(row.variantes_face_mesh_testadas) ? row.variantes_face_mesh_testadas.length : 0;
+  const veredito = vereditoLegivel(row.categoria);
+  const sim = interpretarSimilaridade(row.similaridade_arcface);
   const imagemTratadaUrl = row.img_camera_tratada_url || row.img_camera_url;
-  const varianteUsada = row.variante_imagem_usada_biometria || row.melhor_variante_biometrica;
-  const varianteUsadaLabel = nomeVarianteLegivel(varianteUsada);
-  const imagemTratadaLabel = row.img_camera_tratada_url
-    ? `Tratada final usada na biometria${varianteUsadaLabel ? ` - ${varianteUsadaLabel}` : ""}`
-    : "Imagem original usada na analise";
+  const varianteUsadaLabel = nomeVarianteLegivel(row.variante_imagem_usada_biometria || row.melhor_variante_biometrica);
   const cropUsadoUrl = row.img_crop_biometria_url;
+  const temNav = idx >= 0 && lista.length > 1;
 
   return (
     <div className="space-y-5 p-4 md:p-6">
-      <div className="flex items-center gap-3">
+      {/* Barra de acoes */}
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => navigate(backTarget)}
           className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
@@ -352,137 +252,129 @@ export default function MonitoramentoDetalhe() {
         </button>
       </div>
 
+      {/* Navegacao entre laudos com legenda em cima */}
+      {temNav && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <button
+            onClick={() => irPara(-1)}
+            disabled={idx <= 0}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <FaChevronLeft /> Anterior
+          </button>
+          <div className="min-w-0 text-center">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+              Laudo {idx + 1} de {lista.length}
+            </p>
+            <p className="truncate text-sm font-black text-slate-800">{row.nome || "Sem nome"}</p>
+          </div>
+          <button
+            onClick={() => irPara(1)}
+            disabled={idx >= lista.length - 1}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Proximo <FaChevronRight />
+          </button>
+        </div>
+      )}
+
       <InovePageHeader
         eyebrow="Laudo de Inspecao"
         title={row.nome || "Sem nome"}
-        description={`Registro ${row.registro} - ${row.data_hora_evento || "-"}${row.prefixo || row.veiculo ? ` | Prefixo ${row.prefixo || row.veiculo}` : ""}`}
+        description={`Registro ${row.registro || "-"} · ${row.data_hora_evento || "-"}${row.prefixo || row.veiculo ? ` · Prefixo ${row.prefixo || row.veiculo}` : ""}`}
         icon={<FaExclamationTriangle className="text-xl" />}
         tone="blue"
         actions={<Badge acao={row.acao_prevista} />}
       />
 
+      {/* Veredito em destaque */}
       <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">Leitura do Bot</h2>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <DecisionCard label="Veredito final" value={row.recomendacao_operacional} tone="blue" />
-          <DecisionCard label="Recomendacao da camera" value={row.camera_recomendacao || row.recomendacao_camera} tone="amber" />
-          <DecisionCard label="Avaliacao da camera" value={row.avaliacao_camera} tone="slate" />
-          <DecisionCard label="Imagem usada na biometria" value={varianteUsadaLabel || varianteEscolhida} tone="emerald" />
-          <DecisionCard label="Variantes Face Mesh" value={totalVariantesFaceMesh} tone="slate" />
-          <DecisionCard label="Motivo Face Mesh" value={row.motivo_face_mesh} full tone="rose" />
-          <DecisionCard label="Descricao profissional" value={row.descricao_profissional} full tone="slate" />
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <div className={`rounded-3xl border-2 p-5 ${TONE_CLASSES[veredito.tone]}`}>
+            <p className="text-[11px] font-black uppercase tracking-widest opacity-70">Veredito</p>
+            <div className="mt-1 flex items-center gap-3">
+              <span className="text-2xl">{veredito.icon}</span>
+              <div>
+                <p className="text-2xl font-black leading-tight">{veredito.texto}</p>
+                <p className="text-sm font-semibold opacity-80">{veredito.desc}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-black">Confianca: {row.confianca || "-"}</span>
+              <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-black">Acao: {row.recomendacao_operacional || row.acao_prevista || "-"}</span>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Compatibilidade facial (ArcFace)</p>
+            <p className="mt-1 text-3xl font-black text-slate-800">{row.similaridade_arcface ?? "-"}</p>
+            <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-slate-200">
+              <div
+                className={`h-full rounded-full ${sim.tone === "emerald" ? "bg-emerald-500" : sim.tone === "amber" ? "bg-amber-500" : sim.tone === "rose" ? "bg-rose-500" : "bg-slate-400"}`}
+                style={{ width: `${sim.pct}%` }}
+              />
+            </div>
+            <p className={`mt-2 text-sm font-semibold ${sim.tone === "rose" ? "text-rose-600" : sim.tone === "emerald" ? "text-emerald-600" : "text-slate-600"}`}>
+              {sim.texto}
+            </p>
+          </div>
         </div>
       </InoveSection>
 
+      {/* Imagens / evidencias */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <MediaCard title="Foto Cadastro" subtitle="Imagem de referencia do cadastro" url={row.img_cadastro_url} tone="blue" />
-        <MediaCard title="Foto Camera" subtitle="Imagem original capturada" url={row.img_camera_url} tone="slate" />
-        <MediaCard title="Imagem Tratada" subtitle={imagemTratadaLabel} url={imagemTratadaUrl} tone="emerald" />
-        <MediaCard
-          title="Rosto Comparado"
-          subtitle="Recorte exato do rosto que o bot usou no ArcFace"
-          url={cropUsadoUrl}
-          fallbackLabel="Sem recorte de rosto"
-          tone="amber"
-        />
+        <MediaCard title="Foto Cadastro" subtitle="Referencia do cadastro" url={row.img_cadastro_url} tone="blue" />
+        <MediaCard title="Foto Camera" subtitle="Captura usada na analise" url={row.img_camera_url} tone="slate" />
+        <MediaCard title="Imagem Tratada" subtitle={varianteUsadaLabel || "Tratada para biometria"} url={imagemTratadaUrl} tone="emerald" />
+        <MediaCard title="Rosto Comparado" subtitle="Recorte exato avaliado" url={cropUsadoUrl} fallbackLabel="Sem recorte de rosto" tone="amber" />
       </div>
 
+      {/* Parecer */}
       <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">Ponto de Controle</h2>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <InfoField label="Prefixo" value={row.prefixo} />
-          <InfoField label="Veiculo" value={row.veiculo} />
-          <InfoField label="Codigo Usuario" value={row.codigo_usuario} />
-          <InfoField label="Codigo Cartao" value={row.codigo_cartao} />
-          <InfoField label="Tipo Cartao" value={row.tipo_cartao} />
-        </div>
-      </InoveSection>
-
-      <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">Resultado da Analise</h2>
-        <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
-          <ScoreBar score={row.score} label="Score Final" />
-          <ScoreBar score={row.score_biometrico} label="Score Biometrico" />
-          <ScoreBar score={row.score_face_mesh} label="Face Mesh" />
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">ArcFace</p>
-            <p className="mt-1 text-2xl font-black text-slate-700">{row.similaridade_arcface ?? "-"}</p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
-          <InfoField label="Categoria" value={row.categoria} />
-          <InfoField label="Confianca" value={row.confianca} />
-          <InfoField label="Rosto Visivel" value={row.rosto_visivel ? "Sim" : "Nao"} />
-          <InfoField label="Quantidade Rostos Camera" value={row.quantidade_rostos_camera} />
-          <InfoField label="Qualidade Camera" value={row.qualidade_imagem_camera} />
-          <InfoField label="Categoria Biometrica" value={row.categoria_biometrica} />
-          <InfoField label="Confianca Biometrica" value={row.confianca_biometrica} />
-          <InfoField label="Decisao Biometrica" value={row.decisao_biometrica} />
-          <InfoField label="Melhor Variante" value={row.melhor_variante_biometrica} />
-          <InfoField label="Recomendacao Operacional" value={row.recomendacao_operacional} />
-          <InfoField label="Pontos Compativeis" value={row.pontos_compativeis} />
-          <InfoField label="Pontos Divergentes" value={row.pontos_divergentes} />
-          <InfoField label="Pontos Nao Visiveis" value={row.pontos_nao_visiveis} />
-        </div>
-      </InoveSection>
-
-      <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">Laudo Pericial</h2>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Parecer</h2>
         <div className="grid gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Descricao Profissional</p>
-            <TextoCorto value={row.descricao_profissional} lines={3} />
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Motivo</p>
-            <TextoCorto value={row.motivo} lines={2} />
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-slate-500">Motivo Face Mesh</p>
-            <TextoCorto value={row.motivo_face_mesh} lines={2} />
-          </div>
-          <JsonList label="Indicios de Semelhanca" items={row.indicios_semelhanca} />
-          <JsonList label="Indicios de Diferenca" items={row.indicios_diferenca} />
-          <JsonList label="Limitacoes" items={row.limitacoes} />
-        </div>
-      </InoveSection>
-
-      <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">Mapa Facial</h2>
-        <div className="grid gap-4">
-          {row.mapa_facial_visual_url ? (
-            <div className="col-span-full rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="mb-3 text-xs font-black uppercase tracking-widest text-blue-600">Mapa Facial Visual</p>
-              <img src={row.mapa_facial_visual_url} alt="Mapa facial visual" className="w-full rounded-2xl border" />
+          <Paragrafo value={row.descricao_profissional} />
+          {row.motivo ? (
+            <div>
+              <p className="text-xs font-bold uppercase text-slate-500">Motivo da decisao</p>
+              <Paragrafo value={row.motivo} />
             </div>
           ) : null}
-          <MapaFacialVisual mapa={row.mapa_facial_visual} />
-          <MapaFacialTecnico mapa={row.mapa_facial_tecnico} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <JsonList label="Indicios de semelhanca" items={row.indicios_semelhanca} tone="emerald" />
+            <JsonList label="Indicios de diferenca" items={row.indicios_diferenca} tone="rose" />
+          </div>
+          <JsonList label="Limitacoes da analise" items={row.limitacoes} />
         </div>
       </InoveSection>
 
+      {/* Camera / enquadramento */}
       <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">camera_</h2>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <InfoField label="camera_enquadramento" value={row.camera_enquadramento} />
-          <InfoField label="camera_area_rosto_percentual" value={row.camera_area_rosto_percentual} />
-          <InfoField label="camera_posicao_rosto" value={row.camera_posicao_rosto} />
-          <InfoField label="camera_avaliacao" value={row.avaliacao_camera} full />
-          <InfoField label="camera_recomendacao" value={row.camera_recomendacao || row.recomendacao_camera} full />
-          <JsonList label="camera_problemas_enquadramento" items={row.problemas_enquadramento_camera} />
+        <h2 className="mb-4 text-lg font-black text-slate-900">Camera e enquadramento</h2>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <InfoField label="Enquadramento" value={row.camera_enquadramento || row.avaliacao_camera} />
+          <InfoField label="Qualidade da imagem" value={row.qualidade_imagem_camera} />
+          <InfoField label="Area do rosto" value={row.camera_area_rosto_percentual != null ? `${row.camera_area_rosto_percentual}%` : "-"} />
+          <InfoField label="Rostos na cena" value={row.quantidade_rostos_camera} />
+          <InfoField label="Imagem usada na biometria" value={varianteUsadaLabel} />
+          <div className="col-span-full">
+            <p className="text-xs font-bold uppercase text-slate-500">Recomendacao para a camera</p>
+            <Paragrafo value={row.camera_recomendacao || row.recomendacao_camera} />
+          </div>
+          <JsonList label="Problemas de enquadramento" items={row.problemas_enquadramento_camera} tone="rose" />
         </div>
       </InoveSection>
 
+      {/* Identificacao / cartao */}
       <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">Dados do Cartao</h2>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Identificacao</h2>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <InfoField label="Codigo Usuario" value={row.codigo_usuario} />
-          <InfoField label="Codigo Cartao" value={row.codigo_cartao} />
-          <InfoField label="Tipo Cartao" value={row.tipo_cartao} />
-          <InfoField label="Status Cartao" value={row.status_cartao} />
-          <InfoField label="Status Inspecao" value={row.status_inspecao} />
-          <InfoField label="Data/Hora Evento" value={row.data_hora_evento} />
+          <InfoField label="Prefixo / Veiculo" value={row.prefixo || row.veiculo} />
+          <InfoField label="Codigo do usuario" value={row.codigo_usuario} />
+          <InfoField label="Codigo do cartao" value={row.codigo_cartao} />
+          <InfoField label="Tipo do cartao" value={row.tipo_cartao} />
+          <InfoField label="Status do cartao" value={row.status_cartao} />
+          <InfoField label="Data/hora do evento" value={row.data_hora_evento} />
         </div>
       </InoveSection>
     </div>

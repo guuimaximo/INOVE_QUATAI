@@ -169,13 +169,21 @@ export default function MonitoramentoDetalhe() {
     })();
   }, [id]);
 
-  // Carrega a sequencia de laudos (do dia) para navegar com as setas.
+  // Carrega a sequencia de laudos para navegar com as setas.
+  // Usa a view (que tem dt_evento); a tabela crua vision_inspecoes nao tem essa coluna.
   useEffect(() => {
     (async () => {
-      let q = supabase.from("vision_inspecoes").select("id,nome").order("created_at", { ascending: false });
+      let q = supabase
+        .from("vw_monitoramento_inspecoes_base")
+        .select("id,nome")
+        .order("created_at", { ascending: false });
       if (dia) q = q.eq("dt_evento", dia);
       else q = q.limit(500);
-      const { data } = await q;
+      const { data, error } = await q;
+      if (error) {
+        console.error("Erro ao carregar sequencia de laudos:", error);
+        return;
+      }
       if (Array.isArray(data)) setLista(data);
     })();
   }, [dia]);

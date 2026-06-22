@@ -169,9 +169,17 @@ export default function MonitoramentoDetalhe() {
     })();
   }, [id]);
 
+  // Sequencia vinda da lista (respeita o filtro atual: ex. so irregularidades).
+  const seqState = location.state?.seq;
+
   // Carrega a sequencia de laudos para navegar com as setas.
-  // Usa a view (que tem dt_evento); a tabela crua vision_inspecoes nao tem essa coluna.
+  // 1) Se veio do state (lista filtrada), usa exatamente aquela ordem.
+  // 2) Senao, busca a sequencia do dia na view (que tem dt_evento).
   useEffect(() => {
+    if (Array.isArray(seqState) && seqState.length) {
+      setLista(seqState.map((sid) => ({ id: sid })));
+      return;
+    }
     (async () => {
       let q = supabase
         .from("vw_monitoramento_inspecoes_base")
@@ -186,7 +194,7 @@ export default function MonitoramentoDetalhe() {
       }
       if (Array.isArray(data)) setLista(data);
     })();
-  }, [dia]);
+  }, [dia, seqState]);
 
   const idx = useMemo(() => lista.findIndex((l) => String(l.id) === String(id)), [lista, id]);
   const irPara = useCallback(
@@ -194,9 +202,10 @@ export default function MonitoramentoDetalhe() {
       if (idx < 0) return;
       const alvo = lista[idx + delta];
       if (!alvo) return;
-      navigate(`/monitoramento/${alvo.id}${dia ? `?dia=${dia}` : ""}`);
+      // Preserva a sequencia filtrada ao navegar para o proximo/anterior.
+      navigate(`/monitoramento/${alvo.id}${dia ? `?dia=${dia}` : ""}`, { state: location.state });
     },
-    [idx, lista, dia, navigate],
+    [idx, lista, dia, navigate, location.state],
   );
 
   // Setas do teclado para navegar.

@@ -235,6 +235,10 @@ export default function MonitoramentoDia() {
     return list;
   }, [filteredRows, sortField, sortAsc]);
 
+  // Sequencia completa (filtrada + ordenada) para as setas de navegacao no detalhe
+  // respeitarem o filtro atual (ex.: so irregularidades).
+  const seqIds = useMemo(() => orderedRows.map((r) => r.id), [orderedRows]);
+
   const totalPages = Math.max(1, Math.ceil(orderedRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageRows = orderedRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -441,6 +445,7 @@ export default function MonitoramentoDia() {
                   <Link
                     key={row.id}
                     to={`/monitoramento/${row.id}?dia=${dia}`}
+                    state={{ seq: seqIds }}
                     className="block rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                   >
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

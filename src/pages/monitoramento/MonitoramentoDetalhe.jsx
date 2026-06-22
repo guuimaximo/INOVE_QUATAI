@@ -304,6 +304,24 @@ export default function MonitoramentoDetalhe() {
         actions={<Badge acao={row.acao_prevista} />}
       />
 
+      {/* Identificacao / cartao - no topo */}
+      <InoveSection>
+        <h2 className="mb-4 text-lg font-black text-slate-900">Identificacao</h2>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+          <InfoField label="Nome" value={row.nome} />
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3">
+            <p className="text-xs font-bold uppercase text-blue-600">Tipo do cartao</p>
+            <p className="mt-1 text-sm font-black text-blue-800">{row.tipo_cartao || "-"}</p>
+          </div>
+          <InfoField label="Prefixo / Veiculo" value={row.prefixo || row.veiculo} />
+          <InfoField label="Codigo do usuario" value={row.codigo_usuario} />
+          <InfoField label="Codigo do cartao" value={row.codigo_cartao} />
+          <InfoField label="Status do cartao" value={row.status_cartao} />
+          <InfoField label="Data/hora do evento" value={row.data_hora_evento} />
+          <InfoField label="Registro" value={row.registro} />
+        </div>
+      </InoveSection>
+
       {/* Veredito em destaque */}
       <InoveSection>
         <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
@@ -382,18 +400,6 @@ export default function MonitoramentoDetalhe() {
         </div>
       </InoveSection>
 
-      {/* Identificacao / cartao */}
-      <InoveSection>
-        <h2 className="mb-4 text-lg font-black text-slate-900">Identificacao</h2>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <InfoField label="Prefixo / Veiculo" value={row.prefixo || row.veiculo} />
-          <InfoField label="Codigo do usuario" value={row.codigo_usuario} />
-          <InfoField label="Codigo do cartao" value={row.codigo_cartao} />
-          <InfoField label="Tipo do cartao" value={row.tipo_cartao} />
-          <InfoField label="Status do cartao" value={row.status_cartao} />
-          <InfoField label="Data/hora do evento" value={row.data_hora_evento} />
-        </div>
-      </InoveSection>
     </div>
   );
 }

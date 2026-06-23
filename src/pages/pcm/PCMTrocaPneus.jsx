@@ -3654,15 +3654,23 @@ export default function PCMTrocaPneus() {
       norm(payload.numeroFogoDestinoRetirado) &&
       !payload.isEditing
     ) {
+      const { data: ultimoEstoque } = await supabase
+        .from("pcm_estoque_pneus")
+        .select("ficha_estoque")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const fichaAtual = ultimoEstoque?.ficha_estoque || payload.ficha;
+      const prefixoDestino = payload.prefixoInstalacao || "destino";
       const { error: estoqueError } = await supabase.from("pcm_estoque_pneus").insert([
         {
           id: createClientUuid(),
-          ficha_estoque: payload.ficha,
+          ficha_estoque: fichaAtual,
           numero_pneu: payload.numeroFogoDestinoRetirado,
           numero_fogo: payload.numeroFogoDestinoRetirado,
           marca: "Outra",
           situacao: SITUACAO_ESTOQUE_CONSERTO,
-          observacoes: `Lancado automaticamente pela troca ${payload.ficha}. Pneu removido do carro de destino.`,
+          observacoes: `Saiu do carro ${prefixoDestino} - troca ${payload.ficha}.`,
           criado_por_login: payload.criadoPorLogin,
           criado_por_nome: payload.criadoPorNome,
           criado_por_id: payload.criadoPorId,

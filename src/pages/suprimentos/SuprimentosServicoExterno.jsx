@@ -311,11 +311,132 @@ function PecasCatalogPicker({ onSelect, onClose }) {
   );
 }
 
+/* ─── PneuFogoPicker (nºs de fogo disponíveis no TransNet) ────── */
+function normalizaFogo(valor) {
+  const digits = String(valor || "").replace(/\D/g, "");
+  return digits ? digits.padStart(6, "0") : "";
+}
+
+function PneuFogoPicker({ onConfirm, onClose, jaSelecionados = [] }) {
+  const [pneus, setPneus] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [marcados, setMarcados] = useState(() => new Set(jaSelecionados.map(normalizaFogo).filter(Boolean)));
+
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      setLoading(true);
+      const [{ data: ativos }, { data: aloc }] = await Promise.all([
+        supabase.from("pcm_pneus_transnet_ativos").select("numero_fogo, localizacao, posicao, marca, medida"),
+        supabase.from("pcm_pneus_transnet_alocacao").select("numero_fogo"),
+      ]);
+      if (!ativo) return;
+      const alocSet = new Set((aloc || []).map((a) => normalizaFogo(a.numero_fogo)).filter(Boolean));
+      const isVeiculo = (loc) => /^\d{3}-[0-9A-Z]+$/i.test(String(loc || "").trim());
+      const isRecap = (loc) => /EXTERNO|RECAP/i.test(String(loc || ""));
+      const seen = new Set();
+      const lista = [];
+      for (const a of ativos || []) {
+        const fogo = normalizaFogo(a.numero_fogo);
+        if (!fogo || fogo === "000000" || seen.has(fogo)) continue;
+        if (alocSet.has(fogo) || isVeiculo(a.localizacao)) continue; // está montado em veículo
+        seen.add(fogo);
+        lista.push({
+          fogo,
+          marca: a.marca || "",
+          medida: a.medida || "",
+          localizacao: a.localizacao || "",
+          categoria: isRecap(a.localizacao) ? "Recapadora" : "Estoque",
+        });
+      }
+      lista.sort((x, y) => x.fogo.localeCompare(y.fogo, "pt-BR", { numeric: true }));
+      setPneus(lista);
+      setLoading(false);
+    })();
+    return () => { ativo = false; };
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return pneus;
+    return pneus.filter((p) => `${p.fogo} ${p.marca} ${p.medida} ${p.localizacao} ${p.categoria}`.toLowerCase().includes(q));
+  }, [pneus, search]);
+
+  function toggle(fogo) {
+    setMarcados((prev) => {
+      const next = new Set(prev);
+      if (next.has(fogo)) next.delete(fogo); else next.add(fogo);
+      return next;
+    });
+  }
+
+  function confirmar() {
+    const escolhidos = pneus.filter((p) => marcados.has(p.fogo));
+    onConfirm(escolhidos);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[85vh] w-full max-w-md flex-col rounded-xl bg-white shadow-2xl border border-slate-200">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Nºs de fogo disponíveis</h3>
+            <p className="text-xs text-slate-400">Estoque ou recapadora no TransNet (não montados em veículo).</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><FaTimes /></button>
+        </div>
+        <div className="px-4 py-3 border-b border-slate-100">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
+            <FaSearch className="text-slate-400 text-xs" />
+            <input autoFocus className="bg-transparent outline-none text-sm font-semibold text-slate-700 placeholder:text-slate-400 w-full" placeholder="Buscar nº de fogo, marca…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <p className="py-8 text-center text-sm text-slate-400">Carregando…</p>
+          ) : filtered.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">Nenhum nº de fogo disponível.</p>
+          ) : (
+            filtered.map((p) => {
+              const checked = marcados.has(p.fogo);
+              return (
+                <button
+                  key={p.fogo}
+                  type="button"
+                  onClick={() => toggle(p.fogo)}
+                  className={`flex w-full items-center gap-3 px-5 py-3 text-left border-b border-slate-50 last:border-0 hover:bg-blue-50 ${checked ? "bg-blue-50" : ""}`}
+                >
+                  <input type="checkbox" checked={checked} readOnly className="accent-blue-600 shrink-0" />
+                  <span className="rounded-lg bg-slate-100 px-2 py-0.5 font-mono text-sm font-bold text-slate-700">{p.fogo}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-slate-700">{[p.marca, p.medida].filter(Boolean).join(" · ") || "Sem marca"}</p>
+                    <p className="truncate text-[11px] text-slate-400">{p.localizacao || "—"}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${p.categoria === "Recapadora" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{p.categoria}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4">
+          <span className="text-xs font-semibold text-slate-500">{marcados.size} selecionado(s)</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+            <button onClick={confirmar} disabled={marcados.size === 0} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">Adicionar selecionados</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── ItemRow ─────────────────────────────────────────────────── */
-function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
+function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly, tipo = "peca" }) {
   const fileRef = useRef();
   const [uploading, setUploading] = useState(false);
   const { viewer, openViewer, closeViewer } = useMediaViewer();
+  const isPneu = tipo === "pneu";
 
   function handle(field) {
     return (e) => onChange(index, { ...item, [field]: e.target.value });
@@ -338,33 +459,43 @@ function ItemRow({ item, index, onChange, onRemove, onPickCatalog, readOnly }) {
           {!readOnly && (
             <button type="button" onClick={() => onPickCatalog(index)}
               className="mt-0.5 flex-shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-700 hover:bg-blue-100"
-              title="Selecionar do catálogo">
+              title={isPneu ? "Selecionar nº de fogo" : "Selecionar do catálogo"}>
               <FaList />
             </button>
           )}
           <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
             <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">Código</p>
-              <input className={inputClass + " text-xs"} placeholder="Código" value={item.codigo} onChange={handle("codigo")} disabled={readOnly} />
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">{isPneu ? "Nº de fogo" : "Código"}</p>
+              <input className={inputClass + " text-xs"} placeholder={isPneu ? "Nº de fogo" : "Código"} value={item.codigo} onChange={handle("codigo")} disabled={readOnly} />
             </div>
             <div className="sm:col-span-2">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">Descrição *</p>
-              <PartAutocomplete
-                className={inputClass + " text-xs"}
-                placeholder="Descricao da peca"
-                value={item.descricao}
-                onChange={(value) => onChange(index, { ...item, descricao: value })}
-                onSelect={(peca) =>
-                  onChange(index, {
-                    ...item,
-                    peca_id: peca.id,
-                    codigo: peca.codigo || item.codigo,
-                    descricao: peca.descricao || item.descricao,
-                    unidade: peca.unidade_padrao || item.unidade,
-                  })
-                }
-                disabled={readOnly}
-              />
+              {isPneu ? (
+                <input
+                  className={inputClass + " text-xs"}
+                  placeholder="Marca / medida do pneu"
+                  value={item.descricao}
+                  onChange={handle("descricao")}
+                  disabled={readOnly}
+                />
+              ) : (
+                <PartAutocomplete
+                  className={inputClass + " text-xs"}
+                  placeholder="Descricao da peca"
+                  value={item.descricao}
+                  onChange={(value) => onChange(index, { ...item, descricao: value })}
+                  onSelect={(peca) =>
+                    onChange(index, {
+                      ...item,
+                      peca_id: peca.id,
+                      codigo: peca.codigo || item.codigo,
+                      descricao: peca.descricao || item.descricao,
+                      unidade: peca.unidade_padrao || item.unidade,
+                    })
+                  }
+                  disabled={readOnly}
+                />
+              )}
             </div>
             <div>
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-blue-900">Qtd</p>
@@ -716,6 +847,10 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [catalogTarget, setCatalogTarget] = useState(null);
+  const [tipoItens, setTipoItens] = useState(
+    isEdit && editRecord.itens?.some((it) => it?.tipo === "pneu") ? "pneu" : "peca"
+  );
+  const [fogoPickerOpen, setFogoPickerOpen] = useState(false);
 
   function setF(key, value) { setForm((f) => ({ ...f, [key]: value })); }
 
@@ -741,6 +876,28 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
 
   function removeItem(index) {
     setForm((f) => ({ ...f, itens: f.itens.filter((_, i) => i !== index) }));
+  }
+
+  function handleFogosConfirm(pneus) {
+    setForm((f) => {
+      const existentes = f.itens.filter((it) => normalizaFogo(it.codigo || it.numero_fogo));
+      const fogosExistentes = new Set(existentes.map((it) => normalizaFogo(it.codigo || it.numero_fogo)));
+      const novos = pneus
+        .filter((p) => !fogosExistentes.has(p.fogo))
+        .map((p) => ({
+          ...EMPTY_ITEM,
+          tipo: "pneu",
+          numero_fogo: p.fogo,
+          codigo: p.fogo,
+          descricao: [p.marca, p.medida].filter(Boolean).join(" · ") || `Pneu ${p.fogo}`,
+          quantidade: "1",
+          unidade: "un",
+        }));
+      const base = existentes.length ? existentes : [];
+      const itens = [...base, ...novos];
+      return { ...f, itens: itens.length ? itens : [{ ...EMPTY_ITEM }] };
+    });
+    setFogoPickerOpen(false);
   }
 
   function handleCatalogSelect(peca) {
@@ -862,11 +1019,35 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
 
             {/* Itens */}
             <div>
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-widest text-blue-900">Itens enviados</p>
-                <button type="button" onClick={addItem} className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
-                  <FaPlus /> Adicionar item
-                </button>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-blue-900">Itens enviados</p>
+                  <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setTipoItens("peca")}
+                      className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${tipoItens === "peca" ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      Peças
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTipoItens("pneu")}
+                      className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${tipoItens === "pneu" ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      Pneus
+                    </button>
+                  </div>
+                </div>
+                {tipoItens === "pneu" ? (
+                  <button type="button" onClick={() => setFogoPickerOpen(true)} className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+                    <FaPlus /> Selecionar nº de fogo
+                  </button>
+                ) : (
+                  <button type="button" onClick={addItem} className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+                    <FaPlus /> Adicionar item
+                  </button>
+                )}
               </div>
               <div className="space-y-3">
                 {form.itens.map((item, i) => (
@@ -874,9 +1055,10 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
                     key={i}
                     item={item}
                     index={i}
+                    tipo={tipoItens}
                     onChange={handleItemChange}
                     onRemove={removeItem}
-                    onPickCatalog={(idx) => setCatalogTarget(idx)}
+                    onPickCatalog={(idx) => (tipoItens === "pneu" ? setFogoPickerOpen(true) : setCatalogTarget(idx))}
                     readOnly={false}
                   />
                 ))}
@@ -905,6 +1087,14 @@ function SaidaModal({ editRecord = null, onClose, onSaved, userInfo }) {
 
       {catalogTarget !== null && (
         <PecasCatalogPicker onSelect={handleCatalogSelect} onClose={() => setCatalogTarget(null)} />
+      )}
+
+      {fogoPickerOpen && (
+        <PneuFogoPicker
+          onConfirm={handleFogosConfirm}
+          onClose={() => setFogoPickerOpen(false)}
+          jaSelecionados={form.itens.map((it) => it.codigo || it.numero_fogo).filter(Boolean)}
+        />
       )}
     </>
   );

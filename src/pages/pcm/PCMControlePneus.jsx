@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "../../supabase";
-import { FaSyncAlt, FaSearch, FaCarSide, FaBarcode, FaTimes } from "react-icons/fa";
+import { FaSyncAlt, FaSearch, FaCarSide, FaBarcode, FaTimes, FaFileExcel } from "react-icons/fa";
 import { printEtiquetasPneus } from "../../utils/pneuEtiquetaPdf";
 
 const POSICOES = ["DD", "DE", "TEE", "TEI", "TDI", "TDE"];
@@ -204,6 +205,7 @@ export default function PCMControlePneus() {
   const [etiquetaModalOpen, setEtiquetaModalOpen] = useState(false);
   const [etiquetaBusca, setEtiquetaBusca] = useState("");
   const [etiquetaSelecionadas, setEtiquetaSelecionadas] = useState(new Set());
+  const [etiquetaFonte, setEtiquetaFonte] = useState("fisico");
   const [rowsRaw, setRowsRaw] = useState([]);
   const [trocas, setTrocas] = useState([]);
   const [alocacoes, setAlocacoes] = useState([]);
@@ -920,6 +922,90 @@ export default function PCMControlePneus() {
     };
   }, [estoqueComparado]);
 
+  function exportarExcel() {
+    let linhas = [];
+    let nomeAba = "Pneus";
+
+    if (abaAtiva === "veiculos") {
+      nomeAba = "Veiculos";
+      linhas = filtradas.map((row) => {
+        const base = {
+          Data: fmtData(row.auditoria_em),
+          Ficha: row.ficha || "",
+          Prefixo: row.prefixo || "",
+        };
+        for (const posicao of POSICOES) {
+          const cel = row.posicoes[posicao] || {};
+          base[`${posicao} Base`] = cel.base || "";
+          base[`${posicao} Aud`] = cel.aud || "";
+          base[`${posicao} Status`] = cel.status || "";
+        }
+        base["Troca pos"] = row.troca ? "SIM" : "";
+        return base;
+      });
+    } else if (abaAtiva === "estoque" && abaEstoqueAtiva === "fisico") {
+      nomeAba = "Estoque fisico";
+      linhas = estoqueFisicoOrdenado.map((row) => ({
+        Data: fmtData(row.data_estoque),
+        Ficha: row.ficha_estoque || "",
+        "Numero de fogo": row.pneu || "",
+        Marca: row.marca || "",
+        "Situacao fisica": row.situacao_inove || "",
+        "Status TransNet": row.status || "",
+        "Onde esta no TransNet": row.local || "",
+        Auditoria: row.auditoria_texto || "",
+      }));
+    } else if (abaAtiva === "estoque") {
+      nomeAba = "TransNet borracharia";
+      linhas = estoqueTransnetOrdenado.map((row) => ({
+        "Numero de fogo": row.pneu || "",
+        Marca: row.marca || "",
+        "Local TransNet": row.local || "",
+        "Status confronto": row.status || "",
+        "Estoque fisico": row.ficha_estoque || "",
+        Auditoria: row.auditoria_texto || "",
+        Detalhe: row.detalhe || "",
+      }));
+    } else if (abaAtiva === "recapadora") {
+      nomeAba = "Recapadora";
+      linhas = recapadoraOrdenada.map((row) => ({
+        "Ultima data": fmtData(row.ultima_referencia_em || row.data_estoque),
+        "Local TransNet": row.local_transnet || "",
+        "Numero de fogo": row.pneu || "",
+        Marca: row.marca || "",
+        "Situacao fisica": row.situacao_inove || "",
+        "Status confronto": row.status || "",
+        "Onde aparece": row.local || "",
+        Auditoria: row.auditoria_texto || "",
+        "Ficha conserto": row.ficha_conserto || "",
+        "Status conserto": row.status_conserto || row.origem_conserto || "",
+      }));
+    } else {
+      nomeAba = "Sucata TransNet";
+      linhas = sucataOrdenada.map((row) => ({
+        "Numero de fogo": row.pneu || "",
+        Motivo: row.motivo || "",
+        Marca: row.marca || "",
+        "Status confronto": row.status || "",
+        "Onde aparece": row.local || "",
+        "Ficha estoque": row.ficha_estoque || "",
+        "Situacao fisica": row.situacao_inove || "",
+        Auditoria: row.auditoria_texto || "",
+      }));
+    }
+
+    if (!linhas.length) {
+      alert("Nao ha dados para exportar nesta aba com os filtros atuais.");
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(linhas);
+    XLSX.utils.book_append_sheet(wb, ws, nomeAba.slice(0, 31));
+    const slug = nomeAba.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    XLSX.writeFile(wb, `controle_pneus_${slug}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
   function onSortTabela(key) {
     setOrdenacaoTabela((current) =>
       current.key === key
@@ -1251,7 +1337,16 @@ export default function PCMControlePneus() {
           className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
           title="Auditorias a partir desta data"
         />
-        <span className="ml-auto text-xs text-slate-500">
+        <button
+          type="button"
+          onClick={exportarExcel}
+          className="ml-auto inline-flex items-center gap-2 rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+          title="Baixar a aba atual (com os filtros aplicados) em Excel"
+        >
+          <FaFileExcel />
+          Baixar Excel
+        </button>
+        <span className="text-xs text-slate-500">
           Exibindo {abaAtiva === "veiculos"
             ? filtradas.length
             : abaAtiva === "estoque"
@@ -1362,7 +1457,7 @@ export default function PCMControlePneus() {
             </button>
             <button
               type="button"
-              onClick={() => { setEtiquetaBusca(""); setEtiquetaSelecionadas(new Set()); setEtiquetaModalOpen(true); }}
+              onClick={() => { setEtiquetaBusca(""); setEtiquetaSelecionadas(new Set()); setEtiquetaFonte(abaEstoqueAtiva === "transnet" ? "transnet" : "fisico"); setEtiquetaModalOpen(true); }}
               className="ml-auto inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
             >
               <FaBarcode />
@@ -1587,7 +1682,8 @@ export default function PCMControlePneus() {
 
       {etiquetaModalOpen ? (() => {
         const buscaNorm = String(etiquetaBusca || "").replace(/\D/g, "");
-        const fonteRows = estoqueFisicoFiltrado || [];
+        const fonteRows = (etiquetaFonte === "transnet" ? estoqueTransnetFiltrado : estoqueFisicoFiltrado) || [];
+        const fonteLabel = etiquetaFonte === "transnet" ? "borracharia TransNet" : "estoque físico";
         const matches = buscaNorm
           ? fonteRows.filter((r) => String(r.pneu || "").replace(/\D/g, "").includes(buscaNorm)).slice(0, 12)
           : [];
@@ -1608,10 +1704,26 @@ export default function PCMControlePneus() {
                 </button>
               </div>
               <div className="space-y-4 overflow-y-auto px-5 py-4">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setEtiquetaFonte("fisico"); setEtiquetaSelecionadas(new Set()); }}
+                    className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold ${etiquetaFonte === "fisico" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
+                  >
+                    Estoque físico
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEtiquetaFonte("transnet"); setEtiquetaSelecionadas(new Set()); }}
+                    className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold ${etiquetaFonte === "transnet" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
+                  >
+                    Em estoque no TransNet
+                  </button>
+                </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-sm font-semibold text-slate-800">Todo o estoque físico atual</div>
+                  <div className="text-sm font-semibold text-slate-800">Todo o {fonteLabel} atual</div>
                   <div className="mt-1 text-xs text-slate-500">
-                    Imprime uma etiqueta pra cada pneu da última ficha de estoque ({fonteRows.length} pneu(s)).
+                    Imprime uma etiqueta pra cada pneu do {fonteLabel} ({fonteRows.length} pneu(s)).
                   </div>
                   <button
                     type="button"

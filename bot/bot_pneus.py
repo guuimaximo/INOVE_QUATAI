@@ -100,7 +100,7 @@ def listar_downloads_csv_atuais() -> set:
     return {p.name for p in DOWNLOAD_DIR.glob("*.csv")}
 
 
-def aguardar_csv_novo(antes: set, timeout: int = 120) -> Path:
+def aguardar_csv_novo(antes: set, timeout: int = 600) -> Path:
     deadline = time.time() + timeout
     estavel = 0
     last_size = -1

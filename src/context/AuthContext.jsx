@@ -57,6 +57,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const lastPresenceSyncRef = useRef(0);
   const lastAccessSyncRef = useRef(0);
+  // Espelho do usuario atual para comparar identidade sem recriar os handlers.
+  const userRef = useRef(user);
+  userRef.current = user;
 
   const persistUser = useCallback((userData) => {
     const normalized = normalizeStoredAppUser(userData);
@@ -309,7 +312,13 @@ export function AuthProvider({ children }) {
     const onActivity = () => {
       if (document.visibilityState === "visible") {
         touchActivity();
-        setUser(getStoredUser());
+        // So troca o usuario se a IDENTIDADE mudou (ex.: outra aba logou com
+        // outra conta). Sem isso, a cada evento de atividade reescreviamos o
+        // objeto do usuario, causando re-render e contribuindo para o "piscar".
+        const stored = getStoredUser();
+        const currentId = userRef.current?.usuario_id ?? userRef.current?.id ?? null;
+        const storedId = stored?.usuario_id ?? stored?.id ?? null;
+        if (storedId !== currentId) setUser(stored);
         void syncPresence();
         void syncAccessSnapshot();
       }

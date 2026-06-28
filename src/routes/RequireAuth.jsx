@@ -30,12 +30,9 @@ export default function RequireAuth({ children }) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  // Gate de e-mail real: quem ainda esta com e-mail ficticio precisa cadastrar
-  // um e-mail valido antes de usar o sistema (libera assim que salvar; a
-  // confirmacao por link corre em paralelo, sem prender a pessoa).
-  if (user?.precisa_email_real && location.pathname !== "/confirmar-email") {
-    return <Navigate to="/confirmar-email" replace state={{ from: location }} />;
-  }
+  // Gate de e-mail real desativado: estava prendendo usuarios legados (e-mail
+  // placeholder @inove.local) na tela /confirmar-email e impedindo o acesso.
+  // A pagina /confirmar-email continua acessivel manualmente, mas e opcional.
 
   // Revisao de perfil NAO bloqueia mais o acesso: usuarios legados com setor/email
   // incompletos (e o envio de e-mail do Auth/SMTP indisponivel) ficavam presos nesta

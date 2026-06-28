@@ -290,6 +290,17 @@ export default function Login() {
   }
 
   async function finalizeLegacyFallbackLogin(identifier, legacyUser) {
+    // Fonte unica de verdade: zera qualquer sessao do Supabase Auth que tenha
+    // sobrado (ex.: de outro usuario que nao deslogou direito). Sem isso, a
+    // sessao antiga continua sendo re-hidratada por onAuthStateChange/getSession
+    // e briga com o usuario salvo no localStorage -> a tela fica "piscando"
+    // alternando entre as duas contas.
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Sem rede/sessao: seguimos apenas com a sessao local de contingencia.
+    }
+
     const localUser = persistLocalLogin(buildLegacyFallbackUser(legacyUser));
 
     rememberUserHints(identifier, localUser);

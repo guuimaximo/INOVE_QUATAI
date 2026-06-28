@@ -351,8 +351,15 @@ export default function Sidebar() {
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
           <div className="text-center w-full">
-            <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
-            <p className="mt-1 text-xs text-blue-200">Seu painel de operação</p>
+            <button
+              type="button"
+              onClick={() => navigate("/meu-perfil")}
+              className="w-full rounded-xl px-2 py-1 transition hover:bg-blue-600/50"
+              title="Meu Perfil"
+            >
+              <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
+              <p className="mt-1 text-xs text-blue-200">Ver meu perfil</p>
+            </button>
 
             {podeVerFarol && (
               <button

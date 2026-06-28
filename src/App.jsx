@@ -22,6 +22,7 @@ import { getDefaultAccessiblePath } from "./utils/access";
 import Login from "./pages/auth/Login";
 const AtualizarSenha = lazy(() => import("./pages/auth/AtualizarSenha"));
 const AtualizarPerfil = lazy(() => import("./pages/auth/AtualizarPerfil"));
+const MeuPerfil = lazy(() => import("./pages/auth/MeuPerfil"));
 
 import Dashboard from "./pages/home/Dashboard";
 import ControleEspecialCentral from "./pages/controle-especial/ControleEspecialCentral";
@@ -209,6 +210,7 @@ export default function App() {
               }
             >
               <Route path="/atualizar-perfil" element={<AtualizarPerfil />} />
+              <Route path="/meu-perfil" element={<MeuPerfil />} />
 
               <Route path="/" element={<HomeDecider />} />
               <Route path="/inove" element={<HomeDecider />} />

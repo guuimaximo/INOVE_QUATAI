@@ -30,6 +30,32 @@ const SETORES = [
 
 const AZUL = "#0057b8";
 
+const ANIMAIS = [
+  { e: "🦊", g: "linear-gradient(135deg,#fb923c,#ea580c)" },
+  { e: "🐶", g: "linear-gradient(135deg,#a78bfa,#7c3aed)" },
+  { e: "🐱", g: "linear-gradient(135deg,#f472b6,#db2777)" },
+  { e: "🦁", g: "linear-gradient(135deg,#fbbf24,#d97706)" },
+  { e: "🐯", g: "linear-gradient(135deg,#f59e0b,#b45309)" },
+  { e: "🐻", g: "linear-gradient(135deg,#d6a06a,#92400e)" },
+  { e: "🐼", g: "linear-gradient(135deg,#94a3b8,#475569)" },
+  { e: "🐨", g: "linear-gradient(135deg,#9ca3af,#4b5563)" },
+  { e: "🐵", g: "linear-gradient(135deg,#d8b4fe,#9333ea)" },
+  { e: "🦉", g: "linear-gradient(135deg,#67e8f9,#0891b2)" },
+  { e: "🐺", g: "linear-gradient(135deg,#60a5fa,#1d4ed8)" },
+  { e: "🦅", g: "linear-gradient(135deg,#fca5a5,#b91c1c)" },
+  { e: "🐧", g: "linear-gradient(135deg,#38bdf8,#0369a1)" },
+  { e: "🐢", g: "linear-gradient(135deg,#4ade80,#15803d)" },
+  { e: "🦈", g: "linear-gradient(135deg,#5eead4,#0d9488)" },
+  { e: "🐝", g: "linear-gradient(135deg,#fde047,#ca8a04)" },
+];
+
+function gradAnimal(emoji) {
+  return (ANIMAIS.find((a) => a.e === emoji) || {}).g || `linear-gradient(135deg, ${AZUL}, #2563eb)`;
+}
+function ehImagem(v) {
+  return typeof v === "string" && v.startsWith("http");
+}
+
 function iniciais(nome) {
   const parts = String(nome || "").trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "??";
@@ -269,12 +295,19 @@ export default function MeuPerfil() {
           {/* AVATAR */}
           <div className={`${card} p-6 text-center`}>
             <div className="relative mx-auto h-28 w-28">
-              {avatarUrl ? (
+              {ehImagem(avatarUrl) ? (
                 <img
                   src={avatarUrl}
                   alt="Foto de perfil"
                   className="h-28 w-28 rounded-full object-cover ring-2 ring-white shadow"
                 />
+              ) : avatarUrl ? (
+                <div
+                  className="flex h-28 w-28 items-center justify-center rounded-full text-5xl shadow ring-2 ring-white"
+                  style={{ background: gradAnimal(avatarUrl) }}
+                >
+                  {avatarUrl}
+                </div>
               ) : (
                 <div
                   className="flex h-28 w-28 items-center justify-center rounded-full text-3xl font-bold text-white shadow"
@@ -311,8 +344,25 @@ export default function MeuPerfil() {
                 Setor: {setor}
               </div>
             )}
-            <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-400">
-              JPG ou PNG, ate 2 MB
+            <div className="mt-4 border-t border-slate-100 pt-3">
+              <div className="mb-2 text-xs font-medium text-slate-500">Escolha um avatar</div>
+              <div className="grid grid-cols-6 gap-1.5">
+                {ANIMAIS.map((a) => (
+                  <button
+                    key={a.e}
+                    type="button"
+                    onClick={() => setAvatarUrl(a.e)}
+                    className={`flex aspect-square items-center justify-center rounded-full text-lg shadow-sm transition hover:scale-110 ${
+                      avatarUrl === a.e ? "ring-2 ring-offset-1 ring-[#0057b8]" : ""
+                    }`}
+                    style={{ background: a.g }}
+                    title="Usar este avatar"
+                  >
+                    {a.e}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 text-xs text-slate-400">ou envie uma foto (JPG/PNG, ate 2 MB)</div>
             </div>
           </div>
 

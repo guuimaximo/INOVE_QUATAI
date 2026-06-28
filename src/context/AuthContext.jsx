@@ -264,8 +264,21 @@ export function AuthProvider({ children }) {
     };
   }, [syncFromSession]);
 
+  // Sincroniza presenca/snapshot de acesso UMA vez por login (quando o id do
+  // usuario muda de fato). Antes isso rodava a cada novo objeto de usuario; como
+  // syncAccessSnapshot chama setUser (objeto novo), o efeito re-disparava em
+  // loop -> tempestade de re-render e a tela "piscando".
+  const bootstrappedUserIdRef = useRef(null);
   useEffect(() => {
-    if (!user) return;
+    const uid = user?.usuario_id ?? user?.id ?? null;
+
+    if (!uid) {
+      bootstrappedUserIdRef.current = null;
+      return;
+    }
+
+    if (bootstrappedUserIdRef.current === uid) return;
+    bootstrappedUserIdRef.current = uid;
 
     void syncPresence({ force: true });
     void syncAccessSnapshot({ force: true });
@@ -273,7 +286,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     function onStorage(event) {
-      if (event.key === "user") setUser(getStoredUser());
+      if (event.key !== "user") return;
+      // So troca quando a IDENTIDADE muda (outra aba logou com outra conta),
+      // evitando reescrever o usuario a toa e contribuir para o "piscar".
+      const stored = getStoredUser();
+      const currentId = userRef.current?.usuario_id ?? userRef.current?.id ?? null;
+      const storedId = stored?.usuario_id ?? stored?.id ?? null;
+      if (storedId !== currentId) setUser(stored);
     }
 
     window.addEventListener("storage", onStorage);

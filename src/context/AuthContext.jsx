@@ -227,8 +227,15 @@ export function AuthProvider({ children }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
+
+      // Link de recuperacao de senha: leva sempre para a tela de nova senha,
+      // mesmo que o e-mail tenha caido na raiz (Site URL) em vez de /atualizar-senha.
+      if (event === "PASSWORD_RECOVERY" && window.location.pathname !== "/atualizar-senha") {
+        window.location.assign("/atualizar-senha");
+        return;
+      }
 
       setLoading(true);
       syncFromSession(session?.user || null)

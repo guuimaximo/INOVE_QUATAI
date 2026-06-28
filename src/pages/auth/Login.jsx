@@ -309,28 +309,15 @@ export default function Login() {
     const senha = String(currentPassword || "").trim();
     if (!ident || !senha) return null;
 
-    // Tenta por login (case-insensitive) e em paralelo por email tambem.
-    // Faz em duas queries para evitar o escape fragil do .or() quando o
-    // identificador tem "@", virgula etc.
-    const [byLogin, byEmail] = await Promise.all([
-      supabase
-        .from("usuarios_aprovadores")
-        .select("*")
-        .ilike("login", ident)
-        .eq("senha", senha)
-        .maybeSingle(),
-      supabase
-        .from("usuarios_aprovadores")
-        .select("*")
-        .ilike("email", ident)
-        .eq("senha", senha)
-        .maybeSingle(),
-    ]);
+    // Confere a senha por dentro do banco (funcao SECURITY DEFINER): a senha
+    // NUNCA e lida pelo app. Retorna o usuario (sem o campo senha) ou null.
+    const { data, error } = await supabase.rpc("verify_legacy_login", {
+      p_identifier: ident,
+      p_senha: senha,
+    });
 
-    if (byLogin?.error && byLogin.error.code !== "PGRST116") throw byLogin.error;
-    if (byEmail?.error && byEmail.error.code !== "PGRST116") throw byEmail.error;
-
-    return byLogin?.data || byEmail?.data || null;
+    if (error) throw error;
+    return data || null;
   }
 
   async function finalizeAuthenticatedLogin(identifier) {

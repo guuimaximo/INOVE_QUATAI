@@ -162,6 +162,12 @@ export async function hydrateAuthenticatedUser(authUser) {
     profile,
     requires_profile_review: review.requiresProfileReview,
     profile_review_reasons: review.profileReviewReasons,
+    // Precisa informar e-mail real se NENHUM e-mail salvo for valido/real.
+    // (checa os e-mails guardados, nao o status de confirmacao do Auth, para
+    // o gate liberar assim que a pessoa salvar — sem prender esperando o clique.)
+    precisa_email_real: ![authUser?.email, legacyUser?.email, profile?.email].some(
+      (e) => isValidEmail(e) && !isPlaceholderEmail(e)
+    ),
   };
 }
 

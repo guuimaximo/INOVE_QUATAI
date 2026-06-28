@@ -23,6 +23,7 @@ import Login from "./pages/auth/Login";
 const AtualizarSenha = lazy(() => import("./pages/auth/AtualizarSenha"));
 const AtualizarPerfil = lazy(() => import("./pages/auth/AtualizarPerfil"));
 const MeuPerfil = lazy(() => import("./pages/auth/MeuPerfil"));
+const ConfirmarEmail = lazy(() => import("./pages/auth/ConfirmarEmail"));
 
 import Dashboard from "./pages/home/Dashboard";
 import ControleEspecialCentral from "./pages/controle-especial/ControleEspecialCentral";
@@ -201,6 +202,14 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/atualizar-senha" element={<AtualizarSenha />} />
+            <Route
+              path="/confirmar-email"
+              element={
+                <RequireAuth>
+                  <ConfirmarEmail />
+                </RequireAuth>
+              }
+            />
 
             <Route
               element={

@@ -30,9 +30,9 @@ export default function RequireAuth({ children }) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (user?.requires_profile_review && location.pathname !== "/atualizar-perfil") {
-    return <Navigate to="/atualizar-perfil" replace state={{ from: location }} />;
-  }
+  // Revisao de perfil NAO bloqueia mais o acesso: usuarios legados com setor/email
+  // incompletos (e o envio de e-mail do Auth/SMTP indisponivel) ficavam presos nesta
+  // tela. A pagina /atualizar-perfil continua acessivel, mas e opcional.
 
   const isAllowedNativePath =
     allowedNativePaths.has(location.pathname) ||

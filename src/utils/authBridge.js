@@ -162,11 +162,11 @@ export async function hydrateAuthenticatedUser(authUser) {
     profile,
     requires_profile_review: review.requiresProfileReview,
     profile_review_reasons: review.profileReviewReasons,
-    // Precisa informar e-mail real se NENHUM e-mail salvo for valido/real.
-    // (checa os e-mails guardados, nao o status de confirmacao do Auth, para
-    // o gate liberar assim que a pessoa salvar — sem prender esperando o clique.)
-    precisa_email_real: ![authUser?.email, legacyUser?.email, profile?.email].some(
-      (e) => isValidEmail(e) && !isPlaceholderEmail(e)
+    // Regra rigida: so libera quando o e-mail REAL foi confirmado. O e-mail do
+    // Auth so deixa de ser placeholder DEPOIS que a pessoa clica no link de
+    // confirmacao — entao isto exige a confirmacao de fato.
+    precisa_email_real: !(
+      isValidEmail(authUser?.email) && !isPlaceholderEmail(authUser?.email)
     ),
   };
 }

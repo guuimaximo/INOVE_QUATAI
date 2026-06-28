@@ -519,6 +519,9 @@ export default function Login() {
     setLoading(true);
 
     try {
+      // 1) Identifica o usuario legado (NAO faz login aqui) apenas para checar
+      //    bloqueio de aprovacao, reset de senha obrigatorio e para ter uma
+      //    contingencia caso o Supabase Auth nao consiga abrir a sessao.
       const legacyUser = await fetchLegacyCredentialMatch(identifier, currentPassword);
 
       if (legacyUser) {
@@ -534,17 +537,21 @@ export default function Login() {
           pushFeedback("error", "Antes de acessar, crie uma nova senha para confirmar o reset solicitado pelo administrador.");
           return;
         }
-
-        await finalizeLegacyFallbackLogin(identifier, legacyUser);
-        return;
       }
 
+      // 2) Resolve a conta real no Auth (bridge).
       let bridge = null;
 
       try {
         bridge = await resolveAuthAccount(identifier);
       } catch (error) {
         console.error("Falha ao resolver conta no bridge:", error);
+        // Bridge indisponivel: se o login legado bateu, libera em contingencia
+        // para nao travar o acesso; senao mostra a orientacao de setup.
+        if (legacyUser) {
+          await finalizeLegacyFallbackLogin(identifier, legacyUser);
+          return;
+        }
         pushFeedback("error", getRpcSetupMessage());
         return;
       }
@@ -554,6 +561,9 @@ export default function Login() {
         return;
       }
 
+      // 3) PRIORIDADE: tenta abrir a sessao REAL do Supabase Auth (cracha real).
+      //    Esse e o caminho que faz o banco reconhecer o usuario como logado e
+      //    permite ativar RLS depois.
       let authSignInError = null;
       const signInEmail = getSignInEmail(identifier, bridge);
 
@@ -575,6 +585,15 @@ export default function Login() {
         }
 
         authSignInError = error;
+      }
+
+      // 4) CONTINGENCIA: o Auth real nao abriu a sessao (ex.: usuario ainda sem
+      //    conta Auth), mas as credenciais legadas conferem -> libera em modo de
+      //    contingencia para nao travar ninguem. Antes esse era o caminho padrao;
+      //    agora e apenas a rede de seguranca, so usada quando o Auth real falha.
+      if (legacyUser) {
+        await finalizeLegacyFallbackLogin(identifier, legacyUser);
+        return;
       }
 
       if (bridge && !signInEmail) {

@@ -334,44 +334,44 @@ export default function Layout() {
 
       {!isNativeShell && (
         <div
-          className={`${onFarolTab ? "fixed top-0 left-0 right-0" : "sticky top-0"} z-40 hidden h-[49px] items-center gap-2 border-b border-slate-200 bg-white px-3 shadow-sm lg:flex`}
+          className={`${onFarolTab ? "fixed top-0 left-0 right-0" : "sticky top-0"} z-40 hidden h-[49px] items-center gap-2 border-b border-slate-200 bg-slate-100/90 px-3 backdrop-blur lg:flex`}
         >
           <button
             type="button"
             onClick={() => setDesktopSidebarOpen((current) => !current)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-blue-700"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-900"
             aria-label={desktopSidebarOpen ? "Recolher menu" : "Expandir menu"}
             title="Menu"
           >
             <Menu size={20} />
           </button>
 
-          <div className="flex items-center gap-2">
-            <div style={{ backgroundColor: "var(--inove-accent, #2563eb)" }} className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-semibold text-white">IN</div>
-            <span className="text-[15px] font-semibold text-slate-800">Inove</span>
+          <div className="flex items-center gap-2 pr-1">
+            <div style={{ backgroundColor: "var(--inove-accent, #2563eb)" }} className="flex h-7 w-7 items-center justify-center rounded-lg text-[11px] font-bold text-white shadow-sm">IN</div>
+            {!podeVerFarol && <span className="text-[15px] font-semibold tracking-tight text-slate-800">Inove</span>}
           </div>
 
           {podeVerFarol && (
-            <div className="ml-3 flex items-stretch self-stretch">
+            <div className="ml-1 flex items-end gap-1.5 self-stretch">
               <button
                 type="button"
                 onClick={() => setFarolTab("inove")}
-                className={`flex items-center gap-2 px-4 text-sm font-semibold transition-all ${
+                className={`flex h-[40px] items-center gap-2 rounded-t-xl px-4 text-sm font-medium transition-all ${
                   farolTab === "inove"
-                    ? "text-blue-700 border-b-2 border-blue-600"
-                    : "text-slate-500 hover:text-slate-800 border-b-2 border-transparent"
+                    ? "border border-b-0 border-slate-200 bg-white text-slate-900 shadow-[0_-3px_8px_rgba(15,23,42,0.06)]"
+                    : "text-slate-500 hover:bg-white/60 hover:text-slate-800"
                 }`}
               >
-                <FaThLarge className={farolTab === "inove" ? "text-blue-600" : "text-slate-400"} />
+                <FaThLarge style={farolTab === "inove" ? { color: "var(--inove-accent, #2563eb)" } : undefined} className={farolTab === "inove" ? "" : "text-slate-400"} />
                 Inove
               </button>
               <button
                 type="button"
                 onClick={() => setFarolTab("farol")}
-                className={`flex items-center gap-2 px-4 text-sm font-semibold transition-all ${
+                className={`flex h-[40px] items-center gap-2 rounded-t-xl px-4 text-sm font-medium transition-all ${
                   farolTab === "farol"
-                    ? "text-emerald-700 border-b-2 border-emerald-600"
-                    : "text-slate-500 hover:text-slate-800 border-b-2 border-transparent"
+                    ? "border border-b-0 border-slate-200 bg-white text-emerald-700 shadow-[0_-3px_8px_rgba(15,23,42,0.06)]"
+                    : "text-slate-500 hover:bg-white/60 hover:text-slate-800"
                 }`}
               >
                 <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-black ${farolTab === "farol" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>
@@ -387,17 +387,17 @@ export default function Layout() {
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event("inove:open-search"))}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 transition hover:border-blue-300 hover:text-blue-700"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-400 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
           >
-            <Search size={16} /> Buscar
-            <span className="ml-1 rounded border border-slate-200 px-1.5 text-[11px]">Ctrl K</span>
+            <Search size={16} /> <span className="text-slate-500">Buscar...</span>
+            <span className="ml-2 rounded border border-slate-200 bg-slate-50 px-1.5 text-[11px] text-slate-400">Ctrl K</span>
           </button>
 
           <div className="relative">
             <button
               type="button"
               onClick={() => setUserMenuOpen((v) => !v)}
-              className="flex items-center gap-2 rounded-xl px-1.5 py-1 transition hover:bg-slate-100"
+              className="flex items-center gap-2 rounded-xl px-1.5 py-1 transition hover:bg-white"
               aria-label="Menu do usuário"
             >
               {user?.avatar_url ? (

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, ChevronLeft, ChevronRight, Search, ChevronDown, LogOut, User as UserIcon } from "lucide-react";
+import { Menu, X, ChevronLeft, ChevronRight, Search, ChevronDown, LogOut, User as UserIcon, Palette } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import {
   FaBarcode,
@@ -347,7 +347,7 @@ export default function Layout() {
           </button>
 
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-700 text-xs font-semibold text-white">IN</div>
+            <div style={{ backgroundColor: "var(--inove-accent, #2563eb)" }} className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-semibold text-white">IN</div>
             <span className="text-[15px] font-semibold text-slate-800">Inove</span>
           </div>
 
@@ -429,6 +429,13 @@ export default function Layout() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => { setUserMenuOpen(false); navigate("/preferencias"); }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    <Palette size={16} className="text-slate-400" /> Preferências
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => { setUserMenuOpen(false); handleLogout(); }}
                     className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-rose-600 hover:bg-rose-50"
                   >
@@ -453,7 +460,8 @@ export default function Layout() {
             />
 
             <div
-              className={`fixed inset-y-0 left-0 z-50 w-[84vw] max-w-[320px] transform overflow-hidden rounded-r-[28px] bg-blue-700 transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:rounded-none ${
+              style={{ backgroundColor: "var(--inove-sidebar, #1d4ed8)" }}
+              className={`fixed inset-y-0 left-0 z-50 w-[84vw] max-w-[320px] transform overflow-hidden rounded-r-[28px] transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:rounded-none ${
                 mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
               } ${desktopSidebarOpen ? "" : "lg:hidden"}`}
             >
@@ -464,8 +472,8 @@ export default function Layout() {
             <button
               type="button"
               onClick={() => setDesktopSidebarOpen((current) => !current)}
-              className="hidden lg:flex fixed top-1/2 -translate-y-1/2 z-50 h-16 w-7 items-center justify-center rounded-r-xl bg-blue-600 text-white shadow-lg ring-1 ring-blue-700/30 transition hover:bg-blue-700"
-              style={{ left: desktopSidebarOpen ? "288px" : "0px" }}
+              className="hidden lg:flex fixed top-1/2 -translate-y-1/2 z-50 h-16 w-7 items-center justify-center rounded-r-xl text-white shadow-lg ring-1 ring-black/10 transition hover:brightness-110"
+              style={{ left: desktopSidebarOpen ? "288px" : "0px", backgroundColor: "var(--inove-accent, #2563eb)" }}
               aria-label={desktopSidebarOpen ? "Fechar menu lateral" : "Abrir menu lateral"}
               title={desktopSidebarOpen ? "Fechar menu" : "Abrir menu"}
             >

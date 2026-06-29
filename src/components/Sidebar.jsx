@@ -346,7 +346,10 @@ export default function Sidebar() {
   const showConfig = links.configuracoes.some((l) => canSee(l.path));
 
   return (
-    <aside className="flex h-full w-72 flex-col bg-blue-700 text-white shadow-2xl lg:shadow-none">
+    <aside
+      style={{ backgroundColor: "var(--inove-sidebar, #1d4ed8)" }}
+      className="flex h-full w-72 flex-col text-white shadow-2xl lg:shadow-none"
+    >
       <div className="flex flex-col items-center border-b border-blue-600 px-4 py-5">
         {user?.avatar_url ? (
           <button

@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { App as CapacitorApp } from "@capacitor/app";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import { compressImageFile } from "../../utils/imageCompress";
 import { useSearchParams } from "react-router-dom";
 import {
   FaBarcode,
@@ -537,12 +538,14 @@ function createRiscadoForm(nextFicha, userName) {
 }
 
 async function uploadFoto(bucket, folder, recordId, tag, file) {
-  const safeName = sanitizeFileName(file?.name);
+  // Comprime antes de enviar (cobre foto vinda do seletor de arquivo na web).
+  const slim = await compressImageFile(file);
+  const safeName = sanitizeFileName(slim?.name);
   const path = `${folder}/${recordId}/${tag}_${Date.now()}_${safeName}`;
 
-  const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
+  const { error: uploadError } = await supabase.storage.from(bucket).upload(path, slim, {
     upsert: false,
-    contentType: file?.type || undefined,
+    contentType: slim?.type || undefined,
     cacheControl: "3600",
   });
 
@@ -571,7 +574,11 @@ async function captureNativePhoto(fileNamePrefix) {
   const photo = await Camera.getPhoto({
     source: CameraSource.Camera,
     resultType: CameraResultType.Base64,
-    quality: 80,
+    quality: 75,
+    // Reduz a foto ainda no nativo (no maximo 1600px): base64 menor = preview e
+    // upload rapidos, sem a tela travar ao "entrar" a foto.
+    width: 1600,
+    correctOrientation: true,
     promptLabelHeader: "Foto do pneu",
     promptLabelPhoto: "Galeria",
     promptLabelPicture: "Camera",

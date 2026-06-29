@@ -17,3 +17,6 @@ ios/App/build/
 .env
 .env.local
 .env.*.local
+
+# chave service_role local (NUNCA commitar)
+scripts/.service_key.local

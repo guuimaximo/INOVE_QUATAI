@@ -22,6 +22,9 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const SUPABASE_URL = (
   process.env.SUPABASE_URL ||
@@ -29,7 +32,20 @@ const SUPABASE_URL = (
   "https://wboelthngddvkgrvwkbu.supabase.co"
 ).trim();
 
-const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+// A chave service_role pode vir da env OU de um arquivo local gitignored
+// (scripts/.service_key.local) — assim a chave nunca precisa ir para o chat.
+function readKeyFromFile() {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    return readFileSync(join(here, ".service_key.local"), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+const SERVICE_ROLE_KEY = (
+  process.env.SUPABASE_SERVICE_ROLE_KEY || readKeyFromFile()
+).trim();
 
 const DRY_RUN = process.argv.includes("--dry-run");
 
@@ -48,8 +64,9 @@ function fail(msg) {
 
 if (!SERVICE_ROLE_KEY) {
   fail(
-    "Defina a variavel SUPABASE_SERVICE_ROLE_KEY antes de rodar.\n" +
-      'PowerShell:  $env:SUPABASE_SERVICE_ROLE_KEY = "..."'
+    "Faltou a service_role key. Use UMA das opcoes:\n" +
+      "  1) Crie o arquivo scripts/.service_key.local com a chave dentro; ou\n" +
+      '  2) PowerShell:  $env:SUPABASE_SERVICE_ROLE_KEY = "..."'
   );
 }
 

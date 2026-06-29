@@ -146,7 +146,7 @@ export function AuthProvider({ children }) {
       const { data, error } = await supabase
         .from("usuarios_aprovadores")
         .select(
-          "id, auth_user_id, nome, login, email, nivel, setor, ativo, status_cadastro, estrutura_fisica_liberada, paginas_liberadas, paginas_bloqueadas, app_recursos, migrado_auth"
+          "id, auth_user_id, nome, login, email, nivel, setor, ativo, status_cadastro, estrutura_fisica_liberada, paginas_liberadas, paginas_bloqueadas, app_recursos, migrado_auth, avatar_url"
         )
         .eq("id", usuarioId)
         .maybeSingle();

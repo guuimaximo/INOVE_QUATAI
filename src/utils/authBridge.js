@@ -158,6 +158,7 @@ export async function hydrateAuthenticatedUser(authUser) {
     paginas_bloqueadas: Array.isArray(legacyUser?.paginas_bloqueadas) ? legacyUser.paginas_bloqueadas : [],
     app_recursos: Array.isArray(legacyUser?.app_recursos) ? legacyUser.app_recursos : [],
     migrado_auth: legacyUser?.migrado_auth ?? !!legacyUser?.auth_user_id,
+    avatar_url: legacyUser?.avatar_url || profile?.avatar_url || null,
     legacy_user: legacyUser,
     profile,
     requires_profile_review: review.requiresProfileReview,

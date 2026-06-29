@@ -348,7 +348,28 @@ export default function Sidebar() {
   return (
     <aside className="flex h-full w-72 flex-col bg-blue-700 text-white shadow-2xl lg:shadow-none">
       <div className="flex flex-col items-center border-b border-blue-600 px-4 py-5">
-        <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
+        {user?.avatar_url ? (
+          <button
+            type="button"
+            onClick={() => navigate("/meu-perfil")}
+            className="mb-3 rounded-full transition hover:opacity-90"
+            title="Meu Perfil"
+          >
+            {/^https?:\/\//.test(user.avatar_url) ? (
+              <img
+                src={user.avatar_url}
+                alt="Avatar"
+                className="h-16 w-16 rounded-full object-cover ring-2 ring-white/70 shadow"
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-3xl shadow ring-2 ring-white/70">
+                {user.avatar_url}
+              </div>
+            )}
+          </button>
+        ) : (
+          <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
+        )}
         {user && (
           <div className="text-center w-full">
             <button

@@ -24,6 +24,7 @@ const AtualizarSenha = lazy(() => import("./pages/auth/AtualizarSenha"));
 const AtualizarPerfil = lazy(() => import("./pages/auth/AtualizarPerfil"));
 const MeuPerfil = lazy(() => import("./pages/auth/MeuPerfil"));
 const ConfirmarEmail = lazy(() => import("./pages/auth/ConfirmarEmail"));
+const Preferencias = lazy(() => import("./pages/auth/Preferencias"));
 
 import Dashboard from "./pages/home/Dashboard";
 import ControleEspecialCentral from "./pages/controle-especial/ControleEspecialCentral";
@@ -31,6 +32,7 @@ import ControleEspecialLancamento from "./pages/controle-especial/ControleEspeci
 import InicioRapido from "./pages/home/InicioRapido";
 import MobileHome from "./pages/home/MobileHome";
 import { MobileTabBadgesProvider } from "./context/MobileTabBadgesContext";
+import { ThemeProvider } from "./context/ThemeContext";
 
 const CentralTratativas = lazy(() => import("./pages/tratativas/CentralTratativas"));
 const TratativasResumo = lazy(() => import("./pages/tratativas/TratativasResumo"));
@@ -186,6 +188,7 @@ export default function App() {
   }, []);
 
   return (
+    <ThemeProvider>
     <AuthProvider>
       <AccessProvider>
         <MobileTabBadgesProvider>
@@ -220,6 +223,7 @@ export default function App() {
             >
               <Route path="/atualizar-perfil" element={<AtualizarPerfil />} />
               <Route path="/meu-perfil" element={<MeuPerfil />} />
+              <Route path="/preferencias" element={<Preferencias />} />
 
               <Route path="/" element={<HomeDecider />} />
               <Route path="/inove" element={<HomeDecider />} />
@@ -405,5 +409,6 @@ export default function App() {
         </MobileTabBadgesProvider>
       </AccessProvider>
     </AuthProvider>
+    </ThemeProvider>
   );
 }

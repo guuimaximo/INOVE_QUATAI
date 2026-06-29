@@ -240,22 +240,23 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      setLoading(true);
-      syncFromSession(session?.user || null)
-        .catch((error) => {
-          console.error("Falha ao sincronizar sessao do Auth:", error);
-          const storedUser = getStoredUser();
-          if (shouldKeepLegacySession(storedUser)) {
-            setUser(storedUser);
-            return;
-          }
+      // NAO usar setLoading(true) aqui. Eventos rotineiros (TOKEN_REFRESHED)
+      // disparam quando o app volta ao primeiro plano — ex.: voltando da camera.
+      // Mostrar "Carregando sessao..." remonta a rota inteira e faz o formulario
+      // (e a foto recem-tirada) sumir, parecendo que o app "reiniciou". O loading
+      // inicial e controlado apenas pelo bootstrap acima; aqui sincronizamos em
+      // segundo plano, sem desmontar a tela.
+      syncFromSession(session?.user || null).catch((error) => {
+        console.error("Falha ao sincronizar sessao do Auth:", error);
+        const storedUser = getStoredUser();
+        if (shouldKeepLegacySession(storedUser)) {
+          setUser(storedUser);
+          return;
+        }
 
-          clearStoredUser();
-          setUser(null);
-        })
-        .finally(() => {
-          if (mounted) setLoading(false);
-        });
+        clearStoredUser();
+        setUser(null);
+      });
     });
 
     return () => {

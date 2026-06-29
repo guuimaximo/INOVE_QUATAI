@@ -282,6 +282,7 @@ export default function Login() {
       paginas_bloqueadas: Array.isArray(legacyUser?.paginas_bloqueadas) ? legacyUser.paginas_bloqueadas : [],
       app_recursos: Array.isArray(legacyUser?.app_recursos) ? legacyUser.app_recursos : [],
       migrado_auth: !!legacyUser?.migrado_auth,
+      avatar_url: legacyUser?.avatar_url || null,
       legacy_user: legacyUser,
       profile: null,
       requires_profile_review: false,

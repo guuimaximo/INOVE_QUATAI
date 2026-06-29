@@ -381,18 +381,6 @@ export default function Sidebar() {
               <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
               <p className="mt-1 text-xs text-blue-200">Ver meu perfil</p>
             </button>
-
-            {podeVerFarol && (
-              <button
-                onClick={abrirFarol}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-                type="button"
-                title="Abrir Farol Tático"
-              >
-                Ir para Farol Tático
-                <ExternalLink className="w-4 h-4" />
-              </button>
-            )}
           </div>
         )}
       </div>
@@ -850,7 +838,8 @@ export default function Sidebar() {
         )}
       </nav>
 
-      <div className="border-t border-blue-600 p-4">
+      {/* Sair: só no mobile (no desktop fica no menu do usuário na top bar) */}
+      <div className="border-t border-blue-600 p-4 lg:hidden">
         <button
           onClick={handleLogout}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold shadow-sm transition hover:bg-blue-500"

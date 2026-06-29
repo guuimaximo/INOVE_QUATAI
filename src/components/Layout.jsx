@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Menu, X, ChevronLeft, ChevronRight, Search, ChevronDown, LogOut, User as UserIcon } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import {
   FaBarcode,
@@ -25,6 +25,7 @@ import {
 } from "react-icons/fa";
 
 import Sidebar from "./Sidebar";
+import CommandPalette from "./CommandPalette";
 import { useMobileTabBadges } from "../context/MobileTabBadgesContext";
 import { AuthContext } from "../context/AuthContext";
 import { useAccessGovernance } from "../context/AccessContext";
@@ -177,6 +178,7 @@ export default function Layout() {
       return true;
     }
   });
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [farolTab, setFarolTab] = useState("inove"); // "inove" | "farol"
 
   useEffect(() => {
@@ -277,6 +279,13 @@ export default function Layout() {
     navigate("/login", { replace: true });
   }
 
+  const userInitials = (user?.nome || "U")
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
   const onFarolTab = podeVerFarol && !isNativeShell && farolTab === "farol";
   return (
     <div className={`bg-slate-50 min-h-screen ${onFarolTab ? "overflow-hidden h-screen" : ""}`}>
@@ -300,50 +309,135 @@ export default function Layout() {
           </button>
 
           {isNativeShell ? null : (
-            <button
-              type="button"
-              onClick={() => setMobileSidebarOpen((current) => !current)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
-              aria-label={mobileSidebarOpen ? "Fechar menu" : "Abrir menu"}
-              aria-expanded={mobileSidebarOpen}
-            >
-              {mobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new Event("inove:open-search"))}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+                aria-label="Buscar tela"
+              >
+                <Search size={20} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen((current) => !current)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+                aria-label={mobileSidebarOpen ? "Fechar menu" : "Abrir menu"}
+                aria-expanded={mobileSidebarOpen}
+              >
+                {mobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+              </button>
+            </div>
           )}
         </div>
       </div>
 
-      {podeVerFarol && !isNativeShell && (
+      {!isNativeShell && (
         <div
-          className={`${onFarolTab ? "fixed top-0 left-0 right-0" : "sticky top-0"} z-40 hidden border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white shadow-sm lg:flex lg:items-stretch`}
+          className={`${onFarolTab ? "fixed top-0 left-0 right-0" : "sticky top-0"} z-40 hidden h-[49px] items-center gap-2 border-b border-slate-200 bg-white px-3 shadow-sm lg:flex`}
         >
           <button
             type="button"
-            onClick={() => setFarolTab("inove")}
-            className={`relative flex-1 max-w-[260px] flex items-center justify-center gap-2 px-6 py-3 text-sm font-extrabold tracking-wide transition-all ${
-              farolTab === "inove"
-                ? "bg-white text-blue-700 border-b-[3px] border-blue-600 shadow-[inset_0_-1px_0_rgba(37,99,235,0.15)]"
-                : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/60 border-b-[3px] border-transparent"
-            }`}
+            onClick={() => setDesktopSidebarOpen((current) => !current)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-blue-700"
+            aria-label={desktopSidebarOpen ? "Recolher menu" : "Expandir menu"}
+            title="Menu"
           >
-            <FaThLarge className={farolTab === "inove" ? "text-blue-600" : "text-slate-400"} />
-            Inove
+            <Menu size={20} />
           </button>
+
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-700 text-xs font-semibold text-white">IN</div>
+            <span className="text-[15px] font-semibold text-slate-800">Inove</span>
+          </div>
+
+          {podeVerFarol && (
+            <div className="ml-3 flex items-stretch self-stretch">
+              <button
+                type="button"
+                onClick={() => setFarolTab("inove")}
+                className={`flex items-center gap-2 px-4 text-sm font-semibold transition-all ${
+                  farolTab === "inove"
+                    ? "text-blue-700 border-b-2 border-blue-600"
+                    : "text-slate-500 hover:text-slate-800 border-b-2 border-transparent"
+                }`}
+              >
+                <FaThLarge className={farolTab === "inove" ? "text-blue-600" : "text-slate-400"} />
+                Inove
+              </button>
+              <button
+                type="button"
+                onClick={() => setFarolTab("farol")}
+                className={`flex items-center gap-2 px-4 text-sm font-semibold transition-all ${
+                  farolTab === "farol"
+                    ? "text-emerald-700 border-b-2 border-emerald-600"
+                    : "text-slate-500 hover:text-slate-800 border-b-2 border-transparent"
+                }`}
+              >
+                <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-black ${farolTab === "farol" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>
+                  FT
+                </span>
+                Farol Tático
+              </button>
+            </div>
+          )}
+
+          <div className="flex-1" />
+
           <button
             type="button"
-            onClick={() => setFarolTab("farol")}
-            className={`relative flex-1 max-w-[260px] flex items-center justify-center gap-2 px-6 py-3 text-sm font-extrabold tracking-wide transition-all ${
-              farolTab === "farol"
-                ? "bg-white text-emerald-700 border-b-[3px] border-emerald-600 shadow-[inset_0_-1px_0_rgba(5,150,105,0.15)]"
-                : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/60 border-b-[3px] border-transparent"
-            }`}
+            onClick={() => window.dispatchEvent(new Event("inove:open-search"))}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 transition hover:border-blue-300 hover:text-blue-700"
           >
-            <span className={`inline-flex h-5 w-5 items-center justify-center rounded ${farolTab === "farol" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"} text-[10px] font-black`}>
-              FT
-            </span>
-            Farol Tático
+            <Search size={16} /> Buscar
+            <span className="ml-1 rounded border border-slate-200 px-1.5 text-[11px]">Ctrl K</span>
           </button>
-          <div className="flex-1" />
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setUserMenuOpen((v) => !v)}
+              className="flex items-center gap-2 rounded-xl px-1.5 py-1 transition hover:bg-slate-100"
+              aria-label="Menu do usuário"
+            >
+              {user?.avatar_url ? (
+                /^https?:\/\//.test(user.avatar_url) ? (
+                  <img src={user.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+                ) : (
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-lg">{user.avatar_url}</span>
+                )
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">{userInitials}</span>
+              )}
+              <ChevronDown size={16} className="text-slate-400" />
+            </button>
+
+            {userMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} aria-hidden="true" />
+                <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <div className="border-b border-slate-100 px-4 py-3">
+                    <p className="text-sm font-semibold text-slate-800">{user?.nome?.split(" ")[0] || "Usuário"}</p>
+                    <p className="text-xs text-slate-400">{user?.nivel || ""}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setUserMenuOpen(false); navigate("/meu-perfil"); }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    <UserIcon size={16} className="text-slate-400" /> Meu perfil
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUserMenuOpen(false); handleLogout(); }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-rose-600 hover:bg-rose-50"
+                  >
+                    <LogOut size={16} /> Sair
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -366,16 +460,16 @@ export default function Layout() {
               <Sidebar />
             </div>
 
-            {/* Alça de abrir/fechar o sidebar (somente desktop) */}
+            {/* Alça de abrir/fechar o sidebar (somente desktop) — bem visível */}
             <button
               type="button"
               onClick={() => setDesktopSidebarOpen((current) => !current)}
-              className="hidden lg:flex fixed top-1/2 -translate-y-1/2 z-50 h-12 w-6 items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-white text-slate-600 shadow-md transition hover:bg-slate-50 hover:text-blue-700"
+              className="hidden lg:flex fixed top-1/2 -translate-y-1/2 z-50 h-16 w-7 items-center justify-center rounded-r-xl bg-blue-600 text-white shadow-lg ring-1 ring-blue-700/30 transition hover:bg-blue-700"
               style={{ left: desktopSidebarOpen ? "288px" : "0px" }}
               aria-label={desktopSidebarOpen ? "Fechar menu lateral" : "Abrir menu lateral"}
               title={desktopSidebarOpen ? "Fechar menu" : "Abrir menu"}
             >
-              {desktopSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+              {desktopSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
             </button>
           </>
         )}
@@ -420,6 +514,8 @@ export default function Layout() {
                 : () => setMobileSidebarOpen(true)
         }
       />
+
+      <CommandPalette />
     </div>
   );
 }

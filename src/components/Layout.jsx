@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import {
   FaBarcode,
@@ -170,7 +170,22 @@ export default function Layout() {
   const { profileMap } = useAccessGovernance();
   const { badges } = useMobileTabBadges();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(() => {
+    try {
+      return localStorage.getItem("inove_sidebar_open") !== "false";
+    } catch {
+      return true;
+    }
+  });
   const [farolTab, setFarolTab] = useState("inove"); // "inove" | "farol"
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("inove_sidebar_open", desktopSidebarOpen ? "true" : "false");
+    } catch {
+      // sem storage: estado vive so na sessao
+    }
+  }, [desktopSidebarOpen]);
   const [farolMounted, setFarolMounted] = useState(false);
   const podeVerFarol = useMemo(() => canUserSeeFarol(user, profileMap), [user, profileMap]);
   useEffect(() => {
@@ -346,10 +361,22 @@ export default function Layout() {
             <div
               className={`fixed inset-y-0 left-0 z-50 w-[84vw] max-w-[320px] transform overflow-hidden rounded-r-[28px] bg-blue-700 transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:rounded-none ${
                 mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
-              }`}
+              } ${desktopSidebarOpen ? "" : "lg:hidden"}`}
             >
               <Sidebar />
             </div>
+
+            {/* Alça de abrir/fechar o sidebar (somente desktop) */}
+            <button
+              type="button"
+              onClick={() => setDesktopSidebarOpen((current) => !current)}
+              className="hidden lg:flex fixed top-1/2 -translate-y-1/2 z-50 h-12 w-6 items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-white text-slate-600 shadow-md transition hover:bg-slate-50 hover:text-blue-700"
+              style={{ left: desktopSidebarOpen ? "288px" : "0px" }}
+              aria-label={desktopSidebarOpen ? "Fechar menu lateral" : "Abrir menu lateral"}
+              title={desktopSidebarOpen ? "Fechar menu" : "Abrir menu"}
+            >
+              {desktopSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            </button>
           </>
         )}
 

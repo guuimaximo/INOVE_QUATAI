@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Menu, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import {
   FaBarcode,
@@ -25,6 +25,7 @@ import {
 } from "react-icons/fa";
 
 import Sidebar from "./Sidebar";
+import CommandPalette from "./CommandPalette";
 import { useMobileTabBadges } from "../context/MobileTabBadgesContext";
 import { AuthContext } from "../context/AuthContext";
 import { useAccessGovernance } from "../context/AccessContext";
@@ -300,15 +301,25 @@ export default function Layout() {
           </button>
 
           {isNativeShell ? null : (
-            <button
-              type="button"
-              onClick={() => setMobileSidebarOpen((current) => !current)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
-              aria-label={mobileSidebarOpen ? "Fechar menu" : "Abrir menu"}
-              aria-expanded={mobileSidebarOpen}
-            >
-              {mobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new Event("inove:open-search"))}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+                aria-label="Buscar tela"
+              >
+                <Search size={20} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen((current) => !current)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+                aria-label={mobileSidebarOpen ? "Fechar menu" : "Abrir menu"}
+                aria-expanded={mobileSidebarOpen}
+              >
+                {mobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -420,6 +431,8 @@ export default function Layout() {
                 : () => setMobileSidebarOpen(true)
         }
       />
+
+      <CommandPalette />
     </div>
   );
 }

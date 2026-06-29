@@ -1,17 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 
-function base64ToUint8Array(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
-}
-
 export function isNativeCameraAvailable() {
   try {
     return Capacitor.isNativePlatform();
@@ -41,18 +30,24 @@ export async function captureNativePhotoFile({
 
   const photo = await Camera.getPhoto({
     source: CameraSource.Camera,
-    resultType: CameraResultType.Base64,
+    // URI em vez de Base64: a foto NAO e carregada inteira na memoria do WebView
+    // (base64 de foto em alta resolucao estoura a memoria e derruba o app).
+    resultType: CameraResultType.Uri,
     quality,
+    width: 1600,
+    correctOrientation: true,
     promptLabelHeader,
     promptLabelPhoto: "Galeria",
     promptLabelPicture: "Camera",
   });
 
-  if (!photo?.base64String) return null;
+  const src = photo?.webPath || photo?.path;
+  if (!src) return null;
 
-  const extension = photo.format || "jpg";
-  const mimeType = photo.format ? `image/${photo.format}` : "image/jpeg";
-  const bytes = base64ToUint8Array(photo.base64String);
+  const response = await fetch(src);
+  const blob = await response.blob();
+  const extension = photo.format || (blob.type.split("/")[1] || "jpg");
+  const mimeType = blob.type || (photo.format ? `image/${photo.format}` : "image/jpeg");
 
-  return new File([bytes], `${fileNamePrefix}.${extension}`, { type: mimeType });
+  return new File([blob], `${fileNamePrefix}.${extension}`, { type: mimeType });
 }

@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
+    <!-- Caminhos completos do FileProvider: a camera (plugin e seletor da WebView)
+         salva a foto temporaria em diferentes diretorios. Sem TODOS estes roots,
+         o FileProvider lanca "Failed to find configured root" ao voltar da camera
+         e o app fecha. -->
+    <files-path name="my_files" path="." />
     <cache-path name="my_cache_images" path="." />
+    <external-path name="my_images" path="." />
+    <external-files-path name="my_external_files" path="." />
+    <external-files-path name="my_pictures" path="Pictures" />
+    <external-cache-path name="my_external_cache" path="." />
 </paths>

@@ -362,15 +362,13 @@ export default function Login() {
       return true;
     }
 
+    // A revisao de perfil deixou de prender o usuario: alguns ficavam travados
+    // na tela "atualize seu perfil". A pagina /atualizar-perfil continua
+    // acessivel manualmente (Meu Perfil), mas e opcional e nao bloqueia o acesso.
     const defaultNextPath = getDefaultAccessiblePath(loggedUser, profileMap);
-    navigate(
-      loggedUser.requires_profile_review
-        ? "/atualizar-perfil"
-        : nextPathState || defaultNextPath,
-      {
-        replace: true,
-      }
-    );
+    navigate(nextPathState || defaultNextPath, {
+      replace: true,
+    });
 
     return true;
   }

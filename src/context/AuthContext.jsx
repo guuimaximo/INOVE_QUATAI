@@ -12,26 +12,6 @@ import { PRESENCE_SYNC_INTERVAL_MS } from "../utils/presence";
 
 export const AuthContext = createContext(null);
 
-// --- Diagnostico temporario do "piscar" entre contas ---------------------
-// Registra cada vez que o usuario do contexto e reescrito, com a origem e a
-// identidade. Veja no console (prefixo [AUTH-TRACE]) ou rode no console:
-//   copy(window.__INOVE_AUTH_TRACE__)
-function traceAuth(source, userData) {
-  try {
-    const id = userData?.usuario_id ?? userData?.id ?? null;
-    const nome = userData?.nome ?? null;
-    const entry = { t: new Date().toISOString(), source, id, nome };
-    if (typeof window !== "undefined") {
-      window.__INOVE_AUTH_TRACE__ = window.__INOVE_AUTH_TRACE__ || [];
-      window.__INOVE_AUTH_TRACE__.push(entry);
-      // eslint-disable-next-line no-console
-      console.log("[AUTH-TRACE]", source, "->", nome ? `${nome} (#${id})` : "null");
-    }
-  } catch {
-    // diagnostico nunca pode quebrar o app
-  }
-}
-
 function normalizeStoredAppUser(userData) {
   if (!userData) return null;
 
@@ -85,14 +65,12 @@ export function AuthProvider({ children }) {
     const normalized = normalizeStoredAppUser(userData);
 
     if (!normalized) {
-      traceAuth("persistUser(null)", null);
       clearStoredUser();
       setUser(null);
       return null;
     }
 
     const stored = setStoredUser(normalized);
-    traceAuth("persistUser", stored);
     setUser(stored);
     return stored;
   }, []);
@@ -102,19 +80,16 @@ export function AuthProvider({ children }) {
       if (!sessionUser) {
         const storedUser = getStoredUser();
         if (shouldKeepLegacySession(storedUser)) {
-          traceAuth("syncFromSession:keepLegacy", storedUser);
           setUser(storedUser);
           return storedUser;
         }
 
-        traceAuth("syncFromSession:clear", null);
         clearStoredUser();
         setUser(null);
         return null;
       }
 
       const hydrated = await hydrateAuthenticatedUser(sessionUser);
-      traceAuth("syncFromSession:hydrated", hydrated);
       return persistUser(hydrated);
     },
     [persistUser]
@@ -258,9 +233,6 @@ export function AuthProvider({ children }) {
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
-      // eslint-disable-next-line no-console
-      console.log("[AUTH-TRACE] onAuthStateChange:", event, "session:", session?.user?.email || "null");
-
       // Link de recuperacao de senha: leva sempre para a tela de nova senha,
       // mesmo que o e-mail tenha caido na raiz (Site URL) em vez de /atualizar-senha.
       if (event === "PASSWORD_RECOVERY" && window.location.pathname !== "/atualizar-senha") {
@@ -320,10 +292,7 @@ export function AuthProvider({ children }) {
       const stored = getStoredUser();
       const currentId = userRef.current?.usuario_id ?? userRef.current?.id ?? null;
       const storedId = stored?.usuario_id ?? stored?.id ?? null;
-      if (storedId !== currentId) {
-        traceAuth("onStorage(other-tab)", stored);
-        setUser(stored);
-      }
+      if (storedId !== currentId) setUser(stored);
     }
 
     window.addEventListener("storage", onStorage);
@@ -368,10 +337,7 @@ export function AuthProvider({ children }) {
         const stored = getStoredUser();
         const currentId = userRef.current?.usuario_id ?? userRef.current?.id ?? null;
         const storedId = stored?.usuario_id ?? stored?.id ?? null;
-        if (storedId !== currentId) {
-          traceAuth("onActivity(identity-changed)", stored);
-          setUser(stored);
-        }
+        if (storedId !== currentId) setUser(stored);
         void syncPresence();
         void syncAccessSnapshot();
       }

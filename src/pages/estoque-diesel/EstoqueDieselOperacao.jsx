@@ -2013,6 +2013,17 @@ export default function EstoqueDieselOperacao() {
                           ? "O hodometro inicial veio automaticamente do encerrante do dia anterior."
                           : "Sem historico anterior para esta bomba. Informe o hodometro inicial manualmente no primeiro lancamento."}
                       </p>
+                      {computed.pumpDetails[index]?.initialMismatch ? (
+                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                          <span>⚠️</span>
+                          <span>
+                            O hodômetro inicial ({parseLiters(computed.pumpDetails[index]?.initial)}) não bate
+                            com o encerrante de ontem ({parseLiters(computed.pumpDetails[index]?.encerranteAnterior)}) —
+                            diferença de {parseLiters(Math.abs(computed.pumpDetails[index]?.initialGap || 0))}. Confira
+                            o encerrante do dia anterior ou registre um ajuste de hodômetro.
+                          </span>
+                        </div>
+                      ) : null}
                       {validation.errors[`pump_${pump.number}`] ? (
                         <p className="mt-2 text-xs font-bold text-rose-600">
                           {validation.errors[`pump_${pump.number}`]}

@@ -802,6 +802,15 @@ export function computeMeasurement(form, params, previousEntry, receipts = []) {
       0;
     const final = parseNumber(pump.final) || 0;
 
+    // Problema 2: alerta quando o inicial NAO bate com o encerrante do dia
+    // anterior e nao ha ajuste manual (ex.: bomba registrou consumo fora do
+    // sistema, ou o D-1 mudou depois). encerranteAnterior = final do D-1.
+    const encerranteAnterior = parseNumber(previousPump?.final);
+    const initialMismatch =
+      encerranteAnterior != null &&
+      !pumpAdjustment &&
+      Math.abs(initial - encerranteAnterior) > 0.5;
+
     return {
       ...pump,
       number: pump.number,
@@ -809,6 +818,9 @@ export function computeMeasurement(form, params, previousEntry, receipts = []) {
       initial,
       final,
       output: round(final - initial, 2),
+      encerranteAnterior,
+      initialMismatch,
+      initialGap: initialMismatch ? round(initial - encerranteAnterior, 2) : 0,
     };
   });
 

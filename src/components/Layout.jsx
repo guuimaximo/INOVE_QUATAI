@@ -334,7 +334,7 @@ export default function Layout() {
 
       {!isNativeShell && (
         <div
-          className={`${onFarolTab ? "fixed top-0 left-0 right-0" : "sticky top-0"} z-40 hidden h-[49px] items-center gap-2 border-b border-slate-200 bg-slate-100/90 px-3 backdrop-blur lg:flex`}
+          className={`${onFarolTab ? "fixed top-0 left-0 right-0" : "sticky top-0"} z-40 hidden h-[56px] items-center gap-2 border-b border-slate-200 bg-slate-100/90 px-3 backdrop-blur lg:flex`}
         >
           <button
             type="button"
@@ -501,7 +501,7 @@ export default function Layout() {
           src={FAROL_URL}
           title="Farol Tático"
           className={`fixed left-0 right-0 bottom-0 border-0 bg-white ${farolTab === "farol" ? "block" : "hidden"}`}
-          style={{ top: "49px", width: "100vw", height: "calc(100vh - 49px)" }}
+          style={{ top: "56px", width: "100vw", height: "calc(100vh - 56px)" }}
           allow="display-capture; microphone; camera; clipboard-read; clipboard-write; autoplay; fullscreen"
           allowFullScreen
         />

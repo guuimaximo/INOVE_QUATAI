@@ -1459,8 +1459,7 @@ export default function EstoqueDieselOperacao() {
               O mes fica fixo aqui em cima. Dentro da pagina, o lancamento do dia ja vem com a data de hoje quando ela pertence a este mes.
             </p>
           </div>
-          <div className="space-y-3 xl:min-w-[420px]">
-            <MonthNavigation month={month} product={product} entries={entries} />
+          <div className="space-y-3 xl:min-w-[320px]">
             <ProductSwitcher product={product} onChange={handleProductChange} />
             <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
               <button
@@ -1497,6 +1496,11 @@ export default function EstoqueDieselOperacao() {
               ) : null}
             </div>
           </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">Meses de 2026</div>
+          <MonthNavigation month={month} product={product} entries={entries} />
         </div>
       </EstoqueDieselPanel>
 
@@ -1684,69 +1688,29 @@ export default function EstoqueDieselOperacao() {
             <FormInput label="Saida Transnet (litros)" value={form.transnetOutput} onChange={(value) => updateField("transnetOutput", value)} />
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">Saldo anterior</h3>
-              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoD1)}</p>
-              <p className="mt-1 text-sm font-semibold text-slate-500">
-                Vem automaticamente do ultimo saldo final salvo para {product}.
+          <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-emerald-700">Recebimento de diesel</h3>
+              <p className="mt-1 text-sm font-semibold text-emerald-800">
+                Recebido hoje: <span className="font-black">{parseLiters(computed.entradaDiesel)}</span>
+                {dailyReceipts.length ? ` · ${dailyReceipts.length} recebimento(s)` : " · nenhum"}. Gerenciado em janela separada — entra sozinho no saldo do dia.
               </p>
             </div>
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-blue-700">Saldo inicial do dia</h3>
-              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoInicial)}</p>
-              <p className="mt-1 text-sm font-semibold text-blue-700">
-                Saldo apurado pela regua depois das saidas do dia.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <h3 className="text-sm font-black uppercase tracking-wider text-amber-700">Saldo final</h3>
-              <p className="mt-3 text-2xl font-black text-slate-800">{parseLiters(computed.medicaoAtual)}</p>
-              <p className="mt-1 text-sm font-semibold text-amber-700">
-                Soma do saldo inicial do dia com o recebido de diesel.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-emerald-700">Recebimento de diesel</h3>
-                <p className="mt-1 text-sm font-semibold text-emerald-700">
-                  Cadastre, consulte ou edite os recebimentos em uma janela separada. O recebido entra automaticamente no fechamento do dia.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={prepareNewReceipt}
-                  className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-800"
-                >
-                  Novo recebimento
-                </button>
-                <button
-                  type="button"
-                  onClick={openReceiptConsultation}
-                  className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
-                >
-                  Consultar recebimentos
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3">
-                <div className="text-xs font-black uppercase tracking-wider text-slate-500">Recebimentos do dia</div>
-                <div className="mt-2 text-xl font-black text-slate-800">{dailyReceipts.length}</div>
-              </div>
-              <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3">
-                <div className="text-xs font-black uppercase tracking-wider text-slate-500">Recebido de Diesel</div>
-                <div className="mt-2 text-xl font-black text-slate-800">{parseLiters(computed.entradaDiesel)}</div>
-              </div>
-              <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3">
-                <div className="text-xs font-black uppercase tracking-wider text-slate-500">Planejado de Diesel</div>
-                <div className="mt-2 text-xl font-black text-slate-800">{parseLiters(plannedDieselLiters)}</div>
-              </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={prepareNewReceipt}
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-black text-white transition hover:bg-emerald-800"
+              >
+                Novo recebimento
+              </button>
+              <button
+                type="button"
+                onClick={openReceiptConsultation}
+                className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-black text-emerald-700 transition hover:bg-emerald-100"
+              >
+                Consultar
+              </button>
             </div>
           </div>
 

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, ChevronLeft, ChevronRight, Search, ChevronDown, LogOut, User as UserIcon, Palette } from "lucide-react";
+import { Menu, X, ChevronLeft, ChevronRight, Search, ChevronDown, LogOut, User as UserIcon, Palette, Home, Plus } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import {
   FaBarcode,
@@ -29,7 +29,7 @@ import CommandPalette from "./CommandPalette";
 import { useMobileTabBadges } from "../context/MobileTabBadgesContext";
 import { AuthContext } from "../context/AuthContext";
 import { useAccessGovernance } from "../context/AccessContext";
-import { canUserSeeFarol } from "../utils/access";
+import { canUserSeeFarol, getAccessPageByPath } from "../utils/access";
 import { getMobileNavItems } from "../utils/mobileNavigation";
 
 const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
@@ -179,7 +179,37 @@ export default function Layout() {
     }
   });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [openTabs, setOpenTabs] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("inove_tabs") || "[]");
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
   const [farolTab, setFarolTab] = useState("inove"); // "inove" | "farol"
+
+  function persistTabs(tabs) {
+    try {
+      localStorage.setItem("inove_tabs", JSON.stringify(tabs));
+    } catch {
+      // sem storage: abas valem so na sessao
+    }
+  }
+
+  function closeTab(path, event) {
+    if (event) event.stopPropagation();
+    setOpenTabs((tabs) => {
+      const idx = tabs.findIndex((t) => t.path === path);
+      const next = tabs.filter((t) => t.path !== path);
+      persistTabs(next);
+      if (location.pathname === path) {
+        const alvo = next[idx] || next[idx - 1] || next[next.length - 1];
+        navigate(alvo ? alvo.path : "/");
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     try {
@@ -273,6 +303,21 @@ export default function Layout() {
   useEffect(() => {
     setMobileSidebarOpen(false);
   }, [location.pathname]);
+
+  // Abas estilo navegador (v1): ao navegar, abre/garante a aba da pagina atual.
+  useEffect(() => {
+    if (isNativeShell) return;
+    const path = location.pathname;
+    if (path === "/login" || path === "/") return; // "/" e a aba fixa Inicio
+    const page = getAccessPageByPath(path);
+    const label = page?.label || getPageTitle(path);
+    setOpenTabs((tabs) => {
+      if (tabs.some((t) => t.path === path)) return tabs;
+      const next = [...tabs, { path, label }];
+      persistTabs(next);
+      return next;
+    });
+  }, [location.pathname, isNativeShell]);
 
   async function handleLogout() {
     await logout();
@@ -483,6 +528,58 @@ export default function Layout() {
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
+          {!isNativeShell && farolTab !== "farol" && (
+            <div className="hidden items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 py-1.5 lg:flex">
+              <button
+                type="button"
+                onClick={() => navigate("/")}
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition ${
+                  location.pathname === "/" || location.pathname === "/inove"
+                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                    : "text-slate-500 hover:bg-slate-200/60"
+                }`}
+                title="Início"
+              >
+                <Home size={15} /> Início
+              </button>
+
+              {openTabs.map((t) => {
+                const ativa = location.pathname === t.path;
+                return (
+                  <div
+                    key={t.path}
+                    onClick={() => navigate(t.path)}
+                    className={`flex shrink-0 cursor-pointer items-center gap-2 rounded-lg py-1.5 pl-3 pr-1.5 text-[13px] transition ${
+                      ativa
+                        ? "bg-white font-medium text-slate-900 shadow-sm ring-1 ring-slate-200"
+                        : "text-slate-500 hover:bg-slate-200/60"
+                    }`}
+                  >
+                    <span className="max-w-[160px] truncate">{t.label}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => closeTab(t.path, e)}
+                      className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                      aria-label={`Fechar ${t.label}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new Event("inove:open-search"))}
+                className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-200/60 hover:text-slate-700"
+                title="Abrir página (Ctrl+K)"
+                aria-label="Abrir nova página"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
+          )}
+
           <main
             className={`flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 pb-20 md:px-6 md:py-6 lg:pb-6 ${
               farolTab === "farol" ? "hidden" : ""

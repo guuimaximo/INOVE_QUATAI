@@ -287,6 +287,7 @@ export default function Sidebar() {
       ],
 
       configuracoes: [
+        { path: "/cadastros", label: "Cadastros", icon: <FaBoxes /> },
         { path: "/usuarios", label: "Usuários", icon: <FaUserCog /> },
         { path: "/niveis-acesso", label: "Níveis de acesso", icon: <FaShieldAlt /> },
         { path: "/controle-dados", label: "Controle de Dados", icon: <FaHdd /> },

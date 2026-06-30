@@ -1247,6 +1247,26 @@ export default function Dashboard() {
     [dashboard.embarcados]
   );
 
+  const [mostrarDetalhes, setMostrarDetalhes] = useState(() => {
+    try {
+      return localStorage.getItem("inove_dash_detalhes") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  function toggleDetalhes() {
+    setMostrarDetalhes((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem("inove_dash_detalhes", next ? "1" : "0");
+      } catch {
+        // sem storage: vale so na sessao
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-5">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -1546,6 +1566,20 @@ export default function Dashboard() {
         </SectionCard>
       </section>
 
+      <div className="flex justify-center pt-1">
+        <button
+          type="button"
+          onClick={toggleDetalhes}
+          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
+        >
+          {mostrarDetalhes
+            ? "Ocultar detalhes"
+            : "Mostrar mais detalhes (instrutores, ferias, avarias, tratativas)"}
+        </button>
+      </div>
+
+      {mostrarDetalhes && (
+      <>
       <section className="grid gap-5 xl:grid-cols-3">
         <SectionCard
           title="Instrutores do mes"
@@ -1796,6 +1830,8 @@ export default function Dashboard() {
           </div>
         </SectionCard>
       </section>
+      </>
+      )}
     </div>
   );
 }

@@ -97,47 +97,75 @@ export default function CommandPalette() {
 
   if (!open) return null;
 
+  const grupos = [];
+  const porCategoria = {};
+  results.forEach((p, i) => {
+    if (!porCategoria[p.category]) {
+      porCategoria[p.category] = [];
+      grupos.push(p.category);
+    }
+    porCategoria[p.category].push({ p, i });
+  });
+
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-950/40 px-4 pt-[14vh]"
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-950/50 px-4 pt-[12vh] backdrop-blur-sm"
       onClick={() => setOpen(false)}
     >
       <div
-        className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 border-b border-slate-100 px-4">
-          <Search size={18} className="text-slate-400" />
+        <div className="flex items-center gap-3 border-b border-slate-100 px-5">
+          <Search size={20} className="text-slate-400" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onInputKey}
-            placeholder="Buscar tela... (ex.: pneus, contagem, avarias)"
-            className="w-full bg-transparent py-3.5 text-sm text-slate-800 outline-none placeholder:text-slate-400"
+            placeholder="Buscar tela, módulo ou setor..."
+            className="w-full bg-transparent py-4 text-base text-slate-800 outline-none placeholder:text-slate-400"
           />
           <button type="button" onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700">
             <X size={18} />
           </button>
         </div>
 
-        <div ref={listRef} className="max-h-[52vh] overflow-y-auto py-1">
+        <div ref={listRef} className="max-h-[56vh] overflow-y-auto py-2">
           {results.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-slate-400">Nenhuma tela encontrada.</div>
+            <div className="px-4 py-10 text-center text-sm text-slate-400">Nenhuma tela encontrada.</div>
           ) : (
-            results.map((p, i) => (
-              <button
-                key={p.key}
-                type="button"
-                onMouseEnter={() => setActive(i)}
-                onClick={() => go(p)}
-                className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm ${
-                  i === active ? "bg-blue-50 text-blue-800" : "text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                <span className="font-medium">{p.label}</span>
-                <span className="shrink-0 text-xs text-slate-400">{p.category}</span>
-              </button>
+            grupos.map((cat) => (
+              <div key={cat}>
+                <div className="px-5 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  {cat}
+                </div>
+                {porCategoria[cat].map(({ p, i }) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onMouseEnter={() => setActive(i)}
+                    onClick={() => go(p)}
+                    className={`flex w-full items-center gap-3 px-5 py-2.5 text-left text-sm ${
+                      i === active ? "bg-blue-50 text-blue-800" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                        i === active ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-400"
+                      }`}
+                    >
+                      <Search size={14} />
+                    </span>
+                    <span className="font-medium">{p.label}</span>
+                    {i === active && (
+                      <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-blue-400">
+                        <CornerDownLeft size={12} /> abrir
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
             ))
           )}
         </div>

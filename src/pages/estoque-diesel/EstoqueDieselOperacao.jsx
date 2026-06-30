@@ -436,22 +436,53 @@ function buildCascadeMonthlyEntries(entries, receipts, productParams) {
   return recalculated.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 }
 
-function MonthNavigation({ month, product }) {
+function MonthNavigation({ month, product, entries = [] }) {
+  // Resumo leve por mês (a partir das medições do ano já carregadas).
+  const statsByMonth = {};
+  (entries || []).forEach((entry) => {
+    if (entry.product !== product || !entry.date) return;
+    const m = Number(entry.date.slice(5, 7));
+    if (!statsByMonth[m]) statsByMonth[m] = { dias: 0, criticos: 0 };
+    statsByMonth[m].dias += 1;
+    if (String(entry.status || "").toUpperCase() !== "OK") statsByMonth[m].criticos += 1;
+  });
+
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-6">
       {MONTHS_2026.map((item) => {
         const active = item.month === month;
+        const stats = statsByMonth[item.month] || { dias: 0, criticos: 0 };
+        const diasNoMes = new Date(2026, item.month, 0).getDate();
+        const dotColor =
+          stats.dias === 0
+            ? "#cbd5e1"
+            : stats.criticos === 0
+            ? "#16a34a"
+            : stats.criticos <= 3
+            ? "#d97706"
+            : "#dc2626";
+
         return (
           <Link
             key={item.month}
             to={`/estoque-diesel/operacao/2026/${item.month}?produto=${product}`}
-            className={`rounded-xl border px-3 py-2 text-sm font-black transition ${
+            className={`flex flex-col gap-1 rounded-xl border px-3 py-2 transition ${
               active
-                ? "border-slate-800 bg-slate-800 text-white"
-                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                ? "border-blue-600 bg-blue-50 ring-1 ring-blue-200"
+                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
             }`}
           >
-            {item.label.slice(0, 3)}
+            <div className="flex items-center justify-between">
+              <span className={`text-sm font-black ${active ? "text-blue-700" : "text-slate-800"}`}>
+                {item.label.slice(0, 3)}
+              </span>
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
+            </div>
+            <span className="text-[11px] font-semibold text-slate-400">
+              {stats.dias === 0
+                ? "—"
+                : `${stats.dias}/${diasNoMes}${stats.criticos ? ` · ${stats.criticos} crít.` : ""}`}
+            </span>
           </Link>
         );
       })}
@@ -1398,7 +1429,7 @@ export default function EstoqueDieselOperacao() {
             </p>
           </div>
           <div className="space-y-3 xl:min-w-[420px]">
-            <MonthNavigation month={month} product={product} />
+            <MonthNavigation month={month} product={product} entries={entries} />
             <ProductSwitcher product={product} onChange={handleProductChange} />
             <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
               <button

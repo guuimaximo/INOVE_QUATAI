@@ -378,23 +378,35 @@ function buildCascadeMonthlyEntries(entries, receipts, productParams) {
         ? safeNumber(entry.saldoAnterior, 0)
         : previousSaldoFinal;
 
-    // O saldo final vem da régua/medição já salva. Não converte, não multiplica e não recalcula.
-    const saldoFinal = safeNumber(
+    // CORRECAO (Problema 1): o saldo final do dia = nível do tanque após o
+    // consumo (a régua, ANTES do recebimento) + o diesel recebido no dia. Antes,
+    // o recebimento lançado pela modal NAO entrava no saldo_final salvo, então
+    // sumia do encadeamento (o saldo anterior do dia seguinte ficava menor).
+    const saldoFinalSalvo = safeNumber(
       entry.saldoFinal ?? entry.medicaoAtual ?? entry.medicaoInicial,
       0
     );
+    const entradaSalva = safeNumber(entry.entradaDiesel, 0);
 
-    const entradaDiesel = safeNumber(entry.entradaDiesel, 0);
-    const saidaTanque = saldoAnterior + entradaDiesel - saldoFinal;
     const saidaTotalBombas = safeNumber(entry.saidaTotalBombas, 0);
     const saidaTransnet = safeNumber(entry.saidaTransnet, 0);
     const receiptTotals = receiptTotalsByDate[entry.date] || null;
     const inlineNf = safeNumber(entry.nfVolumeLitros, 0);
     const inlineReceived = safeNumber(entry.receiptMeasuredLiters ?? entry.entradaRecebimentos, 0);
-    const totalNf = safeNumber(receiptTotals?.nfVolumeLitros, 0) + inlineNf;
-    const totalReceived = safeNumber(receiptTotals?.volumeRecebidoLitros, 0) + inlineReceived;
-    const recebidoDiesel = totalReceived > 0 ? totalReceived : entradaDiesel;
-    const saldoInicialDia = roundNumber(saldoAnterior - saidaTanque);
+    // A modal de recebimento e a fonte unica: se houver recebimento na modal,
+    // ignora o inline (legado) pra nao dobrar.
+    const totalNf = receiptTotals ? safeNumber(receiptTotals.nfVolumeLitros, 0) : inlineNf;
+    const totalReceived = receiptTotals
+      ? safeNumber(receiptTotals.volumeRecebidoLitros, 0)
+      : inlineReceived;
+
+    // Nível após o consumo (régua), removendo entrada ja embutida no salvo
+    // (dias salvos corretamente nao dobram o recebido).
+    const saldoInicialDia = roundNumber(saldoFinalSalvo - entradaSalva);
+    const saidaTanque = roundNumber(saldoAnterior - saldoInicialDia);
+    const recebidoDiesel = roundNumber(totalReceived);
+    const entradaDiesel = recebidoDiesel;
+    const saldoFinal = roundNumber(saldoInicialDia + recebidoDiesel);
     const pctDiffNF =
       totalNf > 0 ? calculatePctDifference(totalNf, recebidoDiesel) : entry.pctDiffNF ?? null;
 

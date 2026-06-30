@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   FaArrowLeft,
+  FaChevronLeft,
+  FaChevronRight,
   FaCheckCircle,
   FaExclamationTriangle,
   FaCamera,
@@ -879,6 +881,35 @@ export default function EstoqueDieselOperacao() {
     setFeedback(null);
   }
 
+  function shiftDateISO(dateStr, deltaDays) {
+    const base = new Date(`${dateStr}T00:00:00`);
+    base.setDate(base.getDate() + deltaDays);
+    const y = base.getFullYear();
+    const m = String(base.getMonth() + 1).padStart(2, "0");
+    const d = String(base.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function goToDay(delta) {
+    if (!form.date) return;
+    const target = shiftDateISO(form.date, delta);
+    if (!target.startsWith(`${year}-${month}`)) return; // nao sai do mes corrente
+    setShowDailyLaunch(true);
+    const existing = monthlyEntries.find((entry) => entry.date === target);
+    if (existing) handleSelectEntry(existing);
+    else resetFormForNewEntry({ dateOverride: target });
+  }
+
+  function goToToday() {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const target = todayStr.startsWith(`${year}-${month}`) ? todayStr : `${year}-${month}-01`;
+    setShowDailyLaunch(true);
+    const existing = monthlyEntries.find((entry) => entry.date === target);
+    if (existing) handleSelectEntry(existing);
+    else resetFormForNewEntry({ dateOverride: target });
+  }
+
   function getNextDateAfter(dateStr) {
     if (!dateStr) return null;
     try {
@@ -1477,9 +1508,54 @@ export default function EstoqueDieselOperacao() {
             <div>
               <h2 className="text-lg font-black text-slate-800">Lancamento do dia</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                O operador informa a medicao atual, a saida do Transnet e, se houver, o recebimento do diesel. O restante vem do D-1 e dos calculos automaticos.
+                O operador informa a medicao atual, a saida do Transnet e o restante vem do D-1 e dos calculos automaticos.
               </p>
             </div>
+
+            {(() => {
+              const diaNum = Number((form.date || "").slice(8, 10)) || 1;
+              const diasNoMes = new Date(2026, Number(month), 0).getDate();
+              const rotulo = form.date
+                ? new Date(`${form.date}T00:00:00`).toLocaleDateString("pt-BR", {
+                    weekday: "short",
+                    day: "2-digit",
+                    month: "2-digit",
+                  })
+                : "--";
+              return (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => goToDay(-1)}
+                    disabled={diaNum <= 1}
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                    aria-label="Dia anterior"
+                  >
+                    <FaChevronLeft />
+                  </button>
+                  <div className="min-w-[140px] text-center">
+                    <div className="text-sm font-black capitalize text-slate-800">{rotulo}</div>
+                    <div className="text-[11px] font-semibold text-slate-400">dia {diaNum} de {diasNoMes}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => goToDay(1)}
+                    disabled={diaNum >= diasNoMes}
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                    aria-label="Proximo dia"
+                  >
+                    <FaChevronRight />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goToToday}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Hoje
+                  </button>
+                </div>
+              );
+            })()}
           </div>
 
           {showPumpConfig ? (

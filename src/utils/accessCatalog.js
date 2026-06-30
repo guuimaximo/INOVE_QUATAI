@@ -2,6 +2,7 @@ export const APP_ACCESS_PAGES = [
   { key: "home", label: "Inicio", category: "Portal", path: "/", patterns: ["/", "/inove", "/portal"] },
   { key: "inicio_rapido", label: "Inicio Rapido", category: "Portal", path: "/inicio-rapido", patterns: ["/inicio-rapido"] },
   { key: "painel", label: "Painel Executivo", category: "Portal", path: "/painel", patterns: ["/painel"] },
+  { key: "cadastros_hub", label: "Cadastros (central)", category: "Cadastros", path: "/cadastros", patterns: ["/cadastros"] },
 
   { key: "tratativas_resumo", label: "Tratativas Resumo", category: "Tratativas", path: "/tratativas-resumo", patterns: ["/tratativas-resumo"] },
   { key: "tratativas_solicitacao", label: "Tratativas Solicitacao", category: "Tratativas", path: "/solicitar", patterns: ["/solicitar"] },

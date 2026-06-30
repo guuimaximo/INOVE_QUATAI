@@ -25,6 +25,7 @@ const AtualizarPerfil = lazy(() => import("./pages/auth/AtualizarPerfil"));
 const MeuPerfil = lazy(() => import("./pages/auth/MeuPerfil"));
 const ConfirmarEmail = lazy(() => import("./pages/auth/ConfirmarEmail"));
 const Preferencias = lazy(() => import("./pages/auth/Preferencias"));
+const CadastrosHub = lazy(() => import("./pages/cadastros/CadastrosHub"));
 
 import Dashboard from "./pages/home/Dashboard";
 import ControleEspecialCentral from "./pages/controle-especial/ControleEspecialCentral";
@@ -224,6 +225,7 @@ export default function App() {
               <Route path="/atualizar-perfil" element={<AtualizarPerfil />} />
               <Route path="/meu-perfil" element={<MeuPerfil />} />
               <Route path="/preferencias" element={<Preferencias />} />
+              <Route path="/cadastros" element={<CadastrosHub />} />
 
               <Route path="/" element={<HomeDecider />} />
               <Route path="/inove" element={<HomeDecider />} />

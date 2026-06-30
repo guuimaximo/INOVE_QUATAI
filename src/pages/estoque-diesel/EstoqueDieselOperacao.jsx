@@ -897,13 +897,16 @@ export default function EstoqueDieselOperacao() {
 
   useEffect(() => {
     setForm((current) => {
-      const next = buildPreparedForm(current);
+      // Vinculo vivo: o hodometro inicial SEMPRE reflete o encerrante atual do
+      // D-1 (ou o ajuste, que tem prioridade) — em vez de manter a "foto" salva
+      // que ficava velha quando o D-1 era editado. forcePumpInitials garante isso.
+      const next = buildPreparedForm(current, entries, metadata, { forcePumpInitials: true });
       if (JSON.stringify(next) === JSON.stringify(current)) {
         return current;
       }
       return next;
     });
-  }, [currentPumpAdjustments, previousEntry]);
+  }, [currentPumpAdjustments, previousEntry, entries, metadata]);
 
   useEffect(() => {
     const nextDrafts = {};

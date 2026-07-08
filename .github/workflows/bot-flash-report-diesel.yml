@@ -1,0 +1,65 @@
+name: Bot Diesel · Flash Report Semanal
+
+on:
+  schedule:
+    - cron: "0 11 * * 5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bot-flash-report-diesel
+  cancel-in-progress: false
+
+jobs:
+  gerar-relatorio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: flash-report-diesel/requirements.txt
+
+      - name: Install dependencias do sistema (weasyprint)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
+
+      - name: Install Python deps
+        working-directory: flash-report-diesel
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Gerar graficos + HTML
+        working-directory: flash-report-diesel
+        run: |
+          python gen_html_v3.py
+
+      - name: Gerar PDF final
+        working-directory: flash-report-diesel
+        run: |
+          python -m weasyprint flash_report_diesel_v3.html "Flash Report - Diesel.pdf"
+
+      - name: Commit e push do PDF gerado
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(bot): atualiza Flash Report Diesel semanal"
+          file_pattern: "flash-report-diesel/*.pdf"
+
+      - name: Sobe artefato de apoio
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flash-report-diesel
+          path: |
+            flash-report-diesel/*.pdf
+            flash-report-diesel/*.png
+          if-no-files-found: ignore
+          retention-days: 14

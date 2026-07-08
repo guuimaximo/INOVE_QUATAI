@@ -186,6 +186,28 @@ INSTRUTORES = [
 ]
 
 
+# Credenciais Supabase por projeto — SEMPRE via variaveis de ambiente (secrets do GitHub).
+# NUNCA colocar chave em texto puro neste arquivo. Nomes dos secrets no repo INOVE_QUATAI:
+#   inove:    SUPABASE_URL           + SUPABASE_SERVICE_KEY   (reaproveitados dos outros bots)
+#   bcnt:     SUPABASE_BCNT_URL      + SUPABASE_BCNT_KEY
+#   transnet: SUPABASE_TRANSNET_URL  + SUPABASE_TRANSNET_KEY
+SUPABASE_PROJETOS = {
+    "inove":    ("SUPABASE_URL", "SUPABASE_SERVICE_KEY"),
+    "bcnt":     ("SUPABASE_BCNT_URL", "SUPABASE_BCNT_KEY"),
+    "transnet": ("SUPABASE_TRANSNET_URL", "SUPABASE_TRANSNET_KEY"),
+}
+
+
+def supabase_creds(projeto):
+    """Retorna (url, key) do projeto a partir dos secrets/env, ou (None, None) se ausentes."""
+    url_var, key_var = SUPABASE_PROJETOS[projeto]
+    url = os.environ.get(url_var, "").strip().rstrip("/")
+    key = os.environ.get(key_var, "").strip()
+    if projeto == "inove" and not key:  # aceita a anon se a service nao estiver setada
+        key = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+    return (url, key) if (url and key) else (None, None)
+
+
 def _sb_get(url, key, path, params):
     q = urllib.parse.urlencode(params, safe="().,:-")
     req = urllib.request.Request(f"{url}/rest/v1/{path}?{q}",
@@ -197,8 +219,7 @@ def _sb_get(url, key, path, params):
 def _carregar_instrutores_junho():
     """Busca ao vivo os dados da Pagina 11 (recorte Junho/2026). Retorna None se nao houver
     credencial ou se a consulta falhar (mantendo o fallback fixo)."""
-    url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
-    key = (os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY") or "").strip()
+    url, key = supabase_creds("inove")
     if not url or not key:
         return None
 

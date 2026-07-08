@@ -39,6 +39,9 @@ jobs:
 
       - name: Gerar graficos + HTML
         working-directory: flash-report-diesel
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
           python gen_html_v3.py
 

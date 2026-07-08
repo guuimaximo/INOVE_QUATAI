@@ -9,6 +9,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+import os
+import json
+import urllib.parse
+import urllib.request
 
 OUT = Path(__file__).resolve().parent
 plt.rcParams["font.family"] = "DejaVu Sans"
@@ -163,20 +167,85 @@ COMPLETARAM_30_DIAS = [
     ("DAVID DIAS PEREZ", "30060649", "Helio Ramos", "01/06", 2.807, 2.665),
 ]
 
-# Instrutores - analise aprofundada (base: diesel_acompanhamentos, 477 registros)
-# TODO(pendente credencial Supabase INOVE - wboelthngddvkgrvwkbu.supabase.co):
-# Estes numeros sao ACUMULADO GERAL (toda a base diesel_acompanhamentos, sem filtro de data),
-# diferente do resto do relatorio que e escopado a Junho/2026. Assim que o usuario enviar a
-# anon/service key do projeto INOVE, refazer esta consulta filtrando por dt_inicio (ou campo
-# equivalente) dentro de 01/06/2026 a 30/06/2026, e atualizar tambem INSTRUTORES_DIARIO /
-# INSTRUTORES_DIA_A_DIA se necessario. Depois disso, remover a nota de aviso da Pagina 11
-# em gen_html_v3.py (bloco `<div class="warn">`) e o texto "ACUMULADO GERAL" do page_header.
+# Instrutores - Pagina 11 (base: diesel_acompanhamentos, Supabase INOVE), recorte HIBRIDO de Junho/2026:
+#  - "novos" / "monitorando": acompanhamentos com dt_inicio_monitoramento dentro de Junho/2026
+#    (ainda no ciclo de 30 dias, por isso quase todos "EM_MONITORAMENTO").
+#  - "desf_ok" / "desf_ata": DESFECHOS ocorridos em Junho (prontuario_30_gerado_em em Junho),
+#    porque dt_fim_real e sempre nulo na base. OK/ATA levam ~30 dias para aparecer.
+#  - "taxa_atingiu_meta" / "n_com_dado": sobre os novos de junho com leitura (metadata.kpis.kml_real),
+#    % em que kml_real >= kml_meta.
+# Os valores abaixo sao FALLBACK (ultima extracao 08/07/2026). Se SUPABASE_URL + SUPABASE_SERVICE_KEY
+# (ou SUPABASE_ANON_KEY) estiverem no ambiente, _carregar_instrutores_junho() busca ao vivo e sobrescreve.
+INSTRUTORES_NOMES = ["Fabiano Freitas", "Helio Ramos"]
+JUNHO_INICIO, JUNHO_FIM = "2026-06-01", "2026-07-01"
 INSTRUTORES = [
-    {"nome": "Fabiano Freitas", "total": 254, "ok": 124, "monitorando": 78, "atas": 24,
-     "taxa_atingiu_meta": 24.0, "n_com_dado": 171, "sessoes_semana": 39, "horas_mes": 15.6, "linhas_mes": 7},
-    {"nome": "Helio Ramos", "total": 214, "ok": 128, "monitorando": 57, "atas": 14,
-     "taxa_atingiu_meta": 22.1, "n_com_dado": 163, "sessoes_semana": 19, "horas_mes": 10.3, "linhas_mes": 4},
+    {"nome": "Fabiano Freitas", "novos": 66, "monitorando": 64, "n_com_dado": 24,
+     "taxa_atingiu_meta": 25.0, "desf_ok": 33, "desf_ata": 11},
+    {"nome": "Helio Ramos", "novos": 46, "monitorando": 41, "n_com_dado": 19,
+     "taxa_atingiu_meta": 26.3, "desf_ok": 34, "desf_ata": 12},
 ]
+
+
+def _sb_get(url, key, path, params):
+    q = urllib.parse.urlencode(params, safe="().,:-")
+    req = urllib.request.Request(f"{url}/rest/v1/{path}?{q}",
+                                 headers={"apikey": key, "Authorization": f"Bearer {key}"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def _carregar_instrutores_junho():
+    """Busca ao vivo os dados da Pagina 11 (recorte Junho/2026). Retorna None se nao houver
+    credencial ou se a consulta falhar (mantendo o fallback fixo)."""
+    url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+    key = (os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY") or "").strip()
+    if not url or not key:
+        return None
+
+    def kml_real(x):
+        return ((x.get("metadata") or {}).get("kpis") or {}).get("kml_real")
+
+    try:
+        novos = _sb_get(url, key, "diesel_acompanhamentos", [
+            ("select", "status,instrutor_nome,kml_meta,metadata"),
+            ("dt_inicio_monitoramento", f"gte.{JUNHO_INICIO}"),
+            ("dt_inicio_monitoramento", f"lt.{JUNHO_FIM}"),
+            ("limit", "5000"),
+        ])
+        desf = _sb_get(url, key, "diesel_acompanhamentos", [
+            ("select", "status,instrutor_nome"),
+            ("status", "in.(OK,ATAS)"),
+            ("prontuario_30_gerado_em", f"gte.{JUNHO_INICIO}"),
+            ("prontuario_30_gerado_em", f"lt.{JUNHO_FIM}"),
+            ("limit", "5000"),
+        ])
+    except Exception as e:
+        print(f"[instrutores] busca ao vivo falhou ({e}); usando fallback fixo.")
+        return None
+
+    out = []
+    for nome in INSTRUTORES_NOMES:
+        rn = [x for x in novos if x.get("instrutor_nome") == nome]
+        cd = [x for x in rn if kml_real(x) is not None and x.get("kml_meta") is not None]
+        n = len(cd)
+        atingiu = sum(1 for x in cd if float(kml_real(x)) >= float(x["kml_meta"]))
+        rd = [x for x in desf if x.get("instrutor_nome") == nome]
+        out.append({
+            "nome": nome,
+            "novos": len(rn),
+            "monitorando": sum(1 for x in rn if x.get("status") == "EM_MONITORAMENTO"),
+            "n_com_dado": n,
+            "taxa_atingiu_meta": round(100 * atingiu / n, 1) if n else 0.0,
+            "desf_ok": sum(1 for x in rd if x.get("status") == "OK"),
+            "desf_ata": sum(1 for x in rd if x.get("status") == "ATAS"),
+        })
+    print("[instrutores] dados ao vivo de Junho/2026 carregados do Supabase INOVE.")
+    return out
+
+
+_instrutores_live = _carregar_instrutores_junho()
+if _instrutores_live:
+    INSTRUTORES = _instrutores_live
 
 ACOMPANHAMENTO = [
     {"nome": "Agenor Matias De Jesus", "instrutor": "Fabiano Freitas", "status": "Em monitoramento", "antes": 2.361, "depois": 2.230},
@@ -733,20 +802,20 @@ def chart_instrutores_eficacia():
 def chart_instrutores_status():
     fig, ax = plt.subplots(figsize=(5.4, 3.9))
     nomes = [i["nome"] for i in INSTRUTORES]
-    ok = [i["ok"] for i in INSTRUTORES]
     mon = [i["monitorando"] for i in INSTRUTORES]
-    atas = [i["atas"] for i in INSTRUTORES]
+    ok = [i["desf_ok"] for i in INSTRUTORES]
+    atas = [i["desf_ata"] for i in INSTRUTORES]
     y = np.arange(len(nomes))
-    ax.barh(y, ok, color=GREEN, height=0.5, label="Concluído (OK)")
-    ax.barh(y, mon, left=ok, color=GOLD, height=0.5, label="Em monitoramento")
-    ax.barh(y, atas, left=[a+b for a,b in zip(ok,mon)], color=RED, height=0.5, label="Virou ATA")
+    ax.barh(y, mon, color=GOLD, height=0.5, label="Em monitoramento (novos de jun)")
+    ax.barh(y, ok, left=mon, color=GREEN, height=0.5, label="Concluído OK (desfecho jun)")
+    ax.barh(y, atas, left=[a+b for a,b in zip(mon,ok)], color=RED, height=0.5, label="Virou ATA (desfecho jun)")
     for i, n in enumerate(nomes):
-        total = ok[i] + mon[i] + atas[i]
-        ax.text(total + 3, i, f"total {total}", va="center", fontsize=8.5, color=DARK)
+        total = mon[i] + ok[i] + atas[i]
+        ax.text(total + 3, i, f"{total}", va="center", fontsize=8.5, color=DARK)
     ax.set_yticks(list(y)); ax.set_yticklabels(nomes, fontsize=10)
-    ax.set_xlabel("Nº de acompanhamentos por status")
-    ax.set_title("Carteira de Acompanhamentos por Instrutor", fontsize=11.5, fontweight="bold", color=DARK)
-    ax.legend(loc="lower right", fontsize=7.5, frameon=False)
+    ax.set_xlabel("Nº de acompanhamentos (novos + desfechos de junho)")
+    ax.set_title("Atividade de Junho por Instrutor", fontsize=11.5, fontweight="bold", color=DARK)
+    ax.legend(loc="center", fontsize=6.8, frameon=False)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)

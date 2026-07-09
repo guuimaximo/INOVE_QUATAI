@@ -508,13 +508,73 @@ def _agg_divergencia(rows):
     return sorted(out, key=lambda x: -abs(x[3]))[:8]
 
 
-_transnet_rows = _transnet_fetch("2026-05-01", "2026-08-01")
+_MES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+
+
+def _agg_kml_mensal(rows, ano=2026):
+    """Pagina 2: KM/L mensal ponderado (Transnet) + telemetria mensal jun/jul."""
+    from collections import defaultdict
+    mt, ms = defaultdict(lambda: [0.0, 0.0]), defaultdict(lambda: [0.0, 0.0])
+    for r in rows:
+        d = str(r.get("data_consolidada", ""))
+        if not d.startswith(str(ano)):
+            continue
+        mes = int(d[5:7])
+        kmt, ct = _num(r.get("km_transnet")), _num(r.get("combustivel_transnet"))
+        kms, cs, kls = _num(r.get("km_sst")), _num(r.get("combustivel_sst")), _num(r.get("km_l_sst"))
+        if kmt and ct:
+            mt[mes][0] += kmt; mt[mes][1] += ct
+        if kms and cs and kls is not None and 0.5 <= kls <= 6:
+            ms[mes][0] += kms; ms[mes][1] += cs
+    meses = sorted(m for m in mt if mt[m][1] > 0)
+    if not meses:
+        return None, None
+    ult = meses[-1]
+    hist = [(f"{_MES_PT[m-1]}/{ano}" + ("*" if m == ult else ""), round(mt[m][0] / mt[m][1], 4)) for m in meses]
+    telem = {nome: round(ms[m][0] / ms[m][1], 3) for nome, m in (("jun", 6), ("jul", 7)) if ms.get(m) and ms[m][1] > 0}
+    return hist, telem
+
+
+def _agg_kml_semanal(rows, n=8):
+    """Pagina 2: KM/L ponderado (Transnet) das ultimas n semanas (seg-dom)."""
+    import datetime
+    from collections import defaultdict
+    wk = defaultdict(lambda: [0.0, 0.0])
+    for r in rows:
+        d = str(r.get("data_consolidada", ""))[:10]
+        try:
+            dtv = datetime.date.fromisoformat(d)
+        except ValueError:
+            continue
+        kmt, ct = _num(r.get("km_transnet")), _num(r.get("combustivel_transnet"))
+        if kmt and ct:
+            mon = dtv - datetime.timedelta(days=dtv.weekday())
+            wk[mon][0] += kmt; wk[mon][1] += ct
+    semanas = sorted(w for w in wk if wk[w][1] > 0)[-n:]
+    out = []
+    for mon in semanas:
+        sun = mon + datetime.timedelta(days=6)
+        out.append((f"{mon.day:02d}/{mon.month:02d}-{sun.day:02d}/{sun.month:02d}", round(wk[mon][0] / wk[mon][1], 4)))
+    return out
+
+
+_transnet_rows = _transnet_fetch("2026-01-01", "2026-08-01")
 if _transnet_rows:
+    _hist, _telem = _agg_kml_mensal(_transnet_rows)
+    if _hist:
+        KML_HISTORICO = _hist
+        # KML_MENSAL_TELEMETRIA (sst) NAO e sobrescrito: o dado de telemetria mensal e ruidoso
+        # (ex.: jun ~3,18, implausivel vs Transnet ~2,67). Mantem o valor fixo confiavel.
+        print("[transnet] Pagina 2 (KM/L mensal Transnet) ao vivo.")
+    _sem = _agg_kml_semanal(_transnet_rows)
+    if len(_sem) >= 4:
+        KML_SEMANAL = _sem
+        print("[transnet] Pagina 2 (KM/L semanal) ao vivo.")
     _ader = _agg_aderencia(_transnet_rows, "2026-06")
     if _ader:
         ADERENCIA_DIARIA_EMPRESA, ADERENCIA_MEDIA_EMPRESA, ADERENCIA_CARROS, ADERENCIA_TOTAL_FROTA = _ader
         print("[transnet] Pagina 17 (aderencia) ao vivo.")
-    _div = _agg_divergencia(_transnet_rows)
+    _div = _agg_divergencia([r for r in _transnet_rows if str(r.get("data_consolidada", "")) >= "2026-05-01"])
     if _div:
         DIVERGENCIA_CARROS = _div
         print("[transnet] Pagina 16 (divergencia) ao vivo.")

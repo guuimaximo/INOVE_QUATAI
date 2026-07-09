@@ -20,7 +20,7 @@ _M3 = getattr(gfd, "_MES3", ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "A
 MES3REF = _M3[getattr(gfd, "MES_REF_MM", 6) - 1]   # "Jul"
 MES3ANT = _M3[getattr(gfd, "MES_ANT_MM", 5) - 1]   # "Jun"
 
-TOTAL_PAGINAS = 20
+TOTAL_PAGINAS = 19
 
 CSS = """
 * { box-sizing: border-box; }
@@ -595,38 +595,13 @@ pages.append(f"""<div class="page-break"></div><div class="page">
   {footer(16)}
 </div>""")
 
-# ================= PAGINA 14b: ADERENCIA DA FROTA (media da empresa, por dia) =================
-rows_aderencia_carros = ""
-for a in gfd.ADERENCIA_CARROS:
-    veic, dias, pctad = a
-    cor = "#dc2626" if pctad < 30 else "#e0a800"
-    rows_aderencia_carros += (f"<tr><td style='font-weight:bold;text-align:left;padding-left:6px;'>{veic}</td>"
-                        f"<td>{dias} / 30 dias</td>"
-                        f"<td style='font-weight:800;color:{cor};'>{fmt(pctad,1)}%</td></tr>")
-
-pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 17 · Aderência da Frota — Média da Empresa", "Fonte: CSV Athena (indicadores_carro_quatai) — % da frota (111 veículos) com dado válido por dia", "Média do mês (Junho)", f"{fmt(gfd.ADERENCIA_MEDIA_EMPRESA,1)}%")}
-  <div class="card"><div class="card-title">Aderência diária da frota inteira</div><div class="card-body">
-    <div class="chart-wrap chart-wrap-md"><img src="v3_aderencia_empresa.png"/></div>
-  </div></div>
-  <div class="grid-2">
-    <div class="card"><div class="card-title">Piores carros individuais (mín. aderência no período)</div><div class="card-body">
-      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Carro</th><th>Dias com dado</th><th>% Aderência</th></tr></thead>
-      <tbody>{rows_aderencia_carros.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
-    </div></div>
-    <div class="card"><div class="card-title">Leitura</div><div class="card-body">
-      <div class="cons-box" style="margin-top:0;"><div class="cons-title">Padrão semanal</div>
-      <div class="cons-text">A aderência despenca todo fim de semana (sábados/domingos ficam entre 28% e 34%, contra 88-95% em dias úteis) — isso é esperado pela operação reduzida, mas deve ser considerado ao interpretar qualquer KM/L de fim de semana isoladamente.</div></div>
-      <div class="cons-box"><div class="cons-title">Casos de falha de captação</div>
-      <div class="cons-text">Fora do padrão semanal, os carros 222424 e W555 têm aderência quase nula (apenas 3 dias com dado em 30) — isso não é comportamento do motorista, é falha de captação que deveria ser tratada pela equipe de TI/Transnet antes de qualquer decisão sobre esses veículos.</div></div>
-    </div></div>
-  </div>
-  {footer(17)}
-</div>""")
+# ================= PAGINA ADERENCIA — REMOVIDA POR ENQUANTO (regra em revisao) =================
+# A pagina de Aderencia da Frota foi tirada temporariamente enquanto revisamos a regra
+# (dias sem dado / frota / fins de semana). Reintroduzir depois de acertar a metodologia.
 
 # ================= PAGINA 12: ACOMPANHAMENTO NOTURNO (placeholder) =================
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 18 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "06/07")}
+  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "06/07")}
   <div class="grid-2">
     <div class="card"><div class="card-title">Calendário de visitas — Julho/2026</div><div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
@@ -640,7 +615,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="metric" style="margin-top:8px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">06/07/2026</div></div>
     </div></div>
   </div>
-  {footer(18)}
+  {footer(17)}
 </div>""")
 
 # ================= PAGINA 13: PROGRAMACAO DA SEMANA (placeholder) =================
@@ -651,7 +626,7 @@ _crono_cards = [_crono_marker + part for part in _crono_parts]
 _crono_left = "".join(_crono_cards[:3])
 _crono_right = "".join(_crono_cards[3:])
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 19 · Programação Educativa — Conteúdo Motorista/Motô", "Cronograma de comunicação e engajamento, semana a semana — Junho/2026", "Semanas executadas", "5/5")}
+  {page_header("Página 18 · Programação Educativa — Conteúdo Motorista/Motô", "Cronograma de comunicação e engajamento, semana a semana — Junho/2026", "Semanas executadas", "5/5")}
   <div class="grid-2" style="align-items:start;">
     <div>{_crono_left}</div>
     <div>{_crono_right}
@@ -659,7 +634,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando reunião de brainstorm, imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação — todas as 5 semanas de junho foram executadas conforme planejado.</div></div>
     </div>
   </div>
-  {footer(19)}
+  {footer(18)}
 </div>""")
 
 # ================= PAGINA 14: MELHORIA CONTINUA =================
@@ -679,7 +654,7 @@ for s in gfd.SUGESTOES_LINHAS:
                          f"<td style='text-align:left;font-size:8px;color:#0e7c7b;font-weight:700;'>{s[2]}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 20 · Melhoria Contínua — Plano de Ação da Semana", "Síntese analítica sobre tratativas, acompanhamentos, linhas, carros e instrutores", "Foco #1 da semana", "07TR")}
+  {page_header("Página 19 · Melhoria Contínua — Plano de Ação da Semana", "Síntese analítica sobre tratativas, acompanhamentos, linhas, carros e instrutores", "Foco #1 da semana", "07TR")}
   <div class="grid-3" style="margin-bottom:6px;">
     <div class="metric" style="background:#fef2f2;border-color:#fecaca;"><div class="lbl" style="color:#dc2626;">Ação imediata</div><div class="val" style="font-size:11px;color:#0f172a;">3 tratativas &gt;90 dias em aberto</div><div class="aux">Everaldo, José Carlos, Erisvaldo — prioridade Alta</div></div>
     <div class="metric" style="background:#fffbeb;border-color:#fde68a;"><div class="lbl" style="color:#b45309;">Investigar</div><div class="val" style="font-size:11px;color:#0f172a;">Carro 222215 — sensor?</div><div class="aux">+39,5% de divergência Telemetria x Transnet</div></div>
@@ -700,7 +675,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="cons-box" style="margin-top:0;"><div class="cons-title">Como este plano foi montado</div>
     <div class="cons-text">Cruzamento entre: (1) motoristas do Sinal de Alerta já acompanhados que pioraram; (2) tratativas atrasadas por linha/prioridade; (3) linhas com maior desvio da meta e menor velocidade; (4) carros com divergência de sensor ou efeito positivo/negativo sobre o KM/L nos 30 dias. O objetivo é indicar onde focar na próxima semana, não substituir a análise de campo.</div></div>
   </div>
-  {footer(20)}
+  {footer(19)}
 </div>""")
 
 html = f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Flash Report Diesel v3</title>

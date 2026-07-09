@@ -603,7 +603,7 @@ if _bcnt_url and _bcnt_key:
         _fn = _bcnt_page(_bcnt_url, _bcnt_key, "funcionarios_atualizada", [("select", "nr_cracha,nm_funcionario")])
         _nome_de = {str(f["nr_cracha"]): (f.get("nm_funcionario") or "") for f in _fn if f.get("nr_cracha")}
         _pd = _bcnt_page(_bcnt_url, _bcnt_key, "premiacao_diaria_atualizada",
-                         [("select", "mes,motorista,prefixo,km_rodado,litros_consumidos,meta_kml_usada"),
+                         [("select", "mes,dia,motorista,linha,prefixo,km_rodado,litros_consumidos,litros_ideais,meta_kml_usada,minutos_em_viagem"),
                           ("ano", "eq.2026"), ("mes", "in.(3,4,5,6)")])
     except Exception as _e:
         _pd = None
@@ -612,14 +612,21 @@ if _bcnt_url and _bcnt_key:
     if _pd:
         from collections import defaultdict as _dd
         _MESNOME = {3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun"}
-        # Pagina 3: KM/L por cluster nos ultimos 4 meses
+        # Pagina 3: KM/L por cluster (TRANSNET oficial) = indicadores_diesel (km_transnet) +
+        # mapa veiculo->cluster de veiculos_ativos. NAO usa a telemetria (premiacao_diaria).
         _cl = _dd(lambda: [0.0, 0.0])
-        for r in _pd:
-            c = _cluster_de.get(str(r.get("prefixo")))
-            km, lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+        for r in (_transnet_rows or []):
+            d = str(r.get("data_consolidada", ""))
+            if not d.startswith("2026"):
+                continue
+            m = int(d[5:7])
+            if m not in (3, 4, 5, 6):
+                continue
+            c = _cluster_de.get(str(r.get("veiculo")))
+            km, lt = _num(r.get("km_transnet")), _num(r.get("combustivel_transnet"))
             if c and km and lt:
-                _cl[(c, int(r["mes"]))][0] += km
-                _cl[(c, int(r["mes"]))][1] += lt
+                _cl[(c, m)][0] += km
+                _cl[(c, m)][1] += lt
         _clusters = ["C6", "C8", "C9", "C10", "C11"]
         _hist = {}
         for c in _clusters:
@@ -630,7 +637,7 @@ if _bcnt_url and _bcnt_key:
         if len(_hist) == len(_clusters):
             CLUSTER_HISTORICO_4M = _hist
             CLUSTER_TRANSNET = [(c, _hist[c][2][1], _hist[c][3][1]) for c in _clusters]
-            print("[bcnt] Pagina 3 (cluster) ao vivo.")
+            print("[cluster] Pagina 3 (Transnet + mapa cluster) ao vivo.")
         # Pagina 7: piores e melhores motoristas de junho (min. 500 km)
         _mot = _dd(lambda: [0.0, 0.0, 0.0])
         for r in _pd:
@@ -650,6 +657,97 @@ if _bcnt_url and _bcnt_key:
             PIORES = sorted(_rank, key=lambda x: x[2])[:10]
             MELHORES = sorted(_rank, key=lambda x: -x[2])[:10]
             print("[bcnt] Pagina 7 (piores/melhores) ao vivo.")
+
+        # ----- Paginas 4, 5, 6: por linha, desperdicio, velocidade e KM/L diario (Telemetria) -----
+        _linJ = _dd(lambda: [0.0, 0.0, 0.0, 0.0, 0.0])  # km, litros, meta*km, minutos, litros_ideais
+        _linM = _dd(lambda: [0.0, 0.0])                  # km, litros (maio)
+        _diaJ = _dd(lambda: [0.0, 0.0, 0.0])             # km, litros, minutos (junho por dia)
+        for r in _pd:
+            m = int(r["mes"])
+            km, lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+            if not (km and lt):
+                continue
+            ln = str(r.get("linha") or "").strip()
+            if m == 6:
+                meta, mins, lid = _num(r.get("meta_kml_usada")), _num(r.get("minutos_em_viagem")), _num(r.get("litros_ideais"))
+                if ln:
+                    a = _linJ[ln]
+                    a[0] += km; a[1] += lt; a[2] += (meta or 0) * km; a[3] += (mins or 0); a[4] += (lid or 0)
+                _dia = str(r.get("dia") or "")
+                if len(_dia) >= 10:
+                    dd = _diaJ[_dia[8:10]]
+                    dd[0] += km; dd[1] += lt; dd[2] += (mins or 0)
+            elif m == 5 and ln:
+                _linM[ln][0] += km; _linM[ln][1] += lt
+        # Pagina 5: LINHAS (linha, km_l, vel_media, meta, km_total_mil)
+        _linhas = [(ln, round(a[0] / a[1], 3), round(a[0] * 60 / a[3], 1) if a[3] else 0.0,
+                    round(a[2] / a[0], 2), round(a[0] / 1000))
+                   for ln, a in _linJ.items() if a[1] > 0 and a[0] >= 1000]
+        if len(_linhas) >= 5:
+            LINHAS = sorted(_linhas, key=lambda x: -x[4])
+            print("[bcnt] Pagina 5 (linhas x velocidade) ao vivo.")
+        # Pagina 4: LINHA_DESPERDICIO (linha, kml_mai, kml_jun, var%, meta, desperdicio_L, km_jun, litros_jun)
+        _ld = []
+        for ln, a in _linJ.items():
+            if a[1] > 0 and a[0] >= 1000 and _linM.get(ln) and _linM[ln][1] > 0:
+                kmlJ, kmlM = a[0] / a[1], _linM[ln][0] / _linM[ln][1]
+                _ld.append((ln, round(kmlM, 3), round(kmlJ, 3), round((kmlJ - kmlM) / kmlM * 100, 2),
+                            round(a[2] / a[0], 2), round(a[1] - a[4], 2), int(a[0]), round(a[1], 2)))
+        if len(_ld) >= 5:
+            LINHA_DESPERDICIO = _ld
+            print("[bcnt] Pagina 4 (linha/desperdicio) ao vivo.")
+        # Pagina 6: KML_VELOCIDADE_DIARIO (dia, km_l, vel_media) - junho
+        _kv = [(f"{d}/06", round(_diaJ[d][0] / _diaJ[d][1], 4),
+                round(_diaJ[d][0] * 60 / _diaJ[d][2], 2) if _diaJ[d][2] else 0.0)
+               for d in sorted(_diaJ) if _diaJ[d][1] > 0]
+        if len(_kv) >= 20:
+            KML_VELOCIDADE_DIARIO = _kv
+            print("[bcnt] Pagina 6 (kml x velocidade diario) ao vivo.")
+
+        # ----- Pagina 8: Sinal de Alerta / Destaque Positivo (motorista mai vs jun) + causa -----
+        _mMJ = _dd(lambda: {5: [0.0, 0.0], 6: [0.0, 0.0]})
+        _lc = _dd(lambda: {5: _dd(float), 6: _dd(float)})
+        _cc = _dd(lambda: {5: _dd(float), 6: _dd(float)})
+        for r in _pd:
+            m = int(r["mes"])
+            if m not in (5, 6):
+                continue
+            km, lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+            if not (km and lt):
+                continue
+            ch = str(r.get("motorista") or "")
+            if not ch.strip():
+                continue
+            _mMJ[ch][m][0] += km
+            _mMJ[ch][m][1] += lt
+            ln = str(r.get("linha") or "").strip()
+            if ln:
+                _lc[ch][m][ln] += km
+            pf = str(r.get("prefixo") or "").strip()
+            if pf:
+                _cc[ch][m][pf] += km
+        _var = []
+        for ch, mm in _mMJ.items():
+            if mm[5][1] > 0 and mm[6][1] > 0 and mm[5][0] >= 500 and mm[6][0] >= 500:
+                kmlM, kmlJ = mm[5][0] / mm[5][1], mm[6][0] / mm[6][1]
+                nome = _nome_de.get(ch) or f"MOTORISTA {ch}"
+                _var.append((nome, ch, round(kmlM, 3), round(kmlJ, 3), round((kmlJ - kmlM) / kmlM * 100, 2)))
+        if len(_var) >= 20:
+            _piores_var = sorted(_var, key=lambda x: x[4])[:10]
+            SINAL_ALERTA = [(n, m5, j6, v) for n, ch, m5, j6, v in _piores_var]
+            DESTAQUE_POSITIVO = [(n, m5, j6, v) for n, ch, m5, j6, v in sorted(_var, key=lambda x: -x[4])[:10]]
+
+            def _mais_usado(dic):
+                return max(dic, key=dic.get) if dic else "-"
+            _causa = []
+            for n, ch, m5, j6, v in _piores_var:
+                lM, lJ = _mais_usado(_lc[ch][5]), _mais_usado(_lc[ch][6])
+                cM, cJ = _mais_usado(_cc[ch][5]), _mais_usado(_cc[ch][6])
+                mudL = (lM != lJ) if (lM != "-" and lJ != "-") else None
+                mudC = (cM != cJ) if (cM != "-" and cJ != "-") else None
+                _causa.append((n, lM, lJ, cM, cJ, mudL, mudC))
+            SINAL_ALERTA_CAUSA = _causa
+            print("[bcnt] Pagina 8 (sinal de alerta / destaque) ao vivo.")
 
     # Pagina 15: meritocracia (valor R$ ja calculado pela regra da empresa)
     try:

@@ -17,6 +17,30 @@ import urllib.request
 OUT = Path(__file__).resolve().parent
 plt.rcParams["font.family"] = "DejaVu Sans"
 
+# ---- Mes de referencia = mes CORRENTE, do dia 01 ate ontem (dia anterior a geracao). ----
+# Ex.: gerado em 10/07 -> analisa 01/07 a 09/07. Pode-se fixar via FLASH_REF_DATE=YYYY-MM-DD
+# (para teste/validacao); sem isso usa a data de hoje.
+import datetime as _dtref
+_r = os.environ.get("FLASH_REF_DATE", "").strip()
+try:
+    _HOJE = _dtref.date.fromisoformat(_r) if _r else _dtref.date.today()
+except ValueError:
+    _HOJE = _dtref.date.today()
+_ONTEM = _HOJE - _dtref.timedelta(days=1)
+MES_INI = _HOJE.replace(day=1)          # 1o dia do mes corrente
+MES_FIM = _HOJE                          # EXCLUSIVO: considera datas < MES_FIM (ate ontem)
+_ult_ant = MES_INI - _dtref.timedelta(days=1)
+MES_ANT_INI = _ult_ant.replace(day=1)   # 1o dia do mes anterior (para comparacoes)
+MES_ANT_FIM = MES_INI                    # EXCLUSIVO
+_MESES_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+_MES3 = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+MES_REF_MM, MES_REF_ANO = _HOJE.month, _HOJE.year
+MES_ANT_MM, MES_ANT_ANO = _ult_ant.month, _ult_ant.year
+MES_REF_LABEL = f"{_MESES_PT[MES_REF_MM - 1]}/{MES_REF_ANO}"       # ex.: "Julho/2026"
+MES_ANT_LABEL = f"{_MESES_PT[MES_ANT_MM - 1]}/{MES_ANT_ANO}"       # ex.: "Junho/2026"
+PERIODO_LABEL = f"01/{MES_REF_MM:02d} a {_ONTEM.day:02d}/{_ONTEM.month:02d}/{_ONTEM.year}"
+
 TEAL = "#0e7c7b"
 DARK = "#0f172a"
 RED = "#c0392b"
@@ -177,7 +201,7 @@ COMPLETARAM_30_DIAS = [
 # Os valores abaixo sao FALLBACK (ultima extracao 08/07/2026). Se SUPABASE_URL + SUPABASE_SERVICE_KEY
 # (ou SUPABASE_ANON_KEY) estiverem no ambiente, _carregar_instrutores_junho() busca ao vivo e sobrescreve.
 INSTRUTORES_NOMES = ["Fabiano Freitas", "Helio Ramos"]
-JUNHO_INICIO, JUNHO_FIM = "2026-06-01", "2026-07-01"
+JUNHO_INICIO, JUNHO_FIM = MES_INI.isoformat(), MES_FIM.isoformat()  # mes corrente (dinamico)
 INSTRUTORES = [
     {"nome": "Fabiano Freitas", "novos": 66, "monitorando": 64, "n_com_dado": 24,
      "taxa_atingiu_meta": 25.0, "desf_ok": 33, "desf_ata": 11},
@@ -422,6 +446,583 @@ ADERENCIA_DIARIA_EMPRESA = [
 ]
 ADERENCIA_MEDIA_EMPRESA = 76.4
 ADERENCIA_TOTAL_FROTA = 111
+
+
+# ---- Paginas 16 (divergencia) e 17 (aderencia) ao vivo: tabela indicadores_diesel (Base_transnet) ----
+# Padrao igual ao dos instrutores: busca via supabase_creds("transnet") com PAGINACAO; se nao houver
+# credencial ou a consulta falhar, mantem as constantes fixas acima como fallback.
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _transnet_fetch(dt_ini, dt_fim):
+    url, key = supabase_creds("transnet")
+    if not url or not key:
+        return None
+    cols = "data_consolidada,veiculo,km_litro_transnet,km_transnet,combustivel_transnet,km_sst,combustivel_sst,km_l_sst"
+    rows, off, step = [], 0, 1000
+    try:
+        while True:
+            batch = _sb_get(url, key, "indicadores_diesel", [
+                ("select", cols),
+                ("data_consolidada", f"gte.{dt_ini}"),
+                ("data_consolidada", f"lt.{dt_fim}"),
+                ("order", "data_consolidada"),
+                ("limit", str(step)), ("offset", str(off)),
+            ])
+            rows.extend(batch)
+            if len(batch) < step:
+                break
+            off += step
+    except Exception as e:
+        print(f"[transnet] busca falhou ({e}); usando fallback fixo.")
+        return None
+    return rows
+
+
+def _agg_aderencia(rows, mes="2026-06"):
+    """Pagina 17: aderencia diaria da frota + piores carros, no mes de referencia."""
+    from collections import defaultdict
+    jun = [r for r in rows if str(r.get("data_consolidada", ""))[:7] == mes]
+    if not jun:
+        return None
+    frota = len({r["veiculo"] for r in jun}) or 1
+    por_dia, por_carro = defaultdict(lambda: [0, 0]), defaultdict(lambda: [0, 0])
+    for r in jun:
+        d, v = r["data_consolidada"], r["veiculo"]
+        tem = str(r.get("km_litro_transnet", "")).strip() not in ("", "None")
+        por_dia[d][1] += 1; por_carro[v][1] += 1
+        if tem:
+            por_dia[d][0] += 1; por_carro[v][0] += 1
+    diaria = []
+    for d in sorted(por_dia):
+        ok = por_dia[d][0]
+        diaria.append((f"{d[8:10]}/{d[5:7]}", ok, round(100 * ok / frota, 1)))
+    n_dias = len(por_dia) or 1
+    carros = sorted(((v, c[0], round(100 * c[0] / n_dias, 1)) for v, c in por_carro.items()),
+                    key=lambda x: x[2])[:10]
+    media = round(sum(x[2] for x in diaria) / len(diaria), 1)
+    return diaria, media, carros, frota
+
+
+def _agg_divergencia(rows):
+    """Pagina 16: divergencia KM/L Transnet x telemetria por carro (>=500km, >=10%).
+    Filtro de qualidade: telemetria (km_l_sst) so entra se estiver em faixa realista 0,5..6;
+    valores 0 ou absurdos (ex.: 9,68) sao descartados da media (o carro segue visivel na Pag. 17)."""
+    from collections import defaultdict
+    agg = defaultdict(lambda: {"kmt": 0.0, "ct": 0.0, "kms": 0.0, "cs": 0.0})
+    for r in rows:
+        v = r["veiculo"]
+        kmt, ct = _num(r.get("km_transnet")), _num(r.get("combustivel_transnet"))
+        kms, cs, kls = _num(r.get("km_sst")), _num(r.get("combustivel_sst")), _num(r.get("km_l_sst"))
+        if kmt and ct:
+            agg[v]["kmt"] += kmt; agg[v]["ct"] += ct
+        if kms and cs and kls is not None and 0.5 <= kls <= 6:
+            agg[v]["kms"] += kms; agg[v]["cs"] += cs
+    out = []
+    for v, a in agg.items():
+        if a["ct"] > 0 and a["cs"] > 0 and a["kmt"] >= 500:
+            klt, kls = a["kmt"] / a["ct"], a["kms"] / a["cs"]
+            dp = (kls - klt) / klt * 100
+            if abs(dp) >= 10:
+                out.append((v, round(klt, 3), round(kls, 3), round(dp, 1), int(a["kmt"])))
+    return sorted(out, key=lambda x: -abs(x[3]))[:8]
+
+
+_MES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+
+
+def _agg_kml_mensal(rows, ano=2026):
+    """Pagina 2: KM/L mensal ponderado (Transnet) + telemetria mensal jun/jul."""
+    from collections import defaultdict
+    mt, ms = defaultdict(lambda: [0.0, 0.0]), defaultdict(lambda: [0.0, 0.0])
+    for r in rows:
+        d = str(r.get("data_consolidada", ""))
+        if not d.startswith(str(ano)):
+            continue
+        mes = int(d[5:7])
+        kmt, ct = _num(r.get("km_transnet")), _num(r.get("combustivel_transnet"))
+        kms, cs, kls = _num(r.get("km_sst")), _num(r.get("combustivel_sst")), _num(r.get("km_l_sst"))
+        if kmt and ct:
+            mt[mes][0] += kmt; mt[mes][1] += ct
+        if kms and cs and kls is not None and 0.5 <= kls <= 6:
+            ms[mes][0] += kms; ms[mes][1] += cs
+    meses = sorted(m for m in mt if mt[m][1] > 0)
+    if not meses:
+        return None, None
+    ult = meses[-1]
+    hist = [(f"{_MES_PT[m-1]}/{ano}" + ("*" if m == ult else ""), round(mt[m][0] / mt[m][1], 4)) for m in meses]
+    telem = {nome: round(ms[m][0] / ms[m][1], 3) for nome, m in (("jun", 6), ("jul", 7)) if ms.get(m) and ms[m][1] > 0}
+    return hist, telem
+
+
+def _agg_kml_semanal(rows, n=8):
+    """Pagina 2: KM/L ponderado (Transnet) das ultimas n semanas (seg-dom)."""
+    import datetime
+    from collections import defaultdict
+    wk = defaultdict(lambda: [0.0, 0.0])
+    for r in rows:
+        d = str(r.get("data_consolidada", ""))[:10]
+        try:
+            dtv = datetime.date.fromisoformat(d)
+        except ValueError:
+            continue
+        kmt, ct = _num(r.get("km_transnet")), _num(r.get("combustivel_transnet"))
+        if kmt and ct:
+            mon = dtv - datetime.timedelta(days=dtv.weekday())
+            wk[mon][0] += kmt; wk[mon][1] += ct
+    semanas = sorted(w for w in wk if wk[w][1] > 0)[-n:]
+    out = []
+    for mon in semanas:
+        sun = mon + datetime.timedelta(days=6)
+        out.append((f"{mon.day:02d}/{mon.month:02d}-{sun.day:02d}/{sun.month:02d}", round(wk[mon][0] / wk[mon][1], 4)))
+    return out
+
+
+_tn_ini = (MES_INI - _dtref.timedelta(days=210)).replace(day=1).isoformat()  # ~7 meses de historico
+_transnet_rows = _transnet_fetch(_tn_ini, MES_FIM.isoformat())
+if _transnet_rows:
+    _hist, _telem = _agg_kml_mensal(_transnet_rows, ano=MES_REF_ANO)
+    if _hist:
+        KML_HISTORICO = _hist
+        # KML_MENSAL_TELEMETRIA (sst) NAO e sobrescrito: o dado de telemetria mensal e ruidoso.
+        print("[transnet] Pagina 2 (KM/L mensal Transnet) ao vivo.")
+    _sem = _agg_kml_semanal(_transnet_rows)
+    if len(_sem) >= 4:
+        KML_SEMANAL = _sem
+        print("[transnet] Pagina 2 (KM/L semanal) ao vivo.")
+    _ader = _agg_aderencia(_transnet_rows, f"{MES_REF_ANO}-{MES_REF_MM:02d}")
+    if _ader:
+        ADERENCIA_DIARIA_EMPRESA, ADERENCIA_MEDIA_EMPRESA, ADERENCIA_CARROS, ADERENCIA_TOTAL_FROTA = _ader
+        print("[transnet] Pagina 17 (aderencia) ao vivo.")
+    _div = _agg_divergencia([r for r in _transnet_rows if str(r.get("data_consolidada", "")) >= MES_ANT_INI.isoformat()])
+    if _div:
+        DIVERGENCIA_CARROS = _div
+        print("[transnet] Pagina 16 (divergencia) ao vivo.")
+
+
+# ---- Paginas 3 (cluster), 7 (piores/melhores) e 15 (meritocracia): BCNT ----
+# Fontes: premiacao_diaria_atualizada (KM/L por dia/motorista/linha), veiculos_ativos (mapa
+# veiculo->cluster, pois a coluna cluster da premiacao vem vazia), funcionarios_atualizada
+# (mapa chapa->nome), premiacao_atualizada (valor R$ da meritocracia). Tudo com paginacao.
+def _bcnt_page(url, key, path, params):
+    rows, off = [], 0
+    while True:
+        b = _sb_get(url, key, path, params + [("limit", "1000"), ("offset", str(off))])
+        rows += b
+        if len(b) < 1000:
+            break
+        off += 1000
+    return rows
+
+
+_pd = None
+_nome_de = {}
+_bcnt_url, _bcnt_key = supabase_creds("bcnt")
+if _bcnt_url and _bcnt_key:
+    try:
+        _va = _bcnt_page(_bcnt_url, _bcnt_key, "veiculos_ativos", [("select", "nr_ordem,per_cluster")])
+        _cluster_de = {str(v["nr_ordem"]): v.get("per_cluster") for v in _va if v.get("nr_ordem")}
+        _fn = _bcnt_page(_bcnt_url, _bcnt_key, "funcionarios_atualizada", [("select", "nr_cracha,nm_funcionario")])
+        _nome_de = {str(f["nr_cracha"]): (f.get("nm_funcionario") or "") for f in _fn if f.get("nr_cracha")}
+        _pd_ini = (MES_INI - _dtref.timedelta(days=150)).replace(day=1).isoformat()  # ~5 meses
+        _pd = _bcnt_page(_bcnt_url, _bcnt_key, "premiacao_diaria_atualizada",
+                         [("select", "ano,mes,dia,motorista,linha,prefixo,km_rodado,litros_consumidos,litros_ideais,meta_kml_usada,minutos_em_viagem"),
+                          ("dia", f"gte.{_pd_ini}"), ("dia", f"lt.{MES_FIM.isoformat()}")])
+    except Exception as _e:
+        _pd = None
+        print(f"[bcnt] falha ao carregar mapas/premiacao_diaria ({_e}).")
+
+    if _pd:
+        from collections import defaultdict as _dd
+        # ultimos 4 meses (ano, mes) terminando no mes de referencia
+        _m4, _yy, _mm = [], MES_REF_ANO, MES_REF_MM
+        for _ in range(4):
+            _m4.append((_yy, _mm))
+            _mm -= 1
+            if _mm == 0:
+                _mm, _yy = 12, _yy - 1
+        _m4 = _m4[::-1]
+        _m4set = set(_m4)
+        # Pagina 3: KM/L por cluster (TRANSNET oficial) = indicadores_diesel (km_transnet) +
+        # mapa veiculo->cluster de veiculos_ativos. NAO usa a telemetria (premiacao_diaria).
+        _cl = _dd(lambda: [0.0, 0.0])
+        for r in (_transnet_rows or []):
+            d = str(r.get("data_consolidada", ""))
+            if len(d) < 7:
+                continue
+            _ym = (int(d[:4]), int(d[5:7]))
+            if _ym not in _m4set:
+                continue
+            c = _cluster_de.get(str(r.get("veiculo")))
+            km, lt = _num(r.get("km_transnet")), _num(r.get("combustivel_transnet"))
+            if c and km and lt:
+                _cl[(c, _ym)][0] += km
+                _cl[(c, _ym)][1] += lt
+        _clusters = ["C6", "C8", "C9", "C10", "C11"]
+        _hist = {}
+        for c in _clusters:
+            serie = [(f"{_MES3[m - 1]}/{y}", round(_cl[(c, (y, m))][0] / _cl[(c, (y, m))][1], 4))
+                     for (y, m) in _m4 if _cl.get((c, (y, m))) and _cl[(c, (y, m))][1]]
+            if len(serie) == 4:
+                _hist[c] = serie
+        if len(_hist) == len(_clusters):
+            CLUSTER_HISTORICO_4M = _hist
+            CLUSTER_TRANSNET = [(c, _hist[c][2][1], _hist[c][3][1]) for c in _clusters]
+            print("[cluster] Pagina 3 (Transnet + mapa cluster) ao vivo.")
+        # Pagina 7: piores e melhores motoristas do mes de referencia (min. 500 km)
+        _mot = _dd(lambda: [0.0, 0.0, 0.0])
+        for r in _pd:
+            if int(r["mes"]) != MES_REF_MM:
+                continue
+            km, lt, meta = _num(r.get("km_rodado")), _num(r.get("litros_consumidos")), _num(r.get("meta_kml_usada"))
+            if km and lt:
+                a = _mot[str(r["motorista"])]
+                a[0] += km
+                a[1] += lt
+                if meta:
+                    a[2] += meta * km
+        _rank = [(_nome_de.get(ch) or f"MOTORISTA {ch}", ch, round(a[0] / a[1], 3),
+                  round(a[2] / a[0], 2), int(a[0]), int(a[1]))
+                 for ch, a in _mot.items() if a[1] > 0 and a[0] >= 500 and ch.strip()]
+        if len(_rank) >= 20:
+            PIORES = sorted(_rank, key=lambda x: x[2])[:10]
+            MELHORES = sorted(_rank, key=lambda x: -x[2])[:10]
+            print("[bcnt] Pagina 7 (piores/melhores) ao vivo.")
+
+        # ----- Paginas 4, 5, 6: por linha, desperdicio, velocidade e KM/L diario (Telemetria) -----
+        _linJ = _dd(lambda: [0.0, 0.0, 0.0, 0.0, 0.0])  # km, litros, meta*km, minutos, litros_ideais
+        _linM = _dd(lambda: [0.0, 0.0])                  # km, litros (maio)
+        _diaJ = _dd(lambda: [0.0, 0.0, 0.0])             # km, litros, minutos (junho por dia)
+        for r in _pd:
+            m = int(r["mes"])
+            km, lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+            if not (km and lt):
+                continue
+            ln = str(r.get("linha") or "").strip()
+            if m == MES_REF_MM:
+                meta, mins, lid = _num(r.get("meta_kml_usada")), _num(r.get("minutos_em_viagem")), _num(r.get("litros_ideais"))
+                if ln:
+                    a = _linJ[ln]
+                    a[0] += km; a[1] += lt; a[2] += (meta or 0) * km; a[3] += (mins or 0); a[4] += (lid or 0)
+                _dia = str(r.get("dia") or "")
+                if len(_dia) >= 10:
+                    dd = _diaJ[_dia[8:10]]
+                    dd[0] += km; dd[1] += lt; dd[2] += (mins or 0)
+            elif m == MES_ANT_MM and ln:
+                _linM[ln][0] += km; _linM[ln][1] += lt
+        # Pagina 5: LINHAS (linha, km_l, vel_media, meta, km_total_mil)
+        _linhas = [(ln, round(a[0] / a[1], 3), round(a[0] * 60 / a[3], 1) if a[3] else 0.0,
+                    round(a[2] / a[0], 2), round(a[0] / 1000))
+                   for ln, a in _linJ.items() if a[1] > 0 and a[0] >= 1000]
+        if len(_linhas) >= 5:
+            LINHAS = sorted(_linhas, key=lambda x: -x[4])
+            print("[bcnt] Pagina 5 (linhas x velocidade) ao vivo.")
+        # Pagina 4: LINHA_DESPERDICIO (linha, kml_mai, kml_jun, var%, meta, desperdicio_L, km_jun, litros_jun)
+        _ld = []
+        for ln, a in _linJ.items():
+            if a[1] > 0 and a[0] >= 1000 and _linM.get(ln) and _linM[ln][1] > 0:
+                kmlJ, kmlM = a[0] / a[1], _linM[ln][0] / _linM[ln][1]
+                _ld.append((ln, round(kmlM, 3), round(kmlJ, 3), round((kmlJ - kmlM) / kmlM * 100, 2),
+                            round(a[2] / a[0], 2), round(a[1] - a[4], 2), int(a[0]), round(a[1], 2)))
+        if len(_ld) >= 5:
+            LINHA_DESPERDICIO = _ld
+            print("[bcnt] Pagina 4 (linha/desperdicio) ao vivo.")
+        # Pagina 6: KML_VELOCIDADE_DIARIO (dia, km_l, vel_media) - junho
+        _kv = [(f"{d}/{MES_REF_MM:02d}", round(_diaJ[d][0] / _diaJ[d][1], 4),
+                round(_diaJ[d][0] * 60 / _diaJ[d][2], 2) if _diaJ[d][2] else 0.0)
+               for d in sorted(_diaJ) if _diaJ[d][1] > 0]
+        if len(_kv) >= 20:
+            KML_VELOCIDADE_DIARIO = _kv
+            print("[bcnt] Pagina 6 (kml x velocidade diario) ao vivo.")
+
+        # ----- Pagina 8: Sinal de Alerta / Destaque Positivo (motorista mai vs jun) + causa -----
+        _mMJ = _dd(lambda: {MES_ANT_MM: [0.0, 0.0], MES_REF_MM: [0.0, 0.0]})
+        _lc = _dd(lambda: {MES_ANT_MM: _dd(float), MES_REF_MM: _dd(float)})
+        _cc = _dd(lambda: {MES_ANT_MM: _dd(float), MES_REF_MM: _dd(float)})
+        for r in _pd:
+            m = int(r["mes"])
+            if m not in (MES_ANT_MM, MES_REF_MM):
+                continue
+            km, lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+            if not (km and lt):
+                continue
+            ch = str(r.get("motorista") or "")
+            if not ch.strip():
+                continue
+            _mMJ[ch][m][0] += km
+            _mMJ[ch][m][1] += lt
+            ln = str(r.get("linha") or "").strip()
+            if ln:
+                _lc[ch][m][ln] += km
+            pf = str(r.get("prefixo") or "").strip()
+            if pf:
+                _cc[ch][m][pf] += km
+        _var = []
+        for ch, mm in _mMJ.items():
+            if mm[MES_ANT_MM][1] > 0 and mm[MES_REF_MM][1] > 0 and mm[MES_ANT_MM][0] >= 500 and mm[MES_REF_MM][0] >= 500:
+                kmlM, kmlJ = mm[MES_ANT_MM][0] / mm[MES_ANT_MM][1], mm[MES_REF_MM][0] / mm[MES_REF_MM][1]
+                nome = _nome_de.get(ch) or f"MOTORISTA {ch}"
+                _var.append((nome, ch, round(kmlM, 3), round(kmlJ, 3), round((kmlJ - kmlM) / kmlM * 100, 2)))
+        if len(_var) >= 20:
+            _piores_var = sorted(_var, key=lambda x: x[4])[:10]
+            SINAL_ALERTA = [(n, m5, j6, v) for n, ch, m5, j6, v in _piores_var]
+            DESTAQUE_POSITIVO = [(n, m5, j6, v) for n, ch, m5, j6, v in sorted(_var, key=lambda x: -x[4])[:10]]
+
+            def _mais_usado(dic):
+                return max(dic, key=dic.get) if dic else "-"
+            _causa = []
+            for n, ch, m5, j6, v in _piores_var:
+                lM, lJ = _mais_usado(_lc[ch][MES_ANT_MM]), _mais_usado(_lc[ch][MES_REF_MM])
+                cM, cJ = _mais_usado(_cc[ch][MES_ANT_MM]), _mais_usado(_cc[ch][MES_REF_MM])
+                mudL = (lM != lJ) if (lM != "-" and lJ != "-") else None
+                mudC = (cM != cJ) if (cM != "-" and cJ != "-") else None
+                _causa.append((n, lM, lJ, cM, cJ, mudL, mudC))
+            SINAL_ALERTA_CAUSA = _causa
+            print("[bcnt] Pagina 8 (sinal de alerta / destaque) ao vivo.")
+
+    # Pagina 15: meritocracia (valor R$ ja calculado pela regra da empresa)
+    try:
+        _pa = _bcnt_page(_bcnt_url, _bcnt_key, "premiacao_atualizada",
+                         [("select", "motorista,valor,km_l"), ("ano", f"eq.{MES_REF_ANO}"), ("mes", f"eq.{MES_REF_MM}")])
+    except Exception:
+        _pa = None
+    if _pa:
+        _vals = [(str(x["motorista"]), _num(x.get("valor")) or 0.0, _num(x.get("km_l"))) for x in _pa]
+        _faixas = {"R$ 300": 0, "R$ 200": 0, "R$ 150": 0, "R$ 100": 0, "R$ 0": 0}
+        for _ch, _v, _k in _vals:
+            _lbl = f"R$ {int(_v)}"
+            if _lbl in _faixas:
+                _faixas[_lbl] += 1
+        MERITOCRACIA_RESUMO = {
+            "total_pago": round(sum(v for _, v, _ in _vals)),
+            "motoristas_premiados": sum(1 for _, v, _ in _vals if v > 0),
+            "total_motoristas": len(_vals),
+            "distribuicao": _faixas,
+        }
+        _top = sorted(((_nome_de.get(ch) or f"MOTORISTA {ch}", ch, int(v), k) for ch, v, k in _vals if v > 0 and ch.strip()),
+                      key=lambda x: (-x[2], -(x[3] or 0)))[:10]
+        MERITOCRACIA_TOP = [(n, ch, v, round(k, 2) if k else 0.0) for n, ch, v, k in _top]
+        print("[bcnt] Pagina 15 (meritocracia) ao vivo.")
+
+
+# ---- Pagina 10: Tratativas (INOVE diesel_tratativas) ----
+# status cru = "Concluida"/"Pendente"; ATRASADA vs PENDENTE_NO_PRAZO calculado pelo SLA da
+# prioridade (Gravissima 1d, Alta 3d, Media 7d, Baixa 15d) sobre dias em aberto desde created_at.
+# kml_meta/kml_real vem de metadata.kpis.
+_inv_url, _inv_key = supabase_creds("inove")
+if _inv_url and _inv_key:
+    import datetime as _dtt
+    _SLA = {"Gravíssima": 1, "Gravissima": 1, "Alta": 3, "Média": 7, "Media": 7, "Baixa": 15}
+    try:
+        _tr, _off = [], 0
+        while True:
+            _b = _sb_get(_inv_url, _inv_key, "diesel_tratativas",
+                         [("select", "motorista_nome,motorista_chapa,linha,prioridade,status,created_at,metadata"),
+                          ("limit", "1000"), ("offset", str(_off))])
+            _tr += _b
+            if len(_b) < 1000:
+                break
+            _off += 1000
+    except Exception as _e:
+        _tr = None
+        print(f"[inove] tratativas falhou ({_e}).")
+    if _tr:
+        _hoje = _HOJE
+
+        def _kpi(t, campo):
+            return ((t.get("metadata") or {}).get("kpis") or {}).get(campo)
+
+        _conc = _atr = _prazo = 0
+        _la, _lp = [], []
+        for t in _tr:
+            if (t.get("status") or "").startswith("Conclu"):
+                _conc += 1
+                continue
+            try:
+                _dias = (_hoje - _dtt.date.fromisoformat(str(t.get("created_at") or "")[:10])).days
+            except ValueError:
+                _dias = 0
+            _sla = _SLA.get((t.get("prioridade") or "").strip(), 7)
+            _reg = (t.get("motorista_nome") or "", str(t.get("motorista_chapa") or ""),
+                    t.get("linha") or "-", t.get("prioridade") or "-", _dias,
+                    _num(_kpi(t, "kml_meta")) or 0.0, _num(_kpi(t, "kml_real")) or 0.0)
+            if _dias > _sla:
+                _atr += 1
+                _la.append(_reg)
+            else:
+                _prazo += 1
+                _lp.append(_reg)
+        TRATATIVAS = {"total": len(_tr), "por_status": {"CONCLUIDA": _conc, "ATRASADA": _atr, "PENDENTE_NO_PRAZO": _prazo}}
+        TRATATIVAS_ATRASADAS = sorted(_la, key=lambda x: -x[4])[:15]
+        TRATATIVAS_PENDENTES_PRAZO = _lp
+        print("[inove] Pagina 10 (tratativas) ao vivo.")
+
+    # ---- Paginas 12 (aproveitamento do dia) e 9 (motoristas da semana): sessoes do 1o do mes ate hoje ----
+    _hoje2 = _HOJE
+    _win_ini = MES_INI
+    SEMANA_ATUAL_LABEL = f"01/{MES_REF_MM:02d} a {_ONTEM.day:02d}/{_ONTEM.month:02d}"
+    _DIAS_PT = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
+    try:
+        _ss, _off = [], 0
+        while True:
+            _b = _sb_get(_inv_url, _inv_key, "diesel_acompanhamento_sessoes",
+                         [("select", "data_sessao,instrutor_nome,iniciado_em,encerrado_em,acompanhamento_id,foco_snapshot"),
+                          ("data_sessao", f"gte.{_win_ini.isoformat()}"), ("limit", "1000"), ("offset", str(_off))])
+            _ss += _b
+            if len(_b) < 1000:
+                break
+            _off += 1000
+        _acm, _off = {}, 0
+        while True:
+            _b = _sb_get(_inv_url, _inv_key, "diesel_acompanhamentos",
+                         [("select", "id,motorista_nome,motorista_chapa"), ("limit", "1000"), ("offset", str(_off))])
+            for _x in _b:
+                _acm[_x["id"]] = (_x.get("motorista_nome") or "", str(_x.get("motorista_chapa") or ""))
+            if len(_b) < 1000:
+                break
+            _off += 1000
+    except Exception as _e:
+        _ss = None
+        print(f"[inove] sessoes falhou ({_e}).")
+    if _ss:
+        from collections import defaultdict as _dd3
+
+        def _durmin(s):
+            try:
+                return max(0.0, (_dtt.datetime.fromisoformat(s["encerrado_em"]) - _dtt.datetime.fromisoformat(s["iniciado_em"])).total_seconds() / 60)
+            except (TypeError, ValueError, KeyError):
+                return None
+
+        _pid = _dd3(lambda: [0, 0.0])
+        for s in _ss:
+            d = s.get("data_sessao")
+            dm = _durmin(s)
+            if not d or dm is None:
+                continue
+            _k = (s.get("instrutor_nome") or "?", _dtt.date.fromisoformat(d[:10]))
+            _pid[_k][0] += 1
+            _pid[_k][1] += dm
+        # Pagina 12
+        _dad = [(f"{dd.day:02d}/{dd.month:02d} ({_DIAS_PT[dd.weekday()]})", inst, n,
+                 f"{int(mins // 60)}h {int(mins % 60):02d}min", round(mins / n) if n else 0)
+                for (inst, dd), (n, mins) in sorted(_pid.items(), key=lambda x: (x[0][1], x[0][0]))]
+        _pinst = _dd3(lambda: [set(), 0, 0.0])
+        for (inst, dd), (n, mins) in _pid.items():
+            a = _pinst[inst]
+            a[0].add(dd)
+            a[1] += n
+            a[2] += mins
+        _idi = []
+        for inst, (dias, sess, mins) in _pinst.items():
+            nd = len(dias) or 1
+            th = mins / 60
+            _idi.append({"nome": inst, "dias_trabalhados": nd, "total_sessoes": sess,
+                         "media_sessoes_dia": round(sess / nd, 1), "tempo_total_h": round(th, 1),
+                         "tempo_medio_sessao_min": round(mins / sess) if sess else 0,
+                         "media_h_dia": round(th / nd, 2), "aproveitamento_dia_pct": round(th / nd / 8 * 100, 1)})
+        if _idi and _dad:
+            INSTRUTORES_DIARIO = sorted(_idi, key=lambda x: -x["total_sessoes"])
+            INSTRUTORES_DIA_A_DIA = _dad
+            print("[inove] Pagina 12 (aproveitamento do dia) ao vivo.")
+        # Pagina 9: motoristas da semana (motorista distinto, sessao mais recente na janela)
+        _seen = {}
+        for s in sorted(_ss, key=lambda x: x.get("data_sessao") or "", reverse=True):
+            nm, ch = _acm.get(s.get("acompanhamento_id"), ("", ""))
+            if not nm or not ch or ch in _seen:
+                continue
+            dd = str(s["data_sessao"])[:10]
+            _seen[ch] = (nm.title(), ch, s.get("instrutor_nome") or "", f"{dd[8:10]}/{dd[5:7]}", s.get("foco_snapshot") or "-")
+        if len(_seen) >= 5:
+            MOTORISTAS_SEMANA = list(_seen.values())[:10]
+            print("[inove] Pagina 9 (motoristas da semana) ao vivo.")
+
+    # ---- Paginas 13 (evolucao / 30 dias) e 14 (o veiculo interfere no KM/L) ----
+    try:
+        _acs, _off = [], 0
+        while True:
+            _b = _sb_get(_inv_url, _inv_key, "diesel_acompanhamentos",
+                         [("select", "motorista_nome,motorista_chapa,instrutor_nome,status,kml_inicial,dt_inicio_monitoramento,prontuario_30_gerado_em,metadata"),
+                          ("limit", "1000"), ("offset", str(_off))])
+            _acs += _b
+            if len(_b) < 1000:
+                break
+            _off += 1000
+    except Exception as _e:
+        _acs = None
+        print(f"[inove] acompanhamentos (13/14) falhou ({_e}).")
+    if _acs:
+        _STMAP = {"EM_MONITORAMENTO": "Em monitoramento", "ATAS": "Tratativa (ATA)",
+                  "EM_ANALISE": "Em análise", "OK": "Concluído (OK)", "AGUARDANDO_INSTRUTOR": "Aguardando instrutor"}
+
+        def _kpi_a(a, c):
+            return _num(((a.get("metadata") or {}).get("kpis") or {}).get(c))
+
+        # 13a: completaram 30 dias neste mes (prontuario_30 no mes atual)
+        _comp = []
+        for a in _acs:
+            p30 = str(a.get("prontuario_30_gerado_em") or "")[:10]
+            if p30 and p30 >= _win_ini.isoformat():
+                meta, real = _kpi_a(a, "kml_meta"), _kpi_a(a, "kml_real")
+                di = str(a.get("dt_inicio_monitoramento") or "")[:10]
+                if meta and real:
+                    _comp.append((a.get("motorista_nome") or "", str(a.get("motorista_chapa") or ""),
+                                  a.get("instrutor_nome") or "", f"{di[8:10]}/{di[5:7]}" if len(di) >= 10 else "-",
+                                  round(meta, 3), round(real, 3), di))
+        if _comp:
+            COMPLETARAM_30_DIAS = [t[:6] for t in _comp[:8]]
+            print("[inove] Pagina 13 (completaram 30 dias) ao vivo.")
+        # 13b: ACOMPANHAMENTO antes/depois (10 mais distantes da meta, em acompanhamento)
+        _ac2 = []
+        for a in _acs:
+            antes, depois, meta = _num(a.get("kml_inicial")), _kpi_a(a, "kml_real"), _kpi_a(a, "kml_meta")
+            if antes and depois and a.get("status") in ("EM_MONITORAMENTO", "ATAS", "EM_ANALISE"):
+                _ac2.append({"nome": (a.get("motorista_nome") or "").title(), "instrutor": a.get("instrutor_nome") or "",
+                             "status": _STMAP.get(a.get("status"), a.get("status")),
+                             "antes": round(antes, 3), "depois": round(depois, 3), "_d": depois - (meta or depois)})
+        if len(_ac2) >= 5:
+            _ac2.sort(key=lambda x: x["_d"])
+            ACOMPANHAMENTO = [{k: v for k, v in x.items() if k != "_d"} for x in _ac2[:10]]
+            print("[inove] Pagina 13 (acompanhamento antes/depois) ao vivo.")
+        # 14: carro principal x demais nos 30 dias de cada motorista que completou (usa premiacao_diaria)
+        if _pd and _comp:
+            from collections import defaultdict as _dd4
+            _porChapa = _dd4(list)
+            for r in _pd:
+                _porChapa[str(r.get("motorista"))].append(r)
+            _v30 = []
+            for nome, ch, inst, ini_lbl, meta, real, di in _comp[:4]:
+                if len(di) < 10:
+                    continue
+                _d0 = _dtt.date.fromisoformat(di)
+                _d1 = _d0 + _dtt.timedelta(days=30)
+                _carros = _dd4(lambda: [0, 0.0, 0.0])
+                for r in _porChapa.get(ch, []):
+                    try:
+                        _dd_ = _dtt.date.fromisoformat(str(r.get("dia") or "")[:10])
+                    except ValueError:
+                        continue
+                    km, lt, pf = _num(r.get("km_rodado")), _num(r.get("litros_consumidos")), str(r.get("prefixo") or "").strip()
+                    if _d0 <= _dd_ <= _d1 and km and lt and pf:
+                        c = _carros[pf]
+                        c[0] += 1; c[1] += km; c[2] += lt
+                if not _carros:
+                    continue
+                _tot = sum(c[0] for c in _carros.values())
+                _princ = max(_carros, key=lambda k: _carros[k][0])
+                _pc = _carros[_princ]
+                _okm = sum(c[1] for k, c in _carros.items() if k != _princ)
+                _olt = sum(c[2] for k, c in _carros.items() if k != _princ)
+                _nout = sum(c[0] for k, c in _carros.items() if k != _princ)
+                if _pc[2] > 0 and _olt > 0:
+                    _v30.append((ch, _tot, _princ, _pc[0], round(100 * _pc[0] / _tot, 1),
+                                 round(_pc[1] / _pc[2], 3), round(_okm / _olt, 3), _nout))
+            if _v30:
+                VEICULO_30_DIAS = _v30
+                print("[inove] Pagina 14 (veiculo x kml 30 dias) ao vivo.")
 
 # Dentro dos 30 dias de acompanhamento: quantas vezes o motorista pegou o carro que mais usou,
 # e KM/L nesse carro principal vs KM/L nos demais carros

@@ -773,6 +773,59 @@ if _bcnt_url and _bcnt_key:
         MERITOCRACIA_TOP = [(n, ch, v, round(k, 2) if k else 0.0) for n, ch, v, k in _top]
         print("[bcnt] Pagina 15 (meritocracia) ao vivo.")
 
+
+# ---- Pagina 10: Tratativas (INOVE diesel_tratativas) ----
+# status cru = "Concluida"/"Pendente"; ATRASADA vs PENDENTE_NO_PRAZO calculado pelo SLA da
+# prioridade (Gravissima 1d, Alta 3d, Media 7d, Baixa 15d) sobre dias em aberto desde created_at.
+# kml_meta/kml_real vem de metadata.kpis.
+_inv_url, _inv_key = supabase_creds("inove")
+if _inv_url and _inv_key:
+    import datetime as _dtt
+    _SLA = {"Gravíssima": 1, "Gravissima": 1, "Alta": 3, "Média": 7, "Media": 7, "Baixa": 15}
+    try:
+        _tr, _off = [], 0
+        while True:
+            _b = _sb_get(_inv_url, _inv_key, "diesel_tratativas",
+                         [("select", "motorista_nome,motorista_chapa,linha,prioridade,status,created_at,metadata"),
+                          ("limit", "1000"), ("offset", str(_off))])
+            _tr += _b
+            if len(_b) < 1000:
+                break
+            _off += 1000
+    except Exception as _e:
+        _tr = None
+        print(f"[inove] tratativas falhou ({_e}).")
+    if _tr:
+        _hoje = _dtt.date.today()
+
+        def _kpi(t, campo):
+            return ((t.get("metadata") or {}).get("kpis") or {}).get(campo)
+
+        _conc = _atr = _prazo = 0
+        _la, _lp = [], []
+        for t in _tr:
+            if (t.get("status") or "").startswith("Conclu"):
+                _conc += 1
+                continue
+            try:
+                _dias = (_hoje - _dtt.date.fromisoformat(str(t.get("created_at") or "")[:10])).days
+            except ValueError:
+                _dias = 0
+            _sla = _SLA.get((t.get("prioridade") or "").strip(), 7)
+            _reg = (t.get("motorista_nome") or "", str(t.get("motorista_chapa") or ""),
+                    t.get("linha") or "-", t.get("prioridade") or "-", _dias,
+                    _num(_kpi(t, "kml_meta")) or 0.0, _num(_kpi(t, "kml_real")) or 0.0)
+            if _dias > _sla:
+                _atr += 1
+                _la.append(_reg)
+            else:
+                _prazo += 1
+                _lp.append(_reg)
+        TRATATIVAS = {"total": len(_tr), "por_status": {"CONCLUIDA": _conc, "ATRASADA": _atr, "PENDENTE_NO_PRAZO": _prazo}}
+        TRATATIVAS_ATRASADAS = sorted(_la, key=lambda x: -x[4])[:15]
+        TRATATIVAS_PENDENTES_PRAZO = _lp
+        print("[inove] Pagina 10 (tratativas) ao vivo.")
+
 # Dentro dos 30 dias de acompanhamento: quantas vezes o motorista pegou o carro que mais usou,
 # e KM/L nesse carro principal vs KM/L nos demais carros
 # (chapa, total_dias_com_dado, carro_principal, vezes_no_carro_principal, pct_carro_principal, kml_carro_principal, kml_outros_carros, n_outros)

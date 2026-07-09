@@ -11,6 +11,7 @@ spec.loader.exec_module(gfd)
 
 fmt = gfd.fmt
 pct = gfd.pct
+SEM = getattr(gfd, "SEMANA_ATUAL_LABEL", "28/06 a 03/07")  # janela recente (Pags 9 e 12)
 
 TOTAL_PAGINAS = 20
 
@@ -355,7 +356,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <table class="tbl-compact" style="margin-top:5px;"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>KM/L Maio</th><th>KM/L Junho</th><th>Variação</th></tr></thead>
       <tbody>{rows_destaque}</tbody></table>
     </div></div>
-    <div class="card"><div class="card-title">Motoristas da Semana — foco de acompanhamento (28/06 a 03/07)</div><div class="card-body">
+    <div class="card"><div class="card-title">Motoristas da Semana — foco de acompanhamento ({SEM})</div><div class="card-body">
       <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Motorista</th><th>Chapa</th><th>Instrutor</th><th>Data</th><th style="text-align:left;">Foco</th></tr></thead>
       <tbody>{rows_semana.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
       <div class="cons-box"><div class="cons-title">Leitura da semana</div>
@@ -441,12 +442,12 @@ for d in gfd.INSTRUTORES_DIA_A_DIA:
                           f"<td>{n}</td><td>{thoras}</td><td>{tmed} min</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 12 · Instrutores — Aproveitamento do Dia (última semana)", "Base: diesel_acompanhamento_sessoes — semana de 29/06 a 03/07", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
+  {page_header("Página 12 · Instrutores — Aproveitamento do Dia (última semana)", f"Base: diesel_acompanhamento_sessoes — período de {SEM}", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
   <div class="grid-2">
     <div class="card"><div class="card-title">Aproveitamento do dia — % da jornada (8h) ocupada</div><div class="card-body">
       <div class="chart-wrap chart-wrap-tall"><img src="v3_instrutores_diario.png"/></div>
     </div></div>
-    <div class="card"><div class="card-title">Detalhamento diário — semana de 29/06 a 03/07</div><div class="card-body">
+    <div class="card"><div class="card-title">Detalhamento diário — período de {SEM}</div><div class="card-body">
       <table class="tbl-big"><thead><tr><th>Data</th><th style="text-align:left;">Instrutor</th><th>Acompanhamentos</th><th>Tempo Total</th><th>Tempo Médio</th></tr></thead>
       <tbody>{rows_inst_diario}</tbody></table>
       <div class="cons-box"><div class="cons-title">Leitura</div>

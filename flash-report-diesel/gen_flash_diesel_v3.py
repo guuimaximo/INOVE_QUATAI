@@ -595,6 +595,8 @@ def _bcnt_page(url, key, path, params):
     return rows
 
 
+_pd = None
+_nome_de = {}
 _bcnt_url, _bcnt_key = supabase_creds("bcnt")
 if _bcnt_url and _bcnt_key:
     try:
@@ -604,7 +606,7 @@ if _bcnt_url and _bcnt_key:
         _nome_de = {str(f["nr_cracha"]): (f.get("nm_funcionario") or "") for f in _fn if f.get("nr_cracha")}
         _pd = _bcnt_page(_bcnt_url, _bcnt_key, "premiacao_diaria_atualizada",
                          [("select", "mes,dia,motorista,linha,prefixo,km_rodado,litros_consumidos,litros_ideais,meta_kml_usada,minutos_em_viagem"),
-                          ("ano", "eq.2026"), ("mes", "in.(3,4,5,6)")])
+                          ("ano", "eq.2026"), ("mes", "in.(3,4,5,6,7)")])
     except Exception as _e:
         _pd = None
         print(f"[bcnt] falha ao carregar mapas/premiacao_diaria ({_e}).")
@@ -825,6 +827,169 @@ if _inv_url and _inv_key:
         TRATATIVAS_ATRASADAS = sorted(_la, key=lambda x: -x[4])[:15]
         TRATATIVAS_PENDENTES_PRAZO = _lp
         print("[inove] Pagina 10 (tratativas) ao vivo.")
+
+    # ---- Paginas 12 (aproveitamento do dia) e 9 (motoristas da semana): sessoes do 1o do mes ate hoje ----
+    _hoje2 = _dtt.date.today()
+    _win_ini = _hoje2.replace(day=1)
+    SEMANA_ATUAL_LABEL = f"{_win_ini.day:02d}/{_win_ini.month:02d} a {_hoje2.day:02d}/{_hoje2.month:02d}"
+    _DIAS_PT = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
+    try:
+        _ss, _off = [], 0
+        while True:
+            _b = _sb_get(_inv_url, _inv_key, "diesel_acompanhamento_sessoes",
+                         [("select", "data_sessao,instrutor_nome,iniciado_em,encerrado_em,acompanhamento_id,foco_snapshot"),
+                          ("data_sessao", f"gte.{_win_ini.isoformat()}"), ("limit", "1000"), ("offset", str(_off))])
+            _ss += _b
+            if len(_b) < 1000:
+                break
+            _off += 1000
+        _acm, _off = {}, 0
+        while True:
+            _b = _sb_get(_inv_url, _inv_key, "diesel_acompanhamentos",
+                         [("select", "id,motorista_nome,motorista_chapa"), ("limit", "1000"), ("offset", str(_off))])
+            for _x in _b:
+                _acm[_x["id"]] = (_x.get("motorista_nome") or "", str(_x.get("motorista_chapa") or ""))
+            if len(_b) < 1000:
+                break
+            _off += 1000
+    except Exception as _e:
+        _ss = None
+        print(f"[inove] sessoes falhou ({_e}).")
+    if _ss:
+        from collections import defaultdict as _dd3
+
+        def _durmin(s):
+            try:
+                return max(0.0, (_dtt.datetime.fromisoformat(s["encerrado_em"]) - _dtt.datetime.fromisoformat(s["iniciado_em"])).total_seconds() / 60)
+            except (TypeError, ValueError, KeyError):
+                return None
+
+        _pid = _dd3(lambda: [0, 0.0])
+        for s in _ss:
+            d = s.get("data_sessao")
+            dm = _durmin(s)
+            if not d or dm is None:
+                continue
+            _k = (s.get("instrutor_nome") or "?", _dtt.date.fromisoformat(d[:10]))
+            _pid[_k][0] += 1
+            _pid[_k][1] += dm
+        # Pagina 12
+        _dad = [(f"{dd.day:02d}/{dd.month:02d} ({_DIAS_PT[dd.weekday()]})", inst, n,
+                 f"{int(mins // 60)}h {int(mins % 60):02d}min", round(mins / n) if n else 0)
+                for (inst, dd), (n, mins) in sorted(_pid.items(), key=lambda x: (x[0][1], x[0][0]))]
+        _pinst = _dd3(lambda: [set(), 0, 0.0])
+        for (inst, dd), (n, mins) in _pid.items():
+            a = _pinst[inst]
+            a[0].add(dd)
+            a[1] += n
+            a[2] += mins
+        _idi = []
+        for inst, (dias, sess, mins) in _pinst.items():
+            nd = len(dias) or 1
+            th = mins / 60
+            _idi.append({"nome": inst, "dias_trabalhados": nd, "total_sessoes": sess,
+                         "media_sessoes_dia": round(sess / nd, 1), "tempo_total_h": round(th, 1),
+                         "tempo_medio_sessao_min": round(mins / sess) if sess else 0,
+                         "media_h_dia": round(th / nd, 2), "aproveitamento_dia_pct": round(th / nd / 8 * 100, 1)})
+        if _idi and _dad:
+            INSTRUTORES_DIARIO = sorted(_idi, key=lambda x: -x["total_sessoes"])
+            INSTRUTORES_DIA_A_DIA = _dad
+            print("[inove] Pagina 12 (aproveitamento do dia) ao vivo.")
+        # Pagina 9: motoristas da semana (motorista distinto, sessao mais recente na janela)
+        _seen = {}
+        for s in sorted(_ss, key=lambda x: x.get("data_sessao") or "", reverse=True):
+            nm, ch = _acm.get(s.get("acompanhamento_id"), ("", ""))
+            if not nm or not ch or ch in _seen:
+                continue
+            dd = str(s["data_sessao"])[:10]
+            _seen[ch] = (nm.title(), ch, s.get("instrutor_nome") or "", f"{dd[8:10]}/{dd[5:7]}", s.get("foco_snapshot") or "-")
+        if len(_seen) >= 5:
+            MOTORISTAS_SEMANA = list(_seen.values())[:10]
+            print("[inove] Pagina 9 (motoristas da semana) ao vivo.")
+
+    # ---- Paginas 13 (evolucao / 30 dias) e 14 (o veiculo interfere no KM/L) ----
+    try:
+        _acs, _off = [], 0
+        while True:
+            _b = _sb_get(_inv_url, _inv_key, "diesel_acompanhamentos",
+                         [("select", "motorista_nome,motorista_chapa,instrutor_nome,status,kml_inicial,dt_inicio_monitoramento,prontuario_30_gerado_em,metadata"),
+                          ("limit", "1000"), ("offset", str(_off))])
+            _acs += _b
+            if len(_b) < 1000:
+                break
+            _off += 1000
+    except Exception as _e:
+        _acs = None
+        print(f"[inove] acompanhamentos (13/14) falhou ({_e}).")
+    if _acs:
+        _STMAP = {"EM_MONITORAMENTO": "Em monitoramento", "ATAS": "Tratativa (ATA)",
+                  "EM_ANALISE": "Em análise", "OK": "Concluído (OK)", "AGUARDANDO_INSTRUTOR": "Aguardando instrutor"}
+
+        def _kpi_a(a, c):
+            return _num(((a.get("metadata") or {}).get("kpis") or {}).get(c))
+
+        # 13a: completaram 30 dias neste mes (prontuario_30 no mes atual)
+        _comp = []
+        for a in _acs:
+            p30 = str(a.get("prontuario_30_gerado_em") or "")[:10]
+            if p30 and p30 >= _win_ini.isoformat():
+                meta, real = _kpi_a(a, "kml_meta"), _kpi_a(a, "kml_real")
+                di = str(a.get("dt_inicio_monitoramento") or "")[:10]
+                if meta and real:
+                    _comp.append((a.get("motorista_nome") or "", str(a.get("motorista_chapa") or ""),
+                                  a.get("instrutor_nome") or "", f"{di[8:10]}/{di[5:7]}" if len(di) >= 10 else "-",
+                                  round(meta, 3), round(real, 3), di))
+        if _comp:
+            COMPLETARAM_30_DIAS = [t[:6] for t in _comp[:8]]
+            print("[inove] Pagina 13 (completaram 30 dias) ao vivo.")
+        # 13b: ACOMPANHAMENTO antes/depois (10 mais distantes da meta, em acompanhamento)
+        _ac2 = []
+        for a in _acs:
+            antes, depois, meta = _num(a.get("kml_inicial")), _kpi_a(a, "kml_real"), _kpi_a(a, "kml_meta")
+            if antes and depois and a.get("status") in ("EM_MONITORAMENTO", "ATAS", "EM_ANALISE"):
+                _ac2.append({"nome": (a.get("motorista_nome") or "").title(), "instrutor": a.get("instrutor_nome") or "",
+                             "status": _STMAP.get(a.get("status"), a.get("status")),
+                             "antes": round(antes, 3), "depois": round(depois, 3), "_d": depois - (meta or depois)})
+        if len(_ac2) >= 5:
+            _ac2.sort(key=lambda x: x["_d"])
+            ACOMPANHAMENTO = [{k: v for k, v in x.items() if k != "_d"} for x in _ac2[:10]]
+            print("[inove] Pagina 13 (acompanhamento antes/depois) ao vivo.")
+        # 14: carro principal x demais nos 30 dias de cada motorista que completou (usa premiacao_diaria)
+        if _pd and _comp:
+            from collections import defaultdict as _dd4
+            _porChapa = _dd4(list)
+            for r in _pd:
+                _porChapa[str(r.get("motorista"))].append(r)
+            _v30 = []
+            for nome, ch, inst, ini_lbl, meta, real, di in _comp[:4]:
+                if len(di) < 10:
+                    continue
+                _d0 = _dtt.date.fromisoformat(di)
+                _d1 = _d0 + _dtt.timedelta(days=30)
+                _carros = _dd4(lambda: [0, 0.0, 0.0])
+                for r in _porChapa.get(ch, []):
+                    try:
+                        _dd_ = _dtt.date.fromisoformat(str(r.get("dia") or "")[:10])
+                    except ValueError:
+                        continue
+                    km, lt, pf = _num(r.get("km_rodado")), _num(r.get("litros_consumidos")), str(r.get("prefixo") or "").strip()
+                    if _d0 <= _dd_ <= _d1 and km and lt and pf:
+                        c = _carros[pf]
+                        c[0] += 1; c[1] += km; c[2] += lt
+                if not _carros:
+                    continue
+                _tot = sum(c[0] for c in _carros.values())
+                _princ = max(_carros, key=lambda k: _carros[k][0])
+                _pc = _carros[_princ]
+                _okm = sum(c[1] for k, c in _carros.items() if k != _princ)
+                _olt = sum(c[2] for k, c in _carros.items() if k != _princ)
+                _nout = sum(c[0] for k, c in _carros.items() if k != _princ)
+                if _pc[2] > 0 and _olt > 0:
+                    _v30.append((ch, _tot, _princ, _pc[0], round(100 * _pc[0] / _tot, 1),
+                                 round(_pc[1] / _pc[2], 3), round(_okm / _olt, 3), _nout))
+            if _v30:
+                VEICULO_30_DIAS = _v30
+                print("[inove] Pagina 14 (veiculo x kml 30 dias) ao vivo.")
 
 # Dentro dos 30 dias de acompanhamento: quantas vezes o motorista pegou o carro que mais usou,
 # e KM/L nesse carro principal vs KM/L nos demais carros

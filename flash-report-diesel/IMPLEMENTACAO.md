@@ -77,14 +77,26 @@ completo, então **use a consulta ao vivo com paginação**, não o CSV).
 Agregar somando km e litros e dividindo:
 `kml = Σ km_transnet / Σ combustivel_transnet` (idem para SST com `km_sst`/`combustivel_sst`).
 
-### Filtros de qualidade (obrigatórios)
-- Descartar linhas sem dado: `km_litro_transnet` vazio (para aderência) etc.
-- **Telemetria com lixo:** ignorar `km_l_sst` = 0 ou fora de faixa realista (vi `9,683` e `0,0`
-  nos dados). Recomendo aceitar só `0,5 ≤ km_l_sst ≤ 6` ao computar divergência.
+### Filtros de qualidade — IMPORTANTE: filtrar do CÁLCULO, NUNCA esconder o problema
+O objetivo do filtro é só **não contaminar as médias** com leitura bugada. O carro com dado ruim
+**tem que aparecer numa lista de "consertar"** — é uma informação operacional valiosa (sensor/
+telemetria quebrada), não lixo a ser descartado em silêncio.
+
+- **Nas médias/KM/L ponderado:** ignorar `km_l_sst` = 0 ou fora de faixa realista (vi `9,683` e
+  `0,0` nos dados de teste). Faixa aceitável sugerida: `0,5 ≤ km_l_sst ≤ 6`.
+- **Numa lista/quadro à parte (obrigatório):** gerar a relação de veículos com telemetria
+  quebrada, separando o tipo do defeito, para mandar à manutenção/TI:
+  - `km_l_sst = 0` → aparelho **não transmite** (checar instalação/conexão);
+  - `km_l_sst` absurdo (ex.: 9,68) → sensor **descalibrado** (recalibrar/trocar);
+  - `km_litro_transnet` quase sempre vazio (ex.: 222424, W555) → falha de captação **Transnet**.
+  As Páginas 16 (divergência) e 17 (aderência) já são o lugar de exibir isso — mantê-las com a
+  recomendação de "checagem física do sensor".
 - **Divergência (Pág. 16):** só carros com volume mínimo (o relatório usa **≥ 500 km** no
   período) e recorte **≥ 10%**. Fórmula: `(kml_sst − kml_transnet) / kml_transnet × 100`.
+  Os casos extremos (0 / 9,68) entram na lista de "sensor a consertar", não no ranking de médias.
 - **Aderência (Pág. 17):** por dia, `% = veículos com km_litro_transnet válido / total da frota`.
   Frota de referência no relatório atual = **111**. Fins de semana caem naturalmente (~30%).
+  A página deve destacar os carros com aderência quase nula como "falha de captação a corrigir".
 
 ## BCNT — tabelas necessárias (confirmar schema ao vivo)
 - `veiculos_ativos` — precisa da coluna que mapeia **veículo → cluster** (o relatório usa

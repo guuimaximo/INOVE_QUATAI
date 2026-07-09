@@ -423,6 +423,102 @@ ADERENCIA_DIARIA_EMPRESA = [
 ADERENCIA_MEDIA_EMPRESA = 76.4
 ADERENCIA_TOTAL_FROTA = 111
 
+
+# ---- Paginas 16 (divergencia) e 17 (aderencia) ao vivo: tabela indicadores_diesel (Base_transnet) ----
+# Padrao igual ao dos instrutores: busca via supabase_creds("transnet") com PAGINACAO; se nao houver
+# credencial ou a consulta falhar, mantem as constantes fixas acima como fallback.
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _transnet_fetch(dt_ini, dt_fim):
+    url, key = supabase_creds("transnet")
+    if not url or not key:
+        return None
+    cols = "data_consolidada,veiculo,km_litro_transnet,km_transnet,combustivel_transnet,km_sst,combustivel_sst,km_l_sst"
+    rows, off, step = [], 0, 1000
+    try:
+        while True:
+            batch = _sb_get(url, key, "indicadores_diesel", [
+                ("select", cols),
+                ("data_consolidada", f"gte.{dt_ini}"),
+                ("data_consolidada", f"lt.{dt_fim}"),
+                ("order", "data_consolidada"),
+                ("limit", str(step)), ("offset", str(off)),
+            ])
+            rows.extend(batch)
+            if len(batch) < step:
+                break
+            off += step
+    except Exception as e:
+        print(f"[transnet] busca falhou ({e}); usando fallback fixo.")
+        return None
+    return rows
+
+
+def _agg_aderencia(rows, mes="2026-06"):
+    """Pagina 17: aderencia diaria da frota + piores carros, no mes de referencia."""
+    from collections import defaultdict
+    jun = [r for r in rows if str(r.get("data_consolidada", ""))[:7] == mes]
+    if not jun:
+        return None
+    frota = len({r["veiculo"] for r in jun}) or 1
+    por_dia, por_carro = defaultdict(lambda: [0, 0]), defaultdict(lambda: [0, 0])
+    for r in jun:
+        d, v = r["data_consolidada"], r["veiculo"]
+        tem = str(r.get("km_litro_transnet", "")).strip() not in ("", "None")
+        por_dia[d][1] += 1; por_carro[v][1] += 1
+        if tem:
+            por_dia[d][0] += 1; por_carro[v][0] += 1
+    diaria = []
+    for d in sorted(por_dia):
+        ok = por_dia[d][0]
+        diaria.append((f"{d[8:10]}/{d[5:7]}", ok, round(100 * ok / frota, 1)))
+    n_dias = len(por_dia) or 1
+    carros = sorted(((v, c[0], round(100 * c[0] / n_dias, 1)) for v, c in por_carro.items()),
+                    key=lambda x: x[2])[:10]
+    media = round(sum(x[2] for x in diaria) / len(diaria), 1)
+    return diaria, media, carros, frota
+
+
+def _agg_divergencia(rows):
+    """Pagina 16: divergencia KM/L Transnet x telemetria por carro (>=500km, >=10%).
+    Filtro de qualidade: telemetria (km_l_sst) so entra se estiver em faixa realista 0,5..6;
+    valores 0 ou absurdos (ex.: 9,68) sao descartados da media (o carro segue visivel na Pag. 17)."""
+    from collections import defaultdict
+    agg = defaultdict(lambda: {"kmt": 0.0, "ct": 0.0, "kms": 0.0, "cs": 0.0})
+    for r in rows:
+        v = r["veiculo"]
+        kmt, ct = _num(r.get("km_transnet")), _num(r.get("combustivel_transnet"))
+        kms, cs, kls = _num(r.get("km_sst")), _num(r.get("combustivel_sst")), _num(r.get("km_l_sst"))
+        if kmt and ct:
+            agg[v]["kmt"] += kmt; agg[v]["ct"] += ct
+        if kms and cs and kls is not None and 0.5 <= kls <= 6:
+            agg[v]["kms"] += kms; agg[v]["cs"] += cs
+    out = []
+    for v, a in agg.items():
+        if a["ct"] > 0 and a["cs"] > 0 and a["kmt"] >= 500:
+            klt, kls = a["kmt"] / a["ct"], a["kms"] / a["cs"]
+            dp = (kls - klt) / klt * 100
+            if abs(dp) >= 10:
+                out.append((v, round(klt, 3), round(kls, 3), round(dp, 1), int(a["kmt"])))
+    return sorted(out, key=lambda x: -abs(x[3]))[:8]
+
+
+_transnet_rows = _transnet_fetch("2026-05-01", "2026-08-01")
+if _transnet_rows:
+    _ader = _agg_aderencia(_transnet_rows, "2026-06")
+    if _ader:
+        ADERENCIA_DIARIA_EMPRESA, ADERENCIA_MEDIA_EMPRESA, ADERENCIA_CARROS, ADERENCIA_TOTAL_FROTA = _ader
+        print("[transnet] Pagina 17 (aderencia) ao vivo.")
+    _div = _agg_divergencia(_transnet_rows)
+    if _div:
+        DIVERGENCIA_CARROS = _div
+        print("[transnet] Pagina 16 (divergencia) ao vivo.")
+
 # Dentro dos 30 dias de acompanhamento: quantas vezes o motorista pegou o carro que mais usou,
 # e KM/L nesse carro principal vs KM/L nos demais carros
 # (chapa, total_dias_com_dado, carro_principal, vezes_no_carro_principal, pct_carro_principal, kml_carro_principal, kml_outros_carros, n_outros)

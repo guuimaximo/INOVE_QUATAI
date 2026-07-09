@@ -579,6 +579,102 @@ if _transnet_rows:
         DIVERGENCIA_CARROS = _div
         print("[transnet] Pagina 16 (divergencia) ao vivo.")
 
+
+# ---- Paginas 3 (cluster), 7 (piores/melhores) e 15 (meritocracia): BCNT ----
+# Fontes: premiacao_diaria_atualizada (KM/L por dia/motorista/linha), veiculos_ativos (mapa
+# veiculo->cluster, pois a coluna cluster da premiacao vem vazia), funcionarios_atualizada
+# (mapa chapa->nome), premiacao_atualizada (valor R$ da meritocracia). Tudo com paginacao.
+def _bcnt_page(url, key, path, params):
+    rows, off = [], 0
+    while True:
+        b = _sb_get(url, key, path, params + [("limit", "1000"), ("offset", str(off))])
+        rows += b
+        if len(b) < 1000:
+            break
+        off += 1000
+    return rows
+
+
+_bcnt_url, _bcnt_key = supabase_creds("bcnt")
+if _bcnt_url and _bcnt_key:
+    try:
+        _va = _bcnt_page(_bcnt_url, _bcnt_key, "veiculos_ativos", [("select", "nr_ordem,per_cluster")])
+        _cluster_de = {str(v["nr_ordem"]): v.get("per_cluster") for v in _va if v.get("nr_ordem")}
+        _fn = _bcnt_page(_bcnt_url, _bcnt_key, "funcionarios_atualizada", [("select", "nr_cracha,nm_funcionario")])
+        _nome_de = {str(f["nr_cracha"]): (f.get("nm_funcionario") or "") for f in _fn if f.get("nr_cracha")}
+        _pd = _bcnt_page(_bcnt_url, _bcnt_key, "premiacao_diaria_atualizada",
+                         [("select", "mes,motorista,prefixo,km_rodado,litros_consumidos,meta_kml_usada"),
+                          ("ano", "eq.2026"), ("mes", "in.(3,4,5,6)")])
+    except Exception as _e:
+        _pd = None
+        print(f"[bcnt] falha ao carregar mapas/premiacao_diaria ({_e}).")
+
+    if _pd:
+        from collections import defaultdict as _dd
+        _MESNOME = {3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun"}
+        # Pagina 3: KM/L por cluster nos ultimos 4 meses
+        _cl = _dd(lambda: [0.0, 0.0])
+        for r in _pd:
+            c = _cluster_de.get(str(r.get("prefixo")))
+            km, lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+            if c and km and lt:
+                _cl[(c, int(r["mes"]))][0] += km
+                _cl[(c, int(r["mes"]))][1] += lt
+        _clusters = ["C6", "C8", "C9", "C10", "C11"]
+        _hist = {}
+        for c in _clusters:
+            serie = [(f"{_MESNOME[m]}/2026", round(_cl[(c, m)][0] / _cl[(c, m)][1], 4))
+                     for m in (3, 4, 5, 6) if _cl.get((c, m)) and _cl[(c, m)][1]]
+            if len(serie) == 4:
+                _hist[c] = serie
+        if len(_hist) == len(_clusters):
+            CLUSTER_HISTORICO_4M = _hist
+            CLUSTER_TRANSNET = [(c, _hist[c][2][1], _hist[c][3][1]) for c in _clusters]
+            print("[bcnt] Pagina 3 (cluster) ao vivo.")
+        # Pagina 7: piores e melhores motoristas de junho (min. 500 km)
+        _mot = _dd(lambda: [0.0, 0.0, 0.0])
+        for r in _pd:
+            if int(r["mes"]) != 6:
+                continue
+            km, lt, meta = _num(r.get("km_rodado")), _num(r.get("litros_consumidos")), _num(r.get("meta_kml_usada"))
+            if km and lt:
+                a = _mot[str(r["motorista"])]
+                a[0] += km
+                a[1] += lt
+                if meta:
+                    a[2] += meta * km
+        _rank = [(_nome_de.get(ch) or f"MOTORISTA {ch}", ch, round(a[0] / a[1], 3),
+                  round(a[2] / a[0], 2), int(a[0]), int(a[1]))
+                 for ch, a in _mot.items() if a[1] > 0 and a[0] >= 500 and ch.strip()]
+        if len(_rank) >= 20:
+            PIORES = sorted(_rank, key=lambda x: x[2])[:10]
+            MELHORES = sorted(_rank, key=lambda x: -x[2])[:10]
+            print("[bcnt] Pagina 7 (piores/melhores) ao vivo.")
+
+    # Pagina 15: meritocracia (valor R$ ja calculado pela regra da empresa)
+    try:
+        _pa = _bcnt_page(_bcnt_url, _bcnt_key, "premiacao_atualizada",
+                         [("select", "motorista,valor,km_l"), ("ano", "eq.2026"), ("mes", "eq.6")])
+    except Exception:
+        _pa = None
+    if _pa:
+        _vals = [(str(x["motorista"]), _num(x.get("valor")) or 0.0, _num(x.get("km_l"))) for x in _pa]
+        _faixas = {"R$ 300": 0, "R$ 200": 0, "R$ 150": 0, "R$ 100": 0, "R$ 0": 0}
+        for _ch, _v, _k in _vals:
+            _lbl = f"R$ {int(_v)}"
+            if _lbl in _faixas:
+                _faixas[_lbl] += 1
+        MERITOCRACIA_RESUMO = {
+            "total_pago": round(sum(v for _, v, _ in _vals)),
+            "motoristas_premiados": sum(1 for _, v, _ in _vals if v > 0),
+            "total_motoristas": len(_vals),
+            "distribuicao": _faixas,
+        }
+        _top = sorted(((_nome_de.get(ch) or f"MOTORISTA {ch}", ch, int(v), k) for ch, v, k in _vals if v > 0 and ch.strip()),
+                      key=lambda x: (-x[2], -(x[3] or 0)))[:10]
+        MERITOCRACIA_TOP = [(n, ch, v, round(k, 2) if k else 0.0) for n, ch, v, k in _top]
+        print("[bcnt] Pagina 15 (meritocracia) ao vivo.")
+
 # Dentro dos 30 dias de acompanhamento: quantas vezes o motorista pegou o carro que mais usou,
 # e KM/L nesse carro principal vs KM/L nos demais carros
 # (chapa, total_dias_com_dado, carro_principal, vezes_no_carro_principal, pct_carro_principal, kml_carro_principal, kml_outros_carros, n_outros)

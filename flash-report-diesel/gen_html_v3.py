@@ -12,6 +12,10 @@ spec.loader.exec_module(gfd)
 fmt = gfd.fmt
 pct = gfd.pct
 SEM = getattr(gfd, "SEMANA_ATUAL_LABEL", "28/06 a 03/07")  # janela recente (Pags 9 e 12)
+MESREF = getattr(gfd, "MES_REF_LABEL", "Junho de 2026")     # ex.: "Julho/2026"
+MESANT = getattr(gfd, "MES_ANT_LABEL", "Maio/2026")         # ex.: "Junho/2026"
+MESREF_NOME, MESANT_NOME = MESREF.split("/")[0], MESANT.split("/")[0]
+PERIODO = getattr(gfd, "PERIODO_LABEL", "01/06 a 30/06/2026")
 
 TOTAL_PAGINAS = 20
 
@@ -68,7 +72,7 @@ def page_header(titulo_pag, sub, ref_label, ref_val):
 def footer(pagina):
     return f"""<div class="footer"><div>Gerado automaticamente via Cowork · Página {pagina}/{TOTAL_PAGINAS}</div><div>Flash Report Diesel — Transnet oficial + Telemetria</div></div>"""
 
-periodo_label = "01/06 a 30/06/2026 (mês completo) · comparações Mai/Abr completas"
+periodo_label = f"{PERIODO} · {MESREF} · comparações vs {MESANT}"
 
 pages = []
 
@@ -115,7 +119,7 @@ pages.append(f"""<div class="page" style="background:linear-gradient(135deg,#0f1
   <div style="font-size:13px; letter-spacing:4px; font-weight:700; opacity:.8; margin-bottom:14px;">GRUPO CSC · EXPRESSO PLANALTO S/A</div>
   <div style="font-size:40px; font-weight:900; letter-spacing:1px;">CONDUÇÃO ECONÔMICA</div>
   <div style="font-size:22px; font-weight:700; margin-top:6px; color:#a7f3d0;">FLASH REPORT DIESEL</div>
-  <div style="margin-top:26px; font-size:15px; font-weight:700; background:rgba(255,255,255,.12); padding:8px 26px; border-radius:999px;">Junho / 2026</div>
+  <div style="margin-top:26px; font-size:15px; font-weight:700; background:rgba(255,255,255,.12); padding:8px 26px; border-radius:999px;">{MESREF}</div>
   <div style="margin-top:34px; display:flex; gap:34px;">
     <div style="text-align:center;"><div style="font-size:9px; opacity:.75; text-transform:uppercase; letter-spacing:1px;">Fonte oficial</div><div style="font-size:16px; font-weight:800;">Transnet</div></div>
     <div style="text-align:center;"><div style="font-size:9px; opacity:.75; text-transform:uppercase; letter-spacing:1px;">Comparação</div><div style="font-size:16px; font-weight:800;">Telemetria</div></div>
@@ -127,7 +131,7 @@ pages.append(f"""<div class="page" style="background:linear-gradient(135deg,#0f1
 # ================= PAGINA 1: HISTORICO 6+ MESES + RESUMO =================
 var_jun = (gfd.KML_HISTORICO[-2][1] - gfd.KML_HISTORICO[-3][1]) / gfd.KML_HISTORICO[-3][1] * 100
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 2 · KM/L Mensal — Histórico 7 Meses (Transnet oficial)", f"Período: <b>{periodo_label}</b>", "Mês de referência", "Junho/2026")}
+  {page_header("Página 2 · KM/L Mensal — Histórico 7 Meses (Transnet oficial)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
     <div class="card"><div class="card-title">Evolução Mensal — Transnet</div><div class="card-body">
       <div class="chart-wrap"><img src="v3_historico.png"/></div>
@@ -158,7 +162,7 @@ for c in gfd.CLUSTER_TRANSNET:
                                f"<td style='color:{'#16a34a' if var>0 else '#dc2626'};font-weight:bold;'>{pct(var)}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 3 · KM/L por Cluster de Frota (Transnet oficial)", f"Período: <b>{periodo_label}</b> · Cluster = agrupamento de veículos (veiculos_ativos)", "Mês de referência", "Junho/2026")}
+  {page_header("Página 3 · KM/L por Cluster de Frota (Transnet oficial)", f"Período: <b>{periodo_label}</b> · Cluster = agrupamento de veículos (veiculos_ativos)", "Mês de referência", MESREF)}
   <div class="card"><div class="card-title">KM/L por Cluster de Frota — últimos 4 meses</div><div class="card-body">
     <div class="chart-wrap"><img src="v3_cluster.png"/></div>
   </div></div>
@@ -273,7 +277,7 @@ rows_piores = rows_ranking_com_historico(gfd.PIORES)
 rows_melhores = rows_ranking(gfd.MELHORES)
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 7 · Top 10 — Maior Distância da Meta (Junho)", f"Período: <b>{periodo_label}</b>", "Mês de referência", "Junho/2026")}
+  {page_header("Página 7 · Top 10 — Maior Distância da Meta (Junho)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
     <div class="card"><div class="card-title">Top 10 — Maior distância da meta</div><div class="card-body">
       <div class="chart-wrap chart-wrap-sm"><img src="v3_piores.png"/></div>
@@ -314,7 +318,7 @@ for c in gfd.SINAL_ALERTA_CAUSA:
                           f"<td style='text-align:left;font-size:7.6px;color:{cor};font-weight:700;'>{causa}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 8 · Top 10 Melhores e Sinal de Alerta (Mai→Jun)", f"Período: <b>{periodo_label}</b>", "Mês de referência", "Junho/2026")}
+  {page_header("Página 8 · Top 10 Melhores e Sinal de Alerta (Mai→Jun)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
     <div class="card"><div class="card-title">Top 10 — Melhor desempenho (Junho)</div><div class="card-body">
       <div class="chart-wrap"><img src="v3_melhores.png"/></div>
@@ -349,7 +353,7 @@ for m in gfd.MOTORISTAS_SEMANA:
                      f"<td>{m[2]}</td><td>{m[3]}</td><td style='text-align:left;font-size:7.6px;'>{m[4]}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 9 · Destaque Positivo e Motoristas da Semana", f"Período: <b>{periodo_label}</b>", "Mês de referência", "Junho/2026")}
+  {page_header("Página 9 · Destaque Positivo e Motoristas da Semana", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
     <div class="card"><div class="card-title">Destaque Positivo — maior evolução Maio→Junho</div><div class="card-body">
       <div class="chart-wrap chart-wrap-sm"><img src="v3_destaque.png"/></div>

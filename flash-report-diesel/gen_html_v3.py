@@ -413,18 +413,12 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 </div>""")
 
 # ================= PAGINA 8: INSTRUTORES APROFUNDADO =================
-inst_cards = "".join(
-    f"""<div class="metric"><div class="lbl">{i['nome']}</div>
-    <div class="val">{fmt(i['taxa_atingiu_meta'],1)}%</div><div class="aux">atingiram a meta · {i['total']} acompanhamentos · {i['ok']} OK · {i['atas']} ATA</div></div>"""
-    for i in gfd.INSTRUTORES
-)
-
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 11 · Instrutores — Análise Aprofundada", "Base: diesel_acompanhamentos (477 registros) · ACUMULADO GERAL (sem filtro de mês — pendente credencial p/ recorte de Junho)", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
+  {page_header("Página 11 · Instrutores — Análise Aprofundada", "Base: diesel_acompanhamentos (Supabase INOVE) · recorte Junho/2026 — novos acompanhamentos iniciados no mês + desfechos ocorridos no mês", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
   <div class="grid-3" style="margin-bottom:6px;">
-    <div class="metric"><div class="lbl">Total de acompanhamentos</div><div class="val">{sum(i['total'] for i in gfd.INSTRUTORES)}</div><div class="aux">Fabiano + Helio combinados</div></div>
-    <div class="metric"><div class="lbl">Concluídos (OK)</div><div class="val">{sum(i['ok'] for i in gfd.INSTRUTORES)}</div><div class="aux">bateram a meta ao final do ciclo</div></div>
-    <div class="metric"><div class="lbl">Em ATA (encerrados sem sucesso)</div><div class="val">{sum(i['atas'] for i in gfd.INSTRUTORES)}</div><div class="aux">encerrados sem atingir a meta</div></div>
+    <div class="metric"><div class="lbl">Novos acompanhamentos (iniciados em jun)</div><div class="val">{sum(i['novos'] for i in gfd.INSTRUTORES)}</div><div class="aux">Fabiano + Helio · ainda no ciclo de 30 dias</div></div>
+    <div class="metric"><div class="lbl">Desfechos em jun — Concluídos (OK)</div><div class="val" style="color:#16a34a;">{sum(i['desf_ok'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês atingindo a meta</div></div>
+    <div class="metric"><div class="lbl">Desfechos em jun — viraram ATA</div><div class="val" style="color:#dc2626;">{sum(i['desf_ata'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês sem atingir a meta</div></div>
   </div>
   <div class="grid-2">
     <div class="card"><div class="card-title">Efetividade — % de acompanhados que atingiram a meta</div><div class="card-body">
@@ -434,9 +428,8 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="chart-wrap chart-wrap-tall"><img src="v3_instrutores_status.png"/></div>
     </div></div>
   </div>
-  <div class="warn">⚠ Dados acumulados desde o início do programa (sem recorte por mês) — assim que a credencial do Supabase principal (INOVE) for enviada, esta página passa a mostrar apenas Junho/2026, em linha com o resto do relatório.</div>
   <div class="cons-box"><div class="cons-title">Leitura analítica</div>
-  <div class="cons-text">Fabiano Freitas tem carteira maior (254 vs 214) e taxa de sucesso levemente melhor (24% vs 22,1%), mas ambos convertem menos de 1 em cada 4 acompanhamentos em meta batida. Isso sugere que o gargalo não é o instrutor individualmente, e sim o modelo de acompanhamento: vale testar ciclos mais curtos com reforço em campo nos primeiros 10 dias.</div></div>
+  <div class="cons-text">Em Junho iniciaram-se {sum(i['novos'] for i in gfd.INSTRUTORES)} novos acompanhamentos (Fabiano {gfd.INSTRUTORES[0]['novos']}, Helio {gfd.INSTRUTORES[1]['novos']}), quase todos ainda dentro do ciclo de 30 dias — por isso aparecem majoritariamente como "em monitoramento". Já os ciclos que se encerraram no mês somaram {sum(i['desf_ok'] for i in gfd.INSTRUTORES)} concluídos na meta (OK) e {sum(i['desf_ata'] for i in gfd.INSTRUTORES)} que viraram ATA. A efetividade (leitura inicial já na meta) é parecida entre os dois — {fmt(gfd.INSTRUTORES[0]['taxa_atingiu_meta'],1)}% (Fabiano) e {fmt(gfd.INSTRUTORES[1]['taxa_atingiu_meta'],1)}% (Helio) — sinal de que o gargalo é o modelo de acompanhamento, não o instrutor: vale testar ciclos mais curtos com reforço em campo nos primeiros 10 dias.</div></div>
   {footer(11)}
 </div>""")
 

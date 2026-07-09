@@ -39,6 +39,16 @@ jobs:
 
       - name: Gerar graficos + HTML
         working-directory: flash-report-diesel
+        env:
+          # INOVE (diesel_acompanhamentos - Pagina 11)
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # BCNT (KM/L, clusters, premiacao diaria)
+          SUPABASE_BCNT_URL: ${{ secrets.SUPABASE_BCNT_URL }}
+          SUPABASE_BCNT_KEY: ${{ secrets.SUPABASE_BCNT_KEY }}
+          # Base Transnet (CSV Athena/Transnet importado)
+          SUPABASE_TRANSNET_URL: ${{ secrets.SUPABASE_TRANSNET_URL }}
+          SUPABASE_TRANSNET_KEY: ${{ secrets.SUPABASE_TRANSNET_KEY }}
         run: |
           python gen_html_v3.py
 

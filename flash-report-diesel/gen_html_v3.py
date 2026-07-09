@@ -16,6 +16,9 @@ MESREF = getattr(gfd, "MES_REF_LABEL", "Junho de 2026")     # ex.: "Julho/2026"
 MESANT = getattr(gfd, "MES_ANT_LABEL", "Maio/2026")         # ex.: "Junho/2026"
 MESREF_NOME, MESANT_NOME = MESREF.split("/")[0], MESANT.split("/")[0]
 PERIODO = getattr(gfd, "PERIODO_LABEL", "01/06 a 30/06/2026")
+_M3 = getattr(gfd, "_MES3", ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"])
+MES3REF = _M3[getattr(gfd, "MES_REF_MM", 6) - 1]   # "Jul"
+MES3ANT = _M3[getattr(gfd, "MES_ANT_MM", 5) - 1]   # "Jun"
 
 TOTAL_PAGINAS = 20
 
@@ -129,7 +132,9 @@ pages.append(f"""<div class="page" style="background:linear-gradient(135deg,#0f1
 </div>""")
 
 # ================= PAGINA 1: HISTORICO 6+ MESES + RESUMO =================
-var_jun = (gfd.KML_HISTORICO[-2][1] - gfd.KML_HISTORICO[-3][1]) / gfd.KML_HISTORICO[-3][1] * 100
+var_jun = (gfd.KML_HISTORICO[-1][1] - gfd.KML_HISTORICO[-2][1]) / gfd.KML_HISTORICO[-2][1] * 100
+_telem_key = gfd._MES3[gfd.MES_REF_MM - 1].lower()
+_telem_val = gfd.KML_MENSAL_TELEMETRIA.get(_telem_key, list(gfd.KML_MENSAL_TELEMETRIA.values())[-1])
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 2 · KM/L Mensal — Histórico 7 Meses (Transnet oficial)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
@@ -138,8 +143,8 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     </div></div>
     <div class="card"><div class="card-title">Resumo Executivo</div><div class="card-body">
       <div class="grid-2">
-        <div class="metric"><div class="lbl">KM/L Junho (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-2][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-3][1],3)} em maio ({pct(var_jun)})</div></div>
-        <div class="metric"><div class="lbl">KM/L Junho (Telemetria)</div><div class="val">{fmt(gfd.KML_MENSAL_TELEMETRIA['jun'],3)}</div><div class="aux">Fonte de comparação</div></div>
+        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-1][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-2][1],3)} em {MESANT_NOME.lower()} ({pct(var_jun)})</div></div>
+        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Telemetria)</div><div class="val">{fmt(_telem_val,3)}</div><div class="aux">Fonte de comparação</div></div>
       </div>
       <div class="metric" style="margin-top:8px;"><div class="lbl">Meta operacional</div><div class="val">{fmt(gfd.META,2)} km/L</div></div>
       <div class="metric" style="margin-top:8px;"><div class="lbl">Melhor mês do histórico</div><div class="val">{max(gfd.KML_HISTORICO,key=lambda m:m[1])[0]}</div><div class="aux">{fmt(max(gfd.KML_HISTORICO,key=lambda m:m[1])[1],3)} km/L</div></div>
@@ -167,8 +172,8 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="chart-wrap"><img src="v3_cluster.png"/></div>
   </div></div>
   <div class="grid-2">
-    <div class="card"><div class="card-title">Detalhamento por cluster (Maio → Junho)</div><div class="card-body">
-      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Cluster</th><th>KM/L Maio</th><th>KM/L Junho</th><th>Variação</th></tr></thead>
+    <div class="card"><div class="card-title">Detalhamento por cluster ({MESANT_NOME} → {MESREF_NOME})</div><div class="card-body">
+      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Cluster</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Variação</th></tr></thead>
       <tbody>{rows_cluster_transnet.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
     </div></div>
     <div class="card"><div class="card-title">Leitura por cluster</div><div class="card-body">
@@ -202,14 +207,14 @@ for l in sorted(gfd.LINHA_DESPERDICIO, key=lambda l: -l[5]):
                              f"<td>{km:,}".replace(",",".") + f"</td><td>{fmt(lit,2)} L</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 4 · Análise por Linha — KM/L, Meta e Desperdício (Jun vs Mai)", "Fonte: premiacao_diaria_atualizada (Telemetria)", "Linhas monitoradas", str(len(gfd.LINHA_DESPERDICIO)))}
+  {page_header("Página 4 · Análise por Linha — KM/L, Meta e Desperdício ({MES3REF} vs {MES3ANT})", "Fonte: premiacao_diaria_atualizada (Telemetria)", "Linhas monitoradas", str(len(gfd.LINHA_DESPERDICIO)))}
   <div class="grid-4">
     <div class="metric"><div class="lbl">KM/L Mês Referência</div><div class="val">{fmt(kml_ref_pond,2)}</div></div>
     <div class="metric"><div class="lbl">KM/L Mês Comparação</div><div class="val">{fmt(kml_comp_medio,2)}</div></div>
     <div class="metric"><div class="lbl">Variação vs comparação</div><div class="val" style="color:{'#16a34a' if var_geral>=0 else '#dc2626'};">{pct(var_geral)}</div></div>
     <div class="metric"><div class="lbl">Desperdício Total (Meta)</div><div class="val" style="color:#dc2626;">{fmt(desperdicio_total,2)} L</div></div>
   </div>
-  <div class="card"><div class="card-title">Detalhamento por linha (Junho = referência, Maio = comparação)</div><div class="card-body">
+  <div class="card"><div class="card-title">Detalhamento por linha ({MESREF_NOME} = referência, {MESANT_NOME} = comparação)</div><div class="card-body">
     <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Linha</th><th>KM/L Comp.</th><th>KM/L Ref.</th><th>Var. %</th><th>Meta</th><th>Desperdício</th><th>Km</th><th>Comb.</th></tr></thead>
     <tbody>{rows_linha_completa.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
   </div></div>
@@ -237,17 +242,12 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 
 # ================= PAGINA 5b: VELOCIDADE MEDIA DIARIA x KM/L (correlacao) =================
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 6 · Velocidade Média Diária x KM/L — Correlação", "Fonte: premiacao_diaria_atualizada (Telemetria) — Junho/2026 (30 dias)", "Dias analisados", str(len(gfd.KML_VELOCIDADE_DIARIO)))}
-  <div class="grid-2">
-    <div class="card"><div class="card-title">KM/L diário x Velocidade média diária</div><div class="card-body">
-      <div class="chart-wrap chart-wrap-tall"><img src="v3_vel_kml_diario.png"/></div>
-    </div></div>
-    <div class="card"><div class="card-title">Dispersão e correlação</div><div class="card-body">
-      <div class="chart-wrap chart-wrap-tall"><img src="v3_vel_kml_dispersao.png"/></div>
-    </div></div>
-  </div>
+  {page_header("Página 6 · Velocidade Média Diária x KM/L — Correlação", f"Fonte: premiacao_diaria_atualizada (Telemetria) — {PERIODO}", "Dias analisados", str(len(gfd.KML_VELOCIDADE_DIARIO)))}
+  <div class="card"><div class="card-title">KM/L diário x Velocidade média diária</div><div class="card-body">
+    <div class="chart-wrap"><img src="v3_vel_kml_diario.png"/></div>
+  </div></div>
   <div class="cons-box"><div class="cons-title">Considerações</div>
-  <div class="cons-text">Correlação forte e positiva: dias com velocidade média mais alta (acima de 18 km/h, tipicamente fins de semana com menos trânsito) apresentam KM/L nitidamente maior — os picos de 07/06, 14/06, 21/06 e 28/06 coincidem com os melhores KM/L do mês. Isso reforça que trânsito/parada explica parte do desperdício, ajudando a entender por que linhas urbanas mais lentas (07TR, 20TR, 04TR) ficam distantes da meta.</div></div>
+  <div class="cons-text">Correlação forte e positiva: os dias com velocidade média mais alta (acima de ~18 km/h, tipicamente com menos trânsito) apresentam KM/L nitidamente maior. Isso reforça que trânsito/parada explica parte do desperdício, ajudando a entender por que as linhas urbanas mais lentas ficam distantes da meta.</div></div>
   {footer(6)}
 </div>""")
 
@@ -323,7 +323,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="card"><div class="card-title">Top 10 — Melhor desempenho (Junho)</div><div class="card-body">
       <div class="chart-wrap"><img src="v3_melhores.png"/></div>
     </div></div>
-    <div class="card"><div class="card-title">Sinal de Alerta — maior queda Maio→Junho</div><div class="card-body">
+    <div class="card"><div class="card-title">Sinal de Alerta — maior queda {MESANT_NOME}→{MESREF_NOME}</div><div class="card-body">
       <div class="chart-wrap"><img src="v3_alerta.png"/></div>
     </div></div>
   </div>
@@ -333,7 +333,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <tbody>{rows_melhores}</tbody></table>
     </div></div>
     <div class="card"><div class="card-title">Sinal de Alerta — a queda foi por troca de linha/carro ou comportamento?</div><div class="card-body">
-      <table class="tbl-compact"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>Linha Mai→Jun</th><th>Carro Mai→Jun</th><th>Causa provável</th></tr></thead>
+      <table class="tbl-compact"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>Linha {MES3ANT}→{MES3REF}</th><th>Carro {MES3ANT}→{MES3REF}</th><th>Causa provável</th></tr></thead>
       <tbody>{rows_alerta_causa}</tbody></table>
     </div></div>
   </div>
@@ -355,9 +355,9 @@ for m in gfd.MOTORISTAS_SEMANA:
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 9 · Destaque Positivo e Motoristas da Semana", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
-    <div class="card"><div class="card-title">Destaque Positivo — maior evolução Maio→Junho</div><div class="card-body">
+    <div class="card"><div class="card-title">Destaque Positivo — maior evolução {MESANT_NOME}→{MESREF_NOME}</div><div class="card-body">
       <div class="chart-wrap chart-wrap-sm"><img src="v3_destaque.png"/></div>
-      <table class="tbl-compact" style="margin-top:5px;"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>KM/L Maio</th><th>KM/L Junho</th><th>Variação</th></tr></thead>
+      <table class="tbl-compact" style="margin-top:5px;"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Variação</th></tr></thead>
       <tbody>{rows_destaque}</tbody></table>
     </div></div>
     <div class="card"><div class="card-title">Motoristas da Semana — foco de acompanhamento ({SEM})</div><div class="card-body">

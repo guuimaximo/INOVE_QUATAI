@@ -667,11 +667,12 @@ if _bcnt_url and _bcnt_key:
         for c in _clusters:
             serie = [(f"{_MES3[m - 1]}/{y}", round(_cl[(c, (y, m))][0] / _cl[(c, (y, m))][1], 4))
                      for (y, m) in _m4 if _cl.get((c, (y, m))) and _cl[(c, (y, m))][1]]
-            if len(serie) == 4:
+            if len(serie) >= 3:  # aceita 3 meses (ex.: inicio do mes, cluster sem dado ainda)
                 _hist[c] = serie
         if len(_hist) == len(_clusters):
             CLUSTER_HISTORICO_4M = _hist
-            CLUSTER_TRANSNET = [(c, _hist[c][2][1], _hist[c][3][1]) for c in _clusters]
+            # comparacao = os 2 ultimos meses disponiveis de cada cluster (mes ant x mes ref)
+            CLUSTER_TRANSNET = [(c, _hist[c][-2][1], _hist[c][-1][1]) for c in _clusters]
             print("[cluster] Pagina 3 (Transnet + mapa cluster) ao vivo.")
         # Pagina 7: piores e melhores motoristas do mes de referencia (min. 500 km)
         _mot = _dd(lambda: [0.0, 0.0, 0.0])

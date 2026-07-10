@@ -242,13 +242,38 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 </div>""")
 
 # ================= PAGINA 5b: VELOCIDADE MEDIA DIARIA x KM/L (correlacao) =================
+# Correlacao dinamica (Pearson) velocidade x KM/L diario — evita texto fixo desatualizado.
+_vk = list(gfd.KML_VELOCIDADE_DIARIO)
+def _pearson(xs, ys):
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    mx = sum(xs) / n; my = sum(ys) / n
+    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    sxx = sum((x - mx) ** 2 for x in xs); syy = sum((y - my) ** 2 for y in ys)
+    if sxx == 0 or syy == 0:
+        return 0.0
+    return sxy / ((sxx * syy) ** 0.5)
+_vels = [d[2] for d in _vk]; _kmls = [d[1] for d in _vk]
+_r = _pearson(_vels, _kmls); _absr = abs(_r)
+_forca = "forte" if _absr >= 0.7 else ("moderada" if _absr >= 0.4 else ("fraca" if _absr >= 0.2 else "muito fraca"))
+_sinal = "positiva" if _r >= 0 else "negativa"
+_tend = "maior" if _r >= 0 else "menor"
+_vel_med = (sum(_vels) / len(_vels)) if _vels else 0
+if not _vk:
+    consid_p6 = "Sem dados diários suficientes de velocidade e KM/L nesta janela para avaliar a correlação."
+else:
+    consid_p6 = (f"Correlação {_forca} e {_sinal} entre velocidade média diária e KM/L (r = {fmt(_r,2)}): "
+                 f"os dias com velocidade média mais alta (acima de ~{fmt(_vel_med,0)} km/h, tipicamente com menos trânsito) "
+                 f"tendem a apresentar KM/L {_tend}. Isso ajuda a entender por que as linhas urbanas mais lentas ficam distantes da meta"
+                 + (", e reforça que trânsito/parada explica parte do desperdício." if _r >= 0.2 else "; ainda assim, o efeito observado nesta janela é pequeno."))
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 6 · Velocidade Média Diária x KM/L — Correlação", f"Fonte: premiacao_diaria_atualizada (Telemetria) — {PERIODO}", "Dias analisados", str(len(gfd.KML_VELOCIDADE_DIARIO)))}
   <div class="card"><div class="card-title">KM/L diário x Velocidade média diária</div><div class="card-body">
-    <div class="chart-wrap"><img src="v3_vel_kml_diario.png"/></div>
+    <div class="chart-wrap chart-wrap-sm"><img src="v3_vel_kml_diario.png"/></div>
   </div></div>
   <div class="cons-box"><div class="cons-title">Considerações</div>
-  <div class="cons-text">Correlação forte e positiva: os dias com velocidade média mais alta (acima de ~18 km/h, tipicamente com menos trânsito) apresentam KM/L nitidamente maior. Isso reforça que trânsito/parada explica parte do desperdício, ajudando a entender por que as linhas urbanas mais lentas ficam distantes da meta.</div></div>
+  <div class="cons-text">{consid_p6}</div></div>
   {footer(6)}
 </div>""")
 
@@ -484,6 +509,21 @@ for m in gfd.COMPLETARAM_30_DIAS:
                      f"<td>{m[2]}</td><td>{m[3]}</td><td>{fmt(m[4],3)}</td><td style='font-weight:700;'>{fmt(m[5],3)}</td>"
                      f"<td style='color:{cor};font-weight:800;'>{seta} {fmt(abs(delta),3)}</td></tr>")
 
+# Leitura dinamica do fechamento de 30 dias — evita citar motorista/numero fixo.
+_c30 = list(gfd.COMPLETARAM_30_DIAS)
+_acima = [m for m in _c30 if (m[5] - m[4]) >= 0]
+_abaixo = [m for m in _c30 if (m[5] - m[4]) < 0]
+if not _c30:
+    leitura_30dias = "Nenhum motorista completou o ciclo de 30 dias de acompanhamento nesta janela."
+elif _acima:
+    _best = max(_acima, key=lambda m: m[5] - m[4]); _d = _best[5] - _best[4]; _n = len(_abaixo)
+    if _n == 0:
+        leitura_30dias = f"Todos os {len(_c30)} motoristas fecharam o ciclo na meta ou acima — destaque para {_best[0].title()} (+{fmt(_d,3)}). Bom momento para encerrar os acompanhamentos e migrar o foco para novos casos."
+    else:
+        _pref = f"Os outros {_n} seguem" if _n > 1 else "O outro segue"
+        leitura_30dias = f"{_best[0].title()} fechou o ciclo acima da meta (+{fmt(_d,3)}). {_pref} abaixo da meta ao final dos 30 dias — candidatos naturais a nova tratativa em vez de simples encerramento do acompanhamento."
+else:
+    leitura_30dias = f"Os {len(_c30)} motoristas que completaram os 30 dias fecharam o ciclo abaixo da meta — candidatos naturais a nova tratativa em vez de simples encerramento do acompanhamento."
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 13 · Evolução Individual e Fechamento de Ciclo (30 dias)", "Base: diesel_acompanhamentos + diesel_acompanhamento_sessoes", "Motoristas c/ 30 dias", str(len(gfd.COMPLETARAM_30_DIAS)))}
   <div class="grid-2">
@@ -494,12 +534,12 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Motorista</th><th>Chapa</th><th>Instrutor</th><th>Início</th><th>Meta</th><th>Real</th><th>Evolução</th></tr></thead>
       <tbody>{rows_30dias.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Leitura</div>
-      <div class="cons-text">Ricardo de Oliveira fechou o ciclo acima da meta (+0,131). Os outros 3 seguem abaixo da meta ao final dos 30 dias — candidatos naturais a nova tratativa em vez de simples encerramento do acompanhamento.</div></div>
+      <div class="cons-text">{leitura_30dias}</div></div>
     </div></div>
   </div>
   <div class="card"><div class="card-title">Detalhe: os 10 mais distantes da meta — teve tratativa? quem acompanhou? resultado?</div><div class="card-body">
-    <table style="font-size:9.5px;"><thead><tr style="font-size:8.4px;"><th style="text-align:left;padding-left:10px;">Motorista</th><th>Instrutor</th><th>Status</th><th>KM/L Antes</th><th>KM/L Depois</th><th>Evolução</th></tr></thead>
-    <tbody>{rows_acomp.replace("<td", "<td style='padding:5px 6px;'").replace("padding-left:6px", "padding-left:10px")}</tbody></table>
+    <table style="font-size:8.4px;"><thead><tr style="font-size:8.4px;"><th style="text-align:left;padding-left:10px;">Motorista</th><th>Instrutor</th><th>Status</th><th>KM/L Antes</th><th>KM/L Depois</th><th>Evolução</th></tr></thead>
+    <tbody>{rows_acomp.replace("<td", "<td style='padding:2px 6px;'").replace("padding-left:6px", "padding-left:10px")}</tbody></table>
   </div></div>
   {footer(13)}
 </div>""")
@@ -519,6 +559,35 @@ for v in gfd.VEICULO_30_DIAS:
                          f"<td style='color:{cor};font-weight:800;'>{fmt(diff,3)}</td>"
                          f"<td style='text-align:left;font-size:7.6px;'>{interfere}</td></tr>")
 
+# Caixas e leitura dinamicas dos casos mais marcantes de efeito do veiculo (evita nomes fixos).
+_veic = list(gfd.VEICULO_30_DIAS)
+_veic_sorted = sorted(_veic, key=lambda v: abs(v[5] - v[6]), reverse=True)[:4]
+_boxes_veic = ""
+for _v in _veic_sorted:
+    _chapa, _td, _carro, _vez, _pctc, _kmlc, _kmlo, _no = _v
+    _nome = nomes_30dias.get(_chapa, _chapa).title()
+    _diff = _kmlc - _kmlo
+    if _diff > 0.05:
+        _interp = "Forte indício de efeito positivo do veículo."
+    elif _diff < -0.05:
+        _interp = "Fator provavelmente comportamental, não o veículo."
+    else:
+        _interp = "Diferença pequena, provável fator comportamental."
+    _sin = "a mais" if _diff >= 0 else "a menos"
+    _boxes_veic += (f'<div class="cons-box" style="margin-top:0;"><div class="cons-title">{_nome}</div>'
+                    f'<div class="cons-text" style="font-size:9.5px;">Carro {_carro} rende <b>{fmt(abs(_diff),3)} km/L</b> {_sin} '
+                    f'que os outros que usou. {_interp}</div></div>')
+if _veic:
+    _vp = max(_veic, key=lambda v: v[5] - v[6]); _vn = min(_veic, key=lambda v: v[5] - v[6])
+    _np = nomes_30dias.get(_vp[0], _vp[0]).title(); _dp = _vp[5] - _vp[6]
+    _nn = nomes_30dias.get(_vn[0], _vn[0]).title(); _dn = _vn[5] - _vn[6]
+    consid_p14 = (f"{_np} mostra a maior diferença positiva: +{fmt(_dp,3)} km/L no carro que mais usou ({_vp[2]}) "
+                  f"frente aos demais — indício de que o veículo (não só o motorista) explica parte do resultado. "
+                  f"Já {_nn} rende {fmt(abs(_dn),3)} km/L {'a mais' if _dn >= 0 else 'a menos'} no carro principal ({_vn[2]}), "
+                  f"o que aponta para fator {'do veículo' if _dn > 0.05 else 'comportamental'}. "
+                  f"Recomenda-se cruzar esta análise com a manutenção/idade dos veículos com maior efeito para confirmar a hipótese.")
+else:
+    consid_p14 = "Nenhum motorista com dados suficientes de carro principal x demais carros nesta janela de 30 dias."
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 14 · O Veículo Interfere no KM/L Durante os 30 Dias?", "Fonte: premiacao_diaria_atualizada — carro mais usado por cada motorista no ciclo de 30 dias", "Motoristas analisados", str(len(gfd.VEICULO_30_DIAS)))}
   <div class="card"><div class="card-title">Metodologia</div><div class="card-body">
@@ -529,17 +598,10 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <tbody>{rows_veiculo_30d.replace("padding-left:6px", "padding-left:10px").replace("font-size:7.6px", "font-size:10px")}</tbody></table>
   </div></div>
   <div class="grid-4" style="margin-top:8px;">
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Ricardo de Oliveira</div>
-    <div class="cons-text" style="font-size:9.5px;">Carro 242524 rende <b>+0,177 km/L</b> a mais que os outros que usou. Fechou o ciclo acima da meta.</div></div>
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Eduardo José Silva Chaves</div>
-    <div class="cons-text" style="font-size:9.5px;">Carro 222201 rende <b>-0,126 km/L</b> a menos. Fator provavelmente comportamental, não o veículo.</div></div>
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Marcos dos Santos Caitano</div>
-    <div class="cons-text" style="font-size:9.5px;">Maior diferença do grupo: <b>+0,368 km/L</b> no carro 222210. Forte indício de efeito do veículo.</div></div>
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">David Dias Perez</div>
-    <div class="cons-text" style="font-size:9.5px;">Carro 222207 rende <b>-0,074 km/L</b> a menos. Diferença pequena, provável fator comportamental.</div></div>
+    {_boxes_veic}
   </div>
   <div class="cons-box"><div class="cons-title">Considerações</div>
-  <div class="cons-text">Marcos Dos Santos Caitano mostra a maior diferença: +0,368 km/L no carro que mais usou (222210) frente aos demais — forte indício de que o veículo (não só o motorista) explica parte do resultado. Ricardo De Oliveira também rende mais no seu carro principal (+0,177). Já Eduardo José Silva Chaves e David Dias Perez rendem levemente pior no carro que mais usam, sugerindo que para eles o fator determinante é comportamental, não o veículo. Recomenda-se cruzar esta análise com a manutenção/idade dos veículos 242524 e 222210 para confirmar a hipótese.</div></div>
+  <div class="cons-text">{consid_p14}</div></div>
   {footer(14)}
 </div>""")
 

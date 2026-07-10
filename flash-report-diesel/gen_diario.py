@@ -28,7 +28,7 @@ TK = os.environ["SUPABASE_TRANSNET_KEY"]
 BU = os.environ.get("SUPABASE_BCNT_URL", "").rstrip("/")
 BK = os.environ.get("SUPABASE_BCNT_KEY", "")
 TG = os.environ["TELEGRAM_BOT_TOKEN"]
-CID = os.environ["TELEGRAM_CHAT_ID"]
+CHATS = [c.strip() for c in os.environ["TELEGRAM_CHAT_ID"].split(",") if c.strip()]
 API = f"https://api.telegram.org/bot{TG}"
 
 TEAL = "#0e7c7b"; PURP = "#7c3aed"; DARK = "#0f172a"; RED = "#c0392b"
@@ -403,21 +403,23 @@ def montar_msg(o):
 
 
 def enviar(msg, fotos):
-    r = requests.post(f"{API}/sendMessage", data={"chat_id": CID, "text": msg, "parse_mode": "Markdown"}, timeout=60)
-    print("sendMessage:", r.json().get("ok"), r.json().get("description", ""))
-    for path, cap in fotos:
-        if not os.path.exists(path):
-            continue
-        with open(path, "rb") as fh:
-            r = requests.post(f"{API}/sendPhoto", data={"chat_id": CID, "caption": cap}, files={"photo": fh}, timeout=120)
-        print("sendPhoto", os.path.basename(path), r.json().get("ok"), r.json().get("description", ""))
+    for cid in CHATS:
+        r = requests.post(f"{API}/sendMessage", data={"chat_id": cid, "text": msg, "parse_mode": "Markdown"}, timeout=60)
+        print(f"sendMessage[{cid}]:", r.json().get("ok"), r.json().get("description", ""))
+        for path, cap in fotos:
+            if not os.path.exists(path):
+                continue
+            with open(path, "rb") as fh:
+                r = requests.post(f"{API}/sendPhoto", data={"chat_id": cid, "caption": cap}, files={"photo": fh}, timeout=120)
+            print(f"sendPhoto[{cid}]", os.path.basename(path), r.json().get("ok"), r.json().get("description", ""))
 
 
 def main():
     o = computar(carregar())
     if o is None:
-        requests.post(f"{API}/sendMessage",
-                      data={"chat_id": CID, "text": "🚛 Diesel Diário: sem dados consolidados suficientes hoje."}, timeout=60)
+        for cid in CHATS:
+            requests.post(f"{API}/sendMessage",
+                          data={"chat_id": cid, "text": "🚛 Diesel Diário: sem dados consolidados suficientes hoje."}, timeout=60)
         print("sem dados consolidados"); return
     render_slide(o, "diario_slide.png")
     fotos = [("diario_slide.png", f"Diesel Diário — {data_br(o['REF'])}")]

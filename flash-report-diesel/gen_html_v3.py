@@ -546,10 +546,13 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 
 # ================= PAGINA 13b: O CARRO INTERFERE NO KM/L DENTRO DOS 30 DIAS? =================
 nomes_30dias = {m[1]: m[0] for m in gfd.COMPLETARAM_30_DIAS}
+def _veic_nome(_ch):
+    _nm = nomes_30dias.get(_ch)
+    return _nm.title() if _nm else f"Motorista {_ch}"
 rows_veiculo_30d = ""
 for v in gfd.VEICULO_30_DIAS:
     chapa, total_dias, carro, vezes, pctc, kml_c, kml_o, n_o = v
-    nome = nomes_30dias.get(chapa, chapa).title()
+    nome = _veic_nome(chapa)
     diff = kml_c - kml_o
     cor = "#16a34a" if diff >= 0 else "#dc2626"
     interfere = "Sim — carro ajuda" if diff > 0.05 else ("Sim — carro atrapalha" if diff < -0.05 else "Pouca diferença")
@@ -565,7 +568,7 @@ _veic_sorted = sorted(_veic, key=lambda v: abs(v[5] - v[6]), reverse=True)[:4]
 _boxes_veic = ""
 for _v in _veic_sorted:
     _chapa, _td, _carro, _vez, _pctc, _kmlc, _kmlo, _no = _v
-    _nome = nomes_30dias.get(_chapa, _chapa).title()
+    _nome = _veic_nome(_chapa)
     _diff = _kmlc - _kmlo
     if _diff > 0.05:
         _interp = "Forte indício de efeito positivo do veículo."
@@ -579,8 +582,8 @@ for _v in _veic_sorted:
                     f'que os outros que usou. {_interp}</div></div>')
 if _veic:
     _vp = max(_veic, key=lambda v: v[5] - v[6]); _vn = min(_veic, key=lambda v: v[5] - v[6])
-    _np = nomes_30dias.get(_vp[0], _vp[0]).title(); _dp = _vp[5] - _vp[6]
-    _nn = nomes_30dias.get(_vn[0], _vn[0]).title(); _dn = _vn[5] - _vn[6]
+    _np = _veic_nome(_vp[0]); _dp = _vp[5] - _vp[6]
+    _nn = _veic_nome(_vn[0]); _dn = _vn[5] - _vn[6]
     consid_p14 = (f"{_np} mostra a maior diferença positiva: +{fmt(_dp,3)} km/L no carro que mais usou ({_vp[2]}) "
                   f"frente aos demais — indício de que o veículo (não só o motorista) explica parte do resultado. "
                   f"Já {_nn} rende {fmt(abs(_dn),3)} km/L {'a mais' if _dn >= 0 else 'a menos'} no carro principal ({_vn[2]}), "

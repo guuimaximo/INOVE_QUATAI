@@ -1,0 +1,17 @@
+# saidas geradas
+saida/
+dados/
+*.png
+*.pdf
+
+# segredos / config local (NUNCA subir)
+.env
+_telegram.json
+_supabase.json
+_supabase_service.key
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/

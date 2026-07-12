@@ -1,0 +1,10 @@
+saida/
+dados/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+_telegram.json
+_supabase.json
+_supabase_service.key

@@ -1,0 +1,52 @@
+name: Bot Passageiros · Flash Report Diário
+
+on:
+  schedule:
+    - cron: "0 13 * * *"    # 13:00 UTC = 10:00 no horário de Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot-flash-report-passageiros
+  cancel-in-progress: false
+
+jobs:
+  gerar-enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: flash-report-passageiros/requirements.txt
+
+      - name: Install Python deps
+        working-directory: flash-report-passageiros
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Gerar e enviar Flash Report Diario (Telegram)
+        working-directory: flash-report-passageiros
+        env:
+          # Base Transnet (CSV Athena/Transnet importado) — onde estão as tabelas de passageiros
+          SUPABASE_TRANSNET_URL: ${{ secrets.SUPABASE_TRANSNET_URL }}
+          SUPABASE_TRANSNET_KEY: ${{ secrets.SUPABASE_TRANSNET_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python flash_diario.py
+
+      - name: Sobe artefato de apoio (imagens)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flash-report-passageiros
+          path: flash-report-passageiros/saida/*.png
+          if-no-files-found: ignore
+          retention-days: 14

@@ -319,41 +319,67 @@ function NovoAtestadoModal({ open, onClose, onSave, saving, funcionarios }) {
 
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
           <Field label="Colaborador" hint="Busque por nome, chapa ou função.">
-            <div className="relative">
-              <input
-                className={`${FIELD_INPUT} w-full`}
-                value={buscaFunc}
-                placeholder="Buscar por nome ou chapa"
-                onChange={(event) => {
-                  setBuscaFunc(event.target.value);
-                  setFuncionario(null);
-                  setShowLista(true);
-                }}
-                onFocus={() => setShowLista(true)}
-              />
-              {showLista ? (
-                <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-                  {funcionariosFiltrados.length ? (
-                    funcionariosFiltrados.map((f) => (
-                      <button
-                        key={f.id_funcionario || f.nr_cracha || f.nm_funcionario}
-                        type="button"
-                        onClick={() => selecionarFuncionario(f)}
-                        className="flex w-full flex-col border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50"
-                      >
-                        <span className="text-sm font-bold text-slate-900">{f.nm_funcionario}</span>
-                        <span className="text-xs text-slate-500">
-                          {f.nr_cracha ? `Chapa ${f.nr_cracha}` : "Sem chapa"}
-                          {f.nm_funcao ? ` · ${f.nm_funcao}` : ""}
-                        </span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-3 py-3 text-sm text-slate-400">Nenhum colaborador encontrado.</div>
-                  )}
+            {funcionario ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold text-slate-900">{funcionario.nm_funcionario}</div>
+                  <div className="truncate text-xs text-slate-500">
+                    {funcionario.nr_cracha ? `Chapa ${funcionario.nr_cracha}` : "Sem chapa"}
+                    {funcionario.nm_funcao ? ` · ${funcionario.nm_funcao}` : ""}
+                  </div>
                 </div>
-              ) : null}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFuncionario(null);
+                    setBuscaFunc("");
+                    setShowLista(false);
+                  }}
+                  className="shrink-0 rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                >
+                  Trocar
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  className={`${FIELD_INPUT} w-full`}
+                  value={buscaFunc}
+                  placeholder="Buscar por nome ou chapa"
+                  onChange={(event) => {
+                    setBuscaFunc(event.target.value);
+                    setShowLista(true);
+                  }}
+                  onFocus={() => setShowLista(true)}
+                  onBlur={() => window.setTimeout(() => setShowLista(false), 150)}
+                />
+                {showLista ? (
+                  <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                    {funcionariosFiltrados.length ? (
+                      funcionariosFiltrados.map((f, index) => (
+                        <button
+                          key={f.id_funcionario || f.nr_cracha || `${f.nm_funcionario}-${index}`}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            selecionarFuncionario(f);
+                          }}
+                          className="flex w-full flex-col border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50"
+                        >
+                          <span className="text-sm font-bold text-slate-900">{f.nm_funcionario}</span>
+                          <span className="text-xs text-slate-500">
+                            {f.nr_cracha ? `Chapa ${f.nr_cracha}` : "Sem chapa"}
+                            {f.nm_funcao ? ` · ${f.nm_funcao}` : ""}
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-3 text-sm text-slate-400">Nenhum colaborador encontrado.</div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )}
           </Field>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

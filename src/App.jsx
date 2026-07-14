@@ -84,6 +84,7 @@ const NiveisAcesso = lazy(() => import("./pages/configuracoes/NiveisAcesso"));
 const ControleDados = lazy(() => import("./pages/configuracoes/ControleDados"));
 const Funcionarios = lazy(() => import("./pages/pessoas/Funcionarios"));
 const Ferias = lazy(() => import("./pages/pessoas/Ferias"));
+const Atestados = lazy(() => import("./pages/pessoas/Atestados"));
 const OrganogramaCanvas = lazy(() => import("./pages/pessoas/OrganogramaCanvas"));
 const VagasCentral = lazy(() => import("./pages/pessoas/VagasCentral"));
 
@@ -391,6 +392,7 @@ export default function App() {
               <Route path="/usuarios" element={<Usuarios />} />
               <Route path="/funcionarios" element={<Funcionarios />} />
               <Route path="/ferias" element={<Ferias />} />
+              <Route path="/atestados" element={<Atestados />} />
               <Route path="/organograma" element={<OrganogramaCanvas />} />
               <Route path="/vagas" element={<VagasCentral />} />
               <Route path="/organograma-canvas" element={<Navigate to="/organograma" replace />} />

@@ -16,8 +16,11 @@ MESREF = getattr(gfd, "MES_REF_LABEL", "Junho de 2026")     # ex.: "Julho/2026"
 MESANT = getattr(gfd, "MES_ANT_LABEL", "Maio/2026")         # ex.: "Junho/2026"
 MESREF_NOME, MESANT_NOME = MESREF.split("/")[0], MESANT.split("/")[0]
 PERIODO = getattr(gfd, "PERIODO_LABEL", "01/06 a 30/06/2026")
+_M3 = getattr(gfd, "_MES3", ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"])
+MES3REF = _M3[getattr(gfd, "MES_REF_MM", 6) - 1]   # "Jul"
+MES3ANT = _M3[getattr(gfd, "MES_ANT_MM", 5) - 1]   # "Jun"
 
-TOTAL_PAGINAS = 20
+TOTAL_PAGINAS = 19
 
 CSS = """
 * { box-sizing: border-box; }
@@ -76,7 +79,8 @@ periodo_label = f"{PERIODO} · {MESREF} · comparações vs {MESANT}"
 
 pages = []
 
-# ---- calendario de visitas noturnas (Julho/2026) ----
+# [COWORK] CALENDARIO NOTURNO — ajuste ano/mes e as datas em _visita_label (ver COWORK_FLASH.md)
+# ---- calendario de visitas noturnas ----
 import calendar as _cal
 _cal_c = _cal.Calendar(firstweekday=6)
 _weeks_jul = _cal_c.monthdayscalendar(2026, 7)
@@ -129,7 +133,9 @@ pages.append(f"""<div class="page" style="background:linear-gradient(135deg,#0f1
 </div>""")
 
 # ================= PAGINA 1: HISTORICO 6+ MESES + RESUMO =================
-var_jun = (gfd.KML_HISTORICO[-2][1] - gfd.KML_HISTORICO[-3][1]) / gfd.KML_HISTORICO[-3][1] * 100
+var_jun = (gfd.KML_HISTORICO[-1][1] - gfd.KML_HISTORICO[-2][1]) / gfd.KML_HISTORICO[-2][1] * 100
+_telem_key = gfd._MES3[gfd.MES_REF_MM - 1].lower()
+_telem_val = gfd.KML_MENSAL_TELEMETRIA.get(_telem_key, list(gfd.KML_MENSAL_TELEMETRIA.values())[-1])
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 2 · KM/L Mensal — Histórico 7 Meses (Transnet oficial)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
@@ -138,8 +144,8 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     </div></div>
     <div class="card"><div class="card-title">Resumo Executivo</div><div class="card-body">
       <div class="grid-2">
-        <div class="metric"><div class="lbl">KM/L Junho (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-2][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-3][1],3)} em maio ({pct(var_jun)})</div></div>
-        <div class="metric"><div class="lbl">KM/L Junho (Telemetria)</div><div class="val">{fmt(gfd.KML_MENSAL_TELEMETRIA['jun'],3)}</div><div class="aux">Fonte de comparação</div></div>
+        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-1][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-2][1],3)} em {MESANT_NOME.lower()} ({pct(var_jun)})</div></div>
+        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Telemetria)</div><div class="val">{fmt(_telem_val,3)}</div><div class="aux">Fonte de comparação</div></div>
       </div>
       <div class="metric" style="margin-top:8px;"><div class="lbl">Meta operacional</div><div class="val">{fmt(gfd.META,2)} km/L</div></div>
       <div class="metric" style="margin-top:8px;"><div class="lbl">Melhor mês do histórico</div><div class="val">{max(gfd.KML_HISTORICO,key=lambda m:m[1])[0]}</div><div class="aux">{fmt(max(gfd.KML_HISTORICO,key=lambda m:m[1])[1],3)} km/L</div></div>
@@ -167,8 +173,8 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="chart-wrap"><img src="v3_cluster.png"/></div>
   </div></div>
   <div class="grid-2">
-    <div class="card"><div class="card-title">Detalhamento por cluster (Maio → Junho)</div><div class="card-body">
-      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Cluster</th><th>KM/L Maio</th><th>KM/L Junho</th><th>Variação</th></tr></thead>
+    <div class="card"><div class="card-title">Detalhamento por cluster ({MESANT_NOME} → {MESREF_NOME})</div><div class="card-body">
+      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Cluster</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Variação</th></tr></thead>
       <tbody>{rows_cluster_transnet.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
     </div></div>
     <div class="card"><div class="card-title">Leitura por cluster</div><div class="card-body">
@@ -202,14 +208,14 @@ for l in sorted(gfd.LINHA_DESPERDICIO, key=lambda l: -l[5]):
                              f"<td>{km:,}".replace(",",".") + f"</td><td>{fmt(lit,2)} L</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 4 · Análise por Linha — KM/L, Meta e Desperdício (Jun vs Mai)", "Fonte: premiacao_diaria_atualizada (Telemetria)", "Linhas monitoradas", str(len(gfd.LINHA_DESPERDICIO)))}
+  {page_header("Página 4 · Análise por Linha — KM/L, Meta e Desperdício ({MES3REF} vs {MES3ANT})", "Fonte: premiacao_diaria_atualizada (Telemetria)", "Linhas monitoradas", str(len(gfd.LINHA_DESPERDICIO)))}
   <div class="grid-4">
     <div class="metric"><div class="lbl">KM/L Mês Referência</div><div class="val">{fmt(kml_ref_pond,2)}</div></div>
     <div class="metric"><div class="lbl">KM/L Mês Comparação</div><div class="val">{fmt(kml_comp_medio,2)}</div></div>
     <div class="metric"><div class="lbl">Variação vs comparação</div><div class="val" style="color:{'#16a34a' if var_geral>=0 else '#dc2626'};">{pct(var_geral)}</div></div>
     <div class="metric"><div class="lbl">Desperdício Total (Meta)</div><div class="val" style="color:#dc2626;">{fmt(desperdicio_total,2)} L</div></div>
   </div>
-  <div class="card"><div class="card-title">Detalhamento por linha (Junho = referência, Maio = comparação)</div><div class="card-body">
+  <div class="card"><div class="card-title">Detalhamento por linha ({MESREF_NOME} = referência, {MESANT_NOME} = comparação)</div><div class="card-body">
     <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Linha</th><th>KM/L Comp.</th><th>KM/L Ref.</th><th>Var. %</th><th>Meta</th><th>Desperdício</th><th>Km</th><th>Comb.</th></tr></thead>
     <tbody>{rows_linha_completa.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
   </div></div>
@@ -236,18 +242,38 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 </div>""")
 
 # ================= PAGINA 5b: VELOCIDADE MEDIA DIARIA x KM/L (correlacao) =================
+# Correlacao dinamica (Pearson) velocidade x KM/L diario — evita texto fixo desatualizado.
+_vk = list(gfd.KML_VELOCIDADE_DIARIO)
+def _pearson(xs, ys):
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    mx = sum(xs) / n; my = sum(ys) / n
+    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    sxx = sum((x - mx) ** 2 for x in xs); syy = sum((y - my) ** 2 for y in ys)
+    if sxx == 0 or syy == 0:
+        return 0.0
+    return sxy / ((sxx * syy) ** 0.5)
+_vels = [d[2] for d in _vk]; _kmls = [d[1] for d in _vk]
+_r = _pearson(_vels, _kmls); _absr = abs(_r)
+_forca = "forte" if _absr >= 0.7 else ("moderada" if _absr >= 0.4 else ("fraca" if _absr >= 0.2 else "muito fraca"))
+_sinal = "positiva" if _r >= 0 else "negativa"
+_tend = "maior" if _r >= 0 else "menor"
+_vel_med = (sum(_vels) / len(_vels)) if _vels else 0
+if not _vk:
+    consid_p6 = "Sem dados diários suficientes de velocidade e KM/L nesta janela para avaliar a correlação."
+else:
+    consid_p6 = (f"Correlação {_forca} e {_sinal} entre velocidade média diária e KM/L (r = {fmt(_r,2)}): "
+                 f"os dias com velocidade média mais alta (acima de ~{fmt(_vel_med,0)} km/h, tipicamente com menos trânsito) "
+                 f"tendem a apresentar KM/L {_tend}. Isso ajuda a entender por que as linhas urbanas mais lentas ficam distantes da meta"
+                 + (", e reforça que trânsito/parada explica parte do desperdício." if _r >= 0.2 else "; ainda assim, o efeito observado nesta janela é pequeno."))
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 6 · Velocidade Média Diária x KM/L — Correlação", "Fonte: premiacao_diaria_atualizada (Telemetria) — Junho/2026 (30 dias)", "Dias analisados", str(len(gfd.KML_VELOCIDADE_DIARIO)))}
-  <div class="grid-2">
-    <div class="card"><div class="card-title">KM/L diário x Velocidade média diária</div><div class="card-body">
-      <div class="chart-wrap chart-wrap-tall"><img src="v3_vel_kml_diario.png"/></div>
-    </div></div>
-    <div class="card"><div class="card-title">Dispersão e correlação</div><div class="card-body">
-      <div class="chart-wrap chart-wrap-tall"><img src="v3_vel_kml_dispersao.png"/></div>
-    </div></div>
-  </div>
+  {page_header("Página 6 · Velocidade Média Diária x KM/L — Correlação", f"Fonte: premiacao_diaria_atualizada (Telemetria) — {PERIODO}", "Dias analisados", str(len(gfd.KML_VELOCIDADE_DIARIO)))}
+  <div class="card"><div class="card-title">KM/L diário x Velocidade média diária</div><div class="card-body">
+    <div class="chart-wrap chart-wrap-sm"><img src="v3_vel_kml_diario.png"/></div>
+  </div></div>
   <div class="cons-box"><div class="cons-title">Considerações</div>
-  <div class="cons-text">Correlação forte e positiva: dias com velocidade média mais alta (acima de 18 km/h, tipicamente fins de semana com menos trânsito) apresentam KM/L nitidamente maior — os picos de 07/06, 14/06, 21/06 e 28/06 coincidem com os melhores KM/L do mês. Isso reforça que trânsito/parada explica parte do desperdício, ajudando a entender por que linhas urbanas mais lentas (07TR, 20TR, 04TR) ficam distantes da meta.</div></div>
+  <div class="cons-text">{consid_p6}</div></div>
   {footer(6)}
 </div>""")
 
@@ -323,7 +349,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="card"><div class="card-title">Top 10 — Melhor desempenho (Junho)</div><div class="card-body">
       <div class="chart-wrap"><img src="v3_melhores.png"/></div>
     </div></div>
-    <div class="card"><div class="card-title">Sinal de Alerta — maior queda Maio→Junho</div><div class="card-body">
+    <div class="card"><div class="card-title">Sinal de Alerta — maior queda {MESANT_NOME}→{MESREF_NOME}</div><div class="card-body">
       <div class="chart-wrap"><img src="v3_alerta.png"/></div>
     </div></div>
   </div>
@@ -333,7 +359,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <tbody>{rows_melhores}</tbody></table>
     </div></div>
     <div class="card"><div class="card-title">Sinal de Alerta — a queda foi por troca de linha/carro ou comportamento?</div><div class="card-body">
-      <table class="tbl-compact"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>Linha Mai→Jun</th><th>Carro Mai→Jun</th><th>Causa provável</th></tr></thead>
+      <table class="tbl-compact"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>Linha {MES3ANT}→{MES3REF}</th><th>Carro {MES3ANT}→{MES3REF}</th><th>Causa provável</th></tr></thead>
       <tbody>{rows_alerta_causa}</tbody></table>
     </div></div>
   </div>
@@ -355,9 +381,9 @@ for m in gfd.MOTORISTAS_SEMANA:
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 9 · Destaque Positivo e Motoristas da Semana", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
-    <div class="card"><div class="card-title">Destaque Positivo — maior evolução Maio→Junho</div><div class="card-body">
+    <div class="card"><div class="card-title">Destaque Positivo — maior evolução {MESANT_NOME}→{MESREF_NOME}</div><div class="card-body">
       <div class="chart-wrap chart-wrap-sm"><img src="v3_destaque.png"/></div>
-      <table class="tbl-compact" style="margin-top:5px;"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>KM/L Maio</th><th>KM/L Junho</th><th>Variação</th></tr></thead>
+      <table class="tbl-compact" style="margin-top:5px;"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Variação</th></tr></thead>
       <tbody>{rows_destaque}</tbody></table>
     </div></div>
     <div class="card"><div class="card-title">Motoristas da Semana — foco de acompanhamento ({SEM})</div><div class="card-body">
@@ -483,6 +509,21 @@ for m in gfd.COMPLETARAM_30_DIAS:
                      f"<td>{m[2]}</td><td>{m[3]}</td><td>{fmt(m[4],3)}</td><td style='font-weight:700;'>{fmt(m[5],3)}</td>"
                      f"<td style='color:{cor};font-weight:800;'>{seta} {fmt(abs(delta),3)}</td></tr>")
 
+# Leitura dinamica do fechamento de 30 dias — evita citar motorista/numero fixo.
+_c30 = list(gfd.COMPLETARAM_30_DIAS)
+_acima = [m for m in _c30 if (m[5] - m[4]) >= 0]
+_abaixo = [m for m in _c30 if (m[5] - m[4]) < 0]
+if not _c30:
+    leitura_30dias = "Nenhum motorista completou o ciclo de 30 dias de acompanhamento nesta janela."
+elif _acima:
+    _best = max(_acima, key=lambda m: m[5] - m[4]); _d = _best[5] - _best[4]; _n = len(_abaixo)
+    if _n == 0:
+        leitura_30dias = f"Todos os {len(_c30)} motoristas fecharam o ciclo na meta ou acima — destaque para {_best[0].title()} (+{fmt(_d,3)}). Bom momento para encerrar os acompanhamentos e migrar o foco para novos casos."
+    else:
+        _pref = f"Os outros {_n} seguem" if _n > 1 else "O outro segue"
+        leitura_30dias = f"{_best[0].title()} fechou o ciclo acima da meta (+{fmt(_d,3)}). {_pref} abaixo da meta ao final dos 30 dias — candidatos naturais a nova tratativa em vez de simples encerramento do acompanhamento."
+else:
+    leitura_30dias = f"Os {len(_c30)} motoristas que completaram os 30 dias fecharam o ciclo abaixo da meta — candidatos naturais a nova tratativa em vez de simples encerramento do acompanhamento."
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 13 · Evolução Individual e Fechamento de Ciclo (30 dias)", "Base: diesel_acompanhamentos + diesel_acompanhamento_sessoes", "Motoristas c/ 30 dias", str(len(gfd.COMPLETARAM_30_DIAS)))}
   <div class="grid-2">
@@ -493,22 +534,25 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Motorista</th><th>Chapa</th><th>Instrutor</th><th>Início</th><th>Meta</th><th>Real</th><th>Evolução</th></tr></thead>
       <tbody>{rows_30dias.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Leitura</div>
-      <div class="cons-text">Ricardo de Oliveira fechou o ciclo acima da meta (+0,131). Os outros 3 seguem abaixo da meta ao final dos 30 dias — candidatos naturais a nova tratativa em vez de simples encerramento do acompanhamento.</div></div>
+      <div class="cons-text">{leitura_30dias}</div></div>
     </div></div>
   </div>
   <div class="card"><div class="card-title">Detalhe: os 10 mais distantes da meta — teve tratativa? quem acompanhou? resultado?</div><div class="card-body">
-    <table style="font-size:9.5px;"><thead><tr style="font-size:8.4px;"><th style="text-align:left;padding-left:10px;">Motorista</th><th>Instrutor</th><th>Status</th><th>KM/L Antes</th><th>KM/L Depois</th><th>Evolução</th></tr></thead>
-    <tbody>{rows_acomp.replace("<td", "<td style='padding:5px 6px;'").replace("padding-left:6px", "padding-left:10px")}</tbody></table>
+    <table style="font-size:8.4px;"><thead><tr style="font-size:8.4px;"><th style="text-align:left;padding-left:10px;">Motorista</th><th>Instrutor</th><th>Status</th><th>KM/L Antes</th><th>KM/L Depois</th><th>Evolução</th></tr></thead>
+    <tbody>{rows_acomp.replace("<td", "<td style='padding:2px 6px;'").replace("padding-left:6px", "padding-left:10px")}</tbody></table>
   </div></div>
   {footer(13)}
 </div>""")
 
 # ================= PAGINA 13b: O CARRO INTERFERE NO KM/L DENTRO DOS 30 DIAS? =================
 nomes_30dias = {m[1]: m[0] for m in gfd.COMPLETARAM_30_DIAS}
+def _veic_nome(_ch):
+    _nm = nomes_30dias.get(_ch)
+    return _nm.title() if _nm else f"Motorista {_ch}"
 rows_veiculo_30d = ""
 for v in gfd.VEICULO_30_DIAS:
     chapa, total_dias, carro, vezes, pctc, kml_c, kml_o, n_o = v
-    nome = nomes_30dias.get(chapa, chapa).title()
+    nome = _veic_nome(chapa)
     diff = kml_c - kml_o
     cor = "#16a34a" if diff >= 0 else "#dc2626"
     interfere = "Sim — carro ajuda" if diff > 0.05 else ("Sim — carro atrapalha" if diff < -0.05 else "Pouca diferença")
@@ -518,6 +562,35 @@ for v in gfd.VEICULO_30_DIAS:
                          f"<td style='color:{cor};font-weight:800;'>{fmt(diff,3)}</td>"
                          f"<td style='text-align:left;font-size:7.6px;'>{interfere}</td></tr>")
 
+# Caixas e leitura dinamicas dos casos mais marcantes de efeito do veiculo (evita nomes fixos).
+_veic = list(gfd.VEICULO_30_DIAS)
+_veic_sorted = sorted(_veic, key=lambda v: abs(v[5] - v[6]), reverse=True)[:4]
+_boxes_veic = ""
+for _v in _veic_sorted:
+    _chapa, _td, _carro, _vez, _pctc, _kmlc, _kmlo, _no = _v
+    _nome = _veic_nome(_chapa)
+    _diff = _kmlc - _kmlo
+    if _diff > 0.05:
+        _interp = "Forte indício de efeito positivo do veículo."
+    elif _diff < -0.05:
+        _interp = "Fator provavelmente comportamental, não o veículo."
+    else:
+        _interp = "Diferença pequena, provável fator comportamental."
+    _sin = "a mais" if _diff >= 0 else "a menos"
+    _boxes_veic += (f'<div class="cons-box" style="margin-top:0;"><div class="cons-title">{_nome}</div>'
+                    f'<div class="cons-text" style="font-size:9.5px;">Carro {_carro} rende <b>{fmt(abs(_diff),3)} km/L</b> {_sin} '
+                    f'que os outros que usou. {_interp}</div></div>')
+if _veic:
+    _vp = max(_veic, key=lambda v: v[5] - v[6]); _vn = min(_veic, key=lambda v: v[5] - v[6])
+    _np = _veic_nome(_vp[0]); _dp = _vp[5] - _vp[6]
+    _nn = _veic_nome(_vn[0]); _dn = _vn[5] - _vn[6]
+    consid_p14 = (f"{_np} mostra a maior diferença positiva: +{fmt(_dp,3)} km/L no carro que mais usou ({_vp[2]}) "
+                  f"frente aos demais — indício de que o veículo (não só o motorista) explica parte do resultado. "
+                  f"Já {_nn} rende {fmt(abs(_dn),3)} km/L {'a mais' if _dn >= 0 else 'a menos'} no carro principal ({_vn[2]}), "
+                  f"o que aponta para fator {'do veículo' if _dn > 0.05 else 'comportamental'}. "
+                  f"Recomenda-se cruzar esta análise com a manutenção/idade dos veículos com maior efeito para confirmar a hipótese.")
+else:
+    consid_p14 = "Nenhum motorista com dados suficientes de carro principal x demais carros nesta janela de 30 dias."
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 14 · O Veículo Interfere no KM/L Durante os 30 Dias?", "Fonte: premiacao_diaria_atualizada — carro mais usado por cada motorista no ciclo de 30 dias", "Motoristas analisados", str(len(gfd.VEICULO_30_DIAS)))}
   <div class="card"><div class="card-title">Metodologia</div><div class="card-body">
@@ -528,17 +601,10 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <tbody>{rows_veiculo_30d.replace("padding-left:6px", "padding-left:10px").replace("font-size:7.6px", "font-size:10px")}</tbody></table>
   </div></div>
   <div class="grid-4" style="margin-top:8px;">
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Ricardo de Oliveira</div>
-    <div class="cons-text" style="font-size:9.5px;">Carro 242524 rende <b>+0,177 km/L</b> a mais que os outros que usou. Fechou o ciclo acima da meta.</div></div>
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Eduardo José Silva Chaves</div>
-    <div class="cons-text" style="font-size:9.5px;">Carro 222201 rende <b>-0,126 km/L</b> a menos. Fator provavelmente comportamental, não o veículo.</div></div>
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Marcos dos Santos Caitano</div>
-    <div class="cons-text" style="font-size:9.5px;">Maior diferença do grupo: <b>+0,368 km/L</b> no carro 222210. Forte indício de efeito do veículo.</div></div>
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">David Dias Perez</div>
-    <div class="cons-text" style="font-size:9.5px;">Carro 222207 rende <b>-0,074 km/L</b> a menos. Diferença pequena, provável fator comportamental.</div></div>
+    {_boxes_veic}
   </div>
   <div class="cons-box"><div class="cons-title">Considerações</div>
-  <div class="cons-text">Marcos Dos Santos Caitano mostra a maior diferença: +0,368 km/L no carro que mais usou (222210) frente aos demais — forte indício de que o veículo (não só o motorista) explica parte do resultado. Ricardo De Oliveira também rende mais no seu carro principal (+0,177). Já Eduardo José Silva Chaves e David Dias Perez rendem levemente pior no carro que mais usam, sugerindo que para eles o fator determinante é comportamental, não o veículo. Recomenda-se cruzar esta análise com a manutenção/idade dos veículos 242524 e 222210 para confirmar a hipótese.</div></div>
+  <div class="cons-text">{consid_p14}</div></div>
   {footer(14)}
 </div>""")
 
@@ -595,38 +661,15 @@ pages.append(f"""<div class="page-break"></div><div class="page">
   {footer(16)}
 </div>""")
 
-# ================= PAGINA 14b: ADERENCIA DA FROTA (media da empresa, por dia) =================
-rows_aderencia_carros = ""
-for a in gfd.ADERENCIA_CARROS:
-    veic, dias, pctad = a
-    cor = "#dc2626" if pctad < 30 else "#e0a800"
-    rows_aderencia_carros += (f"<tr><td style='font-weight:bold;text-align:left;padding-left:6px;'>{veic}</td>"
-                        f"<td>{dias} / 30 dias</td>"
-                        f"<td style='font-weight:800;color:{cor};'>{fmt(pctad,1)}%</td></tr>")
+# ================= PAGINA ADERENCIA — REMOVIDA POR ENQUANTO (regra em revisao) =================
+# A pagina de Aderencia da Frota foi tirada temporariamente enquanto revisamos a regra
+# (dias sem dado / frota / fins de semana). Reintroduzir depois de acertar a metodologia.
 
+# [COWORK] PAGINA NOTURNA (17) — dados MANUAIS: ultima visita, descricao, proxima visita e FOTOS.
+# Peca ao usuario e atualize aqui + embuta as fotos anexadas. Ver COWORK_FLASH.md.
+# ================= PAGINA 17: ACOMPANHAMENTO NOTURNO =================
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 17 · Aderência da Frota — Média da Empresa", "Fonte: CSV Athena (indicadores_carro_quatai) — % da frota (111 veículos) com dado válido por dia", "Média do mês (Junho)", f"{fmt(gfd.ADERENCIA_MEDIA_EMPRESA,1)}%")}
-  <div class="card"><div class="card-title">Aderência diária da frota inteira</div><div class="card-body">
-    <div class="chart-wrap chart-wrap-md"><img src="v3_aderencia_empresa.png"/></div>
-  </div></div>
-  <div class="grid-2">
-    <div class="card"><div class="card-title">Piores carros individuais (mín. aderência no período)</div><div class="card-body">
-      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Carro</th><th>Dias com dado</th><th>% Aderência</th></tr></thead>
-      <tbody>{rows_aderencia_carros.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
-    </div></div>
-    <div class="card"><div class="card-title">Leitura</div><div class="card-body">
-      <div class="cons-box" style="margin-top:0;"><div class="cons-title">Padrão semanal</div>
-      <div class="cons-text">A aderência despenca todo fim de semana (sábados/domingos ficam entre 28% e 34%, contra 88-95% em dias úteis) — isso é esperado pela operação reduzida, mas deve ser considerado ao interpretar qualquer KM/L de fim de semana isoladamente.</div></div>
-      <div class="cons-box"><div class="cons-title">Casos de falha de captação</div>
-      <div class="cons-text">Fora do padrão semanal, os carros 222424 e W555 têm aderência quase nula (apenas 3 dias com dado em 30) — isso não é comportamento do motorista, é falha de captação que deveria ser tratada pela equipe de TI/Transnet antes de qualquer decisão sobre esses veículos.</div></div>
-    </div></div>
-  </div>
-  {footer(17)}
-</div>""")
-
-# ================= PAGINA 12: ACOMPANHAMENTO NOTURNO (placeholder) =================
-pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 18 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "06/07")}
+  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "17/07")}
   <div class="grid-2">
     <div class="card"><div class="card-title">Calendário de visitas — Julho/2026</div><div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
@@ -634,32 +677,35 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Programação</div>
       <div class="cons-text">Três visitas noturnas programadas para julho — 06/07, 17/07 e 31/07 — mantendo a cadência mensal iniciada em junho. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
-    <div class="card"><div class="card-title">Última visita realizada — 23/06/2026</div><div class="card-body">
-      <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento de Manobristas — Prevenção de Avarias no Pátio</div>
-      <div class="cons-text" style="text-align:justify;">Foi realizado treinamento com os manobristas da garagem, com foco na prevenção de avarias durante as manobras dos ônibus dentro do pátio. Foram abordados temas como direção defensiva, atenção aos pontos cegos, respeito aos limites de velocidade, utilização correta dos espelhos e importância da comunicação entre os colaboradores durante as movimentações. O objetivo é reforçar as boas práticas operacionais, aumentar a segurança e reduzir ocorrências que possam causar danos aos veículos, às instalações e às pessoas.</div>
-      <div class="metric" style="margin-top:8px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">06/07/2026</div></div>
+    <div class="card"><div class="card-title">Última visita realizada — 06/07/2026</div><div class="card-body">
+      <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento Prático com Manobristas — Condução de Ônibus em Via Pública</div>
+      <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático com os manobristas, analisando a condução de ônibus em via pública. A atividade teve como objetivo avaliar o desempenho individual dos colaboradores, com foco em segurança operacional, atenção ao trânsito, controle do veículo e postura profissional. No quadro atual contamos com 7 manobristas; foram realizados 5 acompanhamentos nesta visita — 1 colaborador estava de atestado médico e outro em licença-paternidade. O treinamento transcorreu de forma satisfatória, contribuindo significativamente para o aprimoramento técnico da equipe e para a preparação dos colaboradores frente às demandas operacionais.</div>
+      <div style="margin-top:8px;border-radius:10px;overflow:hidden;border:1px solid #dbe3ee;"><img src="noturno1.jpg" style="width:100%;height:auto;display:block;"/></div>
+      <div class="metric" style="margin-top:8px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">17/07/2026</div></div>
     </div></div>
   </div>
-  {footer(18)}
+  {footer(17)}
 </div>""")
 
-# ================= PAGINA 13: PROGRAMACAO DA SEMANA (placeholder) =================
-cronograma_html = """<div class="card" style="margin-bottom:7px;"><div class="card-title">1ª Semana — Junho/2026 <span style="font-weight:400;opacity:.85;">(01 a 05/06)</span></div><div class="card-body" style="padding:6px 10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Reunião de Brainstorm</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">01/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Motivacional</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">01/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Vídeo - Min. do Conhecimento</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">A importância do Checklist Operacional / Utilização do Tacógrafo</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">02/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Informativa</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">A importância do Checklist Operacional / Utilização do Tacógrafo</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">03/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Enquete de Fixação</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">A importância do Checklist Operacional / Utilização do Tacógrafo</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">05/06</div></div></div></div><div class="card" style="margin-bottom:7px;"><div class="card-title">2ª Semana — Junho/2026 <span style="font-weight:400;opacity:.85;">(08 a 12/06)</span></div><div class="card-body" style="padding:6px 10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Reunião de Brainstorm</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">08/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Motivacional</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">08/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Vídeo - Min. do Conhecimento</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Dirigir bem também é economizar</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">09/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Informativa</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Dirigir bem também é economizar</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">11/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Enquete de Fixação</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Dirigir bem também é economizar</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">12/06</div></div></div></div><div class="card" style="margin-bottom:7px;"><div class="card-title">3ª Semana — Junho/2026 <span style="font-weight:400;opacity:.85;">(15 a 19/06)</span></div><div class="card-body" style="padding:6px 10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Motivacional</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">15/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Vídeo - Min. do Conhecimento</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Frenagens desnecessárias: o inimigo silencioso do seu KM/L</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">16/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Informativa</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Frenagens desnecessárias: o inimigo silencioso do seu KM/L</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">17/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Podcast - Fala, Motô!</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Segurança e cuidados durante a jornada de trabalho</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">18/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Enquete de Fixação</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Frenagens desnecessárias: o inimigo silencioso do seu KM/L</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">19/06</div></div></div></div><div class="card" style="margin-bottom:7px;"><div class="card-title">4ª Semana — Junho/2026 <span style="font-weight:400;opacity:.85;">(22 a 26/06)</span></div><div class="card-body" style="padding:6px 10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Reunião de Brainstorm</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">22/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Motivacional</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">22/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Vídeo - Min. do Conhecimento</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Uso Correto do Freio Motor para Economizar Combustível</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">23/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Informativa</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Uso Correto do Freio Motor para Economizar Combustível</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">24/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Podcast - Fala, Motô!</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Fugindo de Reclamações e Tratativas: a importância do bom atendimento</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">25/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Enquete de Fixação</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Uso Correto do Freio Motor para Economizar Combustível</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">26/06</div></div></div></div><div class="card" style="margin-bottom:7px;"><div class="card-title">5ª Semana — Junho/2026 <span style="font-weight:400;opacity:.85;">(29/06 em diante)</span></div><div class="card-body" style="padding:6px 10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Reunião de Brainstorm</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">29/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Motivacional</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">29/06</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Vídeo - Min. do Conhecimento</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Tamo no Zap: a ferramenta que facilita o seu dia a dia</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">30/06</div></div></div></div>"""
+# [COWORK] CRONOGRAMA (18) — dado MANUAL: regenere este HTML com as semanas/itens do mes que o
+# usuario informar (mesmo estilo de cards). Ver COWORK_FLASH.md.
+# ================= PAGINA 18: PROGRAMACAO DA SEMANA =================
+cronograma_html = """<div class="card" style="margin-bottom:7px;"><div class="card-title">1ª Semana — Julho/2026 <span style="font-weight:400;opacity:.85;">(01 a 03/07)</span></div><div class="card-body" style="padding:6px 10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Informativa</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Tamo no Zap: a ferramenta que facilita o seu dia a dia!</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">01/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Podcast - Fala, Motô!</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Fugindo de Reclamações e Tratativas: a importância do bom atendimento</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">02/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Enquete de Fixação</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Tamo no Zap: a ferramenta que facilita o seu dia a dia!</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">03/07</div></div></div></div><div class="card" style="margin-bottom:7px;"><div class="card-title">2ª Semana — Julho/2026 <span style="font-weight:400;opacity:.85;">(06 a 10/07)</span></div><div class="card-body" style="padding:6px 10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Motivacional</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">06/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Vídeo - Min. do Conhecimento</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Lei nº 3.888/2025 – Programa Parada Legal</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">07/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Informativa</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Lei nº 3.888/2025 – Programa Parada Legal</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">08/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Podcast - Fala, Motô!</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">O Motorista que Conquista Pessoas</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">09/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Enquete de Fixação</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Lei nº 3.888/2025 – Programa Parada Legal</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">10/07</div></div></div></div>"""
 _crono_marker = '<div class="card" style="margin-bottom:7px;">'
 _crono_parts = cronograma_html.split(_crono_marker)[1:]
 _crono_cards = [_crono_marker + part for part in _crono_parts]
-_crono_left = "".join(_crono_cards[:3])
-_crono_right = "".join(_crono_cards[3:])
+_crono_left = "".join(_crono_cards[:1])
+_crono_right = "".join(_crono_cards[1:])
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 19 · Programação Educativa — Conteúdo Motorista/Motô", "Cronograma de comunicação e engajamento, semana a semana — Junho/2026", "Semanas executadas", "5/5")}
+  {page_header("Página 18 · Programação Educativa — Conteúdo Motorista/Motô", "Cronograma de comunicação e engajamento, semana a semana — Julho/2026", "Semanas executadas", "2/2")}
   <div class="grid-2" style="align-items:start;">
     <div>{_crono_left}</div>
     <div>{_crono_right}
       <div class="cons-box"><div class="cons-title">Sobre o cronograma</div>
-      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando reunião de brainstorm, imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação — todas as 5 semanas de junho foram executadas conforme planejado.</div></div>
+      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. As duas primeiras semanas de julho foram executadas conforme planejado, com destaque para a série sobre a Lei nº 3.888/2025 — Programa Parada Legal.</div></div>
     </div>
   </div>
-  {footer(19)}
+  {footer(18)}
 </div>""")
 
 # ================= PAGINA 14: MELHORIA CONTINUA =================
@@ -679,7 +725,7 @@ for s in gfd.SUGESTOES_LINHAS:
                          f"<td style='text-align:left;font-size:8px;color:#0e7c7b;font-weight:700;'>{s[2]}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 20 · Melhoria Contínua — Plano de Ação da Semana", "Síntese analítica sobre tratativas, acompanhamentos, linhas, carros e instrutores", "Foco #1 da semana", "07TR")}
+  {page_header("Página 19 · Melhoria Contínua — Plano de Ação da Semana", "Síntese analítica sobre tratativas, acompanhamentos, linhas, carros e instrutores", "Foco #1 da semana", "07TR")}
   <div class="grid-3" style="margin-bottom:6px;">
     <div class="metric" style="background:#fef2f2;border-color:#fecaca;"><div class="lbl" style="color:#dc2626;">Ação imediata</div><div class="val" style="font-size:11px;color:#0f172a;">3 tratativas &gt;90 dias em aberto</div><div class="aux">Everaldo, José Carlos, Erisvaldo — prioridade Alta</div></div>
     <div class="metric" style="background:#fffbeb;border-color:#fde68a;"><div class="lbl" style="color:#b45309;">Investigar</div><div class="val" style="font-size:11px;color:#0f172a;">Carro 222215 — sensor?</div><div class="aux">+39,5% de divergência Telemetria x Transnet</div></div>
@@ -700,7 +746,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="cons-box" style="margin-top:0;"><div class="cons-title">Como este plano foi montado</div>
     <div class="cons-text">Cruzamento entre: (1) motoristas do Sinal de Alerta já acompanhados que pioraram; (2) tratativas atrasadas por linha/prioridade; (3) linhas com maior desvio da meta e menor velocidade; (4) carros com divergência de sensor ou efeito positivo/negativo sobre o KM/L nos 30 dias. O objetivo é indicar onde focar na próxima semana, não substituir a análise de campo.</div></div>
   </div>
-  {footer(20)}
+  {footer(19)}
 </div>""")
 
 html = f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Flash Report Diesel v3</title>

@@ -18,6 +18,7 @@ import {
 
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
+import { supabaseBCNT } from "../../supabaseBCNT";
 
 const TIPOS_DOCUMENTO = [
   { value: "ATESTADO_MEDICO", label: "Atestado médico" },
@@ -127,7 +128,7 @@ async function fetchFuncionarios() {
   const rows = [];
   let start = 0;
   while (true) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseBCNT
       .from("funcionarios_atualizada")
       .select("id_funcionario, nr_cracha, nm_funcionario, nm_funcao, status")
       .order("nm_funcionario", { ascending: true })

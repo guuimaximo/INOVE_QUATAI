@@ -16,7 +16,8 @@ import numpy as np
 import requests
 
 META = 2.80
-MIN_VEIC_CONSOLIDADO = 70
+# Sabado/domingo/feriado a frota roda com ~30 carros, entao o corte precisa ficar bem abaixo disso.
+MIN_VEIC_CONSOLIDADO = 20
 JANELA_DIAS = 45
 EVOL_DIAS = 30
 PREFIXO_IGNORAR = ("2216",)
@@ -30,6 +31,15 @@ BK = os.environ.get("SUPABASE_BCNT_KEY", "")
 TG = os.environ["TELEGRAM_BOT_TOKEN"]
 CHATS = [c.strip() for c in os.environ["TELEGRAM_CHAT_ID"].split(",") if c.strip()]
 API = f"https://api.telegram.org/bot{TG}"
+
+# WhatsApp Business Cloud API (opcional: so envia se as 3 primeiras estiverem definidas).
+# Destinos em E.164 sem '+' (ex.: 5567999999999), separados por virgula.
+WA_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
+WA_PHONE_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+WA_DESTINOS = [c.strip() for c in os.environ.get("WHATSAPP_DESTINOS", "").split(",") if c.strip()]
+WA_TEMPLATE = os.environ.get("WHATSAPP_TEMPLATE", "diesel_diario")
+WA_LANG = os.environ.get("WHATSAPP_TEMPLATE_LANG", "pt_BR")
+WA_API = f"https://graph.facebook.com/v22.0/{WA_PHONE_ID}"
 
 TEAL = "#0e7c7b"; PURP = "#7c3aed"; DARK = "#0f172a"; RED = "#c0392b"
 GREEN = "#15803d"; GREY = "#64748b"; BG = "#f8fafc"; ED = "#dbe3ee"; AMBER = "#d97706"
@@ -387,7 +397,7 @@ def montar_msg(o):
     emoji = "🟢" if delta >= 0 else "🔴"; sinal = "acima" if delta >= 0 else "abaixo"
     L = ["🚛 *DIESEL — RELATÓRIO DIÁRIO*",
          f"📅 Último dia consolidado: *{data_br(o['REF'])}*",
-         "_(Transnet fecha com ~3 dias de atraso)_", "",
+         "_(Transnet fecha em D-2)_", "",
          f"⛽ KM/L do dia: *{br(kref)}* — {emoji} {sinal} da meta ({br(META)})",
          f"📉 Desperdício: *+{br(o['desp'], 0)} L* no dia",
          f"📊 Ontem {br(o['kprev'])} · Hoje {br(kref)} · Mês {br(o['acum'])}"]
@@ -412,6 +422,53 @@ def enviar(msg, fotos):
             with open(path, "rb") as fh:
                 r = requests.post(f"{API}/sendPhoto", data={"chat_id": cid, "caption": cap}, files={"photo": fh}, timeout=120)
             print(f"sendPhoto[{cid}]", os.path.basename(path), r.json().get("ok"), r.json().get("description", ""))
+
+
+def wa_upload(path):
+    with open(path, "rb") as fh:
+        r = requests.post(f"{WA_API}/media",
+                          headers={"Authorization": f"Bearer {WA_TOKEN}"},
+                          data={"messaging_product": "whatsapp", "type": "image/png"},
+                          files={"file": (os.path.basename(path), fh, "image/png")}, timeout=120)
+    j = r.json()
+    if "id" not in j:
+        print("wa_upload FALHOU:", os.path.basename(path), j)
+    return j.get("id")
+
+
+def wa_post(payload, rotulo, dest):
+    r = requests.post(f"{WA_API}/messages",
+                      headers={"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"},
+                      json=payload, timeout=60)
+    j = r.json()
+    ok = "messages" in j
+    print(f"whatsapp {rotulo}[{dest}]:", "ok" if ok else j.get("error", {}).get("message", j))
+    return ok
+
+
+def enviar_whatsapp(o, fotos):
+    """Template aprovado (imagem no header + numeros no corpo) para cada destino.
+    Fotos extras vao como mensagem livre: so entregam se o destino respondeu ha <24h
+    (janela de atendimento da Meta); fora dela a API recusa e o report segue normal."""
+    if not (WA_TOKEN and WA_PHONE_ID and WA_DESTINOS):
+        return
+    kref = o["kref"]; sinal = "acima" if kref - META >= 0 else "abaixo"
+    corpo = [data_br(o["REF"]), br(kref), sinal, br(o["desp"], 0),
+             br(o["kprev"]), br(kref), br(o["acum"])]
+    slide_id = wa_upload(fotos[0][0]) if fotos else None
+    extras_ids = [(wa_upload(p), cap) for p, cap in fotos[1:] if os.path.exists(p)]
+    for dest in WA_DESTINOS:
+        comps = []
+        if slide_id:
+            comps.append({"type": "header", "parameters": [{"type": "image", "image": {"id": slide_id}}]})
+        comps.append({"type": "body", "parameters": [{"type": "text", "text": t} for t in corpo]})
+        wa_post({"messaging_product": "whatsapp", "to": dest, "type": "template",
+                 "template": {"name": WA_TEMPLATE, "language": {"code": WA_LANG}, "components": comps}},
+                "template", dest)
+        for mid, cap in extras_ids:
+            if mid:
+                wa_post({"messaging_product": "whatsapp", "to": dest, "type": "image",
+                         "image": {"id": mid, "caption": cap}}, "foto-extra", dest)
 
 
 def main():
@@ -441,6 +498,10 @@ def main():
             print("EXTRAS falharam (segue so o nucleo):"); traceback.print_exc()
 
     enviar(montar_msg(o), fotos)
+    try:
+        enviar_whatsapp(o, fotos)
+    except Exception:
+        print("WHATSAPP falhou (Telegram ja foi):"); traceback.print_exc()
     print("OK - report enviado. REF =", o["REF"], "| fotos:", len(fotos))
 
 

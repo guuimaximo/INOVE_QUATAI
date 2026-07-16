@@ -1,13 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Smartphone, X } from "lucide-react";
 
+const DISMISS_KEY = "inove_install_prompt_dispensado_em";
+const DISMISS_DIAS = 30;
+
 function isStandaloneMode() {
   return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
 }
 
+function dispensadoRecentemente() {
+  try {
+    const ts = Number(localStorage.getItem(DISMISS_KEY) || 0);
+    return ts > 0 && Date.now() - ts < DISMISS_DIAS * 24 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
 export default function InstallAppPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [visible, setVisible] = useState(false);
+  const [dispensado, setDispensado] = useState(dispensadoRecentemente);
 
   useEffect(() => {
     document.body.classList.toggle("standalone-app", isStandaloneMode());
@@ -15,12 +27,11 @@ export default function InstallAppPrompt() {
     function handleBeforeInstallPrompt(event) {
       event.preventDefault();
       setDeferredPrompt(event);
-      setVisible(true);
     }
 
     function handleInstalled() {
       setDeferredPrompt(null);
-      setVisible(false);
+      setDispensado(true);
     }
 
     if (!isStandaloneMode()) {
@@ -35,7 +46,15 @@ export default function InstallAppPrompt() {
   }, []);
 
   const isiOS = useMemo(() => /iphone|ipad|ipod/i.test(window.navigator.userAgent), []);
-  const shouldShowIosHint = visible || (isiOS && !isStandaloneMode());
+
+  function fechar() {
+    setDispensado(true);
+    try {
+      localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    } catch {
+      /* localStorage indisponivel: fecha so nesta sessao */
+    }
+  }
 
   async function handleInstall() {
     if (!deferredPrompt) return;
@@ -43,16 +62,13 @@ export default function InstallAppPrompt() {
     await deferredPrompt.prompt();
     const outcome = await deferredPrompt.userChoice;
 
-    if (outcome.outcome !== "accepted") {
-      setVisible(false);
-      return;
-    }
-
     setDeferredPrompt(null);
-    setVisible(false);
+    if (outcome.outcome !== "accepted") {
+      fechar();
+    }
   }
 
-  if (isStandaloneMode() || (!deferredPrompt && !shouldShowIosHint)) {
+  if (isStandaloneMode() || dispensado || (!deferredPrompt && !isiOS)) {
     return null;
   }
 
@@ -67,8 +83,8 @@ export default function InstallAppPrompt() {
           <p className="text-sm font-semibold text-slate-900">Instalar Inove no aparelho</p>
           <p className="text-xs leading-5 text-slate-600">
             {deferredPrompt
-              ? "Use a mesma base do site como app no Android ou iPhone, com acesso mais r\u00e1pido e tela cheia."
-              : "No iPhone, abra o compartilhamento do Safari e toque em Adicionar \u00e0 Tela de In\u00edcio para usar como app."}
+              ? "Use a mesma base do site como app no Android ou iPhone, com acesso mais rápido e tela cheia."
+              : "No iPhone, abra o compartilhamento do Safari e toque em Adicionar à Tela de Início para usar como app."}
           </p>
         </div>
 
@@ -84,9 +100,9 @@ export default function InstallAppPrompt() {
 
         <button
           type="button"
-          onClick={() => setVisible(false)}
+          onClick={fechar}
           className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-          aria-label={"Fechar aviso de instala\u00e7\u00e3o"}
+          aria-label={"Fechar aviso de instalação"}
         >
           <X size={18} />
         </button>

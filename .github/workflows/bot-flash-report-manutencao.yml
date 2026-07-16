@@ -2,8 +2,8 @@ name: Bot Manutenção · Flash Report Semanal
 
 on:
   schedule:
-    # Todo dia util as 10:00 BRT (13:00 UTC) — inclui a sexta (edicao semanal)
-    - cron: "0 13 * * 1-5"
+    # Toda sexta-feira as 10:00 BRT (13:00 UTC)
+    - cron: "0 13 * * 5"
   workflow_dispatch:
     inputs:
       periodo_inicio:

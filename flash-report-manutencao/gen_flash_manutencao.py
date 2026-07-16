@@ -518,9 +518,15 @@ def processar_pagina_1(periodo_inicio: date, periodo_fim: date) -> dict:
 
     aderencia_meta_pct = (resumo_atual["mkbf"] / MKBF_META * 100.0) if MKBF_META > 0 else 0.0
 
+    # Último dia com KM realmente consolidado no indicadores_diesel — o rótulo do
+    # período exibe os dados reais, não o calendário (dias sem KM ficam fora do MKBF).
+    periodo_fim_dados = diario_atual["data"].max() if not diario_atual.empty else periodo_fim
+
     return {
         "periodo_inicio": periodo_inicio, "periodo_fim": periodo_fim,
-        "periodo_label": periodo_label(periodo_inicio, periodo_fim),
+        "periodo_fim_dados": periodo_fim_dados,
+        "periodo_label": periodo_label(periodo_inicio, periodo_fim_dados),
+        "periodo_label_calendario": periodo_label(periodo_inicio, periodo_fim),
         "mes_atual_label": f"{pt_month_name(periodo_fim)}/{periodo_fim.year}",
         "mes_anterior_label": f"{pt_month_name(ini_ant)}/{ini_ant.year}",
         "resumo_atual": resumo_atual, "resumo_ant": resumo_ant,
@@ -560,10 +566,13 @@ def processar_pagina_2(periodo_inicio: date, periodo_fim: date, diario: pd.DataF
     proj_km_mes = (total_km / dia_atual_mes) * dias_mes if dia_atual_mes > 0 else total_km
     proj_interv_mes = (total_interv / dia_atual_mes) * dias_mes if dia_atual_mes > 0 else total_interv
 
+    # Rótulo do período segue o último dia com KM consolidado (igual à página 1)
+    periodo_fim_dados = df["data"].max() if not df.empty else periodo_fim
+
     return {
         "periodo_inicio": periodo_inicio,
         "periodo_fim": periodo_fim,
-        "periodo_label": periodo_label(periodo_inicio, periodo_fim),
+        "periodo_label": periodo_label(periodo_inicio, periodo_fim_dados),
         "mes_atual_label": f"{pt_month_name(periodo_fim)}/{periodo_fim.year}",
         "diario": df,
         "total_interv": total_interv,
@@ -3024,7 +3033,7 @@ def gerar_html_consolidado_teal(
     )
     paginas.append(f"""
 <div class="page">
-{header_block("SOLICITAÇÃO DE REPARO", f"Solicitação de Reparo · Período: <b>{dados_p1['periodo_label']}</b>", "Mês de referência", mes_ref_label)}
+{header_block("SOLICITAÇÃO DE REPARO", f"Solicitação de Reparo · Período: <b>{dados_p1['periodo_label_calendario']}</b>", "Mês de referência", mes_ref_label)}
   <div class="grid2">
     <div class="card" style="margin-bottom:0;">
       <div class="card-title">Situação das SRs — {sr['mes_anterior_label']} x {sr['mes_atual_label']}</div>

@@ -1,0 +1,70 @@
+name: Bot Flash Diário · Manutenção (Telegram)
+
+on:
+  schedule:
+    # Dias úteis às 10:00 BRT (13:00 UTC)
+    - cron: "0 13 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot-flash-diario-manutencao
+  cancel-in-progress: false
+
+jobs:
+  gerar-e-enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: flash-report-manutencao/requirements.txt
+
+      - name: Install Python deps
+        working-directory: flash-report-manutencao
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Chromium (Playwright)
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Gerar e enviar Flash Diário (2 páginas)
+        working-directory: flash-report-manutencao
+        env:
+          # Base Transnet (indicadores_diesel, solicitacao_reparo, eventos_regeneracao, ultimo_plano)
+          SUPABASE_A_URL: ${{ secrets.SUPABASE_TRANSNET_URL }}
+          SUPABASE_A_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TRANSNET_KEY }}
+          # INOVE (sos_acionamentos, veiculos_pcm, preventivas)
+          SUPABASE_B_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_B_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+          REPORT_OUTPUT_DIR: saida
+          MKBF_META: "7000"
+          REPORT_FERIADOS: ${{ vars.REPORT_FERIADOS }}
+        run: |
+          python -u gen_flash_diario.py
+
+      - name: Sobe artefato de apoio (PNGs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flash-diario-manutencao
+          path: |
+            flash-report-manutencao/saida/diario_pg*.png
+            flash-report-manutencao/saida/flash_diario.html
+          if-no-files-found: ignore
+          retention-days: 7

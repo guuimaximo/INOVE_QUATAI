@@ -305,9 +305,11 @@ export function AuthProvider({ children }) {
 
     // Gravação ativa no Farol (iframe) suspende o logout por inatividade.
     // O Farol envia postMessage { type: "farol:recording", active: bool } ao
-    // iniciar/parar; opcionalmente repete como heartbeat. Sem heartbeat por
-    // mais de RECORDING_HEARTBEAT_MS, consideramos a gravação encerrada.
-    const RECORDING_HEARTBEAT_MS = 2 * 60 * 1000;
+    // iniciar/parar; opcionalmente repete como heartbeat. A janela é longa
+    // porque o Farol pode mandar o sinal só no início: uma reunião gravada
+    // não pode derrubar a sessão no meio. Se ele parar sem avisar (fechou a
+    // aba/iframe), a proteção expira sozinha ao fim da janela.
+    const RECORDING_HEARTBEAT_MS = 3 * 60 * 60 * 1000; // 3h
     let recordingActive = false;
     let recordingLastPing = 0;
 

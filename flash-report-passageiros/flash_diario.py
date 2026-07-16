@@ -236,6 +236,58 @@ def _telegram_cfg():
             c=json.loads(p.read_text(encoding="utf-8")); return c.get("token"), str(c.get("chat_id"))
     return None,None
 
+# ---------------- WHATSAPP PESSOAL (CallMeBot: texto + links das imagens) ----------------
+# Sobe as imagens num bucket publico do Supabase (pasta com sufixo aleatorio,
+# nao adivinhavel) e manda o texto com os links via CallMeBot. Tudo opcional:
+# sem CALLMEBOT_PHONE/CALLMEBOT_APIKEY nao faz nada; sem STORAGE_* vai so o texto.
+def enviar_whatsapp_callmebot(texto, arquivos, slug):
+    import os, time, uuid
+    from datetime import date
+    import requests
+
+    phone = os.environ.get("CALLMEBOT_PHONE", "")
+    apikey = os.environ.get("CALLMEBOT_APIKEY", "")
+    if not (phone and apikey):
+        return
+    st_url = os.environ.get("STORAGE_SUPABASE_URL", "").rstrip("/")
+    st_key = os.environ.get("STORAGE_SUPABASE_KEY", "")
+    bucket = os.environ.get("STORAGE_BUCKET", "flash-reports")
+
+    links = []
+    if st_url and st_key:
+        pasta = f"{slug}/{date.today().isoformat()}-{uuid.uuid4().hex[:8]}"
+        for arq in arquivos:
+            p = str(arq)
+            if not os.path.exists(p):
+                continue
+            nome = os.path.basename(p)
+            with open(p, "rb") as fh:
+                resp = requests.post(f"{st_url}/storage/v1/object/{bucket}/{pasta}/{nome}",
+                                     headers={"Authorization": f"Bearer {st_key}", "x-upsert": "true",
+                                              "Content-Type": "image/png"},
+                                     data=fh.read(), timeout=120)
+            if resp.status_code in (200, 201):
+                links.append(f"{st_url}/storage/v1/object/public/{bucket}/{pasta}/{nome}")
+            else:
+                print("  whats: upload falhou:", nome, resp.status_code, resp.text[:200])
+
+    if links:
+        texto += "\n\n📷 Imagens:\n" + "\n".join(links)
+
+    # CallMeBot tem rate limit; a 2a tentativa espacada cobre colisao de horario com outro bot.
+    for tentativa in (1, 2):
+        try:
+            resp = requests.get("https://api.callmebot.com/whatsapp.php",
+                                params={"phone": phone, "apikey": apikey, "text": texto}, timeout=120)
+            print(f"  whats callmebot ({tentativa}):", resp.status_code, resp.text[:120].replace("\n", " "))
+            if resp.ok:
+                return
+        except Exception as e:
+            print(f"  whats callmebot ({tentativa}) erro:", e)
+        if tentativa == 1:
+            time.sleep(65)
+
+
 def main():
     try: sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception: pass
@@ -252,6 +304,11 @@ def main():
     tg.enviar_foto(token,chat,r["p1"],"Flash Report Diário — pág. 1")
     tg.enviar_foto(token,chat,r["p2"],"Flash Report Diário — pág. 2")
     print("  enviado ao Telegram.")
+    try:
+        texto_wa = r["texto"].replace("<b>","*").replace("</b>","*")
+        enviar_whatsapp_callmebot(texto_wa, [r["p1"], r["p2"]], "passageiros-diario")
+    except Exception:
+        import traceback; print("  CALLMEBOT falhou (Telegram ja foi):"); traceback.print_exc()
     return 0
 
 if __name__=="__main__":

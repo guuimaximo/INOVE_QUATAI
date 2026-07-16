@@ -40,6 +40,11 @@ jobs:
           SUPABASE_TRANSNET_KEY: ${{ secrets.SUPABASE_TRANSNET_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # WhatsApp pessoal (CallMeBot) + bucket publico p/ links das imagens
+          CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
+          STORAGE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          STORAGE_SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python flash_diario.py
 
       - name: Sobe artefato de apoio (imagens)

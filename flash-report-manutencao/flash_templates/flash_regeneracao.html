@@ -1,0 +1,116 @@
+<title>Flash Report — Regeneração</title>
+<style>
+  body{font-family:Arial;background:#eef2f1;padding:20px;} .page{width:210mm;margin:auto;background:#fff;padding:9mm 11mm;position:relative;min-height:297mm;}
+  .header{display:flex;justify-content:space-between;} .title h1{margin:0;font-size:23px;font-weight:900;color:#123b35;}
+  .sub{font-size:10.5px;color:#5b716c;margin-top:5px;} .period-box{background:#0f3d38;color:#fff;padding:8px 16px;border-radius:10px;text-align:right;}
+  .period-box .ref{font-size:9px;opacity:.7;text-transform:uppercase;letter-spacing:1px;} .period-box .val{font-size:17px;font-weight:800;}
+  .card{border:1px solid #d6e3e0;border-radius:12px;overflow:hidden;margin-bottom:14px;} .card-title{background:#0f3d38;color:#fff;padding:9px 13px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;} .card-body{padding:15px;}
+  .metric{border:1px solid #d6e3e0;border-radius:10px;padding:11px;text-align:center;} .metric .lbl{font-size:9px;color:#5b716c;text-transform:uppercase;font-weight:800;} .metric .val{margin-top:4px;font-size:23px;font-weight:900;color:#123b35;} .metric .aux{margin-top:3px;font-size:8.5px;color:#5b716c;text-transform:uppercase;}
+  table{width:100%;border-collapse:collapse;font-size:10px;} th{background:#eef4f3;color:#123b35;text-transform:uppercase;font-size:8.5px;padding:7px 5px;border:1px solid #d6e3e0;} td{padding:6px;border:1px solid #d6e3e0;text-align:center;}
+  .cons-box{border:1px solid #d6e3e0;border-radius:12px;background:#f6faf9;padding:13px;margin-top:12px;} .cons-title{font-size:11px;font-weight:800;text-transform:uppercase;color:#123b35;margin-bottom:8px;} .cons-text{font-size:11.5px;line-height:1.6;color:#1f3a35;text-align:justify;}
+  .footer{position:absolute;left:11mm;right:11mm;bottom:6mm;font-size:9.5px;color:#5b716c;display:flex;justify-content:space-between;border-top:1px solid #d6e3e0;padding-top:5px;}
+</style>
+
+<div class="page">
+  <div class="header">
+    <div class="title"><h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Regeneração do DPF · Julho/2026</div>
+      <div class="sub">Fonte: eventos_regeneracao · consumo e custo de diesel na queima do filtro</div>
+    </div>
+    <div class="period-box"><div class="ref">Mês</div><div class="val">JULHO/2026</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;">
+    <div class="metric" style="border-left:4px solid #0d9488;"><div class="lbl">Eventos (Jul)</div><div class="val" style="color:#0d9488;">44</div><div class="aux">15 veículos · parcial</div></div>
+    <div class="metric" style="border-left:4px solid #dc2626;"><div class="lbl">Custo Diesel</div><div class="val" style="color:#dc2626;">R$ 1.150</div><div class="aux">177 litros queimados</div></div>
+    <div class="metric"><div class="lbl">Duração Média</div><div class="val">46 min</div><div class="aux">por regeneração</div></div>
+    <div class="metric" style="border-left:4px solid #f59e0b;"><div class="lbl">Pior Veículo</div><div class="val" style="font-size:15px;">222406</div><div class="aux">9 regenerações</div></div>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:16px; background:#f6faf9; border:1px solid #d6e3e0; border-radius:12px; padding:9px 16px; margin-bottom:10px;">
+    <div style="text-align:center; flex:0 0 auto;">
+      <div style="font-size:9px; color:#5b716c; text-transform:uppercase; font-weight:800;">Impacto no KML da Frota</div>
+      <div style="font-size:22px; font-weight:900; color:#0d9488; margin-top:2px;">2,695 <span style="color:#94a3a0; font-size:14px;">&rarr;</span> 2,688</div>
+      <div style="font-size:9px; color:#dc2626; font-weight:700;">&minus;0,007 km/L (0,25% do diesel)</div>
+    </div>
+    <div style="flex:1; font-size:10px; color:#334155; line-height:1.55; text-transform:uppercase; letter-spacing:0.2px; border-left:1px solid #d6e3e0; padding-left:16px;">
+      Os 177 L queimados na regeneração equivalem a ~476 km "perdidos" no mês, mas representam só <b>0,25% do combustível</b> da frota — o impacto no KML é marginal. <b style="color:#0d9488;">A regeneração não é um problema de diesel; é um alarme de quebra.</b> O ganho está em inspecionar o carro que regenera demais antes de virar SOS, não na economia de combustível.
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1.1fr;gap:12px;">
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Top 10 Veículos — Regenerações (Julho)</div>
+      <div class="card-body">
+        <table>
+          <thead><tr><th>Veículo</th><th>Eventos</th><th>Custo R$</th><th>Duração méd.</th></tr></thead>
+          <tbody>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">222406</td><td style="font-weight:700;color:#991b1b;">9</td><td>161</td><td>35 min</td></tr>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">222404</td><td style="font-weight:700;color:#991b1b;">7</td><td>224</td><td>48 min</td></tr>
+            <tr><td style="font-weight:700;">222424</td><td style="font-weight:700;">6</td><td>164</td><td>54 min</td></tr>
+            <tr><td style="font-weight:700;">222423</td><td style="font-weight:700;">5</td><td>144</td><td>48 min</td></tr>
+            <tr><td>222420</td><td>3</td><td>109</td><td>59 min</td></tr>
+            <tr><td>222409</td><td>3</td><td>58</td><td>38 min</td></tr>
+            <tr><td class="muted" colspan="4" style="color:#94a3a0;">+ 222408, 222425 (2 evt) e 7 veículos com 1 evento</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:8px;font-size:8.5px;color:#94a3a0;text-transform:uppercase;">4 veículos (222406, 222404, 222424, 222423) concentram 27 dos 44 eventos (61%).</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Custo de Regeneração por Mês</div>
+      <div class="card-body">
+        <div style="padding:8px;border:1px solid #d6e3e0;border-radius:12px;background:#fbfdfc;">
+          <svg viewBox="0 0 480 250" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%; height:120px;">
+            <line x1="42" y1="20" x2="42" y2="200" stroke="#e2e8f0"/><line x1="42" y1="200" x2="470" y2="200" stroke="#e2e8f0"/>
+            <!-- max 3155 -> 160px. v -> 200-v/3155*160 -->
+            <g font-family="Arial" font-size="9" font-weight="700" text-anchor="middle" fill="#123b35">
+              <rect x="52" y="140" width="34" height="60" fill="#0d9488"></rect><text x="69" y="133">1.181</text><text x="69" y="214" fill="#5b716c" font-weight="400">DEZ</text>
+              <rect x="104" y="126" width="34" height="74" fill="#0d9488"></rect><text x="121" y="119">1.459</text><text x="121" y="214" fill="#5b716c" font-weight="400">JAN</text>
+              <rect x="156" y="108" width="34" height="92" fill="#0d9488"></rect><text x="173" y="101">1.816</text><text x="173" y="214" fill="#5b716c" font-weight="400">FEV</text>
+              <rect x="208" y="129" width="34" height="71" fill="#0d9488"></rect><text x="225" y="122">1.401</text><text x="225" y="214" fill="#5b716c" font-weight="400">MAR</text>
+              <rect x="260" y="92" width="34" height="108" fill="#0d9488"></rect><text x="277" y="85">2.134</text><text x="277" y="214" fill="#5b716c" font-weight="400">ABR</text>
+              <rect x="312" y="117" width="34" height="83" fill="#0d9488"></rect><text x="329" y="110">1.636</text><text x="329" y="214" fill="#5b716c" font-weight="400">MAI</text>
+              <rect x="364" y="40" width="34" height="160" fill="#dc2626"></rect><text x="381" y="33" fill="#991b1b">3.155</text><text x="381" y="214" fill="#5b716c" font-weight="400">JUN</text>
+              <rect x="416" y="142" width="34" height="58" fill="#94a3a0"></rect><text x="433" y="135" fill="#94a3a0">1.150</text><text x="433" y="214" fill="#94a3a0" font-weight="400">JUL*</text>
+            </g>
+          </svg>
+        </div>
+        <div style="margin-top:6px;font-size:8.5px;color:#94a3a0;text-transform:uppercase;">Junho disparou: R$ 3.155 e 120 eventos (quase o dobro da média). Julho parcial (cinza).</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Cruzamento · Auto-Regeneração × Quebra em Rua (Julho)</div>
+    <div class="card-body" style="display:flex;gap:14px;align-items:stretch;">
+      <div style="flex:1;">
+        <table>
+          <thead><tr><th>Veículo</th><th>Auto-regen</th><th>Quebrou de Regen (SOS)</th><th style="text-align:left;padding-left:6px;">Leitura</th></tr></thead>
+          <tbody>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">222406</td><td style="font-weight:700;color:#991b1b;">9</td><td>0</td><td style="text-align:left;padding-left:6px;color:#991b1b;font-weight:700;">Regenera muito, ainda não quebrou — vigiar</td></tr>
+            <tr><td style="font-weight:700;">222404</td><td style="font-weight:700;">7</td><td style="color:#dc2626;font-weight:700;">1</td><td style="text-align:left;padding-left:6px;">Regenerou 7× e quebrou</td></tr>
+            <tr><td style="font-weight:700;">222424</td><td style="font-weight:700;">6</td><td style="color:#dc2626;font-weight:700;">1</td><td style="text-align:left;padding-left:6px;">Regenerou 6× e quebrou</td></tr>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">222423</td><td style="font-weight:700;color:#991b1b;">5</td><td>0</td><td style="text-align:left;padding-left:6px;color:#991b1b;font-weight:700;">5 regens, ainda não quebrou — vigiar</td></tr>
+            <tr><td>222420</td><td>3</td><td style="color:#dc2626;font-weight:700;">1</td><td style="text-align:left;padding-left:6px;">Quebrou de regeneração</td></tr>
+            <tr><td>222412</td><td>1</td><td style="color:#dc2626;font-weight:700;">1</td><td style="text-align:left;padding-left:6px;">Quebrou de regeneração</td></tr>
+            <tr><td>222422</td><td>1</td><td style="color:#dc2626;font-weight:700;">1</td><td style="text-align:left;padding-left:6px;">Quebrou de regeneração</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="flex:0 0 190px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:12px;">
+        <div style="font-size:24px;font-weight:900;color:#991b1b;line-height:1;">6</div>
+        <div style="font-size:8.5px;color:#5b716c;text-transform:uppercase;font-weight:700;">quebras de regeneração em julho</div>
+        <div style="margin-top:10px;font-size:9px;color:#334155;line-height:1.6;text-transform:uppercase;">Dos 4 carros com <b>5+ auto-regenerações</b>, <b style="color:#991b1b;">2 já quebraram</b>. O <b>222406</b> (9 regens, 0 quebra) é o próximo — inspeção do DPF/escape antes de virar SOS.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cons-box">
+    <div class="cons-title">Considerações · Regeneração</div>
+    <div class="cons-text">A regeneração do DPF queima diesel para limpar o filtro de partículas — quanto mais frequente, maior o custo e mais forte o sinal de que o veículo não está atingindo a temperatura ideal (rota urbana curta, filtro saturado ou falha de sensor). Em julho, <b>4 veículos concentram 61% dos eventos</b> (222406 com 9, 222404 com 7), e junho foi atípico: R$ 3.155 e 120 eventos, quase o dobro da média mensal. O cruzamento com as intervenções confirma o valor preventivo: <b>dos 4 carros com 5+ auto-regenerações, 2 já quebraram de Regeneração em rua</b> (222404 e 222424). O 222406, com 9 regenerações e nenhuma quebra ainda, é o candidato mais claro a uma inspeção de escape/ARLA <b>antes</b> de virar SOS — a auto-regeneração excessiva funciona como alarme antecipado da quebra, com retorno direto em diesel e disponibilidade.</div>
+  </div>
+
+  <div class="footer"><div>Gerado automaticamente · fonte: eventos_regeneracao</div><div>Flash Report Manutenção — Quatai</div></div>
+</div>

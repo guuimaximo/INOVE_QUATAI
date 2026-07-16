@@ -1,0 +1,365 @@
+<title>Flash Report — GNS, Embarcados e Motoristas</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #eef2f7; color: #111827; padding: 24px 0; }
+  @media (prefers-color-scheme: dark) { body { background: #0b1220; } }
+  :root[data-theme="dark"] body { background: #0b1220; }
+  :root[data-theme="light"] body { background: #eef2f7; }
+  .note { width: 210mm; margin: 0 auto 14px auto; font-size: 12px; color: #64748b; padding: 0 2mm; }
+  .page { width: 210mm; min-height: 297mm; margin: 0 auto 20px auto; background: radial-gradient(circle at top right, rgba(37,99,235,0.06), transparent 22%), linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%); padding: 8mm 10mm; position: relative; box-shadow: 0 20px 50px rgba(15,23,42,0.18); }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 4px solid #0f172a; padding-bottom: 8px; margin-bottom: 14px; }
+  .title h1 { margin: 0; font-size: 24px; line-height: 1; color: #0f172a; }
+  .title .sub { margin-top: 6px; font-size: 11px; color: #475569; text-transform: uppercase; letter-spacing: 0.4px; }
+  .period-box { min-width: 200px; text-align: right; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); color: white; padding: 10px 12px; border-radius: 14px; }
+  .period-box .ref { font-size: 10px; text-transform: uppercase; font-weight: 700; opacity: 0.8; }
+  .period-box .val { font-size: 18px; font-weight: 800; margin-top: 3px; }
+  .grid { display: grid; gap: 12px; }
+  .card { border: 1px solid #dbe3ee; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 6px 20px rgba(15,23,42,0.06); margin-bottom: 16px; }
+  .card-title { padding: 11px 14px; background: linear-gradient(90deg, #0f172a 0%, #172554 100%); color: white; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; }
+  .card-body { padding: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5px; font-variant-numeric: tabular-nums; }
+  th { background: #eef2f7; color: #0f172a; text-transform: uppercase; font-size: 8.5px; padding: 8px 5px; border: 1px solid #dbe3ee; text-align: center; letter-spacing: 0.2px; }
+  td { padding: 7px 6px; border: 1px solid #dbe3ee; text-align: center; }
+  .metric { border: 1px solid #dbe3ee; border-radius: 12px; padding: 12px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); text-align:center; }
+  .metric .lbl { font-size: 9px; color: #64748b; text-transform: uppercase; font-weight: 800; letter-spacing:0.3px; }
+  .metric .val { margin-top: 4px; font-size: 24px; font-weight: 900; color: #0f172a; }
+  .metric .aux { margin-top: 3px; font-size: 8.5px; color: #64748b; text-transform: uppercase; }
+  .footer { position: absolute; left: 10mm; right: 10mm; bottom: 6mm; font-size: 10px; color: #64748b; display: flex; justify-content: space-between; border-top: 1px solid #dbe3ee; padding-top: 4px; text-transform: uppercase; letter-spacing:0.3px; }
+  .muted { color:#94a3b8; }
+  .pill { display:inline-block; padding:2px 7px; border-radius:6px; font-size:8px; font-weight:800; text-transform:uppercase; }
+  .cons-box { border: 1px solid #dbe3ee; border-radius: 14px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); padding: 14px; }
+  .cons-title { font-size: 11px; font-weight: 800; text-transform: uppercase; margin-bottom: 8px; color: #0f172a; letter-spacing: 0.6px; }
+  .cons-text { font-size: 11px; line-height: 1.6; color: #1f2937; text-align: justify; }
+</style>
+
+<div class="note">MODELO — GNS, EMBARCADOS E MOTORISTAS. DADOS REAIS EM 12/07/2026. <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-weight:800;font-size:9px;">RASCUNHO</span></div>
+
+<!-- ===================== SLIDE 1 : GNS / CARROS PARADOS ===================== -->
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">GNS · Carros Parados na Manutenção</div>
+      <div class="sub">Média de dias úteis · <b>Julho/2026</b></div>
+    </div>
+    <div class="period-box">
+      <div class="ref">GNS Médio (dia útil)</div>
+      <div class="val">11,0</div>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(4,1fr); margin-bottom:16px;">
+    <div class="metric" style="border-left:4px solid #dc2626;">
+      <div class="lbl">GNS Médio</div><div class="val" style="color:#dc2626;">11,0</div><div class="aux">Média de dia útil · Julho</div>
+    </div>
+    <div class="metric">
+      <div class="lbl">Dias Úteis</div><div class="val">7</div><div class="aux">Sem fds e sem feriado 09/07</div>
+    </div>
+    <div class="metric">
+      <div class="lbl">Em Aberto (11/07)</div><div class="val">27</div><div class="aux">9 GNS · 16 Pend. · 2 Not.</div>
+    </div>
+    <div class="metric" style="border-left:4px solid #991b1b;">
+      <div class="lbl">Mais Antigo</div><div class="val" style="font-size:15px;">W553</div><div class="aux">124 dias parado</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">GNS por Dia — Julho (dias úteis contam na média)</div>
+    <div class="card-body">
+      <div style="padding:8px; border:1px solid #dbe3ee; border-radius:14px; background:linear-gradient(180deg,#fff,#f8fafc);">
+        <svg viewBox="0 0 900 210" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%; height:112px;">
+          <g stroke="#e2e8f0" stroke-width="1"><line x1="40" y1="15" x2="40" y2="165"></line><line x1="40" y1="165" x2="875" y2="165"></line></g>
+          <!-- linha media 11 -->
+          <line x1="40" y1="99" x2="875" y2="99" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="6,5"></line>
+          <text x="878" y="103" font-size="10" fill="#dc2626" font-family="Arial" font-weight="700">Méd 11</text>
+          <!-- escala: 0=165, 25=15 -> 6px/un. valor v -> 165-v*6 -->
+          <g font-family="Arial" font-size="10" font-weight="700" text-anchor="middle">
+            <!-- GNS: 01=11 02=11 03=12 04*=8 05*=6 06=9 07=11 08=8 09f=11 10=15 11*=9 12*=9 -->
+            <rect x="52" y="99" width="46" height="66" fill="#1e3a8a"></rect><text x="75" y="92" fill="#1e293b">11</text><text x="75" y="180" fill="#64748b" font-weight="400">01</text>
+            <rect x="120" y="99" width="46" height="66" fill="#1e3a8a"></rect><text x="143" y="92" fill="#1e293b">11</text><text x="143" y="180" fill="#64748b" font-weight="400">02</text>
+            <rect x="188" y="93" width="46" height="72" fill="#1e3a8a"></rect><text x="211" y="86" fill="#1e293b">12</text><text x="211" y="180" fill="#64748b" font-weight="400">03</text>
+            <rect x="256" y="117" width="46" height="48" fill="#cbd5e1"></rect><text x="279" y="110" fill="#94a3b8">8</text><text x="279" y="180" fill="#94a3b8" font-weight="400">04·s</text>
+            <rect x="324" y="129" width="46" height="36" fill="#cbd5e1"></rect><text x="347" y="122" fill="#94a3b8">6</text><text x="347" y="180" fill="#94a3b8" font-weight="400">05·d</text>
+            <rect x="392" y="111" width="46" height="54" fill="#1e3a8a"></rect><text x="415" y="104" fill="#1e293b">9</text><text x="415" y="180" fill="#64748b" font-weight="400">06</text>
+            <rect x="460" y="99" width="46" height="66" fill="#1e3a8a"></rect><text x="483" y="92" fill="#1e293b">11</text><text x="483" y="180" fill="#64748b" font-weight="400">07</text>
+            <rect x="528" y="117" width="46" height="48" fill="#1e3a8a"></rect><text x="551" y="110" fill="#1e293b">8</text><text x="551" y="180" fill="#64748b" font-weight="400">08</text>
+            <rect x="596" y="99" width="46" height="66" fill="#cbd5e1"></rect><text x="619" y="92" fill="#94a3b8">11</text><text x="619" y="180" fill="#94a3b8" font-weight="400">09·f</text>
+            <rect x="664" y="75" width="46" height="90" fill="#1e3a8a"></rect><text x="687" y="68" fill="#1e293b">15</text><text x="687" y="180" fill="#64748b" font-weight="400">10</text>
+            <rect x="732" y="111" width="46" height="54" fill="#cbd5e1"></rect><text x="755" y="104" fill="#94a3b8">9</text><text x="755" y="180" fill="#94a3b8" font-weight="400">11·s</text>
+            <rect x="800" y="111" width="46" height="54" fill="#cbd5e1"></rect><text x="823" y="104" fill="#94a3b8">9</text><text x="823" y="180" fill="#94a3b8" font-weight="400">12·d</text>
+          </g>
+        </svg>
+      </div>
+      <div style="margin-top:6px; font-size:8.5px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.2px;">Azul = dia útil (entra na média) · Cinza = fora (s=sábado, d=domingo, f=feriado 09/07). Média dos 7 dias úteis = 11,0. Só GNS em aberto (não liberado), 1 carro conta 1x. Bate com o PCM oficial (11/07 = 9).</div>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1.4fr 1fr;">
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Carros Parados — Mais Antigos</div>
+      <div class="card-body">
+        <table>
+          <thead><tr><th>Veículo</th><th>Categoria</th><th>Setor</th><th style="text-align:left; padding-left:6px;">Motivo</th><th>Dias</th></tr></thead>
+          <tbody>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">W553</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">GNS</span></td><td>Suprimentos</td><td style="text-align:left; padding-left:6px;">Virou bronzina de biela</td><td style="font-weight:700; color:#991b1b;">124</td></tr>
+            <tr><td style="font-weight:700;">222237</td><td><span class="pill" style="background:#fef3c7;color:#92400e;">Pendente</span></td><td>Manutenção</td><td style="text-align:left; padding-left:6px;">Banzer da telemetria</td><td>46</td></tr>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">222208</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">GNS</span></td><td>Suprimentos</td><td style="text-align:left; padding-left:6px;">Aguardando chegada de peças</td><td style="font-weight:700;">43</td></tr>
+            <tr><td style="font-weight:700;">222234</td><td><span class="pill" style="background:#fef3c7;color:#92400e;">Pendente</span></td><td>Manutenção</td><td style="text-align:left; padding-left:6px;">Quinta marcha</td><td>38</td></tr>
+            <tr><td>222403</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">GNS</span></td><td>Suprimentos</td><td style="text-align:left; padding-left:6px;">Bomba do Arla / mangueira</td><td>30</td></tr>
+            <tr><td>222406</td><td><span class="pill" style="background:#fef3c7;color:#92400e;">Pendente</span></td><td>Manutenção</td><td style="text-align:left; padding-left:6px;">Caixa de direção com vazamento</td><td>18</td></tr>
+            <tr><td>W551</td><td><span class="pill" style="background:#fef3c7;color:#92400e;">Pendente</span></td><td>Manutenção</td><td style="text-align:left; padding-left:6px;">Trocar para-brisa</td><td>16</td></tr>
+            <tr><td>222205</td><td><span class="pill" style="background:#fef3c7;color:#92400e;">Pendente</span></td><td>Manutenção</td><td style="text-align:left; padding-left:6px;">Sem motor do exaustor</td><td>15</td></tr>
+            <tr><td>222404</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">GNS</span></td><td>Suprimentos</td><td style="text-align:left; padding-left:6px;">Aguardando módulo ACM</td><td>15</td></tr>
+            <tr><td>222221</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">GNS</span></td><td>Suprimentos</td><td style="text-align:left; padding-left:6px;">Revisão 10.000 km</td><td>14</td></tr>
+            <tr><td class="muted" colspan="5">+ 20 veículos parados há menos de 14 dias</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Distribuição por Setor</div>
+      <div class="card-body">
+        <table>
+          <thead><tr><th style="text-align:left; padding-left:6px;">Setor</th><th>Parados</th></tr></thead>
+          <tbody>
+            <tr><td style="text-align:left; padding-left:6px; font-weight:700;">Manutenção</td><td style="font-weight:700;">14</td></tr>
+            <tr><td style="text-align:left; padding-left:6px; font-weight:700;">Suprimentos</td><td style="font-weight:700; color:#991b1b;">9</td></tr>
+            <tr><td style="text-align:left; padding-left:6px;">Garantia</td><td>2</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:12px; font-size:9px; color:#334155; line-height:1.7; text-transform:uppercase; letter-spacing:0.2px;">
+          <b style="color:#991b1b;">9 carros travados por falta de peça</b> (Suprimentos) — inclui o W553 há 124 dias e o 222208 há 43. É a fila que mais impacta a disponibilidade da frota.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Tempo Médio para Liberar o Carro (Julho)</div>
+    <div class="card-body" style="display:flex; gap:14px; align-items:stretch;">
+      <div class="metric" style="flex:0 0 150px; border-left:4px solid #16a34a;">
+        <div class="lbl">Média p/ Liberar</div><div class="val" style="color:#166534;">3,9 d</div><div class="aux">Mediana 1 dia · 102 liberados</div>
+      </div>
+      <div style="flex:1;">
+        <table>
+          <thead><tr><th style="text-align:left; padding-left:6px;">Categoria</th><th>Liberados</th><th>Média (dias)</th><th>Mediana</th></tr></thead>
+          <tbody>
+            <tr><td style="text-align:left; padding-left:6px; font-weight:700;">GNS</td><td>40</td><td>2,7</td><td>1,0</td></tr>
+            <tr><td style="text-align:left; padding-left:6px;">Faixa Amarela</td><td>14</td><td>2,1</td><td>1,5</td></tr>
+            <tr><td style="text-align:left; padding-left:6px;">Noturno</td><td>42</td><td>5,1</td><td>0,7</td></tr>
+            <tr><td style="text-align:left; padding-left:6px;">Pendentes</td><td>6</td><td>7,6</td><td>5,7</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="flex:0 0 210px; background:#fef2f2; border:1px solid #fca5a5; border-radius:10px; padding:10px;">
+        <div style="font-size:9px; font-weight:800; color:#991b1b; text-transform:uppercase;">⚠️ Atenção · Fila de Peça</div>
+        <div style="font-size:8.5px; color:#334155; margin-top:6px; line-height:1.6; text-transform:uppercase;">A média de ~4 dias é dos que <b>saíram</b>. Quem depende de <b>peça (Suprimentos)</b> encalha: só 3 liberados em 23 dias, e os travados seguem parados — W553 há <b>124 dias</b>. O gargalo real é a chegada de peça, não a oficina.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · fonte: veiculos_pcm (sessão do dia)</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>
+
+<!-- ===================== SLIDE 2 : EMBARCADOS ===================== -->
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Embarcados · Câmeras, Monitoramento e Vision</div>
+      <div class="sub">Prioridade Crítica em Aberto</div>
+    </div>
+    <div class="period-box">
+      <div class="ref">Críticos Abertos</div>
+      <div class="val">11</div>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(4,1fr); margin-bottom:16px;">
+    <div class="metric" style="border-left:4px solid #dc2626;"><div class="lbl">Críticos Abertos</div><div class="val" style="color:#dc2626;">11</div><div class="aux">10 câmeras · 1 vision</div></div>
+    <div class="metric"><div class="lbl">Total Abertos</div><div class="val">12</div><div class="aux">Todas prioridades</div></div>
+    <div class="metric" style="border-left:4px solid #16a34a;"><div class="lbl">Concluídas</div><div class="val" style="color:#166534;">106</div><div class="aux">De 120 no total</div></div>
+    <div class="metric" style="border-left:4px solid #991b1b;"><div class="lbl">Mais Antiga</div><div class="val" style="font-size:15px;">222418</div><div class="aux">Aberta 28/05</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Câmeras / Vision Críticos em Aberto</div>
+    <div class="card-body">
+      <table>
+        <thead><tr><th>Aberto em</th><th>Veículo</th><th>Tipo</th><th style="text-align:left; padding-left:6px;">Problema</th><th>Prioridade</th></tr></thead>
+        <tbody>
+          <tr style="background:#fef2f2;"><td>28/05/2026</td><td style="font-weight:700;">222418</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Testar DVR</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>15/06/2026</td><td style="font-weight:700;">222234</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Carro não está subindo filmagens</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>15/06/2026</td><td style="font-weight:700;">222422</td><td>Vision</td><td style="text-align:left; padding-left:6px;">Não sobe filmagem de monitoramento</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>15/06/2026</td><td style="font-weight:700;">222202</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Sem subir gravação de monitoramento</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>15/06/2026</td><td style="font-weight:700;">222221</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Sem subir gravação</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>15/06/2026</td><td style="font-weight:700;">242506</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Não está subindo filmagem</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>15/06/2026</td><td style="font-weight:700;">242523</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Não está gravando monitoramento</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>15/06/2026</td><td style="font-weight:700;">222413</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Não está subindo gravação</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>18/06/2026</td><td style="font-weight:700;">242512</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Câmeras do motorista e catraca</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>25/06/2026</td><td style="font-weight:700;">222209</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Câmera da rua desconectada</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+          <tr><td>01/07/2026</td><td style="font-weight:700;">242513</td><td>Câmeras</td><td style="text-align:left; padding-left:6px;">Câmera da rua suja</td><td><span class="pill" style="background:#fee2e2;color:#991b1b;">Crítica</span></td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:10px; font-size:9px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.2px;">8 dos 11 críticos abertos concentrados em 15/06 — subida de gravação/monitoramento. Falha de embarcado crítica compromete a segurança e a defesa jurídica em ocorrências.</div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Por Tipo (120 no total)</div>
+      <div class="card-body">
+        <div style="display:flex; flex-direction:column; gap:8px; font-size:10px;">
+          <div style="display:flex; align-items:center; gap:8px;"><span style="width:74px; font-weight:700;">Câmeras</span><div style="flex:1; background:#eef4f3; border-radius:5px; height:16px;"><div style="width:100%; background:#0d9488; height:100%; border-radius:5px;"></div></div><span style="width:22px; text-align:right; font-weight:800;">59</span></div>
+          <div style="display:flex; align-items:center; gap:8px;"><span style="width:74px; font-weight:700;">Vision</span><div style="flex:1; background:#eef4f3; border-radius:5px; height:16px;"><div style="width:90%; background:#0d9488; height:100%; border-radius:5px;"></div></div><span style="width:22px; text-align:right; font-weight:800;">53</span></div>
+          <div style="display:flex; align-items:center; gap:8px;"><span style="width:74px; font-weight:700;">Telemetria</span><div style="flex:1; background:#eef4f3; border-radius:5px; height:16px;"><div style="width:14%; background:#14b8a6; height:100%; border-radius:5px;"></div></div><span style="width:22px; text-align:right; font-weight:800;">8</span></div>
+        </div>
+        <div style="margin-top:10px; font-size:8.5px; color:#94a3a0; text-transform:uppercase;">Componente #1: <b>DVR</b> (45 de 120). Prioridade: 52 críticas · 55 médias · 13 altas.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Solicitações por Mês</div>
+      <div class="card-body">
+        <svg viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg" style="width:100%;">
+          <line x1="26" y1="12" x2="26" y2="135" stroke="#e2e8f0"/><line x1="26" y1="135" x2="310" y2="135" stroke="#e2e8f0"/>
+          <g font-family="Arial" font-size="10" font-weight="700" text-anchor="middle" fill="#123b35">
+            <!-- max 48 -> 115px. v -> 135-v/48*115 -->
+            <rect x="40" y="20" width="34" height="115" fill="#0d9488"></rect><text x="57" y="14">48</text><text x="57" y="150" fill="#5b716c" font-weight="400">MAR</text>
+            <rect x="98" y="104" width="34" height="31" fill="#0d9488"></rect><text x="115" y="98">13</text><text x="115" y="150" fill="#5b716c" font-weight="400">ABR</text>
+            <rect x="156" y="70" width="34" height="65" fill="#0d9488"></rect><text x="173" y="64">27</text><text x="173" y="150" fill="#5b716c" font-weight="400">MAI</text>
+            <rect x="214" y="68" width="34" height="67" fill="#0d9488"></rect><text x="231" y="62">28</text><text x="231" y="150" fill="#5b716c" font-weight="400">JUN</text>
+            <rect x="272" y="126" width="34" height="9" fill="#94a3a0"></rect><text x="289" y="120" fill="#94a3a0">4</text><text x="289" y="150" fill="#94a3a0" font-weight="400">JUL*</text>
+          </g>
+        </svg>
+        <div style="margin-top:2px; font-size:8.5px; color:#94a3a0; text-transform:uppercase;">Pico em março (48). Julho parcial.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Tempo de Resolução</div>
+      <div class="card-body" style="text-align:center;">
+        <div style="font-size:34px; font-weight:900; color:#dc2626; line-height:1;">23 <span style="font-size:16px;">dias</span></div>
+        <div style="font-size:9px; color:#5b716c; text-transform:uppercase; font-weight:700; margin-top:4px;">média p/ concluir · mediana 15</div>
+        <div style="margin-top:12px; font-size:9px; color:#334155; line-height:1.6; text-transform:uppercase; text-align:left; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:9px;">
+          106 concluídas de 120. Mas <b style="color:#991b1b;">3 semanas em média</b> para religar uma câmera/DVR — tempo longo demais para um item de segurança. Priorizar críticos reduz exposição jurídica.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · fonte: embarcados_solicitacoes_reparo</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>
+
+<!-- ===================== SLIDE 3 : MOTORISTAS ===================== -->
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Intervenções por Motorista</div>
+      <div class="sub">Procedentes: Julho · Improcedentes: 2026</div>
+    </div>
+    <div class="period-box">
+      <div class="ref">Mês de referência</div>
+      <div class="val">JULHO/2026</div>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1fr 1fr;">
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Top 5 Motoristas — Procedentes (Julho)</div>
+      <div class="card-body">
+        <table>
+          <thead><tr><th style="text-align:left; padding-left:8px;">Motorista</th><th>Intervenções</th></tr></thead>
+          <tbody>
+            <tr><td style="text-align:left; padding-left:8px; font-weight:700;">Edison Gomes Palmeira</td><td style="font-weight:700; color:#1e3a8a;">3</td></tr>
+            <tr><td style="text-align:left; padding-left:8px; font-weight:700;">Evandro dos Santos Silva Jr.</td><td style="font-weight:700; color:#1e3a8a;">3</td></tr>
+            <tr><td style="text-align:left; padding-left:8px;">Francisco Rhonys Oliveira de Souza</td><td>2</td></tr>
+            <tr><td style="text-align:left; padding-left:8px;">Gustavo Veiga de Oliveira</td><td>2</td></tr>
+            <tr><td style="text-align:left; padding-left:8px;">André Pereira Lima</td><td>2</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:10px; font-size:8.5px; color:#94a3b8; text-transform:uppercase;">Procedentes = intervenções válidas em que o motorista estava conduzindo. Alto volume pode indicar rota crítica ou necessidade de reciclagem.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Top Motoristas — Improcedentes (2026)</div>
+      <div class="card-body">
+        <table>
+          <thead><tr><th style="text-align:left; padding-left:8px;">Motorista</th><th>Improcedentes</th></tr></thead>
+          <tbody>
+            <tr><td style="text-align:left; padding-left:8px; font-weight:700;">Edison Gomes Palmeira</td><td style="font-weight:700; color:#b45309;">2</td></tr>
+            <tr><td style="text-align:left; padding-left:8px; font-weight:700;">William A. de A. F. Oliveira</td><td style="font-weight:700; color:#b45309;">2</td></tr>
+            <tr><td style="text-align:left; padding-left:8px;">Carlos Roberto da Silva</td><td>1</td></tr>
+            <tr><td style="text-align:left; padding-left:8px;">Adriano Alves Quirino</td><td>1</td></tr>
+            <tr><td style="text-align:left; padding-left:8px;">Cleber Mayer Souza Santos</td><td>1</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:10px; font-size:8.5px; color:#94a3b8; text-transform:uppercase;">Improcedentes = acionou socorro sem defeito real. Recorrência sinaliza necessidade de treinamento (uso indevido do SOS).</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Improcedentes por Mês — 2026</div>
+    <div class="card-body">
+      <div style="padding:10px; border:1px solid #dbe3ee; border-radius:14px; background:linear-gradient(180deg,#fff,#f8fafc);">
+        <svg viewBox="0 0 880 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;">
+          <g stroke="#e2e8f0" stroke-width="1"><line x1="45" y1="20" x2="45" y2="175"></line><line x1="45" y1="175" x2="840" y2="175"></line></g>
+          <!-- escala: 0 em y=175, 6 em y=25 -> 25px/unidade -->
+          <polygon points="90,25 220,50 350,125 480,125 610,125 740,150 840,175 840,175 90,175" fill="#f59e0b" fill-opacity="0.10"></polygon>
+          <polyline points="90,25 220,50 350,125 480,125 610,125 740,150 840,175" fill="none" stroke="#f59e0b" stroke-width="3"></polyline>
+          <g font-family="Arial" font-size="12" font-weight="700" fill="#b45309" text-anchor="middle">
+            <circle cx="90" cy="25" r="4" fill="#f59e0b"></circle><text x="90" y="16">6</text>
+            <circle cx="220" cy="50" r="4" fill="#f59e0b"></circle><text x="220" y="41">5</text>
+            <circle cx="350" cy="125" r="4" fill="#f59e0b"></circle><text x="350" y="116">2</text>
+            <circle cx="480" cy="125" r="4" fill="#f59e0b"></circle><text x="480" y="116">2</text>
+            <circle cx="610" cy="125" r="4" fill="#f59e0b"></circle><text x="610" y="116">2</text>
+            <circle cx="740" cy="150" r="4" fill="#f59e0b"></circle><text x="740" y="141">1</text>
+            <circle cx="840" cy="175" r="4" fill="#16a34a"></circle><text x="840" y="166" fill="#166534">0</text>
+          </g>
+          <g font-family="Arial" font-size="11" fill="#64748b" text-anchor="middle">
+            <text x="90" y="195">JAN</text><text x="220" y="195">FEV</text><text x="350" y="195">MAR</text><text x="480" y="195">ABR</text><text x="610" y="195">MAI</text><text x="740" y="195">JUN</text><text x="840" y="195" font-weight="700">JUL*</text>
+          </g>
+        </svg>
+      </div>
+      <div style="margin-top:8px; font-size:9px; color:#64748b; text-transform:uppercase; letter-spacing:0.2px;"><b>Tendência positiva:</b> improcedentes caindo de 6 (jan) para 0 (jul parcial) — 18 no ano. Sinal de melhora no uso correto do acionamento de socorro.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Composição das Intervenções e Foco de Reciclagem</div>
+    <div class="card-body" style="display:flex; gap:16px; align-items:stretch;">
+      <div style="flex:1;">
+        <div style="font-size:9px; color:#5b716c; text-transform:uppercase; font-weight:800; margin-bottom:8px;">Tipo de intervenção — Julho (45 válidas)</div>
+        <div style="display:flex; flex-direction:column; gap:7px; font-size:10px;">
+          <div style="display:flex; align-items:center; gap:8px;"><span style="width:80px; font-weight:700;">RECOLHEU</span><div style="flex:1; background:#eef4f3; border-radius:5px; height:15px;"><div style="width:100%; background:#0d9488; height:100%; border-radius:5px;"></div></div><span style="width:24px; text-align:right; font-weight:800;">19</span></div>
+          <div style="display:flex; align-items:center; gap:8px;"><span style="width:80px; font-weight:700;">SOS</span><div style="flex:1; background:#eef4f3; border-radius:5px; height:15px;"><div style="width:63%; background:#0d9488; height:100%; border-radius:5px;"></div></div><span style="width:24px; text-align:right; font-weight:800;">12</span></div>
+          <div style="display:flex; align-items:center; gap:8px;"><span style="width:80px; font-weight:700;">AVARIA</span><div style="flex:1; background:#eef4f3; border-radius:5px; height:15px;"><div style="width:42%; background:#14b8a6; height:100%; border-radius:5px;"></div></div><span style="width:24px; text-align:right; font-weight:800;">8</span></div>
+          <div style="display:flex; align-items:center; gap:8px;"><span style="width:80px; font-weight:700;">TROCA</span><div style="flex:1; background:#eef4f3; border-radius:5px; height:15px;"><div style="width:32%; background:#14b8a6; height:100%; border-radius:5px;"></div></div><span style="width:24px; text-align:right; font-weight:800;">6</span></div>
+        </div>
+      </div>
+      <div style="flex:0 0 300px; background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:12px;">
+        <div style="font-size:10px; font-weight:800; color:#92400e; text-transform:uppercase;">Como ler o motorista</div>
+        <div style="font-size:9px; color:#334155; line-height:1.6; margin-top:6px; text-transform:uppercase;">
+          <b>Procedente</b> = defeito real do veículo — não é falha do motorista, só mostra em qual carro/rota a quebra cai.<br/>
+          <b style="color:#92400e;">Improcedente</b> = acionou socorro sem defeito — é o indicador de <b>comportamento</b> e o foco de reciclagem.<br/><br/>
+          <b style="color:#991b1b;">Reincidentes em improcedente (2026):</b> Edison Gomes Palmeira e William A. de A. F. Oliveira (2× cada) — prioridade de treinamento no uso do SOS.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · fonte: sos_acionamentos</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>

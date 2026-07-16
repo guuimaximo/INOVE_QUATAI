@@ -1,0 +1,990 @@
+<title>Flash Report Manutenção — Página 1 (Modelo)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #eef2f7; color: #111827; padding: 24px 0; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0b1220; }
+  }
+  :root[data-theme="dark"] body { background: #0b1220; }
+  :root[data-theme="light"] body { background: #eef2f7; }
+
+  .note {
+    width: 210mm; margin: 0 auto 14px auto; font-family: Arial, sans-serif;
+    font-size: 12px; color: #64748b; padding: 0 2mm;
+  }
+
+  .page {
+    width: 210mm; min-height: 297mm; margin: 0 auto;
+    background: radial-gradient(circle at top right, rgba(37,99,235,0.06), transparent 22%), linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+    padding: 8mm 10mm 8mm 10mm; position: relative;
+    box-shadow: 0 20px 50px rgba(15,23,42,0.18);
+  }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 4px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+  .title h1 { margin: 0; font-size: 24px; line-height: 1; letter-spacing: 0.3px; color: #0f172a; }
+  .title .sub { margin-top: 6px; font-size: 11px; color: #475569; }
+  .period-box { min-width: 220px; text-align: right; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); color: white; padding: 10px 12px; border-radius: 14px; box-shadow: 0 10px 24px rgba(15,23,42,0.16); }
+  .period-box .ref { font-size: 10px; text-transform: uppercase; font-weight: 700; opacity: 0.8; }
+  .period-box .val { font-size: 18px; font-weight: 800; margin-top: 3px; }
+
+  .grid-top { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+
+  .card { border: 1px solid #dbe3ee; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 6px 20px rgba(15,23,42,0.06); }
+  .card-title { padding: 10px 12px; background: linear-gradient(90deg, #0f172a 0%, #172554 100%); color: white; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; }
+  .card-body { padding: 12px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 10px; font-variant-numeric: tabular-nums; }
+  th { background: #eef2f7; color: #0f172a; text-transform: uppercase; font-size: 9px; padding: 6px 4px; border: 1px solid #dbe3ee; text-align: center; }
+  td { padding: 6px 4px; border: 1px solid #dbe3ee; vertical-align: middle; text-align: center; word-wrap: break-word; }
+
+  .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .metric { border: 1px solid #dbe3ee; border-radius: 12px; padding: 10px 8px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.8); }
+  .metric .lbl { font-size: 9px; color: #64748b; text-transform: uppercase; font-weight: 800; white-space: nowrap; }
+  .metric .val { margin-top: 4px; font-size: 18px; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+  .metric .aux { margin-top: 3px; font-size: 9px; color: #64748b; line-height: 1.1; }
+
+  .metric-wide { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: white; background: linear-gradient(90deg, #0f172a 0%, #1e3a8a 100%); box-shadow: 0 6px 14px rgba(30,58,138,0.18); }
+  .muted { color: #64748b; }
+
+  .chart-wrap { padding: 10px; border: 1px solid #dbe3ee; border-radius: 14px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); }
+  .chart-wrap svg { width: 100%; height: auto; display: block; }
+
+  .cons-box { margin-top: 12px; border: 1px solid #dbe3ee; border-radius: 14px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); padding: 12px; box-shadow: 0 6px 20px rgba(15,23,42,0.05); }
+  .cons-title { font-size: 11px; font-weight: 800; text-transform: uppercase; margin-bottom: 8px; color: #0f172a; letter-spacing: 0.7px; }
+  .cons-text { font-size: 12px; line-height: 1.62; color: #1f2937; text-align: justify; }
+  .footer { position: absolute; left: 10mm; right: 10mm; bottom: 6mm; font-size: 10px; color: #64748b; display: flex; justify-content: space-between; border-top: 1px solid #dbe3ee; padding-top: 4px; }
+
+  .mock-tag { display:inline-block; background:#fef3c7; color:#92400e; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; padding:3px 8px; border-radius:6px; margin-left:8px; vertical-align:middle; }
+</style>
+
+<div class="note">Modelo de revisão — Página 1 do Flash Report Manutenção, com <b>dados reais</b> e dois ajustes aplicados: (1) dias sem KM consolidado excluídos do cálculo; (2) bug de tratamento de <code>ocorrencia</code> nula corrigido (contava "NAN" como intervenção válida). <span class="mock-tag">Jul/26 parcial · 10 dias válidos</span></div>
+
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Página 1 · Intervenções do mês / MKBF</div>
+      <div class="sub">Período analisado: <b>01/07/2026 a 10/07/2026</b> <span style="color:#dc2626; font-weight:800;">(parcial — dia 11 sem KM consolidado)</span></div>
+    </div>
+    <div class="period-box">
+      <div class="ref">Mês de referência</div>
+      <div class="val">JULHO/2026</div>
+    </div>
+  </div>
+
+  <div class="grid-top">
+    <div class="card">
+      <div class="card-title">Comparativo mensal</div>
+      <div class="card-body">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align: left; padding-left: 8px;">Indicador</th>
+              <th>JUNHO/2026</th>
+              <th>JULHO/2026*</th>
+              <th>Var</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align: left; padding-left: 8px;"><b>Intervenções</b></td>
+              <td>165</td>
+              <td><b>45</b></td>
+              <td style="color:#64748b; font-weight:bold;" title="30 dias vs 10 dias — não comparável">-72,7%*</td>
+            </tr>
+            <tr>
+              <td style="text-align: left; padding-left: 8px;"><b>KM rodado</b></td>
+              <td>607.330</td>
+              <td><b>187.067</b></td>
+              <td style="color:#64748b; font-weight:bold;" title="30 dias vs 10 dias — não comparável">-69,2%*</td>
+            </tr>
+            <tr>
+              <td style="text-align: left; padding-left: 8px;"><b>MKBF</b></td>
+              <td>3.681</td>
+              <td><b>4.157</b></td>
+              <td style="color:#16a34a; font-weight:bold;">+12,9%</td>
+            </tr>
+            <tr>
+              <td style="text-align: left; padding-left: 8px;"><b>Meta MKBF</b></td>
+              <td>7.000</td>
+              <td>7.000</td>
+              <td class="muted">-</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top:6px; font-size:9px; color:#94a3b8;">* Julho parcial (10 de 31 dias com KM consolidado) — variação de Intervenções/KM vs. mês fechado não é comparável ponto a ponto; MKBF sofre menos por ser uma taxa (km ÷ intervenções).</div>
+
+        <div class="metric-wide">
+          <div class="metric">
+            <div class="lbl">Aderência à meta</div>
+            <div class="val">59,4%</div>
+            <div class="aux">Meta de referência: 7.000</div>
+          </div>
+          <div class="metric" style="text-align: center;">
+            <div class="lbl">Status do mês</div>
+            <div style="margin-top:10px;">
+              <span style="display:inline-block; padding:6px 10px; border-radius:10px; font-size:12px; font-weight:800; background:#fee2e2; color:#991b1b;">ABAIXO</span>
+            </div>
+            <div class="aux" style="margin-top:10px;">Base parcial (10 dias válidos)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Resumo executivo do período</div>
+      <div class="card-body">
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="lbl">Intervenções</div>
+            <div class="val">45</div>
+            <div class="aux">Ocorrências válidas</div>
+          </div>
+          <div class="metric">
+            <div class="lbl">KM rodado</div>
+            <div class="val">187.067</div>
+            <div class="aux">Acumulado (10 dias)</div>
+          </div>
+          <div class="metric">
+            <div class="lbl">MKBF</div>
+            <div class="val">4.157</div>
+            <div class="aux">KM ÷ intervenções</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div class="badge">Meta MKBF: 7.000</div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align: left; padding-left: 8px;">Tipo de ocorrência</th>
+                <th>JUNHO/2026</th>
+                <th>JULHO/2026*</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="text-align: left; padding-left: 8px;">RECOLHEU</td>
+                <td>84</td>
+                <td style="font-weight:700;">19</td>
+              </tr>
+              <tr>
+                <td style="text-align: left; padding-left: 8px;">SOS</td>
+                <td>53</td>
+                <td style="font-weight:700;">12</td>
+              </tr>
+              <tr>
+                <td style="text-align: left; padding-left: 8px;">AVARIA</td>
+                <td>16</td>
+                <td style="font-weight:700;">8</td>
+              </tr>
+              <tr>
+                <td style="text-align: left; padding-left: 8px;">TROCA</td>
+                <td>11</td>
+                <td style="font-weight:700;">6</td>
+              </tr>
+              <tr>
+                <td style="text-align: left; padding-left: 8px;">IMPROCEDENTE</td>
+                <td>1</td>
+                <td style="font-weight:700;">0</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-title">Evolução histórica do MKBF</div>
+    <div class="card-body">
+      <div class="chart-wrap">
+        <svg viewBox="0 0 940 380" xmlns="http://www.w3.org/2000/svg">
+          <!-- grid -->
+          <g stroke="#e2e8f0" stroke-width="1">
+            <line x1="60" y1="40" x2="60" y2="320"></line>
+            <line x1="60" y1="320" x2="890" y2="320"></line>
+          </g>
+          <!-- meta line (7.000) -->
+          <line x1="60" y1="59" x2="890" y2="59" stroke="#ef4444" stroke-width="2" stroke-dasharray="8,6"></line>
+          <text x="895" y="63" font-size="11" fill="#ef4444" font-family="Arial" font-weight="700">Meta 7.000</text>
+
+          <!-- area fill under mkbf line -->
+          <polygon points="90,183 158,197 226,185 294,177 362,173 430,177 498,182 566,186 634,184 702,175 770,183 838,165 838,320 90,320" fill="#3b82f6" fill-opacity="0.10"></polygon>
+
+          <!-- mkbf line -->
+          <polyline points="90,183 158,197 226,185 294,177 362,173 430,177 498,182 566,186 634,184 702,175 770,183 838,165"
+            fill="none" stroke="#2563eb" stroke-width="3"></polyline>
+
+          <!-- points + labels -->
+          <g font-family="Arial" font-size="10" font-weight="700" fill="#1e293b">
+            <circle cx="90" cy="183" r="4" fill="#2563eb"></circle><text x="90" y="168" text-anchor="middle">3.671</text>
+            <circle cx="158" cy="197" r="4" fill="#2563eb"></circle><text x="158" y="212" text-anchor="middle" fill="#dc2626">3.304</text>
+            <circle cx="226" cy="185" r="4" fill="#2563eb"></circle><text x="226" y="170" text-anchor="middle">3.622</text>
+            <circle cx="294" cy="177" r="4" fill="#2563eb"></circle><text x="294" y="162" text-anchor="middle">3.822</text>
+            <circle cx="362" cy="173" r="4" fill="#2563eb"></circle><text x="362" y="158" text-anchor="middle">3.932</text>
+            <circle cx="430" cy="177" r="4" fill="#2563eb"></circle><text x="430" y="162" text-anchor="middle">3.829</text>
+            <circle cx="498" cy="182" r="4" fill="#2563eb"></circle><text x="498" y="167" text-anchor="middle">3.703</text>
+            <circle cx="566" cy="186" r="4" fill="#2563eb"></circle><text x="566" y="201" text-anchor="middle">3.601</text>
+            <circle cx="634" cy="184" r="4" fill="#2563eb"></circle><text x="634" y="169" text-anchor="middle">3.657</text>
+            <circle cx="702" cy="175" r="4" fill="#2563eb"></circle><text x="702" y="160" text-anchor="middle">3.887</text>
+            <circle cx="770" cy="183" r="4" fill="#2563eb"></circle><text x="770" y="168" text-anchor="middle">3.681</text>
+            <circle cx="838" cy="165" r="5" fill="#1e3a8a"></circle><text x="838" y="150" text-anchor="middle" fill="#1e3a8a">4.157*</text>
+          </g>
+
+          <!-- month labels -->
+          <g font-family="Arial" font-size="10" fill="#64748b">
+            <text x="90" y="336" text-anchor="middle">AGO/25</text>
+            <text x="158" y="336" text-anchor="middle">SET/25</text>
+            <text x="226" y="336" text-anchor="middle">OUT/25</text>
+            <text x="294" y="336" text-anchor="middle">NOV/25</text>
+            <text x="362" y="336" text-anchor="middle">DEZ/25</text>
+            <text x="430" y="336" text-anchor="middle">JAN/26</text>
+            <text x="498" y="336" text-anchor="middle">FEV/26</text>
+            <text x="566" y="336" text-anchor="middle">MAR/26</text>
+            <text x="634" y="336" text-anchor="middle">ABR/26</text>
+            <text x="702" y="336" text-anchor="middle">MAI/26</text>
+            <text x="770" y="336" text-anchor="middle">JUN/26</text>
+            <text x="838" y="336" text-anchor="middle" font-weight="700" fill="#1e3a8a">JUL/26*</text>
+          </g>
+          <text x="60" y="352" font-size="9" fill="#94a3b8" font-family="Arial">* Julho/2026 parcial (10 de 31 dias com KM consolidado)</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="cons-box">
+    <div class="cons-title">Considerações executivas</div>
+    <div class="cons-text">No período parcial de 01/07/2026 a 10/07/2026 (dias com KM consolidado), a operação registrou 45 intervenções válidas para MKBF, com 187.067 km rodados e MKBF de 4.157. Na comparação com junho/2026 (mês fechado), houve melhora no indicador, com variação de +12,9%. A aderência frente à meta de 7.000 ficou em 59,4%, mantendo o resultado abaixo do patamar esperado — padrão observado nos últimos 12 meses, em que o MKBF não superou a meta em nenhum mês. Os principais ofensores do mês foram RECOLHEU (19), SOS (12), AVARIA (8).</div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · Página 1/5 · dados reais (indicadores_diesel + sos_acionamentos)</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Página 2 · Intervenções por Dia e Projeções</div>
+      <div class="sub">Período analisado: <b>01/07/2026 a 10/07/2026</b> <span style="color:#dc2626; font-weight:800;">(parcial — dia 11 sem KM consolidado)</span></div>
+    </div>
+    <div class="period-box">
+      <div class="ref">Mês de referência</div>
+      <div class="val">JULHO/2026</div>
+    </div>
+  </div>
+
+  <div class="grid-top">
+    <div class="card">
+      <div class="card-title">Projeções e Metas</div>
+      <div class="card-body">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align: left; padding-left: 8px;">Indicador</th>
+              <th>Valor Acumulado / Projeção</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align: left; padding-left: 8px;"><b>Média de Intervenções / Dia</b></td>
+              <td style="font-weight: bold; font-size: 13px;">4,5</td>
+            </tr>
+            <tr>
+              <td style="text-align: left; padding-left: 8px;"><b>Meta de Intervenções / Mês</b></td>
+              <td>27</td>
+            </tr>
+            <tr>
+              <td style="text-align: left; padding-left: 8px;"><b>Projeção Fim do Mês</b></td>
+              <td><b>140</b></td>
+            </tr>
+            <tr>
+              <td style="text-align: left; padding-left: 8px;"><b>Desvio (Delta vs Meta)</b></td>
+              <td style="color:#dc2626; font-weight:bold;">+18</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Status e Base Analítica</div>
+      <div class="card-body" style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="padding: 10px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px;">
+          <div style="font-size: 11px; font-weight: bold; color: #334155; margin-bottom: 4px;">Informação de Base</div>
+          <div style="font-size: 10px; color: #64748b; line-height: 1.4;">
+              Dias decorridos na análise: <b>10 dias</b> (dias com KM consolidado; 11/07 excluído).<br/>
+              A meta de intervenções é calculada através do KM rodado dividido pela meta do MKBF (7.000).
+          </div>
+        </div>
+
+        <div style="padding: 10px; border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; text-align: center;">
+           <div style="font-size:10px; color:#64748b; font-weight:bold; text-transform:uppercase; margin-bottom:8px;">Status da Projeção</div>
+           <div><span style="display:inline-block; padding:6px 10px; border-radius:10px; font-size:12px; font-weight:800; background:#fee2e2; color:#991b1b;">ALERTA</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-title">Intervenções em Aberto — Aguardando Classificação</div>
+    <div class="card-body" style="display:flex; gap:16px; align-items:stretch;">
+      <div style="flex:0 0 108px; display:flex; align-items:center;">
+        <div class="metric" style="width:100%; text-align:center;">
+          <div class="lbl">Em Aberto</div>
+          <div class="val" style="color:#991b1b;">12</div>
+          <div class="aux">Sem ocorrência classificada</div>
+        </div>
+      </div>
+      <div style="flex:1; display:grid; grid-template-columns:1fr 1fr; grid-auto-flow:column; grid-template-rows:repeat(6, auto); column-gap:20px;">
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6248</b> · 222212 · 07TR</span><span class="muted">12/07 13:38</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6247</b> · 222201 · 04TR</span><span class="muted">12/07 13:04</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6246</b> · 222413 · 07TR</span><span class="muted">12/07 05:40</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6245</b> · 222226 · 01TR</span><span class="muted">12/07 04:55</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6243</b> · 222417 · 07TR</span><span class="muted">11/07 12:18</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6242</b> · 222405 · 08TR</span><span class="muted">11/07 12:15</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6241</b> · 242501 · 09TR</span><span class="muted">11/07 11:44</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6240</b> · 222408 · 09TR</span><span class="muted">11/07 11:19</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6239</b> · 222232 · 04TR</span><span class="muted">11/07 08:25</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6238</b> · 222214 · 07TR</span><span class="muted">11/07 06:23</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px dashed #e2e8f0; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6237</b> · 242529 · 10TR</span><span class="muted">10/07 16:22</span></div>
+        <div style="display:flex; justify-content:space-between; gap:6px; padding:3.5px 0; font-size:9px; color:#334155;"><span><b>6236</b> · 222234 · 06TR</span><span class="muted">10/07 16:06</span></div>
+      </div>
+    </div>
+    <div style="padding:0 12px 10px 12px; font-size:8.5px; color:#94a3b8;">Só status "Aberto" (ocorrência ainda não classificada). Mais antiga em aberto: Nº 6236, desde 10/07 16:06 (~1,8 dia).</div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-title">Evolução Diária - Intervenções e MKBF</div>
+    <div class="card-body">
+      <div class="chart-wrap">
+        <svg viewBox="0 0 940 380" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%; height:200px;">
+          <g stroke="#e2e8f0" stroke-width="1">
+            <line x1="60" y1="40" x2="60" y2="320"></line>
+            <line x1="60" y1="320" x2="890" y2="320"></line>
+          </g>
+
+          <!-- bars: intervencoes -->
+          <g fill="#3b82f6" fill-opacity="0.85">
+            <rect x="75" y="297" width="30" height="23"></rect>
+            <rect x="158" y="180" width="30" height="140"></rect>
+            <rect x="241" y="133" width="30" height="187"></rect>
+            <rect x="324" y="180" width="30" height="140"></rect>
+            <rect x="407" y="297" width="30" height="23"></rect>
+            <rect x="491" y="133" width="30" height="187"></rect>
+            <rect x="574" y="203" width="30" height="117"></rect>
+            <rect x="657" y="203" width="30" height="117"></rect>
+            <rect x="740" y="227" width="30" height="93"></rect>
+            <rect x="823" y="297" width="30" height="23"></rect>
+          </g>
+          <g font-family="Arial" font-size="9" font-weight="700" fill="#0f172a">
+            <text x="90" y="292" text-anchor="middle">1</text>
+            <text x="173" y="175" text-anchor="middle">6</text>
+            <text x="256" y="128" text-anchor="middle">8</text>
+            <text x="339" y="175" text-anchor="middle">6</text>
+            <text x="422" y="292" text-anchor="middle">1</text>
+            <text x="506" y="128" text-anchor="middle">8</text>
+            <text x="589" y="198" text-anchor="middle">5</text>
+            <text x="672" y="198" text-anchor="middle">5</text>
+            <text x="755" y="222" text-anchor="middle">4</text>
+            <text x="838" y="292" text-anchor="middle">1</text>
+          </g>
+
+          <!-- line: mkbf diario -->
+          <polyline points="90,40 173,274 256,286 339,289 422,212 506,284 589,265 672,264 755,292 838,96"
+            fill="none" stroke="#ef4444" stroke-width="2.2"></polyline>
+          <g font-family="Arial" font-size="8.5" font-weight="700" fill="#dc2626">
+            <circle cx="90" cy="40" r="3.5" fill="#ef4444"></circle><text x="90" y="32" text-anchor="middle">22.839</text>
+            <circle cx="173" cy="274" r="3.5" fill="#ef4444"></circle><text x="173" y="266" text-anchor="middle">3.730</text>
+            <circle cx="256" cy="286" r="3.5" fill="#ef4444"></circle><text x="256" y="300" text-anchor="middle">2.792</text>
+            <circle cx="339" cy="289" r="3.5" fill="#ef4444"></circle><text x="339" y="303" text-anchor="middle">2.502</text>
+            <circle cx="422" cy="212" r="3.5" fill="#ef4444"></circle><text x="422" y="204" text-anchor="middle">8.823</text>
+            <circle cx="506" cy="284" r="3.5" fill="#ef4444"></circle><text x="506" y="298" text-anchor="middle">2.908</text>
+            <circle cx="589" cy="265" r="3.5" fill="#ef4444"></circle><text x="589" y="257" text-anchor="middle">4.486</text>
+            <circle cx="672" cy="264" r="3.5" fill="#ef4444"></circle><text x="672" y="256" text-anchor="middle">4.538</text>
+            <circle cx="755" cy="292" r="3.5" fill="#ef4444"></circle><text x="755" y="306" text-anchor="middle">2.249</text>
+            <circle cx="838" cy="96" r="3.5" fill="#ef4444"></circle><text x="838" y="88" text-anchor="middle">18.294</text>
+          </g>
+
+          <g font-family="Arial" font-size="10" fill="#64748b">
+            <text x="90" y="352" text-anchor="middle">01/07</text>
+            <text x="173" y="352" text-anchor="middle">02/07</text>
+            <text x="256" y="352" text-anchor="middle">03/07</text>
+            <text x="339" y="352" text-anchor="middle">04/07</text>
+            <text x="422" y="352" text-anchor="middle">05/07</text>
+            <text x="506" y="352" text-anchor="middle">06/07</text>
+            <text x="589" y="352" text-anchor="middle">07/07</text>
+            <text x="672" y="352" text-anchor="middle">08/07</text>
+            <text x="755" y="352" text-anchor="middle">09/07</text>
+            <text x="838" y="352" text-anchor="middle">10/07</text>
+          </g>
+
+          <g font-family="Arial" font-size="10" font-weight="700">
+            <rect x="700" y="44" width="12" height="12" fill="#3b82f6" fill-opacity="0.85"></rect>
+            <text x="716" y="54" fill="#1e293b">Intervenções</text>
+            <line x1="800" y1="50" x2="818" y2="50" stroke="#ef4444" stroke-width="2.2"></line>
+            <text x="822" y="54" fill="#1e293b">MKBF diário</text>
+          </g>
+        </svg>
+      </div>
+      <div style="margin-top:6px; font-size:9px; color:#94a3b8;">11/07 foi excluído do gráfico e de todos os totais: KM rodado = 0 em indicadores_diesel (dado ainda não consolidado) e as 6 ocorrências desse dia estavam com <code>ocorrencia</code> em branco no sos_acionamentos — provável fila de triagem pendente, não intervenções reais classificadas.</div>
+    </div>
+  </div>
+
+  <div class="cons-box">
+    <div class="cons-title">Considerações executivas · Análise Diária</div>
+    <div class="cons-text">No período de 01/07/2026 a 10/07/2026, a média diária observada foi de 4,50 intervenções/dia, com projeção acima da meta de intervenções. A distribuição aponta 38 quebras em dias úteis e 7 aos finais de semana. O comportamento diário pressiona diretamente a confiabilidade operacional. O acompanhamento contínuo é essencial para antecipar ações corretivas.</div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · Página 2/5 · dados reais (indicadores_diesel + sos_acionamentos)</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Página 3 · Análise Estratégica (Linha / Horário / Carro / Cluster)</div>
+      <div class="sub">Período consolidado: <b>01/05/2026 a 10/07/2026 (3 meses)</b></div>
+    </div>
+    <div class="period-box">
+      <div class="ref">Mês Referência Principal</div>
+      <div class="val">JULHO/2026</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-title">Ocorrências por Linha e Horário</div>
+    <div class="card-body" style="padding-bottom: 4px;">
+      <svg viewBox="0 0 940 250" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%; height:104px; margin-bottom:4px;">
+        <text x="470" y="16" text-anchor="middle" font-family="Arial" font-size="12" font-weight="700" fill="#0f172a">Top 14 · Ocorrências por Linha</text>
+        <line x1="20" y1="210" x2="920" y2="210" stroke="#dbe3ee" stroke-width="1"></line>
+        <g font-family="Arial" font-size="8" fill="#334155">
+          <!-- 08TR -->
+          <rect x="54" y="79" width="14" height="131" fill="#cbd5e1"></rect><text x="61" y="74" text-anchor="middle" fill="#64748b">48</text>
+          <rect x="70" y="194" width="14" height="16" fill="#1e3a8a"></rect><text x="77" y="192" text-anchor="middle" font-weight="700">6</text>
+          <text x="70" y="222" text-anchor="middle">08TR</text>
+          <!-- 19TR -->
+          <rect x="118" y="128" width="14" height="82" fill="#cbd5e1"></rect><text x="125" y="123" text-anchor="middle" fill="#64748b">30</text>
+          <rect x="134" y="194" width="14" height="16" fill="#1e3a8a"></rect><text x="141" y="192" text-anchor="middle" font-weight="700">6</text>
+          <text x="134" y="222" text-anchor="middle">19TR</text>
+          <!-- 07TR -->
+          <rect x="182" y="93" width="14" height="117" fill="#cbd5e1"></rect><text x="189" y="88" text-anchor="middle" fill="#64748b">43</text>
+          <rect x="198" y="196" width="14" height="14" fill="#1e3a8a"></rect><text x="205" y="194" text-anchor="middle" font-weight="700">5</text>
+          <text x="198" y="222" text-anchor="middle">07TR</text>
+          <!-- 20TR -->
+          <rect x="246" y="123" width="14" height="87" fill="#cbd5e1"></rect><text x="253" y="118" text-anchor="middle" fill="#64748b">32</text>
+          <rect x="262" y="196" width="14" height="14" fill="#1e3a8a"></rect><text x="269" y="194" text-anchor="middle" font-weight="700">5</text>
+          <text x="262" y="222" text-anchor="middle">20TR</text>
+          <!-- 04TR -->
+          <rect x="310" y="126" width="14" height="84" fill="#cbd5e1"></rect><text x="317" y="121" text-anchor="middle" fill="#64748b">31</text>
+          <rect x="326" y="196" width="14" height="14" fill="#1e3a8a"></rect><text x="333" y="194" text-anchor="middle" font-weight="700">5</text>
+          <text x="326" y="222" text-anchor="middle">04TR</text>
+          <!-- 10TR -->
+          <rect x="374" y="161" width="14" height="49" fill="#cbd5e1"></rect><text x="381" y="156" text-anchor="middle" fill="#64748b">18</text>
+          <rect x="390" y="199" width="14" height="11" fill="#1e3a8a"></rect><text x="397" y="197" text-anchor="middle" font-weight="700">4</text>
+          <text x="390" y="222" text-anchor="middle">10TR</text>
+          <!-- 06TR -->
+          <rect x="438" y="136" width="14" height="74" fill="#cbd5e1"></rect><text x="445" y="131" text-anchor="middle" fill="#64748b">27</text>
+          <rect x="454" y="202" width="14" height="8" fill="#1e3a8a"></rect><text x="461" y="200" text-anchor="middle" font-weight="700">3</text>
+          <text x="454" y="222" text-anchor="middle">06TR</text>
+          <!-- 11TR -->
+          <rect x="502" y="150" width="14" height="60" fill="#cbd5e1"></rect><text x="509" y="145" text-anchor="middle" fill="#64748b">22</text>
+          <rect x="518" y="202" width="14" height="8" fill="#1e3a8a"></rect><text x="525" y="200" text-anchor="middle" font-weight="700">3</text>
+          <text x="518" y="222" text-anchor="middle">11TR</text>
+          <!-- 09TR -->
+          <rect x="566" y="158" width="14" height="52" fill="#cbd5e1"></rect><text x="573" y="153" text-anchor="middle" fill="#64748b">19</text>
+          <rect x="582" y="202" width="14" height="8" fill="#1e3a8a"></rect><text x="589" y="200" text-anchor="middle" font-weight="700">3</text>
+          <text x="582" y="222" text-anchor="middle">09TR</text>
+          <!-- 01TR -->
+          <rect x="630" y="158" width="14" height="52" fill="#cbd5e1"></rect><text x="637" y="153" text-anchor="middle" fill="#64748b">19</text>
+          <rect x="646" y="207" width="14" height="3" fill="#1e3a8a"></rect><text x="653" y="205" text-anchor="middle" font-weight="700">1</text>
+          <text x="646" y="222" text-anchor="middle">01TR</text>
+          <!-- 05TR -->
+          <rect x="694" y="177" width="14" height="33" fill="#cbd5e1"></rect><text x="701" y="172" text-anchor="middle" fill="#64748b">12</text>
+          <rect x="710" y="207" width="14" height="3" fill="#1e3a8a"></rect><text x="717" y="205" text-anchor="middle" font-weight="700">1</text>
+          <text x="710" y="222" text-anchor="middle">05TR</text>
+          <!-- 15TR -->
+          <rect x="758" y="177" width="14" height="33" fill="#cbd5e1"></rect><text x="765" y="172" text-anchor="middle" fill="#64748b">12</text>
+          <rect x="774" y="207" width="14" height="3" fill="#1e3a8a"></rect><text x="781" y="205" text-anchor="middle" font-weight="700">1</text>
+          <text x="774" y="222" text-anchor="middle">15TR</text>
+          <!-- 19VP -->
+          <rect x="822" y="177" width="14" height="33" fill="#cbd5e1"></rect><text x="829" y="172" text-anchor="middle" fill="#64748b">12</text>
+          <rect x="838" y="207" width="14" height="3" fill="#1e3a8a"></rect><text x="845" y="205" text-anchor="middle" font-weight="700">1</text>
+          <text x="838" y="222" text-anchor="middle">19VP</text>
+          <!-- 29TR -->
+          <rect x="886" y="177" width="14" height="33" fill="#cbd5e1"></rect><text x="893" y="172" text-anchor="middle" fill="#64748b">12</text>
+          <rect x="902" y="207" width="14" height="3" fill="#1e3a8a"></rect><text x="909" y="205" text-anchor="middle" font-weight="700">1</text>
+          <text x="902" y="222" text-anchor="middle">29TR</text>
+        </g>
+        <g font-family="Arial" font-size="9" font-weight="700">
+          <rect x="640" y="4" width="10" height="10" fill="#cbd5e1"></rect><text x="654" y="13" fill="#334155">Acumulado (3 Meses)</text>
+          <rect x="790" y="4" width="10" height="10" fill="#1e3a8a"></rect><text x="804" y="13" fill="#334155">Mês Atual</text>
+        </g>
+      </svg>
+
+      <hr style="border: 0; height: 1px; background: #dbe3ee; margin: 10px 0;">
+
+      <svg viewBox="0 0 940 190" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%; height:68px;">
+        <text x="470" y="16" text-anchor="middle" font-family="Arial" font-size="12" font-weight="700" fill="#0f172a">Ocorrências por Faixa de Horário (blocos de 3h)</text>
+        <line x1="20" y1="160" x2="920" y2="160" stroke="#dbe3ee" stroke-width="1"></line>
+        <g font-family="Arial" font-size="9" fill="#334155">
+          <rect x="70" y="156" width="26" height="4" fill="#cbd5e1"></rect><text x="83" y="151" text-anchor="middle" fill="#64748b">3</text>
+          <text x="83" y="174" text-anchor="middle">00–02h</text>
+
+          <rect x="179" y="120" width="26" height="40" fill="#cbd5e1"></rect><text x="192" y="115" text-anchor="middle" fill="#64748b">32</text>
+          <rect x="205" y="154" width="26" height="6" fill="#3b82f6"></rect><text x="218" y="152" text-anchor="middle" font-weight="700">5</text>
+          <text x="205" y="174" text-anchor="middle">03–05h</text>
+
+          <rect x="287" y="60" width="26" height="100" fill="#cbd5e1"></rect><text x="300" y="55" text-anchor="middle" fill="#64748b">81</text>
+          <rect x="313" y="146" width="26" height="14" fill="#3b82f6"></rect><text x="326" y="144" text-anchor="middle" font-weight="700">11</text>
+          <text x="313" y="174" text-anchor="middle" font-weight="700">06–08h</text>
+
+          <rect x="396" y="79" width="26" height="81" fill="#cbd5e1"></rect><text x="409" y="74" text-anchor="middle" fill="#64748b">66</text>
+          <rect x="422" y="150" width="26" height="10" fill="#3b82f6"></rect><text x="435" y="148" text-anchor="middle" font-weight="700">8</text>
+          <text x="422" y="174" text-anchor="middle">09–11h</text>
+
+          <rect x="504" y="65" width="26" height="95" fill="#cbd5e1"></rect><text x="517" y="60" text-anchor="middle" fill="#64748b">77</text>
+          <rect x="530" y="151" width="26" height="9" fill="#3b82f6"></rect><text x="543" y="149" text-anchor="middle" font-weight="700">7</text>
+          <text x="530" y="174" text-anchor="middle">12–14h</text>
+
+          <rect x="613" y="77" width="26" height="83" fill="#cbd5e1"></rect><text x="626" y="72" text-anchor="middle" fill="#64748b">67</text>
+          <rect x="639" y="151" width="26" height="9" fill="#3b82f6"></rect><text x="652" y="149" text-anchor="middle" font-weight="700">7</text>
+          <text x="639" y="174" text-anchor="middle" font-weight="700">15–17h</text>
+
+          <rect x="721" y="120" width="26" height="40" fill="#cbd5e1"></rect><text x="734" y="115" text-anchor="middle" fill="#64748b">32</text>
+          <rect x="747" y="155" width="26" height="5" fill="#3b82f6"></rect><text x="760" y="153" text-anchor="middle" font-weight="700">4</text>
+          <text x="747" y="174" text-anchor="middle">18–20h</text>
+
+          <rect x="830" y="145" width="26" height="15" fill="#cbd5e1"></rect><text x="843" y="140" text-anchor="middle" fill="#64748b">12</text>
+          <rect x="856" y="156" width="26" height="4" fill="#3b82f6"></rect><text x="869" y="154" text-anchor="middle" font-weight="700">3</text>
+          <text x="856" y="174" text-anchor="middle">21–23h</text>
+        </g>
+      </svg>
+      <div style="font-size:9px; color:#94a3b8; margin-top:2px;">06h–08h concentra o maior volume acumulado (81 em 3 meses, 11 em julho) — janela de saída da garagem/início de operação.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-title">Evolução do MKBF por Cluster (6 meses)</div>
+    <div class="card-body">
+      <table style="font-size:10px;">
+        <thead>
+          <tr>
+            <th style="text-align: left; padding-left: 6px;">Cluster</th>
+            <th>FEV/26</th>
+            <th>MAR/26</th>
+            <th>ABR/26</th>
+            <th>MAI/26</th>
+            <th>JUN/26</th>
+            <th style="color:#1e3a8a;">JUL/26*</th>
+            <th>Média 6M</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#f0fdf4;">
+            <td style="font-weight:bold; text-align: left; padding-left:6px; color:#166534;">C11</td>
+            <td>6.906</td><td>6.965</td><td>6.981</td><td>6.521</td><td>6.633</td>
+            <td style="font-weight:800; color:#16a34a;">9.592</td>
+            <td style="font-weight:700;">7.266</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; text-align: left; padding-left:6px;">C10</td>
+            <td>3.608</td><td>4.956</td><td>3.752</td><td>3.134</td><td>3.646</td>
+            <td style="font-weight:800; color:#dc2626;">4.526</td>
+            <td style="font-weight:700;">3.937</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; text-align: left; padding-left:6px;">C9</td>
+            <td>3.384</td><td>3.044</td><td>3.257</td><td>4.166</td><td>3.259</td>
+            <td style="font-weight:800; color:#dc2626;">2.902</td>
+            <td style="font-weight:700;">3.335</td>
+          </tr>
+          <tr style="background:#fef2f2;">
+            <td style="font-weight:bold; text-align: left; padding-left:6px; color:#991b1b;">C8</td>
+            <td>1.482</td><td>1.189</td><td>1.830</td><td>1.281</td><td>1.922</td>
+            <td style="font-weight:800; color:#dc2626;">2.950</td>
+            <td style="font-weight:700;">1.776</td>
+          </tr>
+          <tr style="background:#fef2f2;">
+            <td style="font-weight:bold; text-align: left; padding-left:6px; color:#991b1b;">C6</td>
+            <td>2.105</td><td>1.764</td><td>1.622</td><td>3.243</td><td>2.216</td>
+            <td class="muted">sem dado</td>
+            <td style="font-weight:700;">2.190</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:6px; font-size:9px; color:#94a3b8;">Meta MKBF: 7.000. * Julho parcial (10 dias); C6 sem KM/ocorrências no período. <b style="color:#166534;">C11</b> é o único cluster estruturalmente próximo/acima da meta nos últimos 6 meses. <b style="color:#991b1b;">C8 e C6 estão cronicamente abaixo</b> — não é um problema pontual de julho.</div>
+    </div>
+  </div>
+
+  <div class="grid-top-p3">
+    <div class="card" style="height: 100%;">
+      <div class="card-title">Top 10 - Veículos Ofensores</div>
+      <div class="card-body" style="height: calc(100% - 35px); display: flex; align-items: center; justify-content: center;">
+        <svg viewBox="0 0 460 260" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%; height:158px;">
+          <line x1="20" y1="220" x2="440" y2="220" stroke="#dbe3ee" stroke-width="1"></line>
+          <g font-family="Arial" font-size="8" fill="#334155">
+            <rect x="24" y="112" width="13" height="108" fill="#cbd5e1"></rect><text x="30" y="107" text-anchor="middle" fill="#64748b">8</text>
+            <rect x="38" y="166" width="13" height="54" fill="#ef4444"></rect><text x="44" y="164" text-anchor="middle" font-weight="700">4</text>
+            <text x="37" y="234" text-anchor="middle" font-size="7.5">222204</text>
+
+            <rect x="67" y="126" width="13" height="94" fill="#cbd5e1"></rect><text x="73" y="121" text-anchor="middle" fill="#64748b">7</text>
+            <rect x="81" y="193" width="13" height="27" fill="#ef4444"></rect><text x="87" y="191" text-anchor="middle" font-weight="700">2</text>
+            <text x="80" y="234" text-anchor="middle" font-size="7.5">222221</text>
+
+            <rect x="111" y="126" width="13" height="94" fill="#cbd5e1"></rect><text x="117" y="121" text-anchor="middle" fill="#64748b">7</text>
+            <rect x="125" y="193" width="13" height="27" fill="#ef4444"></rect><text x="131" y="191" text-anchor="middle" font-weight="700">2</text>
+            <text x="124" y="234" text-anchor="middle" font-size="7.5">222231</text>
+
+            <rect x="154" y="139" width="13" height="81" fill="#cbd5e1"></rect><text x="160" y="134" text-anchor="middle" fill="#64748b">6</text>
+            <rect x="168" y="193" width="13" height="27" fill="#ef4444"></rect><text x="174" y="191" text-anchor="middle" font-weight="700">2</text>
+            <text x="167" y="234" text-anchor="middle" font-size="7.5">222405</text>
+
+            <rect x="197" y="153" width="13" height="67" fill="#cbd5e1"></rect><text x="203" y="148" text-anchor="middle" fill="#64748b">5</text>
+            <rect x="211" y="193" width="13" height="27" fill="#ef4444"></rect><text x="217" y="191" text-anchor="middle" font-weight="700">2</text>
+            <text x="210" y="234" text-anchor="middle" font-size="7.5">222234</text>
+
+            <rect x="241" y="166" width="13" height="54" fill="#cbd5e1"></rect><text x="247" y="161" text-anchor="middle" fill="#64748b">4</text>
+            <rect x="255" y="193" width="13" height="27" fill="#ef4444"></rect><text x="261" y="191" text-anchor="middle" font-weight="700">2</text>
+            <text x="254" y="234" text-anchor="middle" font-size="7.5">222220</text>
+
+            <rect x="284" y="166" width="13" height="54" fill="#cbd5e1"></rect><text x="290" y="161" text-anchor="middle" fill="#64748b">4</text>
+            <rect x="298" y="193" width="13" height="27" fill="#ef4444"></rect><text x="304" y="191" text-anchor="middle" font-weight="700">2</text>
+            <text x="297" y="234" text-anchor="middle" font-size="7.5">222232</text>
+
+            <rect x="328" y="193" width="13" height="27" fill="#cbd5e1"></rect><text x="334" y="188" text-anchor="middle" fill="#64748b">2</text>
+            <rect x="342" y="193" width="13" height="27" fill="#ef4444"></rect><text x="348" y="191" text-anchor="middle" font-weight="700">2</text>
+            <text x="341" y="234" text-anchor="middle" font-size="7.5">222219</text>
+
+            <rect x="371" y="112" width="13" height="108" fill="#cbd5e1"></rect><text x="377" y="107" text-anchor="middle" fill="#64748b">8</text>
+            <rect x="385" y="207" width="13" height="13" fill="#ef4444"></rect><text x="391" y="205" text-anchor="middle" font-weight="700">1</text>
+            <text x="384" y="234" text-anchor="middle" font-size="7.5">222238</text>
+
+            <rect x="414" y="139" width="13" height="81" fill="#cbd5e1"></rect><text x="420" y="134" text-anchor="middle" fill="#64748b">6</text>
+            <rect x="428" y="207" width="13" height="13" fill="#ef4444"></rect><text x="434" y="205" text-anchor="middle" font-weight="700">1</text>
+            <text x="427" y="234" text-anchor="middle" font-size="7.5">221604</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="card" style="height: 100%;">
+      <div class="card-title">Volume Histórico por Cluster</div>
+      <div class="card-body">
+        <table style="font-size:9.5px;">
+          <thead>
+            <tr>
+              <th style="text-align: left; padding-left: 6px;">Cluster</th>
+              <th style="color: #1e3a8a;">Interv. (Jul)</th>
+              <th>Int/Veíc.</th>
+              <th>Frota</th>
+              <th>KM (Jul)</th>
+              <th>MKBF (Jul)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:bold; text-align: left; padding-left:6px;">C9</td>
+              <td style="font-weight:700; color:#1e3a8a;">27</td>
+              <td>1,50</td><td>18</td>
+              <td>78.356</td>
+              <td style="font-weight:700; color:#dc2626;">2.902</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold; text-align: left; padding-left:6px;">C10</td>
+              <td style="font-weight:700; color:#1e3a8a;">10</td>
+              <td>1,11</td><td>9</td>
+              <td>45.259</td>
+              <td style="font-weight:700; color:#dc2626;">4.526</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold; text-align: left; padding-left:6px;">C11</td>
+              <td style="font-weight:700; color:#1e3a8a;">6</td>
+              <td>1,00</td><td>6</td>
+              <td>57.551</td>
+              <td style="font-weight:700; color:#16a34a;">9.592</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold; text-align: left; padding-left:6px;">C8</td>
+              <td style="font-weight:700; color:#1e3a8a;">2</td>
+              <td>1,00</td><td>2</td>
+              <td>5.901</td>
+              <td style="font-weight:700; color:#dc2626;">2.951</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold; text-align: left; padding-left:6px;">C6</td>
+              <td style="font-weight:700; color:#1e3a8a;">0</td>
+              <td>0,00</td><td>0</td>
+              <td>0</td>
+              <td class="muted">—</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top:6px; font-size:8.5px; color:#94a3b8;">Evolução de 6 meses no gráfico acima. <b style="color:#dc2626;">C9 é o cluster mais crítico</b> (menor MKBF, 2.902) e C8/C6 estão cronicamente abaixo da meta. C6 sem KM/ocorrências em julho — conferir se é frota parada.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cons-box">
+    <div class="cons-title">Considerações executivas</div>
+    <div class="cons-text">No mês de julho/2026 (parcial, 10 dias com KM consolidado), a operação registrou 45 intervenções. A linha 08TR foi a maior ofensora do mês com 6 quebras, seguida de perto por 19TR, 07TR, 20TR e 04TR. O veículo 222204 foi o mais recorrente, com 4 falhas no período. O cluster C9 concentrou a maior parte do volume (27 ocorrências em julho, 1,50 intervenções por veículo em média), seguido por C10 (10 ocorrências, 1,11 por veículo). C6 não registrou ocorrências válidas no mês.</div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · Página 3/5 · dados reais (sos_acionamentos, 3 meses)</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Página 4 · Análise de Defeitos e Componentes</div>
+      <div class="sub">Período consolidado: <b>01/05/2026 a 10/07/2026 (3 meses)</b></div>
+    </div>
+    <div class="period-box">
+      <div class="ref">Mês Referência Principal</div>
+      <div class="val">JULHO/2026</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-title">Resumo de Defeitos (3 meses)</div>
+    <div class="card-body">
+      <div class="metric-grid">
+        <div class="metric">
+          <div class="lbl">Total de Intervenções</div>
+          <div class="val">370</div>
+          <div class="aux">Mai–Jul/2026</div>
+        </div>
+        <div class="metric">
+          <div class="lbl">Maior Defeito</div>
+          <div class="val" style="font-size:14px;">Pneu Furado</div>
+          <div class="aux">80 ocorrências (22% do total)</div>
+        </div>
+        <div class="metric">
+          <div class="lbl">Maior Setor</div>
+          <div class="val" style="font-size:14px;">Mecânica</div>
+          <div class="aux">133 ocorrências (36% do total)</div>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:9px; color:#94a3b8;">Veículo mais recorrente: <b>221608</b> e <b>222419</b>, empatados com 11 ocorrências cada em 3 meses.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-title">Top 5 Linhas + Maior Defeito</div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left; padding-left:8px;">Linha</th>
+            <th>Total (3M)</th>
+            <th style="text-align:left; padding-left:8px;">Maior Defeito</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:bold; text-align:left; padding-left:8px;">08TR</td>
+            <td style="font-weight:bold; color:#dc2626;">48</td>
+            <td style="text-align:left;">Regeneração</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; text-align:left; padding-left:8px;">07TR</td>
+            <td style="font-weight:bold; color:#dc2626;">43</td>
+            <td style="text-align:left;">Pneu Furado</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; text-align:left; padding-left:8px;">20TR</td>
+            <td style="font-weight:bold; color:#dc2626;">32</td>
+            <td style="text-align:left;">Pneu Furado</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; text-align:left; padding-left:8px;">04TR</td>
+            <td style="font-weight:bold; color:#dc2626;">31</td>
+            <td style="text-align:left;">Pneu Furado</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; text-align:left; padding-left:8px;">19TR</td>
+            <td style="font-weight:bold; color:#dc2626;">30</td>
+            <td style="text-align:left;">Sensor de Velocidade</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-title">Top 5 Carros — Detalhamento</div>
+    <div class="card-body">
+      <table style="font-size:9.5px;">
+        <thead>
+          <tr>
+            <th>Veículo</th>
+            <th>Total (3M)</th>
+            <th>MAI/26</th>
+            <th>JUN/26</th>
+            <th style="color:#1e3a8a;">JUL/26*</th>
+            <th>Linha Princ.</th>
+            <th>Setor Princ.</th>
+            <th style="text-align:left; padding-left:6px;">Top Defeitos</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:bold; color:#1e3a8a;">221608</td>
+            <td style="font-weight:bold;">11</td>
+            <td>7</td><td>4</td><td style="font-weight:700; color:#dc2626;">0</td>
+            <td>08TR</td><td>Borracharia</td>
+            <td style="text-align:left; font-size:8px;">Pneu Furado (4) | kit embreagem (1) | Conexão do pistão de porta (1)</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; color:#1e3a8a;">222419</td>
+            <td style="font-weight:bold;">11</td>
+            <td>6</td><td>5</td><td style="font-weight:700; color:#dc2626;">0</td>
+            <td>01TR</td><td>Elétrica</td>
+            <td style="text-align:left; font-size:8px;">Pneu Furado (2) | TCO (2) | Cabeçote do Compressor (1)</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; color:#1e3a8a;">222411</td>
+            <td style="font-weight:bold;">8</td>
+            <td>2</td><td>6</td><td style="font-weight:700; color:#dc2626;">0</td>
+            <td>08TR</td><td>Mecânica</td>
+            <td style="text-align:left; font-size:8px;">Regeneração (2) | Sensor de Porta (1) | Mola (1)</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; color:#1e3a8a;">222240</td>
+            <td style="font-weight:bold;">8</td>
+            <td>7</td><td>1</td><td style="font-weight:700; color:#dc2626;">0</td>
+            <td>19TR</td><td>Elétrica</td>
+            <td style="text-align:left; font-size:8px;">Sensor de Velocidade (3) | Recapagem (1) | Cilindro Mestre (1)</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold; color:#1e3a8a;">222423</td>
+            <td style="font-weight:bold;">8</td>
+            <td>3</td><td>5</td><td style="font-weight:700; color:#dc2626;">0</td>
+            <td>08TR</td><td>Mecânica</td>
+            <td style="text-align:left; font-size:8px;">Sensor de Temperatura (2) | Bomba d'água (1) | Pneu Furado (1)</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:6px; font-size:8.5px; color:#94a3b8;">* Nenhum dos Top 5 carros teve ocorrência em julho até o momento — volume recente concentrado em outros veículos (ver Top 10 Ofensores na Página 3).</div>
+    </div>
+  </div>
+
+  <div class="cons-box">
+    <div class="cons-title">Considerações executivas</div>
+    <div class="cons-text">No acumulado de 3 meses (mai–jul/2026), <b>Pneu Furado</b> foi o defeito mais recorrente, com 80 ocorrências — 22% de todas as intervenções válidas, concentrado nas linhas 07TR, 20TR e 04TR. O setor de <b>Mecânica</b> respondeu por 133 intervenções (36%), seguido por Borracharia (85) e Elétrica (64+). Os veículos 221608 e 222419 empataram como mais recorrentes, com 11 ocorrências cada, mas nenhum dos dois registrou falhas em julho — sinal de que a atenção recente deve focar nos ofensores mais atuais (ver Top 10 da Página 3). Recomenda-se atenção à qualidade dos pneus/rodagem como ação prioritária, dado o volume concentrado num único tipo de defeito.</div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · Página 4/5 · dados reais (sos_acionamentos, 3 meses)</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>
+
+
+<div class="page-break"></div>
+
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Página 5 · Oportunidades de Melhoria</div>
+      <div class="sub">Base: <b>190 quebras válidas de maio a julho/2026</b></div>
+    </div>
+    <div class="period-box">
+      <div class="ref">Mês de referência</div>
+      <div class="val">JULHO/2026</div>
+    </div>
+  </div>
+
+  <div style="background:linear-gradient(90deg,#0f172a 0%,#1e3a8a 100%); color:white; border-radius:12px; padding:10px 16px; margin-bottom:10px;">
+    <div style="font-size:13px; font-weight:800; letter-spacing:0.3px;">A maioria das quebras dá sinal antes de acontecer.</div>
+    <div style="font-size:10px; opacity:0.85; margin-top:3px;">De cada 10 quebras: 6 são de carro que já tinha quebrado nos últimos 15 dias · 3 acontecem logo depois da preventiva · 3 tinham reclamação do motorista registrada antes.</div>
+  </div>
+
+  <!-- OPORTUNIDADE 1 -->
+  <div class="card" style="margin-bottom:7px; border-left:5px solid #dc2626;">
+    <div class="card-title" style="display:flex; justify-content:space-between;"><span>1 · Carro quebra, volta pra rua e quebra de novo</span><span>MAIOR OPORTUNIDADE</span></div>
+    <div class="card-body" style="display:flex; gap:14px; padding:10px 13px;">
+      <div style="flex:0 0 150px; text-align:center; border-right:1px solid #e2e8f0; padding-right:14px;">
+        <div style="font-size:25px; font-weight:900; color:#dc2626; line-height:1;">43%</div>
+        <div style="font-size:9px; color:#64748b; text-transform:uppercase; font-weight:700; margin-top:4px;">das quebras são em carro<br/>que já quebrou há menos<br/>de 7 dias</div>
+        <div style="font-size:18px; font-weight:900; color:#dc2626; margin-top:6px; line-height:1;">82</div>
+        <div style="font-size:9px; color:#64748b;">quebras repetidas no trimestre</div>
+      </div>
+      <div style="flex:1; font-size:9.5px; color:#1f2937; line-height:1.42;">
+        <b>O que isso significa:</b> o carro é atendido, liberado, e volta a quebrar na mesma semana. Em 13 casos foi <b>exatamente o mesmo defeito</b> — ex.: <b>222417</b> quebrou de Sistema Arla 3 vezes em 8 dias; <b>222240</b> quebrou 2x de Sensor de Velocidade <b>no mesmo dia</b>.<br/><br/>
+        <b style="color:#166534;">✔ Ação recomendada:</b> carro que retorna em até 7 dias <u>não sai da garagem</u> sem reinspeção por uma segunda pessoa (regra dos 4 olhos). Zero custo de peça.<br/>
+        <b style="color:#166534;">✔ Ganho estimado:</b> eliminando só as repetições de 7 dias, as quebras do trimestre caem de 190 para ~108 — o MKBF sobe de 4.157 para <b>mais de 5.500</b>.
+      </div>
+    </div>
+  </div>
+
+  <!-- OPORTUNIDADE 2 -->
+  <div class="card" style="margin-bottom:7px; border-left:5px solid #f59e0b;">
+    <div class="card-title">2 · Motorista avisa, SR é dada como atendida, e o carro quebra mesmo assim</div>
+    <div class="card-body" style="display:flex; gap:14px; padding:10px 13px;">
+      <div style="flex:0 0 150px; text-align:center; border-right:1px solid #e2e8f0; padding-right:14px;">
+        <div style="font-size:25px; font-weight:900; color:#b45309; line-height:1;">34%</div>
+        <div style="font-size:9px; color:#64748b; text-transform:uppercase; font-weight:700; margin-top:4px;">das quebras tinham aviso<br/>do motorista até 30 dias<br/>antes, no mesmo sistema</div>
+      </div>
+      <div style="flex:1; font-size:9.5px; color:#1f2937; line-height:1.42;">
+        <b>Exemplos reais:</b> motorista do <b>222202</b> registrou <i>"5ª marcha não está entrando"</i> — SR constou atendida — 26 dias depois o carro quebrou do câmbio. No <b>222213</b>: <i>"ao frear o carro puxa pra dianteira"</i> → quebrou de Freio Desregulado 27 dias depois. No <b>222425</b>: <i>"carro pedindo regeneração"</i> → quebrou de Regeneração.<br/><br/>
+        <b style="color:#166534;">✔ Ação recomendada:</b> SR de sistema crítico (freio, câmbio, motor, direção) só pode ser fechada com evidência de teste (test-drive ou medição registrada). Hoje "Atendida" não garante "Resolvida".
+      </div>
+    </div>
+  </div>
+
+  <!-- OPORTUNIDADE 3 -->
+  <div class="card" style="margin-bottom:7px; border-left:5px solid #2563eb;">
+    <div class="card-title">3 · Carro quebra logo depois de passar pela preventiva</div>
+    <div class="card-body" style="display:flex; gap:14px; padding:10px 13px;">
+      <div style="flex:0 0 150px; text-align:center; border-right:1px solid #e2e8f0; padding-right:14px;">
+        <div style="font-size:25px; font-weight:900; color:#1e3a8a; line-height:1;">33%</div>
+        <div style="font-size:9px; color:#64748b; text-transform:uppercase; font-weight:700; margin-top:4px;">das quebras acontecem em<br/>até 15 dias após a preventiva</div>
+      </div>
+      <div style="flex:1; font-size:9.5px; color:#1f2937; line-height:1.42;">
+        <b>O que isso significa:</b> a revisão passou pelo carro e não pegou o problema que derrubou ele dias depois (18% quebram em menos de 7 dias). A preventiva está cumprindo checklist, mas não está segurando quebra.<br/><br/>
+        <b style="color:#166534;">✔ Ação recomendada:</b> toda quebra em até 15 dias pós-preventiva gera revisão da OS da preventiva (o sistema registra mecânico, eletricista, funileiro e borracheiro de cada uma) — usar como insumo de treinamento, identificando o que o checklist não cobre.
+      </div>
+    </div>
+  </div>
+
+  <!-- FILA DE RISCO -->
+  <div class="card" style="margin-bottom:7px;">
+    <div class="card-title">Atenção imediata · Fila de SRs não atendidas</div>
+    <div class="card-body" style="display:flex; gap:14px; padding:10px 13px; align-items:center;">
+      <div style="flex:0 0 150px; text-align:center; border-right:1px solid #e2e8f0; padding-right:14px;">
+        <div style="font-size:25px; font-weight:900; color:#991b1b; line-height:1;">126</div>
+        <div style="font-size:9px; color:#64748b; text-transform:uppercase; font-weight:700; margin-top:4px;">reclamações aguardando<br/>atendimento hoje</div>
+      </div>
+      <div style="flex:1; font-size:9.5px; color:#1f2937; line-height:1.42;">
+        O <b style="color:#991b1b;">222208 acumula 19 SRs pendentes</b> e o <b>222210 tem 10</b> — com 43% de reincidência na frota, são os candidatos mais prováveis à próxima quebra em rua.<br/>
+        <b style="color:#166534;">✔ Ação recomendada:</b> triagem diária da fila por veículo; carro com 5+ SRs pendentes entra prioritário na programação da garagem.
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · Página 5/5 · dados reais (SOS + solicitações de reparo + preventivas)</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>

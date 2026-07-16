@@ -1,0 +1,86 @@
+name: Bot Manutenção · Flash Report Semanal
+
+on:
+  workflow_dispatch:
+    inputs:
+      periodo_inicio:
+        description: "YYYY-MM-DD (vazio = mês corrente)"
+        required: false
+      periodo_fim:
+        description: "YYYY-MM-DD (vazio = hoje)"
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bot-flash-report-manutencao
+  cancel-in-progress: false
+
+jobs:
+  gerar-relatorio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: flash-report-manutencao/requirements.txt
+
+      - name: Install Python deps
+        working-directory: flash-report-manutencao
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Chromium (Playwright)
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Gerar Flash Report Manutenção (15 páginas)
+        working-directory: flash-report-manutencao
+        env:
+          # Base Transnet (indicadores_diesel, solicitacao_reparo, eventos_regeneracao, ultimo_plano)
+          SUPABASE_A_URL: ${{ secrets.SUPABASE_TRANSNET_URL }}
+          SUPABASE_A_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TRANSNET_KEY }}
+          # INOVE (sos_acionamentos, veiculos_pcm, preventivas, pneus, embarcados, storage)
+          SUPABASE_B_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_B_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+          REPORT_TIPO: flash_report_manutencao
+          REPORT_PERIODO_INICIO: ${{ inputs.periodo_inicio }}
+          REPORT_PERIODO_FIM: ${{ inputs.periodo_fim }}
+          REPORT_BUCKET: relatorios
+          REPORT_OUTPUT_DIR: saida
+          REPORT_REMOTE_PREFIX: manutencao
+
+          MKBF_META: "7000"
+          REPORT_FERIADOS: ${{ vars.REPORT_FERIADOS }}
+          REPORT_BORRACHARIA_FISICO: ${{ vars.REPORT_BORRACHARIA_FISICO }}
+          REPORT_SR_META: ${{ vars.REPORT_SR_META || '94' }}
+        run: |
+          python -u gen_flash_manutencao.py
+          cp "saida/Flash_Report_Manutencao.pdf" "Flash Report - Manutencao.pdf"
+
+      - name: Commit e push do PDF gerado
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(bot): atualiza Flash Report Manutenção semanal"
+          file_pattern: "flash-report-manutencao/*.pdf"
+
+      - name: Sobe artefato de apoio
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flash-report-manutencao
+          path: |
+            flash-report-manutencao/*.pdf
+            flash-report-manutencao/saida/*.png
+          if-no-files-found: ignore
+          retention-days: 14

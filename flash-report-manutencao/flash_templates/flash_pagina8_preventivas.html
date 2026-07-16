@@ -1,0 +1,179 @@
+<title>Flash Report — Preventivas</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #eef2f7; color: #111827; padding: 24px 0; }
+  @media (prefers-color-scheme: dark) { body { background: #0b1220; } }
+  :root[data-theme="dark"] body { background: #0b1220; }
+  :root[data-theme="light"] body { background: #eef2f7; }
+  .note { width: 210mm; margin: 0 auto 14px auto; font-size: 12px; color: #64748b; padding: 0 2mm; }
+  .page { width: 210mm; min-height: 297mm; margin: 0 auto 20px auto; background: radial-gradient(circle at top right, rgba(37,99,235,0.06), transparent 22%), linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%); padding: 8mm 10mm; position: relative; box-shadow: 0 20px 50px rgba(15,23,42,0.18); }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 4px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+  .title h1 { margin: 0; font-size: 24px; line-height: 1; color: #0f172a; }
+  .title .sub { margin-top: 6px; font-size: 11px; color: #475569; text-transform: uppercase; letter-spacing: 0.4px; }
+  .period-box { min-width: 200px; text-align: right; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); color: white; padding: 10px 12px; border-radius: 14px; }
+  .period-box .ref { font-size: 10px; text-transform: uppercase; font-weight: 700; opacity: 0.8; }
+  .period-box .val { font-size: 18px; font-weight: 800; margin-top: 3px; }
+  .card { border: 1px solid #dbe3ee; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 6px 20px rgba(15,23,42,0.06); margin-bottom: 12px; }
+  .card-title { padding: 10px 12px; background: linear-gradient(90deg, #0f172a 0%, #172554 100%); color: white; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; }
+  .card-body { padding: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; font-variant-numeric: tabular-nums; }
+  th { background: #eef2f7; color: #0f172a; text-transform: uppercase; font-size: 9px; padding: 6px 4px; border: 1px solid #dbe3ee; text-align: center; letter-spacing: 0.3px; }
+  td { padding: 5px 4px; border: 1px solid #dbe3ee; text-align: center; }
+  .metric { border: 1px solid #dbe3ee; border-radius: 12px; padding: 12px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); text-align:center; }
+  .metric .lbl { font-size: 9px; color: #64748b; text-transform: uppercase; font-weight: 800; letter-spacing: 0.4px; }
+  .metric .val { margin-top: 4px; font-size: 26px; font-weight: 900; color: #0f172a; }
+  .metric .aux { margin-top: 3px; font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.2px; }
+  .footer { position: absolute; left: 10mm; right: 10mm; bottom: 6mm; font-size: 10px; color: #64748b; display: flex; justify-content: space-between; border-top: 1px solid #dbe3ee; padding-top: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .muted { color:#94a3b8; }
+  .daygrid td { vertical-align: top; text-align: left; padding: 8px 6px; line-height: 1.7; }
+  .daygrid .dayhead { background:#0f172a; color:white; text-transform:uppercase; font-weight:800; font-size:9px; letter-spacing:0.4px; }
+</style>
+
+<div class="note">MODELO — CONTROLE DE PREVENTIVAS. DADOS REAIS DE 12/07/2026. <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-weight:800;font-size:9px;">RASCUNHO</span></div>
+
+<!-- ===================== SLIDE 1 : CONTROLE DE PREVENTIVAS ===================== -->
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Controle de Preventivas</div>
+      <div class="sub">Data de referência: <b>12/07/2026</b></div>
+    </div>
+    <div class="period-box">
+      <div class="ref">Mês de referência</div>
+      <div class="val">JULHO/2026</div>
+    </div>
+  </div>
+
+  <!-- 1. ACURACIDADE -->
+  <div class="card">
+    <div class="card-title">Acuracidade do Plano Preventivo</div>
+    <div class="card-body" style="display:flex; gap:12px;">
+      <div class="metric" style="flex:1; border-left:4px solid #16a34a;">
+        <div class="lbl">Acuracidade</div>
+        <div class="val" style="color:#16a34a;">98,2%</div>
+        <div class="aux">Em dia ÷ Total</div>
+      </div>
+      <div class="metric" style="flex:1;">
+        <div class="lbl">Planos Ativos</div>
+        <div class="val">1.784</div>
+        <div class="aux">In-house</div>
+      </div>
+      <div class="metric" style="flex:1;">
+        <div class="lbl">Em Dia</div>
+        <div class="val" style="color:#166534;">1.751</div>
+        <div class="aux">Dentro do Prazo</div>
+      </div>
+      <div class="metric" style="flex:1; border-left:4px solid #dc2626;">
+        <div class="lbl">Vencidos</div>
+        <div class="val" style="color:#dc2626;">33</div>
+        <div class="aux">1,8% do Total</div>
+      </div>
+    </div>
+    <div style="padding:0 12px 10px; font-size:8.5px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.2px;">Acuracidade = planos em dia ÷ (em dia + vencidos). Concessionária EURO6 é acompanhada em slide próprio e não entra nesta conta.</div>
+  </div>
+
+  <!-- 2. PLANOS VENCIDOS -->
+  <div class="card">
+    <div class="card-title">Planos Vencidos — 33 Planos</div>
+    <div class="card-body">
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="flex:0 0 250px;">
+          <table>
+            <thead><tr><th style="text-align:left; padding-left:6px;">Plano</th><th>Vencidos</th><th>Km Máx.</th></tr></thead>
+            <tbody>
+              <tr><td style="text-align:left; padding-left:6px;">INSPEÇÃO 5.000</td><td style="font-weight:700; color:#991b1b;">12</td><td>+1.793</td></tr>
+              <tr><td style="text-align:left; padding-left:6px;">LIMPEZA GERAL</td><td>7</td><td>+840</td></tr>
+              <tr><td style="text-align:left; padding-left:6px;">REVISÃO PESADA</td><td>7</td><td>+840</td></tr>
+              <tr><td style="text-align:left; padding-left:6px;">LIMPEZA TANQUE ARLA</td><td>4</td><td>+3.120</td></tr>
+              <tr><td style="text-align:left; padding-left:6px;">ÓLEO CAIXA MARCHA</td><td>1</td><td>+3.563</td></tr>
+              <tr><td style="text-align:left; padding-left:6px;">ÓLEO DIFERENCIAL</td><td>1</td><td>+1.040</td></tr>
+              <tr><td style="text-align:left; padding-left:6px;">FILTRO DE AR</td><td>1</td><td>+41</td></tr>
+              <tr><td style="text-align:left; padding-left:6px;">AFERIÇÃO TACÓGRAFO (TCO)</td><td class="muted">0</td><td class="muted">POR TEMPO</td></tr>
+              <tr style="background:#0f172a; color:white;"><td style="text-align:left; padding-left:6px; font-weight:800;">TOTAL</td><td style="font-weight:800;">33</td><td>—</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:8px; font-size:8.5px; color:#64748b; line-height:1.6; text-transform:uppercase; letter-spacing:0.2px;">
+            <b>Regra:</b> plano de km vence ao passar de 0 (rodou o intervalo). Plano de tempo (TCO) vence por dias — hoje 0 vencidos (o mais próximo está a 1 dia).
+          </div>
+        </div>
+        <div style="flex:1;">
+          <table style="font-size:8.5px;">
+            <thead><tr><th>Veículo</th><th style="text-align:left; padding-left:4px;">Plano</th><th>Km Vencido</th></tr></thead>
+            <tbody>
+              <tr><td style="font-weight:700;">W541</td><td style="text-align:left; padding-left:4px;">ÓLEO CAIXA MARCHA</td><td style="font-weight:700; color:#991b1b;">+3.563</td></tr>
+              <tr><td style="font-weight:700;">222207</td><td style="text-align:left; padding-left:4px;">LIMPEZA TANQUE ARLA</td><td style="font-weight:700; color:#991b1b;">+3.120</td></tr>
+              <tr><td style="font-weight:700;">222234</td><td style="text-align:left; padding-left:4px;">INSPEÇÃO 5.000</td><td style="font-weight:700; color:#991b1b;">+1.793</td></tr>
+              <tr><td style="font-weight:700;">222218</td><td style="text-align:left; padding-left:4px;">INSPEÇÃO 5.000</td><td style="font-weight:700;">+1.401</td></tr>
+              <tr><td style="font-weight:700;">222411</td><td style="text-align:left; padding-left:4px;">INSPEÇÃO 5.000</td><td style="font-weight:700;">+1.139</td></tr>
+              <tr><td style="font-weight:700;">222237</td><td style="text-align:left; padding-left:4px;">INSPEÇÃO 5.000</td><td style="font-weight:700;">+1.130</td></tr>
+              <tr><td>222234</td><td style="text-align:left; padding-left:4px;">ÓLEO DIFERENCIAL</td><td>+1.040</td></tr>
+              <tr><td>222207</td><td style="text-align:left; padding-left:4px;">INSPEÇÃO 5.000</td><td>+957</td></tr>
+              <tr><td>222218</td><td style="text-align:left; padding-left:4px;">LIMPEZA GERAL / REVISÃO PESADA</td><td>+840</td></tr>
+              <tr><td>222234</td><td style="text-align:left; padding-left:4px;">LIMPEZA GERAL / REVISÃO PESADA</td><td>+821</td></tr>
+              <tr><td colspan="3" class="muted" style="text-align:center; font-size:8px; text-transform:uppercase;">+ 21 planos entre +819 e +41 km (limpeza geral, revisão pesada, arla, inspeções restantes)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. REALIZADAS NA SEMANA -->
+  <div class="card">
+    <div class="card-title">Preventivas Realizadas na Semana — 06 a 12/07 (19)</div>
+    <div class="card-body">
+      <table class="daygrid" style="font-size:9px;">
+        <thead>
+          <tr>
+            <th class="dayhead">Seg 06/07 (6)</th>
+            <th class="dayhead">Ter 07/07 (3)</th>
+            <th class="dayhead">Qua 08/07 (9)</th>
+            <th class="dayhead">Qui 09/07 (0)</th>
+            <th class="dayhead">Sex 10/07 (1)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <b>222228</b> Insp. 5.000<br/>
+              <b>222409</b> Insp. 5.000<br/>
+              <b>222405</b> Insp. 5.000<br/>
+              <b>242505</b> Prev. 10.000<br/>
+              <b>222406</b> Prev. 10.000<br/>
+              <b>222425</b> Prev. 10.000
+            </td>
+            <td>
+              <b>242514</b> Prev. 10.000<br/>
+              <b>222204</b> Prev. 10.000<br/>
+              <b>242510</b> Prev. 10.000
+            </td>
+            <td>
+              <b>222229</b> Insp. 5.000<br/>
+              <b>222414</b> Insp. 5.000<br/>
+              <b>222401</b> Insp. 5.000<br/>
+              <b>222219</b> Insp. 5.000<br/>
+              <b>222418</b> Insp. 5.000<br/>
+              <b>222220</b> Insp. 5.000<br/>
+              <b>242518</b> Prev. 10.000<br/>
+              <b>242511</b> Prev. 10.000<br/>
+              <b>242501</b> Prev. 10.000
+            </td>
+            <td class="muted" style="text-align:center;">—</td>
+            <td>
+              <b>242525</b> Insp. 5.000
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:8px; font-size:8.5px; color:#64748b; text-transform:uppercase; letter-spacing:0.2px;">
+        <b>Resumo:</b> 10 Inspeções 5.000 · 9 Preventivas 10.000. Concentração na quarta (9). Inspeções: Ernani Guedes; Preventivas 10.000: Anderson, Maurilio e Luiz Henrique.
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · fontes: ultimo_plano + preventivas</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>

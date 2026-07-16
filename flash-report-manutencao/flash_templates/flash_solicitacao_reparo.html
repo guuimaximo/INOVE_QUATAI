@@ -1,0 +1,171 @@
+<title>Flash Report — Solicitação de Reparo</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #eef2f7; color: #111827; padding: 24px 0; }
+  @media (prefers-color-scheme: dark) { body { background: #0b1220; } }
+  :root[data-theme="dark"] body { background: #0b1220; }
+  :root[data-theme="light"] body { background: #eef2f7; }
+  .note { width: 210mm; margin: 0 auto 14px auto; font-size: 12px; color: #64748b; padding: 0 2mm; }
+  .page { width: 210mm; min-height: 297mm; margin: 0 auto; background: radial-gradient(circle at top right, rgba(37,99,235,0.06), transparent 22%), linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%); padding: 8mm 10mm; position: relative; box-shadow: 0 20px 50px rgba(15,23,42,0.18); }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 4px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+  .title h1 { margin: 0; font-size: 24px; line-height: 1; color: #0f172a; }
+  .title .sub { margin-top: 6px; font-size: 11px; color: #475569; text-transform: uppercase; letter-spacing: 0.4px; }
+  .period-box { min-width: 200px; text-align: right; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); color: white; padding: 10px 12px; border-radius: 14px; }
+  .period-box .ref { font-size: 10px; text-transform: uppercase; font-weight: 700; opacity: 0.8; }
+  .period-box .val { font-size: 18px; font-weight: 800; margin-top: 3px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card { border: 1px solid #dbe3ee; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 6px 20px rgba(15,23,42,0.06); margin-bottom: 12px; }
+  .card-title { padding: 10px 12px; background: linear-gradient(90deg, #0f172a 0%, #172554 100%); color: white; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; }
+  .card-body { padding: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; font-variant-numeric: tabular-nums; }
+  th { background: #eef2f7; color: #0f172a; text-transform: uppercase; font-size: 9px; padding: 6px 4px; border: 1px solid #dbe3ee; text-align: center; letter-spacing: 0.3px; }
+  td { padding: 6px 4px; border: 1px solid #dbe3ee; text-align: center; }
+  .metric { border: 1px solid #dbe3ee; border-radius: 12px; padding: 12px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); text-align:center; }
+  .metric .lbl { font-size: 9px; color: #64748b; text-transform: uppercase; font-weight: 800; letter-spacing:0.4px; }
+  .metric .val { margin-top: 4px; font-size: 24px; font-weight: 900; color: #0f172a; }
+  .metric .aux { margin-top: 3px; font-size: 9px; color: #64748b; text-transform: uppercase; }
+  .footer { position: absolute; left: 10mm; right: 10mm; bottom: 6mm; font-size: 10px; color: #64748b; display: flex; justify-content: space-between; border-top: 1px solid #dbe3ee; padding-top: 4px; text-transform: uppercase; letter-spacing:0.3px; }
+  .muted { color:#94a3b8; }
+</style>
+
+<div class="note">MODELO — SOLICITAÇÃO DE REPARO. DADOS REAIS (SUPABASE, TABELA solicitacao_reparo) EM 12/07/2026. <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-weight:800;font-size:9px;">RASCUNHO</span></div>
+
+<div class="page">
+  <div class="header">
+    <div class="title">
+      <h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Solicitação de Reparo</div>
+      <div class="sub">Período: <b>01 a 12/07/2026</b></div>
+    </div>
+    <div class="period-box">
+      <div class="ref">Mês de referência</div>
+      <div class="val">JULHO/2026</div>
+    </div>
+  </div>
+
+  <!-- COMPARATIVO JUN x JUL -->
+  <div class="grid2">
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Situação das SRs — Junho x Julho</div>
+      <div class="card-body">
+        <table>
+          <thead>
+            <tr><th style="text-align:left; padding-left:8px;">Situação</th><th>Junho</th><th>Julho*</th><th>% Julho</th></tr>
+          </thead>
+          <tbody>
+            <tr><td style="text-align:left; padding-left:8px; font-weight:700;">Atendida</td><td>803</td><td style="font-weight:700; color:#166534;">224</td><td>74,7%</td></tr>
+            <tr><td style="text-align:left; padding-left:8px; font-weight:700;">Improcedente</td><td>7</td><td>1</td><td>0,3%</td></tr>
+            <tr><td style="text-align:left; padding-left:8px; font-weight:700;">Não Atendida</td><td>35</td><td style="font-weight:700; color:#991b1b;">75</td><td>25,0%</td></tr>
+            <tr style="background:#0f172a; color:white;"><td style="text-align:left; padding-left:8px; font-weight:800;">Total</td><td style="font-weight:800;">845</td><td style="font-weight:800;">300</td><td>100%</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:6px; font-size:8.5px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.2px;">* Julho parcial (até 12/07). Situação = status atual de cada SR aberta no mês.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Aderência por Competência (Fechado até dia 3 do mês seguinte)</div>
+      <div class="card-body">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div class="metric" style="border-left:4px solid #16a34a;">
+            <div class="lbl">Junho (fechado)</div>
+            <div class="val" style="color:#166534;">92,1%</div>
+            <div class="aux">778 de 845 no prazo</div>
+          </div>
+          <div class="metric">
+            <div class="lbl">Meta</div>
+            <div class="val">94%</div>
+            <div class="aux">Fechadas no prazo</div>
+          </div>
+          <div class="metric" style="border-left:4px solid #f59e0b;">
+            <div class="lbl">Julho (parcial)</div>
+            <div class="val" style="color:#b45309;">74,7%</div>
+            <div class="aux">224 de 300 · mês aberto</div>
+          </div>
+          <div class="metric" style="border-left:4px solid #dc2626;">
+            <div class="lbl">Gap Junho vs Meta</div>
+            <div class="val" style="color:#dc2626;">-1,9</div>
+            <div class="aux">pontos abaixo</div>
+          </div>
+        </div>
+        <div style="margin-top:8px; font-size:8.5px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.2px;">Competência = SR fechada até dia 3 do mês seguinte. Não infla como o status atual (que dava ~98% retroativo). Julho ainda é parcial.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EVOLUCAO MENSAL POR COMPETENCIA -->
+  <div class="card">
+    <div class="card-title">Evolução da Aderência por Competência — 2026</div>
+    <div class="card-body">
+      <div class="chart-wrap" style="padding:10px; border:1px solid #dbe3ee; border-radius:14px; background:linear-gradient(180deg,#fff,#f8fafc);">
+        <svg viewBox="0 0 900 280" xmlns="http://www.w3.org/2000/svg" style="width:100%;">
+          <g stroke="#e2e8f0" stroke-width="1">
+            <line x1="55" y1="30" x2="55" y2="230"></line>
+            <line x1="55" y1="230" x2="860" y2="230"></line>
+          </g>
+          <!-- meta 94% -->
+          <line x1="55" y1="53" x2="860" y2="53" stroke="#ef4444" stroke-width="2" stroke-dasharray="8,6"></line>
+          <text x="865" y="57" font-size="11" fill="#ef4444" font-family="Arial" font-weight="700">Meta 94%</text>
+          <!-- escala: y=230 (0%), y=30 (100%). val -> 230 - val*2 -->
+          <!-- Jan 84.7=61, Fev 79.6=71, Mar 94.8=41, Abr 88.5=53, Mai 86.8=57, Jun 92.1=46, Jul 74.7=81 -->
+          <polygon points="105,169 230,171 355,140 480,153 605,157 730,146 855,181 855,230 105,230" fill="#3b82f6" fill-opacity="0.10"></polygon>
+          <polyline points="105,169 230,171 355,140 480,153 605,157 730,146 855,181" fill="none" stroke="#2563eb" stroke-width="3"></polyline>
+          <g font-family="Arial" font-size="11" font-weight="700" fill="#1e293b" text-anchor="middle">
+            <circle cx="105" cy="169" r="4" fill="#2563eb"></circle><text x="105" y="160">84,7</text>
+            <circle cx="230" cy="171" r="4" fill="#dc2626"></circle><text x="230" y="188" fill="#dc2626">79,6</text>
+            <circle cx="355" cy="140" r="4" fill="#2563eb"></circle><text x="355" y="131">94,8</text>
+            <circle cx="480" cy="153" r="4" fill="#2563eb"></circle><text x="480" y="144">88,5</text>
+            <circle cx="605" cy="157" r="4" fill="#2563eb"></circle><text x="605" y="148">86,8</text>
+            <circle cx="730" cy="146" r="4" fill="#2563eb"></circle><text x="730" y="137">92,1</text>
+            <circle cx="855" cy="181" r="5" fill="#b45309"></circle><text x="855" y="172" fill="#b45309">74,7*</text>
+          </g>
+          <g font-family="Arial" font-size="10" fill="#64748b" text-anchor="middle">
+            <text x="105" y="248">JAN</text><text x="230" y="248">FEV</text><text x="355" y="248">MAR</text>
+            <text x="480" y="248">ABR</text><text x="605" y="248">MAI</text><text x="730" y="248">JUN</text>
+            <text x="855" y="248" font-weight="700">JUL*</text>
+          </g>
+          <text x="55" y="266" font-size="9" fill="#94a3b8" font-family="Arial">* Julho parcial (mês ainda aberto). Só março superou a meta de 94% no ano.</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ABERTAS EM SISTEMA - AGING -->
+  <div class="card">
+    <div class="card-title">Solicitações de Reparo Abertas em Sistema — Envelhecimento</div>
+    <div class="card-body">
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="flex:1;">
+          <svg viewBox="0 0 560 240" xmlns="http://www.w3.org/2000/svg" style="width:100%;">
+            <line x1="30" y1="200" x2="540" y2="200" stroke="#dbe3ee" stroke-width="1"></line>
+            <g font-family="Arial" font-size="11" font-weight="700" fill="#0f172a" text-anchor="middle">
+              <!-- max 53 -> escala 160px -->
+              <rect x="50" y="40" width="55" height="160" fill="#1e3a8a"></rect><text x="77" y="32">53</text><text x="77" y="218" font-size="9" fill="#64748b">1-5 DIAS</text>
+              <rect x="130" y="146" width="55" height="54" fill="#3b82f6"></rect><text x="157" y="138">18</text><text x="157" y="218" font-size="9" fill="#64748b">6-10 DIAS</text>
+              <rect x="210" y="164" width="55" height="36" fill="#3b82f6"></rect><text x="237" y="156">12</text><text x="237" y="218" font-size="9" fill="#64748b">11-15 DIAS</text>
+              <rect x="290" y="176" width="55" height="24" fill="#3b82f6"></rect><text x="317" y="168">8</text><text x="317" y="218" font-size="9" fill="#64748b">16-20 DIAS</text>
+              <rect x="370" y="107" width="55" height="93" fill="#dc2626"></rect><text x="397" y="99" fill="#991b1b">31</text><text x="397" y="218" font-size="9" fill="#991b1b">21-59 DIAS</text>
+              <rect x="450" y="185" width="55" height="15" fill="#dc2626"></rect><text x="477" y="177" fill="#991b1b">5</text><text x="477" y="218" font-size="9" fill="#991b1b">&gt;60 DIAS</text>
+            </g>
+          </svg>
+        </div>
+        <div style="flex:0 0 210px;">
+          <div class="metric" style="border-left:4px solid #991b1b; margin-bottom:8px;">
+            <div class="lbl">Total em Aberto</div>
+            <div class="val" style="color:#991b1b;">128</div>
+            <div class="aux">SRs situação "Não Atendida"</div>
+          </div>
+          <div style="font-size:9px; color:#334155; line-height:1.7; text-transform:uppercase; letter-spacing:0.2px;">
+            <b style="color:#991b1b;">36 SRs (28%) estão há mais de 20 dias</b> em aberto — backlog antigo (a mais velha: W553 tacógrafo, 142 dias).<br/>
+            Motivos que mais acumulam: Elétrica (19), Carroceria (13), Motor (13), Câmbio (11).
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>Gerado automaticamente · fonte: solicitacao_reparo</div>
+    <div>Flash Report Manutenção</div>
+  </div>
+</div>

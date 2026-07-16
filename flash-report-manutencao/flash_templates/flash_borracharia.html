@@ -1,0 +1,115 @@
+<title>Flash Report — Borracharia</title>
+<style>
+  body{font-family:Arial;background:#eef2f1;padding:20px;} .page{width:210mm;margin:auto;background:#fff;padding:9mm 11mm;position:relative;min-height:297mm;}
+  .header{display:flex;justify-content:space-between;} .title h1{margin:0;font-size:23px;font-weight:900;color:#123b35;}
+  .sub{font-size:10.5px;color:#5b716c;margin-top:5px;} .period-box{background:#0f3d38;color:#fff;padding:8px 16px;border-radius:10px;text-align:right;}
+  .period-box .ref{font-size:9px;opacity:.7;text-transform:uppercase;letter-spacing:1px;} .period-box .val{font-size:17px;font-weight:800;}
+  .card{border:1px solid #d6e3e0;border-radius:12px;overflow:hidden;margin-bottom:14px;} .card-title{background:#0f3d38;color:#fff;padding:9px 13px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;} .card-body{padding:15px;}
+  .metric{border:1px solid #d6e3e0;border-radius:10px;padding:11px;text-align:center;} .metric .lbl{font-size:9px;color:#5b716c;text-transform:uppercase;font-weight:800;} .metric .val{margin-top:4px;font-size:23px;font-weight:900;color:#123b35;} .metric .aux{margin-top:3px;font-size:8.5px;color:#5b716c;text-transform:uppercase;}
+  table{width:100%;border-collapse:collapse;font-size:10px;} th{background:#eef4f3;color:#123b35;text-transform:uppercase;font-size:8.5px;padding:7px 5px;border:1px solid #d6e3e0;} td{padding:6px;border:1px solid #d6e3e0;text-align:center;}
+  .cons-box{border:1px solid #d6e3e0;border-radius:12px;background:#f6faf9;padding:13px;margin-top:12px;} .cons-title{font-size:11px;font-weight:800;text-transform:uppercase;color:#123b35;margin-bottom:8px;} .cons-text{font-size:11.5px;line-height:1.6;color:#1f3a35;text-align:justify;}
+  .footer{position:absolute;left:11mm;right:11mm;bottom:6mm;font-size:9.5px;color:#5b716c;display:flex;justify-content:space-between;border-top:1px solid #d6e3e0;padding-top:5px;}
+  .barrow{display:flex;align-items:center;gap:8px;font-size:10px;margin-bottom:7px;} .barrow .lab{width:96px;font-weight:700;} .barrow .track{flex:1;background:#eef4f3;border-radius:5px;height:15px;} .barrow .fill{height:100%;border-radius:5px;} .barrow .num{width:56px;text-align:right;font-weight:800;}
+</style>
+
+<div class="page">
+  <div class="header">
+    <div class="title"><h1>FLASH REPORT MANUTENÇÃO</h1>
+      <div class="sub">Borracharia · Pneus</div>
+      <div class="sub">Fonte: TransNet (pcm_pneus_transnet_ativos) · trocas (pcm_troca_pneus)</div>
+    </div>
+    <div class="period-box"><div class="ref">Mês</div><div class="val">JULHO/2026</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;">
+    <div class="metric" style="border-left:4px solid #0d9488;"><div class="lbl">Trocas (Jul)</div><div class="val" style="color:#0d9488;">13</div><div class="aux">145 no trimestre</div></div>
+    <div class="metric"><div class="lbl">Estoque Físico</div><div class="val">77</div><div class="aux">71 no TransNet</div></div>
+    <div class="metric" style="border-left:4px solid #16a34a;"><div class="lbl">Corretos no Sistema</div><div class="val" style="color:#166534;">99%</div><div class="aux">665 de 672 posições · 112 veículos</div></div>
+    <div class="metric" style="border-left:4px solid #dc2626;"><div class="lbl">Divergentes</div><div class="val" style="color:#dc2626;">7</div><div class="aux">físico ≠ TransNet</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Teste · KM Rodado dos Pneus Novos (por mês de cadastro)</div>
+    <div class="card-body">
+      <div style="display:flex; gap:16px; align-items:stretch;">
+        <div style="flex:1;">
+          <table>
+            <thead><tr><th>Fogo</th><th>Mês cadastro</th><th>Qtd pneus</th><th>KM médio</th><th>KM máx</th></tr></thead>
+            <tbody>
+              <tr><td style="font-weight:700;">603xxx</td><td>Março/26</td><td>18</td><td style="font-weight:700; color:#0d9488;">17.124</td><td>26.839</td></tr>
+              <tr><td style="font-weight:700;">604xxx</td><td>Abril/26</td><td>18</td><td style="font-weight:700; color:#0d9488;">10.911</td><td>13.682</td></tr>
+              <tr><td style="font-weight:700;">605xxx</td><td>Maio/26</td><td>18</td><td style="font-weight:700; color:#0d9488;">7.688</td><td>10.758</td></tr>
+              <tr><td style="font-weight:700;">606xxx</td><td>Junho/26</td><td>18</td><td style="font-weight:700; color:#0d9488;">5.354</td><td>6.963</td></tr>
+              <tr><td style="font-weight:700;">607xxx</td><td>Julho/26</td><td>18</td><td style="font-weight:700; color:#0d9488;">72</td><td>649</td></tr>
+              <tr style="background:#f6faf9;"><td style="font-weight:800;">Total</td><td>Mar–Jul</td><td style="font-weight:800;">90</td><td colspan="2" style="text-align:left; padding-left:10px; color:#5b716c;">18/mês · só pneu novo (NOVO)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="flex:0 0 250px; background:#f6faf9; border:1px solid #d6e3e0; border-radius:10px; padding:12px;">
+          <div style="font-size:10px; font-weight:800; color:#123b35; text-transform:uppercase;">Regra do fogo</div>
+          <div style="font-size:9px; color:#334155; line-height:1.6; margin-top:6px; text-transform:uppercase;">
+            <b>6</b> = ano 2026 · <b>03</b> = mês (março).<br/>
+            603 = mar · 604 = abr · 605 = mai · 606 = jun · 607 = jul.<br/><br/>
+            Antes não havia controle de pneu — <b style="color:#0d9488;">esta é a base zero</b>. A cada mês, medimos quanto o pneu novo rodou até precisar de recapa, criando o histórico de vida útil real.
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:6px; font-size:8.5px; color:#94a3a0; text-transform:uppercase;">Qtd = 18 pneus novos/mês (3 ônibus × 6 pneus) — só vida NOVO; recapados e intrusos fora. KM médio cai com a idade: março (17,1 mil km, já rodando) → julho (72 km, recém-montado). Quando o 1º lote recapar, teremos o KM de vida do pneu novo.</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Trocas de Pneu por Mês</div>
+      <div class="card-body">
+        <svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" style="width:100%;">
+          <line x1="28" y1="12" x2="28" y2="125" stroke="#e2e8f0"/><line x1="28" y1="125" x2="330" y2="125" stroke="#e2e8f0"/>
+          <g font-family="Arial" font-size="11" font-weight="700" text-anchor="middle" fill="#123b35">
+            <rect x="70" y="20" width="50" height="105" fill="#0d9488"></rect><text x="95" y="14">74</text><text x="95" y="140" fill="#5b716c" font-weight="400">MAI</text>
+            <rect x="150" y="42" width="50" height="83" fill="#0d9488"></rect><text x="175" y="36">58</text><text x="175" y="140" fill="#5b716c" font-weight="400">JUN</text>
+            <rect x="230" y="106" width="50" height="19" fill="#94a3a0"></rect><text x="255" y="100" fill="#94a3a0">13</text><text x="255" y="140" fill="#94a3a0" font-weight="400">JUL*</text>
+          </g>
+        </svg>
+        <div style="margin-top:4px;font-size:9px;color:#5b716c;text-transform:uppercase;">Tipo: <b>Estoque → Carro 117</b> (81%) · Carro → Carro 28.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Estoque — Físico × TransNet (10/07)</div>
+      <div class="card-body">
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px;">
+          <div class="metric"><div class="lbl">Físico</div><div class="val">77</div></div>
+          <div class="metric" style="border-left:3px solid #16a34a;"><div class="lbl">OK</div><div class="val" style="color:#166534;">70</div></div>
+          <div class="metric" style="border-left:3px solid #dc2626;"><div class="lbl">Diverg.</div><div class="val" style="color:#dc2626;">7</div></div>
+        </div>
+        <div style="font-size:9px; color:#5b716c; text-transform:uppercase;">71 no TransNet (ativo sem alocação): <b>27 novos + 44 recapados</b>. Todos 275/80R22,5. Sem sucata.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Pneus Divergentes · Físico ≠ TransNet (7)</div>
+    <div class="card-body" style="display:flex; gap:16px; align-items:stretch;">
+      <div style="flex:1;">
+        <table style="font-size:9px;">
+          <thead><tr><th>Fogo</th><th>Marca</th><th>Físico diz</th><th>TransNet diz</th><th>Onde (TransNet)</th></tr></thead>
+          <tbody>
+            <tr><td style="font-weight:700;">209457</td><td>Michelin</td><td>Enviar p/ recapagem</td><td><span style="color:#991b1b; font-weight:700;">Sucata</span></td><td>Sucata</td></tr>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">209393</td><td>Goodyear</td><td style="color:#991b1b; font-weight:700;">Sucata</td><td>Em carro</td><td style="font-weight:700;">W553 · TEI</td></tr>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">402044</td><td>Michelin</td><td style="color:#991b1b; font-weight:700;">Sucata</td><td>Em carro</td><td style="font-weight:700;">W553 · TDI</td></tr>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">402093</td><td>Goodyear</td><td style="color:#991b1b; font-weight:700;">Sucata</td><td>Em carro</td><td style="font-weight:700; color:#991b1b;">222208 · DE</td></tr>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">408005</td><td>Goodyear</td><td style="color:#991b1b; font-weight:700;">Sucata</td><td>Em carro</td><td style="font-weight:700; color:#991b1b;">222208 · DD</td></tr>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">602001</td><td>Bridgestone</td><td style="color:#991b1b; font-weight:700;">Sucata</td><td>Em carro</td><td style="font-weight:700; color:#991b1b;">222208 · TEI</td></tr>
+            <tr style="background:#fef2f2;"><td style="font-weight:700;">602019</td><td>Goodyear</td><td style="color:#991b1b; font-weight:700;">Sucata</td><td>Em carro</td><td style="font-weight:700; color:#991b1b;">222208 · TDI</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="flex:0 0 210px; background:#fef2f2; border:1px solid #fca5a5; border-radius:10px; padding:12px;">
+        <div style="font-size:10px; font-weight:800; color:#991b1b; text-transform:uppercase;">Padrão dos divergentes</div>
+        <div style="font-size:9px; color:#334155; line-height:1.6; margin-top:6px; text-transform:uppercase;"><b style="color:#991b1b;">5 dos 7 estão em veículos parados</b>: 4 no 222208 e 2 no W553. Pneu baixado como sucata no físico, mas o TransNet ainda diz "em carro" — inventário desatualizado nesses veículos encalhados. Corrigir a baixa evita pagar por pneu que não existe.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer"><div>Gerado automaticamente · fonte: TransNet / PCM pneus</div><div>Flash Report Manutenção — Quatai</div></div>
+</div>

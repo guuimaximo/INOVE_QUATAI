@@ -5,6 +5,9 @@ on:
     # Dias úteis às 10:00 BRT (13:00 UTC)
     - cron: "0 13 * * 1-5"
   workflow_dispatch:
+  # TEMPORARIO (teste): dispara no push desta branch — remover apos validar
+  push:
+    branches: [flash-report-manutencao]
 
 permissions:
   contents: read

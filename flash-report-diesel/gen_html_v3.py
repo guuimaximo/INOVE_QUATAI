@@ -500,8 +500,14 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 rows_acomp = ""
 for a in gfd.ACOMPANHAMENTO:
     delta = a["depois"] - a["antes"]
-    cor = "#16a34a" if delta >= 0 else "#dc2626"
-    seta = "&#8593;" if delta >= 0 else "&#8595;"
+    # Variacao abaixo de 0,01 km/L e ruido de medicao, nao evolucao: sai neutra (=) em
+    # cinza, em vez de seta verde para cima. Antes, delta 0,000 caia no >= e virava alta.
+    if abs(delta) < 0.01:
+        cor, seta = "#94a3b8", "="
+    elif delta > 0:
+        cor, seta = "#16a34a", "&#8593;"
+    else:
+        cor, seta = "#dc2626", "&#8595;"
     rows_acomp += (f"<tr><td style='text-align:left;padding-left:6px;'>{a['nome']}</td>"
                    f"<td>{a['instrutor']}</td><td>{a['status']}</td>"
                    f"<td>{fmt(a['antes'],3)}</td><td style='font-weight:700;'>{fmt(a['depois'],3)}</td>"

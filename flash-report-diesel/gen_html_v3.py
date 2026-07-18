@@ -677,9 +677,13 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # Fotos da visita: coloque os arquivos em flash-report-diesel/ e liste os nomes aqui.
 FOTOS_NOTURNO_ARQUIVOS = ["noturno_jul_1.jpg", "noturno_jul_2.jpg",
                           "noturno_jul_3.jpg", "noturno_jul_4.jpg"]
+# As fotos sao retrato (~1204x1600). Em celula baixa e larga o object-fit:cover corta
+# justamente a cabeca, entao a celula e alta (170px) e o enquadramento sobe
+# (object-position 20%) para manter rosto e tronco visiveis.
 FOTOS_NOTURNO = "".join(
-    f'<div style="border-radius:8px;overflow:hidden;border:1px solid #dbe3ee;height:88px;">'
-    f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>'
+    f'<div style="border-radius:8px;overflow:hidden;border:1px solid #dbe3ee;height:170px;">'
+    f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;'
+    f'object-position:center 20%;display:block;"/></div>'
     for _f in FOTOS_NOTURNO_ARQUIVOS)
 # ================= PAGINA 17: ACOMPANHAMENTO NOTURNO =================
 pages.append(f"""<div class="page-break"></div><div class="page">

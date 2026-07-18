@@ -48,6 +48,14 @@ def _hhmm(v) -> str:
     return s[:5] if s else "—"
 
 
+def _ddmm_str(s) -> str:
+    """Converte 'YYYY-MM-DD' (string do banco) em 'DD/MM'."""
+    try:
+        return date.fromisoformat(str(s)[:10]).strftime("%d/%m")
+    except Exception:
+        return str(s or "—")
+
+
 def _trunc(s, n=40):
     s = str(s or "").strip()
     if not s or s.lower() in ("none", "nan"):
@@ -153,6 +161,14 @@ def coletar_dados() -> dict:
     prev_10k = int(pv_dia["tipo"].astype(str).str.contains("10.000", regex=False).sum()) if not pv_dia.empty else 0
     insp_5k = int(pv_dia["tipo"].astype(str).str.contains("5.000", regex=False).sum()) if not pv_dia.empty else 0
 
+    # A tabela `preventivas` tem lag de lançamento (as do dia 15 só entraram no dia 17).
+    # Se o DIA_REF é posterior ao último dia já lançado, "0" NÃO significa "não fez" —
+    # significa "ainda não lançado". Distinguir os dois casos é essencial: um acusa a
+    # oficina de não trabalhar, o outro explica que o dado não chegou.
+    prev_ultimo_lancado = max(prev["d"].dropna()) if not prev.empty else None
+    prev_aguardando = bool(prev_ultimo_lancado and str(dia_ref) > prev_ultimo_lancado)
+    prev_ontem_aguardando = bool(prev_ultimo_lancado and str(ontem) > prev_ultimo_lancado)
+
     # ---- Etiquetas em aberto (status Aberto, mês corrente) ----
     mesdf = pd.DataFrame(flr.fetch_all_table_period(
         table_name="sos_acionamentos",
@@ -234,6 +250,8 @@ def coletar_dados() -> dict:
         "validas_pos": validas_pos,
         "regen_eventos": regen_eventos, "regen_custo": regen_custo, "regen_veiculos": regen_veiculos,
         "pv_dia": pv_dia, "pv_ontem_qtd": int(len(pv_ontem)), "prev_10k": prev_10k, "insp_5k": insp_5k,
+        "prev_aguardando": prev_aguardando, "prev_ontem_aguardando": prev_ontem_aguardando,
+        "prev_ultimo_lancado": prev_ultimo_lancado,
         "etiquetas": etiquetas, "etiquetas_total": etiquetas_total, "etiquetas_antigas": etiquetas_antigas,
         "gns": g, "sr": sr, "sr_abertas_ontem": sr_abertas_ontem, "sr_motivos_ontem": sr_motivos_ontem,
         "venc": venc, "reincidentes": reincidentes, "onda": onda,
@@ -353,18 +371,32 @@ def gerar_html(d: dict) -> str:
             f'{d["regen_veiculos"]} veículo(s) no dia {_ddmm(dia_ref)} — regeneração frequente é alarme de quebra.</div>'
         )
 
-    if d["pv_dia"].empty:
+    ultimo_lanc = d.get("prev_ultimo_lancado")
+    if d["prev_aguardando"]:
+        # Dado ainda não importado — NÃO afirmar que nada foi feito.
+        rows_prev = ('<tr><td colspan="2" class="muted">Lançamento ainda não importado '
+                     'para este dia</td></tr>')
+        nota_prev = (f'⏳ A base de preventivas está lançada até <b>{_ddmm_str(ultimo_lanc)}</b> — '
+                     f'o que foi feito em {_ddmm(dia_ref)} ainda não entrou no sistema '
+                     f'(lançamento costuma atrasar ~2 dias). <b>Não significa que não foi feito.</b>')
+    elif d["pv_dia"].empty:
         rows_prev = '<tr><td colspan="2" class="muted">Nenhuma preventiva lançada no dia</td></tr>'
+        nota_prev = (f'Nenhuma preventiva registrada em {_ddmm(dia_ref)}'
+                     + (f' — com <b>{venc["total_vencidos"]} planos vencidos</b>, conferir a programação.'
+                        if venc.get("total_vencidos", 0) > 0 else '.'))
     else:
         rows_prev = "".join(
             f'<tr><td><b>{r["prefixo"]}</b></td><td class="l">{_trunc(r["tipo"], 40)}</td></tr>'
             for _, r in d["pv_dia"].iterrows()
         )
-    if d["pv_ontem_qtd"] == 0 and venc.get("total_vencidos", 0) > 0:
-        nota_prev = (f'Ontem ({_ddmm(ontem)}): nenhuma lançada — com <b>{venc["total_vencidos"]} planos vencidos</b>, '
-                     f'conferir a programação.')
-    else:
-        nota_prev = f'Ontem ({_ddmm(ontem)}): {d["pv_ontem_qtd"]} preventiva(s) lançada(s).'
+        if d["prev_ontem_aguardando"]:
+            nota_prev = (f'Ontem ({_ddmm(ontem)}): lançamento ainda não importado '
+                         f'(base vai até {_ddmm_str(ultimo_lanc)}).')
+        elif d["pv_ontem_qtd"] == 0 and venc.get("total_vencidos", 0) > 0:
+            nota_prev = (f'Ontem ({_ddmm(ontem)}): nenhuma lançada — com <b>{venc["total_vencidos"]} planos vencidos</b>, '
+                         f'conferir a programação.')
+        else:
+            nota_prev = f'Ontem ({_ddmm(ontem)}): {d["pv_ontem_qtd"]} preventiva(s) lançada(s).'
 
     # Leitura do dia (dinâmica, sem IA)
     rein_txt = ""
@@ -423,8 +455,8 @@ def gerar_html(d: dict) -> str:
       <div class="card-title">Preventivas realizadas no dia</div>
       <div class="card-body">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:7px;">
-          <div class="metric{'' if d["prev_10k"] else ''}"><div class="lbl">Preventiva 10.000</div><div class="val" style="color:{'#123b35' if d["prev_10k"] else '#94a3a0'};">{d["prev_10k"]}</div></div>
-          <div class="metric b-teal"><div class="lbl">Inspeção 5.000</div><div class="val" style="color:{'#123b35' if d["insp_5k"] else '#94a3a0'};">{d["insp_5k"]}</div></div>
+          <div class="metric"><div class="lbl">Preventiva 10.000</div><div class="val" style="color:{'#94a3a0' if (d["prev_aguardando"] or not d["prev_10k"]) else '#123b35'};font-size:{'12px' if d["prev_aguardando"] else '19px'};">{'aguardando' if d["prev_aguardando"] else d["prev_10k"]}</div></div>
+          <div class="metric b-teal"><div class="lbl">Inspeção 5.000</div><div class="val" style="color:{'#94a3a0' if (d["prev_aguardando"] or not d["insp_5k"]) else '#123b35'};font-size:{'12px' if d["prev_aguardando"] else '19px'};">{'aguardando' if d["prev_aguardando"] else d["insp_5k"]}</div></div>
         </div>
         <table>
           <thead><tr><th>Carro</th><th>Plano</th></tr></thead>
@@ -714,7 +746,12 @@ def montar_caption(d: dict) -> str:
         f"\n\n"
         f"🏷️ {d['etiquetas_total']} etiquetas em aberto ({d['etiquetas_antigas']} antigas p/ classificar)"
         f"\n"
-        f"✅ Dia {_ddmm(dia_ref)}: {d['insp_5k']} Inspeções de 5.000 · {d['prev_10k']} Preventivas de 10.000."
+        + (
+            f"⏳ Preventivas de {_ddmm(dia_ref)}: lançamento ainda não importado "
+            f"(base até {_ddmm_str(d.get('prev_ultimo_lancado'))})."
+            if d.get("prev_aguardando")
+            else f"✅ Dia {_ddmm(dia_ref)}: {d['insp_5k']} Inspeções de 5.000 · {d['prev_10k']} Preventivas de 10.000."
+        )
     )
 
 

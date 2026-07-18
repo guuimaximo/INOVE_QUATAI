@@ -40,6 +40,26 @@ MES_ANT_MM, MES_ANT_ANO = _ult_ant.month, _ult_ant.year
 MES_REF_LABEL = f"{_MESES_PT[MES_REF_MM - 1]}/{MES_REF_ANO}"       # ex.: "Julho/2026"
 MES_ANT_LABEL = f"{_MESES_PT[MES_ANT_MM - 1]}/{MES_ANT_ANO}"       # ex.: "Junho/2026"
 PERIODO_LABEL = f"01/{MES_REF_MM:02d} a {_ONTEM.day:02d}/{_ONTEM.month:02d}/{_ONTEM.year}"
+MES_REF_NOME = _MESES_PT[MES_REF_MM - 1]                           # ex.: "Julho"
+MES_ANT_NOME = _MESES_PT[MES_ANT_MM - 1]                           # ex.: "Junho"
+MES3_REF = _MES3[MES_REF_MM - 1]                                   # ex.: "Jul"
+MES3_ANT = _MES3[MES_ANT_MM - 1]                                   # ex.: "Jun"
+
+# ---- Rastreio das fontes ao vivo ----------------------------------------------------
+# Cada bloco de dados tem um fallback fixo (dados de um mes antigo) para o script nao
+# quebrar. O risco e o fallback entrar em silencio quando uma credencial falha, e o
+# relatorio sair inteiro com o mes errado. _ok() registra o que carregou de verdade;
+# no fim comparamos com PAGINAS_ESPERADAS e avisamos (ou abortamos, se FLASH_STRICT=1).
+import re as _re_fontes
+PAGINAS_AO_VIVO = set()
+
+
+def _ok(msg):
+    print(msg)
+    _m = _re_fontes.search(r"Pagina (\d+)", msg)
+    if _m:
+        PAGINAS_AO_VIVO.add(int(_m.group(1)))
+
 
 TEAL = "#0e7c7b"
 DARK = "#0f172a"
@@ -284,7 +304,7 @@ def _carregar_instrutores_junho():
             "desf_ok": sum(1 for x in rd if x.get("status") == "OK"),
             "desf_ata": sum(1 for x in rd if x.get("status") == "ATAS"),
         })
-    print("[instrutores] dados ao vivo de Junho/2026 carregados do Supabase INOVE.")
+    _ok(f"[instrutores] Pagina 11 ao vivo ({MES_REF_LABEL}) — Supabase INOVE.")
     return out
 
 
@@ -589,19 +609,19 @@ if _transnet_rows:
     if _hist:
         KML_HISTORICO = _hist
         # KML_MENSAL_TELEMETRIA (sst) NAO e sobrescrito: o dado de telemetria mensal e ruidoso.
-        print("[transnet] Pagina 2 (KM/L mensal Transnet) ao vivo.")
+        _ok("[transnet] Pagina 2 (KM/L mensal Transnet) ao vivo.")
     _sem = _agg_kml_semanal(_transnet_rows)
     if len(_sem) >= 4:
         KML_SEMANAL = _sem
-        print("[transnet] Pagina 2 (KM/L semanal) ao vivo.")
+        _ok("[transnet] Pagina 2 (KM/L semanal) ao vivo.")
     _ader = _agg_aderencia(_transnet_rows, f"{MES_REF_ANO}-{MES_REF_MM:02d}")
     if _ader:
         ADERENCIA_DIARIA_EMPRESA, ADERENCIA_MEDIA_EMPRESA, ADERENCIA_CARROS, ADERENCIA_TOTAL_FROTA = _ader
-        print("[transnet] Pagina 17 (aderencia) ao vivo.")
+        _ok("[transnet] Pagina 17 (aderencia) ao vivo.")
     _div = _agg_divergencia([r for r in _transnet_rows if str(r.get("data_consolidada", "")) >= MES_ANT_INI.isoformat()])
     if _div:
         DIVERGENCIA_CARROS = _div
-        print("[transnet] Pagina 16 (divergencia) ao vivo.")
+        _ok("[transnet] Pagina 16 (divergencia) ao vivo.")
 
 
 # ---- Paginas 3 (cluster), 7 (piores/melhores) e 15 (meritocracia): BCNT ----
@@ -692,7 +712,7 @@ if _bcnt_url and _bcnt_key:
         if len(_rank) >= 20:
             PIORES = sorted(_rank, key=lambda x: x[2])[:10]
             MELHORES = sorted(_rank, key=lambda x: -x[2])[:10]
-            print("[bcnt] Pagina 7 (piores/melhores) ao vivo.")
+            _ok("[bcnt] Pagina 7 (piores/melhores) ao vivo.")
 
         # ----- Paginas 4, 5, 6: por linha, desperdicio, velocidade e KM/L diario (Telemetria) -----
         _linJ = _dd(lambda: [0.0, 0.0, 0.0, 0.0, 0.0])  # km, litros, meta*km, minutos, litros_ideais
@@ -721,7 +741,7 @@ if _bcnt_url and _bcnt_key:
                    for ln, a in _linJ.items() if a[1] > 0 and a[0] >= 1000]
         if len(_linhas) >= 5:
             LINHAS = sorted(_linhas, key=lambda x: -x[4])
-            print("[bcnt] Pagina 5 (linhas x velocidade) ao vivo.")
+            _ok("[bcnt] Pagina 5 (linhas x velocidade) ao vivo.")
         # Pagina 4: LINHA_DESPERDICIO (linha, kml_mai, kml_jun, var%, meta, desperdicio_L, km_jun, litros_jun)
         _ld = []
         for ln, a in _linJ.items():
@@ -731,14 +751,14 @@ if _bcnt_url and _bcnt_key:
                             round(a[2] / a[0], 2), round(a[1] - a[4], 2), int(a[0]), round(a[1], 2)))
         if len(_ld) >= 5:
             LINHA_DESPERDICIO = _ld
-            print("[bcnt] Pagina 4 (linha/desperdicio) ao vivo.")
+            _ok("[bcnt] Pagina 4 (linha/desperdicio) ao vivo.")
         # Pagina 6: KML_VELOCIDADE_DIARIO (dia, km_l, vel_media) - junho
         _kv = [(f"{d}/{MES_REF_MM:02d}", round(_diaJ[d][0] / _diaJ[d][1], 4),
                 round(_diaJ[d][0] * 60 / _diaJ[d][2], 2) if _diaJ[d][2] else 0.0)
                for d in sorted(_diaJ) if _diaJ[d][1] > 0]
         if len(_kv) >= 20:
             KML_VELOCIDADE_DIARIO = _kv
-            print("[bcnt] Pagina 6 (kml x velocidade diario) ao vivo.")
+            _ok("[bcnt] Pagina 6 (kml x velocidade diario) ao vivo.")
 
         # ----- Pagina 8: Sinal de Alerta / Destaque Positivo (motorista mai vs jun) + causa -----
         _mMJ = _dd(lambda: {MES_ANT_MM: [0.0, 0.0], MES_REF_MM: [0.0, 0.0]})
@@ -783,7 +803,7 @@ if _bcnt_url and _bcnt_key:
                 mudC = (cM != cJ) if (cM != "-" and cJ != "-") else None
                 _causa.append((n, lM, lJ, cM, cJ, mudL, mudC))
             SINAL_ALERTA_CAUSA = _causa
-            print("[bcnt] Pagina 8 (sinal de alerta / destaque) ao vivo.")
+            _ok("[bcnt] Pagina 8 (sinal de alerta / destaque) ao vivo.")
 
     # Pagina 15: meritocracia (valor R$ ja calculado pela regra da empresa)
     try:
@@ -807,7 +827,7 @@ if _bcnt_url and _bcnt_key:
         _top = sorted(((_nome_de.get(ch) or f"MOTORISTA {ch}", ch, int(v), k) for ch, v, k in _vals if v > 0 and ch.strip()),
                       key=lambda x: (-x[2], -(x[3] or 0)))[:10]
         MERITOCRACIA_TOP = [(n, ch, v, round(k, 2) if k else 0.0) for n, ch, v, k in _top]
-        print("[bcnt] Pagina 15 (meritocracia) ao vivo.")
+        _ok("[bcnt] Pagina 15 (meritocracia) ao vivo.")
 
 
 # ---- Pagina 10: Tratativas (INOVE diesel_tratativas) ----
@@ -860,7 +880,7 @@ if _inv_url and _inv_key:
         TRATATIVAS = {"total": len(_tr), "por_status": {"CONCLUIDA": _conc, "ATRASADA": _atr, "PENDENTE_NO_PRAZO": _prazo}}
         TRATATIVAS_ATRASADAS = sorted(_la, key=lambda x: -x[4])[:15]
         TRATATIVAS_PENDENTES_PRAZO = _lp
-        print("[inove] Pagina 10 (tratativas) ao vivo.")
+        _ok("[inove] Pagina 10 (tratativas) ao vivo.")
 
     # ---- Paginas 12 (aproveitamento do dia) e 9 (motoristas da semana): sessoes do 1o do mes ate hoje ----
     _hoje2 = _HOJE
@@ -928,7 +948,7 @@ if _inv_url and _inv_key:
         if _idi and _dad:
             INSTRUTORES_DIARIO = sorted(_idi, key=lambda x: -x["total_sessoes"])
             INSTRUTORES_DIA_A_DIA = _dad
-            print("[inove] Pagina 12 (aproveitamento do dia) ao vivo.")
+            _ok("[inove] Pagina 12 (aproveitamento do dia) ao vivo.")
         # Pagina 9: motoristas da semana (motorista distinto, sessao mais recente na janela)
         _seen = {}
         for s in sorted(_ss, key=lambda x: x.get("data_sessao") or "", reverse=True):
@@ -939,7 +959,7 @@ if _inv_url and _inv_key:
             _seen[ch] = (nm.title(), ch, s.get("instrutor_nome") or "", f"{dd[8:10]}/{dd[5:7]}", s.get("foco_snapshot") or "-")
         if len(_seen) >= 5:
             MOTORISTAS_SEMANA = list(_seen.values())[:10]
-            print("[inove] Pagina 9 (motoristas da semana) ao vivo.")
+            _ok("[inove] Pagina 9 (motoristas da semana) ao vivo.")
 
     # ---- Paginas 13 (evolucao / 30 dias) e 14 (o veiculo interfere no KM/L) ----
     try:
@@ -975,7 +995,7 @@ if _inv_url and _inv_key:
                                   round(meta, 3), round(real, 3), di))
         if _comp:
             COMPLETARAM_30_DIAS = [t[:6] for t in _comp[:8]]
-            print("[inove] Pagina 13 (completaram 30 dias) ao vivo.")
+            _ok("[inove] Pagina 13 (completaram 30 dias) ao vivo.")
         # 13b: ACOMPANHAMENTO antes/depois (10 mais distantes da meta, em acompanhamento)
         _ac2 = []
         for a in _acs:
@@ -987,7 +1007,30 @@ if _inv_url and _inv_key:
         if len(_ac2) >= 5:
             _ac2.sort(key=lambda x: x["_d"])
             ACOMPANHAMENTO = [{k: v for k, v in x.items() if k != "_d"} for x in _ac2[:10]]
-            print("[inove] Pagina 13 (acompanhamento antes/depois) ao vivo.")
+            _ok("[inove] Pagina 13 (acompanhamento antes/depois) ao vivo.")
+        # Pagina 7: ultimo acompanhamento + ultima tratativa por chapa (antes era dict fixo de
+        # Junho, entao as chapas nao batiam com o PIORES ao vivo e a tabela saia vazia).
+        def _ddmm(iso):
+            s = str(iso or "")[:10]
+            return f"{s[8:10]}/{s[5:7]}" if len(s) >= 10 else "-"
+
+        _ult_ac = {}
+        for a in _acs:
+            ch, di = str(a.get("motorista_chapa") or ""), str(a.get("dt_inicio_monitoramento") or "")[:10]
+            if ch and (ch not in _ult_ac or di > _ult_ac[ch][1]):
+                _ult_ac[ch] = (a.get("status") or "-", di)
+        _ult_tr = {}
+        for t in (_tr or []):
+            ch, dt = str(t.get("motorista_chapa") or ""), str(t.get("created_at") or "")[:10]
+            if ch and (ch not in _ult_tr or dt > _ult_tr[ch][1]):
+                _ult_tr[ch] = (t.get("status") or "-", dt, (t.get("prioridade") or "-").strip() or "-")
+        if _ult_ac:
+            PIORES_HISTORICO = {}
+            for ch in set(_ult_ac) | set(_ult_tr):
+                _sa, _da = _ult_ac.get(ch, ("-", ""))
+                _st, _dt2, _pr = _ult_tr.get(ch, ("-", "", "-"))
+                PIORES_HISTORICO[ch] = (_sa, _ddmm(_da), _st, _ddmm(_dt2), _pr)
+            print(f"[inove] Pagina 7 (historico dos piores) ao vivo: {len(PIORES_HISTORICO)} chapas.")
         # 14: carro principal x demais nos 30 dias de cada motorista que completou (usa premiacao_diaria)
         if _pd and _comp:
             from collections import defaultdict as _dd4
@@ -1023,7 +1066,7 @@ if _inv_url and _inv_key:
                                  round(_pc[1] / _pc[2], 3), round(_okm / _olt, 3), _nout))
             if _v30:
                 VEICULO_30_DIAS = _v30
-                print("[inove] Pagina 14 (veiculo x kml 30 dias) ao vivo.")
+                _ok("[inove] Pagina 14 (veiculo x kml 30 dias) ao vivo.")
 
 # Dentro dos 30 dias de acompanhamento: quantas vezes o motorista pegou o carro que mais usou,
 # e KM/L nesse carro principal vs KM/L nos demais carros
@@ -1087,6 +1130,26 @@ def pct(v):
     s = "+" if v > 0 else ""
     return f"{s}{fmt(v,2)}%"
 
+
+# ---- Conferencia das fontes ao vivo (ver _ok() no topo) ----
+# Paginas que DEVEM vir do banco. A 17 (aderencia) esta fora do relatorio e a 3/18/19
+# sao conteudo manual/derivado, por isso nao entram na conta.
+PAGINAS_ESPERADAS = {2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+PAGINAS_EM_FALLBACK = sorted(PAGINAS_ESPERADAS - PAGINAS_AO_VIVO)
+DADOS_AO_VIVO_OK = not PAGINAS_EM_FALLBACK
+AVISO_FALLBACK = ""
+if not DADOS_AO_VIVO_OK:
+    AVISO_FALLBACK = ("ATENÇÃO: dados NÃO atualizados nas páginas "
+                      + ", ".join(str(p) for p in PAGINAS_EM_FALLBACK)
+                      + " — exibindo valores de fallback de um mês anterior.")
+    print("=" * 78)
+    print(f"[ALERTA] {AVISO_FALLBACK}")
+    print("[ALERTA] Verifique os secrets SUPABASE_* / TRANSNET_* do workflow.")
+    print("=" * 78)
+    if os.environ.get("FLASH_STRICT", "").strip() == "1":
+        raise SystemExit("FLASH_STRICT=1: abortando para nao publicar relatorio com mes errado.")
+else:
+    print(f"[fontes] todas as {len(PAGINAS_ESPERADAS)} paginas de dado carregadas ao vivo.")
 
 # ================= GRAFICOS =================
 
@@ -1207,7 +1270,7 @@ def chart_aderencia_carros():
         ax.text(v + 1.5, i, f"{fmt(v,1)}%", va="center", fontsize=8.4, fontweight="bold", color=DARK)
     ax.set_yticks(list(y)); ax.set_yticklabels([f"Carro {l}" for l in labels], fontsize=8.8)
     ax.set_xlim(0, 70)
-    ax.set_xlabel("% de dias com dado válido de Transnet (Mai-Jul)")
+    ax.set_xlabel(f"% de dias com dado válido de Transnet ({MES_REF_LABEL})")
     ax.set_title("Menor Aderência de Dados — Carros com Falha de Reporte", fontsize=10.8, fontweight="bold", color=DARK)
     for s_ in ["top", "right"]:
         ax.spines[s_].set_visible(False)
@@ -1231,7 +1294,7 @@ def chart_velocidade_kml_diario():
     ax2.set_ylabel("Velocidade média (km/h)", color="#8b5cf6")
     ax2.tick_params(axis="y", colors="#8b5cf6")
     ax1.set_xticks(x[::2]); ax1.set_xticklabels([labels[i] for i in range(0, len(labels), 2)], fontsize=8.4, rotation=45, ha="right")
-    ax1.set_title("KM/L Diário x Velocidade Média — Junho/2026 (correlação)", fontsize=13.5, fontweight="bold", color=DARK)
+    ax1.set_title(f"KM/L Diário x Velocidade Média — {MES_REF_LABEL} (correlação)", fontsize=13.5, fontweight="bold", color=DARK)
     ax1.legend([l1, l2], ["KM/L do dia", "Velocidade média"], loc="lower left", fontsize=9.5, frameon=False)
     for s_ in ["top"]:
         ax1.spines[s_].set_visible(False); ax2.spines[s_].set_visible(False)
@@ -1274,7 +1337,7 @@ def chart_aderencia_empresa_diaria():
     ax.set_xticks(x[::2]); ax.set_xticklabels([labels[i] for i in range(0, len(labels), 2)], fontsize=7.4, rotation=45, ha="right")
     ax.set_ylim(0, 105)
     ax.set_ylabel("% da frota com dado válido")
-    ax.set_title("Aderência Diária da Frota (média da empresa) — Junho/2026", fontsize=11.5, fontweight="bold", color=DARK)
+    ax.set_title(f"Aderência Diária da Frota (média da empresa) — {MES_REF_LABEL}", fontsize=11.5, fontweight="bold", color=DARK)
     ax.legend(loc="lower left", fontsize=8, frameon=False)
     for s_ in ["top", "right"]:
         ax.spines[s_].set_visible(False)
@@ -1330,7 +1393,7 @@ def chart_linha_meta_velocidade():
     ax.set_yticks(list(y)); ax.set_yticklabels(labels, fontsize=8.6)
     ax.set_xlim(-0.22, 0.30)
     ax.set_xlabel("KM/L real − Meta  (negativo = abaixo da meta)")
-    ax.set_title("Distância da Meta por Linha, com Velocidade Média (Junho/2026)", fontsize=12, fontweight="bold", color=DARK)
+    ax.set_title(f"Distância da Meta por Linha, com Velocidade Média ({MES_REF_LABEL})", fontsize=12, fontweight="bold", color=DARK)
     for s in ["top", "right", "left"]:
         ax.spines[s].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)
@@ -1374,7 +1437,7 @@ def chart_tornado(data, title, fname):
     ax.set_yticks(list(y)); ax.set_yticklabels(names, fontsize=7.4)
     ax.invert_yaxis()
     ax.set_title(title, fontsize=10.8, fontweight="bold", color=DARK)
-    ax.set_xlabel("Variação KM/L Maio→Junho (%)")
+    ax.set_xlabel(f"Variação KM/L {MES_ANT_NOME}→{MES_REF_NOME} (%)")
     for s in ["top", "right", "left"]:
         ax.spines[s].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.5)
@@ -1436,8 +1499,8 @@ def chart_instrutores_status():
         total = mon[i] + ok[i] + atas[i]
         ax.text(total + 3, i, f"{total}", va="center", fontsize=8.5, color=DARK)
     ax.set_yticks(list(y)); ax.set_yticklabels(nomes, fontsize=10)
-    ax.set_xlabel("Nº de acompanhamentos (novos + desfechos de junho)")
-    ax.set_title("Atividade de Junho por Instrutor", fontsize=11.5, fontweight="bold", color=DARK)
+    ax.set_xlabel(f"Nº de acompanhamentos (novos + desfechos de {MES_REF_NOME.lower()})")
+    ax.set_title(f"Atividade de {MES_REF_NOME} por Instrutor", fontsize=11.5, fontweight="bold", color=DARK)
     ax.legend(loc="center", fontsize=6.8, frameon=False)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
@@ -1488,7 +1551,7 @@ def chart_meritocracia_donut():
     ax.text(0, 0.05, str(MERITOCRACIA_RESUMO["motoristas_premiados"]), ha="center", va="center", fontsize=20, fontweight="bold", color=DARK)
     ax.text(0, -0.18, "premiados", ha="center", va="center", fontsize=8.5, color="#64748b")
     ax.legend(wedges, [f"{l} ({v})" for l, v in zip(labels, vals)], loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8, frameon=False)
-    ax.set_title("Meritocracia — Distribuição de Valores (Junho/2026)", fontsize=10.5, fontweight="bold", color=DARK)
+    ax.set_title(f"Meritocracia — Distribuição de Valores ({MES_REF_LABEL})", fontsize=10.5, fontweight="bold", color=DARK)
     fig.tight_layout()
     fig.savefig(OUT / "v3_meritocracia.png", dpi=150, transparent=True, bbox_inches="tight")
     plt.close(fig)
@@ -1524,6 +1587,6 @@ for f in [chart_kml_historico, chart_semanal_evolucao, chart_semanal_variacao_pc
     f()
 chart_motoristas_lollipop(PIORES, "Top 10 — Maior distância da meta", "v3_piores.png", RED)
 chart_motoristas_lollipop(MELHORES, "Top 10 — Melhor desempenho", "v3_melhores.png", GREEN)
-chart_tornado(SINAL_ALERTA, "Sinal de Alerta — Maior Queda (Mai->Jun)", "v3_alerta.png")
-chart_tornado(DESTAQUE_POSITIVO, "Destaque Positivo — Maior Evolucao (Mai->Jun)", "v3_destaque.png")
+chart_tornado(SINAL_ALERTA, f"Sinal de Alerta — Maior Queda ({MES3_ANT}->{MES3_REF})", "v3_alerta.png")
+chart_tornado(DESTAQUE_POSITIVO, f"Destaque Positivo — Maior Evolucao ({MES3_ANT}->{MES3_REF})", "v3_destaque.png")
 print("Graficos v3 gerados.")

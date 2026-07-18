@@ -22,6 +22,12 @@ MES3ANT = _M3[getattr(gfd, "MES_ANT_MM", 5) - 1]   # "Jun"
 
 TOTAL_PAGINAS = 19
 
+# Faixa vermelha na capa quando algum bloco caiu no fallback fixo (mes errado silencioso).
+_aviso = getattr(gfd, "AVISO_FALLBACK", "")
+AVISO_HTML = (f"""<div style="margin-top:16px; max-width:640px; font-size:12px; font-weight:800;
+  background:#7f1d1d; border:2px solid #fca5a5; color:#fff; padding:10px 20px; border-radius:10px;">
+  &#9888; {_aviso}</div>""" if _aviso else "")
+
 CSS = """
 * { box-sizing: border-box; }
 body { margin:0; font-family: Arial, Helvetica, sans-serif; background:#eef2f7; color:#111827; }
@@ -124,6 +130,7 @@ pages.append(f"""<div class="page" style="background:linear-gradient(135deg,#0f1
   <div style="font-size:40px; font-weight:900; letter-spacing:1px;">CONDUÇÃO ECONÔMICA</div>
   <div style="font-size:22px; font-weight:700; margin-top:6px; color:#a7f3d0;">FLASH REPORT DIESEL</div>
   <div style="margin-top:26px; font-size:15px; font-weight:700; background:rgba(255,255,255,.12); padding:8px 26px; border-radius:999px;">{MESREF}</div>
+  {AVISO_HTML}
   <div style="margin-top:34px; display:flex; gap:34px;">
     <div style="text-align:center;"><div style="font-size:9px; opacity:.75; text-transform:uppercase; letter-spacing:1px;">Fonte oficial</div><div style="font-size:16px; font-weight:800;">Transnet</div></div>
     <div style="text-align:center;"><div style="font-size:9px; opacity:.75; text-transform:uppercase; letter-spacing:1px;">Comparação</div><div style="font-size:16px; font-weight:800;">Telemetria</div></div>
@@ -144,7 +151,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     </div></div>
     <div class="card"><div class="card-title">Resumo Executivo</div><div class="card-body">
       <div class="grid-2">
-        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-1][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-2][1],3)} em {MESANT_NOME.lower()} ({pct(var_jun)})</div></div>
+        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-1][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-2][1],3)} em {MESREF_NOME.lower()} ({pct(var_jun)})</div></div>
         <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Telemetria)</div><div class="val">{fmt(_telem_val,3)}</div><div class="aux">Fonte de comparação</div></div>
       </div>
       <div class="metric" style="margin-top:8px;"><div class="lbl">Meta operacional</div><div class="val">{fmt(gfd.META,2)} km/L</div></div>
@@ -208,7 +215,7 @@ for l in sorted(gfd.LINHA_DESPERDICIO, key=lambda l: -l[5]):
                              f"<td>{km:,}".replace(",",".") + f"</td><td>{fmt(lit,2)} L</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 4 · Análise por Linha — KM/L, Meta e Desperdício ({MES3REF} vs {MES3ANT})", "Fonte: premiacao_diaria_atualizada (Telemetria)", "Linhas monitoradas", str(len(gfd.LINHA_DESPERDICIO)))}
+  {page_header(f"Página 4 · Análise por Linha — KM/L, Meta e Desperdício ({MES3REF} vs {MES3ANT})", "Fonte: premiacao_diaria_atualizada (Telemetria)", "Linhas monitoradas", str(len(gfd.LINHA_DESPERDICIO)))}
   <div class="grid-4">
     <div class="metric"><div class="lbl">KM/L Mês Referência</div><div class="val">{fmt(kml_ref_pond,2)}</div></div>
     <div class="metric"><div class="lbl">KM/L Mês Comparação</div><div class="val">{fmt(kml_comp_medio,2)}</div></div>
@@ -222,7 +229,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
   <div class="grid-3" style="margin-top:8px;">
     <div class="cons-box" style="margin-top:0;"><div class="cons-title">Piores linhas (maior desperdício)</div>
     <div class="cons-text" style="font-size:10px;"><b>07TR</b> (1.588,97 L)<br/><b>08TR</b> (901,83 L)<br/><b>09TR</b> (695,26 L)</div></div>
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Melhores linhas (maior evolução Mai→Jun)</div>
+    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Melhores linhas (maior evolução {MES3ANT}→{MES3REF})</div>
     <div class="cons-text" style="font-size:10px;"><b>16TR</b> (+7,32%)<br/><b>02TR</b> (+3,91%)<br/><b>08TR</b> (+1,88%)</div></div>
     <div class="cons-box" style="margin-top:0;"><div class="cons-title">Linhas que mais pioraram</div>
     <div class="cons-text" style="font-size:10px;"><b>11TR</b> (-2,88%)<br/><b>07TR</b> (-2,81%)<br/><b>15TR</b> (-2,36%)</div></div>
@@ -232,7 +239,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 
 # ================= PAGINA 4b: DISTANCIA DA META x VELOCIDADE (grafico que o usuario gostou) =================
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 5 · Distância da Meta por Linha, com Velocidade Média", "Fonte: premiacao_diaria_atualizada (Telemetria) — Junho/2026", "Linhas monitoradas", str(len(gfd.LINHAS)))}
+  {page_header("Página 5 · Distância da Meta por Linha, com Velocidade Média", f"Fonte: premiacao_diaria_atualizada (Telemetria) — {MESREF}", "Linhas monitoradas", str(len(gfd.LINHAS)))}
   <div class="card"><div class="card-title">Distância da meta por linha, cruzada com velocidade média</div><div class="card-body">
     <div class="chart-wrap"><img src="v3_linha_meta.png"/></div>
   </div></div>
@@ -303,7 +310,7 @@ rows_piores = rows_ranking_com_historico(gfd.PIORES)
 rows_melhores = rows_ranking(gfd.MELHORES)
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 7 · Top 10 — Maior Distância da Meta (Junho)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
+  {page_header(f"Página 7 · Top 10 — Maior Distância da Meta ({MESREF_NOME})", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
     <div class="card"><div class="card-title">Top 10 — Maior distância da meta</div><div class="card-body">
       <div class="chart-wrap chart-wrap-sm"><img src="v3_piores.png"/></div>
@@ -312,7 +319,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Motorista</th><th>Chapa</th><th>KM/L Real</th><th>Meta</th><th>Último Acompanhamento</th><th>Última Tratativa</th></tr></thead>
       <tbody>{rows_piores.replace("padding-left:6px", "padding-left:10px").replace("font-size:7.4px", "font-size:8.6px")}</tbody></table>
       <div class="cons-box"><div class="cons-title">Leitura</div>
-      <div class="cons-text">Dos 10 motoristas mais distantes da meta em Junho, a maioria já está em algum estágio de acompanhamento ou tratativa — o desafio não é falta de ação, mas a velocidade de conversão desses casos em melhoria efetiva de KM/L.</div></div>
+      <div class="cons-text">Dos 10 motoristas mais distantes da meta em {MESREF_NOME}, a maioria já está em algum estágio de acompanhamento ou tratativa — o desafio não é falta de ação, mas a velocidade de conversão desses casos em melhoria efetiva de KM/L.</div></div>
     </div></div>
   </div>
   {footer(7)}
@@ -344,9 +351,9 @@ for c in gfd.SINAL_ALERTA_CAUSA:
                           f"<td style='text-align:left;font-size:7.6px;color:{cor};font-weight:700;'>{causa}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 8 · Top 10 Melhores e Sinal de Alerta (Mai→Jun)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
+  {page_header(f"Página 8 · Top 10 Melhores e Sinal de Alerta ({MES3ANT}→{MES3REF})", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
-    <div class="card"><div class="card-title">Top 10 — Melhor desempenho (Junho)</div><div class="card-body">
+    <div class="card"><div class="card-title">Top 10 — Melhor desempenho ({MESREF_NOME})</div><div class="card-body">
       <div class="chart-wrap"><img src="v3_melhores.png"/></div>
     </div></div>
     <div class="card"><div class="card-title">Sinal de Alerta — maior queda {MESANT_NOME}→{MESREF_NOME}</div><div class="card-body">
@@ -445,11 +452,11 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 
 # ================= PAGINA 8: INSTRUTORES APROFUNDADO =================
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 11 · Instrutores — Análise Aprofundada", "Base: diesel_acompanhamentos (Supabase INOVE) · recorte Junho/2026 — novos acompanhamentos iniciados no mês + desfechos ocorridos no mês", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
+  {page_header("Página 11 · Instrutores — Análise Aprofundada", f"Base: diesel_acompanhamentos (Supabase INOVE) · recorte {MESREF} — novos acompanhamentos iniciados no mês + desfechos ocorridos no mês", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
   <div class="grid-3" style="margin-bottom:6px;">
-    <div class="metric"><div class="lbl">Novos acompanhamentos (iniciados em jun)</div><div class="val">{sum(i['novos'] for i in gfd.INSTRUTORES)}</div><div class="aux">Fabiano + Helio · ainda no ciclo de 30 dias</div></div>
-    <div class="metric"><div class="lbl">Desfechos em jun — Concluídos (OK)</div><div class="val" style="color:#16a34a;">{sum(i['desf_ok'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês atingindo a meta</div></div>
-    <div class="metric"><div class="lbl">Desfechos em jun — viraram ATA</div><div class="val" style="color:#dc2626;">{sum(i['desf_ata'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês sem atingir a meta</div></div>
+    <div class="metric"><div class="lbl">Novos acompanhamentos (iniciados em {MESREF_NOME.lower()})</div><div class="val">{sum(i['novos'] for i in gfd.INSTRUTORES)}</div><div class="aux">Fabiano + Helio · ainda no ciclo de 30 dias</div></div>
+    <div class="metric"><div class="lbl">Desfechos em {MESREF_NOME.lower()} — Concluídos (OK)</div><div class="val" style="color:#16a34a;">{sum(i['desf_ok'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês atingindo a meta</div></div>
+    <div class="metric"><div class="lbl">Desfechos em {MESREF_NOME.lower()} — viraram ATA</div><div class="val" style="color:#dc2626;">{sum(i['desf_ata'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês sem atingir a meta</div></div>
   </div>
   <div class="grid-2">
     <div class="card"><div class="card-title">Efetividade — % de acompanhados que atingiram a meta</div><div class="card-body">
@@ -460,7 +467,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     </div></div>
   </div>
   <div class="cons-box"><div class="cons-title">Leitura analítica</div>
-  <div class="cons-text">Em Junho iniciaram-se {sum(i['novos'] for i in gfd.INSTRUTORES)} novos acompanhamentos (Fabiano {gfd.INSTRUTORES[0]['novos']}, Helio {gfd.INSTRUTORES[1]['novos']}), quase todos ainda dentro do ciclo de 30 dias — por isso aparecem majoritariamente como "em monitoramento". Já os ciclos que se encerraram no mês somaram {sum(i['desf_ok'] for i in gfd.INSTRUTORES)} concluídos na meta (OK) e {sum(i['desf_ata'] for i in gfd.INSTRUTORES)} que viraram ATA. A efetividade (leitura inicial já na meta) é parecida entre os dois — {fmt(gfd.INSTRUTORES[0]['taxa_atingiu_meta'],1)}% (Fabiano) e {fmt(gfd.INSTRUTORES[1]['taxa_atingiu_meta'],1)}% (Helio) — sinal de que o gargalo é o modelo de acompanhamento, não o instrutor: vale testar ciclos mais curtos com reforço em campo nos primeiros 10 dias.</div></div>
+  <div class="cons-text">Em {MESREF_NOME} iniciaram-se {sum(i['novos'] for i in gfd.INSTRUTORES)} novos acompanhamentos (Fabiano {gfd.INSTRUTORES[0]['novos']}, Helio {gfd.INSTRUTORES[1]['novos']}), quase todos ainda dentro do ciclo de 30 dias — por isso aparecem majoritariamente como "em monitoramento". Já os ciclos que se encerraram no mês somaram {sum(i['desf_ok'] for i in gfd.INSTRUTORES)} concluídos na meta (OK) e {sum(i['desf_ata'] for i in gfd.INSTRUTORES)} que viraram ATA. A efetividade (leitura inicial já na meta) é parecida entre os dois — {fmt(gfd.INSTRUTORES[0]['taxa_atingiu_meta'],1)}% (Fabiano) e {fmt(gfd.INSTRUTORES[1]['taxa_atingiu_meta'],1)}% (Helio) — sinal de que o gargalo é o modelo de acompanhamento, não o instrutor: vale testar ciclos mais curtos com reforço em campo nos primeiros 10 dias.</div></div>
   {footer(11)}
 </div>""")
 
@@ -615,7 +622,7 @@ for m in gfd.MERITOCRACIA_TOP:
                      f"<td style='font-weight:700;color:#0e7c7b;'>R$ {m[2]}</td><td>{fmt(m[3],2)}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 15 · Meritocracia — Premiação por KM/L", "Fonte: BCNT.premiacao_atualizada — valor já calculado pela regra da empresa", "Total pago (Junho)", f"R$ {gfd.MERITOCRACIA_RESUMO['total_pago']:,}".replace(",","."))}
+  {page_header("Página 15 · Meritocracia — Premiação por KM/L", "Fonte: BCNT.premiacao_atualizada — valor já calculado pela regra da empresa", f"Total pago ({MESREF_NOME})", f"R$ {gfd.MERITOCRACIA_RESUMO['total_pago']:,}".replace(",","."))}
   <div class="grid-2">
     <div class="card"><div class="card-title">Distribuição de valores</div><div class="card-body">
       <div class="chart-wrap chart-wrap-sm"><img src="v3_meritocracia.png"/></div>
@@ -630,7 +637,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="cons-text">Quase 68% dos motoristas elegíveis ({gfd.MERITOCRACIA_RESUMO['distribuicao']['R$ 0']} de {gfd.MERITOCRACIA_RESUMO['total_motoristas']}) não receberam nenhum valor no mês — a régua de premiação está concentrada nas faixas de R$ 100 e R$ 150, o que sugere espaço para uma faixa intermediária que incentive quem está perto de bater a meta, mas ainda não bate.</div></div>
     </div></div>
   </div>
-  <div class="card"><div class="card-title">Top 10 maiores premiações (Junho/2026)</div><div class="card-body" style="padding:6px 10px;">
+  <div class="card"><div class="card-title">Top 10 maiores premiações ({MESREF})</div><div class="card-body" style="padding:6px 10px;">
     <table><thead><tr><th style="text-align:left;padding-left:10px;padding-top:4px;padding-bottom:4px;font-size:9px;">Motorista</th><th style="padding-top:4px;padding-bottom:4px;font-size:9px;">Chapa</th><th style="padding-top:4px;padding-bottom:4px;font-size:9px;">Valor</th><th style="padding-top:4px;padding-bottom:4px;font-size:9px;">KM/L</th></tr></thead>
     <tbody>{rows_merito.replace("padding-left:6px", "padding-left:10px").replace("<td", "<td style='padding-top:4px;padding-bottom:4px;font-size:10.5px;'")}</tbody></table>
   </div></div>
@@ -646,7 +653,7 @@ for d in sorted(gfd.DIVERGENCIA_CARROS, key=lambda x: -abs(x[3])):
                      f"<td>{d[4]} km</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 16 · Divergência Telemetria x Transnet por Carro (≥10%)", "Fonte: CSV Athena (indicadores_carro_quatai) — Maio a Julho/2026", "Carros com divergência ≥10%", str(len(gfd.DIVERGENCIA_CARROS)))}
+  {page_header("Página 16 · Divergência Telemetria x Transnet por Carro (≥10%)", f"Fonte: CSV Athena (indicadores_carro_quatai) — {MESANT_NOME} a {MESREF}", "Carros com divergência ≥10%", str(len(gfd.DIVERGENCIA_CARROS)))}
   <div class="grid-2">
     <div class="card"><div class="card-title">Divergências ≥10% (mín. 500km no período)</div><div class="card-body">
       <div class="chart-wrap chart-wrap-tall"><img src="v3_divergencia.png"/></div>

@@ -1439,6 +1439,15 @@ def processar_oportunidades(periodo_fim: date, sr_aberto_total: int = 0) -> dict
                         exemplos_rep.append({"veiculo": veic, "dias": gap, "problema": probs[i]})
 
         # 2) < 15 dias após preventiva (mesmo prefixo)
+        # Fontes UNIDAS — nenhuma das duas é completa sozinha:
+        #  - `preventivas` (INOVE/SB_B): lançamento manual no app. Histórico mais denso,
+        #    mas subnotifica (semana de 13-18/07/2026: 12 registros para 25 execuções).
+        #  - `ultimo_plano` (TransNet/SB_A): vem do sistema de OS, autoritativa, porém é
+        #    snapshot do ÚLTIMO plano por veículo×tipo — não guarda todo o histórico.
+        # Como o indicador só pergunta "houve preventiva neste veículo nesta data?",
+        # a união maximiza a cobertura. Subestimar aqui faz a manutenção parecer melhor
+        # do que é (quebra pós-preventiva não atribuída).
+        datas_prev = []  # lista de (veiculo, timestamp)
         try:
             prev = _fetch_all_rows(_sb_b(), "preventivas", "prefixo, data_realizacao")
         except Exception:
@@ -1447,7 +1456,32 @@ def processar_oportunidades(periodo_fim: date, sr_aberto_total: int = 0) -> dict
             prev["dt"] = pd.to_datetime(prev["data_realizacao"], errors="coerce")
             prev["veic"] = prev["prefixo"].astype(str).str.strip()
             prev = prev.dropna(subset=["dt"])
-            pmap = {v: sorted(g["dt"].tolist()) for v, g in prev.groupby("veic")}
+            datas_prev += list(zip(prev["veic"], prev["dt"]))
+
+        try:
+            pl = _fetch_all_rows(_sb_a(), "ultimo_plano",
+                                 "nr_ordem, cd_ordem_servico, dt_abertura_os, ds_plano")
+        except Exception:
+            pl = pd.DataFrame()
+        if not pl.empty:
+            pl["_p"] = (pl["ds_plano"].astype(str)
+                        .str.normalize("NFKD").str.encode("ascii", "ignore")
+                        .str.decode("ascii").str.upper())
+            # só OS de preventiva/inspeção (ignora corretiva, garantia isolada etc.)
+            eh_prev = (pl["_p"].str.contains("REVISAO PESADA", regex=False)
+                       | pl["_p"].str.contains("INSPECAO 5.000", regex=False))
+            os_prev = pl.loc[eh_prev, "cd_ordem_servico"].unique()
+            pl = pl[pl["cd_ordem_servico"].isin(os_prev)].copy()
+            pl["dt"] = pd.to_datetime(pl["dt_abertura_os"].astype(str).str[:10], errors="coerce")
+            pl["veic"] = pl["nr_ordem"].astype(str).str.strip()
+            pl = pl.dropna(subset=["dt"]).drop_duplicates(subset=["cd_ordem_servico"])
+            datas_prev += list(zip(pl["veic"], pl["dt"]))
+
+        if datas_prev:
+            pmap = {}
+            for v, dt in datas_prev:
+                pmap.setdefault(v, set()).add(dt)
+            pmap = {v: sorted(s) for v, s in pmap.items()}
             for _, r in base.iterrows():
                 datas = [d for d in pmap.get(r["veic"], []) if d <= r["dt"]]
                 if not datas:

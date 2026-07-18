@@ -498,7 +498,9 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 
 # ================= PAGINA 9: EVOLUCAO INDIVIDUAL + 30 DIAS =================
 rows_acomp = ""
-for a in gfd.ACOMPANHAMENTO:
+# Ordena aqui tambem (e nao so na origem) para o fallback fixo respeitar a ordem
+# que o titulo do card anuncia: da maior queda para a maior evolucao.
+for a in sorted(gfd.ACOMPANHAMENTO, key=lambda x: x["depois"] - x["antes"]):
     delta = a["depois"] - a["antes"]
     # Variacao abaixo de 0,01 km/L e ruido de medicao, nao evolucao: sai neutra (=) em
     # cinza, em vez de seta verde para cima. Antes, delta 0,000 caia no >= e virava alta.
@@ -543,7 +545,7 @@ else:
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 13 · Evolução Individual e Fechamento de Ciclo (30 dias)", "Base: diesel_acompanhamentos + diesel_acompanhamento_sessoes", "Motoristas c/ 30 dias", str(len(gfd.COMPLETARAM_30_DIAS)))}
   <div class="grid-2">
-    <div class="card"><div class="card-title">Antes x Depois — Top 10 mais distantes da meta (novo formato)</div><div class="card-body">
+    <div class="card"><div class="card-title">Antes x Depois — motoristas em acompanhamento</div><div class="card-body">
       <div class="chart-wrap chart-wrap-sm"><img src="v3_antes_depois.png"/></div>
     </div></div>
     <div class="card"><div class="card-title">Completaram 30 dias de acompanhamento nesta semana</div><div class="card-body">
@@ -553,7 +555,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="cons-text">{leitura_30dias}</div></div>
     </div></div>
   </div>
-  <div class="card"><div class="card-title">Detalhe: os 10 mais distantes da meta — 30 dias antes do acompanhamento x do início até hoje</div><div class="card-body">
+  <div class="card"><div class="card-title">Detalhe por motorista em acompanhamento — 30 dias antes do início x do início até hoje (ordenado da maior queda para a maior evolução)</div><div class="card-body">
     <table style="font-size:8.4px;"><thead><tr style="font-size:8.4px;"><th style="text-align:left;padding-left:10px;">Motorista</th><th>Instrutor</th><th>Status</th><th>KM Antes</th><th>KM/L Antes</th><th>KM Depois</th><th>KM/L Depois</th><th>Evolução</th></tr></thead>
     <tbody>{rows_acomp.replace("<td", "<td style='padding:2px 6px;'").replace("padding-left:6px", "padding-left:10px")}</tbody></table>
   </div></div>

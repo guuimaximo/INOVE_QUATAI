@@ -1043,14 +1043,18 @@ if _inv_url and _inv_key:
                 _kml_d, _km_d = _kml_janela(_ch, _di, MES_FIM.isoformat())
                 if not (_kml_a and _kml_d) or _km_a < KM_MINIMO_JANELA or _km_d < KM_MINIMO_JANELA:
                     continue
-                _meta = _kpi_a(a, "kml_meta")
                 _ac2.append({"nome": (a.get("motorista_nome") or "").title(),
                              "instrutor": a.get("instrutor_nome") or "",
                              "status": _STMAP.get(a.get("status"), a.get("status")),
                              "antes": _kml_a, "km_antes": _km_a,
                              "depois": _kml_d, "km_depois": _km_d,
-                             "_d": _kml_d - (_meta or _kml_d)})
+                             "_d": _kml_d - _kml_a})
             if len(_ac2) >= 5:
+                # Ordena por EVOLUCAO (pior primeiro), nao por distancia da meta: esta pagina
+                # mede se o acompanhamento surtiu efeito, e quem piorou mesmo acompanhado e
+                # quem precisa de acao. Distancia da meta e o criterio da Pagina 7, que olha
+                # a frota inteira - misturar os dois fazia grafico e tabela usarem ordens
+                # diferentes para o mesmo conjunto.
                 _ac2.sort(key=lambda x: x["_d"])
                 ACOMPANHAMENTO = [{k: v for k, v in x.items() if k != "_d"} for x in _ac2[:10]]
                 _ok("[inove] Pagina 13 (acompanhamento antes/depois) ao vivo.")

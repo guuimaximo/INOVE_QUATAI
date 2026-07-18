@@ -508,9 +508,12 @@ for a in gfd.ACOMPANHAMENTO:
         cor, seta = "#16a34a", "&#8593;"
     else:
         cor, seta = "#dc2626", "&#8595;"
+    _kma = f"{a['km_antes']:,}".replace(",", ".") if a.get("km_antes") else "—"
+    _kmd = f"{a['km_depois']:,}".replace(",", ".") if a.get("km_depois") else "—"
     rows_acomp += (f"<tr><td style='text-align:left;padding-left:6px;'>{a['nome']}</td>"
                    f"<td>{a['instrutor']}</td><td>{a['status']}</td>"
-                   f"<td>{fmt(a['antes'],3)}</td><td style='font-weight:700;'>{fmt(a['depois'],3)}</td>"
+                   f"<td style='color:#64748b;'>{_kma}</td><td>{fmt(a['antes'],3)}</td>"
+                   f"<td style='color:#64748b;'>{_kmd}</td><td style='font-weight:700;'>{fmt(a['depois'],3)}</td>"
                    f"<td style='color:{cor};font-weight:800;'>{seta} {fmt(abs(delta),3)}</td></tr>")
 
 rows_30dias = ""
@@ -550,8 +553,8 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="cons-text">{leitura_30dias}</div></div>
     </div></div>
   </div>
-  <div class="card"><div class="card-title">Detalhe: os 10 mais distantes da meta — teve tratativa? quem acompanhou? resultado?</div><div class="card-body">
-    <table style="font-size:8.4px;"><thead><tr style="font-size:8.4px;"><th style="text-align:left;padding-left:10px;">Motorista</th><th>Instrutor</th><th>Status</th><th>KM/L Antes</th><th>KM/L Depois</th><th>Evolução</th></tr></thead>
+  <div class="card"><div class="card-title">Detalhe: os 10 mais distantes da meta — 30 dias antes do acompanhamento x do início até hoje</div><div class="card-body">
+    <table style="font-size:8.4px;"><thead><tr style="font-size:8.4px;"><th style="text-align:left;padding-left:10px;">Motorista</th><th>Instrutor</th><th>Status</th><th>KM Antes</th><th>KM/L Antes</th><th>KM Depois</th><th>KM/L Depois</th><th>Evolução</th></tr></thead>
     <tbody>{rows_acomp.replace("<td", "<td style='padding:2px 6px;'").replace("padding-left:6px", "padding-left:10px")}</tbody></table>
   </div></div>
   {footer(13)}

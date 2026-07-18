@@ -153,18 +153,60 @@ def coletar_dados() -> dict:
     regen_veiculos = int(regen["prefixo"].nunique()) if not regen.empty else 0
 
     # ---- Preventivas realizadas no DIA_REF (e ontem, p/ nota) ----
-    prev = flr._fetch_all_rows(flr._sb_b(), "preventivas", "prefixo, data_realizacao, tipo")
-    if not prev.empty:
-        prev["d"] = prev["data_realizacao"].astype(str).str[:10]
+    # Fonte: base de planos `ultimo_plano` (SB_A / TransNet), NÃO a tabela `preventivas`
+    # do INOVE. Aquela é preenchida à mão pelo formulário do app e subnotifica: na semana
+    # de 13-18/07/2026 tinha 12 execuções contra 25 reais, com 16 e 17/07 zerados.
+    # Unidade de contagem = a OS (`cd_ordem_servico`): cada OS tem várias linhas de plano,
+    # uma por item do serviço. OS que contém REVISAO PESADA = Preventiva 10.000 — ela
+    # sempre traz a linha da Inspeção 5.000 junto, então NÃO contar as duas; sem ela,
+    # é Inspeção 5.000.
+    planos_ex = flr._fetch_all_rows(
+        flr._sb_a(), "ultimo_plano", "nr_ordem, cd_ordem_servico, dt_abertura_os, ds_plano"
+    )
+
+    def _os_executadas(df):
+        """Agrupa linhas de plano em OS e classifica cada uma.
+        Retorna DataFrame com uma linha por OS (colunas prefixo/tipo/d)."""
+        if df.empty:
+            return pd.DataFrame(columns=["prefixo", "tipo", "d"])
+        t = df.copy()
+        t["d"] = t["dt_abertura_os"].astype(str).str[:10]
+        t = t[t["d"].str.match(r"^\d{4}-\d{2}-\d{2}$", na=False)]
+        if t.empty:
+            return pd.DataFrame(columns=["prefixo", "tipo", "d"])
+        # normaliza acentos p/ casar "INSPEÇÃO"/"REVISÃO" independente de grafia
+        t["_p"] = (t["ds_plano"].astype(str)
+                   .str.normalize("NFKD").str.encode("ascii", "ignore")
+                   .str.decode("ascii").str.upper())
+        out = []
+        for (_os, dia), g in t.groupby(["cd_ordem_servico", "d"]):
+            pesada = bool(g["_p"].str.contains("REVISAO PESADA", regex=False).any())
+            insp = bool(g["_p"].str.contains("INSPECAO 5.000", regex=False).any())
+            if not (pesada or insp):
+                continue  # OS sem plano de preventiva/inspeção — fora do escopo
+            # Concessionária EURO6 = serviço de garantia feito fora, não é preventiva
+            # in-house. A OS traz REVISÃO PESADA/INSPEÇÃO junto, então sem este filtro
+            # ela seria contada como se a oficina tivesse executado (ex.: OS 1171559,
+            # carro 242513, em 16/07).
+            if bool(g["_p"].str.contains("CONCESSIONARIA", regex=False).any()):
+                continue
+            out.append({
+                "prefixo": g["nr_ordem"].iloc[0],
+                "tipo": "Preventiva - 10.000" if pesada else "Inspeção - 5.000",
+                "d": dia,
+            })
+        return pd.DataFrame(out)
+
+    prev = _os_executadas(planos_ex)
     pv_dia = prev[prev["d"] == str(dia_ref)] if not prev.empty else pd.DataFrame()
     pv_ontem = prev[prev["d"] == str(ontem)] if not prev.empty else pd.DataFrame()
-    prev_10k = int(pv_dia["tipo"].astype(str).str.contains("10.000", regex=False).sum()) if not pv_dia.empty else 0
-    insp_5k = int(pv_dia["tipo"].astype(str).str.contains("5.000", regex=False).sum()) if not pv_dia.empty else 0
+    prev_10k = int((pv_dia["tipo"] == "Preventiva - 10.000").sum()) if not pv_dia.empty else 0
+    insp_5k = int((pv_dia["tipo"] == "Inspeção - 5.000").sum()) if not pv_dia.empty else 0
 
-    # A tabela `preventivas` tem lag de lançamento (as do dia 15 só entraram no dia 17).
-    # Se o DIA_REF é posterior ao último dia já lançado, "0" NÃO significa "não fez" —
-    # significa "ainda não lançado". Distinguir os dois casos é essencial: um acusa a
-    # oficina de não trabalhar, o outro explica que o dado não chegou.
+    # A base de planos vem do sistema de OS (não depende de digitação na oficina), mas
+    # ainda é um snapshot importado: se o DIA_REF for posterior à última OS importada,
+    # "0" significa "o dado não chegou", não "não fez". Distinguir os dois casos é
+    # essencial — um acusa a oficina de não trabalhar, o outro explica a ausência.
     prev_ultimo_lancado = max(prev["d"].dropna()) if not prev.empty else None
     prev_aguardando = bool(prev_ultimo_lancado and str(dia_ref) > prev_ultimo_lancado)
     prev_ontem_aguardando = bool(prev_ultimo_lancado and str(ontem) > prev_ultimo_lancado)
@@ -374,14 +416,14 @@ def gerar_html(d: dict) -> str:
     ultimo_lanc = d.get("prev_ultimo_lancado")
     if d["prev_aguardando"]:
         # Dado ainda não importado — NÃO afirmar que nada foi feito.
-        rows_prev = ('<tr><td colspan="2" class="muted">Lançamento ainda não importado '
+        rows_prev = ('<tr><td colspan="2" class="muted">OS ainda não importadas '
                      'para este dia</td></tr>')
-        nota_prev = (f'⏳ A base de preventivas está lançada até <b>{_ddmm_str(ultimo_lanc)}</b> — '
-                     f'o que foi feito em {_ddmm(dia_ref)} ainda não entrou no sistema '
-                     f'(lançamento costuma atrasar ~2 dias). <b>Não significa que não foi feito.</b>')
+        nota_prev = (f'⏳ A base de planos está importada até <b>{_ddmm_str(ultimo_lanc)}</b> — '
+                     f'as OS de {_ddmm(dia_ref)} ainda não entraram. '
+                     f'<b>Não significa que não foi feito.</b>')
     elif d["pv_dia"].empty:
-        rows_prev = '<tr><td colspan="2" class="muted">Nenhuma preventiva lançada no dia</td></tr>'
-        nota_prev = (f'Nenhuma preventiva registrada em {_ddmm(dia_ref)}'
+        rows_prev = '<tr><td colspan="2" class="muted">Nenhuma OS de preventiva no dia</td></tr>'
+        nota_prev = (f'Nenhuma preventiva executada em {_ddmm(dia_ref)}'
                      + (f' — com <b>{venc["total_vencidos"]} planos vencidos</b>, conferir a programação.'
                         if venc.get("total_vencidos", 0) > 0 else '.'))
     else:
@@ -390,13 +432,13 @@ def gerar_html(d: dict) -> str:
             for _, r in d["pv_dia"].iterrows()
         )
         if d["prev_ontem_aguardando"]:
-            nota_prev = (f'Ontem ({_ddmm(ontem)}): lançamento ainda não importado '
+            nota_prev = (f'Ontem ({_ddmm(ontem)}): OS ainda não importadas '
                          f'(base vai até {_ddmm_str(ultimo_lanc)}).')
         elif d["pv_ontem_qtd"] == 0 and venc.get("total_vencidos", 0) > 0:
-            nota_prev = (f'Ontem ({_ddmm(ontem)}): nenhuma lançada — com <b>{venc["total_vencidos"]} planos vencidos</b>, '
+            nota_prev = (f'Ontem ({_ddmm(ontem)}): nenhuma executada — com <b>{venc["total_vencidos"]} planos vencidos</b>, '
                          f'conferir a programação.')
         else:
-            nota_prev = f'Ontem ({_ddmm(ontem)}): {d["pv_ontem_qtd"]} preventiva(s) lançada(s).'
+            nota_prev = f'Ontem ({_ddmm(ontem)}): {d["pv_ontem_qtd"]} preventiva(s) executada(s).'
 
     # Leitura do dia (dinâmica, sem IA)
     rein_txt = ""
@@ -747,8 +789,8 @@ def montar_caption(d: dict) -> str:
         f"🏷️ {d['etiquetas_total']} etiquetas em aberto ({d['etiquetas_antigas']} antigas p/ classificar)"
         f"\n"
         + (
-            f"⏳ Preventivas de {_ddmm(dia_ref)}: lançamento ainda não importado "
-            f"(base até {_ddmm_str(d.get('prev_ultimo_lancado'))})."
+            f"⏳ Preventivas de {_ddmm(dia_ref)}: OS ainda não importadas "
+            f"(base de planos até {_ddmm_str(d.get('prev_ultimo_lancado'))})."
             if d.get("prev_aguardando")
             else f"✅ Dia {_ddmm(dia_ref)}: {d['insp_5k']} Inspeções de 5.000 · {d['prev_10k']} Preventivas de 10.000."
         )

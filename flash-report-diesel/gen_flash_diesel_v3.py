@@ -756,7 +756,10 @@ if _bcnt_url and _bcnt_key:
         _kv = [(f"{d}/{MES_REF_MM:02d}", round(_diaJ[d][0] / _diaJ[d][1], 4),
                 round(_diaJ[d][0] * 60 / _diaJ[d][2], 2) if _diaJ[d][2] else 0.0)
                for d in sorted(_diaJ) if _diaJ[d][1] > 0]
-        if len(_kv) >= 20:
+        # 5 dias, nao 20: o recorte vai do dia 01 ate ontem, entao no inicio do mes nunca
+        # haveria 20 dias e a pagina caia no fallback (dados do mes anterior com titulo do
+        # mes corrente). 5 pontos ja sustentam a correlacao KM/L x velocidade.
+        if len(_kv) >= 5:
             KML_VELOCIDADE_DIARIO = _kv
             _ok("[bcnt] Pagina 6 (kml x velocidade diario) ao vivo.")
 

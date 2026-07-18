@@ -1000,17 +1000,63 @@ if _inv_url and _inv_key:
             COMPLETARAM_30_DIAS = [t[:6] for t in _comp[:8]]
             _ok("[inove] Pagina 13 (completaram 30 dias) ao vivo.")
         # 13b: ACOMPANHAMENTO antes/depois (10 mais distantes da meta, em acompanhamento)
-        _ac2 = []
-        for a in _acs:
-            antes, depois, meta = _num(a.get("kml_inicial")), _kpi_a(a, "kml_real"), _kpi_a(a, "kml_meta")
-            if antes and depois and a.get("status") in ("EM_MONITORAMENTO", "ATAS", "EM_ANALISE"):
-                _ac2.append({"nome": (a.get("motorista_nome") or "").title(), "instrutor": a.get("instrutor_nome") or "",
+        # Antes usava kml_inicial x metadata.kpis.kml_real, que medem janelas quase iguais:
+        # os 10 deltas ficavam entre -0,004 e +0,004 km/L (ruido). Agora as duas janelas sao
+        # calculadas aqui, a partir de premiacao_diaria_atualizada, em torno da data de
+        # inicio do monitoramento -- e o km de cada janela vai junto, para dar
+        # a dimensao do dado por tras da variacao.
+        JANELA_ANTES_DIAS = 30
+        KM_MINIMO_JANELA = 300           # abaixo disso o KM/L da janela nao e confiavel
+        if _pd:
+            _dias_mot = _dd(list)        # chapa -> [(dia_iso, km, litros)]
+            for r in _pd:
+                _ch = str(r.get("motorista") or "").strip()
+                _d = str(r.get("dia") or "")[:10]
+                _km, _lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+                if _ch and len(_d) == 10 and _km and _lt and _lt > 0:
+                    _dias_mot[_ch].append((_d, _km, _lt))
+
+            def _kml_janela(ch, ini, fim):
+                """KM/L ponderado e km total no intervalo [ini, fim). Datas ISO."""
+                km = lt = 0.0
+                for d, k, l in _dias_mot.get(ch, []):
+                    if ini <= d < fim:
+                        km += k
+                        lt += l
+                return (round(km / lt, 3) if lt > 0 else None, round(km))
+
+            # um acompanhamento por motorista: o mais recente (evita o mesmo nome 2x no top 10)
+            _por_chapa = {}
+            for a in _acs:
+                if a.get("status") not in ("EM_MONITORAMENTO", "ATAS", "EM_ANALISE"):
+                    continue
+                _ch = str(a.get("motorista_chapa") or "").strip()
+                _di = str(a.get("dt_inicio_monitoramento") or "")[:10]
+                if _ch and len(_di) == 10 and (_ch not in _por_chapa or _di > _por_chapa[_ch][1]):
+                    _por_chapa[_ch] = (a, _di)
+
+            _ac2 = []
+            for _ch, (a, _di) in _por_chapa.items():
+                _ini_antes = (_dtt.date.fromisoformat(_di)
+                              - _dtt.timedelta(days=JANELA_ANTES_DIAS)).isoformat()
+                _kml_a, _km_a = _kml_janela(_ch, _ini_antes, _di)
+                _kml_d, _km_d = _kml_janela(_ch, _di, MES_FIM.isoformat())
+                if not (_kml_a and _kml_d) or _km_a < KM_MINIMO_JANELA or _km_d < KM_MINIMO_JANELA:
+                    continue
+                _meta = _kpi_a(a, "kml_meta")
+                _ac2.append({"nome": (a.get("motorista_nome") or "").title(),
+                             "instrutor": a.get("instrutor_nome") or "",
                              "status": _STMAP.get(a.get("status"), a.get("status")),
-                             "antes": round(antes, 3), "depois": round(depois, 3), "_d": depois - (meta or depois)})
-        if len(_ac2) >= 5:
-            _ac2.sort(key=lambda x: x["_d"])
-            ACOMPANHAMENTO = [{k: v for k, v in x.items() if k != "_d"} for x in _ac2[:10]]
-            _ok("[inove] Pagina 13 (acompanhamento antes/depois) ao vivo.")
+                             "antes": _kml_a, "km_antes": _km_a,
+                             "depois": _kml_d, "km_depois": _km_d,
+                             "_d": _kml_d - (_meta or _kml_d)})
+            if len(_ac2) >= 5:
+                _ac2.sort(key=lambda x: x["_d"])
+                ACOMPANHAMENTO = [{k: v for k, v in x.items() if k != "_d"} for x in _ac2[:10]]
+                _ok("[inove] Pagina 13 (acompanhamento antes/depois) ao vivo.")
+            else:
+                print(f"[inove] Pagina 13: so {len(_ac2)} motoristas com km suficiente nas duas "
+                      f"janelas; mantendo fallback.")
         # Pagina 7: ultimo acompanhamento + ultima tratativa por chapa (antes era dict fixo de
         # Junho, entao as chapas nao batiam com o PIORES ao vivo e a tabela saia vazia).
         def _ddmm(iso):

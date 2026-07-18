@@ -89,7 +89,7 @@ pages = []
 # ---- calendario de visitas noturnas ----
 import calendar as _cal
 _cal_c = _cal.Calendar(firstweekday=6)
-_weeks_jul = _cal_c.monthdayscalendar(2026, 7)
+_weeks_jul = _cal_c.monthdayscalendar(gfd.MES_REF_ANO, gfd.MES_REF_MM)
 _dias_cols = ["Dom","Seg","Ter","Qua","Qui","Sex","S\u00e1b"]
 _visita_label = {6: "1\u00aa visita", 17: "2\u00aa visita", 31: "3\u00aa visita"}
 _cal_header = "".join(f'<div style="text-align:center;font-size:8px;font-weight:800;color:#64748b;text-transform:uppercase;padding:4px 0;">{d}</div>' for d in _dias_cols)
@@ -674,21 +674,28 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 
 # [COWORK] PAGINA NOTURNA (17) — dados MANUAIS: ultima visita, descricao, proxima visita e FOTOS.
 # Peca ao usuario e atualize aqui + embuta as fotos anexadas. Ver COWORK_FLASH.md.
+# Fotos da visita: coloque os arquivos em flash-report-diesel/ e liste os nomes aqui.
+FOTOS_NOTURNO_ARQUIVOS = ["noturno_jul_1.jpg", "noturno_jul_2.jpg",
+                          "noturno_jul_3.jpg", "noturno_jul_4.jpg"]
+FOTOS_NOTURNO = "".join(
+    f'<div style="border-radius:8px;overflow:hidden;border:1px solid #dbe3ee;height:88px;">'
+    f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>'
+    for _f in FOTOS_NOTURNO_ARQUIVOS)
 # ================= PAGINA 17: ACOMPANHAMENTO NOTURNO =================
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "17/07")}
+  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "31/07")}
   <div class="grid-2">
-    <div class="card"><div class="card-title">Calendário de visitas — Julho/2026</div><div class="card-body">
+    <div class="card"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">{CAL_JULHO_CELLS}</div>
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Programação</div>
       <div class="cons-text">Três visitas noturnas programadas para julho — 06/07, 17/07 e 31/07 — mantendo a cadência mensal iniciada em junho. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
-    <div class="card"><div class="card-title">Última visita realizada — 06/07/2026</div><div class="card-body">
-      <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento Prático com Manobristas — Condução de Ônibus em Via Pública</div>
-      <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático com os manobristas, analisando a condução de ônibus em via pública. A atividade teve como objetivo avaliar o desempenho individual dos colaboradores, com foco em segurança operacional, atenção ao trânsito, controle do veículo e postura profissional. No quadro atual contamos com 7 manobristas; foram realizados 5 acompanhamentos nesta visita — 1 colaborador estava de atestado médico e outro em licença-paternidade. O treinamento transcorreu de forma satisfatória, contribuindo significativamente para o aprimoramento técnico da equipe e para a preparação dos colaboradores frente às demandas operacionais.</div>
-      <div style="margin-top:8px;border-radius:10px;overflow:hidden;border:1px solid #dbe3ee;"><img src="noturno1.jpg" style="width:100%;height:auto;display:block;"/></div>
-      <div class="metric" style="margin-top:8px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">17/07/2026</div></div>
+    <div class="card"><div class="card-title">Última visita realizada — 17/07/2026</div><div class="card-body">
+      <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento Prático de Manobristas</div>
+      <div class="cons-text" style="text-align:justify;">Foi realizado um treinamento prático com os manobristas em vias públicas, com foco no aperfeiçoamento da condução, direção preventiva, cumprimento das normas de trânsito e adoção de boas práticas operacionais. A iniciativa reforça o compromisso com a segurança, a qualidade do serviço e a preparação dos profissionais para uma condução cada vez mais segura e eficiente.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px;">{FOTOS_NOTURNO}</div>
+      <div class="metric" style="margin-top:7px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">31/07/2026</div></div>
     </div></div>
   </div>
   {footer(17)}

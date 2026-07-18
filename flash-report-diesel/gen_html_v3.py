@@ -697,19 +697,65 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # [COWORK] CRONOGRAMA (18) — dado MANUAL: regenere este HTML com as semanas/itens do mes que o
 # usuario informar (mesmo estilo de cards). Ver COWORK_FLASH.md.
 # ================= PAGINA 18: PROGRAMACAO DA SEMANA =================
-cronograma_html = """<div class="card" style="margin-bottom:7px;"><div class="card-title">1ª Semana — Julho/2026 <span style="font-weight:400;opacity:.85;">(01 a 03/07)</span></div><div class="card-body" style="padding:6px 10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Informativa</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Tamo no Zap: a ferramenta que facilita o seu dia a dia!</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">01/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Podcast - Fala, Motô!</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Fugindo de Reclamações e Tratativas: a importância do bom atendimento</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">02/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Enquete de Fixação</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Tamo no Zap: a ferramenta que facilita o seu dia a dia!</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">03/07</div></div></div></div><div class="card" style="margin-bottom:7px;"><div class="card-title">2ª Semana — Julho/2026 <span style="font-weight:400;opacity:.85;">(06 a 10/07)</span></div><div class="card-body" style="padding:6px 10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Motivacional</span></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">06/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Vídeo - Min. do Conhecimento</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Lei nº 3.888/2025 – Programa Parada Legal</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">07/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Imagem Informativa</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Lei nº 3.888/2025 – Programa Parada Legal</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">08/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Podcast - Fala, Motô!</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">O Motorista que Conquista Pessoas</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">09/07</div></div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;"><span style="color:#16a34a;font-weight:800;margin-right:4px;">&#10003;</span><span style="font-size:8.6px;font-weight:700;color:#0f172a;">Enquete de Fixação</span><div style="font-size:7.6px;color:#475569;margin-top:1px;">Lei nº 3.888/2025 – Programa Parada Legal</div></div><div style="font-size:8px;color:#64748b;font-weight:700;white-space:nowrap;margin-left:6px;">10/07</div></div></div></div>"""
-_crono_marker = '<div class="card" style="margin-bottom:7px;">'
-_crono_parts = cronograma_html.split(_crono_marker)[1:]
-_crono_cards = [_crono_marker + part for part in _crono_parts]
-_crono_left = "".join(_crono_cards[:1])
-_crono_right = "".join(_crono_cards[1:])
+# Estrutura: (titulo_semana, intervalo, [(tipo, tema, data, executado), ...])
+# executado=False -> item pendente (bolinha vazia + data em vermelho), igual ao board.
+CRONOGRAMA = [
+    ("1ª Semana", "01 a 03/07", [
+        ("Imagem Informativa", "Tamo no Zap: a ferramenta que facilita o seu dia a dia!", "01/07", True),
+        ("Podcast - Fala, Motô!", "Fugindo de Reclamações e Tratativas: a importância do bom atendimento", "02/07", True),
+        ("Enquete de Fixação", "Tamo no Zap: a ferramenta que facilita o seu dia a dia!", "03/07", True),
+    ]),
+    ("2ª Semana", "06 a 10/07", [
+        ("Imagem Motivacional", "", "06/07", True),
+        ("Vídeo - Min. do Conhecimento", "Lei nº 3.888/2025 – Programa Parada Legal", "07/07", True),
+        ("Imagem Informativa", "Lei nº 3.888/2025 – Programa Parada Legal", "08/07", True),
+        ("Podcast - Fala, Motô!", "O Motorista que Conquista Pessoas", "09/07", True),
+        ("Enquete de Fixação", "Lei nº 3.888/2025 – Programa Parada Legal", "10/07", True),
+    ]),
+    ("3ª Semana", "13 a 17/07", [
+        ("Imagem Motivacional", "", "13/07", True),
+        ("Vídeo - Min. do Conhecimento", "Desconecte do Celular. Conecte-se à Vida", "14/07", True),
+        ("Imagem Informativa", "Desconecte do Celular. Conecte-se à Vida: o perigo do uso do celular ao volante", "15/07", True),
+        ("Podcast - Fala, Motô!", "", "16/07", False),
+        ("Enquete de Fixação", "Desconecte do Celular. Conecte-se à Vida: o perigo do uso do celular ao volante", "17/07", True),
+    ]),
+]
+
+_ROW = ('<div style="display:flex;justify-content:space-between;align-items:flex-start;'
+        'padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;">'
+        '<span style="color:{cor};font-weight:800;margin-right:4px;">{marca}</span>'
+        '<span style="font-size:8.6px;font-weight:700;color:#0f172a;">{tipo}</span>{sub}</div>'
+        '<div style="font-size:8px;color:{cor_data};font-weight:700;white-space:nowrap;'
+        'margin-left:6px;">{data}</div></div>')
+
+
+def _crono_card(titulo, intervalo, itens):
+    linhas = ""
+    for tipo, tema, data, feito in itens:
+        sub = (f'<div style="font-size:7.6px;color:#475569;margin-top:1px;">{tema}</div>'
+               if tema else "")
+        linhas += _ROW.format(cor="#16a34a" if feito else "#cbd5e1",
+                              marca="&#10003;" if feito else "&#9675;",
+                              tipo=tipo, sub=sub, data=data,
+                              cor_data="#64748b" if feito else "#dc2626")
+    return (f'<div class="card" style="margin-bottom:7px;"><div class="card-title">{titulo} — {MESREF} '
+            f'<span style="font-weight:400;opacity:.85;">({intervalo})</span></div>'
+            f'<div class="card-body" style="padding:6px 10px;">{linhas}</div></div>')
+
+
+_crono_cards = [_crono_card(t, i, its) for t, i, its in CRONOGRAMA]
+_n_itens = sum(len(its) for _, _, its in CRONOGRAMA)
+_n_feitos = sum(1 for _, _, its in CRONOGRAMA for it in its if it[3])
+_metade = (len(_crono_cards) + 1) // 2
+_crono_left = "".join(_crono_cards[:_metade])
+_crono_right = "".join(_crono_cards[_metade:])
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 18 · Programação Educativa — Conteúdo Motorista/Motô", "Cronograma de comunicação e engajamento, semana a semana — Julho/2026", "Semanas executadas", "2/2")}
+  {page_header("Página 18 · Programação Educativa — Conteúdo Motorista/Motô", f"Cronograma de comunicação e engajamento, semana a semana — {MESREF}", "Conteúdos executados", f"{_n_feitos}/{_n_itens}")}
   <div class="grid-2" style="align-items:start;">
     <div>{_crono_left}</div>
     <div>{_crono_right}
       <div class="cons-box"><div class="cons-title">Sobre o cronograma</div>
-      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. As duas primeiras semanas de julho foram executadas conforme planejado, com destaque para a série sobre a Lei nº 3.888/2025 — Programa Parada Legal.</div></div>
+      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das três semanas de julho, {_n_feitos} dos {_n_itens} conteúdos foram executados — as séries de destaque foram a Lei nº 3.888/2025 (Programa Parada Legal) e "Desconecte do Celular. Conecte-se à Vida", sobre o perigo do uso do celular ao volante. Consta pendente o Podcast Fala, Motô! de 16/07.</div></div>
     </div>
   </div>
   {footer(18)}

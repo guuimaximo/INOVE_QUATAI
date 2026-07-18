@@ -1545,16 +1545,23 @@ def chart_instrutores_status():
     ok = [i["desf_ok"] for i in INSTRUTORES]
     atas = [i["desf_ata"] for i in INSTRUTORES]
     y = np.arange(len(nomes))
-    ax.barh(y, mon, color=GOLD, height=0.5, label="Em monitoramento (novos de jun)")
-    ax.barh(y, ok, left=mon, color=GREEN, height=0.5, label="Concluído OK (desfecho jun)")
-    ax.barh(y, atas, left=[a+b for a,b in zip(mon,ok)], color=RED, height=0.5, label="Virou ATA (desfecho jun)")
+    # Sem mes nos rotulos e sem titulo proprio: o cabecalho da pagina e o titulo do card
+    # ("Carteira por status") ja dizem do que se trata e de qual mes. O que o grafico
+    # acrescenta aos tiles do topo e a quebra por instrutor - so isso precisa aparecer.
+    ax.barh(y, mon, color=GOLD, height=0.5, label="Em monitoramento")
+    ax.barh(y, ok, left=mon, color=GREEN, height=0.5, label="Concluído OK")
+    ax.barh(y, atas, left=[a+b for a,b in zip(mon,ok)], color=RED, height=0.5, label="Virou ATA")
     for i, n in enumerate(nomes):
         total = mon[i] + ok[i] + atas[i]
         ax.text(total + 3, i, f"{total}", va="center", fontsize=8.5, color=DARK)
     ax.set_yticks(list(y)); ax.set_yticklabels(nomes, fontsize=10)
-    ax.set_xlabel(f"Nº de acompanhamentos (novos + desfechos de {MES_REF_NOME.lower()})")
-    ax.set_title(f"Atividade de {MES_REF_NOME} por Instrutor", fontsize=11.5, fontweight="bold", color=DARK)
-    ax.legend(loc="center", fontsize=6.8, frameon=False)
+    ax.set_xlabel("Nº de acompanhamentos")
+    # Legenda so com as series que têm dado: com desfechos zerados, as entradas verde e
+    # vermelha apareciam sem nenhuma barra correspondente.
+    _hs, _ls = ax.get_legend_handles_labels()
+    _vis = [(h, l) for h, l, s in zip(_hs, _ls, (mon, ok, atas)) if sum(s) > 0]
+    if _vis:
+        ax.legend([h for h, _ in _vis], [l for _, l in _vis], loc="center", fontsize=6.8, frameon=False)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)

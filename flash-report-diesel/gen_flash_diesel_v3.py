@@ -833,6 +833,51 @@ if _bcnt_url and _bcnt_key:
         _ok("[bcnt] Pagina 15 (meritocracia) ao vivo.")
 
 
+# ---- Fallbacks das Paginas 10 e 14 --------------------------------------------------
+# ATENCAO: estes literais PRECISAM ficar antes dos blocos que carregam os dados ao vivo.
+# Estavam declarados ~250 linhas ABAIXO deles e, por serem top-level, executavam depois:
+# sobrescreviam TRATATIVAS/VEICULO_30_DIAS ja carregados do banco. As paginas 10 e 14
+# mostravam junho em toda execucao, enquanto o _ok() as declarava 'ao vivo'.
+
+# Dentro dos 30 dias de acompanhamento: quantas vezes o motorista pegou o carro que mais usou,
+# e KM/L nesse carro principal vs KM/L nos demais carros
+# (chapa, total_dias_com_dado, carro_principal, vezes_no_carro_principal, pct_carro_principal, kml_carro_principal, kml_outros_carros, n_outros)
+VEICULO_30_DIAS = [
+    ("30061193", 26, "242524", 20, 76.9, 3.006, 2.829, 6),
+    ("30060711", 26, "222201", 18, 69.2, 2.541, 2.667, 8),
+    ("30060856", 24, "222210", 20, 83.3, 2.957, 2.589, 4),
+    ("30060649", 26, "222207", 18, 69.2, 2.522, 2.596, 8),
+]
+
+# Tratativas reais (tabela diesel_tratativas, SLA por prioridade: Gravissima=1d, Alta=3d, Media=7d, Baixa=15d)
+TRATATIVAS = {"total": 91, "por_status": {"CONCLUIDA": 62, "ATRASADA": 27, "PENDENTE_NO_PRAZO": 2}}
+
+STATUS_LABEL = {"CONCLUIDA": "Concluida", "ATRASADA": "Atrasada (SLA vencido)", "PENDENTE_NO_PRAZO": "Pendente (no prazo)"}
+
+# (nome, chapa, linha, prioridade, dias_aberto, kml_meta, kml_real)
+TRATATIVAS_ATRASADAS = [
+    ("EVERALDO PINTO NOGUEIRA", "30061091", "10TR", "Alta", 96, 2.85, 2.41),
+    ("JOSE CARLOS DOS SANTOS", "30061019", "08TR", "Alta", 95, 2.75, 2.28),
+    ("ERISVALDO VALTER DA SILVA", "30060997", "08TR", "Alta", 95, 2.80, 2.36),
+    ("JEOVA MARTINS DOS SANTOS", "30061033", "15TR", "Alta", 93, 2.84, 2.39),
+    ("NELIO DA SILVA PEREIRA", "30060246", "07TR", "Alta", 89, 2.78, 2.31),
+    ("JARDEL DE SOUZA", "30027746", "11TR", "Alta", 78, 2.83, 2.42),
+    ("CLAUDIO APARECIDO DE OLIVEIRA", "3203102", "08TR", "Baixa", 75, 2.80, 2.18),
+    ("WANDERSON CARLOS LINO DE SOUZA", "30060859", "20TR", "Alta", 75, 2.73, 2.35),
+    ("WESLEY REIS DA SILVA", "30060867", "07TR", "Alta", 43, 2.78, 2.44),
+    ("ALENCAR ALEXANDRE ALVES", "30061096", "10TR", "Alta", 40, 2.75, 2.65),
+    ("CLAUDIO FLEVERSON DA COSTA FILHO", "30060595", "04TR", "Alta", 24, 2.74, 2.39),
+    ("LUCIANO DA SILVA", "30060552", "04TR", "Alta", 24, 2.75, 2.94),
+    ("SILVANO RIBEIRO DA SILVA FILHO", "30060436", "09TR", "Alta", 24, 3.07, 2.71),
+    ("DOMINGOS SANTANA DE MOISES", "30051606", "06TR", "Média", 15, 2.79, 2.52),
+    ("ADENILTON GALDINO DOS SANTOS", "30061176", "10TR", "Média", 15, 2.75, 2.48),
+]
+
+TRATATIVAS_PENDENTES_PRAZO = [
+    ("LUCIANO EVARISTO TEIXEIRA DE OLIVEIRA", "30061139", "08TR", "Baixa", 8, 2.80, 2.61),
+    ("FELIPE TOMASZEWK", "30061124", "08TR", "Baixa", 8, 2.80, 2.55),
+]
+
 # ---- Pagina 10: Tratativas (INOVE diesel_tratativas) ----
 # status cru = "Concluida"/"Pendente"; ATRASADA vs PENDENTE_NO_PRAZO calculado pelo SLA da
 # prioridade (Gravissima 1d, Alta 3d, Media 7d, Baixa 15d) sobre dias em aberto desde created_at.
@@ -1121,43 +1166,9 @@ if _inv_url and _inv_key:
                 VEICULO_30_DIAS = _v30
                 _ok("[inove] Pagina 14 (veiculo x kml 30 dias) ao vivo.")
 
-# Dentro dos 30 dias de acompanhamento: quantas vezes o motorista pegou o carro que mais usou,
-# e KM/L nesse carro principal vs KM/L nos demais carros
-# (chapa, total_dias_com_dado, carro_principal, vezes_no_carro_principal, pct_carro_principal, kml_carro_principal, kml_outros_carros, n_outros)
-VEICULO_30_DIAS = [
-    ("30061193", 26, "242524", 20, 76.9, 3.006, 2.829, 6),
-    ("30060711", 26, "222201", 18, 69.2, 2.541, 2.667, 8),
-    ("30060856", 24, "222210", 20, 83.3, 2.957, 2.589, 4),
-    ("30060649", 26, "222207", 18, 69.2, 2.522, 2.596, 8),
-]
 
-# Tratativas reais (tabela diesel_tratativas, SLA por prioridade: Gravissima=1d, Alta=3d, Media=7d, Baixa=15d)
-TRATATIVAS = {"total": 91, "por_status": {"CONCLUIDA": 62, "ATRASADA": 27, "PENDENTE_NO_PRAZO": 2}}
-STATUS_LABEL = {"CONCLUIDA": "Concluida", "ATRASADA": "Atrasada (SLA vencido)", "PENDENTE_NO_PRAZO": "Pendente (no prazo)"}
 
-# (nome, chapa, linha, prioridade, dias_aberto, kml_meta, kml_real)
-TRATATIVAS_ATRASADAS = [
-    ("EVERALDO PINTO NOGUEIRA", "30061091", "10TR", "Alta", 96, 2.85, 2.41),
-    ("JOSE CARLOS DOS SANTOS", "30061019", "08TR", "Alta", 95, 2.75, 2.28),
-    ("ERISVALDO VALTER DA SILVA", "30060997", "08TR", "Alta", 95, 2.80, 2.36),
-    ("JEOVA MARTINS DOS SANTOS", "30061033", "15TR", "Alta", 93, 2.84, 2.39),
-    ("NELIO DA SILVA PEREIRA", "30060246", "07TR", "Alta", 89, 2.78, 2.31),
-    ("JARDEL DE SOUZA", "30027746", "11TR", "Alta", 78, 2.83, 2.42),
-    ("CLAUDIO APARECIDO DE OLIVEIRA", "3203102", "08TR", "Baixa", 75, 2.80, 2.18),
-    ("WANDERSON CARLOS LINO DE SOUZA", "30060859", "20TR", "Alta", 75, 2.73, 2.35),
-    ("WESLEY REIS DA SILVA", "30060867", "07TR", "Alta", 43, 2.78, 2.44),
-    ("ALENCAR ALEXANDRE ALVES", "30061096", "10TR", "Alta", 40, 2.75, 2.65),
-    ("CLAUDIO FLEVERSON DA COSTA FILHO", "30060595", "04TR", "Alta", 24, 2.74, 2.39),
-    ("LUCIANO DA SILVA", "30060552", "04TR", "Alta", 24, 2.75, 2.94),
-    ("SILVANO RIBEIRO DA SILVA FILHO", "30060436", "09TR", "Alta", 24, 3.07, 2.71),
-    ("DOMINGOS SANTANA DE MOISES", "30051606", "06TR", "Média", 15, 2.79, 2.52),
-    ("ADENILTON GALDINO DOS SANTOS", "30061176", "10TR", "Média", 15, 2.75, 2.48),
-]
 
-TRATATIVAS_PENDENTES_PRAZO = [
-    ("LUCIANO EVARISTO TEIXEIRA DE OLIVEIRA", "30061139", "08TR", "Baixa", 8, 2.80, 2.61),
-    ("FELIPE TOMASZEWK", "30061124", "08TR", "Baixa", 8, 2.80, 2.55),
-]
 
 SUGESTOES_ACOMPANHAMENTO = [
     ("Agenor Matias De Jesus", "Piorou após acompanhamento (2,36→2,23 km/L) e segue no Sinal de Alerta.", "Reavaliar abordagem do instrutor; considerar reforço presencial ou rodízio de linha."),

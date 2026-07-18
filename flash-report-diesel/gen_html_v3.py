@@ -151,7 +151,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     </div></div>
     <div class="card"><div class="card-title">Resumo Executivo</div><div class="card-body">
       <div class="grid-2">
-        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-1][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-2][1],3)} em {MESREF_NOME.lower()} ({pct(var_jun)})</div></div>
+        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-1][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-2][1],3)} em {MESANT_NOME.lower()} ({pct(var_jun)})</div></div>
         <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Telemetria)</div><div class="val">{fmt(_telem_val,3)}</div><div class="aux">Fonte de comparação</div></div>
       </div>
       <div class="metric" style="margin-top:8px;"><div class="lbl">Meta operacional</div><div class="val">{fmt(gfd.META,2)} km/L</div></div>
@@ -238,13 +238,46 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 </div>""")
 
 # ================= PAGINA 4b: DISTANCIA DA META x VELOCIDADE (grafico que o usuario gostou) =================
+# O paragrafo abaixo era escrito a mao e discordava dos dados: citava 07TR entre as mais
+# lentas (esta a 18,2 km/h), omitia a 2a e 3a piores, e atribuia 20,3 km/h ao 02TR quando
+# 20,3 e do 03TR. Agora sai tudo de gfd.LINHAS. Campos: (linha, km_l, vel_media, meta, km).
+_ln_dist = sorted(gfd.LINHAS, key=lambda l: l[1] - l[3])[:4]          # mais distantes da meta
+_ln_nomes = ", ".join(l[0] for l in _ln_dist)
+_ln_vmin, _ln_vmax = min(l[2] for l in _ln_dist), max(l[2] for l in _ln_dist)
+_frota_vmed = sum(l[2] for l in gfd.LINHAS) / len(gfd.LINHAS)
+# So afirma a tese de "as mais distantes sao tambem as mais lentas" se ela se sustentar.
+_tese_lentas = _ln_vmax < _frota_vmed
+_ln_rapidas = sorted(gfd.LINHAS, key=lambda l: -l[2])[:2]
+_rap_batem = [l for l in _ln_rapidas if l[1] >= l[3]]
+if _tese_lentas:
+    _p5_a = (f"As linhas mais distantes da meta ({_ln_nomes}) também estão entre as mais lentas "
+             f"({fmt(_ln_vmin,1)}–{fmt(_ln_vmax,1)} km/h, contra média de {fmt(_frota_vmed,1)} km/h "
+             f"na frota), reforçando a hipótese de que trânsito/paradas explicam parte do "
+             f"desperdício — não apenas condução.")
+else:
+    _p5_a = (f"As linhas mais distantes da meta ({_ln_nomes}) têm velocidades de "
+             f"{fmt(_ln_vmin,1)} a {fmt(_ln_vmax,1)} km/h, ante média de {fmt(_frota_vmed,1)} km/h "
+             f"na frota — ou seja, lentidão não explica sozinha o desvio destas linhas.")
+if len(_rap_batem) == len(_ln_rapidas):
+    _p5_b = (f" As mais rápidas ({', '.join(f'{l[0]} a {fmt(l[2],1)} km/h' for l in _ln_rapidas)}) "
+             f"batem ou superam a meta.")
+elif _rap_batem:
+    _p5_b = (f" Entre as mais rápidas, {', '.join(l[0] for l in _rap_batem)} bate a meta, "
+             f"mas {', '.join(l[0] for l in _ln_rapidas if l not in _rap_batem)} não — "
+             f"velocidade alta por si só não garante o resultado.")
+else:
+    _p5_b = (f" Mesmo as mais rápidas ({', '.join(l[0] for l in _ln_rapidas)}) ficam abaixo da "
+             f"meta, o que enfraquece a leitura de que o problema seja só trânsito.")
+consid_p5 = _p5_a + _p5_b + (" Vale validar com a equipe de tráfego antes de cobrar apenas "
+                             "dos motoristas nas linhas mais lentas.")
+
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 5 · Distância da Meta por Linha, com Velocidade Média", f"Fonte: premiacao_diaria_atualizada (Telemetria) — {MESREF}", "Linhas monitoradas", str(len(gfd.LINHAS)))}
   <div class="card"><div class="card-title">Distância da meta por linha, cruzada com velocidade média</div><div class="card-body">
     <div class="chart-wrap"><img src="v3_linha_meta.png"/></div>
   </div></div>
   <div class="cons-box"><div class="cons-title">Considerações</div>
-  <div class="cons-text">As linhas mais distantes da meta (07TR, 20TR, 04TR, 05TR) também têm as velocidades médias mais baixas da frota (15-17 km/h), reforçando a hipótese de que trânsito/paradas explicam parte do desperdício — não apenas condução. Linhas com velocidade mais alta (02TR a 20,3 km/h, 03TR) batem ou superam a meta. Vale validar com a equipe de tráfego antes de cobrar apenas dos motoristas nas linhas mais lentas.</div></div>
+  <div class="cons-text">{consid_p5}</div></div>
   {footer(5)}
 </div>""")
 

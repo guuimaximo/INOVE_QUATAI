@@ -1013,6 +1013,35 @@ def processar_regeneracao(periodo_inicio: date, periodo_fim: date, meses_hist: i
         dfh["mes"] = pd.to_datetime(dfh["dt_inicio"], errors="coerce").dt.to_period("M")
         resumo["evolucao_mensal"] = (dfh.groupby("mes", as_index=False)
                                      .agg(eventos=("dt_inicio", "count"), custo=("custo_reais", "sum")))
+
+    # --- Impacto da regeneração no KM/L da empresa no período ---
+    # O diesel queimado na regeneração entra no consumo total mas nao gera KM util,
+    # entao puxa o KM/L da frota para baixo. Mede-se recalculando o indicador sem
+    # esses litros: kml_sem_regen = km / (litros - litros_regen).
+    # Fonte do KM/L: indicadores_diesel (km_transnet / combustivel_transnet), a mesma
+    # base ja usada no MKBF — assim o numero conversa com o resto do relatorio.
+    ind = pd.DataFrame(fetch_all_table_period(
+        table_name="indicadores_diesel",
+        select_fields="data_consolidada, km_transnet, combustivel_transnet",
+        date_field="data_consolidada", start_date=periodo_inicio, end_date=periodo_fim,
+        sb_client=_sb_a(),
+    ))
+    km_periodo = litros_periodo = 0.0
+    if not ind.empty:
+        km_periodo = float(_to_num(ind["km_transnet"]).sum())
+        litros_periodo = float(_to_num(ind["combustivel_transnet"]).sum())
+    litros_regen = float(resumo["consumo_total"])
+    kml_com = (km_periodo / litros_periodo) if litros_periodo else 0.0
+    litros_sem = litros_periodo - litros_regen
+    kml_sem = (km_periodo / litros_sem) if litros_sem > 0 else 0.0
+    resumo.update({
+        "kml_com_regen": kml_com,
+        "kml_sem_regen": kml_sem,
+        "kml_impacto": (kml_sem - kml_com),                       # quanto o KM/L sobe sem a regen
+        "kml_impacto_pct": ((kml_sem - kml_com) / kml_sem * 100.0) if kml_sem else 0.0,
+        "litros_periodo": litros_periodo,
+        "litros_regen_pct": (litros_regen / litros_periodo * 100.0) if litros_periodo else 0.0,
+    })
     return resumo
 
 
@@ -2941,17 +2970,23 @@ def gerar_html_consolidado_teal(
         f"({_fmt_int(dados_regen['consumo_litros'] if 'consumo_litros' in dados_regen else dados_regen.get('consumo_total',0))} litros) "
         f"e duração média de {_num_br(dados_regen['duracao_media'],0)} minutos por evento, em {dados_regen['veiculos']} veículos distintos. "
         f"O veículo {pior_veic} concentrou o maior volume, com {pior_veic_eventos} regenerações no período. "
+        f"Esses litros entram no consumo da frota sem gerar KM útil: representam "
+        f"{_num_br(dados_regen.get('litros_regen_pct',0),2)}% do diesel do mês e puxam o KM/L da empresa de "
+        f"{_num_br(dados_regen.get('kml_sem_regen',0),3)} para {_num_br(dados_regen.get('kml_com_regen',0),3)} "
+        f"(−{_num_br(dados_regen.get('kml_impacto',0),3)} km/L, {_num_br(dados_regen.get('kml_impacto_pct',0),2)}%). "
+        f"O peso no indicador é pequeno — o custo da regeneração é o alerta de falha, não o consumo em si. "
         f"A regeneração frequente é um sinal precoce de quebra — recomenda-se inspeção do sistema de escape/DPF "
         f"nos veículos com maior recorrência antes que o problema evolua para uma SOS em rua."
     )
     paginas.append(f"""
 <div class="page">
 {header_block("REGENERAÇÃO DO DPF", f"Regeneração do DPF · Fonte: eventos_regeneracao (consumo e custo de diesel na queima do filtro)", "Mês", mes_ref_label)}
-  <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">
+  <div class="grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:12px;">
     <div class="metric" style="border-left:4px solid #0d9488;"><div class="lbl">Eventos</div><div class="val" style="color:#0d9488;">{_fmt_int(dados_regen['eventos'])}</div><div class="aux">{dados_regen['veiculos']} veículos</div></div>
     <div class="metric" style="border-left:4px solid #dc2626;"><div class="lbl">Custo Diesel</div><div class="val" style="color:#dc2626;">R$ {_fmt_int(dados_regen['custo_total'])}</div><div class="aux">{_fmt_int(dados_regen.get('consumo_total',0))} litros</div></div>
     <div class="metric"><div class="lbl">Duração Média</div><div class="val">{_num_br(dados_regen['duracao_media'],0)} min</div><div class="aux">por regeneração</div></div>
     <div class="metric" style="border-left:4px solid #f59e0b;"><div class="lbl">Pior Veículo</div><div class="val" style="font-size:15px;">{pior_veic}</div><div class="aux">{pior_veic_eventos} regenerações</div></div>
+    <div class="metric" style="border-left:4px solid #64748b;"><div class="lbl">Impacto no KM/L</div><div class="val" style="color:#64748b;font-size:17px;">−{_num_br(dados_regen.get('kml_impacto',0),3)}</div><div class="aux">{_num_br(dados_regen.get('kml_com_regen',0),3)} → {_num_br(dados_regen.get('kml_sem_regen',0),3)} sem regen ({_num_br(dados_regen.get('kml_impacto_pct',0),2)}%)</div></div>
   </div>
   <div class="grid" style="grid-template-columns:1fr 1.1fr;">
     <div class="card" style="margin-bottom:0;">

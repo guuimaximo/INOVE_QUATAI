@@ -13,13 +13,15 @@ spec.loader.exec_module(gfd)
 fmt = gfd.fmt
 pct = gfd.pct
 SEM = gfd.SEMANA_ATUAL_LABEL   # janela das Pags 9 e 12: dia 01 ate ontem
-MESREF = getattr(gfd, "MES_REF_LABEL", "Junho de 2026")     # ex.: "Julho/2026"
-MESANT = getattr(gfd, "MES_ANT_LABEL", "Maio/2026")         # ex.: "Junho/2026"
-MESREF_NOME, MESANT_NOME = MESREF.split("/")[0], MESANT.split("/")[0]
-PERIODO = getattr(gfd, "PERIODO_LABEL", "01/06 a 30/06/2026")
-_M3 = getattr(gfd, "_MES3", ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"])
-MES3REF = _M3[getattr(gfd, "MES_REF_MM", 6) - 1]   # "Jul"
-MES3ANT = _M3[getattr(gfd, "MES_ANT_MM", 5) - 1]   # "Jun"
+# Sem getattr com default: os defaults eram literais de maio/junho e, se um dia o modulo
+# deixasse de expor uma dessas variaveis, o relatorio inteiro sairia com o mes errado em
+# silencio. Todas sao derivadas de data e sempre existem - se faltar, e para quebrar.
+MESREF = gfd.MES_REF_LABEL          # ex.: "Julho/2026"
+MESANT = gfd.MES_ANT_LABEL          # ex.: "Junho/2026"
+MESREF_NOME, MESANT_NOME = gfd.MES_REF_NOME, gfd.MES_ANT_NOME
+PERIODO = gfd.PERIODO_LABEL
+_M3 = gfd._MES3
+MES3REF, MES3ANT = gfd.MES3_REF, gfd.MES3_ANT
 
 TOTAL_PAGINAS = 19
 
@@ -106,6 +108,7 @@ for _week in _weeks_jul:
         else:
             _cal_cells += (f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:5px 3px;text-align:center;color:#334155;">'
                            f'<div style="font-size:11px;font-weight:600;">{_day}</div></div>')
+_visitas_datas = ", ".join(f"{d:02d}/{gfd.MES_REF_MM:02d}" for d in sorted(_visita_label))
 CAL_JULHO_HEADER = _cal_header
 CAL_JULHO_CELLS = _cal_cells
 
@@ -901,7 +904,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">{CAL_JULHO_CELLS}</div>
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Programação</div>
-      <div class="cons-text">Três visitas noturnas programadas para julho — 06/07, 17/07 e 31/07 — mantendo a cadência mensal iniciada em junho. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
+      <div class="cons-text">{len(_visita_label)} visitas noturnas programadas para {MESREF_NOME.lower()} — {_visitas_datas} — mantendo a cadência mensal iniciada em {MESANT_NOME.lower()}. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
     <div class="card"><div class="card-title">Última visita realizada — 17/07/2026</div><div class="card-body">
       <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento Prático de Manobristas</div>
@@ -965,6 +968,10 @@ def _crono_card(titulo, intervalo, itens):
 _crono_cards = [_crono_card(t, i, its) for t, i, its in CRONOGRAMA]
 _n_itens = sum(len(its) for _, _, its in CRONOGRAMA)
 _n_feitos = sum(1 for _, _, its in CRONOGRAMA for it in its if it[3])
+# lista de pendentes derivada do proprio CRONOGRAMA, para nao contradizer os checks
+_pend = [(t, d) for _, _, its in CRONOGRAMA for t, _tema, d, feito in its if not feito]
+_crono_pend = ("Consta pendente: " + "; ".join(f"{t} de {d}" for t, d in _pend) + "."
+               if _pend else "Todos os conteúdos previstos foram executados.")
 _metade = (len(_crono_cards) + 1) // 2
 _crono_left = "".join(_crono_cards[:_metade])
 _crono_right = "".join(_crono_cards[_metade:])
@@ -974,7 +981,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div>{_crono_left}</div>
     <div>{_crono_right}
       <div class="cons-box"><div class="cons-title">Sobre o cronograma</div>
-      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das três semanas de julho, {_n_feitos} dos {_n_itens} conteúdos foram executados — as séries de destaque foram a Lei nº 3.888/2025 (Programa Parada Legal) e "Desconecte do Celular. Conecte-se à Vida", sobre o perigo do uso do celular ao volante. Consta pendente o Podcast Fala, Motô! de 16/07.</div></div>
+      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos foram executados — as séries de destaque foram a Lei nº 3.888/2025 (Programa Parada Legal) e "Desconecte do Celular. Conecte-se à Vida", sobre o perigo do uso do celular ao volante. {_crono_pend}</div></div>
     </div>
   </div>
   {footer(18)}

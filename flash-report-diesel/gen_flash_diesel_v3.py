@@ -77,6 +77,19 @@ PURPLE = "#8b5cf6"
 # ---------------- DADOS ----------------
 META = 2.80
 
+# Carro principal por motorista (chapa -> (carro, %km)). Vazio no fallback: sem ele a
+# pagina apenas nao exibe o alerta de sensor, em vez de quebrar.
+CARRO_PRINCIPAL = {}
+# Nome -> chapa. SINAL_ALERTA e DESTAQUE_POSITIVO guardam so o nome, e o cruzamento
+# com os carros de sensor divergente precisa da chapa.
+CHAPA_DE_NOME = {}
+# Causa da variacao para quem SUBIU (espelho de SINAL_ALERTA_CAUSA). Vazio no fallback:
+# a coluna sai como "—" em vez de quebrar.
+DESTAQUE_POSITIVO_CAUSA = []
+# Carros com km no Transnet e sem leitura util de telemetria (aparelho mudo/errado).
+# (veiculo, km, dias_transnet, dias_validos, dias_invalidos, pct_cobertura, diagnostico)
+COBERTURA_TELEMETRIA = []
+
 # KM/L mensal Transnet (oficial) - historico real, ponderado km/litro (Athena)
 KML_HISTORICO = [
     ("Jan/2026", 2.6885),
@@ -566,6 +579,47 @@ def _agg_divergencia(rows):
     return sorted(out, key=lambda x: -abs(x[3]))[:8]
 
 
+def _agg_cobertura_telemetria(rows, km_min=500):
+    """Carros que rodaram no Transnet mas a telemetria nao acompanhou.
+
+    A divergencia so enxerga carro com dado nas DUAS fontes. Quem tem km no Transnet e
+    nenhuma leitura util de telemetria e pulado pelo filtro (cs == 0) e some do relatorio -
+    justamente o caso mais grave, porque significa aparelho mudo ou lendo lixo.
+
+    Devolve (veiculo, km_transnet, dias_transnet, dias_tel_validos, dias_tel_invalidos,
+    pct_cobertura, diagnostico), so para carros acima de km_min.
+    """
+    from collections import defaultdict
+    agg = defaultdict(lambda: {"kmt": 0.0, "dt": 0, "dv": 0, "di": 0})
+    for r in rows:
+        v = r["veiculo"]
+        kmt = _num(r.get("km_transnet"))
+        kls = _num(r.get("km_l_sst"))
+        if kmt:
+            agg[v]["kmt"] += kmt
+            agg[v]["dt"] += 1
+            if kls is not None and 0.5 <= kls <= 6:
+                agg[v]["dv"] += 1          # leitura util
+            elif kls is not None:
+                agg[v]["di"] += 1          # aparelho reportou, mas valor impossivel
+    out = []
+    for v, a in agg.items():
+        if a["kmt"] < km_min or a["dt"] == 0:
+            continue
+        pct = 100 * a["dv"] / a["dt"]
+        if a["dv"] == 0 and a["di"] == 0:
+            diag = "Sem nenhuma leitura — aparelho mudo"
+        elif a["dv"] == 0:
+            diag = "Só leitura inválida — aparelho lendo errado"
+        elif pct < 50:
+            diag = "Cobertura intermitente"
+        else:
+            continue                        # cobertura aceitavel: nao e problema
+        out.append((v, int(a["kmt"]), a["dt"], a["dv"], a["di"], round(pct, 1), diag))
+    # pior primeiro: menos cobertura e, em empate, mais km rodado sem medicao
+    return sorted(out, key=lambda x: (x[5], -x[1]))[:10]
+
+
 _MES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
 
@@ -642,7 +696,12 @@ if _transnet_rows:
     if _ader:
         ADERENCIA_DIARIA_EMPRESA, ADERENCIA_MEDIA_EMPRESA, ADERENCIA_CARROS, ADERENCIA_TOTAL_FROTA = _ader
         print("[transnet] aderencia (grafico auxiliar, sem pagina) ao vivo.")
-    _div = _agg_divergencia([r for r in _transnet_rows if str(r.get("data_consolidada", "")) >= MES_ANT_INI.isoformat()])
+    _janela_div = [r for r in _transnet_rows if str(r.get("data_consolidada", "")) >= MES_ANT_INI.isoformat()]
+    _cob = _agg_cobertura_telemetria(_janela_div)
+    if _cob:
+        COBERTURA_TELEMETRIA = _cob
+        print(f"[transnet] {len(_cob)} carro(s) rodando sem leitura util de telemetria.")
+    _div = _agg_divergencia(_janela_div)
     if _div:
         DIVERGENCIA_CARROS = _div
         _ok("[transnet] Pagina 16 (divergencia) ao vivo.")
@@ -671,7 +730,34 @@ if _bcnt_url and _bcnt_key:
         _va = _bcnt_page(_bcnt_url, _bcnt_key, "veiculos_ativos", [("select", "nr_ordem,per_cluster")])
         _cluster_de = {str(v["nr_ordem"]): v.get("per_cluster") for v in _va if v.get("nr_ordem")}
         _fn = _bcnt_page(_bcnt_url, _bcnt_key, "funcionarios_atualizada", [("select", "nr_cracha,nm_funcionario")])
-        _nome_de = {str(f["nr_cracha"]): (f.get("nm_funcionario") or "") for f in _fn if f.get("nr_cracha")}
+        # Indexa a chapa em mais de uma grafia: premiacao_diaria e funcionarios podem gravar
+        # o mesmo numero com espaco, zero a esquerda ou como float ("30061156.0"), e ai a
+        # busca falha e o motorista sai como "MOTORISTA <chapa>" sem que ninguem perceba.
+        _nome_de = {}
+        for _f in _fn:
+            _cr, _nm = _f.get("nr_cracha"), (_f.get("nm_funcionario") or "").strip()
+            if _cr is None or not _nm:
+                continue
+            _base = str(_cr).strip()
+            if _base.endswith(".0"):
+                _base = _base[:-2]
+            for _k in {_base, _base.lstrip("0"), _base.zfill(8)}:
+                if _k:
+                    _nome_de.setdefault(_k, _nm)
+        _sem_nome = set()
+
+        def _nome_chapa(ch):
+            """Nome do motorista tolerando variacao de grafia da chapa. Registra as que
+            nao existem em funcionarios_atualizada, para o log dizer quantas foram."""
+            c = str(ch).strip()
+            if c.endswith(".0"):
+                c = c[:-2]
+            n = _nome_de.get(c) or _nome_de.get(c.lstrip("0")) or _nome_de.get(c.zfill(8))
+            if n:
+                return n
+            _sem_nome.add(c)
+            return f"MOTORISTA {c}"
+        CHAPA_DE_NOME = {v.strip().upper(): k for k, v in _nome_de.items() if v and v.strip()}
         _pd_ini = (MES_INI - _dtref.timedelta(days=150)).replace(day=1).isoformat()  # ~5 meses
         _pd = _bcnt_page(_bcnt_url, _bcnt_key, "premiacao_diaria_atualizada",
                          [("select", "ano,mes,dia,motorista,linha,prefixo,km_rodado,litros_consumidos,litros_ideais,meta_kml_usada,minutos_em_viagem"),
@@ -720,6 +806,7 @@ if _bcnt_url and _bcnt_key:
             _ok("[cluster] Pagina 3 (Transnet + mapa cluster) ao vivo.")
         # Pagina 7: piores e melhores motoristas do mes de referencia (min. 500 km)
         _mot = _dd(lambda: [0.0, 0.0, 0.0])
+        _mot_carro = _dd(lambda: _dd(float))   # chapa -> {carro: km} (ver CARRO_PRINCIPAL)
         for r in _pd:
             if int(r["mes"]) != MES_REF_MM:
                 continue
@@ -730,13 +817,26 @@ if _bcnt_url and _bcnt_key:
                 a[1] += lt
                 if meta:
                     a[2] += meta * km
-        _rank = [(_nome_de.get(ch) or f"MOTORISTA {ch}", ch, round(a[0] / a[1], 3),
+                _pf = str(r.get("prefixo") or "").strip()
+                if _pf:
+                    _mot_carro[str(r["motorista"])][_pf] += km
+        _rank = [(_nome_chapa(ch), ch, round(a[0] / a[1], 3),
                   round(a[2] / a[0], 2), int(a[0]), int(a[1]))
                  for ch, a in _mot.items() if a[1] > 0 and a[0] >= 500 and ch.strip()]
         if len(_rank) >= 20:
             PIORES = sorted(_rank, key=lambda x: x[2])[:10]
             MELHORES = sorted(_rank, key=lambda x: -x[2])[:10]
             _ok("[bcnt] Pagina 7 (piores/melhores) ao vivo.")
+        # Carro principal de cada motorista no mes, para cruzar com os carros de sensor
+        # suspeito (DIVERGENCIA_CARROS). Um carro cujo sensor le a mais joga o KM/L do
+        # motorista para cima e pode coloca-lo entre os "melhores" sem que ele tenha
+        # dirigido melhor - e o inverso derruba alguem para os "piores".
+        if _sem_nome:
+            print(f"[bcnt] {len(_sem_nome)} chapa(s) sem nome em funcionarios_atualizada: "
+                  f"{sorted(_sem_nome)[:8]}{' ...' if len(_sem_nome) > 8 else ''}")
+        CARRO_PRINCIPAL = {ch: (max(cs.items(), key=lambda x: x[1])[0],
+                                round(100 * max(cs.values()) / sum(cs.values()), 1))
+                           for ch, cs in _mot_carro.items() if cs and sum(cs.values()) > 0}
 
         # ----- Paginas 4, 5, 6: por linha, desperdicio, velocidade e KM/L diario (Telemetria) -----
         _linJ = _dd(lambda: [0.0, 0.0, 0.0, 0.0, 0.0])  # km, litros, meta*km, minutos, litros_ideais
@@ -816,23 +916,35 @@ if _bcnt_url and _bcnt_key:
         for ch, mm in _mMJ.items():
             if mm[MES_ANT_MM][1] > 0 and mm[MES_REF_MM][1] > 0 and mm[MES_ANT_MM][0] >= 500 and mm[MES_REF_MM][0] >= 500:
                 kmlM, kmlJ = mm[MES_ANT_MM][0] / mm[MES_ANT_MM][1], mm[MES_REF_MM][0] / mm[MES_REF_MM][1]
-                nome = _nome_de.get(ch) or f"MOTORISTA {ch}"
+                nome = _nome_chapa(ch)
                 _var.append((nome, ch, round(kmlM, 3), round(kmlJ, 3), round((kmlJ - kmlM) / kmlM * 100, 2)))
         if len(_var) >= 20:
-            _piores_var = sorted(_var, key=lambda x: x[4])[:10]
+            # 15, nao 10: a pagina de Sinal de Alerta sobrava espaco e o corte em 10 deixava
+            # de fora quedas ainda relevantes.
+            _piores_var = sorted(_var, key=lambda x: x[4])[:15]
             SINAL_ALERTA = [(n, m5, j6, v) for n, ch, m5, j6, v in _piores_var]
-            DESTAQUE_POSITIVO = [(n, m5, j6, v) for n, ch, m5, j6, v in sorted(_var, key=lambda x: -x[4])[:10]]
+            DESTAQUE_POSITIVO = [(n, m5, j6, v) for n, ch, m5, j6, v in sorted(_var, key=lambda x: -x[4])[:15]]
 
             def _mais_usado(dic):
                 return max(dic, key=dic.get) if dic else "-"
-            _causa = []
-            for n, ch, m5, j6, v in _piores_var:
-                lM, lJ = _mais_usado(_lc[ch][MES_ANT_MM]), _mais_usado(_lc[ch][MES_REF_MM])
-                cM, cJ = _mais_usado(_cc[ch][MES_ANT_MM]), _mais_usado(_cc[ch][MES_REF_MM])
-                mudL = (lM != lJ) if (lM != "-" and lJ != "-") else None
-                mudC = (cM != cJ) if (cM != "-" and cJ != "-") else None
-                _causa.append((n, lM, lJ, cM, cJ, mudL, mudC))
-            SINAL_ALERTA_CAUSA = _causa
+
+            def _causas(lista):
+                """(nome, linha_ant, linha_ref, carro_ant, carro_ref, mudou_linha,
+                mudou_carro) — mesma pergunta para quem caiu e para quem subiu: a variacao
+                veio de troca de linha/carro ou da conducao?"""
+                out = []
+                for n, ch, m5, j6, v in lista:
+                    lM, lJ = _mais_usado(_lc[ch][MES_ANT_MM]), _mais_usado(_lc[ch][MES_REF_MM])
+                    cM, cJ = _mais_usado(_cc[ch][MES_ANT_MM]), _mais_usado(_cc[ch][MES_REF_MM])
+                    mudL = (lM != lJ) if (lM != "-" and lJ != "-") else None
+                    mudC = (cM != cJ) if (cM != "-" and cJ != "-") else None
+                    out.append((n, lM, lJ, cM, cJ, mudL, mudC))
+                return out
+
+            SINAL_ALERTA_CAUSA = _causas(_piores_var)
+            # Subir tambem precisa de explicacao: se o motorista melhorou porque pegou carro
+            # ou linha melhor, usa-lo como referencia de conducao induz ao erro.
+            DESTAQUE_POSITIVO_CAUSA = _causas(sorted(_var, key=lambda x: -x[4])[:15])
             _ok("[bcnt] Pagina 8 (sinal de alerta / destaque) ao vivo.")
 
     # Pagina 15: meritocracia (valor R$ ja calculado pela regra da empresa)
@@ -854,7 +966,7 @@ if _bcnt_url and _bcnt_key:
             "total_motoristas": len(_vals),
             "distribuicao": _faixas,
         }
-        _top = sorted(((_nome_de.get(ch) or f"MOTORISTA {ch}", ch, int(v), k) for ch, v, k in _vals if v > 0 and ch.strip()),
+        _top = sorted(((_nome_chapa(ch), ch, int(v), k) for ch, v, k in _vals if v > 0 and ch.strip()),
                       key=lambda x: (-x[2], -(x[3] or 0)))[:10]
         MERITOCRACIA_TOP = [(n, ch, v, round(k, 2) if k else 0.0) for n, ch, v, k in _top]
         _ok("[bcnt] Pagina 15 (meritocracia) ao vivo.")
@@ -1050,7 +1162,7 @@ if _inv_url and _inv_key:
         _acs = None
         print(f"[inove] acompanhamentos (13/14) falhou ({_e}).")
     if _acs:
-        _STMAP = {"EM_MONITORAMENTO": "Em monitoramento", "ATAS": "Tratativa (ATA)",
+        _STMAP = {"EM_MONITORAMENTO": "Em monitoramento", "ATAS": "Virou tratativa",
                   "EM_ANALISE": "Em análise", "OK": "Concluído (OK)", "AGUARDANDO_INSTRUTOR": "Aguardando instrutor"}
 
         def _kpi_a(a, c):
@@ -1064,11 +1176,17 @@ if _inv_url and _inv_key:
                 meta, real = _kpi_a(a, "kml_meta"), _kpi_a(a, "kml_real")
                 di = str(a.get("dt_inicio_monitoramento") or "")[:10]
                 if meta and real:
+                    # kml_inicial junto: sem ele nao da para dizer se o motorista MELHOROU no
+                    # ciclo - so se terminou na meta, que e outra coisa (quem ja entrou na
+                    # meta aparece como sucesso sem ter evoluido nada).
                     _comp.append((a.get("motorista_nome") or "", str(a.get("motorista_chapa") or ""),
                                   a.get("instrutor_nome") or "", f"{di[8:10]}/{di[5:7]}" if len(di) >= 10 else "-",
-                                  round(meta, 3), round(real, 3), di))
+                                  round(meta, 3), round(real, 3), di,
+                                  round(_num(a.get("kml_inicial")) or 0.0, 3)))
         if _comp:
-            COMPLETARAM_30_DIAS = [t[:6] for t in _comp[:8]]
+            # Sem corte em 8: a pagina agora resume o conjunto todo em taxas, entao truncar
+            # falsearia os percentuais. (nome, chapa, instrutor, inicio, meta, real, inicial)
+            COMPLETARAM_30_DIAS = [t[:6] + (t[7],) for t in _comp]
             _ok("[inove] Pagina 13 (completaram 30 dias) ao vivo.")
         # 13b: ACOMPANHAMENTO antes/depois (10 mais distantes da meta, em acompanhamento)
         # Antes usava kml_inicial x metadata.kpis.kml_real, que medem janelas quase iguais:
@@ -1162,7 +1280,9 @@ if _inv_url and _inv_key:
             for r in _pd:
                 _porChapa[str(r.get("motorista"))].append(r)
             _v30 = []
-            for nome, ch, inst, ini_lbl, meta, real, di in _comp[:4]:
+            # Sem corte em 4: a pagina 14 passou a resumir TODOS os ciclos encerrados, e
+            # analisar so 4 deles aqui deixava as duas paginas incoerentes.
+            for nome, ch, inst, ini_lbl, meta, real, di in _comp:
                 if len(di) < 10:
                     continue
                 _d0 = _dtt.date.fromisoformat(di)
@@ -1438,7 +1558,9 @@ def chart_aderencia_carros():
 
 
 def chart_velocidade_kml_diario():
-    fig, ax1 = plt.subplots(figsize=(9.0, 6.4))
+    # 6.6x5.4: os dois graficos da Pagina 6 ficam lado a lado, entao precisam de
+    # proporcao parecida. Antes era 9.0x6.4 (largo) e o card espremia o desenho.
+    fig, ax1 = plt.subplots(figsize=(6.6, 5.4))
     x = list(range(len(KML_VELOCIDADE_DIARIO)))
     labels = [d[0] for d in KML_VELOCIDADE_DIARIO]
     kml = [d[1] for d in KML_VELOCIDADE_DIARIO]
@@ -1451,7 +1573,7 @@ def chart_velocidade_kml_diario():
     ax2.set_ylabel("Velocidade média (km/h)", color="#8b5cf6")
     ax2.tick_params(axis="y", colors="#8b5cf6")
     ax1.set_xticks(x[::2]); ax1.set_xticklabels([labels[i] for i in range(0, len(labels), 2)], fontsize=8.4, rotation=45, ha="right")
-    ax1.set_title(f"KM/L Diário x Velocidade Média — {MES_REF_LABEL} (correlação)", fontsize=13.5, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title; o mes ja esta no cabecalho da pagina
     ax1.legend([l1, l2], ["KM/L do dia", "Velocidade média"], loc="lower left", fontsize=9.5, frameon=False)
     for s_ in ["top"]:
         ax1.spines[s_].set_visible(False); ax2.spines[s_].set_visible(False)
@@ -1462,7 +1584,7 @@ def chart_velocidade_kml_diario():
 
 
 def chart_velocidade_kml_dispersao():
-    fig, ax = plt.subplots(figsize=(5.6, 6.4))
+    fig, ax = plt.subplots(figsize=(6.6, 5.4))
     kml = np.array([d[1] for d in KML_VELOCIDADE_DIARIO])
     vel = np.array([d[2] for d in KML_VELOCIDADE_DIARIO])
     ax.scatter(vel, kml, color=TEAL, s=45, alpha=0.8, zorder=2)
@@ -1473,7 +1595,7 @@ def chart_velocidade_kml_dispersao():
     ax.set_xlabel("Velocidade média (km/h)", fontsize=11)
     ax.set_ylabel("KM/L", fontsize=11)
     ax.tick_params(labelsize=10)
-    ax.set_title("Dispersão — Velocidade x KM/L (30 dias)", fontsize=13, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title, e o "(30 dias)" era fixo com a janela variavel
     ax.legend(loc="lower right", fontsize=10, frameon=False)
     for s_ in ["top", "right"]:
         ax.spines[s_].set_visible(False)
@@ -1534,13 +1656,15 @@ def chart_cluster_divergente():
             ax.spines[s].set_visible(False)
         ax.grid(axis="y", linestyle=":", alpha=0.35)
     axes[0].set_ylabel("KM/L", fontsize=10)
-    fig.suptitle(f"KM/L por Cluster de Frota — últimos {_n_meses_cluster} meses (linha tracejada = meta {META:.2f})", fontsize=13, fontweight="bold", color=DARK, y=1.03)
+    fig.suptitle(f"KM/L por Cluster de Frota — últimos {_n_meses_cluster} meses (linha tracejada = meta {fmt(META,2)})", fontsize=13, fontweight="bold", color=DARK, y=1.03)
     fig.tight_layout()
     fig.savefig(OUT / "v3_cluster.png", dpi=150, transparent=True, bbox_inches="tight")
     plt.close(fig)
 
 
 def chart_linha_meta_velocidade():
+    # (cabecalho da coluna de velocidade e legenda do amarelo adicionados: a coluna de
+    # "18,5 km/h" saia solta e a barra amarela "quase na meta" nao tinha explicacao)
     fig, ax = plt.subplots(figsize=(11.2, 5.6))
     linhas = sorted(LINHAS, key=lambda l: (l[1] - l[3]))
     labels = [l[0] for l in linhas]
@@ -1557,6 +1681,13 @@ def chart_linha_meta_velocidade():
     ax.set_yticks(list(y)); ax.set_yticklabels(labels, fontsize=8.6)
     ax.set_xlim(-0.22, 0.30)
     ax.set_xlabel("KM/L real − Meta  (negativo = abaixo da meta)")
+    ax.text(0.20, len(labels) - 0.25, "Velocidade média", fontsize=7.6, fontweight="bold",
+            color="#475569", ha="left", va="bottom")
+    from matplotlib.patches import Patch
+    ax.legend(handles=[Patch(color=GREEN, label="Na meta ou acima"),
+                       Patch(color=GOLD, label="Quase na meta (até 0,05 abaixo)"),
+                       Patch(color=RED, label="Abaixo da meta")],
+              loc="lower right", fontsize=7.2, frameon=False)
     # titulo removido: duplicava o card-title da pagina
     # ax.set_title(f"Distância da Meta por Linha, com Velocidade Média ({MES_REF_LABEL})", fontsize=12, fontweight="bold", color=DARK)
     for s in ["top", "right", "left"]:
@@ -1568,7 +1699,7 @@ def chart_linha_meta_velocidade():
 
 
 def chart_motoristas_lollipop(data, title, fname, color):
-    fig, ax = plt.subplots(figsize=(5.6, 4.0))
+    fig, ax = plt.subplots(figsize=(5.6, 5.4))
     names = [d[0].title() for d in data]
     kml = [d[2] for d in data]
     meta = [d[3] for d in data]
@@ -1577,10 +1708,20 @@ def chart_motoristas_lollipop(data, title, fname, color):
         ax.plot([meta[i], kml[i]], [i, i], color="#cbd5e1", linewidth=2, zorder=1)
     ax.scatter(kml, y, color=color, s=70, zorder=3, label="KM/L real")
     ax.scatter(meta, y, color=DARK, s=36, marker="D", zorder=3, label="Meta")
+    # Defasagem anotada em cada linha: antes era preciso subtrair de cabeca os dois pontos.
+    for i in y:
+        _gap = kml[i] - meta[i]
+        ax.annotate(f"{_gap:+.2f}".replace(".", ","),
+                    (min(kml[i], meta[i]), i), xytext=(-7, 0), textcoords="offset points",
+                    ha="right", va="center", fontsize=7, fontweight="bold",
+                    color=RED if _gap < 0 else GREEN)
     ax.set_yticks(y); ax.set_yticklabels(names, fontsize=7.6)
     ax.invert_yaxis()
-    ax.set_title(title, fontsize=10.5, fontweight="bold", color=DARK)
-    ax.legend(loc="lower right", fontsize=7, frameon=False)
+    ax.margins(x=0.18)
+    # Titulo nao e desenhado: o card-title da pagina ja o traz. Legenda vai para cima do
+    # eixo - em "lower right" ela ficava escrita por cima das duas ultimas barras.
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2, fontsize=7.5,
+              frameon=False)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.5)
@@ -1590,18 +1731,28 @@ def chart_motoristas_lollipop(data, title, fname, color):
 
 
 def chart_tornado(data, title, fname):
-    fig, ax = plt.subplots(figsize=(6.0, 3.9))
+    fig, ax = plt.subplots(figsize=(6.0, 5.2))
     names = [d[0].title() for d in data]
     vals = [d[3] for d in data]
     y = range(len(data))
     colors = [GREEN if v >= 0 else RED for v in vals]
     ax.barh(list(y), vals, color=colors, height=0.6)
+    # Rotulo DENTRO da barra quando ela e longa: no eixo, o texto da maior barra invadia a
+    # area dos nomes e saia escrito por cima ("Paulo Cass14,06ri").
+    _lim = max(abs(v) for v in vals) if vals else 1
     for i, v in enumerate(vals):
-        ax.text(v + (0.4 if v >= 0 else -0.4), i, pct(v), va="center", ha="left" if v >= 0 else "right", fontsize=7.6, fontweight="bold", color=DARK)
+        _dentro = abs(v) > _lim * 0.55        # barra longa: rotulo cabe dentro dela
+        if _dentro:
+            # desloca para o lado do zero, para o texto cair sobre a propria barra
+            _x, _ha, _cor = v + (-0.35 if v >= 0 else 0.35), ("right" if v >= 0 else "left"), "#ffffff"
+        else:
+            _x, _ha, _cor = v + (0.35 if v >= 0 else -0.35), ("left" if v >= 0 else "right"), DARK
+        ax.text(_x, i, pct(v), va="center", ha=_ha, fontsize=7.6, fontweight="bold", color=_cor)
     ax.axvline(0, color="#94a3b8", linewidth=1)
     ax.set_yticks(list(y)); ax.set_yticklabels(names, fontsize=7.4)
     ax.invert_yaxis()
-    ax.set_title(title, fontsize=10.8, fontweight="bold", color=DARK)
+    ax.margins(x=0.10)
+    # titulo removido: duplicava o card-title da pagina
     ax.set_xlabel(f"Variação KM/L {MES_ANT_NOME}→{MES_REF_NOME} (%)")
     for s in ["top", "right", "left"]:
         ax.spines[s].set_visible(False)
@@ -1664,7 +1815,7 @@ def chart_instrutores_status():
     # acrescenta aos tiles do topo e a quebra por instrutor - so isso precisa aparecer.
     ax.barh(y, mon, color=GOLD, height=0.5, label="Em monitoramento")
     ax.barh(y, ok, left=mon, color=GREEN, height=0.5, label="Concluído OK")
-    ax.barh(y, atas, left=[a+b for a,b in zip(mon,ok)], color=RED, height=0.5, label="Virou ATA")
+    ax.barh(y, atas, left=[a+b for a,b in zip(mon,ok)], color=RED, height=0.5, label="Virou tratativa")
     # A ponta da barra trazia mon+ok+atas como um "total" unico, mas sao populacoes
     # diferentes: monitorando e subconjunto dos novos do mes, e os desfechos vem de coorte
     # anterior. Com os valores de fallback isso dava 195 na barra contra 112 no tile do

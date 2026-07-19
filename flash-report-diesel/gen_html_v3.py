@@ -1514,27 +1514,10 @@ _idx = sorted(INDICE)
 # ((2,6), (7,9)...) e, quando paginas foram divididas e uma removida, 13 das 20 sumiram do
 # indice sem aviso - o mesmo tipo de lista paralela que envelhece que este relatorio ja
 # tinha em varios lugares. Assim as faixas se recalculam sozinhas.
-_GRUPOS_DEF = [
-    ("Frota e linhas", "Como a frota consome e onde o desperdício se concentra",
-     ("km/l mensal", "cluster", "análise por linha", "distância da meta por linha",
-      "velocidade média diária")),
-    ("Motoristas", "Quem está distante da meta, quem evoluiu e quem está sob acompanhamento",
-     ("top 10", "sinal de alerta", "destaque positivo")),
-    ("Tratativas e instrutores", "Ação formal aberta e uso do tempo dos instrutores",
-     ("tratativas", "instrutores")),
-    ("Efeito e verificação", "Se o acompanhamento surtiu efeito e a confiabilidade do dado",
-     ("evolução individual", "veículo interfere", "meritocracia", "divergência")),
-    ("Campo e plano", "Presença noturna, comunicação com o motorista e o que fazer na semana",
-     ("acompanhamento noturno", "programação educativa", "melhoria contínua")),
-]
-
-
-def _grupo_de(assunto):
-    a = assunto.lower()
-    for i, (_t, _d, chaves) in enumerate(_GRUPOS_DEF):
-        if any(k in a for k in chaves):
-            return i
-    return len(_GRUPOS_DEF) - 1     # sem match: cai no ultimo grupo, nunca some do indice
+# Indice no formato do Flash de Manutencao: card unico "CONTEUDO", lista corrida com o
+# numero em teal e listra alternada. Sem grupos tematicos - a numeracao sequencial ja
+# organiza, e o agrupamento por faixa de pagina foi o que quebrou quando as paginas
+# mudaram de lugar.
 _MINUSC = {"de", "da", "do", "das", "dos", "e", "em", "por", "com", "no", "na", "a", "o"}
 
 
@@ -1557,40 +1540,22 @@ def _cap_titulo(t):
     return " ".join(saida)
 
 
-_por_grupo = {}
-for _n, _t in _idx:
-    _por_grupo.setdefault(_grupo_de(_t), []).append((_n, _t))
-_idx_html = ""
-for _gi, (_titulo, _desc, _ch) in enumerate(_GRUPOS_DEF):
-    _itens = sorted(_por_grupo.get(_gi, []))
-    if not _itens:
-        continue
-    _linhas = "".join(
-        f'<div style="display:flex;gap:9px;align-items:baseline;padding:3.5px 0;'
-        f'border-bottom:1px solid #eef2f7;">'
-        f'<span style="font-size:12px;font-weight:800;color:#0e7c7b;min-width:22px;">{n:02d}</span>'
-        f'<span style="font-size:10px;color:#0f172a;">{_cap_titulo(t)}</span></div>'
-        for n, t in _itens)
-    _idx_html += (
-        f'<div class="card" style="margin-bottom:7px;">'
-        f'<div class="card-title">{_titulo} · páginas {_itens[0][0]} a {_itens[-1][0]}</div>'
-        f'<div class="card-body" style="padding:5px 12px;">'
-        f'<div style="font-size:8.4px;color:#64748b;margin-bottom:3px;">{_desc}</div>'
-        f'{_linhas}</div></div>')
-
-_idx_partes = _idx_html.split('<div class="card" style="margin-bottom:7px;">')[1:]
-_idx_cards = ['<div class="card" style="margin-bottom:7px;">' + c for c in _idx_partes]
-_meio = (len(_idx_cards) + 1) // 2
+_idx_linhas = "".join(
+    f'<tr style="background:{"#ffffff" if i % 2 else "#f8fafc"};">'
+    f'<td style="width:52px;text-align:center;font-size:11.5px;font-weight:800;'
+    f'color:#0e7c7b;padding:7px 4px;">{n:02d}</td>'
+    f'<td style="text-align:left;padding:7px 14px;font-size:11px;color:#0f172a;">'
+    f'{_cap_titulo(t)}</td></tr>'
+    for i, (n, t) in enumerate(_idx))
 
 pages.insert(1, f"""<div class="page-break"></div><div class="page">
-  {page_header("Índice do relatório", f"Condução Econômica · Flash Report Diesel · {MESREF} — {len(_idx)} páginas de conteúdo", "Período analisado", PERIODO, numerar=False)}
-  <div class="grid-2" style="align-items:start;">
-    <div>{''.join(_idx_cards[:_meio])}</div>
-    <div>{''.join(_idx_cards[_meio:])}
-      <div class="cons-box" style="margin-top:0;"><div class="cons-title">Como ler este relatório</div>
-      <div class="cons-text">O relatório analisa o mês corrente do dia 01 até a véspera da geração, sempre comparando com o mês anterior fechado. O KM/L oficial vem do Transnet; a Telemetria entra como fonte de comparação, e divergências entre as duas são tratadas na página 16. Uma faixa vermelha na capa indica que alguma página não conseguiu carregar dado atualizado.</div></div>
-    </div>
-  </div>
+  {page_header("Índice do relatório", f"Condução Econômica · Flash Report Diesel", "Mês", MESREF, numerar=False)}
+  <div class="card"><div class="card-title">Conteúdo</div><div class="card-body" style="padding:6px 10px;">
+    <table style="border-collapse:separate;border-spacing:0;">
+      <tbody>{_idx_linhas}</tbody></table>
+  </div></div>
+  <div class="cons-box"><div class="cons-title">Como ler este relatório</div>
+  <div class="cons-text">O relatório analisa o mês corrente do dia 01 até a véspera da geração, sempre comparando com o mês anterior fechado. O KM/L oficial vem do Transnet; a Telemetria entra como fonte de comparação, e divergências entre as duas são tratadas na página 17. Uma faixa vermelha na capa indica que alguma página não conseguiu carregar dado atualizado.</div></div>
 </div>""")
 
 html = f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Flash Report Diesel v3</title>

@@ -142,7 +142,10 @@ pages.append(f"""<div class="page" style="background:linear-gradient(135deg,#0f1
 # ================= PAGINA 1: HISTORICO 6+ MESES + RESUMO =================
 var_jun = (gfd.KML_HISTORICO[-1][1] - gfd.KML_HISTORICO[-2][1]) / gfd.KML_HISTORICO[-2][1] * 100
 _telem_key = gfd._MES3[gfd.MES_REF_MM - 1].lower()
-_telem_val = gfd.KML_MENSAL_TELEMETRIA.get(_telem_key, list(gfd.KML_MENSAL_TELEMETRIA.values())[-1])
+# Sem default para o ultimo valor do dict: em agosto a chave "ago" nao existia e o tile
+# exibia o numero de julho rotulado como agosto, sem nenhuma marca de que era de outro mes.
+_telem_val = gfd.KML_MENSAL_TELEMETRIA.get(_telem_key)
+_telem_txt = fmt(_telem_val, 3) if _telem_val else "n/d"
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 2 · KM/L Mensal — Histórico 7 Meses (Transnet oficial)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
@@ -152,7 +155,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="card"><div class="card-title">Resumo Executivo</div><div class="card-body">
       <div class="grid-2">
         <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-1][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-2][1],3)} em {MESANT_NOME.lower()} ({pct(var_jun)})</div></div>
-        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Telemetria)</div><div class="val">{fmt(_telem_val,3)}</div><div class="aux">Fonte de comparação</div></div>
+        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Telemetria)</div><div class="val">{_telem_txt}</div><div class="aux">{"Fonte de comparação" if _telem_val else "sem leitura de telemetria no mês"}</div></div>
       </div>
       <div class="metric" style="margin-top:8px;"><div class="lbl">Meta operacional</div><div class="val">{fmt(gfd.META,2)} km/L</div></div>
       <div class="metric" style="margin-top:8px;"><div class="lbl">Melhor mês do histórico</div><div class="val">{max(gfd.KML_HISTORICO,key=lambda m:m[1])[0]}</div><div class="aux">{fmt(max(gfd.KML_HISTORICO,key=lambda m:m[1])[1],3)} km/L</div></div>

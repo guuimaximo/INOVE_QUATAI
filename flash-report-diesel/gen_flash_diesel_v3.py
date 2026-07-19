@@ -1282,7 +1282,10 @@ if _inv_url and _inv_key:
             _v30 = []
             # Sem corte em 4: a pagina 14 passou a resumir TODOS os ciclos encerrados, e
             # analisar so 4 deles aqui deixava as duas paginas incoerentes.
-            for nome, ch, inst, ini_lbl, meta, real, di in _comp:
+            # *_resto absorve campos extras: _comp ganhou o kml_inicial como 8o campo e o
+            # unpack fixo de 7 estourou ValueError no caminho ao vivo (o fallback nao passa
+            # por aqui, entao os testes locais nao pegaram).
+            for nome, ch, inst, ini_lbl, meta, real, di, *_resto in _comp:
                 if len(di) < 10:
                     continue
                 _d0 = _dtt.date.fromisoformat(di)

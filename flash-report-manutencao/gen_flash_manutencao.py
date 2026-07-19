@@ -1014,6 +1014,38 @@ def processar_regeneracao(periodo_inicio: date, periodo_fim: date, meses_hist: i
         resumo["evolucao_mensal"] = (dfh.groupby("mes", as_index=False)
                                      .agg(eventos=("dt_inicio", "count"), custo=("custo_reais", "sum")))
 
+    # --- Base de leitura: o mes corrente e PARCIAL ---
+    # Sem isso o grafico de evolucao mensal mente por omissao: um mes com metade
+    # dos dias aparece como queda (ex.: jun=120 -> jul=57) e se le como melhora.
+    # Normalizamos por dia com dado e projetamos o mes fechado para comparar peras
+    # com peras. `ultima_data` expoe ate onde a base foi carregada.
+    if not df.empty:
+        dts = pd.to_datetime(df["dt_inicio"], errors="coerce").dropna()
+        if not dts.empty:
+            ultima = dts.max()
+            dias_span = max((ultima.date() - periodo_inicio).days + 1, 1)
+            import calendar as _cal
+            dias_no_mes = _cal.monthrange(periodo_fim.year, periodo_fim.month)[1]
+            media_dia = len(df) / dias_span
+            resumo.update({
+                "ultima_data": ultima.date(),
+                "dias_com_dado": dias_span,
+                "dias_no_mes": dias_no_mes,
+                "dias_com_evento": int(dts.dt.date.nunique()),
+                "media_dia": media_dia,
+                "projecao_mes": media_dia * dias_no_mes,
+                "mes_parcial": bool(ultima.date() < periodo_fim),
+            })
+    # media/dia do mes anterior, para comparar em base normalizada
+    if not dfh.empty and not dfh.empty:
+        mes_ant = pd.Period(periodo_fim, freq="M") - 1
+        ev_ant = int((dfh["mes"] == mes_ant).sum())
+        import calendar as _cal2
+        d_ant = _cal2.monthrange(mes_ant.year, mes_ant.month)[1]
+        resumo["media_dia_ant"] = (ev_ant / d_ant) if d_ant else 0.0
+        resumo["eventos_mes_ant"] = ev_ant
+        resumo["label_mes_ant"] = f"{mes_ant.month:02d}/{mes_ant.year}"
+
     # --- Impacto da regeneração no KM/L da empresa no período ---
     # O diesel queimado na regeneração entra no consumo total mas nao gera KM util,
     # entao puxa o KM/L da frota para baixo. Mede-se recalculando o indicador sem
@@ -2978,6 +3010,30 @@ def gerar_html_consolidado_teal(
         f"A regeneração frequente é um sinal precoce de quebra — recomenda-se inspeção do sistema de escape/DPF "
         f"nos veículos com maior recorrência antes que o problema evolua para uma SOS em rua."
     )
+    # Faixa de base para leitura: sem ela o grafico mensal engana quando o mes
+    # corrente esta parcial (metade dos dias aparece como queda de eventos).
+    if dados_regen.get("mes_parcial") and dados_regen.get("media_dia"):
+        _md, _mda = dados_regen.get("media_dia", 0), dados_regen.get("media_dia_ant", 0)
+        _delta = ((_md - _mda) / _mda * 100.0) if _mda else 0.0
+        _tend = "estável" if abs(_delta) < 10 else ("acima" if _delta > 0 else "abaixo")
+        faixa_base_regen = (
+            '<div style="background:#f1f5f9;border-left:4px solid #64748b;padding:8px 12px;'
+            'margin-bottom:12px;font-size:10px;color:#334155;border-radius:3px;">'
+            f'<b>Base de leitura — mês parcial.</b> Dados carregados até '
+            f'<b>{dados_regen["ultima_data"].strftime("%d/%m")}</b> '
+            f'({dados_regen["dias_com_dado"]} de {dados_regen["dias_no_mes"]} dias · '
+            f'{dados_regen["dias_com_evento"]} dias com evento). '
+            f'Os {_fmt_int(dados_regen["eventos"])} eventos do mês <b>não são comparáveis</b> '
+            f'aos {_fmt_int(dados_regen.get("eventos_mes_ant",0))} de {dados_regen.get("label_mes_ant","—")} '
+            f'no gráfico abaixo. Em base normalizada: <b>{_num_br(_md,2)} evento/dia</b> contra '
+            f'{_num_br(_mda,2)} no mês anterior ({_tend}) — projeção de '
+            f'<b>~{_fmt_int(dados_regen.get("projecao_mes",0))}</b> no mês fechado. '
+            f'Custo e impacto no KM/L seguem a mesma proporção.'
+            '</div>'
+        )
+    else:
+        faixa_base_regen = ""
+
     paginas.append(f"""
 <div class="page">
 {header_block("REGENERAÇÃO DO DPF", f"Regeneração do DPF · Fonte: eventos_regeneracao (consumo e custo de diesel na queima do filtro)", "Mês", mes_ref_label)}
@@ -2988,6 +3044,7 @@ def gerar_html_consolidado_teal(
     <div class="metric" style="border-left:4px solid #f59e0b;"><div class="lbl">Pior Veículo</div><div class="val" style="font-size:15px;">{pior_veic}</div><div class="aux">{pior_veic_eventos} regenerações</div></div>
     <div class="metric" style="border-left:4px solid #64748b;"><div class="lbl">Impacto no KM/L</div><div class="val" style="color:#64748b;font-size:17px;">−{_num_br(dados_regen.get('kml_impacto',0),3)}</div><div class="aux">{_num_br(dados_regen.get('kml_com_regen',0),3)} → {_num_br(dados_regen.get('kml_sem_regen',0),3)} sem regen ({_num_br(dados_regen.get('kml_impacto_pct',0),2)}%)</div></div>
   </div>
+  {faixa_base_regen}
   <div class="grid" style="grid-template-columns:1fr 1.1fr;">
     <div class="card" style="margin-bottom:0;">
       <div class="card-title">Top 10 Veículos — Regenerações</div>

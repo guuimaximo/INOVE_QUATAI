@@ -571,7 +571,7 @@ _MES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out",
 
 def _agg_kml_mensal(rows, ano=None):
     ano = ano if ano is not None else MES_REF_ANO
-    """Pagina 2: KM/L mensal ponderado (Transnet) + telemetria mensal jun/jul."""
+    """Pagina 2: KM/L mensal ponderado (Transnet) + telemetria do mes anterior e do corrente."""
     from collections import defaultdict
     mt, ms = defaultdict(lambda: [0.0, 0.0]), defaultdict(lambda: [0.0, 0.0])
     for r in rows:

@@ -86,7 +86,7 @@ INDICE = []      # (numero, assunto) preenchido por page_header, consumido pelo 
 _NUM = [1]       # a capa e a pagina 1
 
 
-def page_header(titulo_pag, sub, ref_label, ref_val):
+def page_header(titulo_pag, sub, ref_label, ref_val, numerar=True):
     """Cabecalho no padrao do Flash de Manutencao: o ASSUNTO da pagina em destaque.
 
     Antes o H1 era "CONDUÇÃO ECONÔMICA — FLASH REPORT DIESEL" nas 19 paginas, e o assunto
@@ -97,6 +97,14 @@ def page_header(titulo_pag, sub, ref_label, ref_val):
     # O "Página N ·" que vem na string e descartado: quem manda e o contador.
     m = _re.match(r"\s*Página\s+\d+\s*·\s*(.+)", titulo_pag)
     assunto = m.group(1) if m else titulo_pag
+    if not numerar:
+        # O indice e capa nao entram na contagem nem no proprio indice. Sem isso ele
+        # herdava o ultimo numero (saia "Página 21" no cabecalho do indice).
+        return f"""<div class="header">
+    <div class="title"><h1>{assunto.upper()}</h1>
+      <div class="sub">{sub}</div></div>
+    <div class="period-box"><div class="ref">{ref_label}</div><div class="val">{ref_val}</div></div>
+  </div>"""
     _NUM[0] += 1
     # Guarda o assunto na grafia original: o indice precisa dele antes do .upper(),
     # senao nao consegue distinguir sigla ("KM/L") de palavra em caixa alta.
@@ -1144,7 +1152,12 @@ def _veic_nome(_ch):
 rows_veiculo_30d = ""
 # Ordenado pelo tamanho do efeito: com a lista liberada, os casos que importam
 # (maior diferenca entre carro principal e demais) ficam no topo.
-for v in sorted(gfd.VEICULO_30_DIAS, key=lambda x: -abs(x[5] - x[6])):
+# Limite de exibicao: sem BCNT local a lista tinha 4 itens, mas no CI sao 31 e a pagina
+# quebrava em duas. Mostra os de maior efeito; o restante entra na contagem do rodape.
+_VEIC_MAX = 12
+_veic_todos = sorted(gfd.VEICULO_30_DIAS, key=lambda x: -abs(x[5] - x[6]))
+_veic_extra = max(0, len(_veic_todos) - _VEIC_MAX)
+for v in _veic_todos[:_VEIC_MAX]:
     chapa, total_dias, carro, vezes, pctc, kml_c, kml_o, n_o = v
     nome = _veic_nome(chapa)
     diff = kml_c - kml_o
@@ -1197,7 +1210,9 @@ if _veic:
         f"No conjunto, <b>{_n_efeito} de {len(_veic)}</b> apresentam efeito atribuível ao "
         f"veículo e {_n_neutro} não — nestes, o resultado é de condução. "
         f"Vale cruzar os veículos de maior efeito com manutenção e idade da frota antes de "
-        f"cobrar o motorista.")
+        f"cobrar o motorista."
+        + (f" A tabela mostra os {_VEIC_MAX} de maior efeito; outros {_veic_extra} "
+           f"motoristas foram analisados e estão no conjunto acima." if _veic_extra else ""))
 else:
     consid_p14 = "Nenhum motorista com dados suficientes de carro principal x demais carros nesta janela de 30 dias."
 pages.append(f"""<div class="page-break"></div><div class="page">
@@ -1274,7 +1289,10 @@ for d in sorted(gfd.DIVERGENCIA_CARROS, key=lambda x: -abs(x[3])):
 # Carros rodando sem leitura util de telemetria. A divergencia so ve carro com dado nas
 # duas fontes, entao aparelho mudo era invisivel no relatorio inteiro - e e o caso mais
 # grave, porque o KM/L desses carros simplesmente nao existe.
-_cob = list(gfd.COBERTURA_TELEMETRIA)
+_COB_MAX = 6
+_cob_todos = list(gfd.COBERTURA_TELEMETRIA)
+_cob_extra = max(0, len(_cob_todos) - _COB_MAX)
+_cob = _cob_todos[:_COB_MAX]
 if _cob:
     _cob_rows = "".join(
         f"<tr><td style='font-weight:700;'>{c[0]}</td>"
@@ -1285,7 +1303,7 @@ if _cob:
         for c in _cob)
     _km_sem = sum(c[1] for c in _cob)
     _mudos = [c for c in _cob if c[3] == 0]
-    _bloco_cobertura = f'''<div class="card" style="margin-top:6px;"><div class="card-title">Carros rodando sem leitura confiável de telemetria — {len(_cob)} veículos</div><div class="card-body">
+    _bloco_cobertura = f'''<div class="card" style="margin-top:6px;"><div class="card-title">Carros rodando sem leitura confiável de telemetria — {len(_cob_todos)} veículos{f" (mostrando os {_COB_MAX} piores)" if _cob_extra else ""}</div><div class="card-body">
     <table class="tbl-alerta"><thead><tr><th>Carro</th><th>KM no Transnet</th><th>Dias rodados</th><th>Dias c/ leitura</th><th>Dias c/ leitura inválida</th><th>Cobertura</th><th style="text-align:left;">Diagnóstico</th></tr></thead>
     <tbody>{_cob_rows}</tbody></table>
     <div class="cons-box" style="margin-top:6px;"><div class="cons-title">Por que isto importa</div>
@@ -1544,7 +1562,7 @@ _idx_partes = _idx_html.split('<div class="card" style="margin-bottom:7px;">')[1
 _idx_cards = ['<div class="card" style="margin-bottom:7px;">' + c for c in _idx_partes]
 
 pages.insert(1, f"""<div class="page-break"></div><div class="page">
-  {page_header("Índice do relatório", f"Condução Econômica · Flash Report Diesel · {MESREF} — {len(_idx)} páginas de conteúdo", "Período analisado", PERIODO)}
+  {page_header("Índice do relatório", f"Condução Econômica · Flash Report Diesel · {MESREF} — {len(_idx)} páginas de conteúdo", "Período analisado", PERIODO, numerar=False)}
   <div class="grid-2" style="align-items:start;">
     <div>{''.join(_idx_cards[:_meio])}</div>
     <div>{''.join(_idx_cards[_meio:])}
@@ -1559,6 +1577,10 @@ html = f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title
 {''.join(pages)}
 </body></html>"""
 
+# Aviso de transbordo: cada .page tem altura fixa e o weasyprint quebra em duas quando o
+# conteudo passa. Com dado ao vivo as tabelas crescem e isso aconteceu sem ninguem notar -
+# o PDF saiu com 23 paginas em vez de 21. Compara o previsto com o gerado no fim.
+print(f"[layout] {_NUM[0]} paginas numeradas + capa + indice = {_NUM[0] + 1} esperadas no PDF.")
 html = html.replace("@@TOTAL@@", str(_NUM[0]))
 (OUT / "flash_report_diesel_v3.html").write_text(html, encoding="utf-8")
 print("HTML v3 gerado.")

@@ -1332,23 +1332,23 @@ def _sug_acompanhamento():
     for a in _piorou[:3]:
         _d = a["antes"] - a["depois"]
         out.append((a["nome"].title(),
-                    f"Piorou apos acompanhamento ({fmt(a['antes'],2)}->{fmt(a['depois'],2)} km/L, "
+                    f"Piorou após acompanhamento ({fmt(a['antes'],2)}->{fmt(a['depois'],2)} km/L, "
                     f"-{fmt(_d,3)}), com {a['instrutor']}.",
-                    "Reavaliar abordagem do instrutor; considerar reforco presencial ou "
-                    "rodizio de linha."))
+                    "Reavaliar abordagem do instrutor; considerar reforço presencial ou "
+                    "rodízio de linha."))
     # tratativas mais antigas em aberto
     _velhas = sorted(TRATATIVAS_ATRASADAS, key=lambda t: -t[4])[:2]
     for t in _velhas:
         out.append((t[0].title(),
-                    f"Tratativa aberta ha {t[4]} dias sem SLA cumprido "
+                    f"Tratativa aberta há {t[4]} dias sem SLA cumprido "
                     f"(linha {t[2]}, prioridade {t[3]}).",
-                    "Escalar para ATA formal e cobrar encerramento com o instrutor."))
+                    "Escalar para tratativa formal e cobrar encerramento com o instrutor."))
     _alta = [t for t in TRATATIVAS_ATRASADAS if str(t[3]).strip().lower() == "alta" and t[4] > 90]
     if len(_alta) >= 2:
         out.append((" / ".join(t[0].title() for t in _alta[:3]),
-                    f"{len(_alta)} tratativas de prioridade Alta abertas ha mais de 90 dias — "
-                    f"maior risco de SLA no relatorio.",
-                    "Priorizar encerramento imediato; sao os casos mais criticos de atraso."))
+                    f"{len(_alta)} tratativas de prioridade Alta abertas há mais de 90 dias — "
+                    f"maior risco de SLA no relatório.",
+                    "Priorizar encerramento imediato; são os casos mais críticos de atraso."))
     return out[:5]
 
 
@@ -1364,9 +1364,9 @@ def _sug_linhas():
     for l in sorted(LINHA_DESPERDICIO, key=lambda x: -x[5])[:2]:
         nome = l[0]
         vistas.add(nome)
-        _v = f"; velocidade media {fmt(_vel[nome],1)} km/h" if nome in _vel else ""
+        _v = f"; velocidade média {fmt(_vel[nome],1)} km/h" if nome in _vel else ""
         out.append((nome,
-                    f"Maior desperdicio do periodo ({fmt(l[5],0)} L em {fmt(l[6]/1000,0)} mil km) "
+                    f"Maior desperdício do período ({fmt(l[5],0)} L em {fmt(l[6]/1000,0)} mil km) "
                     f"e KM/L {fmt(l[2],3)} abaixo da meta {fmt(l[4],2)}{_v}.",
                     "Manter como linha foco da semana; repetir acompanhamento focado."))
     # 2) maior concentracao de tratativas atrasadas
@@ -1374,16 +1374,16 @@ def _sug_linhas():
         if nome in vistas or n < 2:
             continue
         vistas.add(nome)
-        out.append((nome, f"{n} tratativas atrasadas — maior concentracao de casos.",
-                    "Candidata a mutirao: fechar as pendencias desta linha na mesma semana."))
+        out.append((nome, f"{n} tratativas atrasadas — maior concentração de casos.",
+                    "Candidata a mutirão: fechar as pendências desta linha na mesma semana."))
     # 3) mais lenta da frota, se ainda nao citada
     if LINHAS:
         _lenta = min(LINHAS, key=lambda l: l[2])
         if _lenta[0] not in vistas:
             out.append((_lenta[0],
-                        f"Velocidade media mais baixa da frota ({fmt(_lenta[2],1)} km/h), "
+                        f"Velocidade média mais baixa da frota ({fmt(_lenta[2],1)} km/h), "
                         f"KM/L {fmt(_lenta[1],3)} vs meta {fmt(_lenta[3],2)}.",
-                        "Validar com a equipe de trafego se o problema e operacional antes de "
+                        "Validar com a equipe de tráfego se o problema é operacional antes de "
                         "cobrar do motorista."))
     return out[:4]
 

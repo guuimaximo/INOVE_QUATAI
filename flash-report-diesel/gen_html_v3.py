@@ -1510,13 +1510,31 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # nao tem como divergir dos titulos reais quando alguem renomear ou reordenar uma pagina.
 _idx = sorted(INDICE)
 
-_GRUPOS = [
-    (2, 6, "Frota e linhas", "Como a frota consome e onde o desperdício se concentra"),
-    (7, 9, "Motoristas", "Quem está distante da meta, quem evoluiu e quem está sob acompanhamento"),
-    (10, 12, "Tratativas e instrutores", "Ação formal aberta e uso do tempo dos instrutores"),
-    (13, 16, "Efeito e verificação", "Se o acompanhamento surtiu efeito e a confiabilidade do dado"),
-    (17, 19, "Campo e plano", "Presença noturna, comunicação com o motorista e o que fazer na semana"),
+# Grupos por PALAVRA-CHAVE do titulo, nao por faixa de pagina. As faixas eram fixas
+# ((2,6), (7,9)...) e, quando paginas foram divididas e uma removida, 13 das 20 sumiram do
+# indice sem aviso - o mesmo tipo de lista paralela que envelhece que este relatorio ja
+# tinha em varios lugares. Assim as faixas se recalculam sozinhas.
+_GRUPOS_DEF = [
+    ("Frota e linhas", "Como a frota consome e onde o desperdício se concentra",
+     ("km/l mensal", "cluster", "análise por linha", "distância da meta por linha",
+      "velocidade média diária")),
+    ("Motoristas", "Quem está distante da meta, quem evoluiu e quem está sob acompanhamento",
+     ("top 10", "sinal de alerta", "destaque positivo")),
+    ("Tratativas e instrutores", "Ação formal aberta e uso do tempo dos instrutores",
+     ("tratativas", "instrutores")),
+    ("Efeito e verificação", "Se o acompanhamento surtiu efeito e a confiabilidade do dado",
+     ("evolução individual", "veículo interfere", "meritocracia", "divergência")),
+    ("Campo e plano", "Presença noturna, comunicação com o motorista e o que fazer na semana",
+     ("acompanhamento noturno", "programação educativa", "melhoria contínua")),
 ]
+
+
+def _grupo_de(assunto):
+    a = assunto.lower()
+    for i, (_t, _d, chaves) in enumerate(_GRUPOS_DEF):
+        if any(k in a for k in chaves):
+            return i
+    return len(_GRUPOS_DEF) - 1     # sem match: cai no ultimo grupo, nunca some do indice
 _MINUSC = {"de", "da", "do", "das", "dos", "e", "em", "por", "com", "no", "na", "a", "o"}
 
 
@@ -1539,9 +1557,12 @@ def _cap_titulo(t):
     return " ".join(saida)
 
 
+_por_grupo = {}
+for _n, _t in _idx:
+    _por_grupo.setdefault(_grupo_de(_t), []).append((_n, _t))
 _idx_html = ""
-for _ini, _fim, _titulo, _desc in _GRUPOS:
-    _itens = [(n, t) for n, t in _idx if _ini <= n <= _fim]
+for _gi, (_titulo, _desc, _ch) in enumerate(_GRUPOS_DEF):
+    _itens = sorted(_por_grupo.get(_gi, []))
     if not _itens:
         continue
     _linhas = "".join(
@@ -1557,9 +1578,9 @@ for _ini, _fim, _titulo, _desc in _GRUPOS:
         f'<div style="font-size:8.4px;color:#64748b;margin-bottom:3px;">{_desc}</div>'
         f'{_linhas}</div></div>')
 
-_meio = (len(_GRUPOS) + 1) // 2
 _idx_partes = _idx_html.split('<div class="card" style="margin-bottom:7px;">')[1:]
 _idx_cards = ['<div class="card" style="margin-bottom:7px;">' + c for c in _idx_partes]
+_meio = (len(_idx_cards) + 1) // 2
 
 pages.insert(1, f"""<div class="page-break"></div><div class="page">
   {page_header("Índice do relatório", f"Condução Econômica · Flash Report Diesel · {MESREF} — {len(_idx)} páginas de conteúdo", "Período analisado", PERIODO, numerar=False)}

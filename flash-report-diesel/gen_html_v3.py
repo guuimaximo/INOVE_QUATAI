@@ -1,6 +1,7 @@
 # Monta o HTML (paginas, A4 paisagem) do Flash Report Diesel v3 e converte pra PDF.
 from pathlib import Path
 from collections import Counter as _Counter
+import re as _re
 import importlib.util
 
 OUT = Path(__file__).resolve().parent
@@ -37,12 +38,16 @@ body { margin:0; font-family: Arial, Helvetica, sans-serif; background:#eef2f7; 
 .page { width:297mm; height:204mm; overflow:hidden; margin:0 auto; background:linear-gradient(180deg,#ffffff 0%,#fbfcfe 100%); padding:4mm 10mm 8mm 10mm; position:relative; }
 .page-break { page-break-before: always; }
 .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:4px solid #0f172a; padding-bottom:6px; margin-bottom:8px; }
-.title h1 { margin:0; font-size:21px; color:#0f172a; }
-.title .sub { margin-top:3px; font-size:9.5px; color:#475569; }
+.title { padding-right:12px; }
+.title h1 { margin:0; font-size:19px; line-height:1.12; color:#0f172a; letter-spacing:.2px; }
+.title .sub { margin-top:4px; font-size:9.5px; color:#475569; }
 .period-box { min-width:200px; text-align:right; background:linear-gradient(135deg,#0f172a 0%,#0e7c7b 100%); color:white; padding:8px 12px; border-radius:12px; }
 .period-box .ref { font-size:8.5px; text-transform:uppercase; font-weight:700; opacity:.85; }
 .period-box .val { font-size:14px; font-weight:800; margin-top:2px; }
 .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px; }
+.grid-38-62 { display:grid; grid-template-columns:38fr 62fr; gap:10px; margin-bottom:8px; }
+.tbl-alerta td, .tbl-alerta th { padding:4px 5px; font-size:8.2px; }
+.tbl-alerta th { font-size:7.4px; }
 .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:8px; }
 .grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; margin-bottom:8px; }
 .card { border:1px solid #dbe3ee; border-radius:12px; overflow:hidden; background:#fff; }
@@ -62,6 +67,7 @@ td { padding:3px 4px; border:1px solid #dbe3ee; text-align:center; }
 .chart-wrap { padding:6px; border:1px solid #dbe3ee; border-radius:12px; background:#fff; text-align:center; }
 .chart-wrap img { width:100%; height:auto; }
 .chart-wrap-sm img { max-height:78mm; width:auto; max-width:100%; }
+.chart-wrap-tall img { max-height:88mm; width:auto; max-width:100%; }
 .cons-box { margin-top:6px; border:1px solid #dbe3ee; border-radius:12px; background:#f8fafc; padding:6px 12px; }
 .cons-title { font-size:8.5px; font-weight:800; text-transform:uppercase; margin-bottom:3px; color:#0f172a; }
 .cons-text { font-size:9px; line-height:1.32; color:#1f2937; text-align:justify; }
@@ -73,16 +79,40 @@ td { padding:3px 4px; border:1px solid #dbe3ee; text-align:center; }
 @page { size: A4 landscape; margin:0; }
 """
 
+INDICE = []      # (numero, assunto) preenchido por page_header, consumido pelo indice
+# Numeracao automatica: o numero da pagina era digitado em dois lugares por pagina (no
+# titulo e no footer). Dividir ou reordenar uma pagina obrigava a renumerar tudo na mao,
+# e bastava esquecer um para o rodape mentir. Agora page_header incrementa e o footer le.
+_NUM = [1]       # a capa e a pagina 1
+
+
 def page_header(titulo_pag, sub, ref_label, ref_val):
+    """Cabecalho no padrao do Flash de Manutencao: o ASSUNTO da pagina em destaque.
+
+    Antes o H1 era "CONDUÇÃO ECONÔMICA — FLASH REPORT DIESEL" nas 19 paginas, e o assunto
+    ficava na letra miuda - o leitor folheava sem saber onde estava. O nome do relatorio
+    ja aparece na capa e no rodape de toda pagina, entao nao precisa se repetir aqui.
+    Recebe "Página N · Assunto" e separa: o assunto sobe para o titulo, o numero desce.
+    """
+    # O "Página N ·" que vem na string e descartado: quem manda e o contador.
+    m = _re.match(r"\s*Página\s+\d+\s*·\s*(.+)", titulo_pag)
+    assunto = m.group(1) if m else titulo_pag
+    _NUM[0] += 1
+    # Guarda o assunto na grafia original: o indice precisa dele antes do .upper(),
+    # senao nao consegue distinguir sigla ("KM/L") de palavra em caixa alta.
+    INDICE.append((_NUM[0], assunto))
+    linha = " · ".join(x for x in (f"Página {_NUM[0]}", sub) if x)
     return f"""<div class="header">
-    <div class="title"><h1>CONDUÇÃO ECONÔMICA — FLASH REPORT DIESEL</h1>
-      <div class="sub">{titulo_pag}</div>
-      <div class="sub">{sub}</div></div>
+    <div class="title"><h1>{assunto.upper()}</h1>
+      <div class="sub">{linha}</div></div>
     <div class="period-box"><div class="ref">{ref_label}</div><div class="val">{ref_val}</div></div>
   </div>"""
 
-def footer(pagina):
-    return f"""<div class="footer"><div>Gerado automaticamente via Cowork · Página {pagina}/{TOTAL_PAGINAS}</div><div>Flash Report Diesel — Transnet oficial + Telemetria</div></div>"""
+def footer(pagina=None):
+    """O argumento e ignorado (mantido so para nao mexer nas 18 chamadas existentes):
+    o numero vem do contador, e o total e substituido no fim, quando ja se sabe quantas
+    paginas foram geradas."""
+    return f"""<div class="footer"><div>Gerado automaticamente via Cowork · Página {_NUM[0]}/@@TOTAL@@</div><div>Flash Report Diesel — Transnet oficial + Telemetria</div></div>"""
 
 periodo_label = f"{PERIODO} · {MESREF} · comparações vs {MESANT}"
 
@@ -145,13 +175,36 @@ pages.append(f"""<div class="page" style="background:linear-gradient(135deg,#0f1
 
 # ================= PAGINA 1: HISTORICO 6+ MESES + RESUMO =================
 var_jun = (gfd.KML_HISTORICO[-1][1] - gfd.KML_HISTORICO[-2][1]) / gfd.KML_HISTORICO[-2][1] * 100
+
+# "Sempre abaixo da meta" e "tendencia erratica" eram afirmacoes fixas; agora as duas sao
+# verificadas contra os dados antes de irem para o texto.
+_h_vals = [m[1] for m in gfd.KML_HISTORICO]
+_h_min, _h_max = min(_h_vals), max(_h_vals)
+_abaixo_meta = _h_max < gfd.META
+_sem_vars = [(b - a) / a * 100 for a, b in zip([s[1] for s in gfd.KML_SEMANAL][:-1],
+                                               [s[1] for s in gfd.KML_SEMANAL][1:])]
+_pos = sum(1 for v in _sem_vars if v > 0)
+if not _sem_vars:
+    _tend = "sem semanas suficientes para avaliar tendência"
+elif _pos >= len(_sem_vars) * 0.7:
+    _tend = "com tendência recente de melhora contínua"
+elif _pos <= len(_sem_vars) * 0.3:
+    _tend = "com tendência recente de queda contínua"
+else:
+    _tend = ("alternando altas e quedas sem tendência clara, o que sugere problema "
+             "estrutural (linhas/trânsito) e não um evento pontual")
+_txt_p2 = (f"Nos últimos {len(gfd.KML_HISTORICO)} meses a frota oscilou entre "
+           f"{fmt(_h_min,3)} e {fmt(_h_max,3)} km/L pelo Transnet"
+           + (f", sempre abaixo da meta de {fmt(gfd.META,2)}." if _abaixo_meta
+              else f"; o melhor mês superou a meta de {fmt(gfd.META,2)}.")
+           + f" Semana a semana, a variação vem {_tend}.")
 _telem_key = gfd._MES3[gfd.MES_REF_MM - 1].lower()
 # Sem default para o ultimo valor do dict: em agosto a chave "ago" nao existia e o tile
 # exibia o numero de julho rotulado como agosto, sem nenhuma marca de que era de outro mes.
 _telem_val = gfd.KML_MENSAL_TELEMETRIA.get(_telem_key)
 _telem_txt = fmt(_telem_val, 3) if _telem_val else "n/d"
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 2 · KM/L Mensal — Histórico 7 Meses (Transnet oficial)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
+  {page_header(f"Página 2 · KM/L Mensal — Histórico de {len(gfd.KML_HISTORICO)} Meses (Transnet oficial)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
     <div class="card"><div class="card-title">Evolução Mensal — Transnet</div><div class="card-body">
       <div class="chart-wrap"><img src="v3_historico.png"/></div>
@@ -169,7 +222,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="chart-wrap chart-wrap-sm"><img src="v3_semanal_pct.png"/></div>
   </div></div>
   <div class="cons-box"><div class="cons-title">Considerações</div>
-  <div class="cons-text">Nos últimos 7 meses a frota oscilou entre {fmt(min(m[1] for m in gfd.KML_HISTORICO),3)} e {fmt(max(m[1] for m in gfd.KML_HISTORICO),3)} km/L pelo Transnet, sempre abaixo da meta de {fmt(gfd.META,2)}. Semana a semana, a variação alterna entre altas e quedas de forma errática (sem tendência clara de piora ou melhora contínua), o que sugere que o problema é estrutural (linhas/trânsito) e não um evento pontual recente.</div></div>
+  <div class="cons-text">{_txt_p2}</div></div>
   {footer(2)}
 </div>""")
 
@@ -275,7 +328,7 @@ for l in _ld_ord:
                              f"<td>{km:,}".replace(",",".") + f"</td><td>{fmt(lit,2)} L</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header(f"Página 4 · Análise por Linha — KM/L, Meta e Desperdício ({MES3REF} vs {MES3ANT})", "Fonte: premiacao_diaria_atualizada (Telemetria)", "Linhas monitoradas", str(len(gfd.LINHA_DESPERDICIO)))}
+  {page_header("Página 4 · Análise por Linha — KM/L, Meta e Desperdício", "Fonte: premiacao_diaria_atualizada (Telemetria)", "Linhas monitoradas", str(len(gfd.LINHA_DESPERDICIO)))}
   <div class="grid-4">
     <div class="metric"><div class="lbl">KM/L Mês Referência</div><div class="val">{fmt(kml_ref_pond,2)}</div></div>
     <div class="metric"><div class="lbl">KM/L Mês Comparação</div><div class="val">{fmt(kml_comp_medio,2)}</div></div>
@@ -283,7 +336,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="metric"><div class="lbl">Desperdício Total (Meta)</div><div class="val" style="color:#dc2626;">{fmt(desperdicio_total,2)} L</div></div>
   </div>
   <div class="card"><div class="card-title">Detalhamento por linha ({MESREF_NOME} = referência, {MESANT_NOME} = comparação)</div><div class="card-body">
-    <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Linha</th><th>KM/L Comp.</th><th>KM/L Ref.</th><th>Var. %</th><th>Meta</th><th>Desperdício</th><th>Km</th><th>Comb.</th></tr></thead>
+    <table class="tbl-alerta"><thead><tr><th style="text-align:left;padding-left:10px;">Linha</th><th>KM/L Comp.</th><th>KM/L Ref.</th><th>Var. %</th><th>Meta</th><th>Desperdício</th><th>Km</th><th>Comb.</th></tr></thead>
     <tbody>{rows_linha_completa.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
   </div></div>
   <div class="grid-3" style="margin-top:8px;">
@@ -360,20 +413,67 @@ _forca = "forte" if _absr >= 0.7 else ("moderada" if _absr >= 0.4 else ("fraca" 
 _sinal = "positiva" if _r >= 0 else "negativa"
 _tend = "maior" if _r >= 0 else "menor"
 _vel_med = (sum(_vels) / len(_vels)) if _vels else 0
+# Recorte dia util x fim de semana: e o que da acao pratica a correlacao. Sem transito, o
+# KM/L sobe - entao a diferenca entre os dois grupos mede o teto que o transito impoe.
+import datetime as _dt6
+_uteis, _fds = [], []
+for _d in _vk:
+    try:
+        _dd, _mm = int(_d[0][:2]), int(_d[0][3:5])
+        _wd = _dt6.date(gfd.MES_REF_ANO, _mm, _dd).weekday()
+    except (ValueError, IndexError):
+        continue
+    (_fds if _wd >= 5 else _uteis).append(_d)
+_med = lambda g: (sum(x[1] for x in g) / len(g)) if g else 0
+_med_v = lambda g: (sum(x[2] for x in g) / len(g)) if g else 0
+_kml_util, _kml_fds = _med(_uteis), _med(_fds)
+_dif_fds = _kml_fds - _kml_util
+_melhor = max(_vk, key=lambda d: d[1]) if _vk else None
+_pior = min(_vk, key=lambda d: d[1]) if _vk else None
+_amp = (_melhor[1] - _pior[1]) if _vk else 0
+
 if not _vk:
     consid_p6 = "Sem dados diários suficientes de velocidade e KM/L nesta janela para avaliar a correlação."
+    consid_p6b = ""
 else:
     consid_p6 = (f"Correlação {_forca} e {_sinal} entre velocidade média diária e KM/L (r = {fmt(_r,2)}): "
                  f"os dias com velocidade média mais alta (acima de ~{fmt(_vel_med,0)} km/h, tipicamente com menos trânsito) "
                  f"tendem a apresentar KM/L {_tend}. Isso ajuda a entender por que as linhas urbanas mais lentas ficam distantes da meta"
                  + (", e reforça que trânsito/parada explica parte do desperdício." if _r >= 0.2 else "; ainda assim, o efeito observado nesta janela é pequeno."))
+    if _uteis and _fds:
+        consid_p6b = (
+            f"Separando os dias: em dia útil a frota faz {fmt(_kml_util,3)} km/L a "
+            f"{fmt(_med_v(_uteis),1)} km/h; no fim de semana, {fmt(_kml_fds,3)} km/L a "
+            f"{fmt(_med_v(_fds),1)} km/h — diferença de {fmt(abs(_dif_fds),3)} km/L "
+            f"({pct(100*_dif_fds/_kml_util if _kml_util else 0)}) com a mesma frota e os mesmos "
+            f"motoristas. Essa distância é a parcela que o trânsito impõe, e não se resolve com "
+            f"cobrança de condução: o ganho realista em dia útil está abaixo desse teto.")
+    else:
+        consid_p6b = ("Ainda não há dias úteis e de fim de semana suficientes nesta janela para "
+                      "separar o efeito do trânsito do efeito de condução.")
+
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 6 · Velocidade Média Diária x KM/L — Correlação", f"Fonte: premiacao_diaria_atualizada (Telemetria) — {PERIODO}", "Dias analisados", str(len(gfd.KML_VELOCIDADE_DIARIO)))}
-  <div class="card"><div class="card-title">KM/L diário x Velocidade média diária</div><div class="card-body">
-    <div class="chart-wrap chart-wrap-sm"><img src="v3_vel_kml_diario.png"/></div>
-  </div></div>
-  <div class="cons-box"><div class="cons-title">Considerações</div>
-  <div class="cons-text">{consid_p6}</div></div>
+  <div class="grid-4" style="margin-bottom:6px;">
+    <div class="metric"><div class="lbl">Correlação (r)</div><div class="val">{fmt(_r,2)}</div><div class="aux">{_forca} e {_sinal}</div></div>
+    <div class="metric"><div class="lbl">Dia útil</div><div class="val">{fmt(_kml_util,3)}</div><div class="aux">{fmt(_med_v(_uteis),1)} km/h · {len(_uteis)} dias</div></div>
+    <div class="metric"><div class="lbl">Fim de semana</div><div class="val" style="color:#16a34a;">{fmt(_kml_fds,3)}</div><div class="aux">{fmt(_med_v(_fds),1)} km/h · {len(_fds)} dias</div></div>
+    <div class="metric"><div class="lbl">Amplitude no mês</div><div class="val">{fmt(_amp,3)}</div><div class="aux">{f"pior {_pior[0]} · melhor {_melhor[0]}" if _vk else "—"}</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><div class="card-title">Cada dia como um ponto — quanto a velocidade explica o KM/L</div><div class="card-body">
+      <div class="chart-wrap chart-wrap-tall"><img src="v3_vel_kml_dispersao.png"/></div>
+    </div></div>
+    <div class="card"><div class="card-title">As duas curvas dia a dia</div><div class="card-body">
+      <div class="chart-wrap chart-wrap-tall"><img src="v3_vel_kml_diario.png"/></div>
+    </div></div>
+  </div>
+  <div class="grid-2">
+    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Considerações</div>
+    <div class="cons-text">{consid_p6}</div></div>
+    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Quanto disso é trânsito, e não condução</div>
+    <div class="cons-text">{consid_p6b}</div></div>
+  </div>
   {footer(6)}
 </div>""")
 
@@ -402,18 +502,119 @@ def rows_ranking_com_historico(data):
 rows_piores = rows_ranking_com_historico(gfd.PIORES)
 rows_melhores = rows_ranking(gfd.MELHORES)
 
+# A leitura afirmava "a maioria ja esta em algum estagio" sem contar. Agora conta - e o que
+# interessa de verdade e o inverso: quem esta no top 10 e NAO tem nenhuma acao aberta.
+# PIORES: (nome, chapa, kml_real, meta, km, litros).
+# ---- Falso melhor / falso pior ------------------------------------------------------
+# O KM/L do ranking vem da Telemetria. Se o carro que o motorista mais usou tem sensor
+# divergente do Transnet, o numero dele esta inflado (ou deprimido) pelo equipamento, nao
+# pela conducao — e ele pode estar no top 10 sem merecer, ou no fundo sem culpa.
+# DIVERGENCIA_CARROS: (carro, kml_transnet, kml_telemetria, div_pct, km).
+_DIV_MIN = 10.0            # so carros com divergencia relevante
+_KM_MIN_CARRO = 50.0       # e que representem parte relevante da rodagem do motorista
+_div_por_carro = {str(d[0]): d for d in gfd.DIVERGENCIA_CARROS}
+
+
+# So mostra a seta quando houve troca: "11TR → 11TR" ocupava o dobro da largura para dizer
+# que nada mudou, e era o que espremia as tabelas das paginas 9 e 10. No nivel do modulo
+# porque as duas usam - dentro do laco, deixava de existir se a lista viesse vazia.
+def _mudou(de, para):
+    de, para = str(de or "-"), str(para or "-")
+    if de in ("-", "") or para in ("-", ""):
+        return "—"
+    return de if de == para else f"{de}<span style='color:#94a3b8;'>→</span>{para}"
+
+
+def _suspeitos(lista, sentido, com_chapa=True):
+    """Motoristas cujo carro principal tem sensor divergente no sentido que os favorece
+    (sentido=+1 para quem aparece bem, -1 para quem aparece mal). Devolve (motorista,
+    carro, pct_km, divergencia).
+
+    com_chapa=False para as listas que guardam so o nome (SINAL_ALERTA,
+    DESTAQUE_POSITIVO): a chapa e resolvida por CHAPA_DE_NOME.
+    """
+    out = []
+    for d in lista:
+        _ch = str(d[1]) if com_chapa else gfd.CHAPA_DE_NOME.get(str(d[0]).strip().upper(), "")
+        carro, pct_km = gfd.CARRO_PRINCIPAL.get(_ch, (None, 0))
+        if not carro:
+            continue
+        dv = _div_por_carro.get(str(carro))
+        if not dv or abs(dv[3]) < _DIV_MIN or pct_km < _KM_MIN_CARRO:
+            continue
+        # sentido do vies: telemetria acima do Transnet infla o KM/L do motorista
+        if (dv[3] > 0 and sentido > 0) or (dv[3] < 0 and sentido < 0):
+            out.append((d[0].title(), carro, pct_km, dv[3]))
+    return out
+
+
+def _bloco_suspeitos(susp, total, titulo, explica):
+    if not gfd.CARRO_PRINCIPAL or not gfd.DIVERGENCIA_CARROS:
+        # Sem o mapa motorista->carro nao da para afirmar que esta limpo: seria dizer
+        # "verificado, nada encontrado" quando na verdade nao foi verificado.
+        return (f'<div class="cons-box" style="margin-top:0;"><div class="cons-title">{titulo}</div>'
+                f'<div class="cons-text">Não foi possível cruzar o ranking com os carros de '
+                f'sensor divergente nesta execução — a verificação de falso positivo não foi '
+                f'feita.</div></div>')
+    if not susp:
+        return (f'<div class="cons-box" style="margin-top:0;"><div class="cons-title">{titulo}</div>'
+                f'<div class="cons-text">Nenhum dos {total} está apoiado em carro com '
+                f'divergência de sensor acima de {fmt(_DIV_MIN,0)}% — o ranking desta página '
+                f'não parece contaminado por leitura de equipamento.</div></div>')
+    _itens = "; ".join(f"<b>{n}</b> (carro {c}, {fmt(p,0)}% da rodagem, sensor {pct(dv)})"
+                       for n, c, p, dv in susp)
+    return (f'<div class="cons-box" style="margin-top:0;background:#fffbeb;border-color:#fde68a;">'
+            f'<div class="cons-title" style="color:#b45309;">{titulo}</div>'
+            f'<div class="cons-text">{len(susp)} de {total} {explica} {_itens}. '
+            f'Confira o sensor destes veículos (página de divergência) antes de usar este '
+            f'ranking para premiação ou cobrança.</div></div>')
+
+
+_susp_piores = _suspeitos(gfd.PIORES, -1)       # sensor lendo a menos derruba o KM/L
+_ph = gfd.PIORES_HISTORICO
+_tem_ac = [d for d in gfd.PIORES if _ph.get(d[1], ("-",))[0] not in ("-", "OK")]
+_tem_tr = [d for d in gfd.PIORES if _ph.get(d[1], ("-", "-", "-"))[2] not in ("-", "")]
+_sem_nada = [d for d in gfd.PIORES
+             if _ph.get(d[1], ("-",))[0] in ("-", "OK") and _ph.get(d[1], ("-", "-", "-"))[2] in ("-", "")]
+_gaps = [d[2] - d[3] for d in gfd.PIORES]
+_gap_med = sum(_gaps) / len(_gaps) if _gaps else 0
+_litros_perdidos = sum((d[3] - d[2]) * d[4] / d[3] for d in gfd.PIORES if d[3])
+
+if _sem_nada:
+    _p7_leitura = (
+        f"{len(_tem_ac)} dos {len(gfd.PIORES)} motoristas mais distantes da meta já estão em "
+        f"acompanhamento e {len(_tem_tr)} têm tratativa registrada. Mas "
+        f"<b>{len(_sem_nada)} seguem sem nenhuma ação aberta</b> "
+        f"({', '.join(d[0].title() for d in _sem_nada)}) — são a lacuna mais direta desta "
+        f"página, porque estão entre os piores e ninguém os está acompanhando.")
+else:
+    _p7_leitura = (
+        f"Todos os {len(gfd.PIORES)} motoristas mais distantes da meta já estão em algum "
+        f"estágio de acompanhamento ou tratativa ({len(_tem_ac)} acompanhados, "
+        f"{len(_tem_tr)} com tratativa) — o desafio não é falta de ação, mas a velocidade de "
+        f"conversão desses casos em melhoria efetiva de KM/L.")
+
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header(f"Página 7 · Top 10 — Maior Distância da Meta ({MESREF_NOME})", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
+  {page_header("Página 7 · Top 10 — Maior Distância da Meta", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
+  <div class="grid-4" style="margin-bottom:6px;">
+    <div class="metric"><div class="lbl">Defasagem média</div><div class="val" style="color:#dc2626;">{fmt(_gap_med,3)}</div><div class="aux">km/L abaixo da meta individual</div></div>
+    <div class="metric"><div class="lbl">Em acompanhamento</div><div class="val">{len(_tem_ac)}/{len(gfd.PIORES)}</div><div class="aux">ciclo aberto com instrutor</div></div>
+    <div class="metric"><div class="lbl">Com tratativa</div><div class="val">{len(_tem_tr)}/{len(gfd.PIORES)}</div><div class="aux">registro formal aberto</div></div>
+    <div class="metric" style="{'background:#fef2f2;border-color:#fecaca;' if _sem_nada else ''}"><div class="lbl" style="{'color:#dc2626;' if _sem_nada else ''}">Sem nenhuma ação</div><div class="val" style="{'color:#dc2626;' if _sem_nada else 'color:#16a34a;'}">{len(_sem_nada)}</div><div class="aux">{'exigem abertura de acompanhamento' if _sem_nada else 'todos cobertos'}</div></div>
+  </div>
   <div class="grid-2">
-    <div class="card"><div class="card-title">Top 10 — Maior distância da meta</div><div class="card-body">
-      <div class="chart-wrap chart-wrap-sm"><img src="v3_piores.png"/></div>
+    <div class="card"><div class="card-title">Distância da meta — KM/L real x meta individual</div><div class="card-body">
+      <div class="chart-wrap chart-wrap-tall"><img src="v3_piores.png"/></div>
     </div></div>
     <div class="card"><div class="card-title">Detalhamento — com último acompanhamento e última tratativa</div><div class="card-body">
       <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Motorista</th><th>Chapa</th><th>KM/L Real</th><th>Meta</th><th>Último Acompanhamento</th><th>Última Tratativa</th></tr></thead>
       <tbody>{rows_piores.replace("padding-left:6px", "padding-left:10px").replace("font-size:7.4px", "font-size:8.6px")}</tbody></table>
-      <div class="cons-box"><div class="cons-title">Leitura</div>
-      <div class="cons-text">Dos 10 motoristas mais distantes da meta em {MESREF_NOME}, a maioria já está em algum estágio de acompanhamento ou tratativa — o desafio não é falta de ação, mas a velocidade de conversão desses casos em melhoria efetiva de KM/L.</div></div>
     </div></div>
+  </div>
+  <div class="grid-2">
+    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Leitura</div>
+    <div class="cons-text">{_p7_leitura} Somados, estes {len(gfd.PIORES)} motoristas representam cerca de <b>{fmt(_litros_perdidos,0)} litros</b> acima do que consumiriam na meta, no período.</div></div>
+    {_bloco_suspeitos(_susp_piores, len(gfd.PIORES), "Possível falso pior — verificar sensor", "podem estar no fundo do ranking por leitura do equipamento, e não por condução:")}
   </div>
   {footer(7)}
 </div>""")
@@ -443,27 +644,115 @@ for c in gfd.SINAL_ALERTA_CAUSA:
                           f"<td>{l_mai} → {l_jun}</td><td>{c_mai} → {c_jun}</td>"
                           f"<td style='text-align:left;font-size:7.6px;color:{cor};font-weight:700;'>{causa}</td></tr>")
 
+# Quantos dos que cairam trocaram de linha/carro (causa operacional) e quantos nao trocaram
+# nada (ai sim aponta para conducao). E a leitura que a pagina precisa entregar.
+_susp_alerta = _suspeitos(gfd.SINAL_ALERTA, -1, com_chapa=False)
+# Tabela unica: o KM/L antes/depois era montado (rows_alerta) e nunca exibido, entao a
+# pagina mostrava a queda em % sem dizer de quanto para quanto. Agora as duas informacoes
+# ficam na mesma linha, junto da causa provavel.
+# SINAL_ALERTA: (nome, kml_ant, kml_ref, var_pct) · SINAL_ALERTA_CAUSA: (nome, linha_ant,
+# linha_ref, carro_ant, carro_ref, mudou_linha, mudou_carro).
+_causa_por_nome = {str(c[0]).strip().upper(): c for c in gfd.SINAL_ALERTA_CAUSA}
+rows_alerta_full = ""
+for a in gfd.SINAL_ALERTA:
+    c = _causa_por_nome.get(str(a[0]).strip().upper())
+    if c and c[5] is None:
+        causa, cor = "Sem dado suficiente", "#64748b"
+    elif c and c[5] and c[6]:
+        causa, cor = "Trocou de linha e de carro", "#e0a800"
+    elif c and c[6]:
+        causa, cor = "Trocou de carro (mesma linha)", "#e0a800"
+    elif c and c[5]:
+        causa, cor = "Trocou de linha (mesmo carro)", "#e0a800"
+    elif c:
+        causa, cor = "Sem troca — condução", "#dc2626"
+    else:
+        causa, cor = "—", "#64748b"
+    _lin = _mudou(c[1], c[2]) if c else "—"
+    _car = _mudou(c[3], c[4]) if c else "—"
+    rows_alerta_full += (
+        f"<tr><td style='text-align:left;padding-left:8px;white-space:nowrap;'>{a[0].title()}</td>"
+        f"<td>{fmt(a[1],3)}</td><td style='font-weight:700;'>{fmt(a[2],3)}</td>"
+        f"<td style='color:#dc2626;font-weight:800;'>{pct(a[3])}</td>"
+        f"<td style='white-space:nowrap;'>{_lin}</td><td style='white-space:nowrap;'>{_car}</td>"
+        f"<td style='text-align:left;color:{cor};font-weight:700;'>{causa}</td></tr>")
+
+_al = list(gfd.SINAL_ALERTA)
+_al_queda_med = (sum(d[3] for d in _al) / len(_al)) if _al else 0
+_al_perda = sum((d[1] - d[2]) for d in _al)
+_ca = list(gfd.SINAL_ALERTA_CAUSA)
+_ca_comport = [c for c in _ca if c[5] is not None and not c[5] and not c[6]]
+_ca_troca = [c for c in _ca if c[5] or c[6]]
+_ca_semdado = [c for c in _ca if c[5] is None]
+if _ca:
+    _txt_alerta = (
+        f"Dos {len(_ca)} motoristas com maior queda, <b>{len(_ca_troca)}</b> trocaram de linha "
+        f"e/ou de carro no período — a queda tem explicação operacional e cobrar condução "
+        f"deles seria injusto. <b>{len(_ca_comport)}</b> mantiveram linha e carro, e são os "
+        f"casos em que a queda aponta de fato para a forma de dirigir"
+        + (f"; {len(_ca_semdado)} ficaram sem dado suficiente para classificar." if _ca_semdado
+           else ".")
+        + " Priorize os que não trocaram nada.")
+else:
+    _txt_alerta = "Sem motoristas com queda relevante nesta janela."
+
+# Uma pagina por assunto: "Top 10 Melhores" e "Sinal de Alerta" dividiam a mesma pagina,
+# com dois graficos e duas tabelas espremidos - as tabelas de baixo saiam cortadas pelo
+# rodape. Sao perguntas diferentes (quem foi bem x quem caiu) e agora tem cada uma a sua.
+_susp_melhores = _suspeitos(gfd.MELHORES, +1)   # sensor lendo a mais infla o KM/L
+_mel = list(gfd.MELHORES)
+_mel_acima = [m for m in _mel if m[2] >= m[3]]
+_mel_gap = [m[2] - m[3] for m in _mel]
+_mel_econ = sum((m[2] - m[3]) * m[4] / m[3] for m in _mel if m[3])
+
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header(f"Página 8 · Top 10 Melhores e Sinal de Alerta ({MES3ANT}→{MES3REF})", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
-  <div class="grid-2">
-    <div class="card"><div class="card-title">Top 10 — Melhor desempenho ({MESREF_NOME})</div><div class="card-body">
-      <div class="chart-wrap"><img src="v3_melhores.png"/></div>
-    </div></div>
-    <div class="card"><div class="card-title">Sinal de Alerta — maior queda {MESANT_NOME}→{MESREF_NOME}</div><div class="card-body">
-      <div class="chart-wrap"><img src="v3_alerta.png"/></div>
-    </div></div>
+  {page_header("Página 8 · Top 10 Melhores — Quem Está Acima da Meta", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
+  <div class="grid-4" style="margin-bottom:6px;">
+    <div class="metric"><div class="lbl">Acima da meta</div><div class="val" style="color:#16a34a;">{len(_mel_acima)}/{len(_mel)}</div><div class="aux">no recorte dos 10 melhores</div></div>
+    <div class="metric"><div class="lbl">Melhor KM/L</div><div class="val">{fmt(_mel[0][2],3) if _mel else "—"}</div><div class="aux">{_mel[0][0].title() if _mel else "—"}</div></div>
+    <div class="metric"><div class="lbl">Vantagem média</div><div class="val" style="color:#16a34a;">+{fmt(sum(_mel_gap)/len(_mel_gap),3) if _mel_gap else "—"}</div><div class="aux">km/L acima da meta individual</div></div>
+    <div class="metric"><div class="lbl">Economia no período</div><div class="val" style="color:#16a34a;">{fmt(_mel_econ,0)} L</div><div class="aux">abaixo do previsto pela meta</div></div>
   </div>
   <div class="grid-2">
+    <div class="card"><div class="card-title">Vantagem sobre a meta — KM/L real x meta individual</div><div class="card-body">
+      <div class="chart-wrap chart-wrap-tall"><img src="v3_melhores.png"/></div>
+    </div></div>
     <div class="card"><div class="card-title">Detalhamento — Top 10 melhores</div><div class="card-body">
-      <table class="tbl-compact"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>Chapa</th><th>KM/L Real</th><th>Meta</th><th>Km</th><th>Comb.</th></tr></thead>
-      <tbody>{rows_melhores}</tbody></table>
-    </div></div>
-    <div class="card"><div class="card-title">Sinal de Alerta — a queda foi por troca de linha/carro ou comportamento?</div><div class="card-body">
-      <table class="tbl-compact"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>Linha {MES3ANT}→{MES3REF}</th><th>Carro {MES3ANT}→{MES3REF}</th><th>Causa provável</th></tr></thead>
-      <tbody>{rows_alerta_causa}</tbody></table>
+      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Motorista</th><th>Chapa</th><th>KM/L Real</th><th>Meta</th><th>Km</th><th>Comb.</th></tr></thead>
+      <tbody>{rows_melhores.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
     </div></div>
   </div>
-  {footer(8)}
+  <div class="grid-2">
+    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Leitura</div>
+    <div class="cons-text">Estes {len(_mel)} motoristas economizaram cerca de <b>{fmt(_mel_econ,0)} litros</b> em relação ao que a meta individual previa — o espelho da página anterior, que mede a perda. São os candidatos naturais a referência de condução: vale entender o que fazem de diferente (linha, carro, horário ou técnica) antes de tratar o desvio dos demais apenas como falta de empenho.</div></div>
+    {_bloco_suspeitos(_susp_melhores, len(_mel), "Possível falso melhor — verificar sensor", "podem estar no topo por leitura do equipamento, e não por condução:")}
+  </div>
+  {footer()}
+</div>""")
+
+pages.append(f"""<div class="page-break"></div><div class="page">
+  {page_header("Página 9 · Sinal de Alerta — Quem Caiu e Por Quê", f"Período: <b>{periodo_label}</b>", "Comparação", f"{MESANT_NOME} → {MESREF_NOME}")}
+  <div class="grid-4" style="margin-bottom:6px;">
+    <div class="metric"><div class="lbl">Motoristas em queda</div><div class="val" style="color:#dc2626;">{len(_al)}</div><div class="aux">maiores quedas do mês</div></div>
+    <div class="metric"><div class="lbl">Maior queda</div><div class="val" style="color:#dc2626;">{pct(_al[0][3]) if _al else "—"}</div><div class="aux">{_al[0][0].title() if _al else "—"}</div></div>
+    <div class="metric"><div class="lbl">Queda média</div><div class="val" style="color:#dc2626;">{pct(_al_queda_med)}</div><div class="aux">no recorte dos que caíram</div></div>
+    <div class="metric" style="{'background:#fef2f2;border-color:#fecaca;' if _ca_comport else ''}"><div class="lbl" style="{'color:#dc2626;' if _ca_comport else ''}">Sem troca — condução</div><div class="val" style="{'color:#dc2626;' if _ca_comport else ''}">{len(_ca_comport)}</div><div class="aux">mesma linha e mesmo carro</div></div>
+  </div>
+  <div class="grid-38-62">
+    <div class="card"><div class="card-title">Maior queda de KM/L no mês</div><div class="card-body">
+      <div class="chart-wrap chart-wrap-tall"><img src="v3_alerta.png"/></div>
+    </div></div>
+    <div class="card"><div class="card-title">De quanto para quanto — e a queda foi por troca ou por condução?</div><div class="card-body">
+      <table class="tbl-alerta"><thead><tr><th style="text-align:left;padding-left:8px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Var.</th><th>Linha</th><th>Carro</th><th style="text-align:left;">Causa provável</th></tr></thead>
+      <tbody>{rows_alerta_full}</tbody></table>
+    </div></div>
+  </div>
+  <div class="grid-2">
+    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Leitura</div>
+    <div class="cons-text">{_txt_alerta}</div></div>
+    {_bloco_suspeitos(_susp_alerta, len(gfd.SINAL_ALERTA), "Possível falsa queda — verificar sensor", "podem ter caído por leitura do equipamento, e não por condução:")}
+  </div>
+  {footer()}
 </div>""")
 
 # ================= PAGINA 6: DESTAQUE POSITIVO + MOTORISTAS DA SEMANA =================
@@ -496,23 +785,82 @@ for m in _ms:
     rows_semana += (f"<tr><td style='text-align:left;padding-left:6px;'>{m[0].title()}</td><td>{m[1]}</td>"
                      f"<td>{m[2]}</td><td>{m[3]}</td><td style='text-align:left;font-size:7.6px;'>{m[4]}</td></tr>")
 
+# Tambem eram dois assuntos numa pagina so: quem mais evoluiu (resultado) e quem esta
+# sendo acompanhado agora (carteira em andamento). Viraram duas.
+_dp = list(gfd.DESTAQUE_POSITIVO)
+_susp_destaque = _suspeitos(_dp, +1, com_chapa=False)   # sensor a mais pode fabricar a alta
+_dp_med = (sum(d[3] for d in _dp) / len(_dp)) if _dp else 0
+
+# Mesma pergunta da pagina de queda, invertida: subiu porque mudou a conducao, ou porque
+# pegou carro/linha melhor? Sem isso, a pagina sugere usar o motorista como referencia de
+# conducao quando o ganho pode ter sido operacional.
+_causa_dp = {str(c[0]).strip().upper(): c for c in gfd.DESTAQUE_POSITIVO_CAUSA}
+rows_destaque_full = ""
+for a in _dp:
+    c = _causa_dp.get(str(a[0]).strip().upper())
+    if c and c[5] is None:
+        causa, cor = "Sem dado suficiente", "#64748b"
+    elif c and (c[5] or c[6]):
+        _q = ("linha e carro" if (c[5] and c[6]) else ("carro" if c[6] else "linha"))
+        causa, cor = f"Trocou de {_q}", "#e0a800"
+    elif c:
+        causa, cor = "Sem troca — condução", "#16a34a"
+    else:
+        causa, cor = "—", "#64748b"
+    _lin = _mudou(c[1], c[2]) if c else "—"
+    _car = _mudou(c[3], c[4]) if c else "—"
+    rows_destaque_full += (
+        f"<tr><td style='text-align:left;padding-left:8px;white-space:nowrap;'>{a[0].title()}</td>"
+        f"<td>{fmt(a[1],3)}</td><td style='font-weight:700;'>{fmt(a[2],3)}</td>"
+        f"<td style='color:#16a34a;font-weight:800;'>{pct(a[3])}</td>"
+        f"<td style='white-space:nowrap;'>{_lin}</td><td style='white-space:nowrap;'>{_car}</td>"
+        f"<td style='text-align:left;color:{cor};font-weight:700;'>{causa}</td></tr>")
+
+_dp_conducao = [c for c in gfd.DESTAQUE_POSITIVO_CAUSA
+                if c[5] is not None and not c[5] and not c[6]]
+if _dp_conducao:
+    _txt_destaque = (
+        f"São os motoristas que mais subiram de {MESANT_NOME} para {MESREF_NOME}. "
+        f"<b>{len(_dp_conducao)} de {len(_dp)}</b> melhoraram mantendo a mesma linha e o "
+        f"mesmo carro — nesses a evolução é atribuível à condução, e são os casos que "
+        f"servem de referência para quem segue abaixo da meta. Nos demais, a alta veio "
+        f"junto de troca de linha ou de veículo, então parte do ganho é operacional.")
+else:
+    _txt_destaque = (
+        f"São os motoristas que mais subiram de {MESANT_NOME} para {MESREF_NOME}. Nenhum "
+        f"deles manteve linha e carro no período, então a alta vem acompanhada de mudança "
+        f"operacional — use com cautela como referência de condução.")
+
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 9 · Destaque Positivo e Motoristas em Acompanhamento", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
-  <div class="grid-2">
-    <div class="card"><div class="card-title">Destaque Positivo — maior evolução {MESANT_NOME}→{MESREF_NOME}</div><div class="card-body">
-      <div class="chart-wrap chart-wrap-sm"><img src="v3_destaque.png"/></div>
-      <table class="tbl-compact" style="margin-top:5px;"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Variação</th></tr></thead>
-      <tbody>{rows_destaque}</tbody></table>
+  {page_header("Página 10 · Destaque Positivo — Quem Mais Evoluiu", f"Período: <b>{periodo_label}</b>", "Comparação", f"{MESANT_NOME} → {MESREF_NOME}")}
+  <div class="grid-4" style="margin-bottom:6px;">
+    <div class="metric"><div class="lbl">Motoristas em alta</div><div class="val" style="color:#16a34a;">{len(_dp)}</div><div class="aux">maior evolução no mês</div></div>
+    <div class="metric"><div class="lbl">Maior evolução</div><div class="val" style="color:#16a34a;">{pct(_dp[0][3]) if _dp else "—"}</div><div class="aux">{_dp[0][0].title() if _dp else "—"}</div></div>
+    <div class="metric"><div class="lbl">Evolução média</div><div class="val" style="color:#16a34a;">{pct(_dp_med)}</div><div class="aux">no recorte dos que subiram</div></div>
+    <div class="metric" style="{'background:#f0fdf4;border-color:#bbf7d0;' if _dp_conducao else ''}"><div class="lbl" style="{'color:#15803d;' if _dp_conducao else ''}">Sem troca — condução</div><div class="val" style="{'color:#16a34a;' if _dp_conducao else ''}">{len(_dp_conducao)}</div><div class="aux">subiram na mesma linha e carro</div></div>
+  </div>
+  <div class="grid-38-62">
+    <div class="card"><div class="card-title">Maior evolução de KM/L no mês</div><div class="card-body">
+      <div class="chart-wrap chart-wrap-tall"><img src="v3_destaque.png"/></div>
     </div></div>
-    <div class="card"><div class="card-title">Motoristas em acompanhamento no período ({SEM})</div><div class="card-body">
-      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Motorista</th><th>Chapa</th><th>Instrutor</th><th>Data</th><th style="text-align:left;">Foco</th></tr></thead>
-      <tbody>{rows_semana.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
-      <div class="cons-box"><div class="cons-title">Leitura do período</div>
-      <div class="cons-text">{_txt_carteira}</div></div>
+    <div class="card"><div class="card-title">De quanto para quanto — e a alta foi por troca ou por condução?</div><div class="card-body">
+      <table class="tbl-alerta"><thead><tr><th style="text-align:left;padding-left:8px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Var.</th><th>Linha</th><th>Carro</th><th style="text-align:left;">Causa provável</th></tr></thead>
+      <tbody>{rows_destaque_full}</tbody></table>
     </div></div>
   </div>
-  {footer(9)}
+  <div class="grid-2">
+    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Leitura</div>
+    <div class="cons-text">{_txt_destaque}</div></div>
+    {_bloco_suspeitos(_susp_destaque, len(_dp), "Possível falsa alta — verificar sensor", "podem ter subido por leitura do equipamento, e não por condução:")}
+  </div>
+  {footer()}
 </div>""")
+
+# A pagina propria de "Motoristas em Acompanhamento" foi eliminada: ela so listava a
+# carteira, e as perguntas que ela levantava ja sao respondidas adiante (efetividade e
+# desfechos na de Instrutores, antes/depois na de Evolucao Individual). A tabela desceu
+# para o rodape da pagina de Instrutores, que e a dona do assunto.
+
 
 # ================= PAGINA 7: TRATATIVAS (melhorada, com meta vs real) =================
 # Este paragrafo era fixo ("Das 91 tratativas, 68% ... As 27 atrasadas ... 07TR/08TR/10TR")
@@ -607,7 +955,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
   <div class="grid-3" style="margin-bottom:6px;">
     <div class="metric"><div class="lbl">Novos acompanhamentos (iniciados em {MESREF_NOME.lower()})</div><div class="val">{sum(i['novos'] for i in gfd.INSTRUTORES)}</div><div class="aux">{_inst_nomes} · ainda no ciclo de 30 dias</div></div>
     <div class="metric"><div class="lbl">Desfechos em {MESREF_NOME.lower()} — Concluídos (OK)</div><div class="val" style="color:#16a34a;">{sum(i['desf_ok'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês atingindo a meta</div></div>
-    <div class="metric"><div class="lbl">Desfechos em {MESREF_NOME.lower()} — viraram ATA</div><div class="val" style="color:#dc2626;">{sum(i['desf_ata'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês sem atingir a meta</div></div>
+    <div class="metric"><div class="lbl">Desfechos em {MESREF_NOME.lower()} — viraram tratativa</div><div class="val" style="color:#dc2626;">{sum(i['desf_ata'] for i in gfd.INSTRUTORES)}</div><div class="aux">viraram tratativa por não atingir a meta</div></div>
   </div>
   <div class="grid-2">
     <div class="card"><div class="card-title">Efetividade — % de acompanhados que atingiram a meta</div><div class="card-body">
@@ -617,9 +965,9 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="chart-wrap chart-wrap-tall"><img src="v3_instrutores_status.png"/></div>
     </div></div>
   </div>
-  <div class="cons-box"><div class="cons-title">Leitura analítica</div>
+  <div class="cons-box" style="margin-top:6px;"><div class="cons-title">Leitura analítica</div>
   <div class="cons-text">{_txt_instrutores}</div></div>
-  {footer(11)}
+  {footer()}
 </div>""")
 
 # ================= PAGINA 10b: INSTRUTORES - APROVEITAMENTO DO DIA (ultima semana) =================
@@ -670,8 +1018,6 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="card"><div class="card-title">Detalhamento diário — período de {SEM}</div><div class="card-body">
       <table class="tbl-big"><thead><tr><th>Data</th><th style="text-align:left;">Instrutor</th><th>Acompanhamentos</th><th>Tempo Total</th><th>Tempo Médio</th></tr></thead>
       <tbody>{rows_inst_diario}</tbody></table>
-      <div class="cons-box"><div class="cons-title">Leitura</div>
-      <div class="cons-text">{_txt_p12_campo}</div></div>
     </div></div>
   </div>
   <div class="cons-box"><div class="cons-title">Leitura analítica</div>
@@ -714,27 +1060,72 @@ for m in gfd.COMPLETARAM_30_DIAS:
 _c30 = list(gfd.COMPLETARAM_30_DIAS)
 _acima = [m for m in _c30 if (m[5] - m[4]) >= 0]
 _abaixo = [m for m in _c30 if (m[5] - m[4]) < 0]
+
+# Resumo do ciclo em vez da lista nominal: a lista cresce a cada mes e vira ruido — quem
+# lê quer a TAXA (quantos melhoraram, quantos fecharam na meta), não 40 nomes.
+# COMPLETARAM_30_DIAS: (nome, chapa, instrutor, inicio, meta, real[, kml_inicial]).
+_tem_inicial = bool(_c30) and len(_c30[0]) >= 7 and any(m[6] for m in _c30)
+_melhoraram = [m for m in _c30 if _tem_inicial and m[6] and m[5] > m[6]]
+_pioraram = [m for m in _c30 if _tem_inicial and m[6] and m[5] < m[6]]
+_ganhos = [m[5] - m[6] for m in _c30 if _tem_inicial and m[6]]
+_ganho_med = (sum(_ganhos) / len(_ganhos)) if _ganhos else 0
+_tx_meta = (100 * len(_acima) / len(_c30)) if _c30 else 0
+_tx_melhora = (100 * len(_melhoraram) / len(_ganhos)) if _ganhos else 0
+# So os extremos vao para a tabela; o meio da distribuicao nao muda decisao.
+_c30_ord = sorted((m for m in _c30 if _tem_inicial and m[6]), key=lambda m: -(m[5] - m[6]))
+_c30_destaques = (_c30_ord[:3] + _c30_ord[-3:]) if len(_c30_ord) > 6 else _c30_ord
+rows_c30_resumo = ""
+for m in _c30_destaques:
+    _ev = m[5] - m[6]
+    _bate = m[5] >= m[4]
+    rows_c30_resumo += (
+        f"<tr><td style='text-align:left;padding-left:8px;white-space:nowrap;'>{m[0].title()}</td>"
+        f"<td>{m[2].split()[0] if m[2] else '—'}</td><td>{m[3]}</td>"
+        f"<td>{fmt(m[6],3)}</td><td style='font-weight:700;'>{fmt(m[5],3)}</td>"
+        f"<td style='color:{'#16a34a' if _ev >= 0 else '#dc2626'};font-weight:800;'>"
+        f"{'↑' if _ev >= 0 else '↓'} {fmt(abs(_ev),3)}</td>"
+        f"<td style='color:{'#16a34a' if _bate else '#dc2626'};font-weight:700;'>"
+        f"{'Na meta' if _bate else 'Abaixo'}</td></tr>")
+# A leitura passa a falar do conjunto: com a lista crescendo, citar um nome nao representa
+# o resultado do ciclo.
 if not _c30:
     leitura_30dias = "Nenhum motorista completou o ciclo de 30 dias de acompanhamento nesta janela."
-elif _acima:
-    _best = max(_acima, key=lambda m: m[5] - m[4]); _d = _best[5] - _best[4]; _n = len(_abaixo)
-    if _n == 0:
-        leitura_30dias = f"Todos os {len(_c30)} motoristas fecharam o ciclo na meta ou acima — destaque para {_best[0].title()} (+{fmt(_d,3)}). Bom momento para encerrar os acompanhamentos e migrar o foco para novos casos."
-    else:
-        _pref = f"Os outros {_n} seguem" if _n > 1 else "O outro segue"
-        leitura_30dias = f"{_best[0].title()} fechou o ciclo acima da meta (+{fmt(_d,3)}). {_pref} abaixo da meta ao final dos 30 dias — candidatos naturais a nova tratativa em vez de simples encerramento do acompanhamento."
+elif not _ganhos:
+    leitura_30dias = (f"{len(_c30)} motoristas encerraram o ciclo de 30 dias: {len(_acima)} "
+                      f"fecharam na meta e {len(_abaixo)} abaixo. Sem leitura inicial "
+                      f"registrada, não é possível dizer quantos de fato melhoraram durante "
+                      f"o acompanhamento.")
 else:
-    leitura_30dias = f"Os {len(_c30)} motoristas que completaram os 30 dias fecharam o ciclo abaixo da meta — candidatos naturais a nova tratativa em vez de simples encerramento do acompanhamento."
+    _dominante = ("a maior parte melhorou" if _tx_melhora >= 60 else
+                  "pouco mais da metade melhorou" if _tx_melhora >= 50 else
+                  "a maior parte NÃO melhorou")
+    leitura_30dias = (
+        f"Dos {len(_c30)} ciclos encerrados, {_dominante} ({len(_melhoraram)} de "
+        f"{len(_ganhos)}), com ganho médio de {fmt(_ganho_med,3)} km/L. "
+        f"{len(_acima)} terminaram na meta e {len(_abaixo)} abaixo"
+        + (f" — estes são candidatos a nova tratativa, e não a simples encerramento."
+           if _abaixo else ", o que permite encerrar e migrar o foco para novos casos.")
+        + (f" Atenção aos {len(_pioraram)} que saíram piores do que entraram: neles o "
+           f"acompanhamento não só deixou de resolver como coincidiu com piora."
+           if _pioraram else ""))
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 13 · Evolução Individual e Fechamento de Ciclo (30 dias)", "Base: diesel_acompanhamentos + diesel_acompanhamento_sessoes", "Motoristas c/ 30 dias", str(len(gfd.COMPLETARAM_30_DIAS)))}
   <div class="grid-2">
     <div class="card"><div class="card-title">Antes x Depois — motoristas em acompanhamento</div><div class="card-body">
       <div class="chart-wrap chart-wrap-sm"><img src="v3_antes_depois.png"/></div>
     </div></div>
-    <div class="card"><div class="card-title">Completaram 30 dias de acompanhamento nesta semana</div><div class="card-body">
-      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Motorista</th><th>Chapa</th><th>Instrutor</th><th>Início</th><th>Meta</th><th>Real</th><th>Evolução</th></tr></thead>
-      <tbody>{rows_30dias.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
-      <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Leitura</div>
+    <div class="card"><div class="card-title">Ciclos de 30 dias encerrados no período — resultado</div><div class="card-body">
+      <div class="grid-2" style="margin-bottom:6px;">
+        <div class="metric"><div class="lbl">Melhoraram o KM/L</div><div class="val" style="color:{'#16a34a' if _tx_melhora >= 50 else '#dc2626'};">{fmt(_tx_melhora,0)}%</div><div class="aux">{len(_melhoraram)} de {len(_ganhos)} com leitura inicial</div></div>
+        <div class="metric"><div class="lbl">Fecharam na meta</div><div class="val" style="color:{'#16a34a' if _tx_meta >= 50 else '#dc2626'};">{fmt(_tx_meta,0)}%</div><div class="aux">{len(_acima)} de {len(_c30)} ciclos encerrados</div></div>
+      </div>
+      <div class="grid-2" style="margin-bottom:6px;">
+        <div class="metric"><div class="lbl">Ganho médio no ciclo</div><div class="val" style="color:{'#16a34a' if _ganho_med >= 0 else '#dc2626'};">{'+' if _ganho_med >= 0 else ''}{fmt(_ganho_med,3)}</div><div class="aux">km/L entre início e fim</div></div>
+        <div class="metric"><div class="lbl">Pioraram no ciclo</div><div class="val" style="color:{'#dc2626' if _pioraram else '#16a34a'};">{len(_pioraram)}</div><div class="aux">saíram piores do que entraram</div></div>
+      </div>
+      <table class="tbl-alerta"><thead><tr><th style="text-align:left;padding-left:8px;">{'Maiores evoluções e maiores quedas' if len(_c30_destaques) < len(_c30_ord) else 'Motorista'}</th><th>Instrutor</th><th>Início</th><th>KM/L ini.</th><th>KM/L fim</th><th>Evolução</th><th>Meta</th></tr></thead>
+      <tbody>{rows_c30_resumo}</tbody></table>
+      <div class="cons-box" style="margin-top:6px;"><div class="cons-title">Leitura</div>
       <div class="cons-text">{leitura_30dias}</div></div>
     </div></div>
   </div>
@@ -751,12 +1142,16 @@ def _veic_nome(_ch):
     _nm = nomes_30dias.get(_ch)
     return _nm.title() if _nm else f"Motorista {_ch}"
 rows_veiculo_30d = ""
-for v in gfd.VEICULO_30_DIAS:
+# Ordenado pelo tamanho do efeito: com a lista liberada, os casos que importam
+# (maior diferenca entre carro principal e demais) ficam no topo.
+for v in sorted(gfd.VEICULO_30_DIAS, key=lambda x: -abs(x[5] - x[6])):
     chapa, total_dias, carro, vezes, pctc, kml_c, kml_o, n_o = v
     nome = _veic_nome(chapa)
     diff = kml_c - kml_o
     cor = "#16a34a" if diff >= 0 else "#dc2626"
-    interfere = "Sim — carro ajuda" if diff > 0.05 else ("Sim — carro atrapalha" if diff < -0.05 else "Pouca diferença")
+    interfere = ("Sim — carro ajuda" if diff > 0.05 else
+             "Sim — carro atrapalha" if diff < -0.05 else
+             "Não — é condução")
     rows_veiculo_30d += (f"<tr><td style='text-align:left;padding-left:6px;'>{nome}</td>"
                          f"<td>{carro}</td><td>{vezes}/{total_dias} dias ({fmt(pctc,1)}%)</td>"
                          f"<td style='font-weight:700;'>{fmt(kml_c,3)}</td><td>{fmt(kml_o,3)} (n={n_o})</td>"
@@ -771,12 +1166,16 @@ for _v in _veic_sorted:
     _chapa, _td, _carro, _vez, _pctc, _kmlc, _kmlo, _no = _v
     _nome = _veic_nome(_chapa)
     _diff = _kmlc - _kmlo
+    # Diferenca NEGATIVA tambem e efeito do veiculo: o motorista rende menos justamente no
+    # carro que mais usa, ou seja, o carro atrapalha. Antes isso era lido como
+    # "comportamental", contradizendo a propria tabela ao lado, que dizia "carro atrapalha".
+    # Comportamental e o caso em que o carro NAO faz diferenca (|diff| pequeno).
     if _diff > 0.05:
-        _interp = "Forte indício de efeito positivo do veículo."
+        _interp = "Indício de efeito positivo do veículo — o carro ajuda."
     elif _diff < -0.05:
-        _interp = "Fator provavelmente comportamental, não o veículo."
+        _interp = "Indício de efeito negativo do veículo — o carro atrapalha."
     else:
-        _interp = "Diferença pequena, provável fator comportamental."
+        _interp = "O carro não faz diferença: o resultado vem da condução."
     _sin = "a mais" if _diff >= 0 else "a menos"
     _boxes_veic += (f'<div class="cons-box" style="margin-top:0;"><div class="cons-title">{_nome}</div>'
                     f'<div class="cons-text" style="font-size:9.5px;">Carro {_carro} rende <b>{fmt(abs(_diff),3)} km/L</b> {_sin} '
@@ -785,11 +1184,20 @@ if _veic:
     _vp = max(_veic, key=lambda v: v[5] - v[6]); _vn = min(_veic, key=lambda v: v[5] - v[6])
     _np = _veic_nome(_vp[0]); _dp = _vp[5] - _vp[6]
     _nn = _veic_nome(_vn[0]); _dn = _vn[5] - _vn[6]
-    consid_p14 = (f"{_np} mostra a maior diferença positiva: +{fmt(_dp,3)} km/L no carro que mais usou ({_vp[2]}) "
-                  f"frente aos demais — indício de que o veículo (não só o motorista) explica parte do resultado. "
-                  f"Já {_nn} rende {fmt(abs(_dn),3)} km/L {'a mais' if _dn >= 0 else 'a menos'} no carro principal ({_vn[2]}), "
-                  f"o que aponta para fator {'do veículo' if _dn > 0.05 else 'comportamental'}. "
-                  f"Recomenda-se cruzar esta análise com a manutenção/idade dos veículos com maior efeito para confirmar a hipótese.")
+    # Mesma correcao dos quadros: diferenca negativa e efeito do veiculo (o carro atrapalha),
+    # nao fator comportamental. Comportamental e quando o carro nao muda o resultado.
+    _n_efeito = sum(1 for v in _veic if abs(v[5] - v[6]) > 0.05)
+    _n_neutro = len(_veic) - _n_efeito
+    consid_p14 = (
+        f"{_np} mostra a maior diferença positiva: +{fmt(_dp,3)} km/L no carro que mais usou "
+        f"({_vp[2]}) frente aos demais — indício de que o veículo, e não só o motorista, "
+        f"explica parte do resultado. No outro extremo, {_nn} rende {fmt(abs(_dn),3)} km/L "
+        f"{'a mais' if _dn >= 0 else 'a menos'} no carro principal ({_vn[2]}), "
+        f"{'outro caso de efeito do veículo' if abs(_dn) > 0.05 else 'diferença pequena, que aponta para condução'}. "
+        f"No conjunto, <b>{_n_efeito} de {len(_veic)}</b> apresentam efeito atribuível ao "
+        f"veículo e {_n_neutro} não — nestes, o resultado é de condução. "
+        f"Vale cruzar os veículos de maior efeito com manutenção e idade da frota antes de "
+        f"cobrar o motorista.")
 else:
     consid_p14 = "Nenhum motorista com dados suficientes de carro principal x demais carros nesta janela de 30 dias."
 pages.append(f"""<div class="page-break"></div><div class="page">
@@ -863,6 +1271,29 @@ for d in sorted(gfd.DIVERGENCIA_CARROS, key=lambda x: -abs(x[3])):
                      f"<td style='font-weight:800;color:{'#dc2626' if d[3]<0 else '#e0a800'};'>{pct(d[3])}</td>"
                      f"<td>{d[4]} km</td></tr>")
 
+# Carros rodando sem leitura util de telemetria. A divergencia so ve carro com dado nas
+# duas fontes, entao aparelho mudo era invisivel no relatorio inteiro - e e o caso mais
+# grave, porque o KM/L desses carros simplesmente nao existe.
+_cob = list(gfd.COBERTURA_TELEMETRIA)
+if _cob:
+    _cob_rows = "".join(
+        f"<tr><td style='font-weight:700;'>{c[0]}</td>"
+        f"<td>{c[1]:,}</td>".replace(",", ".")
+        + f"<td>{c[2]}</td><td>{c[3]}</td><td>{c[4]}</td>"
+        f"<td style='color:{'#dc2626' if c[5] < 50 else '#e0a800'};font-weight:800;'>{fmt(c[5],0)}%</td>"
+        f"<td style='text-align:left;color:{'#dc2626' if c[3] == 0 else '#e0a800'};font-weight:700;'>{c[6]}</td></tr>"
+        for c in _cob)
+    _km_sem = sum(c[1] for c in _cob)
+    _mudos = [c for c in _cob if c[3] == 0]
+    _bloco_cobertura = f'''<div class="card" style="margin-top:6px;"><div class="card-title">Carros rodando sem leitura confiável de telemetria — {len(_cob)} veículos</div><div class="card-body">
+    <table class="tbl-alerta"><thead><tr><th>Carro</th><th>KM no Transnet</th><th>Dias rodados</th><th>Dias c/ leitura</th><th>Dias c/ leitura inválida</th><th>Cobertura</th><th style="text-align:left;">Diagnóstico</th></tr></thead>
+    <tbody>{_cob_rows}</tbody></table>
+    <div class="cons-box" style="margin-top:6px;"><div class="cons-title">Por que isto importa</div>
+    <div class="cons-text">Estes veículos rodaram <b>{_km_sem:,} km</b> no Transnet sem que a telemetria registrasse leitura útil — {len(_mudos)} deles não reportaram nada. Como o ranking de motoristas, a meritocracia e o acompanhamento usam o KM/L da telemetria, quem dirigiu estes carros pode estar fora das análises ou com número incompleto. A divergência acima só enxerga carros com dado nas duas fontes; estes não apareceriam em lugar nenhum. Prioridade de checagem física igual à dos carros com sensor divergente.</div></div>
+  </div></div>'''.replace(",", ".")
+else:
+    _bloco_cobertura = ""
+
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 16 · Divergência Telemetria x Transnet por Carro (≥10%)", f"Fonte: CSV Athena (indicadores_carro_quatai) — {MESANT_NOME} a {MESREF}", "Carros com divergência ≥10%", str(len(gfd.DIVERGENCIA_CARROS)))}
   <div class="grid-2">
@@ -876,7 +1307,8 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="cons-text">Ao abrir o corte para ≥10%, nenhum carro novo aparece — a base é bimodal: ou a divergência é enorme (≥{_p16_min}%, {_p16_n} {_p16_plural} acima) ou é pequena (abaixo de 10%). Isso reforça que {_p16_essas}, e sim fortes candidatos a problema de calibração de sensor ou telemetria com falha de leitura. Recomenda-se checagem física nesses veículos antes de usar o dado de Telemetria para decisões individuais sobre eles.</div></div>
     </div></div>
   </div>
-  {footer(16)}
+  {_bloco_cobertura}
+  {footer()}
 </div>""")
 
 # ================= PAGINA ADERENCIA — REMOVIDA POR ENQUANTO (regra em revisao) =================
@@ -904,7 +1336,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">{CAL_JULHO_CELLS}</div>
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Programação</div>
-      <div class="cons-text">{len(_visita_label)} visitas noturnas programadas para {MESREF_NOME.lower()} — {_visitas_datas} — mantendo a cadência mensal iniciada em {MESANT_NOME.lower()}. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
+      <div class="cons-text">{len(_visita_label)} visitas noturnas programadas para {MESREF_NOME.lower()} — {_visitas_datas} — mantendo a cadência mensal de visitas noturnas. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
     <div class="card"><div class="card-title">Última visita realizada — 17/07/2026</div><div class="card-body">
       <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento Prático de Manobristas</div>
@@ -1055,10 +1487,78 @@ pages.append(f"""<div class="page-break"></div><div class="page">
   {footer(19)}
 </div>""")
 
+# ================= INDICE (montado a partir das paginas ja geradas) =================
+# Le o H1 e o "Página N" de cada pagina em vez de manter uma lista a parte: assim o indice
+# nao tem como divergir dos titulos reais quando alguem renomear ou reordenar uma pagina.
+_idx = sorted(INDICE)
+
+_GRUPOS = [
+    (2, 6, "Frota e linhas", "Como a frota consome e onde o desperdício se concentra"),
+    (7, 9, "Motoristas", "Quem está distante da meta, quem evoluiu e quem está sob acompanhamento"),
+    (10, 12, "Tratativas e instrutores", "Ação formal aberta e uso do tempo dos instrutores"),
+    (13, 16, "Efeito e verificação", "Se o acompanhamento surtiu efeito e a confiabilidade do dado"),
+    (17, 19, "Campo e plano", "Presença noturna, comunicação com o motorista e o que fazer na semana"),
+]
+_MINUSC = {"de", "da", "do", "das", "dos", "e", "em", "por", "com", "no", "na", "a", "o"}
+
+
+def _cap_titulo(t):
+    """Capitaliza sem estragar sigla nem preposicao: .title() dava 'Km/L ... Da Meta'."""
+    saida = []
+    for i, w in enumerate(t.split()):
+        limpo = w.strip("()—·")
+        if not limpo:
+            saida.append(w)
+        elif limpo.upper() == limpo and any(c.isalpha() for c in limpo):
+            saida.append(w)                      # sigla ja em caixa alta: KM/L, ATA, DPF
+        elif i > 0 and limpo.lower() in _MINUSC:
+            saida.append(w.lower())
+        else:
+            # Maiuscula na primeira LETRA, nao no caractere 0: com "(Transnet" o caractere 0
+            # e o parentese e o resultado saia "(transnet".
+            j = next((k for k, c in enumerate(w) if c.isalpha()), None)
+            saida.append(w if j is None else w[:j] + w[j].upper() + w[j + 1:].lower())
+    return " ".join(saida)
+
+
+_idx_html = ""
+for _ini, _fim, _titulo, _desc in _GRUPOS:
+    _itens = [(n, t) for n, t in _idx if _ini <= n <= _fim]
+    if not _itens:
+        continue
+    _linhas = "".join(
+        f'<div style="display:flex;gap:9px;align-items:baseline;padding:3.5px 0;'
+        f'border-bottom:1px solid #eef2f7;">'
+        f'<span style="font-size:12px;font-weight:800;color:#0e7c7b;min-width:22px;">{n:02d}</span>'
+        f'<span style="font-size:10px;color:#0f172a;">{_cap_titulo(t)}</span></div>'
+        for n, t in _itens)
+    _idx_html += (
+        f'<div class="card" style="margin-bottom:7px;">'
+        f'<div class="card-title">{_titulo} · páginas {_itens[0][0]} a {_itens[-1][0]}</div>'
+        f'<div class="card-body" style="padding:5px 12px;">'
+        f'<div style="font-size:8.4px;color:#64748b;margin-bottom:3px;">{_desc}</div>'
+        f'{_linhas}</div></div>')
+
+_meio = (len(_GRUPOS) + 1) // 2
+_idx_partes = _idx_html.split('<div class="card" style="margin-bottom:7px;">')[1:]
+_idx_cards = ['<div class="card" style="margin-bottom:7px;">' + c for c in _idx_partes]
+
+pages.insert(1, f"""<div class="page-break"></div><div class="page">
+  {page_header("Índice do relatório", f"Condução Econômica · Flash Report Diesel · {MESREF} — {len(_idx)} páginas de conteúdo", "Período analisado", PERIODO)}
+  <div class="grid-2" style="align-items:start;">
+    <div>{''.join(_idx_cards[:_meio])}</div>
+    <div>{''.join(_idx_cards[_meio:])}
+      <div class="cons-box" style="margin-top:0;"><div class="cons-title">Como ler este relatório</div>
+      <div class="cons-text">O relatório analisa o mês corrente do dia 01 até a véspera da geração, sempre comparando com o mês anterior fechado. O KM/L oficial vem do Transnet; a Telemetria entra como fonte de comparação, e divergências entre as duas são tratadas na página 16. Uma faixa vermelha na capa indica que alguma página não conseguiu carregar dado atualizado.</div></div>
+    </div>
+  </div>
+</div>""")
+
 html = f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Flash Report Diesel v3</title>
 <style>{CSS}</style></head><body>
 {''.join(pages)}
 </body></html>"""
 
+html = html.replace("@@TOTAL@@", str(_NUM[0]))
 (OUT / "flash_report_diesel_v3.html").write_text(html, encoding="utf-8")
 print("HTML v3 gerado.")

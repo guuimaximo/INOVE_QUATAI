@@ -1168,6 +1168,30 @@ if _inv_url and _inv_key:
         def _kpi_a(a, c):
             return _num(((a.get("metadata") or {}).get("kpis") or {}).get(c))
 
+        # KM/L por janela de datas, calculado do premiacao_diaria. Fica ANTES dos dois
+        # blocos que o usam (ciclos de 30 dias e antes/depois) porque os dois precisam da
+        # mesma base: enquanto o resumo dos ciclos usava kml_inicial/kml_real do banco, a
+        # mesma pagina exibia variacoes de +-0,005 em cima e +-0,36 embaixo.
+        JANELA_ANTES_DIAS = 30
+        KM_MINIMO_JANELA = 300           # abaixo disso o KM/L da janela nao e confiavel
+        from collections import defaultdict as _dd_j   # _dd so existe se o bloco BCNT rodou
+        _dias_mot = _dd_j(list)          # chapa -> [(dia_iso, km, litros)]
+        for r in (_pd or []):
+            _ch = str(r.get("motorista") or "").strip()
+            _d = str(r.get("dia") or "")[:10]
+            _km, _lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+            if _ch and len(_d) == 10 and _km and _lt and _lt > 0:
+                _dias_mot[_ch].append((_d, _km, _lt))
+
+        def _kml_janela(ch, ini, fim):
+            """KM/L ponderado e km total no intervalo [ini, fim). Datas ISO."""
+            km = lt = 0.0
+            for d, k, l in _dias_mot.get(ch, []):
+                if ini <= d < fim:
+                    km += k
+                    lt += l
+            return (round(km / lt, 3) if lt > 0 else None, round(km))
+
         # 13a: completaram 30 dias neste mes (prontuario_30 no mes atual)
         _comp = []
         for a in _acs:
@@ -1176,44 +1200,33 @@ if _inv_url and _inv_key:
                 meta, real = _kpi_a(a, "kml_meta"), _kpi_a(a, "kml_real")
                 di = str(a.get("dt_inicio_monitoramento") or "")[:10]
                 if meta and real:
-                    # kml_inicial junto: sem ele nao da para dizer se o motorista MELHOROU no
-                    # ciclo - so se terminou na meta, que e outra coisa (quem ja entrou na
-                    # meta aparece como sucesso sem ter evoluido nada).
-                    _comp.append((a.get("motorista_nome") or "", str(a.get("motorista_chapa") or ""),
+                    # O "antes" NAO vem de kml_inicial: esse campo e o metadata.kpis.kml_real
+                    # medem janelas quase identicas, e o ganho medio do ciclo saia +0,001 km/L
+                    # enquanto a tabela ao lado, com janelas calculadas, mostrava +-0,36.
+                    # Aqui: antes = 30 dias ANTES do inicio; depois = os 30 dias do ciclo.
+                    _ch_c = str(a.get("motorista_chapa") or "")
+                    _ini_c = (_dtt.date.fromisoformat(di)
+                              - _dtt.timedelta(days=JANELA_ANTES_DIAS)).isoformat() if len(di) >= 10 else None
+                    _fim_c = (_dtt.date.fromisoformat(di)
+                              + _dtt.timedelta(days=30)).isoformat() if len(di) >= 10 else None
+                    _kml_ini_c = _kml_janela(_ch_c, _ini_c, di)[0] if _ini_c else None
+                    _kml_fim_c = _kml_janela(_ch_c, di, _fim_c)[0] if _fim_c else None
+                    _comp.append((a.get("motorista_nome") or "", _ch_c,
                                   a.get("instrutor_nome") or "", f"{di[8:10]}/{di[5:7]}" if len(di) >= 10 else "-",
-                                  round(meta, 3), round(real, 3), di,
-                                  round(_num(a.get("kml_inicial")) or 0.0, 3)))
+                                  round(meta, 3), round(_kml_fim_c or real, 3), di,
+                                  round(_kml_ini_c, 3) if _kml_ini_c else 0.0))
         if _comp:
             # Sem corte em 8: a pagina agora resume o conjunto todo em taxas, entao truncar
             # falsearia os percentuais. (nome, chapa, instrutor, inicio, meta, real, inicial)
             COMPLETARAM_30_DIAS = [t[:6] + (t[7],) for t in _comp]
             _ok("[inove] Pagina 13 (completaram 30 dias) ao vivo.")
         # 13b: ACOMPANHAMENTO antes/depois (10 mais distantes da meta, em acompanhamento)
+        if _pd:
         # Antes usava kml_inicial x metadata.kpis.kml_real, que medem janelas quase iguais:
         # os 10 deltas ficavam entre -0,004 e +0,004 km/L (ruido). Agora as duas janelas sao
         # calculadas aqui, a partir de premiacao_diaria_atualizada, em torno da data de
         # inicio do monitoramento -- e o km de cada janela vai junto, para dar
         # a dimensao do dado por tras da variacao.
-        JANELA_ANTES_DIAS = 30
-        KM_MINIMO_JANELA = 300           # abaixo disso o KM/L da janela nao e confiavel
-        if _pd:
-            _dias_mot = _dd(list)        # chapa -> [(dia_iso, km, litros)]
-            for r in _pd:
-                _ch = str(r.get("motorista") or "").strip()
-                _d = str(r.get("dia") or "")[:10]
-                _km, _lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
-                if _ch and len(_d) == 10 and _km and _lt and _lt > 0:
-                    _dias_mot[_ch].append((_d, _km, _lt))
-
-            def _kml_janela(ch, ini, fim):
-                """KM/L ponderado e km total no intervalo [ini, fim). Datas ISO."""
-                km = lt = 0.0
-                for d, k, l in _dias_mot.get(ch, []):
-                    if ini <= d < fim:
-                        km += k
-                        lt += l
-                return (round(km / lt, 3) if lt > 0 else None, round(km))
-
             # um acompanhamento por motorista: o mais recente (evita o mesmo nome 2x no top 10)
             _por_chapa = {}
             for a in _acs:

@@ -1193,20 +1193,75 @@ if _inv_url and _inv_key:
 
 
 
-SUGESTOES_ACOMPANHAMENTO = [
-    ("Agenor Matias De Jesus", "Piorou após acompanhamento (2,36→2,23 km/L) e segue no Sinal de Alerta.", "Reavaliar abordagem do instrutor; considerar reforço presencial ou rodízio de linha."),
-    ("Silvio Araujo Da Silva", "Piorou após acompanhamento (2,60→2,41 km/L).", "Nova tratativa com foco em condução em subida/frenagem; acompanhar por 10 dias."),
-    ("Antonio Osorio Faria", "Piorou após acompanhamento (2,58→2,37 km/L).", "Repetir checkpoint de 10 dias; investigar se é comportamento ou problema mecânico do veículo."),
-    ("Claudio Aparecido De Oliveira", "Tratativa aberta há 75 dias sem SLA cumprido; acompanhamento mais antigo (maio) sem recuperação.", "Escalar para ATA formal — já está classificado como tal, cobrar encerramento com instrutor."),
-    ("Everaldo Pinto Nogueira / Jose Carlos Dos Santos / Erisvaldo Valter Da Silva", "Tratativas de prioridade Alta abertas há mais de 90 dias — maior risco de SLA no relatório.", "Priorizar encerramento imediato; são os 3 casos mais críticos de atraso."),
-]
+# ---- Plano de acao da semana (Pagina 19) --------------------------------------------
+# Eram duas listas fixas com nomes, km/L e contagens de junho ("tratativa aberta ha 75
+# dias", "07TR ... 61 mil km"), nunca sobrescritas - a pagina que o gestor le como
+# conclusao era a unica sem caminho de dado ao vivo. Agora derivam das mesmas listas que
+# as paginas 8, 10, 13 e 4 ja usam; o texto fixo so entra se nao houver dado.
+def _sug_acompanhamento():
+    """(nome, diagnostico, sugestao) para quem piorou apesar do acompanhamento."""
+    out = []
+    _piorou = sorted((a for a in ACOMPANHAMENTO if a["depois"] < a["antes"]),
+                     key=lambda a: a["depois"] - a["antes"])
+    for a in _piorou[:3]:
+        _d = a["antes"] - a["depois"]
+        out.append((a["nome"].title(),
+                    f"Piorou apos acompanhamento ({fmt(a['antes'],2)}->{fmt(a['depois'],2)} km/L, "
+                    f"-{fmt(_d,3)}), com {a['instrutor']}.",
+                    "Reavaliar abordagem do instrutor; considerar reforco presencial ou "
+                    "rodizio de linha."))
+    # tratativas mais antigas em aberto
+    _velhas = sorted(TRATATIVAS_ATRASADAS, key=lambda t: -t[4])[:2]
+    for t in _velhas:
+        out.append((t[0].title(),
+                    f"Tratativa aberta ha {t[4]} dias sem SLA cumprido "
+                    f"(linha {t[2]}, prioridade {t[3]}).",
+                    "Escalar para ATA formal e cobrar encerramento com o instrutor."))
+    _alta = [t for t in TRATATIVAS_ATRASADAS if str(t[3]).strip().lower() == "alta" and t[4] > 90]
+    if len(_alta) >= 2:
+        out.append((" / ".join(t[0].title() for t in _alta[:3]),
+                    f"{len(_alta)} tratativas de prioridade Alta abertas ha mais de 90 dias — "
+                    f"maior risco de SLA no relatorio.",
+                    "Priorizar encerramento imediato; sao os casos mais criticos de atraso."))
+    return out[:5]
 
-SUGESTOES_LINHAS = [
-    ("07TR", "Maior volume (61 mil km) e KM/L 2,593 abaixo da meta 2,78; velocidade média baixa (18,2 km/h).", "Manter como linha foco da semana; repetir acompanhamento focado."),
-    ("08TR", "3 tratativas atrasadas e 2 pendentes no prazo — maior concentração de casos.", "Candidata a mutirão de tratativas: fechar as 5 pendências desta linha na mesma semana."),
-    ("20TR", "KM/L 2,593 é o mais distante da meta em termos relativos (-5,1%) com velocidade baixa (16,9 km/h).", "Investigar se é traçado/trânsito ou condução; comparar com 07TR que tem o mesmo problema."),
-    ("04TR", "Velocidade média mais baixa da frota (15,2 km/h) sugere trânsito/paradas — pode explicar parte do desperdício.", "Validar com equipe de tráfego se o problema é operacional antes de cobrar do motorista."),
-]
+
+def _sug_linhas():
+    """(linha, diagnostico, sugestao) para as linhas que mais pedem acao."""
+    _vel = {l[0]: l[2] for l in LINHAS}
+    _tr_por_linha = {}
+    for t in TRATATIVAS_ATRASADAS:
+        if t[2] and t[2] != "-":
+            _tr_por_linha[t[2]] = _tr_por_linha.get(t[2], 0) + 1
+    out, vistas = [], set()
+    # 1) maior desperdicio absoluto
+    for l in sorted(LINHA_DESPERDICIO, key=lambda x: -x[5])[:2]:
+        nome = l[0]
+        vistas.add(nome)
+        _v = f"; velocidade media {fmt(_vel[nome],1)} km/h" if nome in _vel else ""
+        out.append((nome,
+                    f"Maior desperdicio do periodo ({fmt(l[5],0)} L em {fmt(l[6]/1000,0)} mil km) "
+                    f"e KM/L {fmt(l[2],3)} abaixo da meta {fmt(l[4],2)}{_v}.",
+                    "Manter como linha foco da semana; repetir acompanhamento focado."))
+    # 2) maior concentracao de tratativas atrasadas
+    for nome, n in sorted(_tr_por_linha.items(), key=lambda x: -x[1])[:1]:
+        if nome in vistas or n < 2:
+            continue
+        vistas.add(nome)
+        out.append((nome, f"{n} tratativas atrasadas — maior concentracao de casos.",
+                    "Candidata a mutirao: fechar as pendencias desta linha na mesma semana."))
+    # 3) mais lenta da frota, se ainda nao citada
+    if LINHAS:
+        _lenta = min(LINHAS, key=lambda l: l[2])
+        if _lenta[0] not in vistas:
+            out.append((_lenta[0],
+                        f"Velocidade media mais baixa da frota ({fmt(_lenta[2],1)} km/h), "
+                        f"KM/L {fmt(_lenta[1],3)} vs meta {fmt(_lenta[3],2)}.",
+                        "Validar com a equipe de trafego se o problema e operacional antes de "
+                        "cobrar do motorista."))
+    return out[:4]
+
+
 
 
 def fmt(v, d=2):
@@ -1221,6 +1276,13 @@ def pct(v):
 # ---- Conferencia das fontes ao vivo (ver _ok() no topo) ----
 # Paginas que DEVEM vir do banco. A 17 (aderencia) esta fora do relatorio e a 3/18/19
 # sao conteudo manual/derivado, por isso nao entram na conta.
+# As sugestoes usam fmt(); por isso sao montadas so depois das helpers de formatacao.
+SUGESTOES_ACOMPANHAMENTO = _sug_acompanhamento()
+SUGESTOES_LINHAS = _sug_linhas()
+if SUGESTOES_ACOMPANHAMENTO or SUGESTOES_LINHAS:
+    _ok(f"[plano] Pagina 19 (plano de acao) derivada: "
+        f"{len(SUGESTOES_ACOMPANHAMENTO)} motoristas, {len(SUGESTOES_LINHAS)} linhas.")
+
 PAGINAS_ESPERADAS = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 PAGINAS_EM_FALLBACK = sorted(PAGINAS_ESPERADAS - PAGINAS_AO_VIVO)
 DADOS_AO_VIVO_OK = not PAGINAS_EM_FALLBACK

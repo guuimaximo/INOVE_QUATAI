@@ -990,6 +990,33 @@ sug_acomp_rows = "".join(
     for s in gfd.SUGESTOES_ACOMPANHAMENTO
 )
 
+# Os tres destaques do topo e o texto de instrutores eram fixos e citavam carros que a
+# Pagina 16 e a 14 mostram ao vivo - o relatorio se contradizia entre paginas.
+_p19_alta = [t for t in gfd.TRATATIVAS_ATRASADAS if t[4] > 90]
+_p19_acao = (f"{len(_p19_alta)} tratativa{'s' if len(_p19_alta)!=1 else ''} &gt;90 dias em aberto"
+             if _p19_alta else "Nenhuma tratativa &gt;90 dias")
+_p19_acao_aux = (", ".join(t[0].title().split()[0] for t in _p19_alta[:3])
+                 + (f" — prioridade {_Counter(t[3] for t in _p19_alta).most_common(1)[0][0]}"
+                    if _p19_alta else "")) if _p19_alta else "SLA em dia nas tratativas antigas"
+_p19_div = max(gfd.DIVERGENCIA_CARROS, key=lambda d: abs(d[3])) if gfd.DIVERGENCIA_CARROS else None
+_p19_inv = f"Carro {_p19_div[0]} — sensor?" if _p19_div else "Sem divergência relevante"
+_p19_inv_aux = (f"{pct(_p19_div[3])} de divergência Telemetria x Transnet" if _p19_div
+                else "nenhum carro acima do corte")
+_v30 = [v for v in gfd.VEICULO_30_DIAS if v[5] and v[6]]
+_p19_best = max(_v30, key=lambda v: v[5]-v[6]) if _v30 else None
+_p19_rep = (f"Carro {_p19_best[2]} rende +{fmt(_p19_best[5]-_p19_best[6],2)} km/L"
+            if _p19_best else "Sem efeito de carro destacado")
+_p19_foco = gfd.SUGESTOES_LINHAS[0][0] if gfd.SUGESTOES_LINHAS else "—"
+_carros_ok = ", ".join(str(v[2]) for v in sorted(_v30, key=lambda v: -(v[5]-v[6]))[:2]) or "—"
+_taxas19 = [i["taxa_atingiu_meta"] for i in gfd.INSTRUTORES] or [0]
+_apr19 = [i["aproveitamento_dia_pct"] for i in gfd.INSTRUTORES_DIARIO] or [0]
+_txt_p19_inst = (
+    f"Os instrutores convertem em media {fmt(sum(_taxas19)/len(_taxas19),0)}% dos "
+    f"acompanhamentos em meta batida, ocupando ~{fmt(sum(_apr19)/len(_apr19),0)}% da jornada. "
+    f"Sugestão: nas próximas 2 semanas, testar ciclos mais curtos (10 dias) com reforço "
+    f"presencial logo no início, focando nos motoristas que já usam os carros de melhor "
+    f"rendimento (ex.: {_carros_ok}) para isolar se o problema é comportamental.")
+
 rows_sug_linhas = ""
 for s in gfd.SUGESTOES_LINHAS:
     rows_sug_linhas += (f"<tr><td style='font-weight:bold;text-align:left;padding-left:6px;'>{s[0]}</td>"
@@ -997,11 +1024,11 @@ for s in gfd.SUGESTOES_LINHAS:
                          f"<td style='text-align:left;font-size:8px;color:#0e7c7b;font-weight:700;'>{s[2]}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 19 · Melhoria Contínua — Plano de Ação da Semana", "Síntese analítica sobre tratativas, acompanhamentos, linhas, carros e instrutores", "Foco #1 da semana", "07TR")}
+  {page_header("Página 19 · Melhoria Contínua — Plano de Ação da Semana", "Síntese analítica sobre tratativas, acompanhamentos, linhas, carros e instrutores", "Foco #1 da semana", _p19_foco)}
   <div class="grid-3" style="margin-bottom:6px;">
-    <div class="metric" style="background:#fef2f2;border-color:#fecaca;"><div class="lbl" style="color:#dc2626;">Ação imediata</div><div class="val" style="font-size:11px;color:#0f172a;">3 tratativas &gt;90 dias em aberto</div><div class="aux">Everaldo, José Carlos, Erisvaldo — prioridade Alta</div></div>
-    <div class="metric" style="background:#fffbeb;border-color:#fde68a;"><div class="lbl" style="color:#b45309;">Investigar</div><div class="val" style="font-size:11px;color:#0f172a;">Carro 222215 — sensor?</div><div class="aux">+39,5% de divergência Telemetria x Transnet</div></div>
-    <div class="metric" style="background:#f0fdf4;border-color:#bbf7d0;"><div class="lbl" style="color:#15803d;">Replicar</div><div class="val" style="font-size:11px;color:#0f172a;">Carro 222210 rende +0,37 km/L</div><div class="aux">Vale testar em outros motoristas da mesma linha</div></div>
+    <div class="metric" style="background:#fef2f2;border-color:#fecaca;"><div class="lbl" style="color:#dc2626;">Ação imediata</div><div class="val" style="font-size:11px;color:#0f172a;">{_p19_acao}</div><div class="aux">{_p19_acao_aux}</div></div>
+    <div class="metric" style="background:#fffbeb;border-color:#fde68a;"><div class="lbl" style="color:#b45309;">Investigar</div><div class="val" style="font-size:11px;color:#0f172a;">{_p19_inv}</div><div class="aux">{_p19_inv_aux}</div></div>
+    <div class="metric" style="background:#f0fdf4;border-color:#bbf7d0;"><div class="lbl" style="color:#15803d;">Replicar</div><div class="val" style="font-size:11px;color:#0f172a;">{_p19_rep}</div><div class="aux">Vale testar em outros motoristas da mesma linha</div></div>
   </div>
   <div class="grid-2">
     <div class="card"><div class="card-title">Motoristas — sugestão de novo acompanhamento ou tratativa</div><div class="card-body" style="max-height:105mm;overflow:hidden;">
@@ -1014,7 +1041,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
   </div>
   <div class="grid-2">
     <div class="cons-box" style="margin-top:0;"><div class="cons-title">Instrutores — ponto de atenção</div>
-    <div class="cons-text">Fabiano e Helio convertem menos de 1 em 4 acompanhamentos em meta batida, mesmo ocupando ~65% da jornada. Sugestão: nas próximas 2 semanas, testar ciclos de acompanhamento mais curtos (10 dias) com reforço presencial logo no início, focando nos motoristas que já usam o carro/linha "certos" (ex: 222210, 242524) para isolar se o problema é comportamental.</div></div>
+    <div class="cons-text">{_txt_p19_inst}</div></div>
     <div class="cons-box" style="margin-top:0;"><div class="cons-title">Como este plano foi montado</div>
     <div class="cons-text">Cruzamento entre: (1) motoristas do Sinal de Alerta já acompanhados que pioraram; (2) tratativas atrasadas por linha/prioridade; (3) linhas com maior desvio da meta e menor velocidade; (4) carros com divergência de sensor ou efeito positivo/negativo sobre o KM/L nos 30 dias. O objetivo é indicar onde focar na próxima semana, não substituir a análise de campo.</div></div>
   </div>

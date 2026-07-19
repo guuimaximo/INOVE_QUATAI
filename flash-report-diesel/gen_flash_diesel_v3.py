@@ -56,9 +56,11 @@ PAGINAS_AO_VIVO = set()
 
 def _ok(msg):
     print(msg)
-    _m = _re_fontes.search(r"Pagina (\d+)", msg)
+    _m = _re_fontes.search(r"P[aá]gina (\d+)", msg)
     if _m:
         PAGINAS_AO_VIVO.add(int(_m.group(1)))
+    else:
+        print(f"[aviso] _ok() sem numero de pagina, nao entrou no rastreio: {msg}")
 
 
 TEAL = "#0e7c7b"
@@ -288,8 +290,17 @@ def _carregar_instrutores_junho():
         print(f"[instrutores] busca ao vivo falhou ({e}); usando fallback fixo.")
         return None
 
+    # Os instrutores saem do proprio resultado, nao da lista fixa: com a lista fixa, um
+    # instrutor novo teria os acompanhamentos buscados do banco e descartados em silencio,
+    # e a pagina sairia "ao vivo" apenas subcontando a carteira.
+    _nomes = sorted({str(x.get("instrutor_nome")).strip()
+                     for x in list(novos) + list(desf) if x.get("instrutor_nome")})
+    if not _nomes:
+        _nomes = INSTRUTORES_NOMES
+    elif set(_nomes) != set(INSTRUTORES_NOMES):
+        print(f"[instrutores] quadro mudou: {_nomes} (fixo era {INSTRUTORES_NOMES})")
     out = []
-    for nome in INSTRUTORES_NOMES:
+    for nome in _nomes:
         rn = [x for x in novos if x.get("instrutor_nome") == nome]
         cd = [x for x in rn if kml_real(x) is not None and x.get("kml_meta") is not None]
         n = len(cd)
@@ -555,7 +566,8 @@ def _agg_divergencia(rows):
 _MES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
 
-def _agg_kml_mensal(rows, ano=2026):
+def _agg_kml_mensal(rows, ano=None):
+    ano = ano if ano is not None else MES_REF_ANO
     """Pagina 2: KM/L mensal ponderado (Transnet) + telemetria mensal jun/jul."""
     from collections import defaultdict
     mt, ms = defaultdict(lambda: [0.0, 0.0]), defaultdict(lambda: [0.0, 0.0])
@@ -575,7 +587,11 @@ def _agg_kml_mensal(rows, ano=2026):
         return None, None
     ult = meses[-1]
     hist = [(f"{_MES_PT[m-1]}/{ano}" + ("*" if m == ult else ""), round(mt[m][0] / mt[m][1], 4)) for m in meses]
-    telem = {nome: round(ms[m][0] / ms[m][1], 3) for nome, m in (("jun", 6), ("jul", 7)) if ms.get(m) and ms[m][1] > 0}
+    # Chaveado pelos meses do periodo corrente, nao pelo par fixo ("jun",6)/("jul",7):
+    # com o par fixo, a partir de agosto nenhuma chave batia com o mes de referencia.
+    telem = {nome: round(ms[m][0] / ms[m][1], 3)
+             for nome, m in ((MES3_ANT.lower(), MES_ANT_MM), (MES3_REF.lower(), MES_REF_MM))
+             if ms.get(m) and ms[m][1] > 0}
     return hist, telem
 
 
@@ -608,8 +624,13 @@ if _transnet_rows:
     _hist, _telem = _agg_kml_mensal(_transnet_rows, ano=MES_REF_ANO)
     if _hist:
         KML_HISTORICO = _hist
-        # KML_MENSAL_TELEMETRIA (sst) NAO e sobrescrito: o dado de telemetria mensal e ruidoso.
         _ok("[transnet] Pagina 2 (KM/L mensal Transnet) ao vivo.")
+    # O KM/L de telemetria (sst) era calculado aqui e descartado, com o comentario "dado
+    # ruidoso" - na pratica o tile exibia 2,706 fixo para sempre. Passa a usar o valor ao
+    # vivo quando existir; se nao existir, o HTML mostra "n/d" em vez de herdar outro mes.
+    if _telem:
+        KML_MENSAL_TELEMETRIA = _telem
+        print(f"[transnet] KM/L telemetria (sst) ao vivo: {_telem}")
     _sem = _agg_kml_semanal(_transnet_rows)
     if len(_sem) >= 4:
         KML_SEMANAL = _sem
@@ -617,7 +638,7 @@ if _transnet_rows:
     _ader = _agg_aderencia(_transnet_rows, f"{MES_REF_ANO}-{MES_REF_MM:02d}")
     if _ader:
         ADERENCIA_DIARIA_EMPRESA, ADERENCIA_MEDIA_EMPRESA, ADERENCIA_CARROS, ADERENCIA_TOTAL_FROTA = _ader
-        _ok("[transnet] Pagina 17 (aderencia) ao vivo.")
+        print("[transnet] aderencia (grafico auxiliar, sem pagina) ao vivo.")
     _div = _agg_divergencia([r for r in _transnet_rows if str(r.get("data_consolidada", "")) >= MES_ANT_INI.isoformat()])
     if _div:
         DIVERGENCIA_CARROS = _div
@@ -693,7 +714,7 @@ if _bcnt_url and _bcnt_key:
             CLUSTER_HISTORICO_4M = _hist
             # comparacao = os 2 ultimos meses disponiveis de cada cluster (mes ant x mes ref)
             CLUSTER_TRANSNET = [(c, _hist[c][-2][1], _hist[c][-1][1]) for c in _clusters]
-            print("[cluster] Pagina 3 (Transnet + mapa cluster) ao vivo.")
+            _ok("[cluster] Pagina 3 (Transnet + mapa cluster) ao vivo.")
         # Pagina 7: piores e melhores motoristas do mes de referencia (min. 500 km)
         _mot = _dd(lambda: [0.0, 0.0, 0.0])
         for r in _pd:
@@ -1128,7 +1149,7 @@ if _inv_url and _inv_key:
                 _sa, _da = _ult_ac.get(ch, ("-", ""))
                 _st, _dt2, _pr = _ult_tr.get(ch, ("-", "", "-"))
                 PIORES_HISTORICO[ch] = (_sa, _ddmm(_da), _st, _ddmm(_dt2), _pr)
-            print(f"[inove] Pagina 7 (historico dos piores) ao vivo: {len(PIORES_HISTORICO)} chapas.")
+            _ok(f"[inove] Pagina 7 (historico dos piores) ao vivo: {len(PIORES_HISTORICO)} chapas.")
         # 14: carro principal x demais nos 30 dias de cada motorista que completou (usa premiacao_diaria)
         if _pd and _comp:
             from collections import defaultdict as _dd4
@@ -1198,7 +1219,7 @@ def pct(v):
 # ---- Conferencia das fontes ao vivo (ver _ok() no topo) ----
 # Paginas que DEVEM vir do banco. A 17 (aderencia) esta fora do relatorio e a 3/18/19
 # sao conteudo manual/derivado, por isso nao entram na conta.
-PAGINAS_ESPERADAS = {2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+PAGINAS_ESPERADAS = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 PAGINAS_EM_FALLBACK = sorted(PAGINAS_ESPERADAS - PAGINAS_AO_VIVO)
 DADOS_AO_VIVO_OK = not PAGINAS_EM_FALLBACK
 AVISO_FALLBACK = ""
@@ -1229,7 +1250,7 @@ def chart_kml_historico():
     ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=9)
     ax.set_ylim(2.55, 2.95)
     ax.set_ylabel("KM/L")
-    ax.set_title("KM/L Mensal — Transnet (oficial) — histórico 7 meses", fontsize=12, fontweight="bold", color=DARK)
+    ax.set_title(f"KM/L Mensal — Transnet (oficial) — histórico de {len(KML_HISTORICO)} meses", fontsize=12, fontweight="bold", color=DARK)
     ax.legend(loc="lower left", fontsize=8, frameon=False)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
@@ -1414,11 +1435,17 @@ def chart_aderencia_empresa_diaria():
 def chart_cluster_divergente():
     # Pequenos multiplos: um mini-grafico de linha por cluster, ultimos 4 meses.
     # Cluster = agrupamento real de veiculos (veiculos_ativos.per_cluster), nao de linhas.
-    clusters_ordem = ["C6", "C8", "C9", "C10", "C11"]
-    fig, axes = plt.subplots(1, 5, figsize=(12.6, 3.4), sharey=True)
+    # Ordem e quantidade saem do proprio dicionario: com a lista fixa, um cluster novo na
+    # frota nao apareceria e um cluster removido derrubaria o grafico com KeyError.
+    clusters_ordem = [c for c in ["C6", "C8", "C9", "C10", "C11"] if c in CLUSTER_HISTORICO_4M]
+    clusters_ordem += [c for c in CLUSTER_HISTORICO_4M if c not in clusters_ordem]
+    # O guard de carga aceita series de 3 meses, entao o titulo nao pode prometer 4 fixo.
+    _n_meses_cluster = max((len(s) for s in CLUSTER_HISTORICO_4M.values()), default=0)
+    fig, axes = plt.subplots(1, max(len(clusters_ordem), 1), figsize=(12.6, 3.4), sharey=True)
+    axes = np.atleast_1d(axes)
     for ax, c in zip(axes, clusters_ordem):
         serie = CLUSTER_HISTORICO_4M[c]
-        meses = [m[0].replace("/2026", "") for m in serie]
+        meses = [m[0].split("/")[0] for m in serie]   # "Abr/2026" -> "Abr" (era replace fixo em 2026)
         vals = [m[1] for m in serie]
         x = list(range(len(vals)))
         cor = GREEN if vals[-1] >= vals[0] else RED
@@ -1434,7 +1461,7 @@ def chart_cluster_divergente():
             ax.spines[s].set_visible(False)
         ax.grid(axis="y", linestyle=":", alpha=0.35)
     axes[0].set_ylabel("KM/L", fontsize=10)
-    fig.suptitle("KM/L por Cluster de Frota — Últimos 4 Meses (linha tracejada = meta 2,80)", fontsize=13, fontweight="bold", color=DARK, y=1.03)
+    fig.suptitle(f"KM/L por Cluster de Frota — últimos {_n_meses_cluster} meses (linha tracejada = meta {META:.2f})", fontsize=13, fontweight="bold", color=DARK, y=1.03)
     fig.tight_layout()
     fig.savefig(OUT / "v3_cluster.png", dpi=150, transparent=True, bbox_inches="tight")
     plt.close(fig)

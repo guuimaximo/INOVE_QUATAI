@@ -1,5 +1,6 @@
 # Monta o HTML (paginas, A4 paisagem) do Flash Report Diesel v3 e converte pra PDF.
 from pathlib import Path
+from collections import Counter as _Counter
 import importlib.util
 
 OUT = Path(__file__).resolve().parent
@@ -11,7 +12,7 @@ spec.loader.exec_module(gfd)
 
 fmt = gfd.fmt
 pct = gfd.pct
-SEM = getattr(gfd, "SEMANA_ATUAL_LABEL", "28/06 a 03/07")  # janela recente (Pags 9 e 12)
+SEM = gfd.SEMANA_ATUAL_LABEL   # janela das Pags 9 e 12: dia 01 ate ontem
 MESREF = getattr(gfd, "MES_REF_LABEL", "Junho de 2026")     # ex.: "Julho/2026"
 MESANT = getattr(gfd, "MES_ANT_LABEL", "Maio/2026")         # ex.: "Junho/2026"
 MESREF_NOME, MESANT_NOME = MESREF.split("/")[0], MESANT.split("/")[0]
@@ -177,6 +178,42 @@ for c in gfd.CLUSTER_TRANSNET:
                                f"<td>{fmt(c[1],3)}</td><td style='font-weight:700;'>{fmt(c[2],3)}</td>"
                                f"<td style='color:{'#16a34a' if var>0 else '#dc2626'};font-weight:bold;'>{pct(var)}</td></tr>")
 
+# As duas leituras abaixo eram texto fixo ("C6 ... 2,37-2,40", "C9 e C11 ... +0,61% e +0,09%")
+# ao lado de uma tabela que recalcula esses mesmos numeros toda semana. Agora saem dos dados.
+# CLUSTER_TRANSNET: (cluster, kml_mes_anterior, kml_mes_ref).
+_cl = list(gfd.CLUSTER_TRANSNET)
+_cl_var = {c[0]: ((c[2] - c[1]) / c[1] * 100 if c[1] else 0) for c in _cl}
+_cl_pior = min(_cl, key=lambda c: c[2])
+_cl_hist_pior = gfd.CLUSTER_HISTORICO_4M.get(_cl_pior[0], [])
+_cl_faixa = (f"{fmt(min(m[1] for m in _cl_hist_pior),2)}–{fmt(max(m[1] for m in _cl_hist_pior),2)}"
+             if _cl_hist_pior else fmt(_cl_pior[2], 2))
+_cl_sobe = [c[0] for c in _cl if _cl_var[c[0]] > 0]
+_cl_abaixo = [c[0] for c in _cl if c[2] < gfd.META]
+_cl_bate = [c for c in _cl if c[2] >= gfd.META]
+_cl_perto = sorted(_cl, key=lambda c: abs(c[2] - gfd.META))[:2]
+# Os "mais distantes" excluem os que ja foram citados como mais proximos, para a frase nao
+# listar o mesmo cluster nos dois lados quando a frota inteira esta abaixo da meta.
+_cl_longe = [c[0] for c in sorted(_cl, key=lambda c: c[2])[:2] if c[0] not in {p[0] for p in _cl_perto}]
+
+_txt_cl_pior = (f"{_cl_pior[0]} é o cluster com pior KM/L do período ({fmt(_cl_pior[2],3)}), "
+                f"variando entre {_cl_faixa} nos últimos {len(_cl_hist_pior) or 1} meses, "
+                f"abaixo da meta de {fmt(gfd.META,2)} — padrão estrutural do cluster "
+                f"(veículo/linha), não evento pontual.")
+if _cl_sobe:
+    _txt_cl_bom = (f"{', '.join(_cl_sobe)} {'são os' if len(_cl_sobe)>1 else 'é o'} "
+                   f"{'únicos' if len(_cl_sobe)>1 else 'único'} com evolução positiva no mês "
+                   f"({', '.join(pct(_cl_var[c]) for c in _cl_sobe)}). ")
+else:
+    _txt_cl_bom = "Nenhum cluster evoluiu positivamente no mês. "
+_txt_cl_bom += f"Mais próximos da meta: {', '.join(f'{c[0]} ({fmt(c[2],3)})' for c in _cl_perto)}"
+if not _cl_bate:
+    _txt_cl_bom += (f" — mas nenhum dos {len(_cl)} clusters atingiu {fmt(gfd.META,2)}"
+                    + (f"; {' e '.join(_cl_longe)} seguem os mais distantes." if _cl_longe else "."))
+elif _cl_abaixo:
+    _txt_cl_bom += f"; {', '.join(_cl_abaixo)} seguem abaixo dela."
+else:
+    _txt_cl_bom += " — todos os clusters na meta."
+
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 3 · KM/L por Cluster de Frota (Transnet oficial)", f"Período: <b>{periodo_label}</b> · Cluster = agrupamento de veículos (veiculos_ativos)", "Mês de referência", MESREF)}
   <div class="card"><div class="card-title">KM/L por Cluster de Frota — últimos 4 meses</div><div class="card-body">
@@ -189,23 +226,40 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     </div></div>
     <div class="card"><div class="card-title">Leitura por cluster</div><div class="card-body">
       <div class="cons-box" style="margin-top:0;"><div class="cons-title">Cluster mais crítico</div>
-      <div class="cons-text">C6 é o cluster com pior KM/L de forma consistente nos 4 meses (2,37–2,40), bem abaixo da meta de 2,80 — não é um evento pontual, e sim um padrão estrutural do cluster (veículo/linha) que merece investigação dedicada.</div></div>
+      <div class="cons-text">{_txt_cl_pior}</div></div>
       <div class="cons-box"><div class="cons-title">Melhor evolução e mais perto da meta</div>
-      <div class="cons-text">C9 e C11 são os únicos com evolução positiva no mês (+0,61% e +0,09%). C10 e C11 seguem os clusters mais próximos da meta de 2,80 km/L (~2,75-2,78), enquanto C6 e C8 permanecem estruturalmente abaixo dela.</div></div>
+      <div class="cons-text">{_txt_cl_bom}</div></div>
     </div></div>
   </div>
   {footer(3)}
 </div>""")
 
 # ================= PAGINA 4: LINHA VS META + VELOCIDADE (formato completo) =================
-kml_ref_medio = sum(l[7] for l in gfd.LINHA_DESPERDICIO) / sum(l[6]/l[2] for l in gfd.LINHA_DESPERDICIO)
+# (kml_ref_medio foi removido: era calculado e nunca usado, e concorria com kml_ref_pond,
+#  que e o valor de fato exibido no tile "KM/L Mes Referencia".)
 kml_comp_medio = sum(l[1]*l[6] for l in gfd.LINHA_DESPERDICIO) / sum(l[6] for l in gfd.LINHA_DESPERDICIO)
 kml_ref_pond = sum(l[6] for l in gfd.LINHA_DESPERDICIO) / sum(l[7] for l in gfd.LINHA_DESPERDICIO)
 var_geral = (kml_ref_pond - kml_comp_medio) / kml_comp_medio * 100
 desperdicio_total = sum(l[5] for l in gfd.LINHA_DESPERDICIO)
 
+# Os tres quadros de apoio traziam linhas e valores colados de uma execucao antiga
+# (07TR 1.588,97 L etc.), ao lado de uma tabela que se atualiza toda semana. Agora saem
+# de LINHA_DESPERDICIO: (linha, kml_ant, kml_ref, var_pct, meta, desperdicio_L, km, litros).
+# O quadro "piores linhas" virou "concentracao": repetia as 3 primeiras linhas da tabela
+# logo acima, que ja e ordenada por desperdicio.
+_ld_ord = sorted(gfd.LINHA_DESPERDICIO, key=lambda l: -l[5])
+_ld_top3 = _ld_ord[:3]
+_desp_tot = sum(l[5] for l in gfd.LINHA_DESPERDICIO) or 1
+_p4_conc = (f"As 3 linhas de maior desperdício somam <b>{fmt(sum(l[5] for l in _ld_top3),0)} L</b>, "
+            f"<b>{fmt(100*sum(l[5] for l in _ld_top3)/_desp_tot,0)}%</b> do total de "
+            f"{fmt(_desp_tot,0)} L em {len(gfd.LINHA_DESPERDICIO)} linhas.")
+_ld_sobe = sorted(gfd.LINHA_DESPERDICIO, key=lambda l: -l[3])[:3]
+_ld_cai = sorted(gfd.LINHA_DESPERDICIO, key=lambda l: l[3])[:3]
+_p4_melhores = "<br/>".join(f"<b>{l[0]}</b> ({pct(l[3])})" for l in _ld_sobe) or "—"
+_p4_pioraram = "<br/>".join(f"<b>{l[0]}</b> ({pct(l[3])})" for l in _ld_cai) or "—"
+
 rows_linha_completa = ""
-for l in sorted(gfd.LINHA_DESPERDICIO, key=lambda l: -l[5]):
+for l in _ld_ord:
     nome, kml_mai, kml_jun, var, meta, desp, km, lit = l
     cor_var = "#16a34a" if var >= 0 else "#dc2626"
     seta = "&#8593;" if var >= 0 else "&#8595;"
@@ -230,12 +284,12 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <tbody>{rows_linha_completa.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
   </div></div>
   <div class="grid-3" style="margin-top:8px;">
-    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Piores linhas (maior desperdício)</div>
-    <div class="cons-text" style="font-size:10px;"><b>07TR</b> (1.588,97 L)<br/><b>08TR</b> (901,83 L)<br/><b>09TR</b> (695,26 L)</div></div>
+    <div class="cons-box" style="margin-top:0;"><div class="cons-title">Concentração do desperdício</div>
+    <div class="cons-text" style="font-size:10px;">{_p4_conc}</div></div>
     <div class="cons-box" style="margin-top:0;"><div class="cons-title">Melhores linhas (maior evolução {MES3ANT}→{MES3REF})</div>
-    <div class="cons-text" style="font-size:10px;"><b>16TR</b> (+7,32%)<br/><b>02TR</b> (+3,91%)<br/><b>08TR</b> (+1,88%)</div></div>
+    <div class="cons-text" style="font-size:10px;">{_p4_melhores}</div></div>
     <div class="cons-box" style="margin-top:0;"><div class="cons-title">Linhas que mais pioraram</div>
-    <div class="cons-text" style="font-size:10px;"><b>11TR</b> (-2,88%)<br/><b>07TR</b> (-2,81%)<br/><b>15TR</b> (-2,36%)</div></div>
+    <div class="cons-text" style="font-size:10px;">{_p4_pioraram}</div></div>
   </div>
   {footer(4)}
 </div>""")
@@ -416,30 +470,68 @@ for a in gfd.DESTAQUE_POSITIVO:
                        f"<td>{fmt(a[1],3)}</td><td>{fmt(a[2],3)}</td>"
                        f"<td style='color:#16a34a;font-weight:800;'>{pct(a[3])}</td></tr>")
 
+# O texto da carteira citava "Fabiano Freitas e Helio Ramos" e "quase igualmente" como
+# literais. MOTORISTAS_SEMANA: (nome, chapa, instrutor, data, foco).
+_ms = list(gfd.MOTORISTAS_SEMANA)
+_ms_inst = _Counter(m[2] for m in _ms if m[2])
+_ms_foco = _Counter(m[4] for m in _ms if m[4])
+if len(_ms_inst) >= 2:
+    (_i1, _n1), (_i2, _n2) = _ms_inst.most_common(2)
+    _equil = "dividida quase igualmente" if abs(_n1 - _n2) <= max(1, 0.2 * len(_ms)) else "concentrada"
+    _txt_inst = f"{_equil} entre {_i1} ({_n1}) e {_i2} ({_n2})"
+elif _ms_inst:
+    _txt_inst = f"concentrada em {_ms_inst.most_common(1)[0][0]}"
+else:
+    _txt_inst = "sem instrutor identificado"
+_txt_carteira = (f"A carteira do período ({len(_ms)} motoristas) está {_txt_inst}"
+                 + (f", com foco predominante em \"{_ms_foco.most_common(1)[0][0]}\"" if _ms_foco else "")
+                 + " — sinal de que o acompanhamento está sendo direcionado aos motoristas "
+                   "mais distantes da meta, e não apenas aos casos já resolvidos.")
+
 rows_semana = ""
-for m in gfd.MOTORISTAS_SEMANA:
+for m in _ms:
     rows_semana += (f"<tr><td style='text-align:left;padding-left:6px;'>{m[0].title()}</td><td>{m[1]}</td>"
                      f"<td>{m[2]}</td><td>{m[3]}</td><td style='text-align:left;font-size:7.6px;'>{m[4]}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 9 · Destaque Positivo e Motoristas da Semana", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
+  {page_header("Página 9 · Destaque Positivo e Motoristas em Acompanhamento", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
   <div class="grid-2">
     <div class="card"><div class="card-title">Destaque Positivo — maior evolução {MESANT_NOME}→{MESREF_NOME}</div><div class="card-body">
       <div class="chart-wrap chart-wrap-sm"><img src="v3_destaque.png"/></div>
       <table class="tbl-compact" style="margin-top:5px;"><thead><tr><th style="text-align:left;padding-left:6px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Variação</th></tr></thead>
       <tbody>{rows_destaque}</tbody></table>
     </div></div>
-    <div class="card"><div class="card-title">Motoristas da Semana — foco de acompanhamento ({SEM})</div><div class="card-body">
+    <div class="card"><div class="card-title">Motoristas em acompanhamento no período ({SEM})</div><div class="card-body">
       <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Motorista</th><th>Chapa</th><th>Instrutor</th><th>Data</th><th style="text-align:left;">Foco</th></tr></thead>
       <tbody>{rows_semana.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
-      <div class="cons-box"><div class="cons-title">Leitura da semana</div>
-      <div class="cons-text">A carteira desta semana é dividida quase igualmente entre Fabiano Freitas e Helio Ramos, com foco predominante em "KM/L abaixo da meta" — sinal de que o acompanhamento está sendo direcionado corretamente aos motoristas mais distantes da meta, e não apenas aos casos já resolvidos.</div></div>
+      <div class="cons-box"><div class="cons-title">Leitura do período</div>
+      <div class="cons-text">{_txt_carteira}</div></div>
     </div></div>
   </div>
   {footer(9)}
 </div>""")
 
 # ================= PAGINA 7: TRATATIVAS (melhorada, com meta vs real) =================
+# Este paragrafo era fixo ("Das 91 tratativas, 68% ... As 27 atrasadas ... 07TR/08TR/10TR")
+# e batia por acaso com o fallback, entao contradizia os tiles assim que o dado ao vivo
+# entrasse. Agora sai de TRATATIVAS / TRATATIVAS_ATRASADAS.
+# TRATATIVAS_ATRASADAS: (nome, chapa, linha, prioridade, dias_aberto, kml_meta, kml_real).
+_tr_tot = gfd.TRATATIVAS["total"] or 1
+_tr_st = gfd.TRATATIVAS["por_status"]
+_tr_conc, _tr_atr = _tr_st.get("CONCLUIDA", 0), _tr_st.get("ATRASADA", 0)
+_tr_linhas = _Counter(t[2] for t in gfd.TRATATIVAS_ATRASADAS if t[2] and t[2] != "-")
+_tr_prio = _Counter(t[3] for t in gfd.TRATATIVAS_ATRASADAS if t[3] and t[3] != "-")
+_txt_tratativas = (f"Das {gfd.TRATATIVAS['total']} tratativas, "
+                   f"{fmt(100*_tr_conc/_tr_tot,0)}% foram concluídas dentro do SLA.")
+if _tr_atr:
+    _tr_top = ", ".join(l for l, _ in _tr_linhas.most_common(3))
+    _txt_tratativas += (f" As {_tr_atr} atrasadas"
+                        + (f" concentram-se em {_tr_top}" if _tr_top else "")
+                        + (f" e prioridade {_tr_prio.most_common(1)[0][0]}" if _tr_prio else "")
+                        + " — mutirão de encerramento recomendado nesta semana.")
+else:
+    _txt_tratativas += " Nenhuma tratativa com SLA vencido no período."
+
 rows_tratativas_atrasadas = ""
 for t in gfd.TRATATIVAS_ATRASADAS:
     delta = t[6]-t[5]
@@ -472,7 +564,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
         <div class="metric"><div class="lbl">Pendentes no prazo</div><div class="val">{gfd.TRATATIVAS['por_status']['PENDENTE_NO_PRAZO']}</div></div>
       </div>
       <div class="cons-box" style="margin-top:6px;"><div class="cons-title">Considerações</div>
-      <div class="cons-text">Das 91 tratativas, 68% foram concluídas dentro do SLA. As 27 atrasadas concentram-se em 07TR/08TR/10TR e prioridade Alta — mutirão de encerramento recomendado nesta semana.</div></div>
+      <div class="cons-text">{_txt_tratativas}</div></div>
     </div></div>
   </div>
   <div class="card"><div class="card-title">Atrasadas — SLA vencido, com KM/L Meta vs Real (top 15 por dias em aberto)</div><div class="card-body">
@@ -487,10 +579,30 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 </div>""")
 
 # ================= PAGINA 8: INSTRUTORES APROFUNDADO =================
+# A leitura citava "Fabiano"/"Helio" como literais presos aos indices [0] e [1]: se a ordem
+# da lista mudasse (a carga ao vivo nao garante ordem), o numero de um sairia com o nome do
+# outro. E repetia em prosa os tres tiles logo acima. Agora os nomes saem dos dados e o
+# texto guarda so a interpretacao.
+_inst = list(gfd.INSTRUTORES)
+_inst_nomes = " + ".join(i["nome"].split()[0] for i in _inst) or "instrutores"
+_inst_novos = sum(i["novos"] for i in _inst)
+_inst_taxas = [i["taxa_atingiu_meta"] for i in _inst]
+_txt_instrutores = (
+    f"Dos {_inst_novos} acompanhamentos iniciados em {MESREF_NOME}, a maior parte segue dentro "
+    f"do ciclo de 30 dias — por isso aparecem majoritariamente como \"em monitoramento\". "
+    + (f"A efetividade (leitura inicial já na meta) fica entre "
+       f"{fmt(min(_inst_taxas),1)}% e {fmt(max(_inst_taxas),1)}%"
+       + (" — parecida entre os instrutores, " if max(_inst_taxas) - min(_inst_taxas) <= 5
+          else " — com diferença relevante entre eles, ")
+       + ("sinal de que o gargalo é o modelo de acompanhamento, não o instrutor: vale testar "
+          "ciclos mais curtos com reforço em campo nos primeiros 10 dias."
+          if max(_inst_taxas) - min(_inst_taxas) <= 5 else
+          "o que sugere olhar a abordagem individual antes de mudar o modelo.")
+       if _inst_taxas else ""))
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 11 · Instrutores — Análise Aprofundada", f"Base: diesel_acompanhamentos (Supabase INOVE) · recorte {MESREF} — novos acompanhamentos iniciados no mês + desfechos ocorridos no mês", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
   <div class="grid-3" style="margin-bottom:6px;">
-    <div class="metric"><div class="lbl">Novos acompanhamentos (iniciados em {MESREF_NOME.lower()})</div><div class="val">{sum(i['novos'] for i in gfd.INSTRUTORES)}</div><div class="aux">Fabiano + Helio · ainda no ciclo de 30 dias</div></div>
+    <div class="metric"><div class="lbl">Novos acompanhamentos (iniciados em {MESREF_NOME.lower()})</div><div class="val">{sum(i['novos'] for i in gfd.INSTRUTORES)}</div><div class="aux">{_inst_nomes} · ainda no ciclo de 30 dias</div></div>
     <div class="metric"><div class="lbl">Desfechos em {MESREF_NOME.lower()} — Concluídos (OK)</div><div class="val" style="color:#16a34a;">{sum(i['desf_ok'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês atingindo a meta</div></div>
     <div class="metric"><div class="lbl">Desfechos em {MESREF_NOME.lower()} — viraram ATA</div><div class="val" style="color:#dc2626;">{sum(i['desf_ata'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês sem atingir a meta</div></div>
   </div>
@@ -503,11 +615,43 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     </div></div>
   </div>
   <div class="cons-box"><div class="cons-title">Leitura analítica</div>
-  <div class="cons-text">Em {MESREF_NOME} iniciaram-se {sum(i['novos'] for i in gfd.INSTRUTORES)} novos acompanhamentos (Fabiano {gfd.INSTRUTORES[0]['novos']}, Helio {gfd.INSTRUTORES[1]['novos']}), quase todos ainda dentro do ciclo de 30 dias — por isso aparecem majoritariamente como "em monitoramento". Já os ciclos que se encerraram no mês somaram {sum(i['desf_ok'] for i in gfd.INSTRUTORES)} concluídos na meta (OK) e {sum(i['desf_ata'] for i in gfd.INSTRUTORES)} que viraram ATA. A efetividade (leitura inicial já na meta) é parecida entre os dois — {fmt(gfd.INSTRUTORES[0]['taxa_atingiu_meta'],1)}% (Fabiano) e {fmt(gfd.INSTRUTORES[1]['taxa_atingiu_meta'],1)}% (Helio) — sinal de que o gargalo é o modelo de acompanhamento, não o instrutor: vale testar ciclos mais curtos com reforço em campo nos primeiros 10 dias.</div></div>
+  <div class="cons-text">{_txt_instrutores}</div></div>
   {footer(11)}
 </div>""")
 
 # ================= PAGINA 10b: INSTRUTORES - APROVEITAMENTO DO DIA (ultima semana) =================
+# Os dois paragrafos traziam "5 dias (29/06 a 03/07)", "32-34 minutos", "9-10 por dia" e
+# "~65%" digitados - a janela era literal de junho num relatorio de julho. Tudo derivado
+# agora. INSTRUTORES_DIA_A_DIA: (data, instrutor, n_sessoes, tempo_total, tempo_medio_min).
+_dad = list(gfd.INSTRUTORES_DIA_A_DIA)
+_dia_ct = len({d[0] for d in _dad})
+_dia_sess = [d[2] for d in _dad if d[2]]
+_dia_min = [d[4] for d in _dad if d[4]]
+_idi = list(gfd.INSTRUTORES_DIARIO)
+_apr = [i["aproveitamento_dia_pct"] for i in _idi] or [0]
+_apr_med = sum(_apr) / len(_apr)
+_h_med = (sum(i["media_h_dia"] for i in _idi) / len(_idi)) if _idi else 0
+_ocioso_h = max(0.0, 8 - _h_med)
+
+
+def _faixa(v, d=0):
+    """'32-34' quando ha dispersao, '33' quando nao."""
+    if not v:
+        return "—"
+    lo, hi = min(v), max(v)
+    return fmt(lo, d) if abs(hi - lo) < (1 if d == 0 else 0.1) else f"{fmt(lo,d)}-{fmt(hi,d)}"
+
+
+_txt_p12_campo = (f"O período ({SEM}) teve {_dia_ct} "
+                  f"{'dia' if _dia_ct == 1 else 'dias'} de acompanhamento em campo, com sessões "
+                  f"em torno de {_faixa(_dia_min)} minutos e volume de {_faixa(_dia_sess)} "
+                  f"acompanhamentos por dia entre os instrutores.")
+_txt_p12_jornada = (
+    f"No período, os instrutores ocuparam em média {fmt(_apr_med,0)}% da jornada de 8h com "
+    f"acompanhamentos ({fmt(_h_med,1)}h/dia), com sessões de {_faixa(_dia_min)} minutos — tempo "
+    f"consistente, que não parece ser o gargalo. O restante do dia (~{fmt(_ocioso_h,1)}h) "
+    f"provavelmente é deslocamento entre linhas/veículos e espera; se isso puder ser reduzido, "
+    f"cada instrutor teria margem para mais acompanhamentos sem aumentar a carga horária.")
 rows_inst_diario = ""
 for d in gfd.INSTRUTORES_DIA_A_DIA:
     data_, inst, n, thoras, tmed = d
@@ -515,7 +659,7 @@ for d in gfd.INSTRUTORES_DIA_A_DIA:
                           f"<td>{n}</td><td>{thoras}</td><td>{tmed} min</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 12 · Instrutores — Aproveitamento do Dia (última semana)", f"Base: diesel_acompanhamento_sessoes — período de {SEM}", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
+  {page_header("Página 12 · Instrutores — Aproveitamento do Dia", f"Base: diesel_acompanhamento_sessoes — período de {SEM}", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
   <div class="grid-2">
     <div class="card"><div class="card-title">Aproveitamento do dia — % da jornada (8h) ocupada</div><div class="card-body">
       <div class="chart-wrap chart-wrap-tall"><img src="v3_instrutores_diario.png"/></div>
@@ -524,11 +668,11 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <table class="tbl-big"><thead><tr><th>Data</th><th style="text-align:left;">Instrutor</th><th>Acompanhamentos</th><th>Tempo Total</th><th>Tempo Médio</th></tr></thead>
       <tbody>{rows_inst_diario}</tbody></table>
       <div class="cons-box"><div class="cons-title">Leitura</div>
-      <div class="cons-text">A semana teve 5 dias de acompanhamento em campo (29/06 a 03/07), com sessões concentradas em torno de 32-34 minutos e volume estável de 9-10 acompanhamentos por dia entre os dois instrutores.</div></div>
+      <div class="cons-text">{_txt_p12_campo}</div></div>
     </div></div>
   </div>
   <div class="cons-box"><div class="cons-title">Leitura analítica</div>
-  <div class="cons-text">Nesta semana, ambos os instrutores ocuparam cerca de 2/3 da jornada de 8h com acompanhamentos (~65%), com sessões de 32-34 minutos em média — tempo consistente e não parece ser o gargalo. O 1/3 restante do dia (~2h40) provavelmente é deslocamento entre linhas/veículos e espera; se isso puder ser reduzido, cada instrutor teria margem para mais 3-4 acompanhamentos por dia sem aumentar a carga horária.</div></div>
+  <div class="cons-text">{_txt_p12_jornada}</div></div>
   {footer(12)}
 </div>""")
 
@@ -663,6 +807,14 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 </div>""")
 
 # ================= PAGINA 10: MERITOCRACIA =================
+# "Quase 68%" era digitado ao lado da propria contagem interpolada, e as faixas "R$ 100 e
+# R$ 150" tambem eram literais - divergiriam do dado ao vivo.
+_mr = gfd.MERITOCRACIA_RESUMO
+_p15_pct = fmt(100 * _mr["distribuicao"].get("R$ 0", 0) / (_mr["total_motoristas"] or 1), 0)
+_p15_top = [f for f, n in sorted(((f, n) for f, n in _mr["distribuicao"].items() if f != "R$ 0"),
+                                 key=lambda x: -x[1])[:2]]
+_p15_faixas = " e ".join(_p15_top) if _p15_top else "—"
+
 rows_merito = ""
 for m in gfd.MERITOCRACIA_TOP:
     rows_merito += (f"<tr><td style='text-align:left;padding-left:6px;'>{m[0].title()}</td><td>{m[1]}</td>"
@@ -681,7 +833,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       </div>
       <div class="metric" style="margin-top:8px;"><div class="lbl">Taxa de premiação</div><div class="val">{fmt(100*gfd.MERITOCRACIA_RESUMO['motoristas_premiados']/gfd.MERITOCRACIA_RESUMO['total_motoristas'],1)}%</div><div class="aux">dos motoristas elegíveis receberam algum valor</div></div>
       <div class="cons-box"><div class="cons-title">Leitura</div>
-      <div class="cons-text">Quase 68% dos motoristas elegíveis ({gfd.MERITOCRACIA_RESUMO['distribuicao']['R$ 0']} de {gfd.MERITOCRACIA_RESUMO['total_motoristas']}) não receberam nenhum valor no mês — a régua de premiação está concentrada nas faixas de R$ 100 e R$ 150, o que sugere espaço para uma faixa intermediária que incentive quem está perto de bater a meta, mas ainda não bate.</div></div>
+      <div class="cons-text">{_p15_pct}% dos motoristas elegíveis ({gfd.MERITOCRACIA_RESUMO['distribuicao']['R$ 0']} de {gfd.MERITOCRACIA_RESUMO['total_motoristas']}) não receberam nenhum valor no mês — a régua de premiação está concentrada nas faixas de {_p15_faixas}, o que sugere espaço para uma faixa intermediária que incentive quem está perto de bater a meta, mas ainda não bate.</div></div>
     </div></div>
   </div>
   <div class="card"><div class="card-title">Top 10 maiores premiações ({MESREF})</div><div class="card-body" style="padding:6px 10px;">
@@ -692,6 +844,15 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 </div>""")
 
 # ================= PAGINA 11: DIVERGENCIA TELEMETRIA X TRANSNET =================
+# "os 6 carros acima" e o corte ">25%" eram digitados; a lista tem tamanho variavel (o
+# agregador corta em 8) e o menor desvio muda a cada semana.
+# DIVERGENCIA_CARROS: (carro, kml_transnet, kml_telemetria, divergencia_pct, km).
+_dv = list(gfd.DIVERGENCIA_CARROS)
+_p16_n = len(_dv)
+_p16_plural = "carro" if _p16_n == 1 else "carros"
+_p16_essas = "esse caso não é apenas estilo de condução" if _p16_n == 1 else \
+             f"os {_p16_n} casos acima não são apenas estilo de condução"
+_p16_min = fmt(min(abs(d[3]) for d in _dv), 0) if _dv else "10"
 rows_diverg = ""
 for d in sorted(gfd.DIVERGENCIA_CARROS, key=lambda x: -abs(x[3])):
     rows_diverg += (f"<tr><td style='font-weight:bold;text-align:left;padding-left:6px;'>{d[0]}</td>"
@@ -709,7 +870,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Carro</th><th>KM/L Transnet</th><th>KM/L Telemetria</th><th>Diferença</th><th>Km no período</th></tr></thead>
       <tbody>{rows_diverg.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Considerações</div>
-      <div class="cons-text">Ao abrir o corte para ≥10%, nenhum carro novo aparece — a base é bimodal: ou a divergência é enorme (>25%, os 6 carros acima) ou é pequena (abaixo de 10%). Isso reforça que os 6 casos acima não são apenas estilo de condução, e sim fortes candidatos a problema de calibração de sensor ou telemetria com falha de leitura. Recomenda-se checagem física nesses veículos antes de usar o dado de Telemetria para decisões individuais sobre eles.</div></div>
+      <div class="cons-text">Ao abrir o corte para ≥10%, nenhum carro novo aparece — a base é bimodal: ou a divergência é enorme (≥{_p16_min}%, {_p16_n} {_p16_plural} acima) ou é pequena (abaixo de 10%). Isso reforça que {_p16_essas}, e sim fortes candidatos a problema de calibração de sensor ou telemetria com falha de leitura. Recomenda-se checagem física nesses veículos antes de usar o dado de Telemetria para decisões individuais sobre eles.</div></div>
     </div></div>
   </div>
   {footer(16)}

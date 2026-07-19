@@ -44,6 +44,9 @@ MES_REF_NOME = _MESES_PT[MES_REF_MM - 1]                           # ex.: "Julho
 MES_ANT_NOME = _MESES_PT[MES_ANT_MM - 1]                           # ex.: "Junho"
 MES3_REF = _MES3[MES_REF_MM - 1]                                   # ex.: "Jul"
 MES3_ANT = _MES3[MES_ANT_MM - 1]                                   # ex.: "Jun"
+# Janela das Paginas 9 e 12. Fica aqui (e nao dentro do bloco que exige credencial) para
+# nunca faltar: quando faltava, o HTML caia num literal de junho via getattr.
+SEMANA_ATUAL_LABEL = f"01/{MES_REF_MM:02d} a {_ONTEM.day:02d}/{_ONTEM.month:02d}"
 
 # ---- Rastreio das fontes ao vivo ----------------------------------------------------
 # Cada bloco de dados tem um fallback fixo (dados de um mes antigo) para o script nao
@@ -954,7 +957,6 @@ if _inv_url and _inv_key:
     # ---- Paginas 12 (aproveitamento do dia) e 9 (motoristas da semana): sessoes do 1o do mes ate hoje ----
     _hoje2 = _HOJE
     _win_ini = MES_INI
-    SEMANA_ATUAL_LABEL = f"01/{MES_REF_MM:02d} a {_ONTEM.day:02d}/{_ONTEM.month:02d}"
     _DIAS_PT = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
     try:
         _ss, _off = [], 0

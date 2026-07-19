@@ -783,7 +783,10 @@ if _bcnt_url and _bcnt_key:
         # 5 dias, nao 20: o recorte vai do dia 01 ate ontem, entao no inicio do mes nunca
         # haveria 20 dias e a pagina caia no fallback (dados do mes anterior com titulo do
         # mes corrente). 5 pontos ja sustentam a correlacao KM/L x velocidade.
-        if len(_kv) >= 5:
+        # Nos primeiros dias do mes nao existem 5 dias fechados; exigir 5 fixo faria a
+        # pagina cair no fallback (serie do mes anterior sob o titulo do mes corrente).
+        _dias_possiveis = (_ONTEM - MES_INI).days + 1
+        if len(_kv) >= min(5, max(2, _dias_possiveis)):
             KML_VELOCIDADE_DIARIO = _kv
             _ok("[bcnt] Pagina 6 (kml x velocidade diario) ao vivo.")
 
@@ -1314,7 +1317,8 @@ def chart_kml_historico():
     ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=9)
     ax.set_ylim(2.55, 2.95)
     ax.set_ylabel("KM/L")
-    ax.set_title(f"KM/L Mensal — Transnet (oficial) — histórico de {len(KML_HISTORICO)} meses", fontsize=12, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title(f"KM/L Mensal — Transnet (oficial) — histórico de {len(KML_HISTORICO)} meses", fontsize=12, fontweight="bold", color=DARK)
     ax.legend(loc="lower left", fontsize=8, frameon=False)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
@@ -1338,7 +1342,8 @@ def chart_semanal_evolucao():
     ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=7.6, rotation=0)
     ax.set_ylim(2.3, 2.95)
     ax.set_ylabel("KM/L")
-    ax.set_title("Evolução Semana a Semana — Transnet (últimas 8 semanas)", fontsize=12, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title("Evolução Semana a Semana — Transnet (últimas 8 semanas)", fontsize=12, fontweight="bold", color=DARK)
     ax.legend(loc="lower left", fontsize=8, frameon=False)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
@@ -1372,7 +1377,8 @@ def chart_semanal_variacao_pct_com_kml():
         ax2.text(xi, v + 0.012, fmt(v, 3), ha="center", fontsize=7, color=TEAL)
     ax2.set_ylabel("KM/L da semana", color=TEAL)
     ax2.tick_params(axis="y", colors=TEAL)
-    ax1.set_title("Evolução da Variação Semanal (%) e KM/L da Semana — Transnet", fontsize=11.5, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax1.set_title("Evolução da Variação Semanal (%) e KM/L da Semana — Transnet", fontsize=11.5, fontweight="bold", color=DARK)
     for s_ in ["top"]:
         ax1.spines[s_].set_visible(False); ax2.spines[s_].set_visible(False)
     ax1.grid(axis="y", linestyle=":", alpha=0.4)
@@ -1398,7 +1404,8 @@ def chart_instrutores_diario():
     ax.set_yticks(list(y)); ax.set_yticklabels(nomes, fontsize=10)
     ax.set_xlim(0, 110)
     ax.set_xlabel("% da jornada (8h) ocupada com acompanhamentos", fontsize=10)
-    ax.set_title("Aproveitamento do Dia — Instrutores (última semana)", fontsize=11, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title("Aproveitamento do Dia — Instrutores (última semana)", fontsize=11, fontweight="bold", color=DARK)
     for s_ in ["top", "right"]:
         ax.spines[s_].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)
@@ -1420,7 +1427,8 @@ def chart_aderencia_carros():
     ax.set_yticks(list(y)); ax.set_yticklabels([f"Carro {l}" for l in labels], fontsize=8.8)
     ax.set_xlim(0, 70)
     ax.set_xlabel(f"% de dias com dado válido de Transnet ({MES_REF_LABEL})")
-    ax.set_title("Menor Aderência de Dados — Carros com Falha de Reporte", fontsize=10.8, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title("Menor Aderência de Dados — Carros com Falha de Reporte", fontsize=10.8, fontweight="bold", color=DARK)
     for s_ in ["top", "right"]:
         ax.spines[s_].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)
@@ -1486,7 +1494,8 @@ def chart_aderencia_empresa_diaria():
     ax.set_xticks(x[::2]); ax.set_xticklabels([labels[i] for i in range(0, len(labels), 2)], fontsize=7.4, rotation=45, ha="right")
     ax.set_ylim(0, 105)
     ax.set_ylabel("% da frota com dado válido")
-    ax.set_title(f"Aderência Diária da Frota (média da empresa) — {MES_REF_LABEL}", fontsize=11.5, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title(f"Aderência Diária da Frota (média da empresa) — {MES_REF_LABEL}", fontsize=11.5, fontweight="bold", color=DARK)
     ax.legend(loc="lower left", fontsize=8, frameon=False)
     for s_ in ["top", "right"]:
         ax.spines[s_].set_visible(False)
@@ -1548,7 +1557,8 @@ def chart_linha_meta_velocidade():
     ax.set_yticks(list(y)); ax.set_yticklabels(labels, fontsize=8.6)
     ax.set_xlim(-0.22, 0.30)
     ax.set_xlabel("KM/L real − Meta  (negativo = abaixo da meta)")
-    ax.set_title(f"Distância da Meta por Linha, com Velocidade Média ({MES_REF_LABEL})", fontsize=12, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title(f"Distância da Meta por Linha, com Velocidade Média ({MES_REF_LABEL})", fontsize=12, fontweight="bold", color=DARK)
     for s in ["top", "right", "left"]:
         ax.spines[s].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)
@@ -1611,7 +1621,8 @@ def chart_donut_tratativas():
     ax.text(0, 0.05, str(TRATATIVAS["total"]), ha="center", va="center", fontsize=22, fontweight="bold", color=DARK)
     ax.text(0, -0.18, "tratativas", ha="center", va="center", fontsize=9, color="#64748b")
     ax.legend(wedges, [f"{l} ({v})" for l, v in zip(labels, vals)], loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8, frameon=False)
-    ax.set_title("Tratativas do Agente Diesel — por status", fontsize=11, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title("Tratativas do Agente Diesel — por status", fontsize=11, fontweight="bold", color=DARK)
     fig.tight_layout()
     fig.savefig(OUT / "v3_donut.png", dpi=150, transparent=True, bbox_inches="tight")
     plt.close(fig)
@@ -1631,7 +1642,8 @@ def chart_instrutores_eficacia():
     ax.set_yticks(list(y)); ax.set_yticklabels(nomes, fontsize=10)
     ax.set_xlim(0, 40)
     ax.set_xlabel("% de acompanhados que atingiram a meta")
-    ax.set_title("Efetividade dos Instrutores — Taxa de Sucesso", fontsize=11.5, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title("Efetividade dos Instrutores — Taxa de Sucesso", fontsize=11.5, fontweight="bold", color=DARK)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)
@@ -1653,9 +1665,14 @@ def chart_instrutores_status():
     ax.barh(y, mon, color=GOLD, height=0.5, label="Em monitoramento")
     ax.barh(y, ok, left=mon, color=GREEN, height=0.5, label="Concluído OK")
     ax.barh(y, atas, left=[a+b for a,b in zip(mon,ok)], color=RED, height=0.5, label="Virou ATA")
+    # A ponta da barra trazia mon+ok+atas como um "total" unico, mas sao populacoes
+    # diferentes: monitorando e subconjunto dos novos do mes, e os desfechos vem de coorte
+    # anterior. Com os valores de fallback isso dava 195 na barra contra 112 no tile do
+    # topo da mesma pagina. Agora sai a composicao, sem somar o que nao se soma.
     for i, n in enumerate(nomes):
         total = mon[i] + ok[i] + atas[i]
-        ax.text(total + 3, i, f"{total}", va="center", fontsize=8.5, color=DARK)
+        partes = "+".join(str(v) for v in (mon[i], ok[i], atas[i]) if v)
+        ax.text(total + 3, i, partes or "0", va="center", fontsize=8.5, color=DARK)
     ax.set_yticks(list(y)); ax.set_yticklabels(nomes, fontsize=10)
     ax.set_xlabel("Nº de acompanhamentos")
     # Legenda so com as series que têm dado: com desfechos zerados, as entradas verde e
@@ -1674,7 +1691,9 @@ def chart_instrutores_status():
 
 def chart_antes_depois_barras():
     fig, ax = plt.subplots(figsize=(11.2, 5.0))
-    dados = sorted(ACOMPANHAMENTO, key=lambda a: a["depois"] - a["antes"])
+    # reverse=True porque barh desenha o indice 0 na base: assim a maior queda aparece
+    # no topo, na mesma ordem que a tabela da pagina anuncia.
+    dados = sorted(ACOMPANHAMENTO, key=lambda a: a["depois"] - a["antes"], reverse=True)
     nomes = [a["nome"] for a in dados]
     antes = [a["antes"] for a in dados]
     depois = [a["depois"] for a in dados]
@@ -1693,7 +1712,8 @@ def chart_antes_depois_barras():
     ax.set_yticks(list(y)); ax.set_yticklabels(nomes, fontsize=9)
     ax.set_xlim(2.0, 3.05)
     ax.set_xlabel("KM/L")
-    ax.set_title("Acompanhamento dos Instrutores — Antes x Depois (KM/L)", fontsize=12, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title("Acompanhamento dos Instrutores — Antes x Depois (KM/L)", fontsize=12, fontweight="bold", color=DARK)
     ax.legend(loc="lower right", fontsize=8, frameon=False)
     for spine in ["top", "right"]:
         ax.spines[spine].set_visible(False)
@@ -1713,7 +1733,8 @@ def chart_meritocracia_donut():
     ax.text(0, 0.05, str(MERITOCRACIA_RESUMO["motoristas_premiados"]), ha="center", va="center", fontsize=20, fontweight="bold", color=DARK)
     ax.text(0, -0.18, "premiados", ha="center", va="center", fontsize=8.5, color="#64748b")
     ax.legend(wedges, [f"{l} ({v})" for l, v in zip(labels, vals)], loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8, frameon=False)
-    ax.set_title(f"Meritocracia — Distribuição de Valores ({MES_REF_LABEL})", fontsize=10.5, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title(f"Meritocracia — Distribuição de Valores ({MES_REF_LABEL})", fontsize=10.5, fontweight="bold", color=DARK)
     fig.tight_layout()
     fig.savefig(OUT / "v3_meritocracia.png", dpi=150, transparent=True, bbox_inches="tight")
     plt.close(fig)
@@ -1733,7 +1754,8 @@ def chart_divergencia_carros():
     ax.set_yticks(list(y)); ax.set_yticklabels([f"Carro {l}" for l in labels], fontsize=8.8)
     ax.set_xlim(-46, 46)
     ax.set_xlabel("Telemetria vs Transnet — variação % do KM/L")
-    ax.set_title("Maiores Divergências Telemetria x Transnet por Carro", fontsize=11, fontweight="bold", color=DARK)
+    # titulo removido: duplicava o card-title da pagina
+    # ax.set_title("Maiores Divergências Telemetria x Transnet por Carro", fontsize=11, fontweight="bold", color=DARK)
     for s in ["top", "right", "left"]:
         ax.spines[s].set_visible(False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)

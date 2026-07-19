@@ -19,14 +19,23 @@ import {
    HELPERS (DATA / CORTE)
 ========================== */
 
+// Data YYYY-MM-DD no fuso LOCAL (BRT), nunca em UTC. Usar toISOString() direto
+// joga o dia para frente depois das 21h (UTC-3): o PCM aberto na noite do dia 18
+// nascia como 19 e, por tabela, a heranca procurava o PCM do dia errado e vinha
+// sem nenhum veiculo.
+function toISODateLocal(date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
+  return local.toISOString().slice(0, 10);
+}
+
 function todayISO() {
-  return new Date().toISOString().split("T")[0];
+  return toISODateLocal(new Date());
 }
 
 function subDaysISO(iso, days = 1) {
   const d = new Date(`${iso}T00:00:00`);
   d.setDate(d.getDate() - days);
-  return d.toISOString().split("T")[0];
+  return toISODateLocal(d);
 }
 
 function canEditPCM(dataRefISO) {

@@ -2,8 +2,8 @@ name: Bot Flash Diário · Manutenção (Telegram)
 
 on:
   schedule:
-    # Dias úteis às 10:00 BRT (13:00 UTC)
-    - cron: "0 13 * * 1-5"
+    # Dias úteis às 09:00 BRT (12:00 UTC)
+    - cron: "0 12 * * 1-5"
   workflow_dispatch:
 
 permissions:

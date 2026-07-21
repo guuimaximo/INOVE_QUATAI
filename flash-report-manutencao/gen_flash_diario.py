@@ -521,6 +521,15 @@ def gerar_html(d: dict) -> str:
     # ---------- PÁGINA 2 ----------
     parados = g["df_parados"].head(8) if not g["df_parados"].empty else pd.DataFrame()
     n_resto = max(0, g["total_parado"] - len(parados))
+
+    # Composição do total: NÃO são "parados/quebrados" — é a fila da manutenção
+    # (GNS = aguardando na oficina · PENDENTES = serviço pendente · FAIXA_AMARELA = restrição).
+    _cat = g["df_parados"]["categoria"].value_counts().to_dict() if not g["df_parados"].empty else {}
+    n_gns = int(_cat.get("GNS", 0))
+    n_pend = int(_cat.get("PENDENTES", 0))
+    n_faixa = int(_cat.get("FAIXA_AMARELA", 0))
+    minibreak = (f'GNS {n_gns} · Pend. {n_pend}'
+                 + (f' · Faixa Am. {n_faixa}' if n_faixa else ''))
     if parados.empty:
         rows_parados = '<tr><td colspan="5" class="muted">Sem carros parados na sessão mais recente</td></tr>'
     else:
@@ -634,12 +643,12 @@ def gerar_html(d: dict) -> str:
       <h1>A MANHÃ DE HOJE · <span class="accent">{_dia_semana(hoje)} {_ddmm(hoje)}</span></h1>
       <div class="sub">Como a operação amanhece · GNS, filas e alertas</div>
     </div>
-    <div class="period-box"><div class="ref">Parados agora</div><div class="val">{g["total_parado"]} carros</div></div>
+    <div class="period-box"><div class="ref">GNS + Pendentes</div><div class="val">{g["total_parado"]} carros</div></div>
   </div>
   <div class="accent-bar"></div>
 
   <div class="grid4">
-    <div class="metric b-red"><div class="lbl">Parados agora</div><div class="val">{g["total_parado"]}</div><div class="aux">sessão PCM mais recente</div></div>
+    <div class="metric b-red"><div class="lbl">GNS + Pendentes</div><div class="val">{g["total_parado"]}</div><div class="aux">{minibreak}</div></div>
     <div class="metric"><div class="lbl">GNS médio do mês</div><div class="val">{f'{g["gns_medio"]:.1f}'.replace(".", ",")}</div><div class="aux">por dia útil</div></div>
     <div class="metric b-amber"><div class="lbl">Fila de SRs</div><div class="val">{sr.get("aberto_total", 0)}</div><div class="aux">não atendidas · +{d["sr_abertas_ontem"]} ontem</div></div>
     <div class="metric red"><div class="lbl">Planos vencidos</div><div class="val">{venc.get("total_vencidos", 0)}</div><div class="aux">acuracidade {f'{venc.get("acuracidade_pct", 0):.1f}'.replace(".", ",")}%</div></div>
@@ -647,13 +656,13 @@ def gerar_html(d: dict) -> str:
 
   <div class="grid2w">
     <div class="card">
-      <div class="card-title">Carros parados — mais antigos</div>
+      <div class="card-title">GNS + Pendentes — mais antigos</div>
       <div class="card-body">
         <table>
           <thead><tr><th>Carro</th><th>Cat.</th><th>Setor</th><th>Motivo</th><th>Dias</th></tr></thead>
           <tbody>{rows_parados}</tbody>
         </table>
-        <div style="margin-top:5px;font-size:9px;color:#94a3a0;">+ {n_resto} carros parados há menos tempo</div>
+        <div style="margin-top:5px;font-size:9px;color:#94a3a0;">+ {n_resto} na fila há menos tempo</div>
       </div>
     </div>
     <div>
@@ -780,7 +789,7 @@ def montar_caption(d: dict) -> str:
         f"📊 <b>Dia {_ddmm(dia_ref)}</b> (último c/ KM): {d['validas_dia']} quebras válidas em "
         f"{_fmt(d['km_dia'])} km → <b>MKBF do dia {mkbf_dia_txt}</b>. Mês: {_fmt(d['mkbf_mes'])} (meta {_fmt(MKBF_META)})."
         f"\n\n"
-        f"🚨 <b>Hoje:</b> {g['total_parado']} carros parados ({carro_ma} há {dias_ma}d) · "
+        f"🚨 <b>Hoje:</b> {g['total_parado']} na manutenção (GNS+Pend., mais antigo {carro_ma} há {dias_ma}d) · "
         f"fila de {sr.get('aberto_total', 0)} SRs (+{d['sr_abertas_ontem']} ontem) · "
         f"{venc.get('total_vencidos', 0)} planos vencidos."
         f"\n\n"

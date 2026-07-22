@@ -18,6 +18,7 @@ import {
   FaScrewdriver,
   FaEye,
   FaUserCog,
+  FaUserClock,
   FaSignOutAlt,
   FaDownload,
   FaRoad,
@@ -165,6 +166,7 @@ export default function Sidebar() {
           { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
           { path: "/ferias", label: "Ferias", icon: <FaCalendarAlt /> },
           { path: "/atestados", label: "Atestados", icon: <FaFileMedical /> },
+          { path: "/reservas", label: "Controle de Reservas", icon: <FaUserClock /> },
           { path: "/organograma", label: "Organograma", icon: <FaSitemap /> },
           { path: "/vagas", label: "Vagas", icon: <FaBriefcase /> },
         ],
@@ -319,7 +321,7 @@ export default function Sidebar() {
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
     if (path.startsWith("/suprimentos")) setSuprimentosOpen(true);
-    if (path.startsWith("/funcionarios") || path.startsWith("/organograma") || path.startsWith("/atestados")) setPessoasOpen(true);
+    if (path.startsWith("/funcionarios") || path.startsWith("/organograma") || path.startsWith("/atestados") || path.startsWith("/reservas")) setPessoasOpen(true);
     if (path.startsWith("/usuarios") || path.startsWith("/niveis-acesso") || path.startsWith("/controle-dados")) setConfigOpen(true);
   }, [location.pathname]);
 

@@ -697,7 +697,12 @@ export default function PCMControlePneus() {
       let status = "NAO LOCALIZADO";
       let detalhe = "Nao consta nem no estoque fisico nem na auditoria.";
 
-      if (estoque) {
+      if (estoque && auditoria) {
+        // Divergencia: nao pode estar na borracharia (estoque) e montado num
+        // carro (auditoria) ao mesmo tempo. Precisa ser conferido.
+        status = "DIVERGENTE";
+        detalhe = `Consta no estoque fisico (${estoque.ficha_estoque || ultimaFicha}) MAS aparece no carro ${auditoria.prefixo} ${auditoria.posicao} na auditoria — verificar.`;
+      } else if (estoque) {
         status = "NO ESTOQUE";
         detalhe = `Consta no estoque fisico (${estoque.ficha_estoque || ultimaFicha}).`;
       } else if (auditoria) {
@@ -913,6 +918,7 @@ export default function PCMControlePneus() {
       transnetTotal: estoqueComparado.transnet.length,
       transnetNoEstoque: estoqueComparado.transnet.filter((item) => item.status === "NO ESTOQUE").length,
       transnetEmCarro: estoqueComparado.transnet.filter((item) => item.status === "EM CARRO").length,
+      transnetDivergente: estoqueComparado.transnet.filter((item) => item.status === "DIVERGENTE").length,
       transnetNaoLocalizado: estoqueComparado.transnet.filter((item) => item.status === "NAO LOCALIZADO").length,
     };
   }, [estoqueComparado]);
@@ -1218,6 +1224,7 @@ export default function PCMControlePneus() {
               <KpiCard label="TransNet borracharia" value={estoqueKpis.transnetTotal} cor="#2563eb" />
               <KpiCard label="TransNet no estoque" value={estoqueKpis.transnetNoEstoque} cor="#16a34a" />
               <KpiCard label="TransNet no carro" value={estoqueKpis.transnetEmCarro} cor="#ca8a04" />
+              <KpiCard label="Divergente (estoque + carro)" value={estoqueKpis.transnetDivergente} cor="#dc2626" />
               <KpiCard label="TransNet nao localizado" value={estoqueKpis.transnetNaoLocalizado} cor="#ea580c" />
             </>
           )
@@ -1316,6 +1323,7 @@ export default function PCMControlePneus() {
               <option value="SUCATA">SUCATA</option>
               <option value="SUCATA OK">SUCATA OK</option>
               <option value="NO ESTOQUE">NO ESTOQUE</option>
+              <option value="DIVERGENTE">DIVERGENTE</option>
               <option value="NAO LOCALIZADO">NAO LOCALIZADO</option>
             </>
           )}
@@ -1552,7 +1560,7 @@ export default function PCMControlePneus() {
                         <td className="px-2 py-2 text-slate-700">{row.marca || "-"}</td>
                         <td className="px-2 py-2 text-slate-700">{row.local}</td>
                         <td className="px-2 py-2">
-                          <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "NO ESTOQUE" ? "#16a34a" : row.status === "EM CARRO" ? "#ca8a04" : "#ea580c" }}>
+                          <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "NO ESTOQUE" ? "#16a34a" : row.status === "DIVERGENTE" ? "#dc2626" : row.status === "EM CARRO" ? "#ca8a04" : "#ea580c" }}>
                             {row.status}
                           </span>
                         </td>

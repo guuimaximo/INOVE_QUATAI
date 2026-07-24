@@ -79,8 +79,14 @@ function calcularStatusComparacao({ baseNumero, audNumero, prefixo, posicao, alo
   return "NAO EXISTE";
 }
 
+// Estoque proprio de Quatai: Borracharia Quatai (448) e Almoxarifado Quatai (446).
+// O snapshot do TransNet vem pela empresa 046 e pode conter pneus fisicamente em
+// borracharias de OUTRAS unidades (ex.: "BORRACHARIA ITAPETINGA"). Esses nao sao o
+// nosso estoque, entao so contam as localizacoes de Quatai.
 function isBorrachariaLocal(localizacao) {
-  return /BORRACH|RECAP|CONSERT/i.test(String(localizacao || ""));
+  const loc = String(localizacao || "").toUpperCase();
+  if (!loc.includes("QUATAI")) return false;
+  return /BORRACH|ALMOX|RECAP|CONSERT/.test(loc);
 }
 
 function isRecapadoraSituacao(situacao) {

@@ -22,16 +22,16 @@ export const CONCESS = new Set(["2645", "2646"]);
 
 // Colunas da Gerencial (mesmo modelo do Excel).  tipo: km | dias | calc | blank
 export const GERENCIAL_COLS = [
-  { t: "ÓLEO DE MOTOR", id: "726", tipo: "km" },
-  { t: "ÓLEO DE CÂMBIO", id: "757", tipo: "km" },
-  { t: "ÓLEO DE DIFERENCIAL", id: "758", tipo: "km" },
+  { t: "ÓLEO MOTOR", id: "726", tipo: "km" },
+  { t: "ÓLEO CÂMBIO", id: "757", tipo: "km" },
+  { t: "ÓLEO DIFER.", id: "758", tipo: "km" },
   { t: "TCO", id: "1239", tipo: "dias" },
-  { t: "FILTRO DE AR", id: "1299", tipo: "km" },
+  { t: "FILTRO AR", id: "1299", tipo: "km" },
   { t: "CUBO DT", id: "1300", tipo: "km" },
   { t: "REVISÃO", id: "2306", tipo: "km" },
-  { t: "FILTRO DO ARLA", id: "2314", tipo: "km" },
+  { t: "FILTRO ARLA", id: "2314", tipo: "km" },
   { t: "EMBREAGEM", id: "1132", tipo: "km" },
-  { t: "REVISÃO VENCIDA", id: null, tipo: "calc" },
+  { t: "REV.VENCIDA", id: null, tipo: "calc" },
   { t: "FILTRO APU", id: "2345", tipo: "km" },
   { t: "LIMPEZA GERAL", id: "2167", tipo: "km" },
 ];

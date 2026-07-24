@@ -35,7 +35,6 @@ export const GERENCIAL_COLS = [
   { t: "CUBO DT", id: "1300", tipo: "km" },
   { t: "EMBREAGEM", id: "1132", tipo: "km" },
   { t: "FLUIDO EMBR.", id: "1585", tipo: "km" },
-  { t: "PAST. FREIO", id: "2505", tipo: "km" },
   { t: "LIMPEZA GERAL", id: "2167", tipo: "km" },
   { t: "TANQUE ARLA", id: "2965", tipo: "km" },
   { t: "LIMPEZA DPF", id: "2966", tipo: "km" },
@@ -68,10 +67,16 @@ const fmtBR = (d) =>
   d ? `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}` : "—";
 
 // Monta o estado por carro a partir das linhas cruas.
+// Carros fora da frota de ônibus: placas de passeio (prefixo com 3 letras no
+// início, ex: PKB3382, BZA7H86) e parados com dado ruim.
+const ehPlaca = (v) => /^[A-Za-z]{3}/.test(v || "");
+const PARADOS = new Set(["110797"]);
+
 export function montarCarros(rows) {
   const cars = new Map();
   for (const r of rows) {
     const v = r.nr_ordem;
+    if (ehPlaca(v) || PARADOS.has(v)) continue; // remove passeio (placa) e parados
     if (!cars.has(v)) cars.set(v, { veic: v, byplan: {}, kmdias: [], gar: false, odom: 0 });
     const c = cars.get(v);
     c.byplan[r.id_plano] = r;

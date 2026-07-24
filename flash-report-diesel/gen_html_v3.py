@@ -1391,6 +1391,13 @@ CRONOGRAMA = [
         ("Podcast - Fala, Motô!", "", "16/07", False),
         ("Enquete de Fixação", "Desconecte do Celular. Conecte-se à Vida: o perigo do uso do celular ao volante", "17/07", True),
     ]),
+    ("4ª Semana", "20 a 24/07", [
+        ("Imagem Motivacional", "", "20/07", True),
+        ("Vídeo - Min. do Conhecimento", "Equipe do plantão não abre mais ficha e nem disponibiliza atendimento", "21/07", True),
+        ("Imagem Informativa", "Equipe do plantão não abre mais ficha e nem disponibiliza atendimento", "22/07", True),
+        ("Podcast - Fala, Motô!", "A importância dos Acompanhamentos Operacionais", "23/07", True),
+        ("Enquete de Fixação", "Equipe do plantão não abre mais ficha e nem disponibiliza atendimento", "24/07", True),
+    ]),
 ]
 
 _ROW = ('<div style="display:flex;justify-content:space-between;align-items:flex-start;'

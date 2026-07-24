@@ -2,11 +2,11 @@
 // Le ultimo_plano (projeto IMPORTACAO_DADOS) via supabaseDados.
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  FaSync, FaSearch, FaTable, FaCalendarWeek, FaExclamationTriangle, FaWrench,
+  FaSync, FaSearch, FaTable, FaCalendarWeek, FaExclamationTriangle, FaWrench, FaShieldAlt,
 } from "react-icons/fa";
 import { puxarUltimoPlano } from "../../supabaseDados";
 import {
-  montarCarros, montarGerencial, montarProgramacao, ultimaAtualizacao,
+  montarCarros, montarGerencial, montarProgramacao, montarGarantia, ultimaAtualizacao,
   GERENCIAL_COLS, fmtBR,
 } from "./preventivasLogic";
 
@@ -44,6 +44,7 @@ export default function PCM_PreventivasPlano() {
   const cars = useMemo(() => (rows.length ? montarCarros(rows) : new Map()), [rows]);
   const gerencial = useMemo(() => (cars.size ? montarGerencial(cars) : null), [cars]);
   const prog = useMemo(() => (cars.size ? montarProgramacao(montarCarros(rows)) : null), [cars, rows]);
+  const garantia = useMemo(() => (cars.size ? montarGarantia(montarCarros(rows)) : null), [cars, rows]);
   const atualizado = useMemo(() => (rows.length ? ultimaAtualizacao(rows) : null), [rows]);
 
   const linhasFiltradas = useMemo(() => {
@@ -91,6 +92,7 @@ export default function PCM_PreventivasPlano() {
         {[
           ["gerencial", "Gerencial", FaTable],
           ["programacao", "Programação da Semana", FaCalendarWeek],
+          ["garantia", "Garantia", FaShieldAlt],
         ].map(([k, label, Icon]) => (
           <button
             key={k}
@@ -129,6 +131,89 @@ export default function PCM_PreventivasPlano() {
       )}
 
       {!loading && !erro && aba === "programacao" && prog && <Programacao prog={prog} />}
+
+      {!loading && !erro && aba === "garantia" && garantia && <Garantia itens={garantia} />}
+    </div>
+  );
+}
+
+/* ===================== GARANTIA ===================== */
+function Garantia({ itens }) {
+  const pend = itens.filter((g) => !g.done).length;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+        <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-semibold dark:bg-amber-900/40 dark:text-amber-300">
+          {pend} a chamar
+        </span>
+        <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-semibold dark:bg-emerald-900/40 dark:text-emerald-300">
+          {itens.length - pend} feitos
+        </span>
+        <span>Revisão 60.000 na concessionária · &quot;Chamar em&quot; já desconta o save de 500 km.</span>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
+        <div className="overflow-auto max-h-[72vh]">
+          <table className="w-full text-sm border-separate border-spacing-0">
+            <thead>
+              <tr>
+                {["Veículo", "Odômetro", "Falta p/ 60k", "km/dia", "Vence 60k", "Chamar em", "Status"].map((h, i) => (
+                  <th
+                    key={h}
+                    className={`sticky top-0 bg-[#8a4b12] text-white font-semibold text-[11px] uppercase tracking-wide px-3 py-2.5 whitespace-nowrap ${
+                      i === 0 ? "text-left" : "text-center"
+                    }`}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map((g, i) => {
+                const zebra = i % 2 === 1;
+                const zbg = g.done
+                  ? "bg-emerald-50 dark:bg-emerald-900/20"
+                  : zebra
+                  ? "bg-[#fdf6ef] dark:bg-gray-800/50"
+                  : "bg-white dark:bg-gray-800";
+                return (
+                  <tr key={g.veic} className="border-b border-gray-100 dark:border-gray-700/60">
+                    <td className={`px-3 py-2.5 font-bold text-gray-800 dark:text-gray-100 ${zbg}`}>
+                      {g.veic}
+                      <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-amber-200/70 text-amber-900 dark:bg-amber-800/50 dark:text-amber-200 font-semibold">
+                        {g.milestone / 1000}k
+                      </span>
+                    </td>
+                    <td className={`px-3 py-2.5 text-center tabular-nums text-gray-600 dark:text-gray-300 ${zbg}`}>
+                      {g.odom.toLocaleString("pt-BR")}
+                    </td>
+                    <td className={`px-3 py-2.5 text-center tabular-nums text-gray-600 dark:text-gray-300 ${zbg}`}>
+                      {g.falta.toLocaleString("pt-BR")}
+                    </td>
+                    <td className={`px-3 py-2.5 text-center tabular-nums text-gray-500 ${zbg}`}>{g.kmdia}</td>
+                    <td className={`px-3 py-2.5 text-center text-gray-500 ${zbg}`}>{g.done ? "—" : g.vence}</td>
+                    <td className={`px-3 py-2.5 text-center font-bold ${g.done ? "text-gray-400" : "text-emerald-700 dark:text-emerald-400"} ${zbg}`}>
+                      {g.done ? "—" : g.alvo}
+                    </td>
+                    <td className={`px-3 py-2.5 text-center ${zbg}`}>
+                      {g.done ? (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                          OK ✓
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                          PROGRAMAR
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

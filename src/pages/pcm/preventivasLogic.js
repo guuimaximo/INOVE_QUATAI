@@ -225,4 +225,52 @@ export function montarProgramacao(cars, hoje = new Date()) {
   };
 }
 
+// ---------- GARANTIA (Euro6): revisão 60k na concessionária, save 500km ----------
+export const GAR_FEITOS = new Set([
+  "242522", "242520", "242517", "242514", "242505", "242513",
+]);
+const GAR_BUFFER = 500;
+const addDias = (base, n) => {
+  const d = new Date(base);
+  d.setDate(d.getDate() + n);
+  return d;
+};
+
+export function montarGarantia(cars, hoje = new Date()) {
+  const base = new Date(hoje);
+  base.setHours(0, 0, 0, 0);
+  const out = [];
+  for (const c of cars.values()) {
+    if (!c.gar || !c.kmdia || c.kmdia <= 0 || !c.odom) continue;
+    let faltam = null;
+    for (const id of CONCESS) {
+      const k = kmp(c, id);
+      if (k == null) continue;
+      const rk = -k; // faltam km
+      if (faltam == null || rk < faltam) faltam = rk;
+    }
+    if (faltam == null) continue;
+    const milestone = Math.round((c.odom + faltam) / 30000) * 30000;
+    const venceD = faltam / c.kmdia;
+    const alvoD = (faltam - GAR_BUFFER) / c.kmdia;
+    const vence = addDias(base, Math.round(venceD));
+    const alvo = addDias(base, Math.max(0, Math.round(alvoD)));
+    const done = GAR_FEITOS.has(c.veic);
+    out.push({
+      veic: "046-" + c.veic,
+      odom: Math.round(c.odom),
+      milestone,
+      falta: Math.round(faltam),
+      kmdia: c.kmdia,
+      vence: fmtBR(vence),
+      alvo: fmtBR(alvo),
+      alvoSort: alvo.getTime(),
+      done,
+    });
+  }
+  // pendentes por data de chamada; feitos (OK) no fim
+  out.sort((a, b) => (a.done === b.done ? a.alvoSort - b.alvoSort : a.done ? 1 : -1));
+  return out;
+}
+
 export { fmtBR };

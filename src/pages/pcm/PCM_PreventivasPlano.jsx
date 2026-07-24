@@ -2,11 +2,11 @@
 // Le ultimo_plano (projeto IMPORTACAO_DADOS) via supabaseDados.
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  FaSync, FaSearch, FaTable, FaCalendarWeek, FaExclamationTriangle, FaWrench,
+  FaSync, FaSearch, FaTable, FaCalendarWeek, FaExclamationTriangle, FaWrench, FaShieldAlt,
 } from "react-icons/fa";
 import { puxarUltimoPlano } from "../../supabaseDados";
 import {
-  montarCarros, montarGerencial, montarProgramacao, ultimaAtualizacao,
+  montarCarros, montarGerencial, montarProgramacao, montarGarantia, ultimaAtualizacao,
   GERENCIAL_COLS, fmtBR,
 } from "./preventivasLogic";
 
@@ -44,6 +44,7 @@ export default function PCM_PreventivasPlano() {
   const cars = useMemo(() => (rows.length ? montarCarros(rows) : new Map()), [rows]);
   const gerencial = useMemo(() => (cars.size ? montarGerencial(cars) : null), [cars]);
   const prog = useMemo(() => (cars.size ? montarProgramacao(montarCarros(rows)) : null), [cars, rows]);
+  const garantia = useMemo(() => (cars.size ? montarGarantia(montarCarros(rows)) : null), [cars, rows]);
   const atualizado = useMemo(() => (rows.length ? ultimaAtualizacao(rows) : null), [rows]);
 
   const linhasFiltradas = useMemo(() => {
@@ -91,6 +92,7 @@ export default function PCM_PreventivasPlano() {
         {[
           ["gerencial", "Gerencial", FaTable],
           ["programacao", "Programação da Semana", FaCalendarWeek],
+          ["garantia", "Garantia", FaShieldAlt],
         ].map(([k, label, Icon]) => (
           <button
             key={k}
@@ -129,6 +131,89 @@ export default function PCM_PreventivasPlano() {
       )}
 
       {!loading && !erro && aba === "programacao" && prog && <Programacao prog={prog} />}
+
+      {!loading && !erro && aba === "garantia" && garantia && <Garantia itens={garantia} />}
+    </div>
+  );
+}
+
+/* ===================== GARANTIA ===================== */
+function Garantia({ itens }) {
+  const pend = itens.filter((g) => !g.done).length;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+        <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-semibold dark:bg-amber-900/40 dark:text-amber-300">
+          {pend} a chamar
+        </span>
+        <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-semibold dark:bg-emerald-900/40 dark:text-emerald-300">
+          {itens.length - pend} feitos
+        </span>
+        <span>Revisão 60.000 na concessionária · &quot;Chamar em&quot; já desconta o save de 500 km.</span>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
+        <div className="overflow-auto max-h-[72vh]">
+          <table className="w-full text-sm border-separate border-spacing-0">
+            <thead>
+              <tr>
+                {["Veículo", "Odômetro", "Falta p/ 60k", "km/dia", "Vence 60k", "Chamar em", "Status"].map((h, i) => (
+                  <th
+                    key={h}
+                    className={`sticky top-0 bg-[#8a4b12] text-white font-semibold text-[11px] uppercase tracking-wide px-3 py-2.5 whitespace-nowrap ${
+                      i === 0 ? "text-left" : "text-center"
+                    }`}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map((g, i) => {
+                const zebra = i % 2 === 1;
+                const zbg = g.done
+                  ? "bg-emerald-50 dark:bg-emerald-900/20"
+                  : zebra
+                  ? "bg-[#fdf6ef] dark:bg-gray-800/50"
+                  : "bg-white dark:bg-gray-800";
+                return (
+                  <tr key={g.veic} className="border-b border-gray-100 dark:border-gray-700/60">
+                    <td className={`px-3 py-2.5 font-bold text-gray-800 dark:text-gray-100 ${zbg}`}>
+                      {g.veic}
+                      <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-amber-200/70 text-amber-900 dark:bg-amber-800/50 dark:text-amber-200 font-semibold">
+                        {g.milestone / 1000}k
+                      </span>
+                    </td>
+                    <td className={`px-3 py-2.5 text-center tabular-nums text-gray-600 dark:text-gray-300 ${zbg}`}>
+                      {g.odom.toLocaleString("pt-BR")}
+                    </td>
+                    <td className={`px-3 py-2.5 text-center tabular-nums text-gray-600 dark:text-gray-300 ${zbg}`}>
+                      {g.falta.toLocaleString("pt-BR")}
+                    </td>
+                    <td className={`px-3 py-2.5 text-center tabular-nums text-gray-500 ${zbg}`}>{g.kmdia}</td>
+                    <td className={`px-3 py-2.5 text-center text-gray-500 ${zbg}`}>{g.done ? "—" : g.vence}</td>
+                    <td className={`px-3 py-2.5 text-center font-bold ${g.done ? "text-gray-400" : "text-emerald-700 dark:text-emerald-400"} ${zbg}`}>
+                      {g.done ? "—" : g.alvo}
+                    </td>
+                    <td className={`px-3 py-2.5 text-center ${zbg}`}>
+                      {g.done ? (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                          OK ✓
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                          PROGRAMAR
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -179,7 +264,7 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4">
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm bg-white dark:bg-gray-900">
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
           <div className="overflow-auto max-h-[72vh]">
             <table className="border-separate border-spacing-0 text-[12.5px] w-full">
               <thead>
@@ -210,7 +295,7 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
                     <tr key={l.veic} className="group">
                       <td
                         className={`sticky left-0 z-[5] pl-3.5 pr-2 py-2 text-left font-bold text-[#0f5d4a] dark:text-emerald-300 border-r border-gray-200 dark:border-gray-700 border-b border-gray-100 dark:border-gray-800 ${
-                          zebra ? "bg-[#f8fafb] dark:bg-gray-800" : "bg-white dark:bg-gray-900"
+                          zebra ? "bg-[#f8fafb] dark:bg-gray-800" : "bg-white dark:bg-gray-800"
                         } group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20`}
                         style={{ boxShadow: "2px 0 4px -2px rgba(0,0,0,.08)" }}
                       >
@@ -239,7 +324,7 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden self-start shadow-sm bg-white dark:bg-gray-900">
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden self-start shadow-sm bg-white dark:bg-gray-800">
           <div className="bg-emerald-700 text-white px-4 py-3 font-semibold text-sm">Aderência às Preventivas</div>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {aderencia.map((a) => {
@@ -273,7 +358,7 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
 /* ===================== PROGRAMACAO ===================== */
 function DiaCard({ dow, data, cars, noite, hoje }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
       <div className={`px-3 py-1.5 text-center text-white ${hoje ? "bg-amber-600" : noite ? "bg-indigo-800" : "bg-emerald-800"}`}>
         <div className="text-xs font-bold">{dow.split("-")[0].toUpperCase()}</div>
         <div className="text-[10px] opacity-80">{data}</div>
@@ -307,22 +392,22 @@ function Programacao({ prog }) {
           ["Dias programados", prog.dias10.length, "gray"],
           ["Serviços conciliados", prog.boxes.length, "gray"],
         ].map(([l, n, c]) => (
-          <div key={l} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-900">
-            <div className={`text-2xl font-bold ${c === "emerald" ? "text-emerald-700" : c === "indigo" ? "text-indigo-700" : "text-gray-700 dark:text-gray-200"}`}>{n}</div>
+          <div key={l} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-800">
+            <div className={`text-2xl font-bold ${c === "emerald" ? "text-emerald-700 dark:text-emerald-400" : c === "indigo" ? "text-indigo-700 dark:text-indigo-400" : "text-gray-700 dark:text-gray-200"}`}>{n}</div>
             <div className="text-xs text-gray-500">{l}</div>
           </div>
         ))}
       </div>
 
       <section>
-        <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-700 mb-2">Preventivas 10.000 — de amanhã até sexta</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 mb-2">Preventivas 10.000 — de amanhã até sexta</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
           {prog.dias10.map((d) => <DiaCard key={"p" + d.data} {...d} />)}
         </div>
       </section>
 
       <section>
-        <h3 className="text-xs font-bold uppercase tracking-wide text-indigo-700 mb-2">Inspeções 5.000 — hoje à noite + até sexta</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-400 mb-2">Inspeções 5.000 — hoje à noite + até sexta</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
           <DiaCard dow="HOJE" data={prog.hoje} cars={prog.hoje5} noite hoje />
           {prog.dias5.map((d) => <DiaCard key={"i" + d.data} {...d} noite />)}
@@ -334,8 +419,8 @@ function Programacao({ prog }) {
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Serviços que vão junto nas preventivas</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {prog.boxes.map((b) => (
-              <div key={b.nome} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-900">
-                <div className="text-[11px] font-bold uppercase text-indigo-700 mb-1">{b.nome}</div>
+              <div key={b.nome} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-800">
+                <div className="text-[11px] font-bold uppercase text-indigo-700 dark:text-indigo-400 mb-1">{b.nome}</div>
                 <div className="text-xs text-gray-700 dark:text-gray-300 tabular-nums">{b.veics.join(" · ")}</div>
               </div>
             ))}

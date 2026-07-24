@@ -134,7 +134,33 @@ export default function PCM_PreventivasPlano() {
 }
 
 /* ===================== GERENCIAL ===================== */
+const fmtNum = (v) =>
+  v == null || v === "" ? "" : typeof v === "number" ? v.toLocaleString("pt-BR") : v;
+
 function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
+  // ordenacao por clique no cabecalho. key: "veic" | "ult" | idx da coluna
+  const [sort, setSort] = useState({ key: null, dir: -1 });
+  const clicar = (key) =>
+    setSort((s) => (s.key === key ? { key, dir: -s.dir } : { key, dir: -1 }));
+
+  const ordenadas = useMemo(() => {
+    if (sort.key == null) return linhas;
+    const val = (l) => {
+      if (sort.key === "veic") return l.veic;
+      if (sort.key === "ult") return l.dataUlt;
+      const c = l.cols[sort.key];
+      return typeof c.v === "number" ? c.v : c.venc ? 0 : -1e9;
+    };
+    return [...linhas].sort((a, b) => {
+      const x = val(a), y = val(b);
+      return (x > y ? 1 : x < y ? -1 : 0) * sort.dir;
+    });
+  }, [linhas, sort]);
+
+  const seta = (key) => (sort.key === key ? (sort.dir === -1 ? " ▼" : " ▲") : "");
+  const thBase =
+    "sticky top-0 z-10 bg-[#0f5d4a] text-white font-semibold text-[10px] uppercase tracking-wide px-1.5 py-2.5 text-center whitespace-nowrap cursor-pointer select-none hover:bg-[#0c4e3e] transition";
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -144,79 +170,100 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar veículo (ex: 2224)"
-            className="pl-9 pr-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 dark:bg-gray-800 text-sm w-64"
+            className="pl-9 pr-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 dark:bg-gray-800 text-sm w-64 focus:ring-2 focus:ring-emerald-500 outline-none"
           />
         </div>
         <span className="text-xs text-gray-500">
-          {linhas.length} de {total} veículos · valor = km faltando (negativo) · <span className="text-red-600 font-semibold">vermelho = vencido</span>
+          {linhas.length} de {total} veículos · <span className="text-red-600 font-semibold">vermelho = vencido</span> · clique no cabeçalho p/ ordenar
         </span>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
-        {/* Tabela larga */}
-        <div className="overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 max-h-[70vh]">
-          <table className="text-xs border-collapse min-w-max">
-            <thead className="sticky top-0 z-10">
-              <tr>
-                <th className="sticky left-0 z-20 bg-emerald-800 text-white px-3 py-2 text-left font-semibold">Prefixo</th>
-                <th className="bg-emerald-800 text-white px-2 py-2 font-semibold">Sem.</th>
-                <th className="bg-emerald-800 text-white px-2 py-2 font-semibold whitespace-nowrap">Últ. Revisão</th>
-                {GERENCIAL_COLS.map((c) => (
-                  <th key={c.t} className="bg-emerald-900 text-white px-2 py-2 font-semibold whitespace-nowrap max-w-[90px]">
-                    {c.t}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4">
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm bg-white dark:bg-gray-900">
+          <div className="overflow-auto max-h-[72vh]">
+            <table className="border-separate border-spacing-0 text-[12.5px] w-full">
+              <thead>
+                <tr>
+                  <th onClick={() => clicar("veic")} className={`${thBase} sticky left-0 z-20 text-left pl-3.5 min-w-[92px]`}>
+                    Prefixo{seta("veic")}
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {linhas.map((l, i) => (
-                <tr key={l.veic} className={i % 2 ? "bg-gray-50 dark:bg-gray-800/40" : "bg-white dark:bg-gray-900"}>
-                  <td className="sticky left-0 z-10 bg-inherit px-3 py-1.5 font-bold text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-700">
-                    {l.veic}
-                  </td>
-                  <td className="px-2 py-1.5 text-center text-gray-500">{l.semana ?? "—"}</td>
-                  <td className="px-2 py-1.5 text-center text-gray-500 whitespace-nowrap">{l.dataUlt}</td>
-                  {l.cols.map((cell, j) => (
-                    <td
-                      key={j}
-                      className={`px-2 py-1.5 text-center tabular-nums ${
-                        cell.venc ? "bg-red-100 text-red-700 font-bold dark:bg-red-900/40 dark:text-red-300" : "text-gray-700 dark:text-gray-300"
-                      }`}
-                    >
-                      {cell.texto}
-                    </td>
-                  ))}
+                  <th onClick={() => clicar("ult")} className={thBase}>
+                    Últ.<span className="block text-[9px] opacity-75 font-normal normal-case">revisão{seta("ult")}</span>
+                  </th>
+                  {GERENCIAL_COLS.map((c, idx) => {
+                    const p = c.t.split(" ");
+                    return (
+                      <th key={c.t} onClick={() => clicar(idx)} className={thBase}>
+                        {p[0]}
+                        {p[1] && <span className="block text-[9px] opacity-75 font-normal">{p.slice(1).join(" ")}</span>}
+                        {seta(idx)}
+                      </th>
+                    );
+                  })}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {ordenadas.map((l, i) => {
+                  const zebra = i % 2 === 1;
+                  const zbg = zebra ? "bg-[#f8fafb] dark:bg-gray-800/40" : "";
+                  return (
+                    <tr key={l.veic} className="group">
+                      <td
+                        className={`sticky left-0 z-[5] pl-3.5 pr-2 py-2 text-left font-bold text-[#0f5d4a] dark:text-emerald-300 border-r border-gray-200 dark:border-gray-700 border-b border-gray-100 dark:border-gray-800 ${
+                          zebra ? "bg-[#f8fafb] dark:bg-gray-800" : "bg-white dark:bg-gray-900"
+                        } group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20`}
+                        style={{ boxShadow: "2px 0 4px -2px rgba(0,0,0,.08)" }}
+                      >
+                        {l.veic}
+                      </td>
+                      <td className={`px-1.5 py-2 text-center text-[11px] text-gray-400 border-b border-gray-100 dark:border-gray-800 ${zbg} group-hover:bg-emerald-50/60`}>
+                        {l.dataUlt}
+                      </td>
+                      {l.cols.map((cell, j) => (
+                        <td
+                          key={j}
+                          className={`px-1.5 py-2 text-center tabular-nums border-b border-gray-100 dark:border-gray-800 ${
+                            cell.venc
+                              ? "bg-red-50 text-red-700 font-bold dark:bg-red-900/40 dark:text-red-300"
+                              : `text-gray-600 dark:text-gray-300 ${zbg}`
+                          } group-hover:bg-emerald-50/60`}
+                        >
+                          {cell.texto === null || cell.texto === "" ? <span className="text-gray-300">·</span> : fmtNum(cell.texto)}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        {/* Aderencia */}
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden self-start">
-          <div className="bg-emerald-700 text-white px-4 py-2.5 font-semibold text-sm">Aderência às Preventivas</div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-gray-500 border-b border-gray-200 dark:border-gray-700">
-                <th className="px-3 py-2 text-left font-semibold">Plano</th>
-                <th className="px-2 py-2 font-semibold">Atras.</th>
-                <th className="px-2 py-2 font-semibold">Total</th>
-                <th className="px-2 py-2 font-semibold">Adr.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {aderencia.map((a) => (
-                <tr key={a.nome} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="px-3 py-1.5 text-gray-700 dark:text-gray-300">{a.nome}</td>
-                  <td className={`px-2 py-1.5 text-center font-semibold ${a.atrasadas ? "text-red-600" : "text-gray-400"}`}>{a.atrasadas}</td>
-                  <td className="px-2 py-1.5 text-center text-gray-500">{a.total}</td>
-                  <td className="px-2 py-1.5 text-center font-semibold text-gray-700 dark:text-gray-300">
-                    {a.adr == null ? "—" : `${(a.adr * 100).toFixed(1)}%`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden self-start shadow-sm bg-white dark:bg-gray-900">
+          <div className="bg-emerald-700 text-white px-4 py-3 font-semibold text-sm">Aderência às Preventivas</div>
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {aderencia.map((a) => {
+              const pct = a.adr == null ? null : a.adr * 100;
+              return (
+                <div key={a.nome} className="px-4 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[12.5px] text-gray-700 dark:text-gray-300">{a.nome}</span>
+                    <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                      {pct == null ? "—" : `${pct.toFixed(1)}%`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                      <div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct ?? 0}%` }} />
+                    </div>
+                    <span className={`text-[11px] tabular-nums ${a.atrasadas ? "text-red-600 font-semibold" : "text-gray-400"}`}>
+                      {a.atrasadas}/{a.total}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

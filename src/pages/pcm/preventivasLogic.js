@@ -22,18 +22,24 @@ export const CONCESS = new Set(["2645", "2646"]);
 
 // Colunas da Gerencial (mesmo modelo do Excel).  tipo: km | dias | calc | blank
 export const GERENCIAL_COLS = [
+  { t: "INSP 5.000", id: "2305", tipo: "km" },
+  { t: "REVISÃO", id: "2306", tipo: "km" },
+  { t: "REV.VENCIDA", id: null, tipo: "calc" },
   { t: "ÓLEO MOTOR", id: "726", tipo: "km" },
   { t: "ÓLEO CÂMBIO", id: "757", tipo: "km" },
   { t: "ÓLEO DIFER.", id: "758", tipo: "km" },
-  { t: "TCO", id: "1239", tipo: "dias" },
   { t: "FILTRO AR", id: "1299", tipo: "km" },
-  { t: "CUBO DT", id: "1300", tipo: "km" },
-  { t: "REVISÃO", id: "2306", tipo: "km" },
   { t: "FILTRO ARLA", id: "2314", tipo: "km" },
-  { t: "EMBREAGEM", id: "1132", tipo: "km" },
-  { t: "REV.VENCIDA", id: null, tipo: "calc" },
   { t: "FILTRO APU", id: "2345", tipo: "km" },
+  { t: "FILTRO HIDR.", id: "2309", tipo: "km" },
+  { t: "CUBO DT", id: "1300", tipo: "km" },
+  { t: "EMBREAGEM", id: "1132", tipo: "km" },
+  { t: "FLUIDO EMBR.", id: "1585", tipo: "km" },
   { t: "LIMPEZA GERAL", id: "2167", tipo: "km" },
+  { t: "TANQUE ARLA", id: "2965", tipo: "km" },
+  { t: "LIMPEZA DPF", id: "2966", tipo: "km" },
+  { t: "SERPENTINA", id: "2311", tipo: "km" },
+  { t: "TCO", id: "1239", tipo: "dias" },
 ];
 
 // Quadros de servico da Programacao (satelites conciliados na 10.000)
@@ -61,10 +67,16 @@ const fmtBR = (d) =>
   d ? `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}` : "—";
 
 // Monta o estado por carro a partir das linhas cruas.
+// Carros fora da frota de ônibus: placas de passeio (prefixo com 3 letras no
+// início, ex: PKB3382, BZA7H86) e parados com dado ruim.
+const ehPlaca = (v) => /^[A-Za-z]{3}/.test(v || "");
+const PARADOS = new Set(["110797"]);
+
 export function montarCarros(rows) {
   const cars = new Map();
   for (const r of rows) {
     const v = r.nr_ordem;
+    if (ehPlaca(v) || PARADOS.has(v)) continue; // remove passeio (placa) e parados
     if (!cars.has(v)) cars.set(v, { veic: v, byplan: {}, kmdias: [], gar: false, odom: 0 });
     const c = cars.get(v);
     c.byplan[r.id_plano] = r;

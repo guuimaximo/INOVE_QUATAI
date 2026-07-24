@@ -16,7 +16,21 @@ export const THEMES = [
 
 const DEFAULT = THEMES[0];
 const STORAGE_KEY = "inove_theme";
+const DARK_KEY = "inove_dark";
 const ThemeContext = createContext(null);
+
+function lerDarkInicial() {
+  try {
+    const salvo = localStorage.getItem(DARK_KEY);
+    if (salvo !== null) return salvo === "1";
+  } catch {
+    // sem storage
+  }
+  if (typeof window !== "undefined" && window.matchMedia) {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  return false;
+}
 
 function applyTheme(theme) {
   if (typeof document === "undefined") return;
@@ -33,6 +47,7 @@ export function ThemeProvider({ children }) {
       return DEFAULT.key;
     }
   });
+  const [dark, setDark] = useState(lerDarkInicial);
 
   useEffect(() => {
     const theme = THEMES.find((t) => t.key === themeKey) || DEFAULT;
@@ -44,8 +59,20 @@ export function ThemeProvider({ children }) {
     }
   }, [themeKey]);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("dark", dark);
+    try {
+      localStorage.setItem(DARK_KEY, dark ? "1" : "0");
+    } catch {
+      // sem storage
+    }
+  }, [dark]);
+
+  const toggleDark = () => setDark((d) => !d);
+
   return (
-    <ThemeContext.Provider value={{ themeKey, setThemeKey, themes: THEMES }}>
+    <ThemeContext.Provider value={{ themeKey, setThemeKey, themes: THEMES, dark, setDark, toggleDark }}>
       {children}
     </ThemeContext.Provider>
   );

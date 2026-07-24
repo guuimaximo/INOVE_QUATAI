@@ -3,8 +3,10 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   FaSync, FaSearch, FaTable, FaCalendarWeek, FaExclamationTriangle, FaWrench, FaShieldAlt,
+  FaMoon, FaSun,
 } from "react-icons/fa";
 import { puxarUltimoPlano } from "../../supabaseDados";
+import { useTheme } from "../../context/ThemeContext";
 import {
   montarCarros, montarGerencial, montarProgramacao, montarGarantia, ultimaAtualizacao,
   GERENCIAL_COLS, fmtBR,
@@ -21,6 +23,7 @@ function Badge({ dias }) {
 }
 
 export default function PCM_PreventivasPlano() {
+  const { dark, toggleDark } = useTheme();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -78,6 +81,14 @@ export default function PCM_PreventivasPlano() {
           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${frescor.cls}`}>
             Sistema até {atualizado ? fmtBR(atualizado) : "—"} · {frescor.txt}
           </span>
+          <button
+            onClick={toggleDark}
+            title={dark ? "Modo claro" : "Modo escuro"}
+            aria-label={dark ? "Ativar modo claro" : "Ativar modo escuro"}
+            className="w-9 h-9 grid place-items-center rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-amber-300 transition"
+          >
+            {dark ? <FaSun /> : <FaMoon />}
+          </button>
           <button
             onClick={carregar}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-100 text-sm font-medium transition"

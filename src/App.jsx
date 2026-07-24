@@ -75,6 +75,7 @@ const PCMInicio = lazy(() => import("./pages/pcm/PCMInicio"));
 const PCMDiario = lazy(() => import("./pages/pcm/PCMDiario"));
 const PCMResumo = lazy(() => import("./pages/pcm/PCMResumo"));
 const PCM_Preventivas = lazy(() => import("./pages/pcm/PCM_Preventivas"));
+const PCM_PreventivasPlano = lazy(() => import("./pages/pcm/PCM_PreventivasPlano"));
 const PCMTrocaPneus = lazy(() => import("./pages/pcm/PCMTrocaPneus"));
 const PCMControleFichas = lazy(() => import("./pages/pcm/PCMControleFichas"));
 const PCMControlePneus = lazy(() => import("./pages/pcm/PCMControlePneus"));
@@ -293,6 +294,7 @@ export default function App() {
               <Route path="/pcm-resumo" element={<PCMResumo />} />
               <Route path="/pcm-diario/:id" element={<PCMDiario />} />
               <Route path="/pcm-preventivas" element={<PCM_Preventivas />} />
+              <Route path="/pcm-preventivas-plano" element={<PCM_PreventivasPlano />} />
               <Route path="/pcm-troca-pneus" element={<PCMTrocaPneus />} />
               <Route path="/pcm-controle-fichas" element={<PCMControleFichas />} />
               <Route path="/pcm-controle-pneus" element={<PCMControlePneus />} />

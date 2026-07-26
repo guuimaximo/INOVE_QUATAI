@@ -32,12 +32,6 @@ function todayISO() {
   return toISODateLocal(new Date());
 }
 
-function subDaysISO(iso, days = 1) {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() - days);
-  return toISODateLocal(d);
-}
-
 function canEditPCM(dataRefISO) {
   try {
     if (!dataRefISO) return false;
@@ -164,13 +158,16 @@ export default function PCMInicio() {
   }
 
   async function herdarVeiculosEmAberto({ pcmNovoId, dataRefHoje }) {
-    const dataOntem = subDaysISO(dataRefHoje, 1);
-
+    // Pega o ULTIMO PCM antes de hoje (nao necessariamente D-1). Se ficar um dia
+    // sem criar PCM, a heranca ainda encontra o ultimo dia existente e nao vem
+    // zerada. Buscar por data_referencia == ontem exato falhava nesse buraco.
     const { data: pcmAnterior, error: errPcmAnterior } = await supabase
       .from("pcm_diario")
       .select("id, data_referencia")
-      .eq("data_referencia", dataOntem)
-      .single();
+      .lt("data_referencia", dataRefHoje)
+      .order("data_referencia", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (errPcmAnterior || !pcmAnterior?.id) return;
 

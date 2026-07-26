@@ -153,11 +153,14 @@ def montar(rows, hoje):
     for c in inhouse: c['tipo'] = tipo(c)
     # tira quem foi feito nos ultimos 7 dias (ja aparece em "realizado") + feitos manuais
     fm = feitos_manual()
-    feitos_set = set(v.replace('046-','') for v,_ in feitas_prev) | set(v.replace('046-','') for v,_ in feitas_insp)
+    # Exclusao por-plano: quem fez a REVISAO 10k recente sai da fila10 (e da fila5, pois 10k reseta a 5k);
+    # quem fez SO a INSPECAO 5k sai da fila5, mas CONTINUA na fila10 se a revisao dele estiver vencida.
+    prev_set = set(v.replace('046-','') for v,_ in feitas_prev)   # fez a 10.000 recente
+    insp_set = set(v.replace('046-','') for v,_ in feitas_insp)   # fez a 5.000 recente
     fila10 = sorted([c for c in inhouse if c['tipo']=='10K' and gat10(c) is not None
-                     and c['veic'] not in feitos_set and '2306' not in fm.get(c['veic'], set())], key=gat10)
+                     and c['veic'] not in prev_set and '2306' not in fm.get(c['veic'], set())], key=gat10)
     fila5  = sorted([c for c in inhouse if c['tipo']=='5K'  and c['insp5'] is not None
-                     and c['veic'] not in feitos_set and '2305' not in fm.get(c['veic'], set())], key=lambda c: c['insp5'])
+                     and c['veic'] not in (prev_set | insp_set) and '2305' not in fm.get(c['veic'], set())], key=lambda c: c['insp5'])
 
     # 10.000 comecam AMANHA e vao ate a SEXTA desta semana (hoje so tem inspecao 5K a noite).
     _d = hoje + datetime.timedelta(days=1)

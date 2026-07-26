@@ -1,0 +1,25 @@
+# Segredos — NUNCA commitar
+.env
+.env.*
+!.env.example
+*_supabase.json
+*_telegram.json
+config/_telegram.json
+config/*.key
+*.key
+*_secret*
+*_service*
+secrets/
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+# Saídas (pasta correta é 'saidas' no plural)
+saida/
+saidas/
+# Deliverables gerados na raiz
+*.pdf
+*.xlsx
+*.png
+*.html

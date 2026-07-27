@@ -422,11 +422,26 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
   const [newFiles, setNewFiles] = useState([]);
   const [saving, setSaving] = useState(false);
   const [editingDatas, setEditingDatas] = useState(false);
+  const [editingDados, setEditingDados] = useState(false);
   const userName = user?.nome || user?.nome_completo || user?.login || user?.email || "Usuario";
 
   useEffect(() => {
     if (!open || !item) return;
     setForm({
+      // dados de cadastro (editaveis via "Editar dados")
+      peca: item.peca || "",
+      codigo_peca: item.codigo_peca || "",
+      fornecedor: item.fornecedor || "",
+      data_compra: item.data_compra || "",
+      valor_peca: item.valor_peca ?? "",
+      tipo_garantia: item.tipo_garantia || "Peca comprada",
+      prefixo: item.prefixo || "",
+      data_instalacao: item.data_instalacao || "",
+      km_instalacao: item.km_instalacao ?? "",
+      data_falha: item.data_falha || "",
+      km_falha: item.km_falha ?? "",
+      tipo_solicitacao: item.tipo_solicitacao || "",
+      // andamento
       enviado_fornecedor_em: item.enviado_fornecedor_em || "",
       retirada_fornecedor_em: item.retirada_fornecedor_em || "",
       prazo_retorno_dias: item.prazo_retorno_dias ?? "",
@@ -445,6 +460,7 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
     setExistingAttachments([...anexos, ...laudos]);
     setNewFiles([]);
     setEditingDatas(false);
+    setEditingDados(false);
   }, [item, open]);
 
   if (!open || !item) return null;
@@ -460,6 +476,20 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
       );
 
       const payload = {
+        // dados de cadastro (editaveis via "Editar dados")
+        peca: form.peca.trim(),
+        codigo_peca: form.codigo_peca.trim() || null,
+        fornecedor: form.fornecedor.trim(),
+        data_compra: form.data_compra || null,
+        valor_peca: safeNumber(form.valor_peca) ?? 0,
+        tipo_garantia: form.tipo_garantia || "Peca comprada",
+        prefixo: form.prefixo.trim(),
+        data_instalacao: form.data_instalacao || null,
+        km_instalacao: safeNumber(form.km_instalacao),
+        data_falha: form.data_falha || null,
+        km_falha: safeNumber(form.km_falha),
+        tipo_solicitacao: form.tipo_solicitacao || null,
+        // andamento
         enviado_fornecedor_em: form.enviado_fornecedor_em || null,
         retirada_fornecedor_em: form.retirada_fornecedor_em || null,
         prazo_retorno_dias: safeNumber(form.prazo_retorno_dias),
@@ -508,31 +538,94 @@ function GarantiaDetailModal({ open, item, onClose, onSaved, user }) {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex justify-end">
+          <ActionButton onClick={() => setEditingDados((v) => !v)}>
+            {editingDados ? "Concluir edicao dos dados" : "Editar dados"}
+          </ActionButton>
+        </div>
+
         <SectionBlock title="Cadastro da peca" description="Identificacao da peca, fornecedor e referencia comercial.">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <Detail label="Controle" value={item.numero_controle} />
-            <Detail label="Tipo da garantia" value={item.tipo_garantia || "Peca comprada"} />
-            <Detail label="Peca" value={item.peca} />
-            <Detail label="Codigo" value={item.codigo_peca} />
-            <Detail label="Fornecedor" value={item.fornecedor} />
-            <Detail label="Data da compra" value={formatDateBR(item.data_compra)} />
-            <Detail label="Valor da peca" value={item.valor_peca != null ? `R$ ${Number(item.valor_peca).toFixed(2)}` : "--"} />
+            {editingDados ? (
+              <Field label="Tipo da garantia">
+                <select value={form.tipo_garantia} onChange={(e) => setForm((prev) => ({ ...prev, tipo_garantia: e.target.value }))} className={inputClass}>
+                  {GARANTIA_TIPOS.map((option) => (<option key={option} value={option}>{option}</option>))}
+                </select>
+              </Field>
+            ) : (
+              <Detail label="Tipo da garantia" value={item.tipo_garantia || "Peca comprada"} />
+            )}
+            {editingDados ? (
+              <Field label="Peca"><input type="text" value={form.peca} onChange={(e) => setForm((prev) => ({ ...prev, peca: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="Peca" value={item.peca} />
+            )}
+            {editingDados ? (
+              <Field label="Codigo"><input type="text" value={form.codigo_peca} onChange={(e) => setForm((prev) => ({ ...prev, codigo_peca: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="Codigo" value={item.codigo_peca} />
+            )}
+            {editingDados ? (
+              <Field label="Fornecedor"><input type="text" value={form.fornecedor} onChange={(e) => setForm((prev) => ({ ...prev, fornecedor: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="Fornecedor" value={item.fornecedor} />
+            )}
+            {editingDados ? (
+              <Field label="Data da compra"><input type="date" value={form.data_compra} onChange={(e) => setForm((prev) => ({ ...prev, data_compra: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="Data da compra" value={formatDateBR(item.data_compra)} />
+            )}
+            {editingDados ? (
+              <Field label="Valor da peca"><input type="number" min="0" step="0.01" value={form.valor_peca} onChange={(e) => setForm((prev) => ({ ...prev, valor_peca: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="Valor da peca" value={item.valor_peca != null ? `R$ ${Number(item.valor_peca).toFixed(2)}` : "--"} />
+            )}
           </div>
         </SectionBlock>
 
         <SectionBlock title="Instalacao" description="Onde e quando a peca foi instalada.">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <Detail label="Prefixo" value={item.prefixo} />
-            <Detail label="Data da instalacao" value={formatDateBR(item.data_instalacao)} />
-            <Detail label="KM instalacao" value={formatKm(item.km_instalacao)} />
+            {editingDados ? (
+              <Field label="Prefixo"><input type="text" value={form.prefixo} onChange={(e) => setForm((prev) => ({ ...prev, prefixo: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="Prefixo" value={item.prefixo} />
+            )}
+            {editingDados ? (
+              <Field label="Data da instalacao"><input type="date" value={form.data_instalacao} onChange={(e) => setForm((prev) => ({ ...prev, data_instalacao: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="Data da instalacao" value={formatDateBR(item.data_instalacao)} />
+            )}
+            {editingDados ? (
+              <Field label="KM instalacao"><input type="number" min="0" step="1" value={form.km_instalacao} onChange={(e) => setForm((prev) => ({ ...prev, km_instalacao: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="KM instalacao" value={formatKm(item.km_instalacao)} />
+            )}
           </div>
         </SectionBlock>
 
         <SectionBlock title="Falha" description="Detalhes da ocorrencia que motivou a abertura da garantia.">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <Detail label="Data da falha" value={formatDateBR(item.data_falha)} />
-            <Detail label="KM falha" value={formatKm(item.km_falha)} />
-            <Detail label="Tipo de solicitacao" value={item.tipo_solicitacao} />
+            {editingDados ? (
+              <Field label="Data da falha"><input type="date" value={form.data_falha} onChange={(e) => setForm((prev) => ({ ...prev, data_falha: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="Data da falha" value={formatDateBR(item.data_falha)} />
+            )}
+            {editingDados ? (
+              <Field label="KM falha"><input type="number" min="0" step="1" value={form.km_falha} onChange={(e) => setForm((prev) => ({ ...prev, km_falha: e.target.value }))} className={inputClass} /></Field>
+            ) : (
+              <Detail label="KM falha" value={formatKm(item.km_falha)} />
+            )}
+            {editingDados ? (
+              <Field label="Tipo de solicitacao">
+                <select value={form.tipo_solicitacao} onChange={(e) => setForm((prev) => ({ ...prev, tipo_solicitacao: e.target.value }))} className={inputClass}>
+                  <option value="">Selecione</option>
+                  {GARANTIA_TIPOS_SOLICITACAO.map((option) => (<option key={option} value={option}>{option}</option>))}
+                </select>
+              </Field>
+            ) : (
+              <Detail label="Tipo de solicitacao" value={item.tipo_solicitacao} />
+            )}
           </div>
         </SectionBlock>
 

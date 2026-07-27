@@ -189,11 +189,10 @@ def montar(rows, hoje):
             for t, codes in BOXES:
                 if t and any(precisa(c, cd) for cd in codes): box_veic[t].append('046-'+c['veic'])
 
-    esc5_hoje = [('', '046-'+c['veic']) for c in fila5[:3]]
-    for c in fila5[:3]:
-        prog_itens.append(dict(veic=c['veic'], tipo='5K', data=hoje.isoformat()))
+    # Nada pra HOJE: a programacao (10K e 5K) comeca AMANHA.
+    esc5_hoje = []
     esc5_sem = []
-    for di, c3 in enumerate([fila5[3+di*3:3+di*3+3] for di in range(ND)]):
+    for di, c3 in enumerate([fila5[di*3:di*3+3] for di in range(ND)]):
         for c in c3:
             esc5_sem.append(('', '046-'+c['veic'], di))
             prog_itens.append(dict(veic=c['veic'], tipo='5K', data=dias_sem[di].isoformat()))

@@ -112,9 +112,10 @@ def build(D, venc, png, hoje):
     t10.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3)]))
     story += [t10, Spacer(1,12)]
 
-    story += [Paragraph('INSPEÇÕES 5.000 — hoje à noite + até sexta', SECt), Spacer(1,5)]
-    n5 = n + 1; w5 = (PW - (n5-1)*6) / n5
-    c5 = [day_card('HOJE', D['hoje'][:5], hoje5, w5, True)] + [day_card(dow[i], dias[i], g5[i], w5) for i in range(n)]
+    tem_hoje = len(hoje5) > 0
+    story += [Paragraph('INSPEÇÕES 5.000 — %s' % ('hoje à noite + até sexta' if tem_hoje else 'de amanhã até sexta'), SECt), Spacer(1,5)]
+    n5 = n + (1 if tem_hoje else 0); w5 = (PW - (n5-1)*6) / n5
+    c5 = ([day_card('HOJE', D['hoje'][:5], hoje5, w5, True)] if tem_hoje else []) + [day_card(dow[i], dias[i], g5[i], w5) for i in range(n)]
     t5 = Table([c5], colWidths=[w5+6]*n5)
     t5.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3)]))
     story += [t5, Spacer(1,12)]

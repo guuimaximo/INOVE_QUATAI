@@ -39,8 +39,9 @@ def feitos_manual_itens():
     except Exception:
         return []
 EXCLUIR     = {'110797', 'PKB3382'}            # veiculos parados
-CONCESS     = {'2645', '2646'}                 # planos de garantia (Euro6)
-GAR_FEITOS  = {'242522','242520','242517','242514','242505','242513'}  # garantias ja feitas (marcar OK) - manter manual
+CONCESS     = {'2645', '2646'}                 # planos de garantia Euro6: 2645=30k, 2646=60k (60k cobre a 30k)
+# "OK/feito" da garantia agora eh AUTOMATICO: revisao da concessionaria aberta nos ultimos 60 dias
+# (ver montar()). Antes era a lista manual GAR_FEITOS, que ficava desatualizada.
 WINDOW_KM   = 3000                             # conciliacao de satelites na preventiva 10k
 MECS        = ['ANDERSON', 'LUIZ H', 'MAURILIO']
 
@@ -153,14 +154,21 @@ def montar(rows, hoje):
     for c in inhouse: c['tipo'] = tipo(c)
     # tira quem foi feito nos ultimos 7 dias (ja aparece em "realizado") + feitos manuais
     fm = feitos_manual()
-    # Exclusao por-plano: quem fez a REVISAO 10k recente sai da fila10 (e da fila5, pois 10k reseta a 5k);
-    # quem fez SO a INSPECAO 5k sai da fila5, mas CONTINUA na fila10 se a revisao dele estiver vencida.
+    # Exclusao por-plano: quem fez a REVISAO 10k recente sai da fila10.
+    # ATENCAO: NAO excluir da fila5 so porque fez a 10.000 -> nem sempre a 10.000 reseta a
+    # inspecao 5.000 (ex.: 222211 fez Rev.Pesada em 20/07 mas a 5.000 seguiu vencida desde 22/06).
+    # A fila5 confia no CONTADOR real da 5.000 (insp5): quem realmente resetou vai pro fim da fila
+    # sozinho; quem continua vencido na 5.000 permanece, mesmo tendo feito a 10.000.
     prev_set = set(v.replace('046-','') for v,_ in feitas_prev)   # fez a 10.000 recente
-    insp_set = set(v.replace('046-','') for v,_ in feitas_insp)   # fez a 5.000 recente
+    insp_set = set(v.replace('046-','') for v,_ in feitas_insp)   # fez a 5.000 recente (2305 fechada)
+    def resetou5(c):  # a 5.000 realmente resetou? (contador voltou a negativo = nao vencida)
+        r = c['byplan'].get('2305'); k = num(r['km_para_proxima']) if r else None
+        return k is not None and k < 0
     fila10 = sorted([c for c in inhouse if c['tipo']=='10K' and gat10(c) is not None
                      and c['veic'] not in prev_set and '2306' not in fm.get(c['veic'], set())], key=gat10)
     fila5  = sorted([c for c in inhouse if c['tipo']=='5K'  and c['insp5'] is not None
-                     and c['veic'] not in (prev_set | insp_set) and '2305' not in fm.get(c['veic'], set())], key=lambda c: c['insp5'])
+                     and c['veic'] not in insp_set and '2305' not in fm.get(c['veic'], set())
+                     and not (c['veic'] in prev_set and resetou5(c))], key=lambda c: c['insp5'])
 
     # 10.000 comecam AMANHA e vao ate a SEXTA desta semana (hoje so tem inspecao 5K a noite).
     _d = hoje + datetime.timedelta(days=1)
@@ -207,13 +215,24 @@ def montar(rows, hoje):
         for r in c['byplan'].values():
             odom = max(odom, (num(r['nr_hodometro']) or 0) + (num(r['km_rodado']) or 0))
         if not kd or kd <= 0 or not odom: continue
+        # 60k (2646) COBRE a 30k (2645). Quando o 60k foi feito por ultimo, o contador da 30k
+        # aparece vencido so por nao ter resetado -> o proximo 30k intermediario cai em (prox 60k - 30k).
+        r30 = remkm(c, '2645'); r60 = remkm(c, '2646')
+        a30 = fdate((c['byplan'].get('2645') or {}).get('dt_abertura_os'))
+        a60 = fdate((c['byplan'].get('2646') or {}).get('dt_abertura_os'))
+        if r60 is not None and a60 and (a30 is None or a60 >= a30):
+            r30 = r60 - 30000
         faltam = None
-        for code in CONCESS:
-            rk = remkm(c, code)
+        for rk in (r30, r60):
             if rk is None: continue
             if faltam is None or rk < faltam: faltam = rk
         if faltam is None: continue
-        done = c['veic'] in GAR_FEITOS
+        # "abriu o plano conta como feito": revisao da concessionaria ABERTA recente (ultimos 60 dias) = OK
+        ult_conc = max([d for d in (a30, a60) if d], default=None)
+        done = bool(ult_conc and (hoje - ult_conc).days <= 60)
+        # a OS da revisao mais recente esta aberta (sem fechamento) ou ja foi fechada?
+        cod_done = '2646' if (a60 and (a30 is None or a60 >= a30)) else ('2645' if a30 else None)
+        os_aberta = bool(cod_done and not fdate((c['byplan'].get(cod_done) or {}).get('dt_fechamento_os')))
         # ultima vez que o KM do veiculo foi atualizado (abastecimento)
         kmupd = None
         for r in c['byplan'].values():
@@ -226,7 +245,7 @@ def montar(rows, hoje):
         alvo = hoje + datetime.timedelta(days=max(0, int(round(alvo_d))))
         gar.append(dict(veic='046-'+c['veic'], odom=int(odom), milestone=milestone, falta=int(round(faltam)),
             kmdia=kd, vence=vence.strftime('%d/%m/%Y'), alvo=alvo.strftime('%d/%m/%Y'),
-            alvo_sort=alvo.isoformat(), done=done,
+            alvo_sort=alvo.isoformat(), done=done, os_aberta=os_aberta,
             km_upd=kmupd.strftime('%d/%m') if kmupd else '—', km_atraso=km_atraso))
     # pendentes por data de chamada; feitos (OK) no fim
     gar.sort(key=lambda x: (x['done'], x['alvo_sort']))

@@ -20,7 +20,21 @@ BG=colors.HexColor('#eef1ee'); TEALD=colors.HexColor('#0c4a3c'); TEAL=colors.Hex
 INK=colors.HexColor('#16211f'); MUT=colors.HexColor('#5f716c'); LINE=colors.HexColor('#dce3df')
 SKY=colors.HexColor('#bfe0d4'); AMBER=colors.HexColor('#b7791f'); AMBERBG=colors.HexColor('#fbf0d8')
 RED=colors.HexColor('#c0392b'); REDBG=colors.HexColor('#fbe4e1'); NIGHT=colors.HexColor('#4a3b78')
+GREEN=colors.HexColor('#1e9e63'); GREENBG=colors.HexColor('#e3f5eb')
 CARD=colors.white
+
+def feitos_semana(rows, corte):
+    """Carros programados JA FEITOS na semana: OS do plano ancora ABERTA (ou fechada) >= corte.
+    corte = 'AAAA-MM-DD' (segunda da semana). 2306 = 10.000, 2305 = 5.000."""
+    out = {'10K': set(), '5K': set()}
+    anc = {'2306': '10K', '2305': '5K'}
+    for r in rows:
+        pid = str(r['id_plano'])
+        if pid not in anc: continue
+        a = (r.get('dt_abertura_os') or '')[:10]; f = (r.get('dt_fechamento_os') or '')[:10]
+        serv = a or f
+        if serv and serv >= corte: out[anc[pid]].add(r['nr_ordem'])
+    return out
 
 def _load(nome):
     spec = importlib.util.spec_from_file_location(nome.split('.')[0], os.path.join(BASE, nome))
@@ -39,8 +53,9 @@ def vencidas_10k(rows):
             if k is not None and k >= 0: s.add(r['nr_ordem'])
     return s
 
-def build(D, venc, png, hoje):
+def build(D, venc, png, hoje, feitos=None):
     from collections import defaultdict
+    feitos = feitos or {'10K': set(), '5K': set()}
     dow = [w.split('-')[0] for w in D['dow']]; dias = [x[:5] for x in D['dias_sem']]
     g10 = defaultdict(list); g5 = defaultdict(list)
     for m, v, di in D['esc10']: g10[di].append(v)
@@ -59,6 +74,7 @@ def build(D, venc, png, hoje):
     DAYD=S('dd', fontSize=7, leading=9, textColor=SKY, alignment=TA_CENTER)
     CAR=S('car', fontName='Helvetica-Bold', fontSize=9, leading=12, textColor=INK, alignment=TA_CENTER)
     CARV=S('carv', fontName='Helvetica-Bold', fontSize=9, leading=12, textColor=RED, alignment=TA_CENTER)
+    CARF=S('carf', fontName='Helvetica-Bold', fontSize=9, leading=12, textColor=GREEN, alignment=TA_CENTER)
     BT=S('bt', fontName='Helvetica-Bold', fontSize=6.8, leading=8.5, textColor=NIGHT)
     BV=S('bv', fontSize=8, leading=10.5, textColor=INK)
     FOOT=S('ft', fontSize=6.6, leading=8.5, textColor=MUT)
@@ -85,7 +101,7 @@ def build(D, venc, png, hoje):
     kr.setStyle(TableStyle([('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3),('VALIGN',(0,0),(-1,-1),'TOP')]))
     story += [kr, Spacer(1,11)]
 
-    def day_card(nome, dt, cars, w, hoje_card=False):
+    def day_card(nome, dt, cars, w, hoje_card=False, feitos_set=frozenset()):
         hh = Table([[Paragraph(nome.upper(), DAYH)],[Paragraph(dt, DAYD)]], colWidths=[w])
         hb = AMBER if hoje_card else TEALD
         hh.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),hb),('TOPPADDING',(0,0),(0,0),3),('BOTTOMPADDING',(0,0),(0,0),0),
@@ -93,21 +109,26 @@ def build(D, venc, png, hoje):
         rows_c = [[hh]]
         for v in cars:
             vv = v.replace('046-','')
-            late = vv in venc
-            rows_c.append([Paragraph(v + (' •' if late else ''), CARV if late else CAR)])
+            done = vv in feitos_set
+            late = (vv in venc) and not done          # feito tem prioridade sobre vencido
+            sty = CARF if done else (CARV if late else CAR)
+            mark = ' ✓' if done else (' •' if late else '')
+            rows_c.append([Paragraph(v + mark, sty)])
         for _ in range(3-len(cars)): rows_c.append([Paragraph('—', S('d', parent=CAR, textColor=MUT))])
         t = Table(rows_c, colWidths=[w])
         st = [('BOX',(0,0),(-1,-1),0.6,LINE),('TOPPADDING',(0,1),(-1,-1),3.5),('BOTTOMPADDING',(0,1),(-1,-1),3.5),
               ('LINEBELOW',(0,1),(0,-2),0.4,LINE),('TOPPADDING',(0,0),(0,0),0),('BOTTOMPADDING',(0,0),(0,0),0),
               ('LEFTPADDING',(0,0),(-1,-1),0),('RIGHTPADDING',(0,0),(-1,-1),0)]
         for i,v in enumerate(cars,1):
-            if v.replace('046-','') in venc: st.append(('BACKGROUND',(0,i),(0,i),REDBG))
+            vv = v.replace('046-','')
+            if vv in feitos_set: st.append(('BACKGROUND',(0,i),(0,i),GREENBG))
+            elif vv in venc: st.append(('BACKGROUND',(0,i),(0,i),REDBG))
         t.setStyle(TableStyle(st))
         return t
 
     story += [Paragraph('PREVENTIVAS 10.000 — de amanhã até sexta', SECt), Spacer(1,5)]
     n = len(dias); w10 = (PW - (n-1)*6) / max(n,1)
-    cells = [day_card(dow[i], dias[i], g10[i], w10) for i in range(n)]
+    cells = [day_card(dow[i], dias[i], g10[i], w10, feitos_set=feitos['10K']) for i in range(n)]
     t10 = Table([cells], colWidths=[w10+6]*n)
     t10.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3)]))
     story += [t10, Spacer(1,12)]
@@ -115,7 +136,7 @@ def build(D, venc, png, hoje):
     tem_hoje = len(hoje5) > 0
     story += [Paragraph('INSPEÇÕES 5.000 — %s' % ('hoje à noite + até sexta' if tem_hoje else 'de amanhã até sexta'), SECt), Spacer(1,5)]
     n5 = n + (1 if tem_hoje else 0); w5 = (PW - (n5-1)*6) / n5
-    c5 = ([day_card('HOJE', D['hoje'][:5], hoje5, w5, True)] if tem_hoje else []) + [day_card(dow[i], dias[i], g5[i], w5) for i in range(n)]
+    c5 = ([day_card('HOJE', D['hoje'][:5], hoje5, w5, True, feitos_set=feitos['5K'])] if tem_hoje else []) + [day_card(dow[i], dias[i], g5[i], w5, feitos_set=feitos['5K']) for i in range(n)]
     t5 = Table([c5], colWidths=[w5+6]*n5)
     t5.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3)]))
     story += [t5, Spacer(1,12)]
@@ -137,7 +158,8 @@ def build(D, venc, png, hoje):
             tb.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
             story += [tb]
 
-    story += [Spacer(1,4), Paragraph('Carros em <font color="#c0392b"><b>vermelho •</b></font> = Revisão 10.000 vencida. '
+    story += [Spacer(1,4), Paragraph('<font color="#1e9e63"><b>verde ✓</b></font> = já feito nesta semana &nbsp;·&nbsp; '
+        'carros em <font color="#c0392b"><b>vermelho •</b></font> = Revisão 10.000 vencida. '
         'Garantia (242xxx) faz 10.000/5.000 in-house; só a revisão da concessionária é à parte. '
         'Nível 10.000 = preventiva · 5.000 = inspeção.', FOOT)]
 
@@ -194,9 +216,12 @@ def main():
     rows = G.puxar_dados()
     Dfresh = G.montar(rows, hoje)
     D['km_ref'] = Dfresh.get('km_ref'); D['km_ref_atraso'] = Dfresh.get('km_ref_atraso')
+    si = D.get('semana_ini', '')  # dd/mm/aaaa -> corte aaaa-mm-dd
+    corte = '%s-%s-%s' % (si[6:10], si[3:5], si[0:2]) if len(si) >= 10 else hoje.isoformat()
+    feitos = feitos_semana(rows, corte)
     os.makedirs(SAIDA_DIR, exist_ok=True)
     png = os.path.join(SAIDA_DIR, 'Painel_Programacao_%s.png' % hoje.strftime('%Y-%m-%d'))
-    pdf = build(D, vencidas_10k(rows), png, hoje)
+    pdf = build(D, vencidas_10k(rows), png, hoje, feitos)
     print('[%s] Painel do plano TRAVADO (%d prev, semana %s-%s)'
           % (datetime.datetime.now().strftime('%H:%M:%S'), len(D['esc10']), D['semana_ini'][:5], D['semana_fim'][:5]))
     PG.enviar_telegram(png, caption(D, hoje), G.TELEGRAM_DIR)

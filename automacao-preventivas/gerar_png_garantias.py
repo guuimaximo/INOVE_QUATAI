@@ -134,7 +134,7 @@ def build(D, png_path, hoje):
             dias = (alvo_dt - hoje_d).days
         except Exception:
             dias = 999
-        if done: stat_txt, stat_c, stat_bg = 'OK', OKG, OKBG
+        if done: stat_txt, stat_c, stat_bg = ('OK<br/><font size=6>OS %s</font>' % ('ABERTA' if g.get('os_aberta') else 'FECHADA')), OKG, OKBG
         elif dias <= 3: stat_txt, stat_c, stat_bg = 'URGENTE', RED, REDBG
         elif dias <= 10: stat_txt, stat_c, stat_bg = 'PRÓXIMA', WARN, WARNBG
         else: stat_txt, stat_c, stat_bg = 'PROGRAMAR', MUT, SOFT
@@ -167,7 +167,7 @@ def build(D, png_path, hoje):
 
     leg = Paragraph('<font color="#c0392b"><b>URGENTE</b></font> = chamar em ≤3 dias &nbsp;·&nbsp; '
         '<font color="#b7791f"><b>PRÓXIMA</b></font> = ≤10 dias &nbsp;·&nbsp; '
-        '<font color="#1e9e63"><b>OK</b></font> = já realizada. &nbsp; '
+        '<font color="#1e9e63"><b>OK</b></font> = já realizada (<b>OS aberta</b> = feita, ainda não fechada no sistema · <b>OS fechada</b> = baixada). &nbsp; '
         '"Chamar em" já desconta o save de 500 km. Projeção pelo km/dia real de cada veículo. &nbsp; '
         '<b>KM Atualiz.</b> = último abastecimento que atualizou o odômetro daquele veículo '
         '(âmbar = 2-3 dias, vermelho = +3 dias sem leitura).', FOOT)

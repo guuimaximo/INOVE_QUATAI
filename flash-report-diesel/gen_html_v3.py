@@ -132,7 +132,7 @@ import calendar as _cal
 _cal_c = _cal.Calendar(firstweekday=6)
 _weeks_jul = _cal_c.monthdayscalendar(gfd.MES_REF_ANO, gfd.MES_REF_MM)
 _dias_cols = ["Dom","Seg","Ter","Qua","Qui","Sex","S\u00e1b"]
-_visita_label = {6: "1\u00aa visita", 17: "2\u00aa visita", 31: "3\u00aa visita"}
+_visita_label = {6: "1\u00aa visita", 17: "2\u00aa visita", 30: "3\u00aa visita"}
 _cal_header = "".join(f'<div style="text-align:center;font-size:8px;font-weight:800;color:#64748b;text-transform:uppercase;padding:4px 0;">{d}</div>' for d in _dias_cols)
 _cal_cells = ""
 for _week in _weeks_jul:
@@ -1336,8 +1336,8 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # [COWORK] PAGINA NOTURNA (17) — dados MANUAIS: ultima visita, descricao, proxima visita e FOTOS.
 # Peca ao usuario e atualize aqui + embuta as fotos anexadas. Ver COWORK_FLASH.md.
 # Fotos da visita: coloque os arquivos em flash-report-diesel/ e liste os nomes aqui.
-FOTOS_NOTURNO_ARQUIVOS = ["noturno_jul_1.jpg", "noturno_jul_2.jpg",
-                          "noturno_jul_3.jpg", "noturno_jul_4.jpg"]
+# Lista vazia = visita sem registro fotografico (o bloco de imagens some da pagina).
+FOTOS_NOTURNO_ARQUIVOS = []
 # As fotos sao retrato (~1204x1600). Em celula baixa e larga o object-fit:cover corta
 # justamente a cabeca, entao a celula e alta (170px) e o enquadramento sobe
 # (object-position 20%) para manter rosto e tronco visiveis.
@@ -1346,9 +1346,12 @@ FOTOS_NOTURNO = "".join(
     f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;'
     f'object-position:center 20%;display:block;"/></div>'
     for _f in FOTOS_NOTURNO_ARQUIVOS)
+FOTOS_NOTURNO_BLOCO = (
+    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px;">{FOTOS_NOTURNO}</div>'
+    if FOTOS_NOTURNO_ARQUIVOS else "")
 # ================= PAGINA 17: ACOMPANHAMENTO NOTURNO =================
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "31/07")}
+  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "14/08")}
   <div class="grid-2">
     <div class="card"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
@@ -1356,11 +1359,14 @@ pages.append(f"""<div class="page-break"></div><div class="page">
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Programação</div>
       <div class="cons-text">{len(_visita_label)} visitas noturnas programadas para {MESREF_NOME.lower()} — {_visitas_datas} — mantendo a cadência mensal de visitas noturnas. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
-    <div class="card"><div class="card-title">Última visita realizada — 17/07/2026</div><div class="card-body">
-      <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento Prático de Manobristas</div>
-      <div class="cons-text" style="text-align:justify;">Foi realizado um treinamento prático com os manobristas em vias públicas, com foco no aperfeiçoamento da condução, direção preventiva, cumprimento das normas de trânsito e adoção de boas práticas operacionais. A iniciativa reforça o compromisso com a segurança, a qualidade do serviço e a preparação dos profissionais para uma condução cada vez mais segura e eficiente.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px;">{FOTOS_NOTURNO}</div>
-      <div class="metric" style="margin-top:7px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">31/07/2026</div></div>
+    <div class="card"><div class="card-title">Última visita realizada — 30/07/2026</div><div class="card-body">
+      <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento de Manobras de Ônibus — Período Noturno</div>
+      <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático de manobras de ônibus no período noturno, com o objetivo de aprimorar as técnicas dos manobristas, reforçar os procedimentos de segurança operacional e desenvolver maior confiança na condução dos veículos em ambiente urbano.</div>
+      <div class="cons-text" style="text-align:justify;margin-top:5px;">Durante a atividade, foram trabalhados pontos como controle do veículo, posicionamento em vias, atenção aos obstáculos, realização de manobras com segurança e condução preventiva, proporcionando uma experiência mais próxima das situações encontradas na operação diária.</div>
+      <div class="cons-text" style="text-align:justify;margin-top:5px;">O treinamento contribuiu para identificar oportunidades de melhoria, corrigir comportamentos de risco e preparar os profissionais para uma atuação mais segura, eficiente e responsável.</div>
+      {FOTOS_NOTURNO_BLOCO}
+      <div class="metric" style="margin-top:7px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">14/08/2026</div>
+        <div style="font-size:7.6px;color:#475569;margin-top:2px;">Visita seguinte: 28/08/2026</div></div>
     </div></div>
   </div>
   {footer(17)}
@@ -1388,8 +1394,22 @@ CRONOGRAMA = [
         ("Imagem Motivacional", "", "13/07", True),
         ("Vídeo - Min. do Conhecimento", "Desconecte do Celular. Conecte-se à Vida", "14/07", True),
         ("Imagem Informativa", "Desconecte do Celular. Conecte-se à Vida: o perigo do uso do celular ao volante", "15/07", True),
-        ("Podcast - Fala, Motô!", "", "16/07", False),
+        ("Podcast - Fala, Motô!", "", "16/07", True),
         ("Enquete de Fixação", "Desconecte do Celular. Conecte-se à Vida: o perigo do uso do celular ao volante", "17/07", True),
+    ]),
+    ("4ª Semana", "20 a 24/07", [
+        ("Imagem Motivacional", "", "20/07", True),
+        ("Vídeo - Min. do Conhecimento", "Equipe do plantão não abre mais ficha e nem disponibiliza atendimento", "21/07", True),
+        ("Imagem Informativa", "Equipe do plantão não abre mais ficha e nem disponibiliza atendimento", "22/07", True),
+        ("Podcast - Fala, Motô!", "A importância dos Acompanhamentos Operacionais", "23/07", True),
+        ("Enquete de Fixação", "Equipe do plantão não abre mais ficha e nem disponibiliza atendimento", "24/07", True),
+    ]),
+    ("5ª Semana", "27 a 31/07", [
+        ("Imagem Motivacional", "", "27/07", True),
+        ("Vídeo - Min. do Conhecimento", "Como Verificar Avarias na Suspensão dos Coletivos", "28/07", True),
+        ("Imagem Informativa", "Como Verificar Avarias na Suspensão dos Coletivos", "29/07", True),
+        ("Podcast - Fala, Motô!", "Mulheres ao Volante: Superação, Coragem e Inspiração", "30/07", True),
+        ("Enquete de Fixação", "Como Verificar Avarias na Suspensão dos Coletivos", "31/07", True),
     ]),
 ]
 

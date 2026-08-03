@@ -93,7 +93,7 @@ export default function PrettyDatePicker({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-2 left-0 w-[280px] bg-white rounded-2xl shadow-2xl border border-slate-200 p-3">
+        <div className="absolute z-[200] mt-2 left-0 w-[280px] bg-white rounded-2xl shadow-2xl border border-slate-200 p-3">
           <div className="flex items-center justify-between mb-2">
             <button
               type="button"

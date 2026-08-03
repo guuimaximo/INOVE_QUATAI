@@ -1380,22 +1380,26 @@ FOTOS_NOTURNO_BLOCO = (
     f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px;">{FOTOS_NOTURNO}</div>'
     if FOTOS_NOTURNO_ARQUIVOS else "")
 # ================= PAGINA 17: ACOMPANHAMENTO NOTURNO =================
-pages.append(f"""<div class="page-break"></div><div class="page">
+# Esta pagina tem so dois cards curtos e sobrava quase metade da folha em branco (a visita
+# de julho nem teve fotos). A pagina vira uma coluna flex e o grid ocupa a altura restante,
+# entao os dois cards esticam ate o rodape e o calendario cresce junto (linhas 1fr) em vez
+# de ficar espremido no topo. margin-bottom deixa a faixa do rodape livre - ele e absoluto.
+pages.append(f"""<div class="page-break"></div><div class="page" style="display:flex;flex-direction:column;">
   {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "14/08")}
-  <div class="grid-2">
-    <div class="card"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body">
+  <div class="grid-2" style="flex:1;min-height:0;margin-bottom:9mm;">
+    <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
-      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">{CAL_JULHO_CELLS}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:4px;flex:1;">{CAL_JULHO_CELLS}</div>
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Programação</div>
       <div class="cons-text">{len(_visita_label)} visitas noturnas programadas para {MESREF_NOME.lower()} — {_visitas_datas} — mantendo a cadência mensal de visitas noturnas. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
-    <div class="card"><div class="card-title">Última visita realizada — 30/07/2026</div><div class="card-body">
+    <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Última visita realizada — 30/07/2026</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
       <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento de Manobras de Ônibus — Período Noturno</div>
       <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático de manobras de ônibus no período noturno, com o objetivo de aprimorar as técnicas dos manobristas, reforçar os procedimentos de segurança operacional e desenvolver maior confiança na condução dos veículos em ambiente urbano.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">Durante a atividade, foram trabalhados pontos como controle do veículo, posicionamento em vias, atenção aos obstáculos, realização de manobras com segurança e condução preventiva, proporcionando uma experiência mais próxima das situações encontradas na operação diária.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">O treinamento contribuiu para identificar oportunidades de melhoria, corrigir comportamentos de risco e preparar os profissionais para uma atuação mais segura, eficiente e responsável.</div>
       {FOTOS_NOTURNO_BLOCO}
-      <div class="metric" style="margin-top:7px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">14/08/2026</div>
+      <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">14/08/2026</div>
         <div style="font-size:7.6px;color:#475569;margin-top:2px;">Visita seguinte: 28/08/2026</div></div>
     </div></div>
   </div>

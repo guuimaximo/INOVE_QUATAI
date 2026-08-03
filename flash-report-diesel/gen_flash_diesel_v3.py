@@ -20,22 +20,36 @@ plt.rcParams["font.family"] = "DejaVu Sans"
 # ---- Mes de referencia = mes CORRENTE, do dia 01 ate ontem (dia anterior a geracao). ----
 # Ex.: gerado em 10/07 -> analisa 01/07 a 09/07. Pode-se fixar via FLASH_REF_DATE=YYYY-MM-DD
 # (para teste/validacao); sem isso usa a data de hoje.
+# FLASH_MES_FECHADO=YYYY-MM gera o FECHAMENTO do mes: dia 01 ate o ultimo dia, INCLUSIVE.
+# Isso nao da para pedir via FLASH_REF_DATE, porque MES_INI e MES_FIM saem da mesma data:
+# 2026-07-31 pararia em 30/07 e 2026-08-01 viraria agosto.
 import datetime as _dtref
 _r = os.environ.get("FLASH_REF_DATE", "").strip()
+_mf = os.environ.get("FLASH_MES_FECHADO", "").strip()
 try:
-    _HOJE = _dtref.date.fromisoformat(_r) if _r else _dtref.date.today()
+    MES_INI = _dtref.date(int(_mf[:4]), int(_mf[5:7]), 1)   # 1o dia do mes a fechar
 except ValueError:
-    _HOJE = _dtref.date.today()
+    MES_INI = None
+if MES_INI is not None:
+    # MES_FIM e EXCLUSIVO, entao aponta para o 1o do mes seguinte e o ultimo dia entra.
+    # _HOJE acompanha: quem o usa (idade de tratativa, janela de sessoes) tem que enxergar
+    # o relatorio como tirado no fechamento, nao na data real de geracao.
+    MES_FIM = _HOJE = (MES_INI + _dtref.timedelta(days=32)).replace(day=1)
+else:
+    try:
+        _HOJE = _dtref.date.fromisoformat(_r) if _r else _dtref.date.today()
+    except ValueError:
+        _HOJE = _dtref.date.today()
+    MES_INI = _HOJE.replace(day=1)      # 1o dia do mes corrente
+    MES_FIM = _HOJE                      # EXCLUSIVO: considera datas < MES_FIM (ate ontem)
 _ONTEM = _HOJE - _dtref.timedelta(days=1)
-MES_INI = _HOJE.replace(day=1)          # 1o dia do mes corrente
-MES_FIM = _HOJE                          # EXCLUSIVO: considera datas < MES_FIM (ate ontem)
 _ult_ant = MES_INI - _dtref.timedelta(days=1)
 MES_ANT_INI = _ult_ant.replace(day=1)   # 1o dia do mes anterior (para comparacoes)
 MES_ANT_FIM = MES_INI                    # EXCLUSIVO
 _MESES_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
              "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 _MES3 = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-MES_REF_MM, MES_REF_ANO = _HOJE.month, _HOJE.year
+MES_REF_MM, MES_REF_ANO = MES_INI.month, MES_INI.year  # de MES_INI: no fechamento _HOJE ja e o mes seguinte
 MES_ANT_MM, MES_ANT_ANO = _ult_ant.month, _ult_ant.year
 MES_REF_LABEL = f"{_MESES_PT[MES_REF_MM - 1]}/{MES_REF_ANO}"       # ex.: "Julho/2026"
 MES_ANT_LABEL = f"{_MESES_PT[MES_ANT_MM - 1]}/{MES_ANT_ANO}"       # ex.: "Junho/2026"

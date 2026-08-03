@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 11 * * 5"
   workflow_dispatch:
+    inputs:
+      mes_fechado:
+        description: "Fechamento de mes (AAAA-MM, ex.: 2026-07). Vazio = mes corrente ate ontem."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -40,6 +45,8 @@ jobs:
       - name: Gerar graficos + HTML
         working-directory: flash-report-diesel
         env:
+          # Vazio nas rodadas agendadas -> comportamento normal (mes corrente ate ontem)
+          FLASH_MES_FECHADO: ${{ inputs.mes_fechado }}
           # INOVE (diesel_acompanhamentos - Pagina 11)
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

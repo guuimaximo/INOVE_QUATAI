@@ -1,6 +1,6 @@
 // src/utils/auth.js
 export const SESSION_KEY = "user";
-const MAX_IDLE_MS = 60 * 60 * 1000; // 1h
+const MAX_IDLE_MS = 4 * 60 * 60 * 1000; // 4h
 
 export function getStoredUser() {
   try {

@@ -211,6 +211,15 @@ export default function Layout() {
     });
   }
 
+  function closeAllTabs(event) {
+    if (event) event.stopPropagation();
+    setOpenTabs(() => {
+      persistTabs([]);
+      return [];
+    });
+    navigate("/"); // volta pra aba fixa Inicio
+  }
+
   useEffect(() => {
     try {
       localStorage.setItem("inove_sidebar_open", desktopSidebarOpen ? "true" : "false");
@@ -549,13 +558,14 @@ export default function Layout() {
                   <div
                     key={t.path}
                     onClick={() => navigate(t.path)}
-                    className={`flex shrink-0 cursor-pointer items-center gap-2 rounded-lg py-1.5 pl-3 pr-1.5 text-[13px] transition ${
+                    title={t.label}
+                    className={`flex w-[150px] shrink-0 cursor-pointer items-center gap-2 rounded-lg py-1.5 pl-3 pr-1.5 text-[13px] transition ${
                       ativa
                         ? "bg-white font-medium text-slate-900 shadow-sm ring-1 ring-slate-200"
                         : "text-slate-500 hover:bg-slate-200/60"
                     }`}
                   >
-                    <span className="max-w-[160px] truncate">{t.label}</span>
+                    <span className="min-w-0 flex-1 truncate">{t.label}</span>
                     <button
                       type="button"
                       onClick={(e) => closeTab(t.path, e)}
@@ -577,6 +587,17 @@ export default function Layout() {
               >
                 <Plus size={16} />
               </button>
+
+              {openTabs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={closeAllTabs}
+                  className="ml-auto flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
+                  title="Fechar todas as abas"
+                >
+                  <X size={14} /> Fechar todas
+                </button>
+              )}
             </div>
           )}
 

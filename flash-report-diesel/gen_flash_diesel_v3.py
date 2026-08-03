@@ -432,18 +432,20 @@ PIORES_HISTORICO = {
 }
 
 # Causa-raiz da queda no Sinal de Alerta: trocou de linha e/ou carro entre Maio e Junho?
-# (nome, linha_maio, linha_junho, carro_maio, carro_junho, mudou_linha, mudou_carro)
+# (nome, linha_ant, linha_ref, carro_ant, carro_ref, mudou_linha, mudou_carro,
+#  mix_linha, mix_carro) — os dois mix ficam None no fallback: sem o dado diario nao
+#  da para medir sobreposicao, e a pagina entao nao exibe o percentual.
 SINAL_ALERTA_CAUSA = [
-    ("Paulo Cassetari", "-", "-", "-", "-", None, None),
-    ("Luiz Fernando Rodrigues Da Silva", "09TR", "15TR", "242522", "242525", True, True),
-    ("Marco Antonio Duarte Santana", "03TR", "20TR", "222406", "222212", True, True),
-    ("Eduardo Moreno Silva", "20TR", "20TR", "222225", "222225", False, False),
-    ("Paulo Marcos G. De Araujo Da Cunha", "-", "-", "-", "-", None, None),
-    ("Alex Jose Santos Rocha", "08TR", "08TR", "242504", "222403", False, True),
-    ("Thiago Dantas Oliveira", "11TR", "11TR", "222423", "222220", False, True),
-    ("Gerson Miranda Pereira", "34TR", "34TR", "242524", "242524", False, False),
-    ("Agenor Matias De Jesus", "11TR", "11TR", "222220", "222220", False, False),
-    ("Jose Everaldo Dos Santos", "04TR", "04TR", "222217", "222217", False, False),
+    ("Paulo Cassetari", "-", "-", "-", "-", None, None, None, None),
+    ("Luiz Fernando Rodrigues Da Silva", "09TR", "15TR", "242522", "242525", True, True, None, None),
+    ("Marco Antonio Duarte Santana", "03TR", "20TR", "222406", "222212", True, True, None, None),
+    ("Eduardo Moreno Silva", "20TR", "20TR", "222225", "222225", False, False, None, None),
+    ("Paulo Marcos G. De Araujo Da Cunha", "-", "-", "-", "-", None, None, None, None),
+    ("Alex Jose Santos Rocha", "08TR", "08TR", "242504", "222403", False, True, None, None),
+    ("Thiago Dantas Oliveira", "11TR", "11TR", "222423", "222220", False, True, None, None),
+    ("Gerson Miranda Pereira", "34TR", "34TR", "242524", "242524", False, False, None, None),
+    ("Agenor Matias De Jesus", "11TR", "11TR", "222220", "222220", False, False, None, None),
+    ("Jose Everaldo Dos Santos", "04TR", "04TR", "222217", "222217", False, False, None, None),
 ]
 
 # Instrutores - metricas da ultima semana do relatorio (29/06 seg a 03/07 sex)
@@ -943,17 +945,45 @@ if _bcnt_url and _bcnt_key:
             def _mais_usado(dic):
                 return max(dic, key=dic.get) if dic else "-"
 
+            def _participacao(dic):
+                """km por carro/linha -> fracao do km total do motorista no mes."""
+                tot = sum(dic.values())
+                return {k: v / tot for k, v in dic.items()} if tot > 0 else {}
+
+            def _sobreposicao(ant, ref):
+                """Quanto do mix de km se manteve entre os dois meses, de 0 a 1.
+
+                Soma dos minimos das participacoes: 1,0 = rodou exatamente a mesma
+                distribuicao de carros; 0,0 = nenhum carro em comum. Serve para os dois
+                meses terem peso igual mesmo com quilometragens diferentes.
+                """
+                sa, sb = _participacao(ant), _participacao(ref)
+                if not sa or not sb:
+                    return None
+                return sum(min(sa.get(k, 0.0), sb.get(k, 0.0)) for k in set(sa) | set(sb))
+
+            # Um motorista roda varios carros no mes - a pagina 15 mostra casos de carro
+            # "principal" com 11% dos dias e outros 16 veiculos. Comparar so o mais usado de
+            # cada mes classificava errado nos dois sentidos: dois meses com a mesma frota em
+            # ordem trocada viravam "trocou de carro", e trocar quase toda a frota mantendo o
+            # primeiro colocado virava "sem troca". Como e esse veredito que decide se a queda
+            # e cobrada como conducao, ele passa a olhar o mix inteiro.
+            MIX_IGUAL = 0.70          # abaixo disso o conjunto de veiculos mudou de verdade
+
             def _causas(lista):
                 """(nome, linha_ant, linha_ref, carro_ant, carro_ref, mudou_linha,
-                mudou_carro) — mesma pergunta para quem caiu e para quem subiu: a variacao
-                veio de troca de linha/carro ou da conducao?"""
+                mudou_carro, mix_linha, mix_carro) — a variacao veio de troca de
+                linha/carro ou da conducao? As duas ultimas posicoes sao a sobreposicao
+                de mix (0 a 1), que e a evidencia por tras do veredito."""
                 out = []
                 for n, ch, m5, j6, v in lista:
                     lM, lJ = _mais_usado(_lc[ch][MES_ANT_MM]), _mais_usado(_lc[ch][MES_REF_MM])
                     cM, cJ = _mais_usado(_cc[ch][MES_ANT_MM]), _mais_usado(_cc[ch][MES_REF_MM])
-                    mudL = (lM != lJ) if (lM != "-" and lJ != "-") else None
-                    mudC = (cM != cJ) if (cM != "-" and cJ != "-") else None
-                    out.append((n, lM, lJ, cM, cJ, mudL, mudC))
+                    ovL = _sobreposicao(_lc[ch][MES_ANT_MM], _lc[ch][MES_REF_MM])
+                    ovC = _sobreposicao(_cc[ch][MES_ANT_MM], _cc[ch][MES_REF_MM])
+                    mudL = (ovL < MIX_IGUAL) if ovL is not None else None
+                    mudC = (ovC < MIX_IGUAL) if ovC is not None else None
+                    out.append((n, lM, lJ, cM, cJ, mudL, mudC, ovL, ovC))
                 return out
 
             SINAL_ALERTA_CAUSA = _causas(_piores_var)

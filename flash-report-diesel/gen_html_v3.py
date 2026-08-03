@@ -547,6 +547,20 @@ def _mudou(de, para):
     return de if de == para else f"{de}<span style='color:#94a3b8;'>→</span>{para}"
 
 
+def _com_mix(de, para, mix):
+    """Predominante do periodo + quanto do mix de km se repetiu entre os dois meses.
+
+    O predominante sozinho dizia pouco: o motorista roda varios carros no mes, e dois
+    meses com a mesma frota em ordem trocada pareciam uma troca de veiculo. O percentual
+    e a evidencia do veredito da ultima coluna. Sem mix (fallback fixo) nao inventa numero.
+    """
+    base = _mudou(de, para)
+    if mix is None or base == "—":
+        return base
+    cor = "#16a34a" if mix >= 0.70 else "#e0a800"
+    return f"{base} <span style='color:{cor};font-weight:700;'>{round(mix * 100)}%</span>"
+
+
 def _suspeitos(lista, sentido, com_chapa=True):
     """Motoristas cujo carro principal tem sensor divergente no sentido que os favorece
     (sentido=+1 para quem aparece bem, -1 para quem aparece mal). Devolve (motorista,
@@ -642,30 +656,6 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 </div>""")
 
 # ================= PAGINA 5: TOP 10 MELHORES + SINAL DE ALERTA =================
-rows_alerta = ""
-for a in gfd.SINAL_ALERTA:
-    rows_alerta += (f"<tr><td style='text-align:left;padding-left:6px;'>{a[0].title()}</td>"
-                     f"<td>{fmt(a[1],3)}</td><td>{fmt(a[2],3)}</td>"
-                     f"<td style='color:#dc2626;font-weight:800;'>{pct(a[3])}</td></tr>")
-
-rows_alerta_causa = ""
-for c in gfd.SINAL_ALERTA_CAUSA:
-    nome, l_mai, l_jun, c_mai, c_jun, mudou_linha, mudou_carro = c
-    if mudou_linha is None:
-        causa = "Sem dado suficiente"
-    elif mudou_linha and mudou_carro:
-        causa = "Trocou de linha e de carro"
-    elif mudou_carro:
-        causa = "Trocou de carro (mesma linha)"
-    elif mudou_linha:
-        causa = "Trocou de linha (mesmo carro)"
-    else:
-        causa = "Sem troca — provável fator comportamental"
-    cor = "#e0a800" if (mudou_linha or mudou_carro) else "#dc2626"
-    rows_alerta_causa += (f"<tr><td style='text-align:left;padding-left:6px;'>{nome}</td>"
-                          f"<td>{l_mai} → {l_jun}</td><td>{c_mai} → {c_jun}</td>"
-                          f"<td style='text-align:left;font-size:7.6px;color:{cor};font-weight:700;'>{causa}</td></tr>")
-
 # Quantos dos que cairam trocaram de linha/carro (causa operacional) e quantos nao trocaram
 # nada (ai sim aponta para conducao). E a leitura que a pagina precisa entregar.
 _susp_alerta = _suspeitos(gfd.SINAL_ALERTA, -1, com_chapa=False)
@@ -673,7 +663,9 @@ _susp_alerta = _suspeitos(gfd.SINAL_ALERTA, -1, com_chapa=False)
 # pagina mostrava a queda em % sem dizer de quanto para quanto. Agora as duas informacoes
 # ficam na mesma linha, junto da causa provavel.
 # SINAL_ALERTA: (nome, kml_ant, kml_ref, var_pct) · SINAL_ALERTA_CAUSA: (nome, linha_ant,
-# linha_ref, carro_ant, carro_ref, mudou_linha, mudou_carro).
+# linha_ref, carro_ant, carro_ref, mudou_linha, mudou_carro, mix_linha, mix_carro).
+# "Trocou" agora quer dizer que menos de 70% do mix de km se repetiu, nao que o primeiro
+# colocado mudou - por isso o texto fala em frota, e nao em "o carro".
 _causa_por_nome = {str(c[0]).strip().upper(): c for c in gfd.SINAL_ALERTA_CAUSA}
 rows_alerta_full = ""
 for a in gfd.SINAL_ALERTA:
@@ -681,17 +673,17 @@ for a in gfd.SINAL_ALERTA:
     if c and c[5] is None:
         causa, cor = "Sem dado suficiente", "#64748b"
     elif c and c[5] and c[6]:
-        causa, cor = "Trocou de linha e de carro", "#e0a800"
+        causa, cor = "Mudou linha e frota", "#e0a800"
     elif c and c[6]:
-        causa, cor = "Trocou de carro (mesma linha)", "#e0a800"
+        causa, cor = "Mudou de frota (mesma linha)", "#e0a800"
     elif c and c[5]:
-        causa, cor = "Trocou de linha (mesmo carro)", "#e0a800"
+        causa, cor = "Mudou de linha (mesma frota)", "#e0a800"
     elif c:
-        causa, cor = "Sem troca — condução", "#dc2626"
+        causa, cor = "Mesma linha e frota — condução", "#dc2626"
     else:
         causa, cor = "—", "#64748b"
-    _lin = _mudou(c[1], c[2]) if c else "—"
-    _car = _mudou(c[3], c[4]) if c else "—"
+    _lin = _com_mix(c[1], c[2], c[7]) if c else "—"
+    _car = _com_mix(c[3], c[4], c[8]) if c else "—"
     rows_alerta_full += (
         f"<tr><td style='text-align:left;padding-left:8px;white-space:nowrap;'>{a[0].title()}</td>"
         f"<td>{fmt(a[1],3)}</td><td style='font-weight:700;'>{fmt(a[2],3)}</td>"
@@ -708,13 +700,15 @@ _ca_troca = [c for c in _ca if c[5] or c[6]]
 _ca_semdado = [c for c in _ca if c[5] is None]
 if _ca:
     _txt_alerta = (
-        f"Dos {len(_ca)} motoristas com maior queda, <b>{len(_ca_troca)}</b> trocaram de linha "
-        f"e/ou de carro no período — a queda tem explicação operacional e cobrar condução "
-        f"deles seria injusto. <b>{len(_ca_comport)}</b> mantiveram linha e carro, e são os "
-        f"casos em que a queda aponta de fato para a forma de dirigir"
+        f"Dos {len(_ca)} motoristas com maior queda, <b>{len(_ca_troca)}</b> rodaram uma linha "
+        f"ou uma frota diferente da do mês anterior — a queda tem explicação operacional e "
+        f"cobrar condução deles seria injusto. <b>{len(_ca_comport)}</b> repetiram "
+        f"praticamente a mesma linha e os mesmos veículos, e são os casos em que a queda "
+        f"aponta de fato para a forma de dirigir"
         + (f"; {len(_ca_semdado)} ficaram sem dado suficiente para classificar." if _ca_semdado
            else ".")
-        + " Priorize os que não trocaram nada.")
+        + " O percentual nas colunas de linha e carro é quanto do mês se repetiu: acima de "
+          "70% tratamos como a mesma operação. Priorize os que não mudaram nada.")
 else:
     _txt_alerta = "Sem motoristas com queda relevante nesta janela."
 
@@ -758,14 +752,14 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="metric"><div class="lbl">Motoristas em queda</div><div class="val" style="color:#dc2626;">{len(_al)}</div><div class="aux">maiores quedas do mês</div></div>
     <div class="metric"><div class="lbl">Maior queda</div><div class="val" style="color:#dc2626;">{pct(_al[0][3]) if _al else "—"}</div><div class="aux">{_al[0][0].title() if _al else "—"}</div></div>
     <div class="metric"><div class="lbl">Queda média</div><div class="val" style="color:#dc2626;">{pct(_al_queda_med)}</div><div class="aux">no recorte dos que caíram</div></div>
-    <div class="metric" style="{'background:#fef2f2;border-color:#fecaca;' if _ca_comport else ''}"><div class="lbl" style="{'color:#dc2626;' if _ca_comport else ''}">Sem troca — condução</div><div class="val" style="{'color:#dc2626;' if _ca_comport else ''}">{len(_ca_comport)}</div><div class="aux">mesma linha e mesmo carro</div></div>
+    <div class="metric" style="{'background:#fef2f2;border-color:#fecaca;' if _ca_comport else ''}"><div class="lbl" style="{'color:#dc2626;' if _ca_comport else ''}">Mesma operação — condução</div><div class="val" style="{'color:#dc2626;' if _ca_comport else ''}">{len(_ca_comport)}</div><div class="aux">repetiram linha e frota do mês</div></div>
   </div>
   <div class="grid-38-62">
     <div class="card"><div class="card-title">Maior queda de KM/L no mês</div><div class="card-body">
       <div class="chart-wrap chart-wrap-tall"><img src="v3_alerta.png"/></div>
     </div></div>
     <div class="card"><div class="card-title">De quanto para quanto — e a queda foi por troca ou por condução?</div><div class="card-body">
-      <table class="tbl-alerta"><thead><tr><th style="text-align:left;padding-left:8px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Var.</th><th>Linha</th><th>Carro</th><th style="text-align:left;">Causa provável</th></tr></thead>
+      <table class="tbl-alerta"><thead><tr><th style="text-align:left;padding-left:8px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Var.</th><th>Linha · % igual</th><th>Frota · % igual</th><th style="text-align:left;">Causa provável</th></tr></thead>
       <tbody>{rows_alerta_full}</tbody></table>
     </div></div>
   </div>
@@ -823,14 +817,14 @@ for a in _dp:
     if c and c[5] is None:
         causa, cor = "Sem dado suficiente", "#64748b"
     elif c and (c[5] or c[6]):
-        _q = ("linha e carro" if (c[5] and c[6]) else ("carro" if c[6] else "linha"))
-        causa, cor = f"Trocou de {_q}", "#e0a800"
+        _q = ("linha e frota" if (c[5] and c[6]) else ("frota" if c[6] else "linha"))
+        causa, cor = f"Mudou de {_q}", "#e0a800"
     elif c:
-        causa, cor = "Sem troca — condução", "#16a34a"
+        causa, cor = "Mesma linha e frota — condução", "#16a34a"
     else:
         causa, cor = "—", "#64748b"
-    _lin = _mudou(c[1], c[2]) if c else "—"
-    _car = _mudou(c[3], c[4]) if c else "—"
+    _lin = _com_mix(c[1], c[2], c[7]) if c else "—"
+    _car = _com_mix(c[3], c[4], c[8]) if c else "—"
     rows_destaque_full += (
         f"<tr><td style='text-align:left;padding-left:8px;white-space:nowrap;'>{a[0].title()}</td>"
         f"<td>{fmt(a[1],3)}</td><td style='font-weight:700;'>{fmt(a[2],3)}</td>"
@@ -843,15 +837,15 @@ _dp_conducao = [c for c in gfd.DESTAQUE_POSITIVO_CAUSA
 if _dp_conducao:
     _txt_destaque = (
         f"São os motoristas que mais subiram de {MESANT_NOME} para {MESREF_NOME}. "
-        f"<b>{len(_dp_conducao)} de {len(_dp)}</b> melhoraram mantendo a mesma linha e o "
-        f"mesmo carro — nesses a evolução é atribuível à condução, e são os casos que "
-        f"servem de referência para quem segue abaixo da meta. Nos demais, a alta veio "
-        f"junto de troca de linha ou de veículo, então parte do ganho é operacional.")
+        f"<b>{len(_dp_conducao)} de {len(_dp)}</b> melhoraram repetindo praticamente a mesma "
+        f"linha e os mesmos veículos — nesses a evolução é atribuível à condução, e são os "
+        f"casos que servem de referência para quem segue abaixo da meta. Nos demais, a alta "
+        f"veio junto de mudança de linha ou de frota, então parte do ganho é operacional.")
 else:
     _txt_destaque = (
         f"São os motoristas que mais subiram de {MESANT_NOME} para {MESREF_NOME}. Nenhum "
-        f"deles manteve linha e carro no período, então a alta vem acompanhada de mudança "
-        f"operacional — use com cautela como referência de condução.")
+        f"deles repetiu a mesma linha e a mesma frota no período, então a alta vem "
+        f"acompanhada de mudança operacional — use com cautela como referência de condução.")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 10 · Destaque Positivo — Quem Mais Evoluiu", f"Período: <b>{periodo_label}</b>", "Comparação", f"{MESANT_NOME} → {MESREF_NOME}")}
@@ -859,14 +853,14 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div class="metric"><div class="lbl">Motoristas em alta</div><div class="val" style="color:#16a34a;">{len(_dp)}</div><div class="aux">maior evolução no mês</div></div>
     <div class="metric"><div class="lbl">Maior evolução</div><div class="val" style="color:#16a34a;">{pct(_dp[0][3]) if _dp else "—"}</div><div class="aux">{_dp[0][0].title() if _dp else "—"}</div></div>
     <div class="metric"><div class="lbl">Evolução média</div><div class="val" style="color:#16a34a;">{pct(_dp_med)}</div><div class="aux">no recorte dos que subiram</div></div>
-    <div class="metric" style="{'background:#f0fdf4;border-color:#bbf7d0;' if _dp_conducao else ''}"><div class="lbl" style="{'color:#15803d;' if _dp_conducao else ''}">Sem troca — condução</div><div class="val" style="{'color:#16a34a;' if _dp_conducao else ''}">{len(_dp_conducao)}</div><div class="aux">subiram na mesma linha e carro</div></div>
+    <div class="metric" style="{'background:#f0fdf4;border-color:#bbf7d0;' if _dp_conducao else ''}"><div class="lbl" style="{'color:#15803d;' if _dp_conducao else ''}">Mesma operação — condução</div><div class="val" style="{'color:#16a34a;' if _dp_conducao else ''}">{len(_dp_conducao)}</div><div class="aux">subiram repetindo linha e frota</div></div>
   </div>
   <div class="grid-38-62">
     <div class="card"><div class="card-title">Maior evolução de KM/L no mês</div><div class="card-body">
       <div class="chart-wrap chart-wrap-tall"><img src="v3_destaque.png"/></div>
     </div></div>
     <div class="card"><div class="card-title">De quanto para quanto — e a alta foi por troca ou por condução?</div><div class="card-body">
-      <table class="tbl-alerta"><thead><tr><th style="text-align:left;padding-left:8px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Var.</th><th>Linha</th><th>Carro</th><th style="text-align:left;">Causa provável</th></tr></thead>
+      <table class="tbl-alerta"><thead><tr><th style="text-align:left;padding-left:8px;">Motorista</th><th>KM/L {MES3ANT}</th><th>KM/L {MES3REF}</th><th>Var.</th><th>Linha · % igual</th><th>Frota · % igual</th><th style="text-align:left;">Causa provável</th></tr></thead>
       <tbody>{rows_destaque_full}</tbody></table>
     </div></div>
   </div>

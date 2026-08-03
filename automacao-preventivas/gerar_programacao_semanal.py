@@ -215,18 +215,12 @@ def montar(rows, hoje):
         for r in c['byplan'].values():
             odom = max(odom, (num(r['nr_hodometro']) or 0) + (num(r['km_rodado']) or 0))
         if not kd or kd <= 0 or not odom: continue
-        # 60k (2646) COBRE a 30k (2645). Quando o 60k foi feito por ultimo, o contador da 30k
-        # aparece vencido so por nao ter resetado -> o proximo 30k intermediario cai em (prox 60k - 30k).
-        r30 = remkm(c, '2645'); r60 = remkm(c, '2646')
+        # Garantia concessionaria Euro6 = revisao de 60k pelo ODOMETRO (proxima de 60k/120k/180k). So a de 60k.
         a30 = fdate((c['byplan'].get('2645') or {}).get('dt_abertura_os'))
         a60 = fdate((c['byplan'].get('2646') or {}).get('dt_abertura_os'))
-        if r60 is not None and a60 and (a30 is None or a60 >= a30):
-            r30 = r60 - 30000
-        faltam = None
-        for rk in (r30, r60):
-            if rk is None: continue
-            if faltam is None or rk < faltam: faltam = rk
-        if faltam is None: continue
+        milestone = (int(odom // 60000) + 1) * 60000     # proxima revisao de 60k acima do odometro
+        faltam = milestone - odom                        # falta = milestone - odometro (ex.: 60000 - 59678 = 322)
+        if faltam <= 0: continue
         # "abriu o plano conta como feito": revisao da concessionaria ABERTA recente (ultimos 60 dias) = OK
         ult_conc = max([d for d in (a30, a60) if d], default=None)
         done = bool(ult_conc and (hoje - ult_conc).days <= 60)
@@ -239,16 +233,20 @@ def montar(rows, hoje):
             d = fdate(r.get('data_abastecimento'))
             if d and (kmupd is None or d > kmupd): kmupd = d
         km_atraso = (hoje - kmupd).days if kmupd else None
-        milestone = int(round((odom + faltam) / 30000.0) * 30000)  # grid da concessionaria (30/60/90k)
+        # milestone e faltam ja calculados acima (proxima revisao de 60k pelo odometro)
         vence_d = faltam / kd; alvo_d = (faltam - GAR_BUFFER) / kd
         vence = hoje + datetime.timedelta(days=int(round(vence_d)))
         alvo = hoje + datetime.timedelta(days=max(0, int(round(alvo_d))))
+        # a revisao da concessionaria troca o OLEO DE MOTOR (726) junto: se o oleo venceu,
+        # a garantia ja era pra ter sido chamada -> vira alerta no report de Garantia.
+        ro = c['byplan'].get('726'); ko = num(ro['km_para_proxima']) if ro else None
+        oleo_venc = int(ko) if (ko is not None and ko >= 0) else None
         gar.append(dict(veic='046-'+c['veic'], odom=int(odom), milestone=milestone, falta=int(round(faltam)),
             kmdia=kd, vence=vence.strftime('%d/%m/%Y'), alvo=alvo.strftime('%d/%m/%Y'),
-            alvo_sort=alvo.isoformat(), done=done, os_aberta=os_aberta,
+            alvo_sort=alvo.isoformat(), done=done, os_aberta=os_aberta, oleo_venc=oleo_venc,
             km_upd=kmupd.strftime('%d/%m') if kmupd else '—', km_atraso=km_atraso))
-    # pendentes por data de chamada; feitos (OK) no fim
-    gar.sort(key=lambda x: (x['done'], x['alvo_sort']))
+    # feitos (OK) no fim; oleo vencido primeiro (chamar ja); depois por data de chamada
+    gar.sort(key=lambda x: (x['done'], x.get('oleo_venc') is None, x['alvo_sort']))
     # frescor do dado = data mais recente da base (odometro OU OS aberta/fechada)
     km_ref = None; km_leitura = None
     for c in cars.values():

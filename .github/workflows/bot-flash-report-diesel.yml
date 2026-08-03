@@ -64,6 +64,11 @@ jobs:
         run: |
           python -m weasyprint flash_report_diesel_v3.html "Flash Report - Diesel.pdf"
 
+      - name: Conferir layout do PDF (transbordo de pagina)
+        working-directory: flash-report-diesel
+        run: |
+          python verifica_layout.py
+
       - name: Commit e push do PDF gerado
         uses: stefanzweifel/git-auto-commit-action@v5
         with:

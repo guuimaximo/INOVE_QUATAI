@@ -1085,7 +1085,6 @@ if _inv_url and _inv_key:
         _ok("[inove] Pagina 10 (tratativas) ao vivo.")
 
     # ---- Paginas 12 (aproveitamento do dia) e 9 (motoristas da semana): sessoes do 1o do mes ate hoje ----
-    _hoje2 = _HOJE
     _win_ini = MES_INI
     _DIAS_PT = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
     try:
@@ -1093,7 +1092,12 @@ if _inv_url and _inv_key:
         while True:
             _b = _sb_get(_inv_url, _inv_key, "diesel_acompanhamento_sessoes",
                          [("select", "data_sessao,instrutor_nome,iniciado_em,encerrado_em,acompanhamento_id,foco_snapshot"),
-                          ("data_sessao", f"gte.{_win_ini.isoformat()}"), ("limit", "1000"), ("offset", str(_off))])
+                          ("data_sessao", f"gte.{_win_ini.isoformat()}"),
+                          # Sem este limite a janela ficava aberta a direita: num fechamento
+                          # (gerado ja no mes seguinte) entravam sessoes posteriores ao mes,
+                          # e a tabela do dia-a-dia mostrava datas fora do periodo do titulo.
+                          ("data_sessao", f"lt.{MES_FIM.isoformat()}"),
+                          ("limit", "1000"), ("offset", str(_off))])
             _ss += _b
             if len(_b) < 1000:
                 break
@@ -1667,6 +1671,12 @@ def chart_cluster_divergente():
     clusters_ordem += [c for c in CLUSTER_HISTORICO_4M if c not in clusters_ordem]
     # O guard de carga aceita series de 3 meses, entao o titulo nao pode prometer 4 fixo.
     _n_meses_cluster = max((len(s) for s in CLUSTER_HISTORICO_4M.values()), default=0)
+    # Escala fixa: um cluster sem leitura no mes (0,0) fica FORA dela. O rotulo desse ponto
+    # era desenhado em y=0 e, como texto nao e recortado, o bbox_inches="tight" esticava o
+    # PNG de 3,5:1 para ~1:1 - a pagina 3 entao estourava a folha e saia uma pagina em
+    # branco. Rotulo passa a ser recortado (clip_on) e o valor fora de escala e anunciado
+    # embaixo, em vermelho: some do grafico, mas nao some do relatorio.
+    _YLO, _YHI = 2.15, 2.95
     fig, axes = plt.subplots(1, max(len(clusters_ordem), 1), figsize=(12.6, 3.4), sharey=True)
     axes = np.atleast_1d(axes)
     for ax, c in zip(axes, clusters_ordem):
@@ -1679,10 +1689,16 @@ def chart_cluster_divergente():
         ax.axhline(META, color="#94a3b8", linestyle=":", linewidth=1.1, zorder=1)
         ax.fill_between(x, vals, META, where=[v < META for v in vals], color=RED, alpha=0.06, zorder=0)
         for xi, v in zip(x, vals):
-            ax.text(xi, v + 0.028, fmt(v, 2), ha="center", fontsize=7.6, fontweight="bold", color=DARK)
+            ax.text(xi, v + 0.028, fmt(v, 2), ha="center", fontsize=7.6, fontweight="bold",
+                    color=DARK, clip_on=True)
+        _fora = [(meses[xi], v) for xi, v in zip(x, vals) if not (_YLO <= v <= _YHI)]
+        if _fora:
+            ax.text(0.5, 0.02, "  ".join(f"{m}: {fmt(v, 2)} fora da escala" for m, v in _fora),
+                    transform=ax.transAxes, ha="center", va="bottom", fontsize=6.6,
+                    fontweight="bold", color=RED, clip_on=True)
         ax.set_xticks(x); ax.set_xticklabels(meses, fontsize=8)
         ax.set_title(c, fontsize=12.5, fontweight="bold", color=DARK)
-        ax.set_ylim(2.15, 2.95)
+        ax.set_ylim(_YLO, _YHI)
         for s in ["top", "right"]:
             ax.spines[s].set_visible(False)
         ax.grid(axis="y", linestyle=":", alpha=0.35)

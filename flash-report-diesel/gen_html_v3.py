@@ -72,7 +72,10 @@ td { padding:3px 4px; border:1px solid #dbe3ee; text-align:center; }
 .metric .val { margin-top:2px; font-size:15px; font-weight:800; color:#0f172a; }
 .metric .aux { margin-top:2px; font-size:7.5px; color:#64748b; }
 .chart-wrap { padding:6px; border:1px solid #dbe3ee; border-radius:12px; background:#fff; text-align:center; }
-.chart-wrap img { width:100%; height:auto; }
+/* max-height e trava de seguranca: um PNG com proporcao inesperada (ja aconteceu com o
+   cluster, que virou quase quadrado) empurrava a pagina inteira para a folha seguinte.
+   O maior grafico legitimo desta classe ocupa ~134mm, entao 140mm nao mexe em nenhum. */
+.chart-wrap img { max-width:100%; max-height:140mm; width:auto; height:auto; }
 .chart-wrap-sm img { max-height:78mm; width:auto; max-width:100%; }
 .chart-wrap-tall img { max-height:88mm; width:auto; max-width:100%; }
 .cons-box { margin-top:6px; border:1px solid #dbe3ee; border-radius:12px; background:#f8fafc; padding:6px 12px; }
@@ -141,18 +144,22 @@ _weeks_jul = _cal_c.monthdayscalendar(gfd.MES_REF_ANO, gfd.MES_REF_MM)
 _dias_cols = ["Dom","Seg","Ter","Qua","Qui","Sex","S\u00e1b"]
 _visita_label = {6: "1\u00aa visita", 17: "2\u00aa visita", 30: "3\u00aa visita"}
 _cal_header = "".join(f'<div style="text-align:center;font-size:8px;font-weight:800;color:#64748b;text-transform:uppercase;padding:4px 0;">{d}</div>' for d in _dias_cols)
+# Celula alta: a pagina 17 tem so o calendario e o card da visita, e com celula baixa
+# sobrava mais de um terco da folha em branco (fica gritante quando a visita nao teve
+# fotos). A altura da celula e o que faz os dois cards preencherem a pagina.
+_CAL_CELULA = "min-height:52px;display:flex;flex-direction:column;justify-content:center;"
 _cal_cells = ""
 for _week in _weeks_jul:
     for _day in _week:
         if _day == 0:
             _cal_cells += '<div></div>'
         elif _day in _visita_label:
-            _cal_cells += (f'<div style="border-radius:8px;background:#0e7c7b;color:#fff;padding:5px 3px;text-align:center;">'
-                           f'<div style="font-size:13px;font-weight:800;">{_day}</div>'
-                           f'<div style="font-size:6.4px;font-weight:700;margin-top:1px;">{_visita_label[_day]}</div></div>')
+            _cal_cells += (f'<div style="border-radius:8px;background:#0e7c7b;color:#fff;padding:5px 3px;text-align:center;{_CAL_CELULA}">'
+                           f'<div style="font-size:16px;font-weight:800;">{_day}</div>'
+                           f'<div style="font-size:7px;font-weight:700;margin-top:1px;">{_visita_label[_day]}</div></div>')
         else:
-            _cal_cells += (f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:5px 3px;text-align:center;color:#334155;">'
-                           f'<div style="font-size:11px;font-weight:600;">{_day}</div></div>')
+            _cal_cells += (f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:5px 3px;text-align:center;color:#334155;{_CAL_CELULA}">'
+                           f'<div style="font-size:13px;font-weight:600;">{_day}</div></div>')
 _visitas_datas = ", ".join(f"{d:02d}/{gfd.MES_REF_MM:02d}" for d in sorted(_visita_label))
 CAL_JULHO_HEADER = _cal_header
 CAL_JULHO_CELLS = _cal_cells
@@ -1018,25 +1025,41 @@ _txt_p12_jornada = (
     f"consistente, que não parece ser o gargalo. O restante do dia (~{fmt(_ocioso_h,1)}h) "
     f"provavelmente é deslocamento entre linhas/veículos e espera; se isso puder ser reduzido, "
     f"cada instrutor teria margem para mais acompanhamentos sem aumentar a carga horária.")
-rows_inst_diario = ""
-for d in gfd.INSTRUTORES_DIA_A_DIA:
-    data_, inst, n, thoras, tmed = d
-    rows_inst_diario += (f"<tr><td>{data_}</td><td style='text-align:left;padding-left:6px;'>{inst}</td>"
-                          f"<td>{n}</td><td>{thoras}</td><td>{tmed} min</td></tr>")
+# O detalhamento tem uma linha por (dia, instrutor): num mes fechado passa de 35 linhas e
+# nao cabe em meia pagina - transbordava para uma segunda folha, sem cabecalho nem rodape.
+# A tabela passa a ocupar a largura toda, quebrada em duas colunas, e o grafico (que tem so
+# uma barra por instrutor) divide a faixa de cima com a leitura analitica.
+_linhas_diario = [
+    (f"<tr><td>{data_}</td><td style='text-align:left;padding-left:6px;'>{inst}</td>"
+     f"<td>{n}</td><td>{thoras}</td><td>{tmed} min</td></tr>")
+    for data_, inst, n, thoras, tmed in gfd.INSTRUTORES_DIA_A_DIA]
+_meio_diario = (len(_linhas_diario) + 1) // 2
+_THEAD_DIARIO = ('<thead><tr><th>Data</th><th style="text-align:left;">Instrutor</th>'
+                 '<th>Acomp.</th><th>Tempo Total</th><th>Tempo Médio</th></tr></thead>')
+
+
+def _tabela_diario(linhas):
+    return (f'<table class="tbl-compact">{_THEAD_DIARIO}<tbody>{"".join(linhas)}</tbody></table>'
+            if linhas else "")
+
 
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 12 · Instrutores — Aproveitamento do Dia", f"Base: diesel_acompanhamento_sessoes — período de {SEM}", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
-  <div class="grid-2">
+  <div class="grid-2" style="align-items:start;">
     <div class="card"><div class="card-title">Aproveitamento do dia — % da jornada (8h) ocupada</div><div class="card-body">
-      <div class="chart-wrap chart-wrap-tall"><img src="v3_instrutores_diario.png"/></div>
+      <div class="chart-wrap chart-wrap-md"><img src="v3_instrutores_diario.png"/></div>
     </div></div>
-    <div class="card"><div class="card-title">Detalhamento diário — período de {SEM}</div><div class="card-body">
-      <table class="tbl-big"><thead><tr><th>Data</th><th style="text-align:left;">Instrutor</th><th>Acompanhamentos</th><th>Tempo Total</th><th>Tempo Médio</th></tr></thead>
-      <tbody>{rows_inst_diario}</tbody></table>
+    <div class="card"><div class="card-title">Leitura analítica</div><div class="card-body">
+      <div class="cons-text">{_txt_p12_jornada}</div>
     </div></div>
   </div>
-  <div class="cons-box"><div class="cons-title">Leitura analítica</div>
-  <div class="cons-text">{_txt_p12_jornada}</div></div>
+  <div class="card" style="margin-top:7px;"><div class="card-title">Detalhamento diário — período de {SEM} · {len(_linhas_diario)} registros</div>
+    <div class="card-body" style="padding:6px 10px;">
+      <div class="grid-2">
+        <div>{_tabela_diario(_linhas_diario[:_meio_diario])}</div>
+        <div>{_tabela_diario(_linhas_diario[_meio_diario:])}</div>
+      </div>
+    </div></div>
   {footer(12)}
 </div>""")
 
@@ -1594,6 +1617,9 @@ html = f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title
 # conteudo passa. Com dado ao vivo as tabelas crescem e isso aconteceu sem ninguem notar -
 # o PDF saiu com 23 paginas em vez de 21. Compara o previsto com o gerado no fim.
 print(f"[layout] {_NUM[0]} paginas numeradas + capa + indice = {_NUM[0] + 1} esperadas no PDF.")
+# O numero fica em disco para o verifica_layout.py conferir contra o PDF ja renderizado:
+# so imprimir o esperado nao adiantou nada, o PDF quebrado passou assim mesmo.
+(OUT / "paginas_esperadas.txt").write_text(str(_NUM[0] + 1), encoding="utf-8")
 html = html.replace("@@TOTAL@@", str(_NUM[0]))
 (OUT / "flash_report_diesel_v3.html").write_text(html, encoding="utf-8")
 print("HTML v3 gerado.")

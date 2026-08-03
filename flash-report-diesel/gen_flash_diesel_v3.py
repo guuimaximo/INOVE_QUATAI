@@ -30,7 +30,8 @@ try:
     MES_INI = _dtref.date(int(_mf[:4]), int(_mf[5:7]), 1)   # 1o dia do mes a fechar
 except ValueError:
     MES_INI = None
-if MES_INI is not None:
+MES_FECHADO = MES_INI is not None       # muda os textos que falam "ate a vespera da geracao"
+if MES_FECHADO:
     # MES_FIM e EXCLUSIVO, entao aponta para o 1o do mes seguinte e o ultimo dia entra.
     # _HOJE acompanha: quem o usa (idade de tratativa, janela de sessoes) tem que enxergar
     # o relatorio como tirado no fechamento, nao na data real de geracao.

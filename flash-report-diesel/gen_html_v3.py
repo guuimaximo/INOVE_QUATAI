@@ -23,6 +23,13 @@ MESREF_NOME, MESANT_NOME = gfd.MES_REF_NOME, gfd.MES_ANT_NOME
 PERIODO = gfd.PERIODO_LABEL
 _M3 = gfd._MES3
 MES3REF, MES3ANT = gfd.MES3_REF, gfd.MES3_ANT
+# No fechamento o mes analisado ja acabou - dizer "mes corrente ate a vespera" seria mentira.
+_COMO_LER_JANELA = (
+    f"Este é o fechamento de {MESREF}: o relatório cobre o mês inteiro ({PERIODO}), "
+    f"comparado com {MESANT}."
+    if getattr(gfd, "MES_FECHADO", False) else
+    "O relatório analisa o mês corrente do dia 01 até a véspera da geração, sempre "
+    "comparando com o mês anterior fechado.")
 
 TOTAL_PAGINAS = 19
 
@@ -1575,7 +1582,7 @@ pages.insert(1, f"""<div class="page-break"></div><div class="page">
       <tbody>{_idx_linhas}</tbody></table>
   </div></div>
   <div class="cons-box"><div class="cons-title">Como ler este relatório</div>
-  <div class="cons-text">O relatório analisa o mês corrente do dia 01 até a véspera da geração, sempre comparando com o mês anterior fechado. O KM/L oficial vem do Transnet; a Telemetria entra como fonte de comparação, e divergências entre as duas são tratadas na página 17. Uma faixa vermelha na capa indica que alguma página não conseguiu carregar dado atualizado.</div></div>
+  <div class="cons-text">{_COMO_LER_JANELA} O KM/L oficial vem do Transnet; a Telemetria entra como fonte de comparação, e divergências entre as duas são tratadas na página 17. Uma faixa vermelha na capa indica que alguma página não conseguiu carregar dado atualizado.</div></div>
 </div>""")
 
 html = f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Flash Report Diesel v3</title>

@@ -35,10 +35,13 @@ create index if not exists idx_reservas_motoristas_cracha on public.reservas_mot
 
 alter table public.reservas_motoristas enable row level security;
 
+-- Somente usuarios autenticados (nunca anon). O acesso anonimo foi trancado no
+-- banco na "RLS Fase 1"; grants a anon reabririam o buraco (ver atestados).
 drop policy if exists "anon all reservas_motoristas" on public.reservas_motoristas;
-create policy "anon all reservas_motoristas" on public.reservas_motoristas
-  for all to anon, authenticated using (true) with check (true);
+drop policy if exists "auth reservas_motoristas" on public.reservas_motoristas;
+create policy "auth reservas_motoristas" on public.reservas_motoristas
+  for all to authenticated using (true) with check (true);
 
-grant select, insert, update, delete on public.reservas_motoristas to anon, authenticated;
+grant select, insert, update, delete on public.reservas_motoristas to authenticated;
 
 notify pgrst, 'reload schema';

@@ -923,6 +923,96 @@ export default function PCMControlePneus() {
     };
   }, [estoqueComparado]);
 
+  // Aba Recapados / Almoxarifado.
+  // Fonte da lista = estoque diario (o borracheiro lanca situacao "RECAPADO").
+  // Conferencia = TransNet (mais confiavel): vida_atual com "REF" (1REF, 2REF...)
+  // confirma que e recapado; se vier "NOVO" ou o fogo nao existir la, e divergencia.
+  // Rastreio = primeira movimentacao do fogo para um carro (pcm_troca_pneus),
+  // a partir de quando virou recapado. So a PRIMEIRA vez.
+  const recapadosData = useMemo(() => {
+    const norm = (s) => String(s || "").toUpperCase();
+
+    const recByFogo = new Map();
+    for (const item of estoqueRows) {
+      if (!norm(item.situacao).includes("RECAP")) continue;
+      const fogo = normalizarPneu(item.numero_fogo || item.numero_pneu);
+      if (!fogo) continue;
+      const prev = recByFogo.get(fogo);
+      if (!prev || String(item.created_at || "") > String(prev.created_at || "")) {
+        recByFogo.set(fogo, item);
+      }
+    }
+
+    const trocasPorFogo = new Map();
+    for (const t of trocas) {
+      const fogo = normalizarPneu(t.numero_fogo_colocado);
+      if (!fogo || !t.prefixo_instalacao) continue;
+      if (!trocasPorFogo.has(fogo)) trocasPorFogo.set(fogo, []);
+      trocasPorFogo.get(fogo).push(t);
+    }
+    for (const arr of trocasPorFogo.values()) {
+      arr.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+    }
+
+    const ativoPorFogo = new Map();
+    for (const a of ativos) {
+      const fogo = normalizarPneu(a.numero_fogo);
+      if (fogo && !ativoPorFogo.has(fogo)) ativoPorFogo.set(fogo, a);
+    }
+
+    const rows = [];
+    for (const [fogo, est] of recByFogo.entries()) {
+      const recapDate = String(est.created_at || "");
+      const movs = trocasPorFogo.get(fogo) || [];
+      // Primeira ida para carro DEPOIS de virar recapado neste ciclo. Sem
+      // fallback para trocas antigas (seriam de um ciclo de recapagem anterior).
+      const primeira = movs.find((t) => String(t.created_at || "") >= recapDate) || null;
+      const ativo = ativoPorFogo.get(fogo) || null;
+      const vida = ativo?.vida_atual || "";
+      rows.push({
+        fogo,
+        numero_pneu: est.numero_pneu || "",
+        marca: est.marca || ativo?.marca || "",
+        ficha: est.ficha_estoque || "",
+        recapado_em: recapDate,
+        vida_transnet: vida,
+        transnet_confere: /REF/i.test(vida),
+        local_transnet: ativo ? (ativo.localizacao || "-") : "nao esta no TransNet",
+        carro: primeira?.prefixo_instalacao || "",
+        posicao: primeira?.posicao_instalacao || "",
+        movido_em: primeira ? String(primeira.created_at || "") : "",
+        movido: !!primeira,
+      });
+    }
+    rows.sort((a, b) => String(b.recapado_em).localeCompare(String(a.recapado_em)));
+    return rows;
+  }, [estoqueRows, trocas, ativos]);
+
+  const recapadosKpis = useMemo(() => {
+    let noAlmox = 0;
+    let emCarro = 0;
+    let divergenteTransnet = 0;
+    for (const r of recapadosData) {
+      if (r.movido) emCarro += 1;
+      else noAlmox += 1;
+      if (!r.transnet_confere) divergenteTransnet += 1;
+    }
+    return { total: recapadosData.length, noAlmox, emCarro, divergenteTransnet };
+  }, [recapadosData]);
+
+  const recapadosFiltrada = useMemo(() => {
+    const q = String(busca || "").trim().toLowerCase();
+    const qf = String(buscaFogo || "").trim().toLowerCase();
+    return recapadosData.filter((r) => {
+      if (qf && !String(r.fogo).toLowerCase().includes(qf)) return false;
+      if (q) {
+        const hay = `${r.fogo} ${r.numero_pneu} ${r.marca} ${r.carro} ${r.ficha}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [recapadosData, busca, buscaFogo]);
+
   const recapadoraKpis = useMemo(() => {
     return {
       total: estoqueComparado.recapadora.length,
@@ -991,6 +1081,22 @@ export default function PCMControlePneus() {
         Auditoria: row.auditoria_texto || "",
         "Ficha conserto": row.ficha_conserto || "",
         "Status conserto": row.status_conserto || row.origem_conserto || "",
+      }));
+    } else if (abaAtiva === "recapados") {
+      nomeAba = "Recapados";
+      linhas = recapadosFiltrada.map((row) => ({
+        "Numero de fogo": row.fogo || "",
+        "Numero de pneu": row.numero_pneu || "",
+        Marca: row.marca || "",
+        Ficha: row.ficha || "",
+        "Recapado em": fmtData(row.recapado_em),
+        "Vida TransNet": row.vida_transnet || "",
+        "TransNet confere?": row.transnet_confere ? "SIM" : "NAO",
+        "Local TransNet": row.local_transnet || "",
+        "1a movimentacao - Carro": row.carro || "",
+        "1a mov - Posicao": row.posicao || "",
+        "1a mov - Data": fmtData(row.movido_em),
+        Situacao: row.movido ? "Foi para carro" : "No almoxarifado",
       }));
     } else {
       nomeAba = "Sucata TransNet";
@@ -1195,6 +1301,13 @@ export default function PCMControlePneus() {
         </button>
         <button
           type="button"
+          onClick={() => setAbaAtiva("recapados")}
+          className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${abaAtiva === "recapados" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
+        >
+          Recapados
+        </button>
+        <button
+          type="button"
           onClick={() => setAbaAtiva("sucata")}
           className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${abaAtiva === "sucata" ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-300"}`}
         >
@@ -1236,6 +1349,13 @@ export default function PCMControlePneus() {
             <KpiCard label="Em estoque fisico" value={recapadoraKpis.estoqueFisico} cor="#ca8a04" />
             <KpiCard label="Sucata" value={recapadoraKpis.sucata} cor="#dc2626" />
             <KpiCard label="Outros" value={recapadoraKpis.outros} cor="#7c3aed" />
+          </>
+        ) : abaAtiva === "recapados" ? (
+          <>
+            <KpiCard label="Recapados (estoque)" value={recapadosKpis.total} cor="#475569" />
+            <KpiCard label="No almoxarifado" value={recapadosKpis.noAlmox} cor="#2563eb" />
+            <KpiCard label="Já foram p/ carro" value={recapadosKpis.emCarro} cor="#16a34a" />
+            <KpiCard label="TransNet não confere" value={recapadosKpis.divergenteTransnet} cor="#dc2626" />
           </>
         ) : (
           <>
@@ -1315,6 +1435,8 @@ export default function PCMControlePneus() {
               <option value="SUCATA">SUCATA</option>
               <option value="OUTRO LOCAL">OUTRO LOCAL</option>
             </>
+          ) : abaAtiva === "recapados" ? (
+            <></>
           ) : (
             <>
               <option value="BORRACHARIA">BORRACHARIA</option>
@@ -1367,13 +1489,17 @@ export default function PCMControlePneus() {
               ? (abaEstoqueAtiva === "fisico" ? estoqueFisicoFiltrado.length : estoqueTransnetFiltrado.length)
               : abaAtiva === "recapadora"
                 ? recapadoraFiltrada.length
-                : sucataFiltrada.length} / {abaAtiva === "veiculos"
+                : abaAtiva === "recapados"
+                  ? recapadosFiltrada.length
+                  : sucataFiltrada.length} / {abaAtiva === "veiculos"
             ? linhasBase.length
             : abaAtiva === "estoque"
               ? (abaEstoqueAtiva === "fisico" ? estoqueComparado.fisico.length : estoqueComparado.transnet.length)
               : abaAtiva === "recapadora"
                 ? estoqueComparado.recapadora.length
-                : estoqueComparado.sucata.length}
+                : abaAtiva === "recapados"
+                  ? recapadosData.length
+                  : estoqueComparado.sucata.length}
         </span>
       </section>
 
@@ -1621,6 +1747,72 @@ export default function PCMControlePneus() {
                     <td className="px-2 py-2 text-slate-700">{row.auditoria_texto}</td>
                     <td className="px-2 py-2 font-mono text-slate-700">{row.ficha_conserto || "-"}</td>
                     <td className="px-2 py-2 text-slate-700">{row.status_conserto || row.origem_conserto || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : abaAtiva === "recapados" ? (
+        <div className="rounded-lg border border-slate-200 bg-white shadow">
+          <div className="border-b border-slate-200 px-3 py-2">
+            <div className="text-sm font-bold text-slate-800">Pneus recapados (estoque diário) e a 1ª ida para o carro</div>
+            <div className="text-xs text-slate-500">
+              Fogos lançados como RECAPADO no estoque diário. Confere com o TransNet (vida REF = recapado) e mostra a PRIMEIRA movimentação de cada um para um carro — carro, posição e data. Só a primeira vez.
+            </div>
+          </div>
+          <div className="max-h-[calc(100vh-340px)] overflow-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 shadow-sm">
+                <tr>
+                  <th className="px-2 py-2 text-left">Nº de fogo</th>
+                  <th className="px-2 py-2 text-left">Nº do pneu</th>
+                  <th className="px-2 py-2 text-left">Marca</th>
+                  <th className="px-2 py-2 text-left">Recapado em</th>
+                  <th className="px-2 py-2 text-left">Vida (TransNet)</th>
+                  <th className="px-2 py-2 text-left">Local TransNet</th>
+                  <th className="px-2 py-2 text-left">1ª mov · Carro</th>
+                  <th className="px-2 py-2 text-left">Posição</th>
+                  <th className="px-2 py-2 text-left">Data da mov.</th>
+                  <th className="px-2 py-2 text-left">Situação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recapadosFiltrada.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-8 text-center text-slate-400">
+                      Nenhum pneu recapado no estoque.
+                    </td>
+                  </tr>
+                ) : null}
+                {recapadosFiltrada.map((row) => (
+                  <tr key={row.fogo} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="px-2 py-2 font-mono text-[13px] font-bold text-slate-900">{row.fogo}</td>
+                    <td className="px-2 py-2 font-mono text-slate-700">{row.numero_pneu || "-"}</td>
+                    <td className="px-2 py-2 text-slate-700">{row.marca || "-"}</td>
+                    <td className="whitespace-nowrap px-2 py-2 text-slate-600">{fmtData(row.recapado_em)}</td>
+                    <td className="px-2 py-2">
+                      <span
+                        className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"
+                        style={{ background: row.transnet_confere ? "#16a34a" : "#dc2626" }}
+                        title={row.transnet_confere ? "TransNet confirma recapado (vida REF)" : "TransNet não confirma como recapado"}
+                      >
+                        {row.vida_transnet || "—"}
+                        {row.transnet_confere ? "" : " · não confere"}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-slate-700">{row.local_transnet}</td>
+                    <td className="px-2 py-2 font-mono font-bold text-slate-900">{row.carro || "—"}</td>
+                    <td className="px-2 py-2 text-slate-700">{row.posicao || "-"}</td>
+                    <td className="whitespace-nowrap px-2 py-2 text-slate-600">{row.movido ? fmtData(row.movido_em) : "-"}</td>
+                    <td className="px-2 py-2">
+                      <span
+                        className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"
+                        style={{ background: row.movido ? "#2563eb" : "#ca8a04" }}
+                      >
+                        {row.movido ? "Foi p/ carro" : "No almoxarifado"}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

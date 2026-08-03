@@ -115,6 +115,20 @@ def build(D, png_path, hoje):
         ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
     story += [faixa, Spacer(1,12)]
 
+    # ---- ALERTA: oleo de motor vencido -> chamar a concessionaria (revisao troca o oleo junto) ----
+    oleo_alert = sorted([g for g in gar if g.get('oleo_venc') is not None], key=lambda g: -g['oleo_venc'])
+    if oleo_alert:
+        AL = S('al', fontName='Helvetica-Bold', fontSize=8.4, leading=10.5, textColor=colors.white)
+        txt = '  ·  '.join('<b>%s</b> (óleo venceu %s km)' % (g['veic'], g['oleo_venc']) for g in oleo_alert[:10])
+        cab = Table([[Paragraph('⚠️  ÓLEO DE MOTOR VENCIDO — CHAMAR A CONCESSIONÁRIA JÁ (a revisão troca o óleo junto)', AL)]], colWidths=[PW])
+        cab.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),RED),('LEFTPADDING',(0,0),(-1,-1),10),
+            ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]))
+        corpo = Table([[Paragraph(txt, S('alc', fontSize=8.4, leading=11, textColor=INK))]], colWidths=[PW])
+        corpo.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),REDBG),('BOX',(0,0),(-1,-1),0.6,RED),
+            ('LEFTPADDING',(0,0),(-1,-1),10),('RIGHTPADDING',(0,0),(-1,-1),10),
+            ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
+        story += [cab, corpo, Spacer(1,12)]
+
     # ---- barra de secao ----
     bar = Table([[Paragraph('CRONOGRAMA DE REVISÕES — ORDENADO POR URGÊNCIA', SEC)]], colWidths=[PW])
     bar.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),DARK),('LEFTPADDING',(0,0),(-1,-1),10),
@@ -134,11 +148,13 @@ def build(D, png_path, hoje):
             dias = (alvo_dt - hoje_d).days
         except Exception:
             dias = 999
-        if done: stat_txt, stat_c, stat_bg = ('OK<br/><font size=6>OS %s</font>' % ('ABERTA' if g.get('os_aberta') else 'FECHADA')), OKG, OKBG
+        oleo_v = g.get('oleo_venc') is not None
+        if done: stat_txt, stat_c, stat_bg = ('OK<br/><font size=5.3>OS %s</font>' % ('ABERTA' if g.get('os_aberta') else 'FECHADA')), OKG, OKBG
+        elif oleo_v: stat_txt, stat_c, stat_bg = 'CHAMAR JÁ<br/><font size=5.3>óleo vencido</font>', RED, REDBG
         elif dias <= 3: stat_txt, stat_c, stat_bg = 'URGENTE', RED, REDBG
         elif dias <= 10: stat_txt, stat_c, stat_bg = 'PRÓXIMA', WARN, WARNBG
         else: stat_txt, stat_c, stat_bg = 'PROGRAMAR', MUT, SOFT
-        chamar = '—' if done else g['alvo']
+        chamar = '—' if done else ('JÁ' if oleo_v else g['alvo'])
         atr = g.get('km_atraso')
         kmupd_c = MUT if (atr is None or atr <= 1) else (WARN if atr <= 3 else RED)
         data.append([Paragraph(g['veic'], TDB),
@@ -151,7 +167,7 @@ def build(D, png_path, hoje):
                      Paragraph(g['vence'], S('v', parent=TD, textColor=MUT)),
                      Paragraph(chamar, S('c', parent=TD, fontName='Helvetica-Bold',
                                          textColor=(MUT if done else (RED if dias <= 3 else INK)))),
-                     Paragraph(stat_txt, S('s', parent=TD, fontName='Helvetica-Bold', fontSize=6.9, textColor=stat_c))])
+                     Paragraph(stat_txt, S('s', parent=TD, fontName='Helvetica-Bold', fontSize=6.0, leading=7.2, textColor=stat_c))])
         styles.append(('BACKGROUND', (8,i), (8,i), stat_bg))
         if done: styles.append(('BACKGROUND', (0,i), (7,i), colors.HexColor('#f7fbf8')))
         elif i % 2 == 0: styles.append(('BACKGROUND', (0,i), (7,i), SOFT))

@@ -58,7 +58,9 @@ def avaliar(rows, vig, hoje, fm=None, extra_manual=None):
         s = s or ''
         try: return datetime.date(int(s[6:10]), int(s[3:5]), int(s[0:2]))
         except: return None
-    corte = fdate_br(vig.get('semana_ini')) or fdate(vig.get('gerado_em')) or hoje
+    # corte = data mais cedo do plano (inclui o lote HOJE, que pode ser antes da semana_ini)
+    _cand = [d for d in (fdate_br(vig.get('semana_ini')), fdate_br(vig.get('hoje'))) if d]
+    corte = (min(_cand) if _cand else None) or fdate(vig.get('gerado_em')) or hoje
     ANC = {'10K': '2306', '5K': '2305'}
     itens = []
     for it in vig.get('itens', []):

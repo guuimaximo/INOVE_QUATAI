@@ -61,6 +61,7 @@ def build(D, venc, png, hoje, feitos=None):
     for m, v, di in D['esc10']: g10[di].append(v)
     for m, v, di in D['esc5_sem']: g5[di].append(v)
     hoje5 = [v for m, v in D['esc5_hoje']]
+    hoje10 = [v for m, v in D.get('esc10_hoje', [])]
     PW = landscape(A4)[0] - 2*1.0*cm
 
     H1=S('h1', fontName='Helvetica-Bold', fontSize=18, leading=21)
@@ -126,12 +127,14 @@ def build(D, venc, png, hoje, feitos=None):
         t.setStyle(TableStyle(st))
         return t
 
-    story += [Paragraph('PREVENTIVAS 10.000 — de amanhã até sexta', SECt), Spacer(1,5)]
-    n = len(dias); w10 = (PW - (n-1)*6) / max(n,1)
-    cells = [day_card(dow[i], dias[i], g10[i], w10, feitos_set=feitos['10K']) for i in range(n)]
-    t10 = Table([cells], colWidths=[w10+6]*n)
+    tem_hoje10 = len(hoje10) > 0
+    story += [Paragraph('PREVENTIVAS 10.000 — %s' % ('hoje + até sexta' if tem_hoje10 else 'de amanhã até sexta'), SECt), Spacer(1,5)]
+    n = len(dias); n10 = n + (1 if tem_hoje10 else 0); w10 = (PW - (n10-1)*6) / max(n10,1)
+    cells = ([day_card('HOJE', D['hoje'][:5], hoje10, w10, True, feitos_set=feitos['10K'])] if tem_hoje10 else []) \
+            + [day_card(dow[i], dias[i], g10[i], w10, feitos_set=feitos['10K']) for i in range(n)]
+    t10 = Table([cells], colWidths=[w10+6]*n10)
     t10.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3)]))
-    story += [t10, Spacer(1,12)]
+    story += [t10, Spacer(1,8)]
 
     tem_hoje = len(hoje5) > 0
     story += [Paragraph('INSPEÇÕES 5.000 — %s' % ('hoje à noite + até sexta' if tem_hoje else 'de amanhã até sexta'), SECt), Spacer(1,5)]
@@ -139,38 +142,45 @@ def build(D, venc, png, hoje, feitos=None):
     c5 = ([day_card('HOJE', D['hoje'][:5], hoje5, w5, True, feitos_set=feitos['5K'])] if tem_hoje else []) + [day_card(dow[i], dias[i], g5[i], w5, feitos_set=feitos['5K']) for i in range(n)]
     t5 = Table([c5], colWidths=[w5+6]*n5)
     t5.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3)]))
-    story += [t5, Spacer(1,12)]
+    story += [t5, Spacer(1,8)]
 
     boxes = [(t, D['box_veic'].get(t, [])) for t in D['boxes'] if D['box_veic'].get(t)]
     if boxes:
         story += [Paragraph('SERVIÇOS QUE VÃO JUNTO NAS PREVENTIVAS', SECt), Spacer(1,5)]
         cellsb = []
         for t, vs in boxes:
-            bx = Table([[Paragraph(t, BT)],[Paragraph(' · '.join(vs), BV)]], colWidths=[(PW-3*8)/4])
+            bx = Table([[Paragraph(t, BT)],[Paragraph(' · '.join(vs), BV)]], colWidths=[(PW-4*8)/5])
             bx.setStyle(TableStyle([('BOX',(0,0),(-1,-1),0.6,LINE),('BACKGROUND',(0,0),(-1,-1),CARD),
                 ('TOPPADDING',(0,0),(0,0),5),('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
                 ('BOTTOMPADDING',(0,1),(0,1),6),('TOPPADDING',(0,1),(0,1),2)]))
             cellsb.append(bx)
-        rowsb = [cellsb[i:i+4] for i in range(0, len(cellsb), 4)]
+        rowsb = [cellsb[i:i+5] for i in range(0, len(cellsb), 5)]
         for rb in rowsb:
-            while len(rb) < 4: rb.append('')
-            tb = Table([rb], colWidths=[PW/4]*4)
+            while len(rb) < 5: rb.append('')
+            tb = Table([rb], colWidths=[PW/5]*5)
             tb.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
             story += [tb]
 
-    story += [Spacer(1,4), Paragraph('<font color="#1e9e63"><b>verde ✓</b></font> = já feito nesta semana &nbsp;·&nbsp; '
-        'carros em <font color="#c0392b"><b>vermelho •</b></font> = Revisão 10.000 vencida. '
-        'Garantia (242xxx) faz 10.000/5.000 in-house; só a revisão da concessionária é à parte. '
-        'Nível 10.000 = preventiva · 5.000 = inspeção.', FOOT)]
+    # legenda vai no RODAPÉ (canvas), fora do fluxo — assim não transborda pra pág 2
 
     def page(cv, doc):
         cv.saveState(); cv.setFillColor(BG); cv.rect(0,0,landscape(A4)[0],landscape(A4)[1], stroke=0, fill=1)
+        W = landscape(A4)[0]
+        # legenda (linha única, cores nas palavras-chave)
+        y = 1.12*cm; x = 1.0*cm
+        cv.setFont('Helvetica-Bold', 6.4)
+        cv.setFillColor(colors.HexColor('#1e9e63')); cv.drawString(x, y, 'verde ✓'); x += cv.stringWidth('verde ✓', 'Helvetica-Bold', 6.4)
         cv.setFillColor(MUT); cv.setFont('Helvetica', 6.4)
-        cv.drawString(1.0*cm, 0.62*cm, 'Gerado automaticamente · Manutenção Garagem Quataí')
-        cv.drawRightString(landscape(A4)[0]-1.0*cm, 0.62*cm, 'Programação · %s' % hoje.strftime('%d/%m/%Y'))
+        seg1 = ' = já feito nesta semana   ·   carros em '; cv.drawString(x, y, seg1); x += cv.stringWidth(seg1, 'Helvetica', 6.4)
+        cv.setFillColor(colors.HexColor('#c0392b')); cv.setFont('Helvetica-Bold', 6.4); cv.drawString(x, y, 'vermelho •'); x += cv.stringWidth('vermelho •', 'Helvetica-Bold', 6.4)
+        cv.setFillColor(MUT); cv.setFont('Helvetica', 6.4)
+        cv.drawString(x, y, ' = Revisão 10.000 vencida.   Garantia (242xxx) faz 10.000/5.000 in-house; só a revisão da concessionária é à parte.   Nível 10.000 = preventiva · 5.000 = inspeção.')
+        cv.setFont('Helvetica', 6.4)
+        cv.drawString(1.0*cm, 0.55*cm, 'Gerado automaticamente · Manutenção Garagem Quataí')
+        cv.drawRightString(W-1.0*cm, 0.55*cm, 'Programação · %s' % hoje.strftime('%d/%m/%Y'))
         cv.restoreState()
     pdf = png.replace('.png', '.pdf')
-    doc = SimpleDocTemplate(pdf, pagesize=landscape(A4), leftMargin=1.0*cm, rightMargin=1.0*cm, topMargin=0.9*cm, bottomMargin=1.0*cm, title='Programação da Semana')
+    doc = SimpleDocTemplate(pdf, pagesize=landscape(A4), leftMargin=1.0*cm, rightMargin=1.0*cm, topMargin=0.85*cm, bottomMargin=1.15*cm, title='Programação da Semana')
     doc.build(story, onFirstPage=page, onLaterPages=page)
     import fitz
     d = fitz.open(pdf); d[0].get_pixmap(dpi=165).save(png); d.close()
@@ -216,9 +226,15 @@ def main():
     rows = G.puxar_dados()
     Dfresh = G.montar(rows, hoje)
     D['km_ref'] = Dfresh.get('km_ref'); D['km_ref_atraso'] = Dfresh.get('km_ref_atraso')
-    si = D.get('semana_ini', '')  # dd/mm/aaaa -> corte aaaa-mm-dd
-    corte = '%s-%s-%s' % (si[6:10], si[3:5], si[0:2]) if len(si) >= 10 else hoje.isoformat()
+    # corte = data mais cedo do plano (inclui o lote HOJE, que pode ser antes da semana_ini)
+    def _iso(s): return ('%s-%s-%s' % (s[6:10], s[3:5], s[0:2])) if len(s or '') >= 10 else None
+    cortes = [c for c in (_iso(D.get('semana_ini')), _iso(D.get('hoje'))) if c]
+    corte = min(cortes) if cortes else hoje.isoformat()
     feitos = feitos_semana(rows, corte)
+    # inclui feitos manuais (feito hoje, antes do sistema atualizar). 10K reseta a 5K junto.
+    for v, codes in G.feitos_manual().items():
+        if '2306' in codes: feitos['10K'].add(v)
+        if '2305' in codes: feitos['5K'].add(v)
     os.makedirs(SAIDA_DIR, exist_ok=True)
     png = os.path.join(SAIDA_DIR, 'Painel_Programacao_%s.png' % hoje.strftime('%Y-%m-%d'))
     pdf = build(D, vencidas_10k(rows), png, hoje, feitos)

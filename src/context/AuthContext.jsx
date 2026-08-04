@@ -79,7 +79,12 @@ export function AuthProvider({ children }) {
     async (sessionUser) => {
       if (!sessionUser) {
         const storedUser = getStoredUser();
-        if (shouldKeepLegacySession(storedUser)) {
+        // Mantém o usuário logado enquanto estiver dentro da janela de idle (4h).
+        // Uma piscada no token (refresh que falhou por um instante, app voltando
+        // do segundo plano) NAO deve derrubar quem está ativo — só o idle de 4h
+        // (ou o logout explícito) encerra a sessão. O autoRefresh recupera o
+        // token em segundo plano quando a rede volta.
+        if (storedUser && isSessionValid()) {
           setUser(storedUser);
           return storedUser;
         }
@@ -249,7 +254,10 @@ export function AuthProvider({ children }) {
       syncFromSession(session?.user || null).catch((error) => {
         console.error("Falha ao sincronizar sessao do Auth:", error);
         const storedUser = getStoredUser();
-        if (shouldKeepLegacySession(storedUser)) {
+        // Falha de hidratação (blip de rede/DB) com o token ainda válido NAO pode
+        // derrubar quem está ativo. Mantém o usuário dentro da janela de idle (4h);
+        // só cai por idle ou logout explícito. Retenta em segundo plano depois.
+        if (storedUser && isSessionValid()) {
           setUser(storedUser);
           return;
         }

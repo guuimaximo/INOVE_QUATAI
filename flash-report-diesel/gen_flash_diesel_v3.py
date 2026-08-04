@@ -367,6 +367,23 @@ ACOMPANHAMENTO = [
     {"nome": "Jose Carlos Dos Santos", "instrutor": "Helio Ramos", "status": "Em monitoramento", "antes": 2.546, "depois": 2.650},
 ]
 
+# Producao de cada instrutor no mes. "sessoes" e quantos acompanhamentos ele FEZ (cada ida a
+# campo, tabela diesel_acompanhamento_sessoes); "motoristas" e em quantas PESSOAS distintas
+# ele encostou - o mesmo motorista costuma receber varias sessoes no ciclo de 30 dias, entao
+# os dois numeros nao se confundem. Fallback da ultima extracao; sobrescrito ao vivo.
+INSTRUTORES_PRODUCAO = [
+    {"nome": "Fabiano Freitas", "sessoes": 178, "motoristas": 44, "dias": 19},
+    {"nome": "Helio Ramos", "sessoes": 141, "motoristas": 38, "dias": 16},
+]
+# Motoristas distintos no mes somando os dois instrutores - uniao, nao soma das linhas
+# acima, porque o mesmo motorista pode ser atendido pelos dois.
+MOTORISTAS_ATENDIDOS = 79
+
+# Evolucao de TODOS os motoristas acompanhados com janela valida (a ACOMPANHAMENTO acima e o
+# recorte dos 10 piores, para o grafico). Aqui entra o conjunto inteiro, que e o que permite
+# dizer quantos melhoraram e quantos pioraram com cada instrutor sem falsear a taxa.
+EVOLUCAO_ACOMP = list(ACOMPANHAMENTO)
+
 # Meritocracia (BCNT.premiacao_atualizada, junho/2026 - valor R$ ja calculado pela regra da empresa)
 MERITOCRACIA_RESUMO = {"total_pago": 10850, "motoristas_premiados": 71, "total_motoristas": 220,
                        "distribuicao": {"R$ 300": 4, "R$ 200": 15, "R$ 150": 29, "R$ 100": 23, "R$ 0": 149}}
@@ -1184,6 +1201,28 @@ if _inv_url and _inv_key:
             INSTRUTORES_DIARIO = sorted(_idi, key=lambda x: -x["total_sessoes"])
             INSTRUTORES_DIA_A_DIA = _dad
             _ok("[inove] Pagina 12 (aproveitamento do dia) ao vivo.")
+
+        # Quantas PESSOAS distintas cada instrutor atendeu no mes. A sessao nao guarda o
+        # motorista: guarda o acompanhamento_id, e e o _acm que leva ao motorista. Sem isso
+        # so da para contar sessoes, que e outra pergunta - um motorista recebe varias no
+        # ciclo de 30 dias.
+        _mot_por_inst = _dd3(set)
+        _sess_por_inst = _dd3(int)
+        for s in _ss:
+            _i = s.get("instrutor_nome") or "?"
+            _sess_por_inst[_i] += 1
+            _nm_s, _ch_s = _acm.get(s.get("acompanhamento_id"), ("", ""))
+            if _ch_s:
+                _mot_por_inst[_i].add(_ch_s)
+        _prod = [{"nome": i, "sessoes": _sess_por_inst[i], "motoristas": len(_mot_por_inst[i]),
+                  "dias": len({d for (inst, d) in _pid if inst == i})}
+                 for i in sorted(_sess_por_inst, key=lambda x: -_sess_por_inst[x])]
+        if _prod:
+            INSTRUTORES_PRODUCAO = _prod
+            # Uniao, nao soma: um motorista atendido pelos dois instrutores contaria duas
+            # vezes no total da pagina.
+            MOTORISTAS_ATENDIDOS = len(set().union(*_mot_por_inst.values())) if _mot_por_inst else 0
+            _ok("[inove] Pagina 12 (producao por instrutor) ao vivo.")
         # Pagina 9: motoristas da semana (motorista distinto, sessao mais recente na janela)
         _seen = {}
         for s in sorted(_ss, key=lambda x: x.get("data_sessao") or "", reverse=True):
@@ -1308,6 +1347,10 @@ if _inv_url and _inv_key:
                 # diferentes para o mesmo conjunto.
                 _ac2.sort(key=lambda x: x["_d"])
                 ACOMPANHAMENTO = [{k: v for k, v in x.items() if k != "_d"} for x in _ac2[:10]]
+                # O conjunto inteiro, sem o corte em 10: a pagina de instrutores conta
+                # quantos melhoraram e quantos pioraram, e sobre os 10 piores a taxa daria
+                # 100% de piora em qualquer mes.
+                EVOLUCAO_ACOMP = [{k: v for k, v in x.items() if k != "_d"} for x in _ac2]
                 _ok("[inove] Pagina 13 (acompanhamento antes/depois) ao vivo.")
             else:
                 print(f"[inove] Pagina 13: so {len(_ac2)} motoristas com km suficiente nas duas "
@@ -1994,7 +2037,9 @@ def chart_divergencia_carros():
 
 for f in [chart_kml_historico, chart_semanal_evolucao, chart_semanal_variacao_pct_com_kml, chart_velocidade_kml_diario, chart_velocidade_kml_dispersao,
           chart_cluster_divergente, chart_linha_meta_velocidade,
-          chart_donut_tratativas, chart_instrutores_eficacia, chart_instrutores_status, chart_instrutores_diario,
+          # chart_instrutores_eficacia/_status sairam com a reforma da Pagina 11: eram
+          # duas barras cada, e a pagina agora responde producao e resultado em tabela.
+          chart_donut_tratativas, chart_instrutores_diario,
           chart_antes_depois_barras, chart_meritocracia_donut, chart_divergencia_carros, chart_aderencia_carros, chart_aderencia_empresa_diaria]:
     f()
 chart_motoristas_lollipop(PIORES, "Top 10 — Maior distância da meta", "v3_piores.png", RED)

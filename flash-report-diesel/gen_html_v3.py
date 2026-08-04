@@ -950,38 +950,102 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # da lista mudasse (a carga ao vivo nao garante ordem), o numero de um sairia com o nome do
 # outro. E repetia em prosa os tres tiles logo acima. Agora os nomes saem dos dados e o
 # texto guarda so a interpretacao.
+# A pagina respondia "quantos ciclos estao abertos" com dois graficos de duas barras cada.
+# As perguntas que ela precisa responder sao outras tres: quantos acompanhamentos cada
+# instrutor FEZ, em quantos MOTORISTAS distintos ele encostou (um motorista recebe varias
+# sessoes no ciclo, entao os numeros nao se confundem) e quem melhorou e quem piorou depois
+# de acompanhado. Os graficos sairam: quatro barras nao justificavam meia pagina cada.
 _inst = list(gfd.INSTRUTORES)
-_inst_nomes = " + ".join(i["nome"].split()[0] for i in _inst) or "instrutores"
-_inst_novos = sum(i["novos"] for i in _inst)
-_inst_taxas = [i["taxa_atingiu_meta"] for i in _inst]
+_prod = list(gfd.INSTRUTORES_PRODUCAO)
+_evo = list(gfd.EVOLUCAO_ACOMP)
+# Uniao entre os instrutores; a soma das linhas contaria duas vezes quem foi atendido
+# pelos dois. Sem o valor ao vivo, cai na soma e no maximo superestima.
+_mot_total = getattr(gfd, "MOTORISTAS_ATENDIDOS", 0) or sum(p.get("motoristas", 0) for p in _prod)
+
+# Melhorou/piorou por instrutor. O empate tecnico (variacao abaixo de 0,01 km/L) fica de
+# fora dos dois lados: e ruido de medicao, e contar como melhora inflaria a taxa.
+LIMIAR_EVOLUCAO = 0.01
+for _e in _evo:
+    _e["delta"] = _e["depois"] - _e["antes"]
+_melhor = [e for e in _evo if e["delta"] >= LIMIAR_EVOLUCAO]
+_pior = [e for e in _evo if e["delta"] <= -LIMIAR_EVOLUCAO]
+_estavel = [e for e in _evo if abs(e["delta"]) < LIMIAR_EVOLUCAO]
+
+
+def _por_instrutor(lista, nome):
+    return [e for e in lista if str(e.get("instrutor", "")).strip() == str(nome).strip()]
+
+
+rows_prod = ""
+for p in _prod:
+    _m = _por_instrutor(_melhor, p["nome"])
+    _p = _por_instrutor(_pior, p["nome"])
+    _t = len(_por_instrutor(_evo, p["nome"]))
+    _spm = (p["sessoes"] / p["motoristas"]) if p.get("motoristas") else 0
+    _taxa = (100 * len(_m) / _t) if _t else None
+    rows_prod += (
+        f"<tr><td style='text-align:left;padding-left:8px;font-weight:700;'>{p['nome']}</td>"
+        f"<td style='font-weight:800;'>{p['sessoes']}</td>"
+        f"<td style='font-weight:800;'>{p.get('motoristas', 0)}</td>"
+        f"<td>{fmt(_spm,1)}</td><td>{p.get('dias', 0)}</td>"
+        f"<td style='color:#16a34a;font-weight:800;'>{len(_m)}</td>"
+        f"<td style='color:#dc2626;font-weight:800;'>{len(_p)}</td>"
+        f"<td style='font-weight:700;'>{'—' if _taxa is None else fmt(_taxa,0) + '%'}</td></tr>")
+
+
+def _lista_evolucao(lista, cor, seta, limite=14):
+    """Motoristas nomeados, do maior movimento para o menor. Sem truncar em silencio:
+    quando sobra gente, a ultima linha diz quantos ficaram de fora."""
+    itens = sorted(lista, key=lambda e: -abs(e["delta"]))
+    linhas = "".join(
+        f"<tr><td style='text-align:left;padding-left:8px;'>{e['nome']}</td>"
+        f"<td style='font-size:7.4px;color:#64748b;'>{e.get('instrutor', '-').split()[0]}</td>"
+        f"<td>{fmt(e['antes'],3)}</td><td style='font-weight:700;'>{fmt(e['depois'],3)}</td>"
+        f"<td style='color:{cor};font-weight:800;white-space:nowrap;'>{seta} {fmt(abs(e['delta']),3)}</td></tr>"
+        for e in itens[:limite])
+    if len(itens) > limite:
+        linhas += (f"<tr><td colspan='5' style='text-align:left;padding-left:8px;font-size:7.4px;"
+                   f"color:#64748b;'>+ {len(itens) - limite} motoristas nesta faixa, "
+                   f"não listados por espaço.</td></tr>")
+    return linhas
+
+
+_THEAD_EVO = ('<thead><tr><th style="text-align:left;padding-left:8px;">Motorista</th>'
+              '<th>Instrutor</th><th>Antes</th><th>Depois</th><th>Variação</th></tr></thead>')
+_taxa_geral = (100 * len(_melhor) / len(_evo)) if _evo else 0
 _txt_instrutores = (
-    f"Dos {_inst_novos} acompanhamentos iniciados em {MESREF_NOME}, a maior parte segue dentro "
-    f"do ciclo de 30 dias — por isso aparecem majoritariamente como \"em monitoramento\". "
-    + (f"A efetividade (leitura inicial já na meta) fica entre "
-       f"{fmt(min(_inst_taxas),1)}% e {fmt(max(_inst_taxas),1)}%"
-       + (" — parecida entre os instrutores, " if max(_inst_taxas) - min(_inst_taxas) <= 5
-          else " — com diferença relevante entre eles, ")
-       + ("sinal de que o gargalo é o modelo de acompanhamento, não o instrutor: vale testar "
-          "ciclos mais curtos com reforço em campo nos primeiros 10 dias."
-          if max(_inst_taxas) - min(_inst_taxas) <= 5 else
-          "o que sugere olhar a abordagem individual antes de mudar o modelo.")
-       if _inst_taxas else ""))
+    f"Cada instrutor faz várias sessões com o mesmo motorista dentro do ciclo de 30 dias — por "
+    f"isso o número de acompanhamentos é maior que o de pessoas atendidas. O que decide se o "
+    f"trabalho funcionou é a coluna da direita: dos <b>{len(_evo)}</b> motoristas com KM/L "
+    f"medido antes e depois do início do acompanhamento, <b>{len(_melhor)}</b> melhoraram "
+    f"({fmt(_taxa_geral,0)}%), <b>{len(_pior)}</b> pioraram e {len(_estavel)} ficaram estáveis "
+    f"(variação abaixo de 0,01 km/L, que é ruído de medição). O “antes” são os 30 dias "
+    f"anteriores ao início; o “depois”, do início até o fim do período."
+    if _evo else
+    "Sem motoristas com quilometragem suficiente nas duas janelas para medir evolução — a "
+    "produção ao lado é real, mas o resultado do acompanhamento não pôde ser calculado.")
+
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 11 · Instrutores — Análise Aprofundada", f"Base: diesel_acompanhamentos (Supabase INOVE) · recorte {MESREF} — novos acompanhamentos iniciados no mês + desfechos ocorridos no mês", "Instrutores ativos", str(len(gfd.INSTRUTORES)))}
-  <div class="grid-3" style="margin-bottom:6px;">
-    <div class="metric"><div class="lbl">Novos acompanhamentos (iniciados em {MESREF_NOME.lower()})</div><div class="val">{sum(i['novos'] for i in gfd.INSTRUTORES)}</div><div class="aux">{_inst_nomes} · ainda no ciclo de 30 dias</div></div>
-    <div class="metric"><div class="lbl">Desfechos em {MESREF_NOME.lower()} — Concluídos (OK)</div><div class="val" style="color:#16a34a;">{sum(i['desf_ok'] for i in gfd.INSTRUTORES)}</div><div class="aux">ciclos encerrados no mês atingindo a meta</div></div>
-    <div class="metric"><div class="lbl">Desfechos em {MESREF_NOME.lower()} — viraram tratativa</div><div class="val" style="color:#dc2626;">{sum(i['desf_ata'] for i in gfd.INSTRUTORES)}</div><div class="aux">viraram tratativa por não atingir a meta</div></div>
+  {page_header("Página 11 · Instrutores — Produção e Resultado", f"Base: diesel_acompanhamento_sessoes + diesel_acompanhamentos (Supabase INOVE) — {MESREF}", "Instrutores ativos", str(len(_prod) or len(_inst)))}
+  <div class="grid-4" style="margin-bottom:6px;">
+    <div class="metric"><div class="lbl">Acompanhamentos feitos</div><div class="val">{sum(p['sessoes'] for p in _prod)}</div><div class="aux">sessões em campo no mês</div></div>
+    <div class="metric"><div class="lbl">Motoristas atendidos</div><div class="val">{_mot_total}</div><div class="aux">pessoas distintas acompanhadas</div></div>
+    <div class="metric"><div class="lbl">Melhoraram o KM/L</div><div class="val" style="color:#16a34a;">{len(_melhor)}</div><div class="aux">de {len(_evo)} com antes e depois medidos</div></div>
+    <div class="metric"><div class="lbl">Pioraram o KM/L</div><div class="val" style="color:#dc2626;">{len(_pior)}</div><div class="aux">mesmo estando acompanhados</div></div>
   </div>
-  <div class="grid-2">
-    <div class="card"><div class="card-title">Efetividade — % de acompanhados que atingiram a meta</div><div class="card-body">
-      <div class="chart-wrap chart-wrap-tall"><img src="v3_instrutores_eficacia.png"/></div>
+  <div class="card" style="margin-bottom:6px;"><div class="card-title">Por instrutor — quanto fez e o que resultou</div><div class="card-body" style="padding:6px 10px;">
+    <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:8px;">Instrutor</th><th>Acomp. feitos</th><th>Motoristas</th><th>Acomp./motorista</th><th>Dias em campo</th><th>Melhoraram</th><th>Pioraram</th><th>% melhora</th></tr></thead>
+    <tbody>{rows_prod}</tbody></table>
+  </div></div>
+  <div class="grid-2" style="align-items:start;">
+    <div class="card"><div class="card-title">Melhoraram depois do acompanhamento ({len(_melhor)})</div><div class="card-body" style="padding:6px 10px;">
+      <table class="tbl-compact">{_THEAD_EVO}<tbody>{_lista_evolucao(_melhor, "#16a34a", "&#8593;")}</tbody></table>
     </div></div>
-    <div class="card"><div class="card-title">Carteira por status</div><div class="card-body">
-      <div class="chart-wrap chart-wrap-tall"><img src="v3_instrutores_status.png"/></div>
+    <div class="card"><div class="card-title">Pioraram mesmo acompanhados ({len(_pior)})</div><div class="card-body" style="padding:6px 10px;">
+      <table class="tbl-compact">{_THEAD_EVO}<tbody>{_lista_evolucao(_pior, "#dc2626", "&#8595;")}</tbody></table>
     </div></div>
   </div>
-  <div class="cons-box" style="margin-top:6px;"><div class="cons-title">Leitura analítica</div>
+  <div class="cons-box" style="margin-top:6px;"><div class="cons-title">Como ler</div>
   <div class="cons-text">{_txt_instrutores}</div></div>
   {footer()}
 </div>""")

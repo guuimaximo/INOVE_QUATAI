@@ -1374,14 +1374,24 @@ def _janela_carro(d):
 
 
 # DIVERGENCIA_CARROS: (carro, kml_transnet, kml_sst, divergencia_pct, km, dias, 1o, ultimo).
-_dv = list(gfd.DIVERGENCIA_CARROS)
+# A pagina mostra os maiores, mas quem conta e a lista INTEIRA: o KPI do topo vinha do
+# recorte ja cortado e anunciava 8 quando existiam 9 acima do corte.
+_dv_todos = sorted(gfd.DIVERGENCIA_CARROS, key=lambda x: -abs(x[3]))
+_DV_MAX = getattr(gfd, "DIVERGENCIA_MOSTRA", 8)
+_dv = _dv_todos[:_DV_MAX]
+_dv_total = len(_dv_todos)
+_dv_extra = max(0, _dv_total - len(_dv))
 _p16_n = len(_dv)
 _p16_plural = "carro" if _p16_n == 1 else "carros"
+_p16_plural_total = "carro" if _dv_total == 1 else "carros"
 _p16_essas = "esse caso não é apenas estilo de condução" if _p16_n == 1 else \
              f"os {_p16_n} casos acima não são apenas estilo de condução"
-_p16_min = fmt(min(abs(d[3]) for d in _dv), 0) if _dv else "10"
+# Sobre TODOS, nao sobre os exibidos: a frase conta os N do total, entao o piso tem de
+# ser o do total. Com o menor dos 8 exibidos, ela afirmava "12 carros acima de 22%"
+# quando os 4 nao exibidos estavam entre 10% e 22%.
+_p16_min = fmt(min(abs(d[3]) for d in _dv_todos), 0) if _dv_todos else "10"
 rows_diverg = ""
-for d in sorted(gfd.DIVERGENCIA_CARROS, key=lambda x: -abs(x[3])):
+for d in _dv:
     rows_diverg += (f"<tr><td style='font-weight:bold;text-align:left;padding-left:6px;'>{d[0]}</td>"
                      f"<td>{fmt(d[1],3)}</td><td>{fmt(d[2],3)}</td>"
                      f"<td style='font-weight:800;color:{'#dc2626' if d[3]<0 else '#e0a800'};'>{pct(d[3])}</td>"
@@ -1415,16 +1425,16 @@ else:
     _bloco_cobertura = ""
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 16 · Divergência Telemetria x Transnet por Carro (≥10%)", f"Fonte: indicadores_diesel — por carro, os últimos {gfd.DIAS_DIVERGENCIA} dias com leitura nas DUAS fontes (mín. {gfd.KM_MIN_DIVERGENCIA} km acumulados)", "Carros com divergência ≥10%", str(len(gfd.DIVERGENCIA_CARROS)))}
+  {page_header("Página 16 · Divergência Telemetria x Transnet por Carro (≥10%)", f"Fonte: indicadores_diesel — por carro, os últimos {gfd.DIAS_DIVERGENCIA} dias com leitura nas DUAS fontes (mín. {gfd.KM_MIN_DIVERGENCIA} km acumulados)", "Carros com divergência ≥10%", str(_dv_total))}
   <div class="grid-2">
-    <div class="card"><div class="card-title">Divergências ≥10% (mín. {gfd.KM_MIN_DIVERGENCIA} km na janela)</div><div class="card-body">
+    <div class="card"><div class="card-title">Divergências ≥10% (mín. {gfd.KM_MIN_DIVERGENCIA} km na janela){f" — os {len(_dv)} maiores de {_dv_total}" if _dv_extra else ""}</div><div class="card-body">
       <div class="chart-wrap chart-wrap-tall"><img src="v3_divergencia.png"/></div>
     </div></div>
     <div class="card"><div class="card-title">Detalhamento</div><div class="card-body">
       <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Carro</th><th>KM/L Transnet</th><th>KM/L SST</th><th>Diferença</th><th>Km na janela</th><th>Dias</th></tr></thead>
       <tbody>{rows_diverg.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Considerações</div>
-      <div class="cons-text">Ao abrir o corte para ≥10%, nenhum carro novo aparece — a base é bimodal: ou a divergência é enorme (≥{_p16_min}%, {_p16_n} {_p16_plural} acima) ou é pequena (abaixo de 10%). Isso reforça que {_p16_essas}, e sim fortes candidatos a problema de calibração de sensor ou telemetria com falha de leitura. Recomenda-se checagem física nesses veículos antes de usar o dado de Telemetria para decisões individuais sobre eles.</div></div>
+      <div class="cons-text">Ao abrir o corte para ≥10%, nenhum carro novo aparece — a base é bimodal: ou a divergência é enorme (≥{_p16_min}%, {_dv_total} {_p16_plural_total} no total) ou é pequena (abaixo de 10%). Isso reforça que {_p16_essas}, e sim fortes candidatos a problema de calibração de sensor ou telemetria com falha de leitura. Recomenda-se checagem física nesses veículos antes de usar o dado de Telemetria para decisões individuais sobre eles.</div></div>
     </div></div>
   </div>
   {_bloco_cobertura}

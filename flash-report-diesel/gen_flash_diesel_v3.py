@@ -635,52 +635,11 @@ def _agg_divergencia(rows, n_dias=DIAS_DIVERGENCIA, km_min=KM_MIN_DIVERGENCIA):
             out.append((v, round(klt, 3), round(kl_sst, 3), round(dp, 1), int(kmt),
                         len(janela), janela[-1][0], janela[0][0]))
     out.sort(key=lambda x: -abs(x[3]))
-    # O total real nao cabe na pagina, mas nao pode sumir: a pagina mostra os maiores.
-    print(f"[transnet] divergencia >=10%: {len(out)} carro(s) no total; "
-          f"pagina mostra os {min(len(out), DIVERGENCIA_MOSTRA)} maiores.")
-    return out[:DIVERGENCIA_MOSTRA]
-
-
-def _diag_pareamento(rows):
-    """Diagnostico: com que frequencia as duas fontes registram abastecimento no MESMO dia.
-
-    A divergencia pareia por dia para as duas medias cobrirem os mesmos dias. Se as fontes
-    raramente coincidem, o pareamento fica restritivo e a janela recua no calendario.
-    So imprime - nao altera nenhum numero do relatorio.
-    """
-    from collections import defaultdict
-    st = defaultdict(lambda: {"dias": set(), "tn": set(), "sst": set(), "sst_ruim": set()})
-    for r in rows:
-        v, d = r.get("veiculo"), str(r.get("data_consolidada") or "")[:10]
-        if not v or len(d) != 10:
-            continue
-        a = st[v]
-        a["dias"].add(d)
-        if _num(r.get("km_transnet")) and _num(r.get("combustivel_transnet")):
-            a["tn"].add(d)
-        kls = _num(r.get("km_l_sst"))
-        if _num(r.get("km_sst")) and _num(r.get("combustivel_sst")) and kls is not None:
-            (a["sst"] if 0.5 <= kls <= 6 else a["sst_ruim"]).add(d)
-    if not st:
-        return
-    linhas = []
-    for v, a in st.items():
-        tn, sst = len(a["tn"]), len(a["sst"])
-        amb = len(a["tn"] & a["sst"])
-        linhas.append((v, len(a["dias"]), tn, sst, len(a["sst_ruim"]), amb,
-                       round(100 * amb / tn, 1) if tn else 0.0))
-    tot_tn = sum(x[2] for x in linhas)
-    tot_sst = sum(x[3] for x in linhas)
-    tot_amb = sum(x[5] for x in linhas)
-    n_ok = sum(1 for x in linhas if x[5] >= 10)
-    print(f"[diag-pareamento] {len(linhas)} carros na janela | dias com abastec. Transnet: "
-          f"{tot_tn} | com SST valido: {tot_sst} | nos DOIS no mesmo dia: {tot_amb} "
-          f"({round(100 * tot_amb / tot_tn, 1) if tot_tn else 0}% dos dias Transnet)")
-    print(f"[diag-pareamento] carros que alcancam 10 dias pareados: {n_ok} de {len(linhas)}")
-    print("[diag-pareamento] piores (menos pareamento), carro/dias/TN/SST/SSTruim/ambos/%:")
-    for x in sorted(linhas, key=lambda y: y[6])[:12]:
-        print(f"[diag-pareamento]   {x[0]}: {x[1]}d  TN={x[2]}  SST={x[3]}  "
-              f"SSTruim={x[4]}  ambos={x[5]}  ({x[6]}%)")
+    # Devolve TODOS. Cortar aqui fazia a pagina contar a lista ja truncada e anunciar 8
+    # quando existiam 9 - quem lia concluia que o problema era menor do que e. Quem corta
+    # para caber na folha e a pagina, que entao sabe dizer "os 8 maiores de 9".
+    print(f"[transnet] divergencia >=10%: {len(out)} carro(s).")
+    return out
 
 
 def _agg_cobertura_telemetria(rows, km_min=500):
@@ -805,7 +764,6 @@ if _transnet_rows:
     if _cob:
         COBERTURA_TELEMETRIA = _cob
         print(f"[transnet] {len(_cob)} carro(s) rodando sem leitura util de telemetria.")
-    _diag_pareamento(_janela_div)
     _div = _agg_divergencia(_janela_div)
     if _div:
         DIVERGENCIA_CARROS = _div
@@ -2084,7 +2042,9 @@ def chart_meritocracia_donut():
 
 def chart_divergencia_carros():
     fig, ax = plt.subplots(figsize=(6.8, 5.6))
-    dados = sorted(DIVERGENCIA_CARROS, key=lambda d: d[3])
+    # Mesmo recorte da tabela ao lado: as duas tem de falar dos mesmos carros.
+    _maiores = sorted(DIVERGENCIA_CARROS, key=lambda d: -abs(d[3]))[:DIVERGENCIA_MOSTRA]
+    dados = sorted(_maiores, key=lambda d: d[3])
     labels = [d[0] for d in dados]
     vals = [d[3] for d in dados]
     y = range(len(labels))

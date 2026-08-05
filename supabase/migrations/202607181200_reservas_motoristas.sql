@@ -42,6 +42,11 @@ drop policy if exists "auth reservas_motoristas" on public.reservas_motoristas;
 create policy "auth reservas_motoristas" on public.reservas_motoristas
   for all to authenticated using (true) with check (true);
 
+-- IMPORTANTE: no Supabase, toda tabela nova no schema public nasce com grants
+-- para anon por DEFAULT PRIVILEGES. Conceder só a authenticated NAO basta — o
+-- anon precisa ser revogado explicitamente, senao a tabela fica legivel/gravavel
+-- sem login (foi o que aconteceu aqui e no atestados). Ver skill inove-playbook.
+revoke all on public.reservas_motoristas from anon;
 grant select, insert, update, delete on public.reservas_motoristas to authenticated;
 
 notify pgrst, 'reload schema';

@@ -35,16 +35,19 @@ Projeto: app de gestão operacional (React + Vite + Supabase), usado pela opera�
   ```
   `--linked` mira no projeto remoto usando o token da CLI, **sem pedir senha**. (`db query` sem `--linked` conecta no banco LOCAL — não é o que você quer.)
 - **RLS: o acesso `anon` foi TRANCADO na "Fase 1".** A maioria das tabelas retorna 401 para a anon key. **NUNCA** conceda `anon` numa tabela nova — nem `grant ... to anon`, nem `policy ... to anon`. Isso **reabre buraco de segurança**. Já aconteceu 2x: `atestados` e `reservas_motoristas` (que eu mesmo criei copiando o padrão antigo) ficaram legíveis/graváveis sem login. Dado sensível (CID de atestado = LGPD).
+- **⚠️ Tabela nova nasce com anon liberado (DEFAULT PRIVILEGES).** No Supabase, ao criar QUALQUER tabela no schema `public`, o Postgres concede grants a `anon` automaticamente (default privileges). Conceder só a `authenticated` **NÃO fecha o anon** — é preciso **revogar o anon explicitamente**, senão a tabela fica legível/gravável sem login (aconteceu com `atestados` E com `reservas_motoristas`, que eu criei "certo" e mesmo assim vazou). **Sempre teste depois** com a anon key: tem que dar 401.
 - **Padrão correto de tabela nova:**
   ```sql
   alter table public.<tabela> enable row level security;
   drop policy if exists "auth <tabela>" on public.<tabela>;
   create policy "auth <tabela>" on public.<tabela>
     for all to authenticated using (true) with check (true);
+  revoke all on public.<tabela> from anon;                                  -- ESSENCIAL
   grant select, insert, update, delete on public.<tabela> to authenticated;
   notify pgrst, 'reload schema';
   ```
-  Só `authenticated`. Nunca `anon`.
+  Só `authenticated`. Nunca `anon` — e o `revoke ... from anon` é obrigatório.
+- **Teste de fechamento (sempre):** `curl` na tabela com a **anon key** pública → deve dar **401**; com a **service key** → 200. Se anon der 200, tem buraco: `revoke all on public.<tabela> from anon`.
 - **`ENABLE ROW LEVEL SECURITY` sem policy = tabela trava** (nem o dono logado acessa). Sempre criar a policy junto.
 - **Dívida estrutural conhecida:** todas as policies são `using(true)` → qualquer usuário logado lê/escreve **tudo** (sem filtro por perfil/empresa). O `canUserAccessPath` do frontend é só cosmético; o banco não o aplica. O fix de verdade (server-side / JWT com claims) é projeto à parte — ver memória `inove-rls-auth-bloqueio`.
 - **Consultar dados para auditoria/simulação:** REST com a **service_role key** (bypassa RLS). Projeto Supabase: `wboelthngddvkgrvwkbu.supabase.co`. Para **testar exposição** (o que um estranho vê), use a **anon key** pública.

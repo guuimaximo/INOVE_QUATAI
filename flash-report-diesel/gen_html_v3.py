@@ -1360,7 +1360,20 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # ================= PAGINA 11: DIVERGENCIA TELEMETRIA X TRANSNET =================
 # "os 6 carros acima" e o corte ">25%" eram digitados; a lista tem tamanho variavel (o
 # agregador corta em 8) e o menor desvio muda a cada semana.
-# DIVERGENCIA_CARROS: (carro, kml_transnet, kml_telemetria, divergencia_pct, km).
+def _janela_carro(d):
+    """Dias usados + de quando sao. A janela nao e igual para todo carro: leitura absurda
+    nos dias recentes e descartada, e a busca recua - sem mostrar as datas, o leitor
+    tomaria um numero de duas semanas atras como sendo de ontem."""
+    if len(d) < 8 or not d[5]:
+        return "—"
+    if not (d[6] and d[7]):
+        return str(d[5])
+    _f = lambda iso: f"{iso[8:10]}/{iso[5:7]}"
+    return (f"{d[5]}<div style='font-size:6.6px;color:#64748b;font-weight:600;'>"
+            f"{_f(d[6])}–{_f(d[7])}</div>")
+
+
+# DIVERGENCIA_CARROS: (carro, kml_transnet, kml_sst, divergencia_pct, km, dias, 1o, ultimo).
 _dv = list(gfd.DIVERGENCIA_CARROS)
 _p16_n = len(_dv)
 _p16_plural = "carro" if _p16_n == 1 else "carros"
@@ -1372,7 +1385,8 @@ for d in sorted(gfd.DIVERGENCIA_CARROS, key=lambda x: -abs(x[3])):
     rows_diverg += (f"<tr><td style='font-weight:bold;text-align:left;padding-left:6px;'>{d[0]}</td>"
                      f"<td>{fmt(d[1],3)}</td><td>{fmt(d[2],3)}</td>"
                      f"<td style='font-weight:800;color:{'#dc2626' if d[3]<0 else '#e0a800'};'>{pct(d[3])}</td>"
-                     f"<td>{d[4]} km</td></tr>")
+                     f"<td>{d[4]} km</td>"
+                     f"<td>{_janela_carro(d)}</td></tr>")
 
 # Carros rodando sem leitura util de telemetria. A divergencia so ve carro com dado nas
 # duas fontes, entao aparelho mudo era invisivel no relatorio inteiro - e e o caso mais
@@ -1401,13 +1415,13 @@ else:
     _bloco_cobertura = ""
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 16 · Divergência Telemetria x Transnet por Carro (≥10%)", f"Fonte: CSV Athena (indicadores_carro_quatai) — {MESANT_NOME} a {MESREF}", "Carros com divergência ≥10%", str(len(gfd.DIVERGENCIA_CARROS)))}
+  {page_header("Página 16 · Divergência Telemetria x Transnet por Carro (≥10%)", f"Fonte: indicadores_diesel — por carro, os últimos {gfd.DIAS_DIVERGENCIA} dias com leitura nas DUAS fontes (mín. {gfd.KM_MIN_DIVERGENCIA} km acumulados)", "Carros com divergência ≥10%", str(len(gfd.DIVERGENCIA_CARROS)))}
   <div class="grid-2">
-    <div class="card"><div class="card-title">Divergências ≥10% (mín. 500km no período)</div><div class="card-body">
+    <div class="card"><div class="card-title">Divergências ≥10% (mín. {gfd.KM_MIN_DIVERGENCIA} km na janela)</div><div class="card-body">
       <div class="chart-wrap chart-wrap-tall"><img src="v3_divergencia.png"/></div>
     </div></div>
     <div class="card"><div class="card-title">Detalhamento</div><div class="card-body">
-      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Carro</th><th>KM/L Transnet</th><th>KM/L Telemetria</th><th>Diferença</th><th>Km no período</th></tr></thead>
+      <table class="tbl-big"><thead><tr><th style="text-align:left;padding-left:10px;">Carro</th><th>KM/L Transnet</th><th>KM/L SST</th><th>Diferença</th><th>Km na janela</th><th>Dias</th></tr></thead>
       <tbody>{rows_diverg.replace("padding-left:6px", "padding-left:10px")}</tbody></table>
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Considerações</div>
       <div class="cons-text">Ao abrir o corte para ≥10%, nenhum carro novo aparece — a base é bimodal: ou a divergência é enorme (≥{_p16_min}%, {_p16_n} {_p16_plural} acima) ou é pequena (abaixo de 10%). Isso reforça que {_p16_essas}, e sim fortes candidatos a problema de calibração de sensor ou telemetria com falha de leitura. Recomenda-se checagem física nesses veículos antes de usar o dado de Telemetria para decisões individuais sobre eles.</div></div>

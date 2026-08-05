@@ -401,13 +401,15 @@ MERITOCRACIA_TOP = [
 ]
 
 # Divergencia Transnet x Telemetria por carro (Athena, mai-jul/2026, min. 500km rodado)
+# (carro, kml_transnet, kml_sst, divergencia_pct, km_transnet, dias, primeiro, ultimo).
+# As tres ultimas ficam vazias no fallback: sao do recorte por dia, que so existe ao vivo.
 DIVERGENCIA_CARROS = [
-    ("222215", 2.934, 4.093, 39.5, 14966),
-    ("221606", 2.649, 3.517, 32.8, 2956),
-    ("222220", 2.750, 1.951, -29.1, 12974),
-    ("222204", 2.807, 3.599, 28.2, 13760),
-    ("222203", 2.781, 2.026, -27.1, 13099),
-    ("221608", 2.405, 1.764, -26.6, 6031),
+    ("222215", 2.934, 4.093, 39.5, 14966, 0, "", ""),
+    ("221606", 2.649, 3.517, 32.8, 2956, 0, "", ""),
+    ("222220", 2.750, 1.951, -29.1, 12974, 0, "", ""),
+    ("222204", 2.807, 3.599, 28.2, 13760, 0, "", ""),
+    ("222203", 2.781, 2.026, -27.1, 13099, 0, "", ""),
+    ("221608", 2.405, 1.764, -26.6, 6031, 0, "", ""),
 ]
 
 # Analise de linha completa (estilo app: Mes Referencia=Junho, Mes Comparacao=Maio)
@@ -589,28 +591,54 @@ def _agg_aderencia(rows, mes="2026-06"):
     return diaria, media, carros, frota
 
 
-def _agg_divergencia(rows):
-    """Pagina 16: divergencia KM/L Transnet x telemetria por carro (>=500km, >=10%).
-    Filtro de qualidade: telemetria (km_l_sst) so entra se estiver em faixa realista 0,5..6;
-    valores 0 ou absurdos (ex.: 9,68) sao descartados da media (o carro segue visivel na Pag. 17)."""
+DIAS_DIVERGENCIA = 10       # dias (com leitura nas duas fontes) que entram na comparacao
+KM_MIN_DIVERGENCIA = 500    # acumulado no Transnet abaixo disso nao sustenta a conclusao
+DIVERGENCIA_MOSTRA = 8      # linhas exibidas na pagina; o total real vai no log
+
+
+def _agg_divergencia(rows, n_dias=DIAS_DIVERGENCIA, km_min=KM_MIN_DIVERGENCIA):
+    """Divergencia KM/L Transnet x telemetria (SST) por carro, nos dias mais recentes.
+
+    Recorte: para cada carro, os n_dias mais recentes em que AS DUAS fontes reportaram no
+    MESMO dia. Antes cada lado somava o que tinha ao longo de dois meses, entao as duas
+    medias cobriam conjuntos de dias diferentes e parte da "divergencia" era diferenca de
+    amostra, nao do sensor. Pareando por dia, o que sobra e o sensor.
+
+    Um dia so conta se tiver km e combustivel nas duas fontes E o km_l_sst estiver na faixa
+    realista de 0,5 a 6: zero e aparelho mudo, e valor absurdo (ex.: 9,68) e descalibragem.
+    Esses dias nao entram na media, e o carro continua visivel na tabela de cobertura.
+
+    Entra na lista quem acumular >= km_min km de Transnet na janela e divergir >= 10%.
+    Devolve (carro, kml_transnet, kml_sst, divergencia_pct, km_transnet, dias, primeiro,
+    ultimo) - as tres ultimas posicoes dizem sobre quanto dado a conclusao se apoia.
+    """
     from collections import defaultdict
-    agg = defaultdict(lambda: {"kmt": 0.0, "ct": 0.0, "kms": 0.0, "cs": 0.0})
+    por_carro = defaultdict(list)
     for r in rows:
-        v = r["veiculo"]
+        v, d = r.get("veiculo"), str(r.get("data_consolidada") or "")[:10]
+        if not v or len(d) != 10:
+            continue
         kmt, ct = _num(r.get("km_transnet")), _num(r.get("combustivel_transnet"))
         kms, cs, kls = _num(r.get("km_sst")), _num(r.get("combustivel_sst")), _num(r.get("km_l_sst"))
-        if kmt and ct:
-            agg[v]["kmt"] += kmt; agg[v]["ct"] += ct
-        if kms and cs and kls is not None and 0.5 <= kls <= 6:
-            agg[v]["kms"] += kms; agg[v]["cs"] += cs
+        if kmt and ct and kms and cs and kls is not None and 0.5 <= kls <= 6:
+            por_carro[v].append((d, kmt, ct, kms, cs))
     out = []
-    for v, a in agg.items():
-        if a["ct"] > 0 and a["cs"] > 0 and a["kmt"] >= 500:
-            klt, kls = a["kmt"] / a["ct"], a["kms"] / a["cs"]
-            dp = (kls - klt) / klt * 100
-            if abs(dp) >= 10:
-                out.append((v, round(klt, 3), round(kls, 3), round(dp, 1), int(a["kmt"])))
-    return sorted(out, key=lambda x: -abs(x[3]))[:8]
+    for v, dias in por_carro.items():
+        janela = sorted(dias, key=lambda x: x[0], reverse=True)[:n_dias]
+        kmt = sum(x[1] for x in janela); ct = sum(x[2] for x in janela)
+        kms = sum(x[3] for x in janela); cs = sum(x[4] for x in janela)
+        if ct <= 0 or cs <= 0 or kmt < km_min:
+            continue
+        klt, kl_sst = kmt / ct, kms / cs
+        dp = (kl_sst - klt) / klt * 100
+        if abs(dp) >= 10:
+            out.append((v, round(klt, 3), round(kl_sst, 3), round(dp, 1), int(kmt),
+                        len(janela), janela[-1][0], janela[0][0]))
+    out.sort(key=lambda x: -abs(x[3]))
+    # O total real nao cabe na pagina, mas nao pode sumir: a pagina mostra os maiores.
+    print(f"[transnet] divergencia >=10%: {len(out)} carro(s) no total; "
+          f"pagina mostra os {min(len(out), DIVERGENCIA_MOSTRA)} maiores.")
+    return out[:DIVERGENCIA_MOSTRA]
 
 
 def _agg_cobertura_telemetria(rows, km_min=500):

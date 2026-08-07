@@ -142,7 +142,7 @@ import calendar as _cal
 _cal_c = _cal.Calendar(firstweekday=6)
 _weeks_jul = _cal_c.monthdayscalendar(gfd.MES_REF_ANO, gfd.MES_REF_MM)
 _dias_cols = ["Dom","Seg","Ter","Qua","Qui","Sex","S\u00e1b"]
-_visita_label = {6: "1\u00aa visita", 17: "2\u00aa visita", 30: "3\u00aa visita"}
+_visita_label = {14: "1\u00aa visita", 28: "2\u00aa visita"}
 _cal_header = "".join(f'<div style="text-align:center;font-size:8px;font-weight:800;color:#64748b;text-transform:uppercase;padding:4px 0;">{d}</div>' for d in _dias_cols)
 # Celula alta: a pagina 17 tem so o calendario e o card da visita, e com celula baixa
 # sobrava mais de um terco da folha em branco (fica gritante quando a visita nao teve
@@ -1492,40 +1492,39 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
 # usuario informar (mesmo estilo de cards). Ver COWORK_FLASH.md.
 # ================= PAGINA 18: PROGRAMACAO DA SEMANA =================
 # Estrutura: (titulo_semana, intervalo, [(tipo, tema, data, executado), ...])
-# executado=False -> item pendente (bolinha vazia + data em vermelho), igual ao board.
+# executado=False -> item nao executado (bolinha vazia), igual ao board. A data so fica
+# vermelha se ja venceu; o que ainda vai acontecer no mes e programacao, nao atraso.
 CRONOGRAMA = [
-    ("1ª Semana", "01 a 03/07", [
-        ("Imagem Informativa", "Tamo no Zap: a ferramenta que facilita o seu dia a dia!", "01/07", True),
-        ("Podcast - Fala, Motô!", "Fugindo de Reclamações e Tratativas: a importância do bom atendimento", "02/07", True),
-        ("Enquete de Fixação", "Tamo no Zap: a ferramenta que facilita o seu dia a dia!", "03/07", True),
+    ("1ª Semana", "03 a 07/08", [
+        ("Imagem Motivacional", "", "03/08", True),
+        ("Vídeo - Min. do Conhecimento", "Parado Ligado: Consumo ou Desperdício?", "04/08", True),
+        ("Imagem Informativa", "Parado Ligado: Consumo ou Desperdício?", "05/08", True),
+        ("Podcast - Fala, Motô!", "Benefícios sem Mistério: Entenda Como Tudo Funciona", "06/08", True),
+        ("Enquete de Fixação", "Parado Ligado: Consumo ou Desperdício?", "07/08", True),
     ]),
-    ("2ª Semana", "06 a 10/07", [
-        ("Imagem Motivacional", "", "06/07", True),
-        ("Vídeo - Min. do Conhecimento", "Lei nº 3.888/2025 – Programa Parada Legal", "07/07", True),
-        ("Imagem Informativa", "Lei nº 3.888/2025 – Programa Parada Legal", "08/07", True),
-        ("Podcast - Fala, Motô!", "O Motorista que Conquista Pessoas", "09/07", True),
-        ("Enquete de Fixação", "Lei nº 3.888/2025 – Programa Parada Legal", "10/07", True),
+    ("2ª Semana", "10 a 14/08", [
+        ("Imagem Motivacional", "", "10/08", False),
+        ("Vídeo - Min. do Conhecimento", "", "11/08", False),
+        ("Imagem Informativa", "", "12/08", False),
+        ("Podcast - Fala, Motô!", "", "13/08", False),
+        ("Enquete de Fixação", "", "14/08", False),
     ]),
-    ("3ª Semana", "13 a 17/07", [
-        ("Imagem Motivacional", "", "13/07", True),
-        ("Vídeo - Min. do Conhecimento", "Desconecte do Celular. Conecte-se à Vida", "14/07", True),
-        ("Imagem Informativa", "Desconecte do Celular. Conecte-se à Vida: o perigo do uso do celular ao volante", "15/07", True),
-        ("Podcast - Fala, Motô!", "", "16/07", True),
-        ("Enquete de Fixação", "Desconecte do Celular. Conecte-se à Vida: o perigo do uso do celular ao volante", "17/07", True),
+    ("3ª Semana", "17 a 21/08", [
+        ("Imagem Motivacional", "", "17/08", False),
+        ("Vídeo - Min. do Conhecimento", "", "18/08", False),
+        ("Imagem Informativa", "", "19/08", False),
+        ("Podcast - Fala, Motô!", "", "20/08", False),
+        ("Enquete de Fixação", "", "21/08", False),
     ]),
-    ("4ª Semana", "20 a 24/07", [
-        ("Imagem Motivacional", "", "20/07", True),
-        ("Vídeo - Min. do Conhecimento", "Equipe do plantão não abre mais ficha e nem disponibiliza atendimento", "21/07", True),
-        ("Imagem Informativa", "Equipe do plantão não abre mais ficha e nem disponibiliza atendimento", "22/07", True),
-        ("Podcast - Fala, Motô!", "A importância dos Acompanhamentos Operacionais", "23/07", True),
-        ("Enquete de Fixação", "Equipe do plantão não abre mais ficha e nem disponibiliza atendimento", "24/07", True),
+    ("4ª Semana", "24 a 28/08", [
+        ("Imagem Motivacional", "", "24/08", False),
+        ("Vídeo - Min. do Conhecimento", "", "25/08", False),
+        ("Imagem Informativa", "", "26/08", False),
+        ("Podcast - Fala, Motô!", "", "27/08", False),
+        ("Enquete de Fixação", "", "28/08", False),
     ]),
-    ("5ª Semana", "27 a 31/07", [
-        ("Imagem Motivacional", "", "27/07", True),
-        ("Vídeo - Min. do Conhecimento", "Como Verificar Avarias na Suspensão dos Coletivos", "28/07", True),
-        ("Imagem Informativa", "Como Verificar Avarias na Suspensão dos Coletivos", "29/07", True),
-        ("Podcast - Fala, Motô!", "Mulheres ao Volante: Superação, Coragem e Inspiração", "30/07", True),
-        ("Enquete de Fixação", "Como Verificar Avarias na Suspensão dos Coletivos", "31/07", True),
+    ("5ª Semana", "31/08", [
+        ("Imagem Motivacional", "", "31/08", False),
     ]),
 ]
 
@@ -1537,15 +1536,23 @@ _ROW = ('<div style="display:flex;justify-content:space-between;align-items:flex
         'margin-left:6px;">{data}</div></div>')
 
 
+# MES_FIM e exclusivo (= dia da geracao), entao "venceu" e data anterior a ele: o item
+# caiu dentro do periodo analisado e nao foi executado. Data futura fica cinza.
+def _crono_venceu(data):
+    _d, _m = (int(x) for x in data.split("/"))
+    return _dt6.date(gfd.MES_REF_ANO, _m, _d) < gfd.MES_FIM
+
+
 def _crono_card(titulo, intervalo, itens):
     linhas = ""
     for tipo, tema, data, feito in itens:
         sub = (f'<div style="font-size:7.6px;color:#475569;margin-top:1px;">{tema}</div>'
                if tema else "")
+        atrasado = not feito and _crono_venceu(data)
         linhas += _ROW.format(cor="#16a34a" if feito else "#cbd5e1",
                               marca="&#10003;" if feito else "&#9675;",
                               tipo=tipo, sub=sub, data=data,
-                              cor_data="#64748b" if feito else "#dc2626")
+                              cor_data="#dc2626" if atrasado else "#64748b" if feito else "#94a3b8")
     return (f'<div class="card" style="margin-bottom:7px;"><div class="card-title">{titulo} — {MESREF} '
             f'<span style="font-weight:400;opacity:.85;">({intervalo})</span></div>'
             f'<div class="card-body" style="padding:6px 10px;">{linhas}</div></div>')
@@ -1554,10 +1561,16 @@ def _crono_card(titulo, intervalo, itens):
 _crono_cards = [_crono_card(t, i, its) for t, i, its in CRONOGRAMA]
 _n_itens = sum(len(its) for _, _, its in CRONOGRAMA)
 _n_feitos = sum(1 for _, _, its in CRONOGRAMA for it in its if it[3])
-# lista de pendentes derivada do proprio CRONOGRAMA, para nao contradizer os checks
-_pend = [(t, d) for _, _, its in CRONOGRAMA for t, _tema, d, feito in its if not feito]
+# lista de pendentes derivada do proprio CRONOGRAMA, para nao contradizer os checks.
+# So entra quem ja venceu; o resto do mes conta como programado, nao como atraso.
+_pend = [(t, d) for _, _, its in CRONOGRAMA for t, _tema, d, feito in its
+         if not feito and _crono_venceu(d)]
+_n_prog = sum(1 for _, _, its in CRONOGRAMA for it in its
+              if not it[3] and not _crono_venceu(it[2]))
 _crono_pend = ("Consta pendente: " + "; ".join(f"{t} de {d}" for t, d in _pend) + "."
-               if _pend else "Todos os conteúdos previstos foram executados.")
+               if _pend else "Nenhum conteúdo vencido em aberto.")
+if _n_prog:
+    _crono_pend += f" Os outros {_n_prog} conteúdos seguem programados para as semanas seguintes."
 _metade = (len(_crono_cards) + 1) // 2
 _crono_left = "".join(_crono_cards[:_metade])
 _crono_right = "".join(_crono_cards[_metade:])
@@ -1567,7 +1580,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div>{_crono_left}</div>
     <div>{_crono_right}
       <div class="cons-box"><div class="cons-title">Sobre o cronograma</div>
-      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos foram executados — as séries de destaque foram a Lei nº 3.888/2025 (Programa Parada Legal) e "Desconecte do Celular. Conecte-se à Vida", sobre o perigo do uso do celular ao volante. {_crono_pend}</div></div>
+      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos já foram executados — a série da 1ª semana foi "Parado Ligado: Consumo ou Desperdício?", trabalhada em vídeo, imagem informativa e enquete de fixação para reforçar o custo do motor em marcha lenta, somada ao podcast "Benefícios sem Mistério: Entenda Como Tudo Funciona". {_crono_pend}</div></div>
     </div>
   </div>
   {footer(18)}

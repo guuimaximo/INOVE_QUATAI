@@ -693,12 +693,10 @@ function ItemCarro({ it, onRemover, onEditar }) {
       title="Clique para editar · arraste para mover"
       className={`group/i px-3 py-2.5 flex items-start justify-between gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
     >
-      <div className="min-w-0">
-        <span className={`block font-black text-xl leading-tight tabular-nums ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
-        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-          <span className={`px-2 py-0.5 rounded text-[11px] font-black uppercase leading-none ${cor}`}>{it.categoria}</span>
-          {it.tipo && <span className="text-[12px] font-medium text-gray-600 dark:text-gray-300 truncate">{it.tipo}</span>}
-        </div>
+      <div className="min-w-0 flex items-center gap-2 flex-wrap">
+        <span className={`font-black text-xl leading-tight tabular-nums whitespace-nowrap ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
+        <span className={`px-2 py-1 rounded text-[11px] font-black uppercase whitespace-nowrap ${cor}`}>{it.categoria}</span>
+        {it.tipo && <span className="text-[12px] font-medium text-gray-600 dark:text-gray-300 truncate">{it.tipo}</span>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {it.feito && <span className="text-emerald-600 dark:text-emerald-400 font-bold text-lg" title="feito">✓</span>}
@@ -715,10 +713,15 @@ function ItemCarro({ it, onRemover, onEditar }) {
 }
 
 // Card de um dia para UM turno (Dia OU Noite). É alvo de "soltar".
-function DiaTurnoCard({ dia, turno, itens, onRemover, onMover, onEditar }) {
+// categorias: filtra quais categorias aparecem (ex.: só Revisão+Inspeção, ou só Garantia).
+// ignoreTurno: mostra o dia inteiro independente do turno (usado na Garantia).
+function DiaTurnoCard({ dia, turno, categorias, ignoreTurno = false, itens, onRemover, onMover, onEditar }) {
   const [over, setOver] = useState(false);
   const doDia = itens.filter(
-    (it) => it.data_planejada === dia.iso && (it.turno || "Dia") === turno
+    (it) =>
+      it.data_planejada === dia.iso &&
+      (!categorias || categorias.includes(it.categoria)) &&
+      (ignoreTurno || (it.turno || "Dia") === turno)
   );
   return (
     <div
@@ -811,24 +814,38 @@ function Programacao({ itens, onRemover, onMover, onEditar, semana, duePorCarro 
             <span className="text-gray-400">· arraste o carro para mover entre dias e entre Dia/Noite</span>
           </div>
 
-          <section>
-            <h3 className="flex items-center gap-2 text-sm font-bold text-amber-700 dark:text-amber-400 mb-2">
+          {/* ===== DIA ===== */}
+          <section className="space-y-3">
+            <div className="rounded-xl bg-amber-500 text-white px-5 py-3 text-2xl font-black flex items-center gap-2 shadow-sm">
               ☀️ Dia
-            </h3>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
               {dias.map((d) => (
-                <DiaTurnoCard key={"dia-" + d.iso} dia={d} turno="Dia" itens={itens} onRemover={onRemover} onMover={onMover} onEditar={onEditar} />
+                <DiaTurnoCard key={"dia-" + d.iso} dia={d} turno="Dia" categorias={["Revisão", "Inspeção"]} itens={itens} onRemover={onRemover} onMover={onMover} onEditar={onEditar} />
               ))}
+            </div>
+            {/* Garantia separada (concessionária) — sempre no Dia */}
+            <div>
+              <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-green-700 dark:text-green-400 mb-2">
+                <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-green-600 text-white">Garantia</span>
+                concessionária
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                {dias.map((d) => (
+                  <DiaTurnoCard key={"gar-" + d.iso} dia={d} turno="Dia" categorias={["Garantia"]} ignoreTurno itens={itens} onRemover={onRemover} onMover={onMover} onEditar={onEditar} />
+                ))}
+              </div>
             </div>
           </section>
 
-          <section>
-            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">
+          {/* ===== NOITE (sem Garantia) ===== */}
+          <section className="space-y-3">
+            <div className="rounded-xl bg-slate-700 text-white px-5 py-3 text-2xl font-black flex items-center gap-2 shadow-sm">
               🌙 Noite
-            </h3>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
               {dias.map((d) => (
-                <DiaTurnoCard key={"noite-" + d.iso} dia={d} turno="Noite" itens={itens} onRemover={onRemover} onMover={onMover} onEditar={onEditar} />
+                <DiaTurnoCard key={"noite-" + d.iso} dia={d} turno="Noite" categorias={["Revisão", "Inspeção"]} itens={itens} onRemover={onRemover} onMover={onMover} onEditar={onEditar} />
               ))}
             </div>
           </section>

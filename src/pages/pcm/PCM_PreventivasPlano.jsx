@@ -502,74 +502,130 @@ function Gerencial({ linhas, busca, setBusca, total, onProgramar }) {
   );
 }
 
-/* ===================== PROGRAMACAO (MANUAL) ===================== */
-function BlocoCategoria({ titulo, cor, itens, onRemover }) {
-  const cores = {
-    emerald: "text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300",
-    indigo: "text-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 dark:text-indigo-300",
-    amber: "text-amber-800 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300",
-  };
+/* ===================== PROGRAMACAO (MANUAL — visual de cards por dia) ===================== */
+const DOW = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
+function diasUteis(segundaISO) {
+  const base = new Date(segundaISO + "T00:00:00");
+  const hojeISO = toISODateLocal(new Date());
+  return Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    const iso = toISODateLocal(d);
+    return {
+      iso,
+      label: DOW[d.getDay()],
+      dm: `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`,
+      hoje: iso === hojeISO,
+    };
+  });
+}
+
+function DiaCard({ dia, cor, itens, onRemover }) {
+  const corHdr = { emerald: "bg-emerald-800", indigo: "bg-indigo-800", amber: "bg-amber-700" };
+  const doDia = itens.filter((it) => it.data_planejada === dia.iso);
   return (
-    <section className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
-      <div className={`px-4 py-2.5 font-bold text-sm ${cores[cor]}`}>
-        {titulo} <span className="opacity-70 font-semibold">· {itens.length}</span>
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
+      <div className={`px-3 py-1.5 text-center text-white ${dia.hoje ? "bg-amber-600" : corHdr[cor]}`}>
+        <div className="text-xs font-bold">{dia.label}</div>
+        <div className="text-[10px] opacity-80">{dia.dm}</div>
       </div>
-      {itens.length === 0 ? (
-        <div className="px-4 py-6 text-center text-sm text-gray-400 italic">Nenhuma programada — use o + no Gerencial.</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wide text-gray-400">
-                <th className="px-4 py-2">Prefixo</th>
-                <th className="px-4 py-2">Tipo</th>
-                <th className="px-4 py-2">Data</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2 text-right"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {itens.map((it) => (
-                <tr key={it.id} className={it.feito ? "bg-emerald-50/60 dark:bg-emerald-900/10" : ""}>
-                  <td className="px-4 py-2 font-bold text-gray-800 dark:text-gray-100">{it.prefixo}</td>
-                  <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{it.tipo || "—"}</td>
-                  <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{it.data_planejada ? fmtBR(new Date(it.data_planejada + "T00:00:00")) : "—"}</td>
-                  <td className="px-4 py-2">
-                    {it.feito ? (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">Feito ✓</span>
-                    ) : (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">Planejado</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <button onClick={() => onRemover(it.id)} title="Remover" className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50">
-                      <FaTrash className="text-xs" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+      <div className="divide-y divide-gray-100 dark:divide-gray-800">
+        {doDia.length === 0 && <div className="px-3 py-3 text-center text-xs text-gray-400 italic">livre</div>}
+        {doDia.map((it) => (
+          <div
+            key={it.id}
+            className={`group/i px-3 py-2 flex items-center justify-between gap-2 ${it.feito ? "bg-emerald-50 dark:bg-emerald-900/20" : ""}`}
+          >
+            <div className="min-w-0">
+              <span className="font-bold text-sm text-gray-800 dark:text-gray-100">{it.prefixo}</span>
+              {it.tipo && <span className="block text-[9px] text-gray-400 truncate">{it.tipo}</span>}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {it.feito && <span className="text-emerald-600 dark:text-emerald-400 font-bold" title="feito">✓</span>}
+              <button
+                onClick={() => onRemover(it.id)}
+                title="Remover"
+                className="text-gray-300 hover:text-red-600 opacity-0 group-hover/i:opacity-100 transition"
+              >
+                <FaTrash className="text-[10px]" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
 function Programacao({ itens, onRemover, semana }) {
+  const dias = useMemo(() => diasUteis(semana), [semana]);
   const porCat = useMemo(() => {
     const m = { "Revisão": [], "Inspeção": [], "Garantia": [] };
     for (const it of itens) (m[it.categoria] || (m[it.categoria] = [])).push(it);
     return m;
   }, [itens]);
+  const nFeito = itens.filter((it) => it.feito).length;
+
+  const secoes = [
+    ["Revisões", "Revisão", "emerald"],
+    ["Inspeção", "Inspeção", "indigo"],
+    ["Garantia", "Garantia", "amber"],
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="text-xs text-gray-500">
-        Semana de <span className="font-semibold">{fmtBR(new Date(semana + "T00:00:00"))}</span> · {itens.length} programada(s) · "Feito" aparece sozinho quando a preventiva é lançada.
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          ["Revisões", (porCat["Revisão"] || []).length, "emerald"],
+          ["Inspeção", (porCat["Inspeção"] || []).length, "indigo"],
+          ["Garantia", (porCat["Garantia"] || []).length, "amber"],
+          ["Feitas na semana", nFeito, "gray"],
+        ].map(([l, n, c]) => (
+          <div key={l} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-800">
+            <div
+              className={`text-2xl font-bold ${
+                c === "emerald"
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : c === "indigo"
+                  ? "text-indigo-700 dark:text-indigo-400"
+                  : c === "amber"
+                  ? "text-amber-700 dark:text-amber-400"
+                  : "text-gray-700 dark:text-gray-200"
+              }`}
+            >
+              {n}
+            </div>
+            <div className="text-xs text-gray-500">{l}</div>
+          </div>
+        ))}
       </div>
-      <BlocoCategoria titulo="Revisões" cor="emerald" itens={porCat["Revisão"] || []} onRemover={onRemover} />
-      <BlocoCategoria titulo="Inspeção" cor="indigo" itens={porCat["Inspeção"] || []} onRemover={onRemover} />
-      <BlocoCategoria titulo="Garantia" cor="amber" itens={porCat["Garantia"] || []} onRemover={onRemover} />
+
+      {itens.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center text-sm text-gray-400">
+          Nenhuma preventiva programada nesta semana. Use o <span className="font-bold text-emerald-600">+</span> no Gerencial para montar a programação.
+        </div>
+      )}
+
+      {secoes.map(([titulo, cat, cor]) => (
+        <section key={cat}>
+          <h3
+            className={`text-xs font-bold uppercase tracking-wide mb-2 ${
+              cor === "emerald"
+                ? "text-emerald-700 dark:text-emerald-400"
+                : cor === "indigo"
+                ? "text-indigo-700 dark:text-indigo-400"
+                : "text-amber-700 dark:text-amber-400"
+            }`}
+          >
+            {titulo} — {(porCat[cat] || []).length} na semana
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+            {dias.map((d) => (
+              <DiaCard key={cat + d.iso} dia={d} cor={cor} itens={porCat[cat] || []} onRemover={onRemover} />
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

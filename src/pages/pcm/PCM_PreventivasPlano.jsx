@@ -110,6 +110,16 @@ export default function PCM_PreventivasPlano() {
     });
   }, [progItems, realizadas]);
 
+  // Programado por carro (chave = prefixo/veic, igual ao l.veic do Gerencial),
+  // para mostrar a data programada como etiqueta na aba Gerencial.
+  const progPorCarro = useMemo(() => {
+    const m = {};
+    for (const it of progComStatus) (m[it.prefixo] || (m[it.prefixo] = [])).push(it);
+    for (const k in m)
+      m[k].sort((a, b) => (String(a.data_planejada || "") < String(b.data_planejada || "") ? -1 : 1));
+    return m;
+  }, [progComStatus]);
+
   // O que precisa trocar por carro: colunas do Gerencial marcadas como vencidas
   // (pula INSP 5.000 / REVISÃO / REV.VENCIDA — esses são "quando", não "o que trocar").
   const duePorCarro = useMemo(() => {
@@ -276,6 +286,7 @@ export default function PCM_PreventivasPlano() {
           busca={busca}
           setBusca={setBusca}
           total={gerencial.linhas.length}
+          prog={progPorCarro}
           onProgramar={(prefixo) => setModal({ prefixo })}
         />
       )}
@@ -453,7 +464,9 @@ function Garantia({ itens }) {
 const fmtNum = (v) =>
   v == null || v === "" ? "" : typeof v === "number" ? v.toLocaleString("pt-BR") : v;
 
-function Gerencial({ linhas, busca, setBusca, total, onProgramar }) {
+const fmtDia = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) : "s/data");
+
+function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
   const [sort, setSort] = useState({ key: null, dir: -1 });
   const clicar = (key) =>
     setSort((s) => (s.key === key ? { key, dir: -s.dir } : { key, dir: -1 }));
@@ -489,7 +502,7 @@ function Gerencial({ linhas, busca, setBusca, total, onProgramar }) {
           />
         </div>
         <span className="text-xs text-gray-500">
-          {linhas.length} de {total} veículos · <span className="text-red-600 font-semibold">vermelho = vencido</span> · clique no cabeçalho p/ ordenar · <span className="text-emerald-700 font-semibold">+</span> programa a semana
+          {linhas.length} de {total} veículos · <span className="text-red-600 font-semibold">vermelho = vencido</span> · clique no cabeçalho p/ ordenar · <span className="text-emerald-700 font-semibold">+</span> programa a semana · <span className="text-emerald-700 font-semibold">etiqueta</span> = data programada (verde = feita)
         </span>
       </div>
 
@@ -540,6 +553,28 @@ function Gerencial({ linhas, busca, setBusca, total, onProgramar }) {
                         style={{ boxShadow: "2px 0 4px -2px rgba(0,0,0,.08)" }}
                       >
                         {l.veic}
+                        {(prog[l.veic] || []).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {prog[l.veic].map((p) => (
+                              <span
+                                key={p.id}
+                                title={`${p.categoria}${p.tipo ? " · " + p.tipo : ""} — ${p.feito ? "feito" : "programado"}${p.data_planejada ? " p/ " + fmtDia(p.data_planejada) : ""}`}
+                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-bold leading-none text-[9px] ${
+                                  p.feito
+                                    ? "bg-emerald-600 text-white"
+                                    : p.categoria === "Revisão"
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
+                                    : p.categoria === "Inspeção"
+                                    ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300"
+                                    : "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
+                                }`}
+                              >
+                                {p.feito && "✓"}
+                                {fmtDia(p.data_planejada)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className={`px-1.5 py-2 text-center text-[11px] text-gray-400 border-b border-gray-100 dark:border-gray-800 ${zbg} group-hover:bg-emerald-50/60`}>
                         {l.dataUlt}

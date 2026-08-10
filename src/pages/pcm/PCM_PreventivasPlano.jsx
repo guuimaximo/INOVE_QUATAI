@@ -660,27 +660,27 @@ function diasUteis(segundaISO) {
   });
 }
 
-// Etiqueta da categoria ao lado do carro.
-const TAG_CAT = {
-  "Revisão": { t: "REV", c: "bg-orange-500 text-white" },
-  "Inspeção": { t: "INSP", c: "bg-yellow-400 text-yellow-900" },
-  "Garantia": { t: "GAR", c: "bg-green-600 text-white" },
+// Cor da etiqueta da categoria (escrita por extenso ao lado do carro).
+const COR_CAT = {
+  "Revisão": "bg-orange-500 text-white",
+  "Inspeção": "bg-yellow-400 text-yellow-900",
+  "Garantia": "bg-green-600 text-white",
 };
 
 function ItemCarro({ it, onRemover }) {
-  const tag = TAG_CAT[it.categoria] || { t: "?", c: "bg-gray-400 text-white" };
+  const cor = COR_CAT[it.categoria] || "bg-gray-400 text-white";
   return (
     <div
       draggable
       onDragStart={(e) => { e.dataTransfer.setData("text/plain", it.id); e.dataTransfer.effectAllowed = "move"; }}
       className={`group/i px-2.5 py-1.5 flex items-center justify-between gap-2 cursor-move ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
     >
-      <div className="min-w-0 flex items-center gap-1.5">
-        <span className={`px-1 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${tag.c}`} title={it.categoria}>{tag.t}</span>
-        <div className="min-w-0">
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase leading-none shrink-0 ${cor}`}>{it.categoria}</span>
           <span className={`font-bold text-[13px] ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
-          {it.tipo && <span className="block text-[9px] text-gray-400 truncate">{it.tipo}</span>}
         </div>
+        {it.tipo && <span className="block text-[9px] text-gray-400 truncate mt-0.5">{it.tipo}</span>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {it.feito && <span className="text-emerald-600 dark:text-emerald-400 font-bold" title="feito">✓</span>}
@@ -696,10 +696,12 @@ function ItemCarro({ it, onRemover }) {
   );
 }
 
-// Zona de um turno (Dia/Noite) dentro do card do dia — é alvo de "soltar".
-function TurnoZona({ dia, turno, itens, onRemover, onMover }) {
+// Card de um dia para UM turno (Dia OU Noite). É alvo de "soltar".
+function DiaTurnoCard({ dia, turno, itens, onRemover, onMover }) {
   const [over, setOver] = useState(false);
-  const noite = turno === "Noite";
+  const doDia = itens.filter(
+    (it) => it.data_planejada === dia.iso && (it.turno || "Dia") === turno
+  );
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); if (!over) setOver(true); }}
@@ -710,32 +712,16 @@ function TurnoZona({ dia, turno, itens, onRemover, onMover }) {
         const id = e.dataTransfer.getData("text/plain");
         if (id) onMover?.(id, dia.iso, turno);
       }}
-      className={`transition ${over ? "ring-2 ring-inset ring-emerald-400 bg-emerald-50/50 dark:bg-emerald-900/10" : ""}`}
+      className={`rounded-xl border overflow-hidden bg-white dark:bg-gray-800 transition ${over ? "border-emerald-500 ring-2 ring-emerald-400" : "border-gray-200 dark:border-gray-700"}`}
     >
-      <div className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${noite ? "bg-slate-100 text-slate-600 dark:bg-slate-900/60 dark:text-slate-300" : "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"}`}>
-        {noite ? "🌙 Noite" : "☀️ Dia"}
-      </div>
-      <div className="divide-y divide-gray-100 dark:divide-gray-800 min-h-[30px]">
-        {itens.length === 0 && <div className="px-3 py-1.5 text-center text-[10px] text-gray-300 italic">livre</div>}
-        {itens.map((it) => <ItemCarro key={it.id} it={it} onRemover={onRemover} />)}
-      </div>
-    </div>
-  );
-}
-
-function DiaCard({ dia, itens, onRemover, onMover }) {
-  const doDia = itens.filter((it) => it.data_planejada === dia.iso);
-  const dias = doDia.filter((it) => (it.turno || "Dia") !== "Noite");
-  const noites = doDia.filter((it) => (it.turno || "Dia") === "Noite");
-  return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
       <div className={`px-3 py-1.5 text-center text-white ${dia.hoje ? "bg-amber-600" : "bg-slate-700"}`}>
         <div className="text-xs font-bold">{dia.label}</div>
         <div className="text-[10px] opacity-80">{dia.dm}</div>
       </div>
-      <TurnoZona dia={dia} turno="Dia" itens={dias} onRemover={onRemover} onMover={onMover} />
-      <div className="border-t border-gray-200 dark:border-gray-700" />
-      <TurnoZona dia={dia} turno="Noite" itens={noites} onRemover={onRemover} onMover={onMover} />
+      <div className="divide-y divide-gray-100 dark:divide-gray-800 min-h-[40px]">
+        {doDia.length === 0 && <div className="px-3 py-3 text-center text-xs text-gray-400 italic">livre</div>}
+        {doDia.map((it) => <ItemCarro key={it.id} it={it} onRemover={onRemover} />)}
+      </div>
     </div>
   );
 }
@@ -799,19 +785,36 @@ function Programacao({ itens, onRemover, onMover, semana, duePorCarro = {} }) {
       )}
 
       {itens.length > 0 && (
-        <section>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-2 text-[11px] text-gray-500 dark:text-gray-400">
-            <span className="inline-flex items-center gap-1"><span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-orange-500 text-white">REV</span> Revisão</span>
-            <span className="inline-flex items-center gap-1"><span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-yellow-400 text-yellow-900">INSP</span> Inspeção</span>
-            <span className="inline-flex items-center gap-1"><span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-green-600 text-white">GAR</span> Garantia</span>
-            <span className="text-gray-400">· cada dia tem ☀️ Dia e 🌙 Noite · arraste o carro p/ mover</span>
+        <>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+            <span className="inline-flex items-center gap-1"><span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-orange-500 text-white">Revisão</span></span>
+            <span className="inline-flex items-center gap-1"><span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-yellow-400 text-yellow-900">Inspeção</span></span>
+            <span className="inline-flex items-center gap-1"><span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-green-600 text-white">Garantia</span></span>
+            <span className="text-gray-400">· arraste o carro para mover entre dias e entre Dia/Noite</span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
-            {dias.map((d) => (
-              <DiaCard key={d.iso} dia={d} itens={itens} onRemover={onRemover} onMover={onMover} />
-            ))}
-          </div>
-        </section>
+
+          <section>
+            <h3 className="flex items-center gap-2 text-sm font-bold text-amber-700 dark:text-amber-400 mb-2">
+              ☀️ Dia
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+              {dias.map((d) => (
+                <DiaTurnoCard key={"dia-" + d.iso} dia={d} turno="Dia" itens={itens} onRemover={onRemover} onMover={onMover} />
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">
+              🌙 Noite
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+              {dias.map((d) => (
+                <DiaTurnoCard key={"noite-" + d.iso} dia={d} turno="Noite" itens={itens} onRemover={onRemover} onMover={onMover} />
+              ))}
+            </div>
+          </section>
+        </>
       )}
 
       {servicos.length > 0 && (

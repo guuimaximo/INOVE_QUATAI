@@ -13,8 +13,11 @@ import { supabase } from "../../supabase";
 import { useTheme } from "../../context/ThemeContext";
 import {
   montarCarros, montarGerencial, montarGarantia, ultimaAtualizacao,
-  GERENCIAL_COLS, fmtBR,
+  GERENCIAL_COLS, WINDOW_KM, fmtBR,
 } from "./preventivasLogic";
+
+// Tacógrafo (plano por prazo): entra junto na revisão se faltam <= 15 dias.
+const JANELA_DIAS_TCO = 15;
 
 const CATEGORIAS = ["Revisão", "Inspeção", "Garantia"];
 const CAT_COR = {
@@ -120,16 +123,21 @@ export default function PCM_PreventivasPlano() {
     return m;
   }, [progComStatus]);
 
-  // O que precisa trocar por carro: colunas do Gerencial marcadas como vencidas
-  // (pula INSP 5.000 / REVISÃO / REV.VENCIDA — esses são "quando", não "o que trocar").
+  // O que trocar junto na revisão (regra do dono): entra todo plano satélite
+  // VENCIDO ou a <= 3.000 km de vencer (janela WINDOW_KM). O Tacógrafo (plano por
+  // prazo) entra se faltam <= 15 dias. Pula INSP 5.000 / REVISÃO / REV.VENCIDA
+  // (esses são "quando fazer", não "o que trocar").
+  // Convenção do dado: v >= 0 já vencido; v < 0 => faltam -v (km ou dias).
   const duePorCarro = useMemo(() => {
     const m = {};
     if (!gerencial) return m;
     for (const l of gerencial.linhas) {
       const due = [];
       l.cols.forEach((c, j) => {
-        if (j <= 2) return;
-        if (c.venc) due.push(GERENCIAL_COLS[j].t);
+        if (j <= 2 || c.v == null) return;
+        const col = GERENCIAL_COLS[j];
+        const dentro = col.tipo === "dias" ? c.v >= -JANELA_DIAS_TCO : c.v >= -WINDOW_KM;
+        if (dentro) due.push(col.t);
       });
       m[l.veic] = due;
     }
@@ -829,9 +837,12 @@ function Programacao({ itens, onRemover, onMover, onEditar, semana, duePorCarro 
 
       {servicos.length > 0 && (
         <section>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-2">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-1">
             Serviços que vão junto — o que trocar nas revisões
           </h3>
+          <p className="text-[11px] text-gray-400 mb-2">
+            Satélites vencidos ou a ≤ {WINDOW_KM.toLocaleString("pt-BR")} km de vencer (Tacógrafo: ≤ {JANELA_DIAS_TCO} dias).
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {servicos.map((b) => (
               <div key={b.nome} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-800">

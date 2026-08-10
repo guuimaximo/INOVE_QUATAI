@@ -142,17 +142,22 @@ export default function PCM_PreventivasPlano() {
     return q ? gerencial.linhas.filter((l) => l.veic.toLowerCase().includes(q)) : gerencial.linhas;
   }, [gerencial, busca]);
 
-  async function salvarProgramacao({ prefixo, categoria, tipo, data_planejada, turno }) {
+  async function salvarProgramacao({ id, prefixo, categoria, tipo, data_planejada, turno }) {
     setSalvando(true);
     try {
-      const { error } = await supabase.from("preventivas_programacao").insert({
+      const dados = {
         prefixo,
         categoria,
         tipo: tipo || null,
         data_planejada: data_planejada || null,
         turno: turno || "Dia",
-        semana,
-      });
+      };
+      const { error } = id
+        ? await supabase
+            .from("preventivas_programacao")
+            .update({ ...dados, atualizado_em: new Date().toISOString() })
+            .eq("id", id)
+        : await supabase.from("preventivas_programacao").insert({ ...dados, semana });
       if (error) throw error;
       setModal(null);
       const { data } = await supabase
@@ -160,7 +165,7 @@ export default function PCM_PreventivasPlano() {
         .order("data_planejada", { ascending: true });
       setProgItems(data || []);
     } catch (e) {
-      alert("Erro ao programar: " + (e.message || e));
+      alert("Erro ao salvar: " + (e.message || e));
     } finally {
       setSalvando(false);
     }
@@ -308,6 +313,7 @@ export default function PCM_PreventivasPlano() {
               itens={progComStatus}
               onRemover={removerProgramacao}
               onMover={moverItem}
+              onEditar={(it) => setModal(it)}
               semana={semana}
               duePorCarro={duePorCarro}
             />
@@ -323,7 +329,7 @@ export default function PCM_PreventivasPlano() {
 
       {modal && (
         <ProgramarModal
-          prefixo={modal.prefixo}
+          item={modal}
           salvando={salvando}
           onClose={() => setModal(null)}
           onSalvar={salvarProgramacao}
@@ -334,11 +340,13 @@ export default function PCM_PreventivasPlano() {
 }
 
 /* ===================== MODAL PROGRAMAR ===================== */
-function ProgramarModal({ prefixo, salvando, onClose, onSalvar }) {
-  const [categoria, setCategoria] = useState("Revisão");
-  const [tipo, setTipo] = useState("");
-  const [data, setData] = useState(toISODateLocal(new Date()));
-  const [turno, setTurno] = useState("Dia");
+function ProgramarModal({ item, salvando, onClose, onSalvar }) {
+  const editando = !!item.id;
+  const prefixo = item.prefixo;
+  const [categoria, setCategoria] = useState(item.categoria || "Revisão");
+  const [tipo, setTipo] = useState(item.tipo || "");
+  const [data, setData] = useState(item.data_planejada || toISODateLocal(new Date()));
+  const [turno, setTurno] = useState(item.turno || "Dia");
   const inputCls =
     "w-full rounded-lg border border-gray-200 dark:border-gray-600 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500";
   return (
@@ -346,7 +354,7 @@ function ProgramarModal({ prefixo, salvando, onClose, onSalvar }) {
       <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-600">Programar preventiva</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-600">{editando ? "Editar preventiva" : "Programar preventiva"}</div>
             <div className="text-lg font-black text-gray-900 dark:text-gray-100">Carro {prefixo}</div>
           </div>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600"><FaTimes /></button>
@@ -390,10 +398,10 @@ function ProgramarModal({ prefixo, salvando, onClose, onSalvar }) {
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Cancelar</button>
           <button
             disabled={salvando}
-            onClick={() => onSalvar({ prefixo, categoria, tipo: tipo.trim(), data_planejada: data, turno })}
+            onClick={() => onSalvar({ id: item.id, prefixo, categoria, tipo: tipo.trim(), data_planejada: data, turno })}
             className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60"
           >
-            {salvando ? "Salvando…" : "Programar"}
+            {salvando ? "Salvando…" : editando ? "Salvar" : "Programar"}
           </button>
         </div>
       </div>
@@ -667,13 +675,15 @@ const COR_CAT = {
   "Garantia": "bg-green-600 text-white",
 };
 
-function ItemCarro({ it, onRemover }) {
+function ItemCarro({ it, onRemover, onEditar }) {
   const cor = COR_CAT[it.categoria] || "bg-gray-400 text-white";
   return (
     <div
       draggable
       onDragStart={(e) => { e.dataTransfer.setData("text/plain", it.id); e.dataTransfer.effectAllowed = "move"; }}
-      className={`group/i px-3 py-2.5 flex items-start justify-between gap-2 cursor-move ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
+      onClick={() => onEditar?.(it)}
+      title="Clique para editar · arraste para mover"
+      className={`group/i px-3 py-2.5 flex items-start justify-between gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
     >
       <div className="min-w-0">
         <span className={`block font-black text-xl leading-tight tabular-nums ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
@@ -685,7 +695,7 @@ function ItemCarro({ it, onRemover }) {
       <div className="flex items-center gap-1 shrink-0">
         {it.feito && <span className="text-emerald-600 dark:text-emerald-400 font-bold text-lg" title="feito">✓</span>}
         <button
-          onClick={() => onRemover(it.id)}
+          onClick={(e) => { e.stopPropagation(); onRemover(it.id); }}
           title="Remover"
           className="text-gray-300 hover:text-red-600 opacity-0 group-hover/i:opacity-100 transition"
         >
@@ -697,7 +707,7 @@ function ItemCarro({ it, onRemover }) {
 }
 
 // Card de um dia para UM turno (Dia OU Noite). É alvo de "soltar".
-function DiaTurnoCard({ dia, turno, itens, onRemover, onMover }) {
+function DiaTurnoCard({ dia, turno, itens, onRemover, onMover, onEditar }) {
   const [over, setOver] = useState(false);
   const doDia = itens.filter(
     (it) => it.data_planejada === dia.iso && (it.turno || "Dia") === turno
@@ -720,13 +730,13 @@ function DiaTurnoCard({ dia, turno, itens, onRemover, onMover }) {
       </div>
       <div className="divide-y divide-gray-100 dark:divide-gray-800 min-h-[40px]">
         {doDia.length === 0 && <div className="px-3 py-3 text-center text-xs text-gray-400 italic">livre</div>}
-        {doDia.map((it) => <ItemCarro key={it.id} it={it} onRemover={onRemover} />)}
+        {doDia.map((it) => <ItemCarro key={it.id} it={it} onRemover={onRemover} onEditar={onEditar} />)}
       </div>
     </div>
   );
 }
 
-function Programacao({ itens, onRemover, onMover, semana, duePorCarro = {} }) {
+function Programacao({ itens, onRemover, onMover, onEditar, semana, duePorCarro = {} }) {
   const dias = useMemo(() => diasUteis(semana), [semana]);
   const porCat = useMemo(() => {
     const m = { "Revisão": [], "Inspeção": [], "Garantia": [] };
@@ -799,7 +809,7 @@ function Programacao({ itens, onRemover, onMover, semana, duePorCarro = {} }) {
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
               {dias.map((d) => (
-                <DiaTurnoCard key={"dia-" + d.iso} dia={d} turno="Dia" itens={itens} onRemover={onRemover} onMover={onMover} />
+                <DiaTurnoCard key={"dia-" + d.iso} dia={d} turno="Dia" itens={itens} onRemover={onRemover} onMover={onMover} onEditar={onEditar} />
               ))}
             </div>
           </section>
@@ -810,7 +820,7 @@ function Programacao({ itens, onRemover, onMover, semana, duePorCarro = {} }) {
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
               {dias.map((d) => (
-                <DiaTurnoCard key={"noite-" + d.iso} dia={d} turno="Noite" itens={itens} onRemover={onRemover} onMover={onMover} />
+                <DiaTurnoCard key={"noite-" + d.iso} dia={d} turno="Noite" itens={itens} onRemover={onRemover} onMover={onMover} onEditar={onEditar} />
               ))}
             </div>
           </section>

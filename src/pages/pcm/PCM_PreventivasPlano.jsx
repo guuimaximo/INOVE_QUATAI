@@ -673,23 +673,23 @@ function ItemCarro({ it, onRemover }) {
     <div
       draggable
       onDragStart={(e) => { e.dataTransfer.setData("text/plain", it.id); e.dataTransfer.effectAllowed = "move"; }}
-      className={`group/i px-2.5 py-1.5 flex items-center justify-between gap-2 cursor-move ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
+      className={`group/i px-3 py-2.5 flex items-start justify-between gap-2 cursor-move ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
     >
       <div className="min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase leading-none shrink-0 ${cor}`}>{it.categoria}</span>
-          <span className={`font-bold text-[13px] ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
+        <span className={`block font-black text-xl leading-tight tabular-nums ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
+        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+          <span className={`px-2 py-0.5 rounded text-[11px] font-black uppercase leading-none ${cor}`}>{it.categoria}</span>
+          {it.tipo && <span className="text-[12px] font-medium text-gray-600 dark:text-gray-300 truncate">{it.tipo}</span>}
         </div>
-        {it.tipo && <span className="block text-[9px] text-gray-400 truncate mt-0.5">{it.tipo}</span>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        {it.feito && <span className="text-emerald-600 dark:text-emerald-400 font-bold" title="feito">✓</span>}
+        {it.feito && <span className="text-emerald-600 dark:text-emerald-400 font-bold text-lg" title="feito">✓</span>}
         <button
           onClick={() => onRemover(it.id)}
           title="Remover"
           className="text-gray-300 hover:text-red-600 opacity-0 group-hover/i:opacity-100 transition"
         >
-          <FaTrash className="text-[10px]" />
+          <FaTrash className="text-xs" />
         </button>
       </div>
     </div>
@@ -714,9 +714,9 @@ function DiaTurnoCard({ dia, turno, itens, onRemover, onMover }) {
       }}
       className={`rounded-xl border overflow-hidden bg-white dark:bg-gray-800 transition ${over ? "border-emerald-500 ring-2 ring-emerald-400" : "border-gray-200 dark:border-gray-700"}`}
     >
-      <div className={`px-3 py-1.5 text-center text-white ${dia.hoje ? "bg-amber-600" : "bg-slate-700"}`}>
-        <div className="text-xs font-bold">{dia.label}</div>
-        <div className="text-[10px] opacity-80">{dia.dm}</div>
+      <div className={`px-3 py-2 text-center text-white ${dia.hoje ? "bg-amber-600" : "bg-slate-700"}`}>
+        <div className="text-sm font-bold tracking-wide">{dia.label}</div>
+        <div className="text-[11px] opacity-80">{dia.dm}</div>
       </div>
       <div className="divide-y divide-gray-100 dark:divide-gray-800 min-h-[40px]">
         {doDia.length === 0 && <div className="px-3 py-3 text-center text-xs text-gray-400 italic">livre</div>}

@@ -466,6 +466,23 @@ const fmtNum = (v) =>
 
 const fmtDia = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) : "s/data");
 
+// Categoria "dominante" de um carro programado (prioridade Revisão > Inspeção >
+// Garantia) e o tom de fundo da linha no Gerencial.
+const catDaLinha = (items) => {
+  if (!items || !items.length) return null;
+  for (const c of ["Revisão", "Inspeção", "Garantia"])
+    if (items.some((p) => p.categoria === c)) return c;
+  return items[0].categoria;
+};
+const tintLinha = (cat) =>
+  cat === "Revisão"
+    ? "bg-orange-100 dark:bg-orange-900"
+    : cat === "Inspeção"
+    ? "bg-yellow-100 dark:bg-yellow-900"
+    : cat === "Garantia"
+    ? "bg-green-100 dark:bg-green-900"
+    : null;
+
 function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
   const [sort, setSort] = useState({ key: null, dir: -1 });
   const clicar = (key) =>
@@ -535,9 +552,11 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
                 {ordenadas.map((l, i) => {
                   const zebra = i % 2 === 1;
                   const zbg = zebra ? "bg-[#f8fafb] dark:bg-gray-800/40" : "";
+                  const tint = tintLinha(catDaLinha(prog[l.veic]));
+                  const stickyBg = tint || (zebra ? "bg-[#f8fafb] dark:bg-gray-800" : "bg-white dark:bg-gray-800");
                   return (
                     <tr key={l.veic} className="group">
-                      <td className={`sticky left-0 z-[5] px-1 py-1 text-center border-r border-gray-100 border-b border-gray-100 dark:border-gray-800 ${zebra ? "bg-[#f8fafb] dark:bg-gray-800" : "bg-white dark:bg-gray-800"} group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20`}>
+                      <td className={`sticky left-0 z-[5] px-1 py-1 text-center border-r border-gray-100 border-b border-gray-100 dark:border-gray-800 ${stickyBg} group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20`}>
                         <button
                           onClick={() => onProgramar(l.veic)}
                           title="Programar este carro na semana"
@@ -547,9 +566,7 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
                         </button>
                       </td>
                       <td
-                        className={`sticky left-8 z-[5] pl-2 pr-2 py-2 text-left font-bold text-[#0f5d4a] dark:text-emerald-300 border-r border-gray-200 dark:border-gray-700 border-b border-gray-100 dark:border-gray-800 ${
-                          zebra ? "bg-[#f8fafb] dark:bg-gray-800" : "bg-white dark:bg-gray-800"
-                        } group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20`}
+                        className={`sticky left-8 z-[5] pl-2 pr-2 py-2 text-left font-bold text-[#0f5d4a] dark:text-emerald-300 border-r border-gray-200 dark:border-gray-700 border-b border-gray-100 dark:border-gray-800 ${stickyBg} group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20`}
                         style={{ boxShadow: "2px 0 4px -2px rgba(0,0,0,.08)" }}
                       >
                         {l.veic}
@@ -563,10 +580,10 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
                                   p.feito
                                     ? "bg-emerald-600 text-white"
                                     : p.categoria === "Revisão"
-                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
+                                    ? "bg-orange-500 text-white"
                                     : p.categoria === "Inspeção"
-                                    ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300"
-                                    : "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
+                                    ? "bg-yellow-400 text-yellow-900"
+                                    : "bg-green-600 text-white"
                                 }`}
                               >
                                 {p.feito && "✓"}
@@ -576,7 +593,7 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
                           </div>
                         )}
                       </td>
-                      <td className={`px-1.5 py-2 text-center text-[11px] text-gray-400 border-b border-gray-100 dark:border-gray-800 ${zbg} group-hover:bg-emerald-50/60`}>
+                      <td className={`px-1.5 py-2 text-center text-[11px] text-gray-400 border-b border-gray-100 dark:border-gray-800 ${tint || zbg} group-hover:bg-emerald-50/60`}>
                         {l.dataUlt}
                       </td>
                       {l.cols.map((cell, j) => (
@@ -585,7 +602,7 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
                           className={`px-1.5 py-2 text-center tabular-nums border-b border-gray-100 dark:border-gray-800 ${
                             cell.venc
                               ? "bg-red-50 text-red-700 font-bold dark:bg-red-900/40 dark:text-red-300"
-                              : `text-gray-600 dark:text-gray-300 ${zbg}`
+                              : `text-gray-600 dark:text-gray-300 ${tint || zbg}`
                           } group-hover:bg-emerald-50/60`}
                         >
                           {cell.texto === null || cell.texto === "" ? <span className="text-gray-300">·</span> : fmtNum(cell.texto)}

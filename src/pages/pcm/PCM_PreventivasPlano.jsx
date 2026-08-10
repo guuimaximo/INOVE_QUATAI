@@ -225,7 +225,6 @@ export default function PCM_PreventivasPlano() {
       {!loading && !erro && aba === "gerencial" && gerencial && (
         <Gerencial
           linhas={linhasFiltradas}
-          aderencia={gerencial.aderencia}
           busca={busca}
           setBusca={setBusca}
           total={gerencial.linhas.length}
@@ -388,7 +387,7 @@ function Garantia({ itens }) {
 const fmtNum = (v) =>
   v == null || v === "" ? "" : typeof v === "number" ? v.toLocaleString("pt-BR") : v;
 
-function Gerencial({ linhas, aderencia, busca, setBusca, total, onProgramar }) {
+function Gerencial({ linhas, busca, setBusca, total, onProgramar }) {
   const [sort, setSort] = useState({ key: null, dir: -1 });
   const clicar = (key) =>
     setSort((s) => (s.key === key ? { key, dir: -s.dir } : { key, dir: -1 }));
@@ -428,7 +427,7 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total, onProgramar }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4">
+      <div>
         <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
           <div className="overflow-auto max-h-[72vh]">
             <table className="border-separate border-spacing-0 text-[12.5px] w-full">
@@ -496,33 +495,6 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total, onProgramar }) {
                 })}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden self-start shadow-sm bg-white dark:bg-gray-800">
-          <div className="bg-emerald-700 text-white px-4 py-3 font-semibold text-sm">Aderência às Preventivas</div>
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {aderencia.map((a) => {
-              const pct = a.adr == null ? null : a.adr * 100;
-              return (
-                <div key={a.nome} className="px-4 py-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[12.5px] text-gray-700 dark:text-gray-300">{a.nome}</span>
-                    <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
-                      {pct == null ? "—" : `${pct.toFixed(1)}%`}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                      <div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct ?? 0}%` }} />
-                    </div>
-                    <span className={`text-[11px] tabular-nums ${a.atrasadas ? "text-red-600 font-semibold" : "text-gray-400"}`}>
-                      {a.atrasadas}/{a.total}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
       </div>

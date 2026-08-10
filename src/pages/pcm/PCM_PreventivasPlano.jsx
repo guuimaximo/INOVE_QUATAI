@@ -162,6 +162,19 @@ export default function PCM_PreventivasPlano() {
     setProgItems((p) => p.filter((x) => x.id !== id));
   }
 
+  // Arrastar: solta o item num dia/seção → muda data_planejada e categoria.
+  async function moverItem(id, novaData, novaCategoria) {
+    const atual = progItems.find((x) => x.id === id);
+    if (!atual) return;
+    if (atual.data_planejada === novaData && atual.categoria === novaCategoria) return;
+    setProgItems((p) => p.map((x) => (x.id === id ? { ...x, data_planejada: novaData, categoria: novaCategoria } : x)));
+    const { error } = await supabase
+      .from("preventivas_programacao")
+      .update({ data_planejada: novaData, categoria: novaCategoria, atualizado_em: new Date().toISOString() })
+      .eq("id", id);
+    if (error) { alert("Erro ao mover: " + error.message); carregar(); }
+  }
+
   async function baixarPDF() {
     const el = document.getElementById("prog-print");
     if (!el) return;
@@ -281,6 +294,7 @@ export default function PCM_PreventivasPlano() {
             <Programacao
               itens={progComStatus}
               onRemover={removerProgramacao}
+              onMover={moverItem}
               semana={semana}
               duePorCarro={duePorCarro}
             />
@@ -572,21 +586,34 @@ function diasUteis(segundaISO) {
   });
 }
 
-function DiaCard({ dia, cor, itens, onRemover }) {
+function DiaCard({ dia, cor, cat, itens, onRemover, onMover }) {
   const corHdr = { emerald: "bg-emerald-800", indigo: "bg-indigo-800", amber: "bg-amber-700" };
   const doDia = itens.filter((it) => it.data_planejada === dia.iso);
+  const [over, setOver] = useState(false);
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
+    <div
+      className={`rounded-xl border overflow-hidden bg-white dark:bg-gray-800 transition ${over ? "border-emerald-500 ring-2 ring-emerald-400" : "border-gray-200 dark:border-gray-700"}`}
+      onDragOver={(e) => { e.preventDefault(); if (!over) setOver(true); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const id = e.dataTransfer.getData("text/plain");
+        if (id) onMover?.(id, dia.iso, cat);
+      }}
+    >
       <div className={`px-3 py-1.5 text-center text-white ${dia.hoje ? "bg-amber-600" : corHdr[cor]}`}>
         <div className="text-xs font-bold">{dia.label}</div>
         <div className="text-[10px] opacity-80">{dia.dm}</div>
       </div>
-      <div className="divide-y divide-gray-100 dark:divide-gray-800">
+      <div className="divide-y divide-gray-100 dark:divide-gray-800 min-h-[40px]">
         {doDia.length === 0 && <div className="px-3 py-3 text-center text-xs text-gray-400 italic">livre</div>}
         {doDia.map((it) => (
           <div
             key={it.id}
-            className={`group/i px-3 py-2 flex items-center justify-between gap-2 ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("text/plain", it.id); e.dataTransfer.effectAllowed = "move"; }}
+            className={`group/i px-3 py-2 flex items-center justify-between gap-2 cursor-move ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
           >
             <div className="min-w-0">
               <span className={`font-bold text-sm ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
@@ -609,7 +636,7 @@ function DiaCard({ dia, cor, itens, onRemover }) {
   );
 }
 
-function Programacao({ itens, onRemover, semana, duePorCarro = {} }) {
+function Programacao({ itens, onRemover, onMover, semana, duePorCarro = {} }) {
   const dias = useMemo(() => diasUteis(semana), [semana]);
   const porCat = useMemo(() => {
     const m = { "Revisão": [], "Inspeção": [], "Garantia": [] };
@@ -688,7 +715,7 @@ function Programacao({ itens, onRemover, semana, duePorCarro = {} }) {
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
             {dias.map((d) => (
-              <DiaCard key={cat + d.iso} dia={d} cor={cor} itens={porCat[cat] || []} onRemover={onRemover} />
+              <DiaCard key={cat + d.iso} dia={d} cor={cor} cat={cat} itens={porCat[cat] || []} onRemover={onRemover} onMover={onMover} />
             ))}
           </div>
         </section>

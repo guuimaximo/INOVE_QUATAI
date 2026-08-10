@@ -1,16 +1,41 @@
-// Tela de Preventivas — Gerencial (1 linha/carro x planos) + Programacao da semana.
-// Le ultimo_plano (projeto IMPORTACAO_DADOS) via supabaseDados.
+// Tela de Preventivas — Gerencial (1 linha/carro x planos) + Programacao MANUAL da semana.
+// Le ultimo_plano (projeto IMPORTACAO_DADOS) via supabaseDados para o Gerencial/Garantia.
+// A Programacao da Semana agora e MANUAL: o usuario "programa" carros a partir do Gerencial;
+// os itens ficam na tabela public.preventivas_programacao (projeto INOVE, via supabase).
+// "Feito" e automatico: casa com o realizado da tabela public.preventivas (prefixo + data).
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   FaSync, FaSearch, FaTable, FaCalendarWeek, FaExclamationTriangle, FaWrench, FaShieldAlt,
-  FaMoon, FaSun,
+  FaMoon, FaSun, FaPlus, FaTrash, FaChartBar, FaTimes,
 } from "react-icons/fa";
 import { puxarUltimoPlano } from "../../supabaseDados";
+import { supabase } from "../../supabase";
 import { useTheme } from "../../context/ThemeContext";
 import {
-  montarCarros, montarGerencial, montarProgramacao, montarGarantia, ultimaAtualizacao,
+  montarCarros, montarGerencial, montarGarantia, ultimaAtualizacao,
   GERENCIAL_COLS, fmtBR,
 } from "./preventivasLogic";
+
+const CATEGORIAS = ["Revisão", "Inspeção", "Garantia"];
+const CAT_COR = {
+  "Revisão": "emerald",
+  "Inspeção": "indigo",
+  "Garantia": "amber",
+};
+
+// Data local (BRT), nunca UTC — ver skill inove-playbook.
+function toISODateLocal(d) {
+  const x = d instanceof Date ? d : new Date(d);
+  return new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+// Segunda-feira da semana atual (chave da semana).
+function semanaSegunda() {
+  const d = new Date();
+  const dow = (d.getDay() + 6) % 7; // 0 = segunda
+  d.setDate(d.getDate() - dow);
+  return toISODateLocal(d);
+}
+const soDigitos = (s) => String(s || "").replace(/\D/g, "");
 
 function Badge({ dias }) {
   if (dias == null) return <span className="text-gray-400">—</span>;
@@ -30,31 +55,96 @@ export default function PCM_PreventivasPlano() {
   const [aba, setAba] = useState("gerencial");
   const [busca, setBusca] = useState("");
 
+  // Programacao manual (tabela preventivas_programacao) + realizadas (tabela preventivas).
+  const semana = useMemo(() => semanaSegunda(), []);
+  const [progItems, setProgItems] = useState([]);
+  const [realizadas, setRealizadas] = useState([]);
+  const [modal, setModal] = useState(null); // { prefixo }
+  const [salvando, setSalvando] = useState(false);
+
   const carregar = useCallback(async () => {
     setLoading(true); setErro(null);
     try {
-      const data = await puxarUltimoPlano();
+      const [data, prog, real] = await Promise.all([
+        puxarUltimoPlano(),
+        supabase
+          .from("preventivas_programacao")
+          .select("*")
+          .eq("semana", semana)
+          .order("data_planejada", { ascending: true }),
+        // realizadas recentes p/ casar o "feito" (ultimos 60 dias)
+        supabase
+          .from("preventivas")
+          .select("prefixo,tipo,data_realizacao")
+          .gte("data_realizacao", toISODateLocal(new Date(Date.now() - 60 * 86400000))),
+      ]);
       setRows(data);
+      if (!prog.error) setProgItems(prog.data || []);
+      if (!real.error) setRealizadas(real.data || []);
     } catch (e) {
       setErro(e.message || String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [semana]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
   const cars = useMemo(() => (rows.length ? montarCarros(rows) : new Map()), [rows]);
   const gerencial = useMemo(() => (cars.size ? montarGerencial(cars) : null), [cars]);
-  const prog = useMemo(() => (cars.size ? montarProgramacao(montarCarros(rows)) : null), [cars, rows]);
   const garantia = useMemo(() => (cars.size ? montarGarantia(montarCarros(rows)) : null), [cars, rows]);
   const atualizado = useMemo(() => (rows.length ? ultimaAtualizacao(rows) : null), [rows]);
+
+  // "Feito" automatico: para cada item programado, existe uma preventiva realizada
+  // do mesmo prefixo (comparando so digitos) com data_realizacao >= data_planejada.
+  const progComStatus = useMemo(() => {
+    return progItems.map((it) => {
+      const dig = soDigitos(it.prefixo);
+      const feito = realizadas.some(
+        (r) =>
+          soDigitos(r.prefixo) &&
+          (soDigitos(r.prefixo) === dig || soDigitos(r.prefixo).endsWith(dig) || dig.endsWith(soDigitos(r.prefixo))) &&
+          (!it.data_planejada || String(r.data_realizacao || "") >= String(it.data_planejada))
+      );
+      return { ...it, feito };
+    });
+  }, [progItems, realizadas]);
 
   const linhasFiltradas = useMemo(() => {
     if (!gerencial) return [];
     const q = busca.trim().toLowerCase();
     return q ? gerencial.linhas.filter((l) => l.veic.toLowerCase().includes(q)) : gerencial.linhas;
   }, [gerencial, busca]);
+
+  async function salvarProgramacao({ prefixo, categoria, tipo, data_planejada }) {
+    setSalvando(true);
+    try {
+      const { error } = await supabase.from("preventivas_programacao").insert({
+        prefixo,
+        categoria,
+        tipo: tipo || null,
+        data_planejada: data_planejada || null,
+        semana,
+      });
+      if (error) throw error;
+      setModal(null);
+      const { data } = await supabase
+        .from("preventivas_programacao").select("*").eq("semana", semana)
+        .order("data_planejada", { ascending: true });
+      setProgItems(data || []);
+    } catch (e) {
+      alert("Erro ao programar: " + (e.message || e));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function removerProgramacao(id) {
+    if (!window.confirm("Remover este item da programação?")) return;
+    const { error } = await supabase.from("preventivas_programacao").delete().eq("id", id);
+    if (error) { alert("Erro ao remover: " + error.message); return; }
+    setProgItems((p) => p.filter((x) => x.id !== id));
+  }
 
   const hoje = new Date();
   const atrasoDias = atualizado ? Math.round((hoje - atualizado) / 86400000) : null;
@@ -99,10 +189,11 @@ export default function PCM_PreventivasPlano() {
       </div>
 
       {/* Abas */}
-      <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700">
         {[
           ["gerencial", "Gerencial", FaTable],
           ["programacao", "Programação da Semana", FaCalendarWeek],
+          ["resumo", "Resumo", FaChartBar],
           ["garantia", "Garantia", FaShieldAlt],
         ].map(([k, label, Icon]) => (
           <button
@@ -138,12 +229,76 @@ export default function PCM_PreventivasPlano() {
           busca={busca}
           setBusca={setBusca}
           total={gerencial.linhas.length}
+          onProgramar={(prefixo) => setModal({ prefixo })}
         />
       )}
 
-      {!loading && !erro && aba === "programacao" && prog && <Programacao prog={prog} />}
+      {!loading && !erro && aba === "programacao" && (
+        <Programacao itens={progComStatus} onRemover={removerProgramacao} semana={semana} />
+      )}
+
+      {!loading && !erro && aba === "resumo" && gerencial && (
+        <Resumo aderencia={gerencial.aderencia} itens={progComStatus} />
+      )}
 
       {!loading && !erro && aba === "garantia" && garantia && <Garantia itens={garantia} />}
+
+      {modal && (
+        <ProgramarModal
+          prefixo={modal.prefixo}
+          salvando={salvando}
+          onClose={() => setModal(null)}
+          onSalvar={salvarProgramacao}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ===================== MODAL PROGRAMAR ===================== */
+function ProgramarModal({ prefixo, salvando, onClose, onSalvar }) {
+  const [categoria, setCategoria] = useState("Revisão");
+  const [tipo, setTipo] = useState("");
+  const [data, setData] = useState(toISODateLocal(new Date()));
+  const inputCls =
+    "w-full rounded-lg border border-gray-200 dark:border-gray-600 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500";
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-600">Programar preventiva</div>
+            <div className="text-lg font-black text-gray-900 dark:text-gray-100">Carro {prefixo}</div>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600"><FaTimes /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Categoria</span>
+            <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={`${inputCls} mt-1`}>
+              {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Tipo (opcional)</span>
+            <input value={tipo} onChange={(e) => setTipo(e.target.value)} placeholder="Ex.: Preventiva 10.000, Óleo motor…" className={`${inputCls} mt-1`} />
+          </label>
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Data planejada</span>
+            <input type="date" value={data} onChange={(e) => setData(e.target.value)} className={`${inputCls} mt-1`} />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 dark:border-gray-700">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Cancelar</button>
+          <button
+            disabled={salvando}
+            onClick={() => onSalvar({ prefixo, categoria, tipo: tipo.trim(), data_planejada: data })}
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {salvando ? "Salvando…" : "Programar"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -233,8 +388,7 @@ function Garantia({ itens }) {
 const fmtNum = (v) =>
   v == null || v === "" ? "" : typeof v === "number" ? v.toLocaleString("pt-BR") : v;
 
-function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
-  // ordenacao por clique no cabecalho. key: "veic" | "ult" | idx da coluna
+function Gerencial({ linhas, aderencia, busca, setBusca, total, onProgramar }) {
   const [sort, setSort] = useState({ key: null, dir: -1 });
   const clicar = (key) =>
     setSort((s) => (s.key === key ? { key, dir: -s.dir } : { key, dir: -1 }));
@@ -270,7 +424,7 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
           />
         </div>
         <span className="text-xs text-gray-500">
-          {linhas.length} de {total} veículos · <span className="text-red-600 font-semibold">vermelho = vencido</span> · clique no cabeçalho p/ ordenar
+          {linhas.length} de {total} veículos · <span className="text-red-600 font-semibold">vermelho = vencido</span> · clique no cabeçalho p/ ordenar · <span className="text-emerald-700 font-semibold">+</span> programa a semana
         </span>
       </div>
 
@@ -280,7 +434,8 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
             <table className="border-separate border-spacing-0 text-[12.5px] w-full">
               <thead>
                 <tr>
-                  <th onClick={() => clicar("veic")} className={`${thBase} sticky left-0 z-20 text-left pl-3.5 min-w-[92px]`}>
+                  <th className={`${thBase} sticky left-0 z-20`}></th>
+                  <th onClick={() => clicar("veic")} className={`${thBase} text-left pl-2 min-w-[92px]`}>
                     Prefixo{seta("veic")}
                   </th>
                   <th onClick={() => clicar("ult")} className={thBase}>
@@ -304,8 +459,17 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
                   const zbg = zebra ? "bg-[#f8fafb] dark:bg-gray-800/40" : "";
                   return (
                     <tr key={l.veic} className="group">
+                      <td className={`sticky left-0 z-[5] px-1 py-1 text-center border-r border-gray-100 border-b border-gray-100 dark:border-gray-800 ${zebra ? "bg-[#f8fafb] dark:bg-gray-800" : "bg-white dark:bg-gray-800"} group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20`}>
+                        <button
+                          onClick={() => onProgramar(l.veic)}
+                          title="Programar este carro na semana"
+                          className="w-6 h-6 grid place-items-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700"
+                        >
+                          <FaPlus className="text-[10px]" />
+                        </button>
+                      </td>
                       <td
-                        className={`sticky left-0 z-[5] pl-3.5 pr-2 py-2 text-left font-bold text-[#0f5d4a] dark:text-emerald-300 border-r border-gray-200 dark:border-gray-700 border-b border-gray-100 dark:border-gray-800 ${
+                        className={`sticky left-8 z-[5] pl-2 pr-2 py-2 text-left font-bold text-[#0f5d4a] dark:text-emerald-300 border-r border-gray-200 dark:border-gray-700 border-b border-gray-100 dark:border-gray-800 ${
                           zebra ? "bg-[#f8fafb] dark:bg-gray-800" : "bg-white dark:bg-gray-800"
                         } group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20`}
                         style={{ boxShadow: "2px 0 4px -2px rgba(0,0,0,.08)" }}
@@ -366,78 +530,136 @@ function Gerencial({ linhas, aderencia, busca, setBusca, total }) {
   );
 }
 
-/* ===================== PROGRAMACAO ===================== */
-function DiaCard({ dow, data, cars, noite, hoje }) {
+/* ===================== PROGRAMACAO (MANUAL) ===================== */
+function BlocoCategoria({ titulo, cor, itens, onRemover }) {
+  const cores = {
+    emerald: "text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300",
+    indigo: "text-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 dark:text-indigo-300",
+    amber: "text-amber-800 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300",
+  };
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
-      <div className={`px-3 py-1.5 text-center text-white ${hoje ? "bg-amber-600" : noite ? "bg-indigo-800" : "bg-emerald-800"}`}>
-        <div className="text-xs font-bold">{dow.split("-")[0].toUpperCase()}</div>
-        <div className="text-[10px] opacity-80">{data}</div>
+    <section className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
+      <div className={`px-4 py-2.5 font-bold text-sm ${cores[cor]}`}>
+        {titulo} <span className="opacity-70 font-semibold">· {itens.length}</span>
       </div>
-      <div className="divide-y divide-gray-100 dark:divide-gray-800">
-        {cars.length === 0 && <div className="px-3 py-3 text-center text-xs text-gray-400 italic">livre</div>}
-        {cars.map((c) => {
-          const venc = c.gat != null && c.gat <= 0;
-          return (
-            <div key={c.veic} className={`px-3 py-2 flex items-center justify-between gap-2 ${venc ? "bg-red-50 dark:bg-red-900/30" : ""}`}>
-              <span className={`font-bold text-sm ${noite ? "text-indigo-700 dark:text-indigo-300" : "text-emerald-800 dark:text-emerald-300"}`}>{c.veic}</span>
-              <span className="text-right">
-                <Badge dias={c.gat} />
-                {c.drv && <span className="ml-1 text-[9px] text-gray-400">{c.drv}</span>}
-              </span>
-            </div>
-          );
-        })}
+      {itens.length === 0 ? (
+        <div className="px-4 py-6 text-center text-sm text-gray-400 italic">Nenhuma programada — use o + no Gerencial.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wide text-gray-400">
+                <th className="px-4 py-2">Prefixo</th>
+                <th className="px-4 py-2">Tipo</th>
+                <th className="px-4 py-2">Data</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2 text-right"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {itens.map((it) => (
+                <tr key={it.id} className={it.feito ? "bg-emerald-50/60 dark:bg-emerald-900/10" : ""}>
+                  <td className="px-4 py-2 font-bold text-gray-800 dark:text-gray-100">{it.prefixo}</td>
+                  <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{it.tipo || "—"}</td>
+                  <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{it.data_planejada ? fmtBR(new Date(it.data_planejada + "T00:00:00")) : "—"}</td>
+                  <td className="px-4 py-2">
+                    {it.feito ? (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">Feito ✓</span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">Planejado</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <button onClick={() => onRemover(it.id)} title="Remover" className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50">
+                      <FaTrash className="text-xs" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Programacao({ itens, onRemover, semana }) {
+  const porCat = useMemo(() => {
+    const m = { "Revisão": [], "Inspeção": [], "Garantia": [] };
+    for (const it of itens) (m[it.categoria] || (m[it.categoria] = [])).push(it);
+    return m;
+  }, [itens]);
+  return (
+    <div className="space-y-4">
+      <div className="text-xs text-gray-500">
+        Semana de <span className="font-semibold">{fmtBR(new Date(semana + "T00:00:00"))}</span> · {itens.length} programada(s) · "Feito" aparece sozinho quando a preventiva é lançada.
       </div>
+      <BlocoCategoria titulo="Revisões" cor="emerald" itens={porCat["Revisão"] || []} onRemover={onRemover} />
+      <BlocoCategoria titulo="Inspeção" cor="indigo" itens={porCat["Inspeção"] || []} onRemover={onRemover} />
+      <BlocoCategoria titulo="Garantia" cor="amber" itens={porCat["Garantia"] || []} onRemover={onRemover} />
     </div>
   );
 }
 
-function Programacao({ prog }) {
+/* ===================== RESUMO ===================== */
+function Resumo({ aderencia, itens }) {
+  const porCat = useMemo(() => {
+    const m = {};
+    for (const c of CATEGORIAS) m[c] = { total: 0, feito: 0 };
+    for (const it of itens) {
+      const b = m[it.categoria] || (m[it.categoria] = { total: 0, feito: 0 });
+      b.total += 1;
+      if (it.feito) b.feito += 1;
+    }
+    return m;
+  }, [itens]);
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          ["Preventivas 10.000", prog.nPrev, "emerald"],
-          ["Inspeções 5.000", prog.nInsp, "indigo"],
-          ["Dias programados", prog.dias10.length, "gray"],
-          ["Serviços conciliados", prog.boxes.length, "gray"],
-        ].map(([l, n, c]) => (
-          <div key={l} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-800">
-            <div className={`text-2xl font-bold ${c === "emerald" ? "text-emerald-700 dark:text-emerald-400" : c === "indigo" ? "text-indigo-700 dark:text-indigo-400" : "text-gray-700 dark:text-gray-200"}`}>{n}</div>
-            <div className="text-xs text-gray-500">{l}</div>
-          </div>
-        ))}
-      </div>
-
       <section>
-        <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 mb-2">Preventivas 10.000 — de amanhã até sexta</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
-          {prog.dias10.map((d) => <DiaCard key={"p" + d.data} {...d} />)}
-        </div>
-      </section>
-
-      <section>
-        <h3 className="text-xs font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-400 mb-2">Inspeções 5.000 — hoje à noite + até sexta</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
-          <DiaCard dow="HOJE" data={prog.hoje} cars={prog.hoje5} noite hoje />
-          {prog.dias5.map((d) => <DiaCard key={"i" + d.data} {...d} noite />)}
-        </div>
-      </section>
-
-      {prog.boxes.length > 0 && (
-        <section>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Serviços que vão junto nas preventivas</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {prog.boxes.map((b) => (
-              <div key={b.nome} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-800">
-                <div className="text-[11px] font-bold uppercase text-indigo-700 dark:text-indigo-400 mb-1">{b.nome}</div>
-                <div className="text-xs text-gray-700 dark:text-gray-300 tabular-nums">{b.veics.join(" · ")}</div>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Programação da semana — planejado × feito</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {CATEGORIAS.map((c) => {
+            const b = porCat[c] || { total: 0, feito: 0 };
+            const pct = b.total ? (b.feito / b.total) * 100 : null;
+            const cor = CAT_COR[c];
+            return (
+              <div key={c} className="rounded-2xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
+                <div className={`text-xs font-bold uppercase ${cor === "emerald" ? "text-emerald-700" : cor === "indigo" ? "text-indigo-700" : "text-amber-800"}`}>{c === "Revisão" ? "Revisões" : c}</div>
+                <div className="mt-1 text-2xl font-black text-gray-800 dark:text-gray-100">{pct == null ? "—" : `${pct.toFixed(0)}%`}</div>
+                <div className="text-xs text-gray-500">{b.feito}/{b.total} feitas</div>
+                <div className="mt-2 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                  <div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct ?? 0}%` }} />
+                </div>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+            );
+          })}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Aderência por item (do plano)</h3>
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+          {aderencia.map((a) => {
+            const pct = a.adr == null ? null : a.adr * 100;
+            return (
+              <div key={a.nome} className="px-4 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] text-gray-700 dark:text-gray-300">{a.nome}</span>
+                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{pct == null ? "—" : `${pct.toFixed(1)}%`}</span>
+                </div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                    <div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct ?? 0}%` }} />
+                  </div>
+                  <span className={`text-[11px] tabular-nums ${a.atrasadas ? "text-red-600 font-semibold" : "text-gray-400"}`}>{a.atrasadas}/{a.total}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

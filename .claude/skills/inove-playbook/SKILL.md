@@ -103,6 +103,15 @@ Para uma página aparecer e ser gated corretamente, mexa em **3 lugares** (o Ate
 
 - `src/pages/pcm/PCMControlePneus.jsx` (~1700 linhas) e o `Copiloto.jsx` do Farol (~2000) são enormes. No Controle de Pneus, cada **aba** se ramifica em ~6 lugares (KPIs, filtro de status, contador "Exibindo", tabela, export Excel). Adicionar aba nova = tocar em **todos** — faça branches cirúrgicos e confira cada ternário.
 
+## 6.1. Preventivas (PCM) — lógica de cálculo  ⚠️
+
+- **Arquivos:** `src/pages/pcm/PCM_PreventivasPlano.jsx` (página) + `src/pages/pcm/preventivasLogic.js` (cálculo puro, porta do gerador Python). Os dados vêm de `ultimo_plano` do **outro** projeto Supabase (IMPORTACAO_DADOS) via `puxarUltimoPlano()` de `../../supabaseDados` — não é o projeto INOVE.
+- **⚠️ Sinal do `km_para_proxima` (`kmp`) é invertido:** **`v >= 0` = JÁ VENCIDO**; `v < 0` = **faltam `-v` km**. Igual para planos por prazo (`dias_vencido`): `>= 0` vencido. Errar esse sinal inverte toda a lógica de "vencido/falta".
+- **km/dia do carro** = mediana de `km_rodado / dias_vencido` só de planos com `dias_vencido > 30` (ritmo real). **Odômetro** = `nr_hodometro + km_rodado` (máx entre planos).
+- **"O que trocar junto na revisão" (regra do dono):** entra todo satélite **vencido OU a ≤ `WINDOW_KM` (3.000) km** de vencer → condição `v >= -WINDOW_KM`. Tacógrafo (plano por prazo) entra se **≤ 15 dias** (`v >= -15`). **Não** é "só vencido" — já corrigimos isso no `duePorCarro` (antes usava só `c.venc`). O `precisa()` da `montarProgramacao` é a referência da regra.
+- **A Programação da Semana virou MANUAL** (tabela `preventivas_programacao`, projeto INOVE). A `montarProgramacao` (fila automática 3×10k + 3×5k/dia) ainda existe em `preventivasLogic.js` mas **não é mais usada pela tela** — serve de referência da regra. O "feito" é automático (casa com a tabela `preventivas` realizada por prefixo+data).
+- **Gap de dado conhecido:** "Pastilha/Fluido Freio" está na regra do dono mas **não tem coluna** em `GERENCIAL_COLS` (sem `id_plano`), então não entra no "o que trocar" até mapearem o id.
+
 ## 7. Farol (app separado, embutido no INOVE)
 
 - Repo próprio: `C:\Users\Guilh\Repositorios\Sistemas\FAROL`, remote `github.com/GuilhermeCSC13/FAROL_TATICO` (**conta diferente** da do INOVE). `web/` (React+Vite) + `server/` (Express+TS). Embutido no INOVE via iframe (`FAROL_URL` em `Layout.jsx`). Detalhes: memória `farol-repo`.

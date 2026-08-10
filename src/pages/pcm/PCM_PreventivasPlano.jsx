@@ -142,7 +142,7 @@ export default function PCM_PreventivasPlano() {
     return q ? gerencial.linhas.filter((l) => l.veic.toLowerCase().includes(q)) : gerencial.linhas;
   }, [gerencial, busca]);
 
-  async function salvarProgramacao({ prefixo, categoria, tipo, data_planejada }) {
+  async function salvarProgramacao({ prefixo, categoria, tipo, data_planejada, turno }) {
     setSalvando(true);
     try {
       const { error } = await supabase.from("preventivas_programacao").insert({
@@ -150,6 +150,7 @@ export default function PCM_PreventivasPlano() {
         categoria,
         tipo: tipo || null,
         data_planejada: data_planejada || null,
+        turno: turno || "Dia",
         semana,
       });
       if (error) throw error;
@@ -172,15 +173,16 @@ export default function PCM_PreventivasPlano() {
     setProgItems((p) => p.filter((x) => x.id !== id));
   }
 
-  // Arrastar: solta o item num dia/seção → muda data_planejada e categoria.
-  async function moverItem(id, novaData, novaCategoria) {
+  // Arrastar: solta o carro num dia/turno → muda data_planejada e turno.
+  async function moverItem(id, novaData, novoTurno) {
     const atual = progItems.find((x) => x.id === id);
     if (!atual) return;
-    if (atual.data_planejada === novaData && atual.categoria === novaCategoria) return;
-    setProgItems((p) => p.map((x) => (x.id === id ? { ...x, data_planejada: novaData, categoria: novaCategoria } : x)));
+    const turnoAtual = atual.turno || "Dia";
+    if (atual.data_planejada === novaData && turnoAtual === novoTurno) return;
+    setProgItems((p) => p.map((x) => (x.id === id ? { ...x, data_planejada: novaData, turno: novoTurno } : x)));
     const { error } = await supabase
       .from("preventivas_programacao")
-      .update({ data_planejada: novaData, categoria: novaCategoria, atualizado_em: new Date().toISOString() })
+      .update({ data_planejada: novaData, turno: novoTurno, atualizado_em: new Date().toISOString() })
       .eq("id", id);
     if (error) { alert("Erro ao mover: " + error.message); carregar(); }
   }
@@ -336,6 +338,7 @@ function ProgramarModal({ prefixo, salvando, onClose, onSalvar }) {
   const [categoria, setCategoria] = useState("Revisão");
   const [tipo, setTipo] = useState("");
   const [data, setData] = useState(toISODateLocal(new Date()));
+  const [turno, setTurno] = useState("Dia");
   const inputCls =
     "w-full rounded-lg border border-gray-200 dark:border-gray-600 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500";
   return (
@@ -363,12 +366,31 @@ function ProgramarModal({ prefixo, salvando, onClose, onSalvar }) {
             <span className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Data planejada</span>
             <input type="date" value={data} onChange={(e) => setData(e.target.value)} className={`${inputCls} mt-1`} />
           </label>
+          <div className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Turno</span>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              {[["Dia", "☀️ Dia"], ["Noite", "🌙 Noite"]].map(([v, txt]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setTurno(v)}
+                  className={`px-3 py-2 rounded-lg text-sm font-bold border transition ${
+                    turno === v
+                      ? "bg-emerald-600 border-emerald-600 text-white"
+                      : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-emerald-400"
+                  }`}
+                >
+                  {txt}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 dark:border-gray-700">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Cancelar</button>
           <button
             disabled={salvando}
-            onClick={() => onSalvar({ prefixo, categoria, tipo: tipo.trim(), data_planejada: data })}
+            onClick={() => onSalvar({ prefixo, categoria, tipo: tipo.trim(), data_planejada: data, turno })}
             className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60"
           >
             {salvando ? "Salvando…" : "Programar"}
@@ -638,52 +660,82 @@ function diasUteis(segundaISO) {
   });
 }
 
-function DiaCard({ dia, cor, cat, itens, onRemover, onMover }) {
-  const corHdr = { emerald: "bg-emerald-800", indigo: "bg-indigo-800", amber: "bg-amber-700" };
-  const doDia = itens.filter((it) => it.data_planejada === dia.iso);
-  const [over, setOver] = useState(false);
+// Etiqueta da categoria ao lado do carro.
+const TAG_CAT = {
+  "Revisão": { t: "REV", c: "bg-orange-500 text-white" },
+  "Inspeção": { t: "INSP", c: "bg-yellow-400 text-yellow-900" },
+  "Garantia": { t: "GAR", c: "bg-green-600 text-white" },
+};
+
+function ItemCarro({ it, onRemover }) {
+  const tag = TAG_CAT[it.categoria] || { t: "?", c: "bg-gray-400 text-white" };
   return (
     <div
-      className={`rounded-xl border overflow-hidden bg-white dark:bg-gray-800 transition ${over ? "border-emerald-500 ring-2 ring-emerald-400" : "border-gray-200 dark:border-gray-700"}`}
+      draggable
+      onDragStart={(e) => { e.dataTransfer.setData("text/plain", it.id); e.dataTransfer.effectAllowed = "move"; }}
+      className={`group/i px-2.5 py-1.5 flex items-center justify-between gap-2 cursor-move ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
+    >
+      <div className="min-w-0 flex items-center gap-1.5">
+        <span className={`px-1 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${tag.c}`} title={it.categoria}>{tag.t}</span>
+        <div className="min-w-0">
+          <span className={`font-bold text-[13px] ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
+          {it.tipo && <span className="block text-[9px] text-gray-400 truncate">{it.tipo}</span>}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        {it.feito && <span className="text-emerald-600 dark:text-emerald-400 font-bold" title="feito">✓</span>}
+        <button
+          onClick={() => onRemover(it.id)}
+          title="Remover"
+          className="text-gray-300 hover:text-red-600 opacity-0 group-hover/i:opacity-100 transition"
+        >
+          <FaTrash className="text-[10px]" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Zona de um turno (Dia/Noite) dentro do card do dia — é alvo de "soltar".
+function TurnoZona({ dia, turno, itens, onRemover, onMover }) {
+  const [over, setOver] = useState(false);
+  const noite = turno === "Noite";
+  return (
+    <div
       onDragOver={(e) => { e.preventDefault(); if (!over) setOver(true); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false); }}
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
         const id = e.dataTransfer.getData("text/plain");
-        if (id) onMover?.(id, dia.iso, cat);
+        if (id) onMover?.(id, dia.iso, turno);
       }}
+      className={`transition ${over ? "ring-2 ring-inset ring-emerald-400 bg-emerald-50/50 dark:bg-emerald-900/10" : ""}`}
     >
-      <div className={`px-3 py-1.5 text-center text-white ${dia.hoje ? "bg-amber-600" : corHdr[cor]}`}>
+      <div className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${noite ? "bg-slate-100 text-slate-600 dark:bg-slate-900/60 dark:text-slate-300" : "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"}`}>
+        {noite ? "🌙 Noite" : "☀️ Dia"}
+      </div>
+      <div className="divide-y divide-gray-100 dark:divide-gray-800 min-h-[30px]">
+        {itens.length === 0 && <div className="px-3 py-1.5 text-center text-[10px] text-gray-300 italic">livre</div>}
+        {itens.map((it) => <ItemCarro key={it.id} it={it} onRemover={onRemover} />)}
+      </div>
+    </div>
+  );
+}
+
+function DiaCard({ dia, itens, onRemover, onMover }) {
+  const doDia = itens.filter((it) => it.data_planejada === dia.iso);
+  const dias = doDia.filter((it) => (it.turno || "Dia") !== "Noite");
+  const noites = doDia.filter((it) => (it.turno || "Dia") === "Noite");
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
+      <div className={`px-3 py-1.5 text-center text-white ${dia.hoje ? "bg-amber-600" : "bg-slate-700"}`}>
         <div className="text-xs font-bold">{dia.label}</div>
         <div className="text-[10px] opacity-80">{dia.dm}</div>
       </div>
-      <div className="divide-y divide-gray-100 dark:divide-gray-800 min-h-[40px]">
-        {doDia.length === 0 && <div className="px-3 py-3 text-center text-xs text-gray-400 italic">livre</div>}
-        {doDia.map((it) => (
-          <div
-            key={it.id}
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData("text/plain", it.id); e.dataTransfer.effectAllowed = "move"; }}
-            className={`group/i px-3 py-2 flex items-center justify-between gap-2 cursor-move ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
-          >
-            <div className="min-w-0">
-              <span className={`font-bold text-sm ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
-              {it.tipo && <span className="block text-[9px] text-gray-400 truncate">{it.tipo}</span>}
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {it.feito && <span className="text-emerald-600 dark:text-emerald-400 font-bold" title="feito">✓</span>}
-              <button
-                onClick={() => onRemover(it.id)}
-                title="Remover"
-                className="text-gray-300 hover:text-red-600 opacity-0 group-hover/i:opacity-100 transition"
-              >
-                <FaTrash className="text-[10px]" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+      <TurnoZona dia={dia} turno="Dia" itens={dias} onRemover={onRemover} onMover={onMover} />
+      <div className="border-t border-gray-200 dark:border-gray-700" />
+      <TurnoZona dia={dia} turno="Noite" itens={noites} onRemover={onRemover} onMover={onMover} />
     </div>
   );
 }
@@ -711,12 +763,6 @@ function Programacao({ itens, onRemover, onMover, semana, duePorCarro = {} }) {
       .map(([nome, set]) => ({ nome, carros: [...set].sort() }))
       .sort((a, b) => b.carros.length - a.carros.length);
   }, [porCat, duePorCarro]);
-
-  const secoes = [
-    ["Revisões", "Revisão", "emerald"],
-    ["Inspeção", "Inspeção", "indigo"],
-    ["Garantia", "Garantia", "amber"],
-  ];
 
   return (
     <div className="space-y-6">
@@ -752,26 +798,21 @@ function Programacao({ itens, onRemover, onMover, semana, duePorCarro = {} }) {
         </div>
       )}
 
-      {secoes.map(([titulo, cat, cor]) => (
-        <section key={cat}>
-          <h3
-            className={`text-xs font-bold uppercase tracking-wide mb-2 ${
-              cor === "emerald"
-                ? "text-emerald-700 dark:text-emerald-400"
-                : cor === "indigo"
-                ? "text-indigo-700 dark:text-indigo-400"
-                : "text-amber-700 dark:text-amber-400"
-            }`}
-          >
-            {titulo} — {(porCat[cat] || []).length} na semana
-          </h3>
+      {itens.length > 0 && (
+        <section>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-2 text-[11px] text-gray-500 dark:text-gray-400">
+            <span className="inline-flex items-center gap-1"><span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-orange-500 text-white">REV</span> Revisão</span>
+            <span className="inline-flex items-center gap-1"><span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-yellow-400 text-yellow-900">INSP</span> Inspeção</span>
+            <span className="inline-flex items-center gap-1"><span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-green-600 text-white">GAR</span> Garantia</span>
+            <span className="text-gray-400">· cada dia tem ☀️ Dia e 🌙 Noite · arraste o carro p/ mover</span>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
             {dias.map((d) => (
-              <DiaCard key={cat + d.iso} dia={d} cor={cor} cat={cat} itens={porCat[cat] || []} onRemover={onRemover} onMover={onMover} />
+              <DiaCard key={d.iso} dia={d} itens={itens} onRemover={onRemover} onMover={onMover} />
             ))}
           </div>
         </section>
-      ))}
+      )}
 
       {servicos.length > 0 && (
         <section>

@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   FaSync, FaSearch, FaTable, FaCalendarWeek, FaExclamationTriangle, FaWrench, FaShieldAlt,
-  FaMoon, FaSun, FaPlus, FaTrash, FaChartBar, FaTimes,
+  FaMoon, FaSun, FaPlus, FaTrash, FaChartBar, FaTimes, FaFilePdf,
 } from "react-icons/fa";
 import { puxarUltimoPlano } from "../../supabaseDados";
 import { supabase } from "../../supabase";
@@ -110,6 +110,22 @@ export default function PCM_PreventivasPlano() {
     });
   }, [progItems, realizadas]);
 
+  // O que precisa trocar por carro: colunas do Gerencial marcadas como vencidas
+  // (pula INSP 5.000 / REVISÃO / REV.VENCIDA — esses são "quando", não "o que trocar").
+  const duePorCarro = useMemo(() => {
+    const m = {};
+    if (!gerencial) return m;
+    for (const l of gerencial.linhas) {
+      const due = [];
+      l.cols.forEach((c, j) => {
+        if (j <= 2) return;
+        if (c.venc) due.push(GERENCIAL_COLS[j].t);
+      });
+      m[l.veic] = due;
+    }
+    return m;
+  }, [gerencial]);
+
   const linhasFiltradas = useMemo(() => {
     if (!gerencial) return [];
     const q = busca.trim().toLowerCase();
@@ -144,6 +160,25 @@ export default function PCM_PreventivasPlano() {
     const { error } = await supabase.from("preventivas_programacao").delete().eq("id", id);
     if (error) { alert("Erro ao remover: " + error.message); return; }
     setProgItems((p) => p.filter((x) => x.id !== id));
+  }
+
+  async function baixarPDF() {
+    const el = document.getElementById("prog-print");
+    if (!el) return;
+    try {
+      const [{ default: html2canvas }, jspdfMod] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const jsPDF = jspdfMod.jsPDF || jspdfMod.default;
+      const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      const img = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [canvas.width, canvas.height] });
+      pdf.addImage(img, "PNG", 0, 0, canvas.width, canvas.height);
+      pdf.save(`programacao_semana_${semana}.pdf`);
+    } catch (e) {
+      alert("Erro ao gerar PDF: " + (e.message || e));
+    }
   }
 
   const hoje = new Date();
@@ -233,7 +268,24 @@ export default function PCM_PreventivasPlano() {
       )}
 
       {!loading && !erro && aba === "programacao" && (
-        <Programacao itens={progComStatus} onRemover={removerProgramacao} semana={semana} />
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <button
+              onClick={baixarPDF}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition"
+            >
+              <FaFilePdf /> Baixar PDF
+            </button>
+          </div>
+          <div id="prog-print" className="bg-white dark:bg-gray-900 rounded-xl p-3">
+            <Programacao
+              itens={progComStatus}
+              onRemover={removerProgramacao}
+              semana={semana}
+              duePorCarro={duePorCarro}
+            />
+          </div>
+        </div>
       )}
 
       {!loading && !erro && aba === "resumo" && gerencial && (
@@ -534,10 +586,10 @@ function DiaCard({ dia, cor, itens, onRemover }) {
         {doDia.map((it) => (
           <div
             key={it.id}
-            className={`group/i px-3 py-2 flex items-center justify-between gap-2 ${it.feito ? "bg-emerald-50 dark:bg-emerald-900/20" : ""}`}
+            className={`group/i px-3 py-2 flex items-center justify-between gap-2 ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
           >
             <div className="min-w-0">
-              <span className="font-bold text-sm text-gray-800 dark:text-gray-100">{it.prefixo}</span>
+              <span className={`font-bold text-sm ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
               {it.tipo && <span className="block text-[9px] text-gray-400 truncate">{it.tipo}</span>}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -557,7 +609,7 @@ function DiaCard({ dia, cor, itens, onRemover }) {
   );
 }
 
-function Programacao({ itens, onRemover, semana }) {
+function Programacao({ itens, onRemover, semana, duePorCarro = {} }) {
   const dias = useMemo(() => diasUteis(semana), [semana]);
   const porCat = useMemo(() => {
     const m = { "Revisão": [], "Inspeção": [], "Garantia": [] };
@@ -565,6 +617,21 @@ function Programacao({ itens, onRemover, semana }) {
     return m;
   }, [itens]);
   const nFeito = itens.filter((it) => it.feito).length;
+
+  // "O que precisa trocar" agregado das REVISÕES programadas: por serviço, quais
+  // carros (cujo item está vencido no Gerencial). É o "serviços que vão junto".
+  const servicos = useMemo(() => {
+    const map = new Map();
+    for (const it of porCat["Revisão"] || []) {
+      for (const s of duePorCarro[it.prefixo] || []) {
+        if (!map.has(s)) map.set(s, new Set());
+        map.get(s).add(it.prefixo);
+      }
+    }
+    return [...map.entries()]
+      .map(([nome, set]) => ({ nome, carros: [...set].sort() }))
+      .sort((a, b) => b.carros.length - a.carros.length);
+  }, [porCat, duePorCarro]);
 
   const secoes = [
     ["Revisões", "Revisão", "emerald"],
@@ -626,6 +693,24 @@ function Programacao({ itens, onRemover, semana }) {
           </div>
         </section>
       ))}
+
+      {servicos.length > 0 && (
+        <section>
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-2">
+            Serviços que vão junto — o que trocar nas revisões
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {servicos.map((b) => (
+              <div key={b.nome} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-800">
+                <div className="text-[11px] font-bold uppercase text-indigo-700 dark:text-indigo-400 mb-1">
+                  {b.nome} <span className="text-gray-400 font-semibold">· {b.carros.length}</span>
+                </div>
+                <div className="text-xs text-gray-700 dark:text-gray-300 tabular-nums">{b.carros.join(" · ")}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

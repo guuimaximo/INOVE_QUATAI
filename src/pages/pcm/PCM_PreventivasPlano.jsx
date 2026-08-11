@@ -209,10 +209,28 @@ export default function PCM_PreventivasPlano() {
         import("jspdf"),
       ]);
       const jsPDF = jspdfMod.jsPDF || jspdfMod.default;
-      const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      // Captura na largura real da tela (mantém as 5 colunas, igual à página).
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        windowWidth: el.scrollWidth,
+      });
       const img = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [canvas.width, canvas.height] });
-      pdf.addImage(img, "PNG", 0, 0, canvas.width, canvas.height);
+      // Página A4 paisagem padrão: conteúdo ajustado p/ caber INTEIRO numa folha
+      // (imprime numa página só, sem cortar card).
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 6;
+      const availW = pageW - margin * 2;
+      const availH = pageH - margin * 2;
+      const ratio = canvas.width / canvas.height;
+      let w = availW;
+      let h = w / ratio;
+      if (h > availH) { h = availH; w = h * ratio; }
+      const x = (pageW - w) / 2;
+      pdf.addImage(img, "PNG", x, margin, w, h);
       pdf.save(`programacao_semana_${semana}.pdf`);
     } catch (e) {
       alert("Erro ao gerar PDF: " + (e.message || e));

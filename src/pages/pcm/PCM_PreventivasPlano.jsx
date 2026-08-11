@@ -676,6 +676,11 @@ function diasUteis(segundaISO) {
   });
 }
 
+// html2canvas (exportação PDF) insere um espaço no hífen normal, quebrando o
+// número do carro em "046- 2222". Usar hífen NÃO-QUEBRÁVEL (U+2011) resolve, e
+// na tela fica idêntico.
+const semQuebra = (s) => String(s ?? "").replace(/-/g, "‑");
+
 // Cor da etiqueta da categoria (escrita por extenso ao lado do carro).
 const COR_CAT = {
   "Revisão": "bg-orange-500 text-white",
@@ -694,7 +699,7 @@ function ItemCarro({ it, onRemover, onEditar }) {
       className={`group/i px-3 py-2.5 flex items-start justify-between gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 ${it.feito ? "bg-emerald-100 dark:bg-emerald-900/40" : ""}`}
     >
       <div className="min-w-0 flex items-center gap-2 flex-wrap">
-        <span className={`font-black text-xl leading-tight tabular-nums whitespace-nowrap ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{it.prefixo}</span>
+        <span className={`font-black text-xl leading-tight tabular-nums whitespace-nowrap ${it.feito ? "text-emerald-800 dark:text-emerald-300" : "text-gray-800 dark:text-gray-100"}`}>{semQuebra(it.prefixo)}</span>
         <span className={`px-2 py-1 rounded text-[11px] font-black uppercase whitespace-nowrap ${cor}`}>{it.categoria}</span>
         {it.tipo && <span className="text-[12px] font-medium text-gray-600 dark:text-gray-300 truncate">{it.tipo}</span>}
       </div>
@@ -866,7 +871,7 @@ function Programacao({ itens, onRemover, onMover, onEditar, semana, duePorCarro 
                 <div className="text-[11px] font-bold uppercase text-indigo-700 dark:text-indigo-400 mb-1">
                   {b.nome} <span className="text-gray-400 font-semibold">· {b.carros.length}</span>
                 </div>
-                <div className="text-xs text-gray-700 dark:text-gray-300 tabular-nums">{b.carros.join(" · ")}</div>
+                <div className="text-xs text-gray-700 dark:text-gray-300 tabular-nums">{b.carros.map(semQuebra).join(" · ")}</div>
               </div>
             ))}
           </div>

@@ -137,7 +137,8 @@ export default function PCM_PreventivasPlano() {
         if (j <= 2 || c.v == null) return;
         const col = GERENCIAL_COLS[j];
         const dentro = col.tipo === "dias" ? c.v >= -JANELA_DIAS_TCO : c.v >= -WINDOW_KM;
-        if (dentro) due.push(col.t);
+        // falta = quanto falta pra vencer (positivo). <= 0 já vencido.
+        if (dentro) due.push({ nome: col.t, falta: Math.round(-c.v), un: col.tipo === "dias" ? "d" : "km" });
       });
       m[l.veic] = due;
     }
@@ -780,17 +781,25 @@ function Programacao({ itens, onRemover, onMover, onEditar, semana, duePorCarro 
   const nFeito = itens.filter((it) => it.feito).length;
 
   // "O que precisa trocar" agregado das REVISÕES programadas: por serviço, quais
-  // carros (cujo item está vencido no Gerencial). É o "serviços que vão junto".
+  // carros e quanto falta em cada um. É o "serviços que vão junto".
   const servicos = useMemo(() => {
     const map = new Map();
     for (const it of porCat["Revisão"] || []) {
       for (const s of duePorCarro[it.prefixo] || []) {
-        if (!map.has(s)) map.set(s, new Set());
-        map.get(s).add(it.prefixo);
+        if (!map.has(s.nome)) map.set(s.nome, new Map());
+        // guarda o menor "falta" caso o carro apareça repetido
+        const cars = map.get(s.nome);
+        if (!cars.has(it.prefixo) || s.falta < cars.get(it.prefixo).falta)
+          cars.set(it.prefixo, { falta: s.falta, un: s.un });
       }
     }
     return [...map.entries()]
-      .map(([nome, set]) => ({ nome, carros: [...set].sort() }))
+      .map(([nome, cars]) => ({
+        nome,
+        carros: [...cars.entries()]
+          .map(([veic, info]) => ({ veic, ...info }))
+          .sort((a, b) => a.falta - b.falta),
+      }))
       .sort((a, b) => b.carros.length - a.carros.length);
   }, [porCat, duePorCarro]);
 
@@ -886,10 +895,21 @@ function Programacao({ itens, onRemover, onMover, onEditar, semana, duePorCarro 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {servicos.map((b) => (
               <div key={b.nome} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-800">
-                <div className="text-[11px] font-bold uppercase text-indigo-700 dark:text-indigo-400 mb-1">
+                <div className="text-[11px] font-bold uppercase text-indigo-700 dark:text-indigo-400 mb-1.5">
                   {b.nome} <span className="text-gray-400 font-semibold">· {b.carros.length}</span>
                 </div>
-                <div className="text-xs text-gray-700 dark:text-gray-300 tabular-nums">{b.carros.map(semQuebra).join(" · ")}</div>
+                <div className="space-y-0.5">
+                  {b.carros.map((c) => (
+                    <div key={c.veic} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="font-semibold text-gray-700 dark:text-gray-200 tabular-nums whitespace-nowrap">{semQuebra(c.veic)}</span>
+                      <span className={`tabular-nums text-[11px] ${c.falta <= 0 ? "text-red-600 dark:text-red-400 font-bold" : "text-gray-500"}`}>
+                        {c.falta <= 0
+                          ? `vencido ${Math.abs(c.falta).toLocaleString("pt-BR")} ${c.un}`
+                          : `faltam ${c.falta.toLocaleString("pt-BR")} ${c.un}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

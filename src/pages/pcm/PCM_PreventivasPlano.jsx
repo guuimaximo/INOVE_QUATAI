@@ -59,39 +59,62 @@ export default function PCM_PreventivasPlano() {
   const [busca, setBusca] = useState("");
 
   // Programacao manual (tabela preventivas_programacao) + realizadas (tabela preventivas).
-  const semana = useMemo(() => semanaSegunda(), []);
+  // A semana e navegavel (setinhas): historico p/ tras, planejamento p/ frente.
+  const [semana, setSemana] = useState(() => semanaSegunda());
+  const shiftSemana = (delta) =>
+    setSemana((s) => {
+      const d = new Date(s + "T00:00:00");
+      d.setDate(d.getDate() + delta * 7);
+      return toISODateLocal(d);
+    });
   const [progItems, setProgItems] = useState([]);
   const [realizadas, setRealizadas] = useState([]);
   const [modal, setModal] = useState(null); // { prefixo }
   const [salvando, setSalvando] = useState(false);
 
-  const carregar = useCallback(async () => {
+  const ehSemanaAtual = semana === semanaSegunda();
+  const labelSemana = useMemo(() => {
+    const d = diasUteis(semana);
+    return `${d[0].dm} – ${d[d.length - 1].dm}`;
+  }, [semana]);
+
+  // Plano (Gerencial/Garantia) — NÃO depende da semana; carrega uma vez (consulta
+  // grande do Athena). Não recarrega ao trocar de semana, pra folhear rápido.
+  const carregarPlano = useCallback(async () => {
     setLoading(true); setErro(null);
     try {
-      const [data, prog, real] = await Promise.all([
-        puxarUltimoPlano(),
-        supabase
-          .from("preventivas_programacao")
-          .select("*")
-          .eq("semana", semana)
-          .order("data_planejada", { ascending: true }),
-        // realizadas recentes p/ casar o "feito" (ultimos 60 dias)
-        supabase
-          .from("preventivas")
-          .select("prefixo,tipo,data_realizacao")
-          .gte("data_realizacao", toISODateLocal(new Date(Date.now() - 60 * 86400000))),
-      ]);
-      setRows(data);
-      if (!prog.error) setProgItems(prog.data || []);
-      if (!real.error) setRealizadas(real.data || []);
+      setRows(await puxarUltimoPlano());
     } catch (e) {
       setErro(e.message || String(e));
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Programação + realizadas — dependem da semana; troca leve, sem spinner.
+  const carregarSemana = useCallback(async () => {
+    try {
+      const [prog, real] = await Promise.all([
+        supabase
+          .from("preventivas_programacao")
+          .select("*")
+          .eq("semana", semana)
+          .order("data_planejada", { ascending: true }),
+        // realizadas p/ casar o "feito": desde ~3 dias antes da semana vista.
+        supabase
+          .from("preventivas")
+          .select("prefixo,tipo,data_realizacao")
+          .gte("data_realizacao", toISODateLocal(new Date(new Date(semana + "T00:00:00").getTime() - 3 * 86400000))),
+      ]);
+      if (!prog.error) setProgItems(prog.data || []);
+      if (!real.error) setRealizadas(real.data || []);
+    } catch (e) {
+      console.error("Falha ao carregar a semana:", e);
+    }
   }, [semana]);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { carregarPlano(); }, [carregarPlano]);
+  useEffect(() => { carregarSemana(); }, [carregarSemana]);
 
   const cars = useMemo(() => (rows.length ? montarCarros(rows) : new Map()), [rows]);
   const gerencial = useMemo(() => (cars.size ? montarGerencial(cars) : null), [cars]);
@@ -114,10 +137,15 @@ export default function PCM_PreventivasPlano() {
   }, [progItems, realizadas]);
 
   // Programado por carro (chave = prefixo/veic, igual ao l.veic do Gerencial),
-  // para mostrar a data programada como etiqueta na aba Gerencial.
+  // para mostrar a data programada como etiqueta e pintar a linha no Gerencial.
+  // Itens JÁ FEITOS (✓) saem daqui: a linha deixa de ficar pintada/"selecionada"
+  // no Gerencial — só continuam marcados os que ainda faltam.
   const progPorCarro = useMemo(() => {
     const m = {};
-    for (const it of progComStatus) (m[it.prefixo] || (m[it.prefixo] = [])).push(it);
+    for (const it of progComStatus) {
+      if (it.feito) continue;
+      (m[it.prefixo] || (m[it.prefixo] = [])).push(it);
+    }
     for (const k in m)
       m[k].sort((a, b) => (String(a.data_planejada || "") < String(b.data_planejada || "") ? -1 : 1));
     return m;
@@ -198,7 +226,7 @@ export default function PCM_PreventivasPlano() {
       .from("preventivas_programacao")
       .update({ data_planejada: novaData, turno: novoTurno, atualizado_em: new Date().toISOString() })
       .eq("id", id);
-    if (error) { alert("Erro ao mover: " + error.message); carregar(); }
+    if (error) { alert("Erro ao mover: " + error.message); carregarSemana(); }
   }
 
   async function baixarPDF() {
@@ -272,7 +300,7 @@ export default function PCM_PreventivasPlano() {
             {dark ? <FaSun /> : <FaMoon />}
           </button>
           <button
-            onClick={carregar}
+            onClick={() => { carregarPlano(); carregarSemana(); }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-100 text-sm font-medium transition"
           >
             <FaSync className={loading ? "animate-spin" : ""} /> Atualizar
@@ -327,7 +355,35 @@ export default function PCM_PreventivasPlano() {
 
       {!loading && !erro && aba === "programacao" && (
         <div className="space-y-3">
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => shiftSemana(-1)}
+                title="Semana anterior"
+                className="w-9 h-9 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-700 text-lg font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                ‹
+              </button>
+              <div className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-bold text-gray-700 dark:text-gray-200 text-center min-w-[140px]">
+                {labelSemana}
+                {ehSemanaAtual && <span className="ml-1.5 text-[10px] font-semibold text-emerald-600">• atual</span>}
+              </div>
+              <button
+                onClick={() => shiftSemana(1)}
+                title="Próxima semana"
+                className="w-9 h-9 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-700 text-lg font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                ›
+              </button>
+              {!ehSemanaAtual && (
+                <button
+                  onClick={() => setSemana(semanaSegunda())}
+                  className="ml-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 px-2 py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                >
+                  Hoje
+                </button>
+              )}
+            </div>
             <button
               onClick={baixarPDF}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition"
@@ -357,6 +413,7 @@ export default function PCM_PreventivasPlano() {
       {modal && (
         <ProgramarModal
           item={modal}
+          semanaISO={semana}
           salvando={salvando}
           onClose={() => setModal(null)}
           onSalvar={salvarProgramacao}
@@ -367,12 +424,21 @@ export default function PCM_PreventivasPlano() {
 }
 
 /* ===================== MODAL PROGRAMAR ===================== */
-function ProgramarModal({ item, salvando, onClose, onSalvar }) {
+function ProgramarModal({ item, semanaISO, salvando, onClose, onSalvar }) {
   const editando = !!item.id;
   const prefixo = item.prefixo;
+  // Data padrão: hoje se a semana vista contém hoje; senão, a segunda dessa
+  // semana (pra o item cair dentro da semana que está sendo montada).
+  const defaultData = (() => {
+    if (item.data_planejada) return item.data_planejada;
+    if (!semanaISO) return toISODateLocal(new Date());
+    const hoje = toISODateLocal(new Date());
+    const fim = toISODateLocal(new Date(new Date(semanaISO + "T00:00:00").getTime() + 6 * 86400000));
+    return hoje >= semanaISO && hoje <= fim ? hoje : semanaISO;
+  })();
   const [categoria, setCategoria] = useState(item.categoria || "Revisão");
   const [tipo, setTipo] = useState(item.tipo || "");
-  const [data, setData] = useState(item.data_planejada || toISODateLocal(new Date()));
+  const [data, setData] = useState(defaultData);
   const [turno, setTurno] = useState(item.turno || "Dia");
   const inputCls =
     "w-full rounded-lg border border-gray-200 dark:border-gray-600 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500";

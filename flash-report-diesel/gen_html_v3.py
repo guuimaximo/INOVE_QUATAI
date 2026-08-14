@@ -1503,10 +1503,12 @@ CRONOGRAMA = [
         ("Enquete de Fixação", "Parado Ligado: Consumo ou Desperdício?", "07/08", True),
     ]),
     ("2ª Semana", "10 a 14/08", [
-        ("Imagem Motivacional", "", "10/08", False),
-        ("Vídeo - Min. do Conhecimento", "", "11/08", False),
-        ("Imagem Informativa", "", "12/08", False),
-        ("Podcast - Fala, Motô!", "", "13/08", False),
+        ("Imagem Motivacional", "", "10/08", True),
+        ("Vídeo - Min. do Conhecimento", "", "11/08", True),
+        ("Imagem Informativa", "", "12/08", True),
+        ("Podcast - Fala, Motô!", "", "13/08", True),
+        # 14/08 e o dia da geracao: fora da janela analisada (01 a 13/08), entra como
+        # programado. Vira True quando o relatorio da proxima semana for gerado.
         ("Enquete de Fixação", "", "14/08", False),
     ]),
     ("3ª Semana", "17 a 21/08", [

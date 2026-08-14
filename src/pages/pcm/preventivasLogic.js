@@ -143,7 +143,7 @@ export function montarGerencial(cars) {
       const venc = rev != null && rev >= 0;
       return { v: rev, venc, texto: rev == null ? "" : venc ? "VENCIDA" : "NÃO", isCalc: true };
     });
-    linhas.push({ veic: "046-" + c.veic, semana, dataUlt: fmtBR(du), kmdia: c.kmdia, cols });
+    linhas.push({ veic: "046-" + c.veic, semana, dataUlt: fmtBR(du), kmdia: c.kmdia, odom: c.odom, cols });
   }
   // Bloco de aderencia (por plano)
   const aderencia = GERENCIAL_COLS.filter((col) => col.id).map((col) => {

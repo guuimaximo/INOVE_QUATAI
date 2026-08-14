@@ -616,6 +616,7 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
     const val = (l) => {
       if (sort.key === "veic") return l.veic;
       if (sort.key === "ult") return l.dataUlt;
+      if (sort.key === "odom") return typeof l.odom === "number" ? l.odom : -1;
       const c = l.cols[sort.key];
       return typeof c.v === "number" ? c.v : c.venc ? 0 : -1e9;
     };
@@ -658,6 +659,9 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
                   </th>
                   <th onClick={() => clicar("ult")} className={thBase}>
                     Últ.<span className="block text-[9px] opacity-75 font-normal normal-case">revisão{seta("ult")}</span>
+                  </th>
+                  <th onClick={() => clicar("odom")} className={thBase}>
+                    Odômetro{seta("odom")}
                   </th>
                   {GERENCIAL_COLS.map((c, idx) => {
                     const p = c.t.split(" ");
@@ -718,6 +722,9 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
                       </td>
                       <td className={`px-1.5 py-2 text-center text-[11px] text-gray-400 border-b border-gray-100 dark:border-gray-800 ${tint || zbg} group-hover:bg-emerald-50/60`}>
                         {l.dataUlt}
+                      </td>
+                      <td className={`px-1.5 py-2 text-center tabular-nums text-[11px] text-gray-600 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800 ${tint || zbg} group-hover:bg-emerald-50/60`}>
+                        {typeof l.odom === "number" && l.odom > 0 ? Math.round(l.odom).toLocaleString("pt-BR") : <span className="text-gray-300">·</span>}
                       </td>
                       {l.cols.map((cell, j) => (
                         <td

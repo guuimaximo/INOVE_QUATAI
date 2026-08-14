@@ -31,7 +31,17 @@ function toISODateLocal(d) {
   const x = d instanceof Date ? d : new Date(d);
   return new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
-// Segunda-feira da semana atual (chave da semana).
+// Segunda-feira da semana de uma data (chave da semana). A "gaveta" da semana
+// é SEMPRE derivada da data planejada — nunca da semana que está sendo vista —
+// senão um item programado p/ outra semana vira órfão.
+function semanaSegundaDe(iso) {
+  const d = new Date((iso || "") + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return semanaSegunda();
+  const dow = (d.getDay() + 6) % 7; // 0 = segunda
+  d.setDate(d.getDate() - dow);
+  return toISODateLocal(d);
+}
+// Segunda-feira da semana atual.
 function semanaSegunda() {
   const d = new Date();
   const dow = (d.getDay() + 6) % 7; // 0 = segunda
@@ -182,23 +192,28 @@ export default function PCM_PreventivasPlano() {
   async function salvarProgramacao({ id, prefixo, categoria, tipo, data_planejada, turno }) {
     setSalvando(true);
     try {
+      // A semana (gaveta) vem SEMPRE da data planejada, não da semana vista.
+      const semanaItem = data_planejada ? semanaSegundaDe(data_planejada) : semana;
       const dados = {
         prefixo,
         categoria,
         tipo: tipo || null,
         data_planejada: data_planejada || null,
         turno: turno || "Dia",
+        semana: semanaItem,
       };
       const { error } = id
         ? await supabase
             .from("preventivas_programacao")
             .update({ ...dados, atualizado_em: new Date().toISOString() })
             .eq("id", id)
-        : await supabase.from("preventivas_programacao").insert({ ...dados, semana });
+        : await supabase.from("preventivas_programacao").insert(dados);
       if (error) throw error;
       setModal(null);
+      // Pula para a semana onde o item caiu (assim ele aparece na hora).
+      setSemana(semanaItem);
       const { data } = await supabase
-        .from("preventivas_programacao").select("*").eq("semana", semana)
+        .from("preventivas_programacao").select("*").eq("semana", semanaItem)
         .order("data_planejada", { ascending: true });
       setProgItems(data || []);
     } catch (e) {
@@ -221,10 +236,11 @@ export default function PCM_PreventivasPlano() {
     if (!atual) return;
     const turnoAtual = atual.turno || "Dia";
     if (atual.data_planejada === novaData && turnoAtual === novoTurno) return;
-    setProgItems((p) => p.map((x) => (x.id === id ? { ...x, data_planejada: novaData, turno: novoTurno } : x)));
+    const novaSemana = semanaSegundaDe(novaData);
+    setProgItems((p) => p.map((x) => (x.id === id ? { ...x, data_planejada: novaData, turno: novoTurno, semana: novaSemana } : x)));
     const { error } = await supabase
       .from("preventivas_programacao")
-      .update({ data_planejada: novaData, turno: novoTurno, atualizado_em: new Date().toISOString() })
+      .update({ data_planejada: novaData, turno: novoTurno, semana: novaSemana, atualizado_em: new Date().toISOString() })
       .eq("id", id);
     if (error) { alert("Erro ao mover: " + error.message); carregarSemana(); }
   }

@@ -390,6 +390,31 @@ export function AuthProvider({ children }) {
     };
   }, [logout, syncAccessSnapshot, syncPresence]);
 
+  // Mantém o token JWT do Supabase fresco ao voltar de idle. O UI mantém o
+  // usuário logado por atividade (isSessionValid ~4h), mas o access token do
+  // Supabase expira em ~1h; com a aba em segundo plano / máquina dormindo, o
+  // auto-refresh não dispara e as tabelas passam a dar 401 até relogar. Ao
+  // voltar o foco/visibilidade, reativamos o refresh (que renova na hora um
+  // token expirado). startAutoRefresh funciona mesmo se o auto-refresh do
+  // init estiver desligado; o AuthContext não desloga em "piscadas" de token.
+  useEffect(() => {
+    const reativarRefresh = () => {
+      try {
+        if (document.visibilityState === "visible") supabase.auth.startAutoRefresh?.();
+        else supabase.auth.stopAutoRefresh?.();
+      } catch {
+        /* silencioso */
+      }
+    };
+    document.addEventListener("visibilitychange", reativarRefresh);
+    window.addEventListener("focus", reativarRefresh);
+    reativarRefresh(); // garante o refresh ativo ao montar
+    return () => {
+      document.removeEventListener("visibilitychange", reativarRefresh);
+      window.removeEventListener("focus", reativarRefresh);
+    };
+  }, []);
+
   const value = useMemo(
     () => ({
       user,

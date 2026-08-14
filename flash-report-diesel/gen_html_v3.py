@@ -1504,12 +1504,10 @@ CRONOGRAMA = [
     ]),
     ("2ª Semana", "10 a 14/08", [
         ("Imagem Motivacional", "", "10/08", True),
-        ("Vídeo - Min. do Conhecimento", "", "11/08", True),
-        ("Imagem Informativa", "", "12/08", True),
+        ("Vídeo - Min. do Conhecimento", "i9mtra", "11/08", True),
+        ("Imagem Informativa", "Carros com Vazamento de Ar", "12/08", True),
         ("Podcast - Fala, Motô!", "", "13/08", True),
-        # 14/08 e o dia da geracao: fora da janela analisada (01 a 13/08), entra como
-        # programado. Vira True quando o relatorio da proxima semana for gerado.
-        ("Enquete de Fixação", "", "14/08", False),
+        ("Enquete de Fixação", "Carros com Vazamento de Ar", "14/08", True),
     ]),
     ("3ª Semana", "17 a 21/08", [
         ("Imagem Motivacional", "", "17/08", False),
@@ -1582,7 +1580,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div>{_crono_left}</div>
     <div>{_crono_right}
       <div class="cons-box"><div class="cons-title">Sobre o cronograma</div>
-      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos já foram executados — a série da 1ª semana foi "Parado Ligado: Consumo ou Desperdício?", trabalhada em vídeo, imagem informativa e enquete de fixação para reforçar o custo do motor em marcha lenta, somada ao podcast "Benefícios sem Mistério: Entenda Como Tudo Funciona". {_crono_pend}</div></div>
+      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos já foram executados. A série da 1ª semana foi "Parado Ligado: Consumo ou Desperdício?", trabalhada em vídeo, imagem informativa e enquete de fixação para reforçar o custo do motor em marcha lenta, somada ao podcast "Benefícios sem Mistério: Entenda Como Tudo Funciona". A 2ª semana tratou de "Carros com Vazamento de Ar" em imagem informativa e enquete de fixação, tema de manutenção que impacta diretamente o consumo. {_crono_pend}</div></div>
     </div>
   </div>
   {footer(18)}

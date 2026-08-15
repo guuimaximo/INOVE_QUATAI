@@ -387,36 +387,60 @@ if _ac:
     if _c:
         _rota, _cond = _c["efeito_rota"], _c["efeito_conducao"]
         _manda = "conducao" if abs(_cond) >= abs(_rota) else "rota"
-        _vel_txt = ""
+        # Velocidade media e a peca que o consumo ideal NAO enxerga: a base calcula o
+        # ideal pela rota, nao pelo transito do dia. Se a velocidade caiu, uma parte do
+        # "desperdicio" e motor parado em congestionamento, e nao tecnica de conducao -
+        # e a acao muda completamente (falar com a operacao, nao com o motorista). Por
+        # isso a queda de velocidade entra como ressalva no veredito, nao como rodape.
+        _vel_var = None
         if _c["vel_ant"] and _c["vel_ref"]:
-            _dv = _c["vel_ref"] - _c["vel_ant"]
-            _vel_txt = (f" A velocidade média passou de {fmt(_c['vel_ant'],1)} para "
-                        f"{fmt(_c['vel_ref'],1)} km/h"
-                        + (" — trânsito mais parado puxa o consumo para cima."
-                           if _dv < -0.5 else
-                           " — praticamente igual, então não foi trânsito."
-                           if abs(_dv) <= 0.5 else
-                           " — mais rápido, o que costuma ajudar o consumo."))
+            _vel_var = 100 * (_c["vel_ref"] - _c["vel_ant"]) / _c["vel_ant"]
+        _vel_caiu = _vel_var is not None and _vel_var <= -2.0
+        _vel_txt = ""
+        if _vel_var is not None and not _vel_caiu:
+            _vel_txt = (f" A velocidade média ficou em {fmt(_c['vel_ref'],1)} km/h "
+                        f"(era {fmt(_c['vel_ant'],1)}), então não foi trânsito."
+                        if abs(_vel_var) < 2.0 else
+                        f" A velocidade média subiu de {fmt(_c['vel_ant'],1)} para "
+                        f"{fmt(_c['vel_ref'],1)} km/h, o que costuma ajudar o consumo.")
         if _manda == "conducao" and _cond < 0:
-            _veredito = (f"<b>A operação não ficou mais pesada — quem piorou foi a condução.</b> "
-                         f"O consumo que as rotas do {_CL} pediam ficou praticamente igual "
+            _veredito = (f"O consumo que as rotas do {_CL} pediam ficou praticamente igual "
                          f"({fmt(_c['ideal_ant'],2)} &rarr; {fmt(_c['ideal_ref'],2)} L/100km), "
                          f"mas o que se gastou acima disso subiu de {fmt(_c['exc_ant'],2)} para "
-                         f"{fmt(_c['exc_ref'],2)} L/100km. Na quilometragem do mês isso dá "
+                         f"{fmt(_c['exc_ref'],2)} L/100km — na quilometragem do mês, "
                          f"<b>{abs(_c['litros_extra'])} litros queimados a mais</b> do que se o "
-                         f"cluster tivesse mantido o desperdício de {MESANT_NOME.lower()}.{_vel_txt}")
+                         f"cluster tivesse mantido o desperdício de {MESANT_NOME.lower()}.")
+            if _vel_caiu:
+                _veredito = (
+                    f"<b>Sobrou consumo, mas o trânsito também piorou — não dá para cobrar "
+                    f"só o motorista.</b> " + _veredito +
+                    f" <b>Atenção:</b> a velocidade média caiu de {fmt(_c['vel_ant'],1)} para "
+                    f"{fmt(_c['vel_ref'],1)} km/h ({pct(_vel_var)}), e o consumo ideal é "
+                    f"calculado pela rota, sem levar trânsito em conta. Boa parte desses "
+                    f"{abs(_c['litros_extra'])} litros pode ser motor parado em "
+                    f"congestionamento, não técnica de condução. Antes de tratar como "
+                    f"comportamento, vale conferir o que aconteceu com o tempo de viagem "
+                    f"das linhas do {_CL} no período.")
+            else:
+                _veredito = (f"<b>A operação não ficou mais pesada — quem piorou foi a "
+                             f"condução.</b> " + _veredito + _vel_txt)
         elif _manda == "rota" and _rota < 0:
             _veredito = (f"<b>A operação ficou mais pesada.</b> O consumo que as próprias rotas do "
                          f"{_CL} pediam subiu de {fmt(_c['ideal_ant'],2)} para {fmt(_c['ideal_ref'],2)} "
                          f"L/100km — isso não é condução, é a operação (trânsito, itinerário, carga). "
                          f"O desperdício sobre o ideal ficou em {fmt(_c['exc_ref'],2)} L/100km "
-                         f"(era {fmt(_c['exc_ant'],2)}).{_vel_txt}")
+                         f"(era {fmt(_c['exc_ant'],2)}).{_vel_txt}"
+                         + (f" A velocidade média caiu de {fmt(_c['vel_ant'],1)} para "
+                            f"{fmt(_c['vel_ref'],1)} km/h ({pct(_vel_var)}), reforçando a "
+                            f"leitura de operação." if _vel_caiu else ""))
         else:
             _veredito = (f"O consumo ideal das rotas foi de {fmt(_c['ideal_ant'],2)} para "
                          f"{fmt(_c['ideal_ref'],2)} L/100km e o desperdício sobre ele de "
                          f"{fmt(_c['exc_ant'],2)} para {fmt(_c['exc_ref'],2)} L/100km, "
                          f"o que dá {_sinal(_rota)} km/L de operação e {_sinal(_cond)} km/L "
-                         f"de condução.{_vel_txt}")
+                         f"de condução.{_vel_txt}"
+                         + (f" A velocidade média caiu {pct(_vel_var)}, e o consumo ideal "
+                            f"não leva trânsito em conta." if _vel_caiu else ""))
         _bloco = f"""
   <div class="cons-box" style="margin:0 0 7px 0;border-left:5px solid {_cor_var};">
     <div class="cons-title">Por que o {_CL} {'caiu' if _piorou else 'subiu'}</div>

@@ -1994,19 +1994,30 @@ def _cap_titulo(t):
     return " ".join(saida)
 
 
-_idx_linhas = "".join(
-    f'<tr style="background:{"#ffffff" if i % 2 else "#EAF4F2"};">'
-    f'<td style="width:52px;text-align:center;font-size:11.5px;font-weight:800;'
-    f'color:#0E7C6E;padding:7px 4px;">{n:02d}</td>'
-    f'<td style="text-align:left;padding:7px 14px;font-size:11px;color:#1F2D2B;">'
-    f'{_cap_titulo(t)}</td></tr>'
-    for i, (n, t) in enumerate(_idx))
+# O indice era uma coluna so. Com as paginas novas passou de 20 entradas, estourou a
+# altura fixa da folha e o PDF ganhou uma pagina extra sem rodape (a verificacao de
+# layout pegou). Em duas colunas cabe ate ~30 sem apertar a linha.
+def _idx_coluna(itens):
+    return "".join(
+        f'<tr style="background:{"#ffffff" if i % 2 else "#EAF4F2"};">'
+        f'<td style="width:44px;text-align:center;font-size:10.5px;font-weight:800;'
+        f'color:#0E7C6E;padding:5px 4px;">{n:02d}</td>'
+        f'<td style="text-align:left;padding:5px 10px;font-size:9.6px;color:#1F2D2B;">'
+        f'{_cap_titulo(t)}</td></tr>'
+        for i, (n, t) in enumerate(itens))
+
+
+_idx_meio = (len(_idx) + 1) // 2
+_idx_esq = _idx_coluna(_idx[:_idx_meio])
+_idx_dir = _idx_coluna(_idx[_idx_meio:])
 
 pages.insert(1, f"""<div class="page-break"></div><div class="page">
   {page_header("Índice do relatório", f"Condução Econômica · Flash Report Diesel", "Mês", MESREF, numerar=False)}
   <div class="card"><div class="card-title">Conteúdo</div><div class="card-body" style="padding:6px 10px;">
-    <table style="border-collapse:separate;border-spacing:0;">
-      <tbody>{_idx_linhas}</tbody></table>
+    <div class="grid-2" style="gap:14px;margin-bottom:0;">
+      <table style="border-collapse:separate;border-spacing:0;"><tbody>{_idx_esq}</tbody></table>
+      <table style="border-collapse:separate;border-spacing:0;"><tbody>{_idx_dir}</tbody></table>
+    </div>
   </div></div>
   <div class="cons-box"><div class="cons-title">Como ler este relatório</div>
   <div class="cons-text">{_COMO_LER_JANELA} O KM/L oficial vem do Transnet; a Telemetria entra como fonte de comparação, e divergências entre as duas são tratadas na página 17. Uma faixa vermelha na capa indica que alguma página não conseguiu carregar dado atualizado.</div></div>

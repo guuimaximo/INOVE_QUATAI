@@ -344,117 +344,147 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 </div>""")
 
 # ============ PAGINA DEDICADA: DIAGNOSTICO DO CLUSTER (por que variou) ============
-# A pagina inteira so existe se houver dado ao vivo: sem premiacao_diaria nao da para
-# separar linha/motorista/veiculo, e uma pagina de diagnostico com numero velho e pior
-# que pagina nenhuma. O cluster investigado sai de gfd.CLUSTER_DIAGNOSTICO.
+# A primeira versao respondia "trocou de linha?" com uma decomposicao mix x desempenho.
+# Estava certa, mas ninguem le um relatorio para descobrir que "o mix explica -0,001": a
+# pergunta e POR QUE caiu. A premiacao_diaria traz litros_ideais - o consumo que a viagem
+# deveria ter tido nas condicoes dela - e em litros/100km vale real = ideal + excesso.
+# Entao da para dizer, em portugues, se a operacao ficou mais pesada ou se andaram pior,
+# e quanto isso custou EM LITROS. O mix x desempenho vira uma linha de rodape.
 _ac = gfd.ANALISE_CLUSTER
 if _ac:
     _CL = _ac["cluster"]
+    _c = _ac.get("causa")
     _d_lin, _d_mot = _ac["dims"]["linha"], _ac["dims"]["motorista"]
     _piorou = _ac["delta"] < 0
-    _seta = "queda" if _piorou else "alta"
     _cor_var = "#c0392b" if _piorou else "#1e7a34"
 
     def _sinal(v, casas=3):
-        """+0,012 / -0,045 — o sinal e o que importa numa tabela de contribuicao."""
-        return ("+" if v >= 0 else "−") + fmt(abs(v), casas)
+        return ("+" if v >= 0 else "\u2212") + fmt(abs(v), casas)
 
-    def _linhas_tabela(dim, n=6, rotulo_km="km"):
-        """As n maiores contribuicoes negativas; se sobrar espaco, a maior positiva,
-        para a tabela nao dar a impressao de que tudo no cluster piorou."""
-        itens = [i for i in dim["itens"] if i["km_ant"] or i["km_ref"]]
-        piores = itens[:n]
-        melhor = [i for i in reversed(itens) if i["contrib"] > 0 and i not in piores][:1]
+    def _mil(v):
+        return fmt(v / 1000, 1) + " mil"
+
+    def _tab_causa(itens, e_motorista, n=6):
+        """Piores primeiro; a lista ja vem filtrada por km minimo nos dois meses."""
         out = ""
-        for i in piores + melhor:
-            tag = ""
-            if i["entrou"]:
-                tag = '<span style="font-size:6.6px;font-weight:800;color:#0A5A50;"> ENTROU</span>'
-            elif i["saiu"]:
-                tag = '<span style="font-size:6.6px;font-weight:800;color:#9AAEAA;"> SAIU</span>'
-            _ka = f"{i['km_ant']/1000:.1f}".replace(".", ",")
-            _kr = f"{i['km_ref']/1000:.1f}".replace(".", ",")
-            _kl = (f"{fmt(i['kml_ant'],3)} &rarr; {fmt(i['kml_ref'],3)}"
-                   if i["kml_ant"] and i["kml_ref"] else
-                   (fmt(i["kml_ref"], 3) if i["kml_ref"] else fmt(i["kml_ant"], 3)))
-            _cc = "#c0392b" if i["contrib"] < 0 else "#1e7a34"
-            out += (f"<tr><td style='text-align:left;padding-left:7px;font-weight:700;'>{i['nome'][:26]}{tag}</td>"
-                    f"<td>{_ka} &rarr; {_kr}</td>"
-                    f"<td>{fmt(i['share_ant'],1)}% &rarr; {fmt(i['share_ref'],1)}%</td>"
-                    f"<td style='font-size:7.6px;'>{_kl}</td>"
-                    f"<td style='color:{_cc};font-weight:800;'>{_sinal(i['contrib'])}</td></tr>")
-        return out
+        for i in itens[:n]:
+            nome = i["nome"][:28].title() if e_motorista else i["nome"]
+            cor = "#c0392b" if i["litros_extra"] > 0 else "#1e7a34"
+            extra = ("+" if i["litros_extra"] > 0 else "\u2212") + str(abs(i["litros_extra"]))
+            out += ("<tr>"
+                    f"<td style='text-align:left;padding-left:7px;font-weight:700;'>{nome}</td>"
+                    f"<td>{_mil(i['km_ref'])}</td>"
+                    f"<td>{fmt(i['kml_ant'],3)} &rarr; <b>{fmt(i['kml_ref'],3)}</b></td>"
+                    f"<td>{fmt(i['exc_ant'],1)} &rarr; <b>{fmt(i['exc_ref'],1)}</b></td>"
+                    f"<td style='color:{cor};font-weight:800;'>{extra} L</td>"
+                    "</tr>")
+        return out or "<tr><td colspan='5' style='color:#6B7C79;'>Sem registros com quilometragem suficiente nos dois meses.</td></tr>"
 
-    _cab = (f"<thead><tr><th style='text-align:left;padding-left:7px;'>{{0}}</th>"
-            f"<th>km mil {MES3ANT}&rarr;{MES3REF}</th><th>Participação</th>"
-            f"<th>KM/L {MES3ANT}&rarr;{MES3REF}</th><th>Impacto km/L</th></tr></thead>")
+    _cab_causa = ("<thead><tr><th style='text-align:left;padding-left:7px;'>{rot}</th>"
+                  f"<th>Km rodado</th><th>KM/L {MES3ANT}&rarr;{MES3REF}</th>"
+                  "<th>Desperd\u00edcio<br/>L/100km</th><th>Litros a mais<br/>no m\u00eas</th></tr></thead>")
 
-    # ---- veredito: qual recorte explica mais, e dentro dele mix ou desempenho ----
-    _dom_lin = "mix" if abs(_d_lin["mix"]) > abs(_d_lin["desemp"]) else "desemp"
-    _dom_mot = "mix" if abs(_d_mot["mix"]) > abs(_d_mot["desemp"]) else "desemp"
-    _txt_lin = ("a **troca de linhas** — os carros do cluster passaram a rodar um conjunto "
-                "de linhas diferente" if _dom_lin == "mix" else
-                "o **desempenho dentro das mesmas linhas** — o mix de linhas praticamente "
-                "não mudou, o consumo por linha é que piorou")
-    _txt_mot = ("**mudança de motoristas** no cluster" if _dom_mot == "mix" else
-                "**os mesmos motoristas** passando a consumir mais")
-    _piores_lin = [i["nome"] for i in _d_lin["itens"][:2] if i["contrib"] < 0]
-    _piores_mot = [i["nome"].title() for i in _d_mot["itens"][:2] if i["contrib"] < 0]
-    _entraram = [i["nome"] for i in _d_lin["itens"] if i["entrou"]][:3]
-    _sairam = [i["nome"] for i in _d_lin["itens"] if i["saiu"]][:3]
-    _txt_diag = (
-        f"Os dois meses estão cortados no dia {_ac['dia_max']:02d} — comparar {MESREF_NOME.lower()} "
-        f"parcial com {MESANT_NOME.lower()} inteiro distorceria o mix. "
-        f"O {_CL} saiu de {fmt(_ac['kml_ant'],3)} para {fmt(_ac['kml_ref'],3)} km/L pela telemetria "
-        f"({pct(_ac['var_pct'])}), uma {_seta} de {fmt(abs(_ac['delta']),3)} km/L. "
-        f"Separando a variação: pelo recorte de <b>linha</b>, {fmt(abs(_d_lin['mix']),3)} km/L vêm do mix "
-        f"e {fmt(abs(_d_lin['desemp']),3)} km/L do desempenho — ou seja, o que pesa é "
-        + _txt_lin.replace("**", "") + ". "
-        f"Pelo recorte de <b>motorista</b>, {fmt(abs(_d_mot['mix']),3)} km/L vêm do mix e "
-        f"{fmt(abs(_d_mot['desemp']),3)} km/L do desempenho, apontando para "
-        + _txt_mot.replace("**", "") + ". ")
-    if _piores_lin:
-        _txt_diag += f"Linhas que mais puxaram para baixo: {', '.join(_piores_lin)}. "
-    if _entraram:
-        _txt_diag += f"Entraram no cluster: {', '.join(_entraram)}. "
-    if _sairam:
-        _txt_diag += f"Saíram: {', '.join(_sairam)}. "
-    if _piores_mot:
-        _txt_diag += f"Motoristas com maior impacto negativo: {', '.join(_piores_mot)}."
-    _nota_oficial = ""
-    if _ac.get("kml_ref_oficial"):
-        _nota_oficial = (f"O KM/L oficial (Transnet) do {_CL} é "
-                         f"{fmt(_ac['kml_ant_oficial'],3)} &rarr; {fmt(_ac['kml_ref_oficial'],3)}; "
-                         f"a decomposição roda sobre a telemetria, única fonte que traz linha, "
-                         f"motorista e veículo no mesmo registro, por isso os números não são idênticos. ")
-    _nota_pior = ""
-    if _ac.get("pior_cluster") and _ac["pior_cluster"] != _CL:
-        _nota_pior = (f"Atenção: no mês, quem mais caiu não foi o {_CL} e sim o "
-                      f"{_ac['pior_cluster']}. ")
-
-    pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header(f"Diagnóstico do Cluster {_CL} — por que o KM/L variou",
-               f"Período: <b>{periodo_label}</b> · {MESANT_NOME} cortado no mesmo dia (01 a {_ac['dia_max']:02d}) para a comparação ser justa · decomposição mix × desempenho sobre a telemetria",
-               "Variação no mês", pct(_ac['var_pct']))}
-  <div class="grid-4" style="margin-bottom:7px;">
-    <div class="metric"><div class="lbl">KM/L {MES3ANT} (telemetria)</div><div class="val">{fmt(_ac['kml_ant'],3)}</div><div class="aux">{_ac['km_ant']/1000:.0f} mil km rodados</div></div>
-    <div class="metric"><div class="lbl">KM/L {MES3REF} (telemetria)</div><div class="val" style="color:{_cor_var};">{fmt(_ac['kml_ref'],3)}</div><div class="aux">{_ac['km_ref']/1000:.0f} mil km rodados</div></div>
-    <div class="metric"><div class="lbl">Variação</div><div class="val" style="color:{_cor_var};">{_sinal(_ac['delta'])}</div><div class="aux">{pct(_ac['var_pct'])} vs {MESANT_NOME.lower()}</div></div>
-    <div class="metric"><div class="lbl">Frota e condutores</div><div class="val" style="font-size:12px;">{_ac['n_veic_ref']} carros · {_ac['n_mot_ref']} motoristas</div><div class="aux">era {_ac['n_veic_ant']} carros · {_ac['n_mot_ant']} motoristas</div></div>
-  </div>
-  <div class="card" style="margin-bottom:7px;"><div class="card-title">De onde veio a variação — mix (quem rodou o km) × desempenho (consumo do mesmo grupo)</div><div class="card-body" style="padding:4px 8px;">
-    <div class="chart-wrap chart-wrap-diag" style="border:none;padding:0;"><img src="v3_cluster_diag.png"/></div>
+    if _c:
+        _rota, _cond = _c["efeito_rota"], _c["efeito_conducao"]
+        _manda = "conducao" if abs(_cond) >= abs(_rota) else "rota"
+        _vel_txt = ""
+        if _c["vel_ant"] and _c["vel_ref"]:
+            _dv = _c["vel_ref"] - _c["vel_ant"]
+            _vel_txt = (f" A velocidade m\u00e9dia passou de {fmt(_c['vel_ant'],1)} para "
+                        f"{fmt(_c['vel_ref'],1)} km/h"
+                        + (" \u2014 tr\u00e2nsito mais parado puxa o consumo para cima."
+                           if _dv < -0.5 else
+                           " \u2014 praticamente igual, ent\u00e3o n\u00e3o foi tr\u00e2nsito."
+                           if abs(_dv) <= 0.5 else
+                           " \u2014 mais r\u00e1pido, o que costuma ajudar o consumo."))
+        if _manda == "conducao" and _cond < 0:
+            _veredito = (f"<b>A opera\u00e7\u00e3o n\u00e3o ficou mais pesada \u2014 quem piorou foi a condu\u00e7\u00e3o.</b> "
+                         f"O consumo que as rotas do {_CL} pediam ficou praticamente igual "
+                         f"({fmt(_c['ideal_ant'],2)} &rarr; {fmt(_c['ideal_ref'],2)} L/100km), "
+                         f"mas o que se gastou acima disso subiu de {fmt(_c['exc_ant'],2)} para "
+                         f"{fmt(_c['exc_ref'],2)} L/100km. Na quilometragem do m\u00eas isso d\u00e1 "
+                         f"<b>{abs(_c['litros_extra'])} litros queimados a mais</b> do que se o "
+                         f"cluster tivesse mantido o desperd\u00edcio de {MESANT_NOME.lower()}.{_vel_txt}")
+        elif _manda == "rota" and _rota < 0:
+            _veredito = (f"<b>A opera\u00e7\u00e3o ficou mais pesada.</b> O consumo que as pr\u00f3prias rotas do "
+                         f"{_CL} pediam subiu de {fmt(_c['ideal_ant'],2)} para {fmt(_c['ideal_ref'],2)} "
+                         f"L/100km \u2014 isso n\u00e3o \u00e9 condu\u00e7\u00e3o, \u00e9 a opera\u00e7\u00e3o (tr\u00e2nsito, itiner\u00e1rio, carga). "
+                         f"O desperd\u00edcio sobre o ideal ficou em {fmt(_c['exc_ref'],2)} L/100km "
+                         f"(era {fmt(_c['exc_ant'],2)}).{_vel_txt}")
+        else:
+            _veredito = (f"O consumo ideal das rotas foi de {fmt(_c['ideal_ant'],2)} para "
+                         f"{fmt(_c['ideal_ref'],2)} L/100km e o desperd\u00edcio sobre ele de "
+                         f"{fmt(_c['exc_ant'],2)} para {fmt(_c['exc_ref'],2)} L/100km, "
+                         f"o que d\u00e1 {_sinal(_rota)} km/L de opera\u00e7\u00e3o e {_sinal(_cond)} km/L "
+                         f"de condu\u00e7\u00e3o.{_vel_txt}")
+        _bloco = f"""
+  <div class="cons-box" style="margin:0 0 7px 0;border-left:5px solid {_cor_var};">
+    <div class="cons-title">Por que o {_CL} {'caiu' if _piorou else 'subiu'}</div>
+    <div class="cons-text" style="font-size:10.2px;line-height:1.4;">{_veredito}</div></div>
+  <div class="card" style="margin-bottom:7px;"><div class="card-title">Da {'queda' if _piorou else 'alta'} de {fmt(abs(_ac['delta']),3)} km/L, quanto veio de cada coisa</div><div class="card-body" style="padding:4px 8px;">
+    <div class="chart-wrap chart-wrap-diag" style="border:none;padding:0;"><img src="v3_cluster_cascata.png"/></div>
   </div></div>
   <div class="grid-2">
-    <div class="card"><div class="card-title">Por linha — maiores impactos no KM/L do {_CL}</div><div class="card-body" style="padding:5px 7px;">
-      <table class="tbl-compact">{_cab.format("Linha")}<tbody>{_linhas_tabela(_d_lin)}</tbody></table>
+    <div class="card"><div class="card-title">Carros que mais desperdi\u00e7aram (m\u00edn. 500 km nos dois meses)</div><div class="card-body" style="padding:5px 7px;">
+      <table class="tbl-compact">{_cab_causa.format(rot="Carro")}<tbody>{_tab_causa(_c['carros'], False)}</tbody></table>
     </div></div>
-    <div class="card"><div class="card-title">Por motorista — maiores impactos no KM/L do {_CL}</div><div class="card-body" style="padding:5px 7px;">
-      <table class="tbl-compact">{_cab.format("Motorista")}<tbody>{_linhas_tabela(_d_mot)}</tbody></table>
+    <div class="card"><div class="card-title">Motoristas que mais desperdi\u00e7aram (m\u00edn. 500 km nos dois meses)</div><div class="card-body" style="padding:5px 7px;">
+      <table class="tbl-compact">{_cab_causa.format(rot="Motorista")}<tbody>{_tab_causa(_c['motoristas'], True)}</tbody></table>
     </div></div>
-  </div>
-  <div class="cons-box"><div class="cons-title">Diagnóstico</div>
-  <div class="cons-text">{_nota_pior}{_txt_diag} {_nota_oficial}</div></div>
+  </div>"""
+        _kpis = f"""
+    <div class="metric"><div class="lbl">KM/L do {_CL}</div><div class="val" style="color:{_cor_var};font-size:13px;">{fmt(_ac['kml_ant'],3)} &rarr; {fmt(_ac['kml_ref'],3)}</div><div class="aux">{pct(_ac['var_pct'])} vs {MESANT_NOME.lower()}, mesma janela</div></div>
+    <div class="metric"><div class="lbl">Litros queimados a mais</div><div class="val" style="color:{_cor_var};">{abs(_c['litros_extra'])} L</div><div class="aux">al\u00e9m do desperd\u00edcio de {MESANT_NOME.lower()}</div></div>
+    <div class="metric"><div class="lbl">Consumo que a rota pedia</div><div class="val" style="font-size:13px;">{fmt(_c['ideal_ant'],2)} &rarr; {fmt(_c['ideal_ref'],2)}</div><div class="aux">L/100km \u2014 dificuldade da opera\u00e7\u00e3o</div></div>
+    <div class="metric"><div class="lbl">Desperd\u00edcio sobre o ideal</div><div class="val" style="font-size:13px;">{fmt(_c['exc_ant'],2)} &rarr; {fmt(_c['exc_ref'],2)}</div><div class="aux">L/100km \u2014 o que depende da condu\u00e7\u00e3o</div></div>"""
+    else:
+        _bloco = f"""
+  <div class="cons-box" style="margin:0 0 7px 0;"><div class="cons-title">Sem litros ideais no per\u00edodo</div>
+  <div class="cons-text">A base n\u00e3o trouxe <i>litros_ideais</i> para o {_CL} nos dois meses, ent\u00e3o n\u00e3o d\u00e1 para separar opera\u00e7\u00e3o de condu\u00e7\u00e3o. Fica s\u00f3 a leitura de composi\u00e7\u00e3o.</div></div>
+  <div class="card"><div class="card-title">Composi\u00e7\u00e3o \u2014 mix (quem rodou o km) \u00d7 desempenho</div><div class="card-body" style="padding:4px 8px;">
+    <div class="chart-wrap chart-wrap-diag" style="border:none;padding:0;"><img src="v3_cluster_diag.png"/></div>
+  </div></div>"""
+        _kpis = f"""
+    <div class="metric"><div class="lbl">KM/L do {_CL}</div><div class="val" style="color:{_cor_var};font-size:13px;">{fmt(_ac['kml_ant'],3)} &rarr; {fmt(_ac['kml_ref'],3)}</div><div class="aux">{pct(_ac['var_pct'])} vs {MESANT_NOME.lower()}</div></div>
+    <div class="metric"><div class="lbl">Km rodado</div><div class="val">{_mil(_ac['km_ref'])}</div><div class="aux">era {_mil(_ac['km_ant'])}</div></div>
+    <div class="metric"><div class="lbl">Frota</div><div class="val">{_ac['n_veic_ref']} carros</div><div class="aux">era {_ac['n_veic_ant']}</div></div>
+    <div class="metric"><div class="lbl">Motoristas</div><div class="val">{_ac['n_mot_ref']}</div><div class="aux">era {_ac['n_mot_ant']}</div></div>"""
+
+    # Rodape: a pergunta "trocou de linha?" respondida em uma frase, sem tomar a pagina.
+    _trocou = abs(_d_lin["mix"]) > abs(_d_lin["desemp"])
+    _trocou_mot = abs(_d_mot["mix"]) > abs(_d_mot["desemp"])
+    _entraram = [i["nome"] for i in _d_lin["itens"] if i["entrou"]][:3]
+    _sairam = [i["nome"] for i in _d_lin["itens"] if i["saiu"]][:3]
+    _rod = ("<b>Trocou de linha?</b> "
+            + (f"Sim \u2014 a mudan\u00e7a no conjunto de linhas responde por {_sinal(_d_lin['mix'])} km/L, "
+               f"mais que o desempenho dentro delas ({_sinal(_d_lin['desemp'])})."
+               if _trocou else
+               f"N\u00e3o \u2014 o mix de linhas responde por apenas {_sinal(_d_lin['mix'])} km/L; o peso "
+               f"est\u00e1 no desempenho dentro das mesmas linhas ({_sinal(_d_lin['desemp'])}).")
+            + " <b>Trocou de motorista?</b> "
+            + (f"Sim \u2014 a troca responde por {_sinal(_d_mot['mix'])} km/L."
+               if _trocou_mot else
+               f"N\u00e3o \u2014 a troca responde por {_sinal(_d_mot['mix'])} km/L, contra "
+               f"{_sinal(_d_mot['desemp'])} dos mesmos motoristas."))
+    if _entraram:
+        _rod += f" Linhas que entraram: {', '.join(_entraram)}."
+    if _sairam:
+        _rod += f" Sa\u00edram: {', '.join(_sairam)}."
+    if _ac.get("kml_ref_oficial"):
+        _rod += (f" KM/L oficial (Transnet) do {_CL}: {fmt(_ac['kml_ant_oficial'],3)} &rarr; "
+                 f"{fmt(_ac['kml_ref_oficial'],3)} \u2014 a conta acima roda sobre a telemetria, "
+                 f"\u00fanica fonte com linha, motorista e ve\u00edculo no mesmo registro.")
+    if _ac.get("pior_cluster") and _ac["pior_cluster"] != _CL:
+        _rod = f"No m\u00eas, quem mais caiu n\u00e3o foi o {_CL} e sim o {_ac['pior_cluster']}. " + _rod
+
+    pages.append(f"""<div class="page-break"></div><div class="page">
+  {page_header(f"Diagn\u00f3stico do Cluster {_CL} \u2014 por que o KM/L variou",
+               f"Per\u00edodo: <b>{periodo_label}</b> \u00b7 {MESANT_NOME} cortado no mesmo dia (01 a {_ac['dia_max']:02d}) para a compara\u00e7\u00e3o ser justa",
+               "Varia\u00e7\u00e3o no m\u00eas", pct(_ac['var_pct']))}
+  <div class="grid-4" style="margin-bottom:7px;">{_kpis}
+  </div>{_bloco}
+  <div class="cons-box"><div class="cons-title">O que N\u00c3O explica a varia\u00e7\u00e3o</div>
+  <div class="cons-text">{_rod}</div></div>
   {footer(0)}
 </div>""")
 
@@ -1608,17 +1638,23 @@ FOTOS_NOTURNO_ARQUIVOS = [
 ]
 # inline-block em vez de flex de proposito: o flex-wrap do WeasyPrint nao e confiavel e as
 # fotos empilhavam uma por linha. font-size:0 no pai mata o espaco entre os inline-blocks.
-# 32% + 0,3% de margem dos dois lados = 97,8% - a folga evita a quebra de linha por
-# arredondamento, que jogava a terceira foto para baixo.
+# As fotos ficavam num card de meia folha, com ~155px de largura cada - o registro da
+# visita saia espremido. Agora a faixa e um card de largura cheia embaixo dos dois cards
+# de texto, entao cada foto ganha ~1/3 da folha (o dobro de area). A altura acompanha.
+# A largura se divide pelo numero de fotos, com folga para o arredondamento nao quebrar
+# a linha: com 4 fotos elas ficam menores em vez de a quarta cair sozinha embaixo.
+_N_FOTOS = max(len(FOTOS_NOTURNO_ARQUIVOS), 1)
+_LARG_FOTO = 99.0 / _N_FOTOS - 0.8
 FOTOS_NOTURNO = "".join(
-    f'<div style="display:inline-block;width:32%;height:96px;margin:0 .3%;'
-    f'border-radius:8px;overflow:hidden;border:1px solid #CFE4DF;vertical-align:top;">'
+    f'<div style="display:inline-block;width:{_LARG_FOTO:.2f}%;height:150px;margin:0 .4%;'
+    f'border-radius:10px;overflow:hidden;border:1px solid #CFE4DF;vertical-align:top;">'
     f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;'
     f'object-position:center {_foco};display:block;"/></div>'
     for _f, _foco in FOTOS_NOTURNO_ARQUIVOS)
 FOTOS_NOTURNO_BLOCO = (
-    f'<div style="margin-top:7px;text-align:center;font-size:0;line-height:0;">'
-    f'{FOTOS_NOTURNO}</div>'
+    f'<div class="card" style="margin-top:7px;"><div class="card-title">Registro fotogr\u00e1fico da visita</div>'
+    f'<div class="card-body" style="padding:7px 8px;text-align:center;font-size:0;line-height:0;">'
+    f'{FOTOS_NOTURNO}</div></div>'
     if FOTOS_NOTURNO_ARQUIVOS else "")
 # ================= PAGINA 17: ACOMPANHAMENTO NOTURNO =================
 # Esta pagina tem so dois cards curtos e sobrava quase metade da folha em branco (a visita
@@ -1627,7 +1663,7 @@ FOTOS_NOTURNO_BLOCO = (
 # de ficar espremido no topo. margin-bottom deixa a faixa do rodape livre - ele e absoluto.
 pages.append(f"""<div class="page-break"></div><div class="page" style="display:flex;flex-direction:column;">
   {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "28/08")}
-  <div class="grid-2" style="flex:1;min-height:0;margin-bottom:9mm;">
+  <div class="grid-2" style="flex:1;min-height:0;margin-bottom:0;">
     <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
       <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:4px;flex:1;">{CAL_JULHO_CELLS}</div>
@@ -1640,11 +1676,11 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
       <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático com os manobristas em campo, com acompanhamento do instrutor, trabalhando a dinâmica “o instrutor leva e o manobrista traz”, proporcionando mais segurança e confiança durante as manobras.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">Também foi realizado teste prático de manobrista para motorista, sendo o colaborador Maurício <b>APROVADO</b> na avaliação e apto a exercer a função de motorista.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">Treinamento, avaliação e desenvolvimento profissional em busca de mais segurança e qualidade na operação.</div>
-      {FOTOS_NOTURNO_BLOCO}
       <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">28/08/2026</div>
         <div style="font-size:7.6px;color:#48605C;margin-top:2px;">2ª e última visita noturna de agosto</div></div>
     </div></div>
   </div>
+  {FOTOS_NOTURNO_BLOCO}
   {footer(17)}
 </div>""")
 

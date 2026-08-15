@@ -858,6 +858,77 @@ def _decompor_kml(ant, ref):
     }
 
 
+def _perfil(rows):
+    """Soma km, litros consumidos, litros ideais e minutos de um conjunto de registros.
+
+    `litros_ideais` e o consumo que a viagem DEVERIA ter tido nas condicoes dela (mesma
+    base que a pagina de desperdicio por linha usa). E o que permite responder 'por que
+    caiu': se o ideal subiu, a operacao ficou mais pesada (transito, rota, carga); se o
+    que subiu foi a sobra em cima do ideal, quem piorou foi a conducao.
+    """
+    km = lt = li = mi = 0.0
+    for r in rows:
+        _km, _lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+        if not (_km and _lt):
+            continue
+        km += _km
+        lt += _lt
+        li += _num(r.get("litros_ideais")) or 0.0
+        mi += _num(r.get("minutos_em_viagem")) or 0.0
+    return {"km": km, "litros": lt, "ideais": li, "min": mi}
+
+
+def _por_100(p):
+    """Litros por 100 km: real, ideal e o excesso do real sobre o ideal. Trabalhar em
+    litros/100km (e nao em km/L) e o que deixa a conta somar: real = ideal + excesso."""
+    if not p["km"]:
+        return None
+    return {"real": 100 * p["litros"] / p["km"],
+            "ideal": 100 * p["ideais"] / p["km"],
+            "exc": 100 * (p["litros"] - p["ideais"]) / p["km"],
+            "vel": (p["km"] * 60 / p["min"]) if p["min"] else None}
+
+
+def _causa_cluster(ant, ref, chave, km_min=500.0):
+    """Ranking de carros/motoristas por LITROS A MAIS desperdicados, no mesmo volume de km.
+
+    Exige km_min nos DOIS meses: sem isso o ranking era tomado por quem rodou 100 km
+    (meia dezena de viagens), que oscila muito e nao diz nada sobre o cluster. Era o que
+    fazia a tabela listar motorista com 0,1 mil km como 'maior impacto'.
+    """
+    from collections import defaultdict as _dd2
+    ga, gr = _dd2(list), _dd2(list)
+    for r in ant:
+        ga[str(r.get(chave) or "").strip()].append(r)
+    for r in ref:
+        gr[str(r.get(chave) or "").strip()].append(r)
+    out = []
+    for k in set(ga) & set(gr):
+        if not k:
+            continue
+        pa, pr = _perfil(ga[k]), _perfil(gr[k])
+        if pa["km"] < km_min or pr["km"] < km_min:
+            continue
+        ca, cr = _por_100(pa), _por_100(pr)
+        if not (ca and cr) or not (pa["ideais"] and pr["ideais"]):
+            continue
+        # litros que teriam sido economizados se o excesso tivesse ficado no nivel do mes
+        # anterior - ou seja, o desperdicio ADICIONAL, ja no volume de km do mes atual
+        litros_extra = pr["km"] * (cr["exc"] - ca["exc"]) / 100
+        out.append({
+            "nome": k,
+            "km_ant": round(pa["km"]), "km_ref": round(pr["km"]),
+            "kml_ant": round(pa["km"] / pa["litros"], 3),
+            "kml_ref": round(pr["km"] / pr["litros"], 3),
+            "exc_ant": round(ca["exc"], 2), "exc_ref": round(cr["exc"], 2),
+            "litros_extra": round(litros_extra),
+            "vel_ant": round(ca["vel"], 1) if ca["vel"] else None,
+            "vel_ref": round(cr["vel"], 1) if cr["vel"] else None,
+        })
+    out.sort(key=lambda d: -d["litros_extra"])
+    return out
+
+
 def _analise_cluster(rows_pd, cluster_de, cluster, nome_chapa):
     """Diagnostico de um cluster: por que o KM/L caiu (ou subiu) contra o mes anterior.
 
@@ -901,8 +972,34 @@ def _analise_cluster(rows_pd, cluster_de, cluster, nome_chapa):
                 it["nome"] = nome_chapa(it["nome"])
         dims[dim] = d
     base = dims["linha"]
+    # ----- a resposta de "por que caiu": condicoes da operacao x conducao -----
+    pa, pr = _perfil(ant), _perfil(ref)
+    ca, cr = _por_100(pa), _por_100(pr)
+    causa = None
+    if ca and cr and pa["ideais"] and pr["ideais"]:
+        # real = ideal + excesso, em litros/100km, entao a variacao do real e a soma das
+        # duas variacoes. Volta para km/L pela mesma relacao exata usada na decomposicao.
+        fator = -100.0 / (ca["real"] * cr["real"])
+        causa = {
+            "real_ant": round(ca["real"], 2), "real_ref": round(cr["real"], 2),
+            "ideal_ant": round(ca["ideal"], 2), "ideal_ref": round(cr["ideal"], 2),
+            "exc_ant": round(ca["exc"], 2), "exc_ref": round(cr["exc"], 2),
+            "vel_ant": round(ca["vel"], 1) if ca["vel"] else None,
+            "vel_ref": round(cr["vel"], 1) if cr["vel"] else None,
+            "litros_exc_ant": round(pa["litros"] - pa["ideais"]),
+            "litros_exc_ref": round(pr["litros"] - pr["ideais"]),
+            # desperdicio adicional do mes, no volume de km do proprio mes
+            "litros_extra": round(pr["km"] * (cr["exc"] - ca["exc"]) / 100),
+            "efeito_rota": round(fator * (cr["ideal"] - ca["ideal"]), 4),
+            "efeito_conducao": round(fator * (cr["exc"] - ca["exc"]), 4),
+            "carros": _causa_cluster(ant, ref, "prefixo"),
+            "motoristas": _causa_cluster(ant, ref, "motorista"),
+        }
+        for m in causa["motoristas"]:
+            m["nome"] = nome_chapa(m["nome"])
     return {
         "cluster": cluster,
+        "causa": causa,
         "dia_max": _dia_max,   # os dois meses cortados no mesmo dia
         "kml_ant": base["kml_ant"], "kml_ref": base["kml_ref"], "delta": base["delta"],
         "var_pct": round(100 * base["delta"] / base["kml_ant"], 2),
@@ -1759,6 +1856,58 @@ def chart_kml_historico():
     plt.close(fig)
 
 
+def chart_cluster_cascata():
+    """Cascata: sai do KM/L do mes anterior, aplica o efeito das CONDICOES da operacao
+    (o consumo ideal da rota mudou) e o efeito da CONDUCAO (a sobra em cima do ideal
+    mudou), e chega no KM/L do mes. Substitui o grafico de mix x desempenho, que era
+    correto mas exigia explicacao: aqui se le o porque de cima para baixo, sem legenda."""
+    if not (ANALISE_CLUSTER and ANALISE_CLUSTER.get("causa")):
+        return
+    a, c = ANALISE_CLUSTER, ANALISE_CLUSTER["causa"]
+    passos = [
+        (f"KM/L {MES3_ANT}", a["kml_ant"], None),
+        ("Condições da\noperação", c["efeito_rota"], "delta"),
+        ("Condução\n(desperdício)", c["efeito_conducao"], "delta"),
+        (f"KM/L {MES3_REF}", a["kml_ref"], None),
+    ]
+    fig, ax = plt.subplots(figsize=(12.4, 4.6))
+    # O eixo e cortado (senao as barras de efeito somem ao lado de colunas de ~2,7).
+    # A folga acompanha o tamanho do maior efeito: pouca folga achata a leitura,
+    # muita joga metade do grafico em area vazia.
+    base = min(a["kml_ant"], a["kml_ref"]) - max(abs(c["efeito_rota"]), abs(c["efeito_conducao"]), 0.02) * 1.15
+    acum = a["kml_ant"]
+    for i, (rot, val, tipo) in enumerate(passos):
+        if tipo is None:
+            ax.bar(i, val - base, bottom=base, color=DARK, width=0.56, zorder=3)
+            ax.text(i, val + (a["kml_ant"] - base) * 0.035, fmt(val, 3), ha="center",
+                    fontsize=17, fontweight="bold", color=DARK, zorder=4)
+        else:
+            ini = acum
+            acum = acum + val
+            cor = GREEN if val >= 0 else RED
+            ax.bar(i, abs(val), bottom=min(ini, acum), color=cor, width=0.56, zorder=3)
+            # a barra de efeito costuma ser fininha; o rotulo vai acima dela, nao dentro
+            ax.text(i, max(ini, acum) + (a["kml_ant"] - base) * 0.035,
+                    ("+" if val >= 0 else "−") + fmt(abs(val), 3), ha="center",
+                    fontsize=16, fontweight="bold", color=cor, zorder=4)
+            ax.plot([i - 0.28, i + 0.28], [ini, ini], color=GREY, linewidth=1.4,
+                    linestyle=":", zorder=2)
+    for i in range(len(passos) - 1):
+        y = [a["kml_ant"], a["kml_ant"], acum, a["kml_ref"]][i]
+        ax.plot([i + 0.28, i + 1 - 0.28], [y, y], color=GREY, linewidth=1.4, linestyle=":", zorder=1)
+    ax.set_xticks(range(len(passos)))
+    ax.set_xticklabels([p[0] for p in passos], fontsize=14.5, fontweight="bold", color=DARK)
+    ax.set_ylim(base, a["kml_ant"] + (a["kml_ant"] - base) * 0.13)
+    ax.set_ylabel("KM/L do cluster", fontsize=14, fontweight="bold", color=DARK)
+    ax.tick_params(axis="y", labelsize=12)
+    for s in ["top", "right"]:
+        ax.spines[s].set_visible(False)
+    ax.grid(axis="y", linestyle=":", alpha=0.45)
+    fig.tight_layout()
+    fig.savefig(OUT / "v3_cluster_cascata.png", dpi=150, transparent=True)
+    plt.close(fig)
+
+
 def chart_cluster_diagnostico():
     """Duas barras horizontais por dimensao (linha, motorista, veiculo): quanto da
     variacao de KM/L veio de MIX (mudou quem rodou o km) e quanto veio de DESEMPENHO
@@ -2310,8 +2459,8 @@ for f in [chart_kml_historico, chart_semanal_evolucao, chart_semanal_variacao_pc
           # duas barras cada, e a pagina agora responde producao e resultado em tabela.
           chart_donut_tratativas, chart_instrutores_diario,
           chart_antes_depois_barras, chart_meritocracia_donut, chart_divergencia_carros, chart_aderencia_carros, chart_aderencia_empresa_diaria,
-          # sai sozinho se ANALISE_CLUSTER for None (sem dado para o cluster investigado)
-          chart_cluster_diagnostico]:
+          # saem sozinhos se ANALISE_CLUSTER for None (sem dado para o cluster investigado)
+          chart_cluster_cascata, chart_cluster_diagnostico]:
     f()
 chart_motoristas_lollipop(PIORES, "Top 10 — Maior distância da meta", "v3_piores.png", RED)
 chart_motoristas_lollipop(MELHORES, "Top 10 — Melhor desempenho", "v3_melhores.png", GREEN)

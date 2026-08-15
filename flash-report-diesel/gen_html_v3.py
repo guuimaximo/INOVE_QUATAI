@@ -1670,7 +1670,7 @@ FOTOS_NOTURNO_ARQUIVOS = [
 _N_FOTOS = max(len(FOTOS_NOTURNO_ARQUIVOS), 1)
 _LARG_FOTO = 99.0 / _N_FOTOS - 0.8
 FOTOS_NOTURNO = "".join(
-    f'<div style="display:inline-block;width:{_LARG_FOTO:.2f}%;height:206px;margin:0 .4%;'
+    f'<div style="display:inline-block;width:{_LARG_FOTO:.2f}%;height:150px;margin:0 .4%;'
     f'border-radius:10px;overflow:hidden;border:1px solid #CFE4DF;vertical-align:top;">'
     f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;'
     f'object-position:center {_foco};display:block;"/></div>'
@@ -1687,7 +1687,7 @@ FOTOS_NOTURNO_BLOCO = (
 # de ficar espremido no topo. margin-bottom deixa a faixa do rodape livre - ele e absoluto.
 pages.append(f"""<div class="page-break"></div><div class="page" style="display:flex;flex-direction:column;">
   {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "28/08")}
-  <div class="grid-2" style="margin-bottom:0;">
+  <div class="grid-2" style="flex:1;min-height:0;margin-bottom:0;">
     <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
       <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:4px;flex:1;">{CAL_JULHO_CELLS}</div>

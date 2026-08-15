@@ -1449,17 +1449,18 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # Peca ao usuario e atualize aqui + embuta as fotos anexadas. Ver COWORK_FLASH.md.
 # Fotos da visita: coloque os arquivos em flash-report-diesel/ e liste os nomes aqui.
 # Lista vazia = visita sem registro fotografico (o bloco de imagens some da pagina).
-FOTOS_NOTURNO_ARQUIVOS = []
-# As fotos sao retrato (~1204x1600). Em celula baixa e larga o object-fit:cover corta
-# justamente a cabeca, entao a celula e alta (170px) e o enquadramento sobe
-# (object-position 20%) para manter rosto e tronco visiveis.
+FOTOS_NOTURNO_ARQUIVOS = ["noturno_ago_1.jpg", "noturno_ago_2.jpg", "noturno_ago_3.jpg"]
+# As fotos chegam do WhatsApp com orientacao mista (as de agosto sao 2 paisagem + 1 retrato).
+# Grade fixa com object-fit:cover cortava a cabeca das paisagens e espremia o retrato, entao
+# a faixa e um flex: altura travada, largura livre. Cada foto guarda a proporcao original e
+# nada e cortado, seja qual for a orientacao que vier no mes seguinte.
 FOTOS_NOTURNO = "".join(
-    f'<div style="border-radius:8px;overflow:hidden;border:1px solid #dbe3ee;height:170px;">'
-    f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;'
-    f'object-position:center 20%;display:block;"/></div>'
+    f'<img src="{_f}" style="height:104px;width:auto;border-radius:8px;'
+    f'border:1px solid #dbe3ee;display:block;"/>'
     for _f in FOTOS_NOTURNO_ARQUIVOS)
 FOTOS_NOTURNO_BLOCO = (
-    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px;">{FOTOS_NOTURNO}</div>'
+    f'<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;'
+    f'justify-content:center;align-items:flex-start;">{FOTOS_NOTURNO}</div>'
     if FOTOS_NOTURNO_ARQUIVOS else "")
 # ================= PAGINA 17: ACOMPANHAMENTO NOTURNO =================
 # Esta pagina tem so dois cards curtos e sobrava quase metade da folha em branco (a visita
@@ -1467,7 +1468,7 @@ FOTOS_NOTURNO_BLOCO = (
 # entao os dois cards esticam ate o rodape e o calendario cresce junto (linhas 1fr) em vez
 # de ficar espremido no topo. margin-bottom deixa a faixa do rodape livre - ele e absoluto.
 pages.append(f"""<div class="page-break"></div><div class="page" style="display:flex;flex-direction:column;">
-  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "14/08")}
+  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "28/08")}
   <div class="grid-2" style="flex:1;min-height:0;margin-bottom:9mm;">
     <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
@@ -1475,14 +1476,15 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Programação</div>
       <div class="cons-text">{len(_visita_label)} visitas noturnas programadas para {MESREF_NOME.lower()} — {_visitas_datas} — mantendo a cadência mensal de visitas noturnas. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
-    <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Última visita realizada — 30/07/2026</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
-      <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:4px;">Treinamento de Manobras de Ônibus — Período Noturno</div>
-      <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático de manobras de ônibus no período noturno, com o objetivo de aprimorar as técnicas dos manobristas, reforçar os procedimentos de segurança operacional e desenvolver maior confiança na condução dos veículos em ambiente urbano.</div>
-      <div class="cons-text" style="text-align:justify;margin-top:5px;">Durante a atividade, foram trabalhados pontos como controle do veículo, posicionamento em vias, atenção aos obstáculos, realização de manobras com segurança e condução preventiva, proporcionando uma experiência mais próxima das situações encontradas na operação diária.</div>
-      <div class="cons-text" style="text-align:justify;margin-top:5px;">O treinamento contribuiu para identificar oportunidades de melhoria, corrigir comportamentos de risco e preparar os profissionais para uma atuação mais segura, eficiente e responsável.</div>
+    <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Última visita realizada — 14/08/2026</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
+      <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:2px;">Treinamento Prático de Manobristas em Campo — Acompanhamento do Instrutor</div>
+      <div style="font-size:7.8px;color:#0e7c7b;font-weight:700;margin-bottom:4px;">Acompanhamento: instrutor Hélio</div>
+      <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático com os manobristas em campo, com acompanhamento do instrutor, trabalhando a dinâmica “o instrutor leva e o manobrista traz”, proporcionando mais segurança e confiança durante as manobras.</div>
+      <div class="cons-text" style="text-align:justify;margin-top:5px;">Também foi realizado teste prático de manobrista para motorista, sendo o colaborador Maurício <b>APROVADO</b> na avaliação e apto a exercer a função de motorista.</div>
+      <div class="cons-text" style="text-align:justify;margin-top:5px;">Treinamento, avaliação e desenvolvimento profissional em busca de mais segurança e qualidade na operação.</div>
       {FOTOS_NOTURNO_BLOCO}
-      <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">14/08/2026</div>
-        <div style="font-size:7.6px;color:#475569;margin-top:2px;">Visita seguinte: 28/08/2026</div></div>
+      <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">28/08/2026</div>
+        <div style="font-size:7.6px;color:#475569;margin-top:2px;">2ª e última visita noturna de agosto</div></div>
     </div></div>
   </div>
   {footer(17)}

@@ -1727,7 +1727,7 @@ def chart_kml_historico():
     """KM/L do ano, em formato grande: esta pagina vai para a TV da garagem, entao o
     grafico ocupa a largura da folha e as fontes sao ~60% maiores que as dos graficos
     de apoio. Sem isso os rotulos ficavam ilegiveis a alguns metros de distancia."""
-    fig, ax = plt.subplots(figsize=(12.4, 4.6))
+    fig, ax = plt.subplots(figsize=(12.4, 5.5))
     x = list(range(len(KML_HISTORICO)))
     labels = [m[0] for m in KML_HISTORICO]
     vals = [m[1] for m in KML_HISTORICO]
@@ -1825,7 +1825,7 @@ def chart_semanal_evolucao():
 def chart_semanal_variacao_pct_com_kml():
     # Mesmo tratamento do grafico do ano: pagina propria, largura cheia e fontes grandes
     # para o grafico continuar legivel projetado na TV da garagem.
-    fig, ax1 = plt.subplots(figsize=(12.4, 4.4))
+    fig, ax1 = plt.subplots(figsize=(12.4, 5.3))
     x = list(range(1, len(KML_SEMANAL)))
     labels = [s[0] for s in KML_SEMANAL[1:]]
     vals_pct = []

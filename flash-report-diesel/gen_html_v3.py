@@ -403,6 +403,8 @@ if _ac:
     _entraram = [i["nome"] for i in _d_lin["itens"] if i["entrou"]][:3]
     _sairam = [i["nome"] for i in _d_lin["itens"] if i["saiu"]][:3]
     _txt_diag = (
+        f"Os dois meses estão cortados no dia {_ac['dia_max']:02d} — comparar {MESREF_NOME.lower()} "
+        f"parcial com {MESANT_NOME.lower()} inteiro distorceria o mix. "
         f"O {_CL} saiu de {fmt(_ac['kml_ant'],3)} para {fmt(_ac['kml_ref'],3)} km/L pela telemetria "
         f"({pct(_ac['var_pct'])}), uma {_seta} de {fmt(abs(_ac['delta']),3)} km/L. "
         f"Separando a variação: pelo recorte de <b>linha</b>, {fmt(abs(_d_lin['mix']),3)} km/L vêm do mix "
@@ -432,7 +434,7 @@ if _ac:
 
     pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header(f"Diagnóstico do Cluster {_CL} — por que o KM/L variou",
-               f"Período: <b>{periodo_label}</b> · decomposição mix × desempenho sobre a telemetria",
+               f"Período: <b>{periodo_label}</b> · {MESANT_NOME} cortado no mesmo dia (01 a {_ac['dia_max']:02d}) para a comparação ser justa · decomposição mix × desempenho sobre a telemetria",
                "Variação no mês", pct(_ac['var_pct']))}
   <div class="grid-4" style="margin-bottom:7px;">
     <div class="metric"><div class="lbl">KM/L {MES3ANT} (telemetria)</div><div class="val">{fmt(_ac['kml_ant'],3)}</div><div class="aux">{_ac['km_ant']/1000:.0f} mil km rodados</div></div>

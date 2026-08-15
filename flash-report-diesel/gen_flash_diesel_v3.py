@@ -870,11 +870,24 @@ def _analise_cluster(rows_pd, cluster_de, cluster, nome_chapa):
     # virada, e a janela de premiacao_diaria tem 5 meses, entao os dois existiriam.
     _ym_ref = (MES_REF_ANO, MES_REF_MM)
     _ym_ant = (MES_REF_ANO - 1, 12) if MES_REF_MM == 1 else (MES_REF_ANO, MES_ANT_MM)
+    # E casa o DIA: o mes de referencia vai do dia 01 ate ontem, entao comparar com o mes
+    # anterior INTEIRO poe 14 dias contra 31. O KM/L (razao) ate aguenta, mas o mix nao:
+    # uma linha que so roda na segunda quinzena aparecia "saindo" do cluster, e a contagem
+    # de motoristas caia pela metade so por causa da janela. Corta os dois no mesmo dia.
+    _dia_max = (MES_FIM - _dtref.timedelta(days=1)).day
 
     def _do(ym):
-        return [r for r in rows_pd
-                if (int(r.get("ano") or 0), int(r["mes"])) == ym
-                and cluster_de.get(str(r.get("prefixo") or "").strip()) == cluster]
+        out = []
+        for r in rows_pd:
+            if (int(r.get("ano") or 0), int(r["mes"])) != ym:
+                continue
+            if cluster_de.get(str(r.get("prefixo") or "").strip()) != cluster:
+                continue
+            _d = str(r.get("dia") or "")
+            if len(_d) >= 10 and int(_d[8:10]) > _dia_max:
+                continue
+            out.append(r)
+        return out
     ant, ref = _do(_ym_ant), _do(_ym_ref)
     if not ant or not ref:
         return None
@@ -890,6 +903,7 @@ def _analise_cluster(rows_pd, cluster_de, cluster, nome_chapa):
     base = dims["linha"]
     return {
         "cluster": cluster,
+        "dia_max": _dia_max,   # os dois meses cortados no mesmo dia
         "kml_ant": base["kml_ant"], "kml_ref": base["kml_ref"], "delta": base["delta"],
         "var_pct": round(100 * base["delta"] / base["kml_ant"], 2),
         "km_ant": base["km_ant"], "km_ref": base["km_ref"],
@@ -1011,7 +1025,7 @@ if _bcnt_url and _bcnt_key:
             _qd = sorted(((c, r - a) for c, a, r in CLUSTER_TRANSNET if a), key=lambda x: x[1])
             _ac["pior_cluster"] = _qd[0][0] if _qd else None
             ANALISE_CLUSTER = _ac
-            _ok(f"[cluster] Pagina de diagnostico do {CLUSTER_DIAGNOSTICO} ao vivo.")
+            print(f"[cluster] Pagina de diagnostico do {CLUSTER_DIAGNOSTICO} ao vivo.")
         else:
             print(f"[cluster] sem dado para diagnosticar o {CLUSTER_DIAGNOSTICO}; pagina omitida.")
         # Pagina 7: piores e melhores motoristas do mes de referencia (min. 500 km)

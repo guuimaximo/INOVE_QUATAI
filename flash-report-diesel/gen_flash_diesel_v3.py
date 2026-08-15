@@ -81,12 +81,12 @@ def _ok(msg):
         print(f"[aviso] _ok() sem numero de pagina, nao entrou no rastreio: {msg}")
 
 
-TEAL = "#0e7c7b"
-DARK = "#0f172a"
+TEAL = "#0E7C6E"
+DARK = "#0A5A50"
 RED = "#c0392b"
 GREEN = "#1e7a34"
 GOLD = "#e0a800"
-GREY = "#94a3b8"
+GREY = "#9AAEAA"
 PURPLE = "#8b5cf6"
 
 # ---------------- DADOS ----------------
@@ -116,6 +116,11 @@ KML_HISTORICO = [
     ("Jul/2026*", 2.6566),
 ]
 KML_MENSAL_TELEMETRIA = {"jun": 2.732, "jul": 2.706}
+
+# Diagnostico de um cluster (pagina dedicada). Para trocar o cluster investigado basta
+# mudar aqui ou setar FLASH_CLUSTER_DIAG=Cx - o resto da pagina se refaz sozinho.
+CLUSTER_DIAGNOSTICO = os.environ.get("FLASH_CLUSTER_DIAG", "").strip().upper() or "C11"
+ANALISE_CLUSTER = None   # None = sem dado ao vivo; a pagina inteira some do relatorio
 
 # KM/L semanal Transnet (oficial), ultimas 8 semanas (seg-dom, semana da direita e parcial)
 KML_SEMANAL = [
@@ -770,6 +775,132 @@ if _transnet_rows:
         _ok("[transnet] Pagina 16 (divergencia) ao vivo.")
 
 
+def _agg_por(rows, chave):
+    """Soma km e litros por valor de `chave` (linha, motorista, prefixo)."""
+    from collections import defaultdict as _dd2
+    d = _dd2(lambda: [0.0, 0.0])
+    for r in rows:
+        k = str(r.get(chave) or "").strip()
+        km, lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+        if k and km and lt:
+            d[k][0] += km
+            d[k][1] += lt
+    return d
+
+
+def _decompor_kml(ant, ref):
+    """Separa a variacao de KM/L entre dois meses em MIX e DESEMPENHO.
+
+    KM/L e razao de somas e nao se decompoe somando parcelas. O consumo especifico
+    c = litros/km, sim: c_total = soma(w_i * c_i) com w_i = km_i / km_total. Entao
+
+        dc = soma[(w_ref - w_ant) * c_ant]      -> MIX: mudou QUEM rodou o km
+           + soma[w_ant * (c_ref - c_ant)]      -> DESEMPENHO: o mesmo grupo gastou mais
+           + soma[(w_ref - w_ant)*(c_ref - c_ant)]  -> interacao (as duas coisas juntas)
+
+    e a soma das tres parcelas fecha exatamente com c_ref - c_ant. Cada parcela vira
+    km/L pela relacao exata d(1/c) = -dc / (c_ant * c_ref).
+
+    Um grupo que so aparece em um dos meses entra com peso zero no outro e com o mesmo
+    consumo dos dois lados: entrada e saida de linha/motorista sao efeito de MIX, nao de
+    desempenho - senao um motorista novo apareceria "piorando" um mes em que nem rodou.
+    """
+    km_a = sum(v[0] for v in ant.values())
+    lt_a = sum(v[1] for v in ant.values())
+    km_r = sum(v[0] for v in ref.values())
+    lt_r = sum(v[1] for v in ref.values())
+    if not (km_a and km_r and lt_a and lt_r):
+        return None
+    c_a, c_r = lt_a / km_a, lt_r / km_r
+    fator = -1.0 / (c_a * c_r)          # converte variacao de litros/km em km/L
+    itens, tot = [], {"mix": 0.0, "desemp": 0.0}
+    for k in set(ant) | set(ref):
+        kma, lta = ant.get(k, [0.0, 0.0])
+        kmr, ltr = ref.get(k, [0.0, 0.0])
+        ca = (lta / kma) if kma else None
+        cr = (ltr / kmr) if kmr else None
+        if ca is None and cr is None:
+            continue
+        ca = cr if ca is None else ca
+        cr = ca if cr is None else cr
+        wa, wr = kma / km_a, kmr / km_r
+        # O mix e medido contra a MEDIA do mes anterior, nao contra zero. Como a soma das
+        # variacoes de participacao e zero, subtrair a media nao muda o total - mas muda
+        # tudo na leitura por item: sem isso cada linha "contribuia" com decimos de km/L
+        # que se cancelavam entre si, e uma linha que so cresceu consumindo exatamente a
+        # media aparecia como grande vila. Agora so pesa quem difere da media.
+        mix = (wr - wa) * (ca - c_a)
+        des = wa * (cr - ca)
+        # A interacao (mudou de peso E de consumo) entra junto do desempenho: e o consumo
+        # extra do proprio grupo. Assim mix + desempenho fecha exatamente com o total.
+        des += (wr - wa) * (cr - ca)
+        tot["mix"] += mix
+        tot["desemp"] += des
+        itens.append({
+            "nome": k,
+            "km_ant": round(kma), "km_ref": round(kmr),
+            "share_ant": round(100 * wa, 1), "share_ref": round(100 * wr, 1),
+            "kml_ant": round(1 / ca, 3) if kma else None,
+            "kml_ref": round(1 / cr, 3) if kmr else None,
+            "mix": round(fator * mix, 4),
+            "desemp": round(fator * des, 4),
+            "contrib": round(fator * (mix + des), 4),
+            "entrou": kma == 0, "saiu": kmr == 0,
+        })
+    itens.sort(key=lambda i: i["contrib"])
+    return {
+        "kml_ant": round(1 / c_a, 4), "kml_ref": round(1 / c_r, 4),
+        "km_ant": round(km_a), "km_ref": round(km_r),
+        "delta": round(1 / c_r - 1 / c_a, 4),
+        "mix": round(fator * tot["mix"], 4),
+        "desemp": round(fator * tot["desemp"], 4),
+        "itens": itens,
+    }
+
+
+def _analise_cluster(rows_pd, cluster_de, cluster, nome_chapa):
+    """Diagnostico de um cluster: por que o KM/L caiu (ou subiu) contra o mes anterior.
+
+    Usa premiacao_diaria_atualizada (telemetria BCNT) porque e a UNICA fonte que traz
+    linha, motorista e prefixo no mesmo registro. O KM/L oficial do cluster (pagina do
+    cluster) vem do Transnet e e um numero um pouco diferente - a pagina mostra os dois
+    e diz qual e qual, em vez de fingir que batem.
+    """
+    # Casa ANO e mes: filtrar so por mes compara janeiro com dezembro do mesmo ano na
+    # virada, e a janela de premiacao_diaria tem 5 meses, entao os dois existiriam.
+    _ym_ref = (MES_REF_ANO, MES_REF_MM)
+    _ym_ant = (MES_REF_ANO - 1, 12) if MES_REF_MM == 1 else (MES_REF_ANO, MES_ANT_MM)
+
+    def _do(ym):
+        return [r for r in rows_pd
+                if (int(r.get("ano") or 0), int(r["mes"])) == ym
+                and cluster_de.get(str(r.get("prefixo") or "").strip()) == cluster]
+    ant, ref = _do(_ym_ant), _do(_ym_ref)
+    if not ant or not ref:
+        return None
+    dims = {}
+    for dim, chave in (("linha", "linha"), ("motorista", "motorista"), ("veiculo", "prefixo")):
+        d = _decompor_kml(_agg_por(ant, chave), _agg_por(ref, chave))
+        if not d:
+            return None
+        if dim == "motorista":
+            for it in d["itens"]:
+                it["nome"] = nome_chapa(it["nome"])
+        dims[dim] = d
+    base = dims["linha"]
+    return {
+        "cluster": cluster,
+        "kml_ant": base["kml_ant"], "kml_ref": base["kml_ref"], "delta": base["delta"],
+        "var_pct": round(100 * base["delta"] / base["kml_ant"], 2),
+        "km_ant": base["km_ant"], "km_ref": base["km_ref"],
+        "n_veic_ant": len({r.get("prefixo") for r in ant if r.get("prefixo")}),
+        "n_veic_ref": len({r.get("prefixo") for r in ref if r.get("prefixo")}),
+        "n_mot_ant": len({r.get("motorista") for r in ant if r.get("motorista")}),
+        "n_mot_ref": len({r.get("motorista") for r in ref if r.get("motorista")}),
+        "dims": dims,
+    }
+
+
 # ---- Paginas 3 (cluster), 7 (piores/melhores) e 15 (meritocracia): BCNT ----
 # Fontes: premiacao_diaria_atualizada (KM/L por dia/motorista/linha), veiculos_ativos (mapa
 # veiculo->cluster, pois a coluna cluster da premiacao vem vazia), funcionarios_atualizada
@@ -867,6 +998,22 @@ if _bcnt_url and _bcnt_key:
             # comparacao = os 2 ultimos meses disponiveis de cada cluster (mes ant x mes ref)
             CLUSTER_TRANSNET = [(c, _hist[c][-2][1], _hist[c][-1][1]) for c in _clusters]
             _ok("[cluster] Pagina 3 (Transnet + mapa cluster) ao vivo.")
+        # ----- Pagina dedicada: por que o cluster investigado variou contra o mes anterior
+        _ac = _analise_cluster(_pd, _cluster_de, CLUSTER_DIAGNOSTICO, _nome_chapa)
+        if _ac:
+            # KM/L oficial (Transnet) do mesmo cluster. A decomposicao roda sobre a
+            # telemetria, que da um numero proximo mas nao identico - a pagina mostra os
+            # dois lado a lado em vez de deixar parecer que sao a mesma medicao.
+            _of = next(((a, r) for c, a, r in CLUSTER_TRANSNET if c == CLUSTER_DIAGNOSTICO), None)
+            if _of:
+                _ac["kml_ant_oficial"], _ac["kml_ref_oficial"] = _of
+            # Qual cluster mais caiu no mes, para a pagina avisar se nao e o investigado.
+            _qd = sorted(((c, r - a) for c, a, r in CLUSTER_TRANSNET if a), key=lambda x: x[1])
+            _ac["pior_cluster"] = _qd[0][0] if _qd else None
+            ANALISE_CLUSTER = _ac
+            _ok(f"[cluster] Pagina de diagnostico do {CLUSTER_DIAGNOSTICO} ao vivo.")
+        else:
+            print(f"[cluster] sem dado para diagnosticar o {CLUSTER_DIAGNOSTICO}; pagina omitida.")
         # Pagina 7: piores e melhores motoristas do mes de referencia (min. 500 km)
         _mot = _dd(lambda: [0.0, 0.0, 0.0])
         _mot_carro = _dd(lambda: _dd(float))   # chapa -> {carro: km} (ver CARRO_PRINCIPAL)
@@ -1563,25 +1710,76 @@ else:
 # ================= GRAFICOS =================
 
 def chart_kml_historico():
-    fig, ax = plt.subplots(figsize=(11.0, 3.9))
+    """KM/L do ano, em formato grande: esta pagina vai para a TV da garagem, entao o
+    grafico ocupa a largura da folha e as fontes sao ~60% maiores que as dos graficos
+    de apoio. Sem isso os rotulos ficavam ilegiveis a alguns metros de distancia."""
+    fig, ax = plt.subplots(figsize=(12.4, 4.6))
     x = list(range(len(KML_HISTORICO)))
     labels = [m[0] for m in KML_HISTORICO]
     vals = [m[1] for m in KML_HISTORICO]
-    ax.plot(x, vals, marker="o", markersize=7, linewidth=2.6, color=TEAL)
-    ax.axhline(META, color=RED, linestyle=":", linewidth=1.5, label=f"Meta {fmt(META)}")
+    ax.plot(x, vals, marker="o", markersize=13, linewidth=4.2, color=TEAL,
+            markerfacecolor="white", markeredgewidth=3.2, zorder=3)
+    ax.axhline(META, color=RED, linestyle=":", linewidth=2.6, label=f"Meta {fmt(META)}", zorder=2)
+    # O rotulo do ultimo ponto cai para baixo: no topo ele encostava no limite do eixo.
+    _alto = max(vals)
     for xi, v in zip(x, vals):
-        ax.text(xi, v + 0.02, fmt(v, 3), ha="center", fontsize=8.6, fontweight="bold", color=TEAL)
-    ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=9)
-    ax.set_ylim(2.55, 2.95)
-    ax.set_ylabel("KM/L")
-    # titulo removido: duplicava o card-title da pagina
-    # ax.set_title(f"KM/L Mensal — Transnet (oficial) — histórico de {len(KML_HISTORICO)} meses", fontsize=12, fontweight="bold", color=DARK)
-    ax.legend(loc="lower left", fontsize=8, frameon=False)
+        _acima = v < _alto - 0.004
+        ax.annotate(fmt(v, 3), (xi, v), textcoords="offset points",
+                    xytext=(0, 15 if _acima else -26), ha="center",
+                    fontsize=13.5, fontweight="bold", color=TEAL, zorder=4)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=14, fontweight="bold", color=DARK)
+    ax.tick_params(axis="y", labelsize=13)
+    # Limite fixo 2,55-2,95 cortava a linha quando o mes saia da faixa. Agora a escala
+    # segue os dados e a meta, com uma folga proporcional.
+    _lo, _hi = min(min(vals), META), max(max(vals), META)
+    _fol = max((_hi - _lo) * 0.28, 0.05)
+    ax.set_ylim(_lo - _fol, _hi + _fol)
+    ax.set_ylabel("KM/L", fontsize=14, fontweight="bold", color=DARK)
+    ax.legend(loc="lower left", fontsize=13, frameon=False)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
-    ax.grid(axis="y", linestyle=":", alpha=0.5)
+    ax.grid(axis="y", linestyle=":", alpha=0.55)
     fig.tight_layout()
     fig.savefig(OUT / "v3_historico.png", dpi=150, transparent=True)
+    plt.close(fig)
+
+
+def chart_cluster_diagnostico():
+    """Duas barras horizontais por dimensao (linha, motorista, veiculo): quanto da
+    variacao de KM/L veio de MIX (mudou quem rodou o km) e quanto veio de DESEMPENHO
+    (o mesmo grupo passou a gastar mais). Barras a esquerda do zero = puxaram para baixo."""
+    if not ANALISE_CLUSTER:
+        return
+    dims = ANALISE_CLUSTER["dims"]
+    ordem = [("linha", "Linha"), ("motorista", "Motorista"), ("veiculo", "Veículo")]
+    fig, ax = plt.subplots(figsize=(12.4, 3.4))
+    y = np.arange(len(ordem))
+    mix = [dims[k]["mix"] for k, _ in ordem]
+    des = [dims[k]["desemp"] for k, _ in ordem]
+    b1 = ax.barh(y + 0.19, mix, height=0.34, color=GOLD, label="Mix (mudou quem rodou o km)")
+    b2 = ax.barh(y - 0.19, des, height=0.34, color=TEAL, label="Desempenho (mesmo grupo, mais consumo)")
+    _lim = max([abs(v) for v in mix + des] + [0.001]) * 1.45
+    for barras in (b1, b2):
+        for b in barras:
+            w = b.get_width()
+            ax.text(w + (_lim * 0.03 if w >= 0 else -_lim * 0.03),
+                    b.get_y() + b.get_height() / 2, f"{w:+.3f}".replace(".", ","),
+                    va="center", ha="left" if w >= 0 else "right",
+                    fontsize=12.5, fontweight="bold", color=DARK)
+    ax.axvline(0, color=DARK, linewidth=1.4)
+    ax.set_yticks(y)
+    ax.set_yticklabels([n for _, n in ordem], fontsize=14, fontweight="bold", color=DARK)
+    ax.invert_yaxis()   # Linha no topo: e o recorte que se le primeiro
+    ax.set_xlim(-_lim, _lim)
+    ax.set_xlabel("Impacto no KM/L do cluster (km/L)", fontsize=12.5, color=DARK)
+    ax.tick_params(axis="x", labelsize=11)
+    ax.legend(loc="lower right", fontsize=11.5, frameon=False, ncol=1)
+    for s in ["top", "right", "left"]:
+        ax.spines[s].set_visible(False)
+    ax.grid(axis="x", linestyle=":", alpha=0.5)
+    fig.tight_layout()
+    fig.savefig(OUT / "v3_cluster_diag.png", dpi=150, transparent=True)
     plt.close(fig)
 
 
@@ -1611,7 +1809,9 @@ def chart_semanal_evolucao():
 
 
 def chart_semanal_variacao_pct_com_kml():
-    fig, ax1 = plt.subplots(figsize=(11.0, 3.5))
+    # Mesmo tratamento do grafico do ano: pagina propria, largura cheia e fontes grandes
+    # para o grafico continuar legivel projetado na TV da garagem.
+    fig, ax1 = plt.subplots(figsize=(12.4, 4.4))
     x = list(range(1, len(KML_SEMANAL)))
     labels = [s[0] for s in KML_SEMANAL[1:]]
     vals_pct = []
@@ -1622,24 +1822,48 @@ def chart_semanal_variacao_pct_com_kml():
     vals_kml = [KML_SEMANAL[i][1] for i in range(1, len(KML_SEMANAL))]
     cores = [GREEN if v >= 0 else RED for v in vals_pct]
     ax1.axhline(0, color="#94a3b8", linewidth=1)
-    ax1.plot(x, vals_pct, color=DARK, linewidth=1.6, marker="o", markersize=5, zorder=2)
+    ax1.plot(x, vals_pct, color=DARK, linewidth=3.0, marker="o", markersize=8, zorder=2)
     for xi, v, c in zip(x, vals_pct, cores):
-        ax1.scatter([xi], [v], color=c, s=55, zorder=3)
-        ax1.text(xi, v + (0.25 if v >= 0 else -0.42), pct(v), ha="center", fontsize=8, fontweight="bold", color=c)
-    ax1.set_xticks(x); ax1.set_xticklabels(labels, fontsize=7.6)
-    ax1.set_ylabel("Variação % semana anterior", color=DARK)
+        ax1.scatter([xi], [v], color=c, s=130, zorder=3)
+    ax1.set_xticks(x); ax1.set_xticklabels(labels, fontsize=11.5, fontweight="bold", color=DARK)
+    ax1.tick_params(axis="y", labelsize=12)
+    ax1.set_ylabel("Variação % semana anterior", color=DARK, fontsize=13, fontweight="bold")
     ax2 = ax1.twinx()
-    ax2.plot(x, vals_kml, color=TEAL, linewidth=1.6, linestyle="--", marker="s", markersize=4, zorder=1, alpha=0.75)
-    for xi, v in zip(x, vals_kml):
-        ax2.text(xi, v + 0.012, fmt(v, 3), ha="center", fontsize=7, color=TEAL)
-    ax2.set_ylabel("KM/L da semana", color=TEAL)
-    ax2.tick_params(axis="y", colors=TEAL)
+    ax2.plot(x, vals_kml, color=TEAL, linewidth=3.0, linestyle="--", marker="s", markersize=8, zorder=1, alpha=0.85)
+    # A serie de KM/L e a mesma informacao da variacao %, so que em nivel: as duas curvas
+    # andam juntas e rotular ponto a ponto fazia os textos se sobreporem em quase toda
+    # semana. Rotula so as pontas, que e o que da a escala - o meio se le pela linha.
+    ax2.set_ylabel("KM/L da semana", color=TEAL, fontsize=13, fontweight="bold")
+    ax2.tick_params(axis="y", colors=TEAL, labelsize=12)
     # titulo removido: duplicava o card-title da pagina
     # ax1.set_title("Evolução da Variação Semanal (%) e KM/L da Semana — Transnet", fontsize=11.5, fontweight="bold", color=DARK)
     for s_ in ["top"]:
         ax1.spines[s_].set_visible(False); ax2.spines[s_].set_visible(False)
     ax1.grid(axis="y", linestyle=":", alpha=0.4)
+    ax1.margins(y=0.22)
+    ax2.margins(y=0.22)
     fig.tight_layout()
+    # Rotulos so DEPOIS do layout fechado: as duas series sao a mesma informacao (nivel e
+    # variacao), andam coladas e o rotulo de uma caia em cima do marcador da outra. Com o
+    # desenho pronto da para comparar a altura real das duas em pixels e jogar cada rotulo
+    # para o lado oposto ao da outra serie. Sem isso nao existe offset fixo que sirva: em
+    # umas semanas a tracejada esta acima, em outras abaixo.
+    fig.canvas.draw()
+    for xi, v, c in zip(x, vals_pct, cores):
+        y_pct = ax1.transData.transform((xi, v))[1]
+        y_kml = ax2.transData.transform((xi, vals_kml[x.index(xi)]))[1]
+        acima = y_pct >= y_kml
+        ax1.annotate(pct(v), (xi, v), textcoords="offset points",
+                     xytext=(0, 15 if acima else -27), ha="center",
+                     fontsize=12.5, fontweight="bold", color=c)
+    # KM/L so nas pontas, do lado oposto ao rotulo de variacao daquela semana.
+    for xi in (x[0], x[-1]):
+        v = vals_kml[x.index(xi)]
+        y_pct = ax1.transData.transform((xi, vals_pct[x.index(xi)]))[1]
+        y_kml = ax2.transData.transform((xi, v))[1]
+        ax2.annotate(fmt(v, 3), (xi, v), textcoords="offset points",
+                     xytext=(0, 15 if y_kml > y_pct else -27), ha="center",
+                     fontsize=12, fontweight="bold", color=TEAL)
     fig.savefig(OUT / "v3_semanal_pct.png", dpi=150, transparent=True)
     plt.close(fig)
 
@@ -2071,7 +2295,9 @@ for f in [chart_kml_historico, chart_semanal_evolucao, chart_semanal_variacao_pc
           # chart_instrutores_eficacia/_status sairam com a reforma da Pagina 11: eram
           # duas barras cada, e a pagina agora responde producao e resultado em tabela.
           chart_donut_tratativas, chart_instrutores_diario,
-          chart_antes_depois_barras, chart_meritocracia_donut, chart_divergencia_carros, chart_aderencia_carros, chart_aderencia_empresa_diaria]:
+          chart_antes_depois_barras, chart_meritocracia_donut, chart_divergencia_carros, chart_aderencia_carros, chart_aderencia_empresa_diaria,
+          # sai sozinho se ANALISE_CLUSTER for None (sem dado para o cluster investigado)
+          chart_cluster_diagnostico]:
     f()
 chart_motoristas_lollipop(PIORES, "Top 10 — Maior distância da meta", "v3_piores.png", RED)
 chart_motoristas_lollipop(MELHORES, "Top 10 — Melhor desempenho", "v3_melhores.png", GREEN)

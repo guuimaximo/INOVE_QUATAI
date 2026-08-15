@@ -84,6 +84,11 @@ td { padding:3px 4px; border:1px solid #CFE4DF; text-align:center; }
 .chart-wrap img { max-width:100%; max-height:140mm; width:auto; height:auto; }
 .chart-wrap-sm img { max-height:78mm; width:auto; max-width:100%; }
 .chart-wrap-tall img { max-height:88mm; width:auto; max-width:100%; }
+/* grafico de diagnostico: largura cheia da folha, altura travada para caber
+   as duas tabelas e o texto embaixo sem empurrar nada para a pagina seguinte. */
+.chart-wrap-diag img { width:100%; max-width:100%; max-height:70mm; height:auto; }
+/* KM/L do ano: o grafico e o assunto da pagina, entao ocupa a folha toda. */
+.chart-wrap-xl img { width:100%; max-width:100%; max-height:118mm; height:auto; }
 .cons-box { margin-top:6px; border:1px solid #CFE4DF; border-radius:12px; background:#EAF4F2; padding:6px 12px; }
 .cons-title { font-size:8.5px; font-weight:800; text-transform:uppercase; margin-bottom:3px; color:#0A5A50; }
 .cons-text { font-size:9px; line-height:1.32; color:#1F2D2B; text-align:justify; }
@@ -234,26 +239,43 @@ _telem_key = gfd._MES3[gfd.MES_REF_MM - 1].lower()
 # exibia o numero de julho rotulado como agosto, sem nenhuma marca de que era de outro mes.
 _telem_val = gfd.KML_MENSAL_TELEMETRIA.get(_telem_key)
 _telem_txt = fmt(_telem_val, 3) if _telem_val else "n/d"
+# O grafico do ano dividia a folha com o resumo executivo e o grafico semanal, e saia com
+# ~1/4 da largura util - ilegivel na TV da garagem. Vira o assunto da pagina: os numeros
+# do resumo viram uma faixa de cards no topo e o grafico ocupa a folha inteira. O semanal
+# ganhou pagina propria logo abaixo, no mesmo formato.
+_melhor_mes = max(gfd.KML_HISTORICO, key=lambda m: m[1])
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header(f"Página 2 · KM/L Mensal — Histórico de {len(gfd.KML_HISTORICO)} Meses (Transnet oficial)", f"Período: <b>{periodo_label}</b>", "Mês de referência", MESREF)}
-  <div class="grid-2">
-    <div class="card"><div class="card-title">Evolução Mensal — Transnet</div><div class="card-body">
-      <div class="chart-wrap"><img src="v3_historico.png"/></div>
-    </div></div>
-    <div class="card"><div class="card-title">Resumo Executivo</div><div class="card-body">
-      <div class="grid-2">
-        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-1][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-2][1],3)} em {MESANT_NOME.lower()} ({pct(var_jun)})</div></div>
-        <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Telemetria)</div><div class="val">{_telem_txt}</div><div class="aux">{"Fonte de comparação" if _telem_val else "sem leitura de telemetria no mês"}</div></div>
-      </div>
-      <div class="metric" style="margin-top:8px;"><div class="lbl">Meta operacional</div><div class="val">{fmt(gfd.META,2)} km/L</div></div>
-      <div class="metric" style="margin-top:8px;"><div class="lbl">Melhor mês do histórico</div><div class="val">{max(gfd.KML_HISTORICO,key=lambda m:m[1])[0]}</div><div class="aux">{fmt(max(gfd.KML_HISTORICO,key=lambda m:m[1])[1],3)} km/L</div></div>
-    </div></div>
+  <div class="grid-4" style="margin-bottom:8px;">
+    <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Transnet)<span class="badge-oficial">OFICIAL</span></div><div class="val">{fmt(gfd.KML_HISTORICO[-1][1],3)}</div><div class="aux">vs {fmt(gfd.KML_HISTORICO[-2][1],3)} em {MESANT_NOME.lower()} ({pct(var_jun)})</div></div>
+    <div class="metric"><div class="lbl">KM/L {MESREF_NOME} (Telemetria)</div><div class="val">{_telem_txt}</div><div class="aux">{"Fonte de comparação" if _telem_val else "sem leitura de telemetria no mês"}</div></div>
+    <div class="metric"><div class="lbl">Meta operacional</div><div class="val">{fmt(gfd.META,2)} km/L</div><div class="aux">referência do mês</div></div>
+    <div class="metric"><div class="lbl">Melhor mês do histórico</div><div class="val">{_melhor_mes[0]}</div><div class="aux">{fmt(_melhor_mes[1],3)} km/L</div></div>
   </div>
-  <div class="card"><div class="card-title">Evolução da Variação Semanal (%) — Transnet</div><div class="card-body">
-    <div class="chart-wrap chart-wrap-sm"><img src="v3_semanal_pct.png"/></div>
+  <div class="card"><div class="card-title">Evolução Mensal — Transnet (oficial)</div><div class="card-body" style="padding:6px 8px;">
+    <div class="chart-wrap chart-wrap-xl" style="border:none;padding:0;"><img src="v3_historico.png"/></div>
   </div></div>
   <div class="cons-box"><div class="cons-title">Considerações</div>
   <div class="cons-text">{_txt_p2}</div></div>
+  {footer(2)}
+</div>""")
+
+# ---- Pagina propria para a variacao semanal, no mesmo formato grande ----
+_sem_ult = gfd.KML_SEMANAL[-1] if gfd.KML_SEMANAL else None
+_sem_melhor = max(gfd.KML_SEMANAL, key=lambda s: s[1]) if gfd.KML_SEMANAL else None
+_sem_pior = min(gfd.KML_SEMANAL, key=lambda s: s[1]) if gfd.KML_SEMANAL else None
+_txt_sem = (f"Nas últimas {len(gfd.KML_SEMANAL)} semanas o KM/L oscilou entre "
+            f"{fmt(_sem_pior[1],3)} ({_sem_pior[0]}) e {fmt(_sem_melhor[1],3)} ({_sem_melhor[0]}). "
+            f"A variação semana a semana vem {_tend}. "
+            f"A semana mais recente ({_sem_ult[0]}) fechou em {fmt(_sem_ult[1],3)} km/L."
+            if gfd.KML_SEMANAL else "Sem semanas suficientes no período.")
+pages.append(f"""<div class="page-break"></div><div class="page">
+  {page_header("Evolução da Variação Semanal (%) — Transnet", f"Período: <b>{periodo_label}</b> · semanas de segunda a domingo", "Semanas no gráfico", str(len(gfd.KML_SEMANAL)))}
+  <div class="card" style="margin-bottom:8px;"><div class="card-title">Variação Semanal (%) e KM/L da Semana — Transnet</div><div class="card-body" style="padding:6px 8px;">
+    <div class="chart-wrap chart-wrap-xl" style="border:none;padding:0;"><img src="v3_semanal_pct.png"/></div>
+  </div></div>
+  <div class="cons-box"><div class="cons-title">Considerações</div>
+  <div class="cons-text">{_txt_sem}</div></div>
   {footer(2)}
 </div>""")
 
@@ -319,6 +341,119 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     </div></div>
   </div>
   {footer(3)}
+</div>""")
+
+# ============ PAGINA DEDICADA: DIAGNOSTICO DO CLUSTER (por que variou) ============
+# A pagina inteira so existe se houver dado ao vivo: sem premiacao_diaria nao da para
+# separar linha/motorista/veiculo, e uma pagina de diagnostico com numero velho e pior
+# que pagina nenhuma. O cluster investigado sai de gfd.CLUSTER_DIAGNOSTICO.
+_ac = gfd.ANALISE_CLUSTER
+if _ac:
+    _CL = _ac["cluster"]
+    _d_lin, _d_mot = _ac["dims"]["linha"], _ac["dims"]["motorista"]
+    _piorou = _ac["delta"] < 0
+    _seta = "queda" if _piorou else "alta"
+    _cor_var = "#c0392b" if _piorou else "#1e7a34"
+
+    def _sinal(v, casas=3):
+        """+0,012 / -0,045 — o sinal e o que importa numa tabela de contribuicao."""
+        return ("+" if v >= 0 else "−") + fmt(abs(v), casas)
+
+    def _linhas_tabela(dim, n=6, rotulo_km="km"):
+        """As n maiores contribuicoes negativas; se sobrar espaco, a maior positiva,
+        para a tabela nao dar a impressao de que tudo no cluster piorou."""
+        itens = [i for i in dim["itens"] if i["km_ant"] or i["km_ref"]]
+        piores = itens[:n]
+        melhor = [i for i in reversed(itens) if i["contrib"] > 0 and i not in piores][:1]
+        out = ""
+        for i in piores + melhor:
+            tag = ""
+            if i["entrou"]:
+                tag = '<span style="font-size:6.6px;font-weight:800;color:#0A5A50;"> ENTROU</span>'
+            elif i["saiu"]:
+                tag = '<span style="font-size:6.6px;font-weight:800;color:#9AAEAA;"> SAIU</span>'
+            _ka = f"{i['km_ant']/1000:.1f}".replace(".", ",")
+            _kr = f"{i['km_ref']/1000:.1f}".replace(".", ",")
+            _kl = (f"{fmt(i['kml_ant'],3)} &rarr; {fmt(i['kml_ref'],3)}"
+                   if i["kml_ant"] and i["kml_ref"] else
+                   (fmt(i["kml_ref"], 3) if i["kml_ref"] else fmt(i["kml_ant"], 3)))
+            _cc = "#c0392b" if i["contrib"] < 0 else "#1e7a34"
+            out += (f"<tr><td style='text-align:left;padding-left:7px;font-weight:700;'>{i['nome'][:26]}{tag}</td>"
+                    f"<td>{_ka} &rarr; {_kr}</td>"
+                    f"<td>{fmt(i['share_ant'],1)}% &rarr; {fmt(i['share_ref'],1)}%</td>"
+                    f"<td style='font-size:7.6px;'>{_kl}</td>"
+                    f"<td style='color:{_cc};font-weight:800;'>{_sinal(i['contrib'])}</td></tr>")
+        return out
+
+    _cab = (f"<thead><tr><th style='text-align:left;padding-left:7px;'>{{0}}</th>"
+            f"<th>km mil {MES3ANT}&rarr;{MES3REF}</th><th>Participação</th>"
+            f"<th>KM/L {MES3ANT}&rarr;{MES3REF}</th><th>Impacto km/L</th></tr></thead>")
+
+    # ---- veredito: qual recorte explica mais, e dentro dele mix ou desempenho ----
+    _dom_lin = "mix" if abs(_d_lin["mix"]) > abs(_d_lin["desemp"]) else "desemp"
+    _dom_mot = "mix" if abs(_d_mot["mix"]) > abs(_d_mot["desemp"]) else "desemp"
+    _txt_lin = ("a **troca de linhas** — os carros do cluster passaram a rodar um conjunto "
+                "de linhas diferente" if _dom_lin == "mix" else
+                "o **desempenho dentro das mesmas linhas** — o mix de linhas praticamente "
+                "não mudou, o consumo por linha é que piorou")
+    _txt_mot = ("**mudança de motoristas** no cluster" if _dom_mot == "mix" else
+                "**os mesmos motoristas** passando a consumir mais")
+    _piores_lin = [i["nome"] for i in _d_lin["itens"][:2] if i["contrib"] < 0]
+    _piores_mot = [i["nome"].title() for i in _d_mot["itens"][:2] if i["contrib"] < 0]
+    _entraram = [i["nome"] for i in _d_lin["itens"] if i["entrou"]][:3]
+    _sairam = [i["nome"] for i in _d_lin["itens"] if i["saiu"]][:3]
+    _txt_diag = (
+        f"O {_CL} saiu de {fmt(_ac['kml_ant'],3)} para {fmt(_ac['kml_ref'],3)} km/L pela telemetria "
+        f"({pct(_ac['var_pct'])}), uma {_seta} de {fmt(abs(_ac['delta']),3)} km/L. "
+        f"Separando a variação: pelo recorte de <b>linha</b>, {fmt(abs(_d_lin['mix']),3)} km/L vêm do mix "
+        f"e {fmt(abs(_d_lin['desemp']),3)} km/L do desempenho — ou seja, o que pesa é "
+        + _txt_lin.replace("**", "") + ". "
+        f"Pelo recorte de <b>motorista</b>, {fmt(abs(_d_mot['mix']),3)} km/L vêm do mix e "
+        f"{fmt(abs(_d_mot['desemp']),3)} km/L do desempenho, apontando para "
+        + _txt_mot.replace("**", "") + ". ")
+    if _piores_lin:
+        _txt_diag += f"Linhas que mais puxaram para baixo: {', '.join(_piores_lin)}. "
+    if _entraram:
+        _txt_diag += f"Entraram no cluster: {', '.join(_entraram)}. "
+    if _sairam:
+        _txt_diag += f"Saíram: {', '.join(_sairam)}. "
+    if _piores_mot:
+        _txt_diag += f"Motoristas com maior impacto negativo: {', '.join(_piores_mot)}."
+    _nota_oficial = ""
+    if _ac.get("kml_ref_oficial"):
+        _nota_oficial = (f"O KM/L oficial (Transnet) do {_CL} é "
+                         f"{fmt(_ac['kml_ant_oficial'],3)} &rarr; {fmt(_ac['kml_ref_oficial'],3)}; "
+                         f"a decomposição roda sobre a telemetria, única fonte que traz linha, "
+                         f"motorista e veículo no mesmo registro, por isso os números não são idênticos. ")
+    _nota_pior = ""
+    if _ac.get("pior_cluster") and _ac["pior_cluster"] != _CL:
+        _nota_pior = (f"Atenção: no mês, quem mais caiu não foi o {_CL} e sim o "
+                      f"{_ac['pior_cluster']}. ")
+
+    pages.append(f"""<div class="page-break"></div><div class="page">
+  {page_header(f"Diagnóstico do Cluster {_CL} — por que o KM/L variou",
+               f"Período: <b>{periodo_label}</b> · decomposição mix × desempenho sobre a telemetria",
+               "Variação no mês", pct(_ac['var_pct']))}
+  <div class="grid-4" style="margin-bottom:7px;">
+    <div class="metric"><div class="lbl">KM/L {MES3ANT} (telemetria)</div><div class="val">{fmt(_ac['kml_ant'],3)}</div><div class="aux">{_ac['km_ant']/1000:.0f} mil km rodados</div></div>
+    <div class="metric"><div class="lbl">KM/L {MES3REF} (telemetria)</div><div class="val" style="color:{_cor_var};">{fmt(_ac['kml_ref'],3)}</div><div class="aux">{_ac['km_ref']/1000:.0f} mil km rodados</div></div>
+    <div class="metric"><div class="lbl">Variação</div><div class="val" style="color:{_cor_var};">{_sinal(_ac['delta'])}</div><div class="aux">{pct(_ac['var_pct'])} vs {MESANT_NOME.lower()}</div></div>
+    <div class="metric"><div class="lbl">Frota e condutores</div><div class="val" style="font-size:12px;">{_ac['n_veic_ref']} carros · {_ac['n_mot_ref']} motoristas</div><div class="aux">era {_ac['n_veic_ant']} carros · {_ac['n_mot_ant']} motoristas</div></div>
+  </div>
+  <div class="card" style="margin-bottom:7px;"><div class="card-title">De onde veio a variação — mix (quem rodou o km) × desempenho (consumo do mesmo grupo)</div><div class="card-body" style="padding:4px 8px;">
+    <div class="chart-wrap chart-wrap-diag" style="border:none;padding:0;"><img src="v3_cluster_diag.png"/></div>
+  </div></div>
+  <div class="grid-2">
+    <div class="card"><div class="card-title">Por linha — maiores impactos no KM/L do {_CL}</div><div class="card-body" style="padding:5px 7px;">
+      <table class="tbl-compact">{_cab.format("Linha")}<tbody>{_linhas_tabela(_d_lin)}</tbody></table>
+    </div></div>
+    <div class="card"><div class="card-title">Por motorista — maiores impactos no KM/L do {_CL}</div><div class="card-body" style="padding:5px 7px;">
+      <table class="tbl-compact">{_cab.format("Motorista")}<tbody>{_linhas_tabela(_d_mot)}</tbody></table>
+    </div></div>
+  </div>
+  <div class="cons-box"><div class="cons-title">Diagnóstico</div>
+  <div class="cons-text">{_nota_pior}{_txt_diag} {_nota_oficial}</div></div>
+  {footer(0)}
 </div>""")
 
 # ================= PAGINA 4: LINHA VS META + VELOCIDADE (formato completo) =================

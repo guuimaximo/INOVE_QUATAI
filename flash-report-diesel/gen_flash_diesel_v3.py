@@ -1940,7 +1940,9 @@ def chart_cluster_velocidade():
     if not (ANALISE_CLUSTER and ANALISE_CLUSTER.get("vel") and ANALISE_CLUSTER["vel"]["linhas"]):
         return
     v = ANALISE_CLUSTER["vel"]
-    linhas = v["linhas"][:9]
+    # 8 linhas e o que cabe na folha junto com a tabela; com 10 a pagina
+    # transbordava e o PDF ganhava uma folha extra sem rodape.
+    linhas = v["linhas"][:8]
     fig, ax = plt.subplots(figsize=(12.4, 4.9))
     y = np.arange(len(linhas))
     alt = 0.36

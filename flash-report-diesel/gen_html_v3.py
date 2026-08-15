@@ -556,9 +556,16 @@ if _v and _v["linhas"]:
     if _piores_v:
         _txt_v += (" Linhas que mais perderam velocidade: "
                    + ", ".join(f"{l['nome']} ({pct(l['var'])})" for l in _piores_v) + ".")
+    _n_caiu = sum(1 for l in _v["linhas"] if (l["var"] or 0) < 0)
+    _txt_v += (f" De {len(_v['linhas'])} linhas com quilometragem relevante nos dois meses, "
+               f"{_n_caiu} perderam velocidade.")
 
+    # Mesmo corte do grafico. O texto avisa quantas ficaram de fora - tabela truncada
+    # em silencio faz parecer que o cluster so tem essas linhas.
+    _V_MOSTRA = 8
+    _v_extra = len(_v["linhas"]) - _V_MOSTRA
     _rows_v = ""
-    for l in _v["linhas"]:
+    for l in _v["linhas"][:_V_MOSTRA]:
         cor = "#c0392b" if (l["var"] or 0) < 0 else "#1e7a34"
         _rows_v += (f"<tr><td style='text-align:left;padding-left:7px;font-weight:700;'>{l['nome']}</td>"
                     f"<td>{fmt(l['km_ref']/1000,1)} mil</td>"
@@ -585,6 +592,7 @@ if _v and _v["linhas"]:
   <div class="card"><div class="card-title">Velocidade por linha — detalhamento</div><div class="card-body" style="padding:5px 7px;">
     <table class="tbl-compact"><thead><tr><th style="text-align:left;padding-left:7px;">Linha</th><th>Km rodado</th><th>km/h {MES3ANT}&rarr;{MES3REF}</th><th>Variação</th><th>Participação no km do cluster</th></tr></thead>
     <tbody>{_rows_v}</tbody></table>
+    {f'<div style="font-size:7.4px;color:#6B7C79;margin-top:4px;">Mostrando as {_V_MOSTRA} linhas com maior perda de velocidade; outras {_v_extra} ficaram de fora da tabela.</div>' if _v_extra > 0 else ''}
   </div></div>
   {footer(0)}
 </div>""")

@@ -41,51 +41,57 @@ AVISO_HTML = (f"""<div style="margin-top:16px; max-width:640px; font-size:12px; 
 
 CSS = """
 * { box-sizing: border-box; }
-body { margin:0; font-family: Arial, Helvetica, sans-serif; background:#eef2f7; color:#111827; }
-.page { width:297mm; height:204mm; overflow:hidden; margin:0 auto; background:linear-gradient(180deg,#ffffff 0%,#fbfcfe 100%); padding:4mm 10mm 8mm 10mm; position:relative; }
+body { margin:0; font-family: Arial, Helvetica, sans-serif; background:#EAF4F2; color:#1F2D2B; }
+.page { width:297mm; height:204mm; overflow:hidden; margin:0 auto; background:#ffffff; padding:0 10mm 8mm 10mm; position:relative; }
 .page-break { page-break-before: always; }
-.header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:4px solid #0f172a; padding-bottom:6px; margin-bottom:8px; }
+/* Faixa do padrao RGI: barra verde-escura sangrando ate as bordas da folha, com o fio
+   mint no topo. As margens laterais negativas anulam o padding da .page, e o padding-top
+   da .page foi zerado para a barra encostar no topo - por isso ela nao "flutua". */
+.header { display:flex; justify-content:space-between; align-items:center;
+  background:#0A5A50; border-top:3px solid #49B8A5;
+  margin:0 -10mm 8px -10mm; padding:7px 10mm 8px 10mm; }
 .title { padding-right:12px; }
-.title h1 { margin:0; font-size:19px; line-height:1.12; color:#0f172a; letter-spacing:.2px; }
-.title .sub { margin-top:4px; font-size:9.5px; color:#475569; }
-.period-box { min-width:200px; text-align:right; background:linear-gradient(135deg,#0f172a 0%,#0e7c7b 100%); color:white; padding:8px 12px; border-radius:12px; }
-.period-box .ref { font-size:8.5px; text-transform:uppercase; font-weight:700; opacity:.85; }
+.title h1 { margin:0; font-size:19px; line-height:1.12; color:#ffffff; font-style:italic; letter-spacing:.2px; }
+.title .sub { margin-top:3px; font-size:9.5px; color:#9FD8CE; }
+.period-box { min-width:190px; text-align:right; background:rgba(255,255,255,.13); border:1px solid rgba(159,216,206,.5); color:#ffffff; padding:6px 12px; border-radius:10px; }
+.period-box .ref { font-size:8.5px; text-transform:uppercase; font-weight:700; color:#9FD8CE; }
 .period-box .val { font-size:14px; font-weight:800; margin-top:2px; }
+.csc-mark { font-size:19px; font-weight:800; font-style:italic; color:#ffffff; letter-spacing:.5px; margin-left:13px; white-space:nowrap; }
 .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px; }
 .grid-38-62 { display:grid; grid-template-columns:38fr 62fr; gap:10px; margin-bottom:8px; }
 .tbl-alerta td, .tbl-alerta th { padding:4px 5px; font-size:8.2px; }
 .tbl-alerta th { font-size:7.4px; }
 .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:8px; }
 .grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; margin-bottom:8px; }
-.card { border:1px solid #dbe3ee; border-radius:12px; overflow:hidden; background:#fff; }
-.card-title { padding:6px 12px; background:linear-gradient(90deg,#0e7c7b 0%,#0f172a 100%); color:white; font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; }
+.card { border:1px solid #CFE4DF; border-radius:12px; overflow:hidden; background:#fff; }
+.card-title { padding:6px 12px; background:#0A5A50; color:white; font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; }
 .card-body { padding:8px 10px; }
 table { width:100%; border-collapse:collapse; font-size:8.4px; }
-th { background:#eef2f7; color:#0f172a; text-transform:uppercase; font-size:7.4px; padding:3px 4px; border:1px solid #dbe3ee; text-align:center; }
-td { padding:3px 4px; border:1px solid #dbe3ee; text-align:center; }
+th { background:#EAF4F2; color:#0A5A50; text-transform:uppercase; font-size:7.4px; padding:3px 4px; border:1px solid #CFE4DF; text-align:center; }
+td { padding:3px 4px; border:1px solid #CFE4DF; text-align:center; }
 .tbl-compact td, .tbl-compact th { padding:2px 4px; font-size:7.6px; }
 .tbl-big td, .tbl-big th { padding:7px 8px; font-size:10.5px; }
 .tbl-big th { font-size:9px; }
 .chart-wrap-md img { max-height:68mm; width:auto; max-width:100%; }
-.metric { border:1px solid #dbe3ee; border-radius:10px; padding:7px; background:#f8fafc; text-align:center; }
-.metric .lbl { font-size:8px; color:#64748b; text-transform:uppercase; font-weight:800; }
-.metric .val { margin-top:2px; font-size:15px; font-weight:800; color:#0f172a; }
-.metric .aux { margin-top:2px; font-size:7.5px; color:#64748b; }
-.chart-wrap { padding:6px; border:1px solid #dbe3ee; border-radius:12px; background:#fff; text-align:center; }
+.metric { border:1px solid #CFE4DF; border-radius:10px; padding:7px; background:#EAF4F2; text-align:center; }
+.metric .lbl { font-size:8px; color:#6B7C79; text-transform:uppercase; font-weight:800; }
+.metric .val { margin-top:2px; font-size:15px; font-weight:800; color:#1F2D2B; }
+.metric .aux { margin-top:2px; font-size:7.5px; color:#6B7C79; }
+.chart-wrap { padding:6px; border:1px solid #CFE4DF; border-radius:12px; background:#fff; text-align:center; }
 /* max-height e trava de seguranca: um PNG com proporcao inesperada (ja aconteceu com o
    cluster, que virou quase quadrado) empurrava a pagina inteira para a folha seguinte.
    O maior grafico legitimo desta classe ocupa ~134mm, entao 140mm nao mexe em nenhum. */
 .chart-wrap img { max-width:100%; max-height:140mm; width:auto; height:auto; }
 .chart-wrap-sm img { max-height:78mm; width:auto; max-width:100%; }
 .chart-wrap-tall img { max-height:88mm; width:auto; max-width:100%; }
-.cons-box { margin-top:6px; border:1px solid #dbe3ee; border-radius:12px; background:#f8fafc; padding:6px 12px; }
-.cons-title { font-size:8.5px; font-weight:800; text-transform:uppercase; margin-bottom:3px; color:#0f172a; }
-.cons-text { font-size:9px; line-height:1.32; color:#1f2937; text-align:justify; }
-.footer { position:absolute; left:10mm; right:10mm; bottom:3mm; font-size:7.5px; color:#64748b; display:flex; justify-content:space-between; border-top:1px solid #dbe3ee; padding-top:3px; }
+.cons-box { margin-top:6px; border:1px solid #CFE4DF; border-radius:12px; background:#EAF4F2; padding:6px 12px; }
+.cons-title { font-size:8.5px; font-weight:800; text-transform:uppercase; margin-bottom:3px; color:#0A5A50; }
+.cons-text { font-size:9px; line-height:1.32; color:#1F2D2B; text-align:justify; }
+.footer { position:absolute; left:10mm; right:10mm; bottom:3mm; font-size:7.5px; color:#6B7C79; display:flex; justify-content:space-between; border-top:1px solid #CFE4DF; padding-top:3px; }
 .warn { background:#fef9c3; border:1px solid #eab308; color:#854d0e; border-radius:10px; padding:6px 12px; font-size:9px; margin-bottom:6px; }
-.badge-oficial { display:inline-block; background:#0e7c7b; color:white; font-size:8px; font-weight:800; padding:2px 8px; border-radius:999px; margin-left:6px; }
-.placeholder { border:2px dashed #94a3b8; border-radius:12px; padding:20px; text-align:center; color:#64748b; background:#f8fafc; }
-.placeholder b { color:#0f172a; }
+.badge-oficial { display:inline-block; background:#0E7C6E; color:white; font-size:8px; font-weight:800; padding:2px 8px; border-radius:999px; margin-left:6px; }
+.placeholder { border:2px dashed #9AAEAA; border-radius:12px; padding:20px; text-align:center; color:#6B7C79; background:#EAF4F2; }
+.placeholder b { color:#1F2D2B; }
 @page { size: A4 landscape; margin:0; }
 """
 
@@ -114,6 +120,7 @@ def page_header(titulo_pag, sub, ref_label, ref_val, numerar=True):
     <div class="title"><h1>{assunto.upper()}</h1>
       <div class="sub">{sub}</div></div>
     <div class="period-box"><div class="ref">{ref_label}</div><div class="val">{ref_val}</div></div>
+    <div class="csc-mark">CSC</div>
   </div>"""
     _NUM[0] += 1
     # Guarda o assunto na grafia original: o indice precisa dele antes do .upper(),
@@ -124,6 +131,7 @@ def page_header(titulo_pag, sub, ref_label, ref_val, numerar=True):
     <div class="title"><h1>{assunto.upper()}</h1>
       <div class="sub">{linha}</div></div>
     <div class="period-box"><div class="ref">{ref_label}</div><div class="val">{ref_val}</div></div>
+    <div class="csc-mark">CSC</div>
   </div>"""
 
 def footer(pagina=None):
@@ -143,7 +151,7 @@ _cal_c = _cal.Calendar(firstweekday=6)
 _weeks_jul = _cal_c.monthdayscalendar(gfd.MES_REF_ANO, gfd.MES_REF_MM)
 _dias_cols = ["Dom","Seg","Ter","Qua","Qui","Sex","S\u00e1b"]
 _visita_label = {14: "1\u00aa visita", 28: "2\u00aa visita"}
-_cal_header = "".join(f'<div style="text-align:center;font-size:8px;font-weight:800;color:#64748b;text-transform:uppercase;padding:4px 0;">{d}</div>' for d in _dias_cols)
+_cal_header = "".join(f'<div style="text-align:center;font-size:8px;font-weight:800;color:#6B7C79;text-transform:uppercase;padding:4px 0;">{d}</div>' for d in _dias_cols)
 # Celula alta: a pagina 17 tem so o calendario e o card da visita, e com celula baixa
 # sobrava mais de um terco da folha em branco (fica gritante quando a visita nao teve
 # fotos). A altura da celula e o que faz os dois cards preencherem a pagina.
@@ -154,11 +162,11 @@ for _week in _weeks_jul:
         if _day == 0:
             _cal_cells += '<div></div>'
         elif _day in _visita_label:
-            _cal_cells += (f'<div style="border-radius:8px;background:#0e7c7b;color:#fff;padding:5px 3px;text-align:center;{_CAL_CELULA}">'
+            _cal_cells += (f'<div style="border-radius:8px;background:#0E7C6E;color:#fff;padding:5px 3px;text-align:center;{_CAL_CELULA}">'
                            f'<div style="font-size:16px;font-weight:800;">{_day}</div>'
                            f'<div style="font-size:7px;font-weight:700;margin-top:1px;">{_visita_label[_day]}</div></div>')
         else:
-            _cal_cells += (f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:5px 3px;text-align:center;color:#334155;{_CAL_CELULA}">'
+            _cal_cells += (f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:5px 3px;text-align:center;color:#3A4A47;{_CAL_CELULA}">'
                            f'<div style="font-size:13px;font-weight:600;">{_day}</div></div>')
 _visitas_datas = ", ".join(f"{d:02d}/{gfd.MES_REF_MM:02d}" for d in sorted(_visita_label))
 CAL_JULHO_HEADER = _cal_header
@@ -166,25 +174,26 @@ CAL_JULHO_CELLS = _cal_cells
 
 
 # ================= PAGINA 0: CAPA =================
-pages.append(f"""<div class="page" style="background:linear-gradient(135deg,#0f172a 0%,#0e7c7b 100%); color:white; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:0;">
+pages.append(f"""<div class="page" style="background:linear-gradient(135deg,#0A5A50 0%,#0E7C6E 100%); color:white; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:0;">
+  <div style="position:absolute; top:0; left:0; right:0; height:3px; background:#49B8A5;"></div>
   <svg width="150" height="90" viewBox="0 0 200 120" style="margin-bottom:10px;">
     <rect x="8" y="28" width="184" height="62" rx="14" fill="#ffffff" opacity="0.95"/>
-    <rect x="8" y="28" width="184" height="20" rx="10" fill="#a7f3d0"/>
-    <rect x="20" y="52" width="26" height="20" rx="3" fill="#0e7c7b"/>
-    <rect x="52" y="52" width="26" height="20" rx="3" fill="#0e7c7b"/>
-    <rect x="84" y="52" width="26" height="20" rx="3" fill="#0e7c7b"/>
-    <rect x="116" y="52" width="26" height="20" rx="3" fill="#0e7c7b"/>
-    <rect x="148" y="52" width="30" height="20" rx="3" fill="#0f172a"/>
-    <rect x="8" y="76" width="184" height="8" fill="#0f172a"/>
-    <circle cx="42" cy="98" r="13" fill="#0f172a"/>
+    <rect x="8" y="28" width="184" height="20" rx="10" fill="#9FD8CE"/>
+    <rect x="20" y="52" width="26" height="20" rx="3" fill="#0E7C6E"/>
+    <rect x="52" y="52" width="26" height="20" rx="3" fill="#0E7C6E"/>
+    <rect x="84" y="52" width="26" height="20" rx="3" fill="#0E7C6E"/>
+    <rect x="116" y="52" width="26" height="20" rx="3" fill="#0E7C6E"/>
+    <rect x="148" y="52" width="30" height="20" rx="3" fill="#0A5A50"/>
+    <rect x="8" y="76" width="184" height="8" fill="#0A5A50"/>
+    <circle cx="42" cy="98" r="13" fill="#0A5A50"/>
     <circle cx="42" cy="98" r="5.5" fill="#cbd5e1"/>
-    <circle cx="158" cy="98" r="13" fill="#0f172a"/>
+    <circle cx="158" cy="98" r="13" fill="#0A5A50"/>
     <circle cx="158" cy="98" r="5.5" fill="#cbd5e1"/>
-    <rect x="8" y="28" width="184" height="62" rx="14" fill="none" stroke="#0e7c7b" stroke-width="2"/>
+    <rect x="8" y="28" width="184" height="62" rx="14" fill="none" stroke="#0E7C6E" stroke-width="2"/>
   </svg>
   <div style="font-size:13px; letter-spacing:4px; font-weight:700; opacity:.8; margin-bottom:14px;">GRUPO CSC · EXPRESSO PLANALTO S/A</div>
   <div style="font-size:40px; font-weight:900; letter-spacing:1px;">CONDUÇÃO ECONÔMICA</div>
-  <div style="font-size:22px; font-weight:700; margin-top:6px; color:#a7f3d0;">FLASH REPORT DIESEL</div>
+  <div style="font-size:22px; font-weight:700; margin-top:6px; color:#9FD8CE;">FLASH REPORT DIESEL</div>
   <div style="margin-top:26px; font-size:15px; font-weight:700; background:rgba(255,255,255,.12); padding:8px 26px; border-radius:999px;">{MESREF}</div>
   {AVISO_HTML}
   <div style="margin-top:34px; display:flex; gap:34px;">
@@ -544,7 +553,7 @@ def _mudou(de, para):
     de, para = str(de or "-"), str(para or "-")
     if de in ("-", "") or para in ("-", ""):
         return "—"
-    return de if de == para else f"{de}<span style='color:#94a3b8;'>→</span>{para}"
+    return de if de == para else f"{de}<span style='color:#9AAEAA;'>→</span>{para}"
 
 
 def _com_mix(de, para, mix):
@@ -671,7 +680,7 @@ rows_alerta_full = ""
 for a in gfd.SINAL_ALERTA:
     c = _causa_por_nome.get(str(a[0]).strip().upper())
     if c and c[5] is None:
-        causa, cor = "Sem dado suficiente", "#64748b"
+        causa, cor = "Sem dado suficiente", "#6B7C79"
     elif c and c[5] and c[6]:
         causa, cor = "Mudou linha e frota", "#e0a800"
     elif c and c[6]:
@@ -681,7 +690,7 @@ for a in gfd.SINAL_ALERTA:
     elif c:
         causa, cor = "Mesma linha e frota — condução", "#dc2626"
     else:
-        causa, cor = "—", "#64748b"
+        causa, cor = "—", "#6B7C79"
     _lin = _com_mix(c[1], c[2], c[7]) if c else "—"
     _car = _com_mix(c[3], c[4], c[8]) if c else "—"
     rows_alerta_full += (
@@ -815,14 +824,14 @@ rows_destaque_full = ""
 for a in _dp:
     c = _causa_dp.get(str(a[0]).strip().upper())
     if c and c[5] is None:
-        causa, cor = "Sem dado suficiente", "#64748b"
+        causa, cor = "Sem dado suficiente", "#6B7C79"
     elif c and (c[5] or c[6]):
         _q = ("linha e frota" if (c[5] and c[6]) else ("frota" if c[6] else "linha"))
         causa, cor = f"Mudou de {_q}", "#e0a800"
     elif c:
         causa, cor = "Mesma linha e frota — condução", "#16a34a"
     else:
-        causa, cor = "—", "#64748b"
+        causa, cor = "—", "#6B7C79"
     _lin = _com_mix(c[1], c[2], c[7]) if c else "—"
     _car = _com_mix(c[3], c[4], c[8]) if c else "—"
     rows_destaque_full += (
@@ -913,7 +922,7 @@ for t in gfd.TRATATIVAS_PENDENTES_PRAZO:
     delta = t[6]-t[5]
     rows_tratativas_pendentes += (f"<tr><td style='text-align:left;padding-left:6px;'>{t[0].title()}</td>"
                                    f"<td>{t[1]}</td><td>{t[2]}</td><td>{t[3]}</td>"
-                                   f"<td style='color:#0e7c7b;font-weight:800;'>{t[4]}d</td>"
+                                   f"<td style='color:#0E7C6E;font-weight:800;'>{t[4]}d</td>"
                                    f"<td>{fmt(t[5],2)}</td><td>{fmt(t[6],2)}</td>"
                                    f"<td style='color:{'#16a34a' if delta>=0 else '#dc2626'};font-weight:700;'>{fmt(delta,2)}</td></tr>")
 
@@ -999,13 +1008,13 @@ def _lista_evolucao(lista, cor, seta, limite=14):
     itens = sorted(lista, key=lambda e: -abs(e["delta"]))
     linhas = "".join(
         f"<tr><td style='text-align:left;padding-left:8px;'>{e['nome']}</td>"
-        f"<td style='font-size:7.4px;color:#64748b;'>{e.get('instrutor', '-').split()[0]}</td>"
+        f"<td style='font-size:7.4px;color:#6B7C79;'>{e.get('instrutor', '-').split()[0]}</td>"
         f"<td>{fmt(e['antes'],3)}</td><td style='font-weight:700;'>{fmt(e['depois'],3)}</td>"
         f"<td style='color:{cor};font-weight:800;white-space:nowrap;'>{seta} {fmt(abs(e['delta']),3)}</td></tr>"
         for e in itens[:limite])
     if len(itens) > limite:
         linhas += (f"<tr><td colspan='5' style='text-align:left;padding-left:8px;font-size:7.4px;"
-                   f"color:#64748b;'>+ {len(itens) - limite} motoristas nesta faixa, "
+                   f"color:#6B7C79;'>+ {len(itens) - limite} motoristas nesta faixa, "
                    f"não listados por espaço.</td></tr>")
     return linhas
 
@@ -1130,7 +1139,7 @@ for a in sorted(gfd.ACOMPANHAMENTO, key=lambda x: x["depois"] - x["antes"]):
     # Variacao abaixo de 0,01 km/L e ruido de medicao, nao evolucao: sai neutra (=) em
     # cinza, em vez de seta verde para cima. Antes, delta 0,000 caia no >= e virava alta.
     if abs(delta) < 0.01:
-        cor, seta = "#94a3b8", "="
+        cor, seta = "#9AAEAA", "="
     elif delta > 0:
         cor, seta = "#16a34a", "&#8593;"
     else:
@@ -1139,8 +1148,8 @@ for a in sorted(gfd.ACOMPANHAMENTO, key=lambda x: x["depois"] - x["antes"]):
     _kmd = f"{a['km_depois']:,}".replace(",", ".") if a.get("km_depois") else "—"
     rows_acomp += (f"<tr><td style='text-align:left;padding-left:6px;'>{a['nome']}</td>"
                    f"<td>{a['instrutor']}</td><td>{a['status']}</td>"
-                   f"<td style='color:#64748b;'>{_kma}</td><td>{fmt(a['antes'],3)}</td>"
-                   f"<td style='color:#64748b;'>{_kmd}</td><td style='font-weight:700;'>{fmt(a['depois'],3)}</td>"
+                   f"<td style='color:#6B7C79;'>{_kma}</td><td>{fmt(a['antes'],3)}</td>"
+                   f"<td style='color:#6B7C79;'>{_kmd}</td><td style='font-weight:700;'>{fmt(a['depois'],3)}</td>"
                    f"<td style='color:{cor};font-weight:800;'>{seta} {fmt(abs(delta),3)}</td></tr>")
 
 rows_30dias = ""
@@ -1332,7 +1341,7 @@ _p15_faixas = " e ".join(_p15_top) if _p15_top else "—"
 rows_merito = ""
 for m in gfd.MERITOCRACIA_TOP:
     rows_merito += (f"<tr><td style='text-align:left;padding-left:6px;'>{m[0].title()}</td><td>{m[1]}</td>"
-                     f"<td style='font-weight:700;color:#0e7c7b;'>R$ {m[2]}</td><td>{fmt(m[3],2)}</td></tr>")
+                     f"<td style='font-weight:700;color:#0E7C6E;'>R$ {m[2]}</td><td>{fmt(m[3],2)}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 15 · Meritocracia — Premiação por KM/L", "Fonte: BCNT.premiacao_atualizada — valor já calculado pela regra da empresa", f"Total pago ({MESREF_NOME})", f"R$ {gfd.MERITOCRACIA_RESUMO['total_pago']:,}".replace(",","."))}
@@ -1369,7 +1378,7 @@ def _janela_carro(d):
     if not (d[6] and d[7]):
         return str(d[5])
     _f = lambda iso: f"{iso[8:10]}/{iso[5:7]}"
-    return (f"{d[5]}<div style='font-size:6.6px;color:#64748b;font-weight:600;'>"
+    return (f"{d[5]}<div style='font-size:6.6px;color:#6B7C79;font-weight:600;'>"
             f"{_f(d[6])}–{_f(d[7])}</div>")
 
 
@@ -1449,18 +1458,30 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # Peca ao usuario e atualize aqui + embuta as fotos anexadas. Ver COWORK_FLASH.md.
 # Fotos da visita: coloque os arquivos em flash-report-diesel/ e liste os nomes aqui.
 # Lista vazia = visita sem registro fotografico (o bloco de imagens some da pagina).
-FOTOS_NOTURNO_ARQUIVOS = ["noturno_ago_1.jpg", "noturno_ago_2.jpg", "noturno_ago_3.jpg"]
-# As fotos chegam do WhatsApp com orientacao mista (as de agosto sao 2 paisagem + 1 retrato).
-# Grade fixa com object-fit:cover cortava a cabeca das paisagens e espremia o retrato, entao
-# a faixa e um flex: altura travada, largura livre. Cada foto guarda a proporcao original e
-# nada e cortado, seja qual for a orientacao que vier no mes seguinte.
+# Cada item e (arquivo, foco vertical). As fotos chegam do WhatsApp com orientacao mista
+# (as de agosto sao 2 paisagem + 1 retrato) e larguras livres deixavam o retrato com 40px:
+# ao lado de uma paisagem 2,2:1, um retrato 0,45:1 na mesma altura vira uma tira. Entao as
+# celulas sao iguais e a foto preenche com object-fit:cover - o que muda por foto e ONDE o
+# recorte se apoia. Paisagem de grupo pede ~40%; retrato de corpo inteiro pede ~24%, senao
+# o corte pega a cintura em vez do rosto. So um numero para acertar no mes que vem.
+FOTOS_NOTURNO_ARQUIVOS = [
+    ("noturno_ago_1.jpg", "40%"),
+    ("noturno_ago_2.jpg", "40%"),
+    ("noturno_ago_3.jpg", "24%"),
+]
+# inline-block em vez de flex de proposito: o flex-wrap do WeasyPrint nao e confiavel e as
+# fotos empilhavam uma por linha. font-size:0 no pai mata o espaco entre os inline-blocks.
+# 32% + 0,3% de margem dos dois lados = 97,8% - a folga evita a quebra de linha por
+# arredondamento, que jogava a terceira foto para baixo.
 FOTOS_NOTURNO = "".join(
-    f'<img src="{_f}" style="height:104px;width:auto;border-radius:8px;'
-    f'border:1px solid #dbe3ee;display:block;"/>'
-    for _f in FOTOS_NOTURNO_ARQUIVOS)
+    f'<div style="display:inline-block;width:32%;height:96px;margin:0 .3%;'
+    f'border-radius:8px;overflow:hidden;border:1px solid #CFE4DF;vertical-align:top;">'
+    f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;'
+    f'object-position:center {_foco};display:block;"/></div>'
+    for _f, _foco in FOTOS_NOTURNO_ARQUIVOS)
 FOTOS_NOTURNO_BLOCO = (
-    f'<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;'
-    f'justify-content:center;align-items:flex-start;">{FOTOS_NOTURNO}</div>'
+    f'<div style="margin-top:7px;text-align:center;font-size:0;line-height:0;">'
+    f'{FOTOS_NOTURNO}</div>'
     if FOTOS_NOTURNO_ARQUIVOS else "")
 # ================= PAGINA 17: ACOMPANHAMENTO NOTURNO =================
 # Esta pagina tem so dois cards curtos e sobrava quase metade da folha em branco (a visita
@@ -1477,14 +1498,14 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
       <div class="cons-text">{len(_visita_label)} visitas noturnas programadas para {MESREF_NOME.lower()} — {_visitas_datas} — mantendo a cadência mensal de visitas noturnas. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
     <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Última visita realizada — 14/08/2026</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
-      <div style="font-weight:800;font-size:10.5px;color:#0f172a;margin-bottom:2px;">Treinamento Prático de Manobristas em Campo — Acompanhamento do Instrutor</div>
-      <div style="font-size:7.8px;color:#0e7c7b;font-weight:700;margin-bottom:4px;">Acompanhamento: instrutor Hélio</div>
+      <div style="font-weight:800;font-size:10.5px;color:#1F2D2B;margin-bottom:2px;">Treinamento Prático de Manobristas em Campo — Acompanhamento do Instrutor</div>
+      <div style="font-size:7.8px;color:#0E7C6E;font-weight:700;margin-bottom:4px;">Acompanhamento: instrutor Hélio</div>
       <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático com os manobristas em campo, com acompanhamento do instrutor, trabalhando a dinâmica “o instrutor leva e o manobrista traz”, proporcionando mais segurança e confiança durante as manobras.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">Também foi realizado teste prático de manobrista para motorista, sendo o colaborador Maurício <b>APROVADO</b> na avaliação e apto a exercer a função de motorista.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">Treinamento, avaliação e desenvolvimento profissional em busca de mais segurança e qualidade na operação.</div>
       {FOTOS_NOTURNO_BLOCO}
       <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">28/08/2026</div>
-        <div style="font-size:7.6px;color:#475569;margin-top:2px;">2ª e última visita noturna de agosto</div></div>
+        <div style="font-size:7.6px;color:#48605C;margin-top:2px;">2ª e última visita noturna de agosto</div></div>
     </div></div>
   </div>
   {footer(17)}
@@ -1531,9 +1552,9 @@ CRONOGRAMA = [
 ]
 
 _ROW = ('<div style="display:flex;justify-content:space-between;align-items:flex-start;'
-        'padding:4px 0;border-bottom:1px solid #eef2f7;"><div style="flex:1;">'
+        'padding:4px 0;border-bottom:1px solid #EAF4F2;"><div style="flex:1;">'
         '<span style="color:{cor};font-weight:800;margin-right:4px;">{marca}</span>'
-        '<span style="font-size:8.6px;font-weight:700;color:#0f172a;">{tipo}</span>{sub}</div>'
+        '<span style="font-size:8.6px;font-weight:700;color:#1F2D2B;">{tipo}</span>{sub}</div>'
         '<div style="font-size:8px;color:{cor_data};font-weight:700;white-space:nowrap;'
         'margin-left:6px;">{data}</div></div>')
 
@@ -1548,13 +1569,13 @@ def _crono_venceu(data):
 def _crono_card(titulo, intervalo, itens):
     linhas = ""
     for tipo, tema, data, feito in itens:
-        sub = (f'<div style="font-size:7.6px;color:#475569;margin-top:1px;">{tema}</div>'
+        sub = (f'<div style="font-size:7.6px;color:#48605C;margin-top:1px;">{tema}</div>'
                if tema else "")
         atrasado = not feito and _crono_venceu(data)
         linhas += _ROW.format(cor="#16a34a" if feito else "#cbd5e1",
                               marca="&#10003;" if feito else "&#9675;",
                               tipo=tipo, sub=sub, data=data,
-                              cor_data="#dc2626" if atrasado else "#64748b" if feito else "#94a3b8")
+                              cor_data="#dc2626" if atrasado else "#6B7C79" if feito else "#9AAEAA")
     return (f'<div class="card" style="margin-bottom:7px;"><div class="card-title">{titulo} — {MESREF} '
             f'<span style="font-weight:400;opacity:.85;">({intervalo})</span></div>'
             f'<div class="card-body" style="padding:6px 10px;">{linhas}</div></div>')
@@ -1591,9 +1612,9 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # ================= PAGINA 14: MELHORIA CONTINUA =================
 sug_acomp_rows = "".join(
     f"""<div class="card" style="margin-bottom:6px;"><div class="card-body" style="padding:7px 10px;">
-    <div style="font-weight:800;font-size:9.5px;color:#0f172a;">{s[0]}</div>
-    <div style="font-size:8.6px;color:#475569;margin-top:2px;">{s[1]}</div>
-    <div style="font-size:8.8px;color:#0e7c7b;font-weight:700;margin-top:3px;">→ {s[2]}</div>
+    <div style="font-weight:800;font-size:9.5px;color:#1F2D2B;">{s[0]}</div>
+    <div style="font-size:8.6px;color:#48605C;margin-top:2px;">{s[1]}</div>
+    <div style="font-size:8.8px;color:#0E7C6E;font-weight:700;margin-top:3px;">→ {s[2]}</div>
   </div></div>"""
     for s in gfd.SUGESTOES_ACOMPANHAMENTO
 )
@@ -1629,14 +1650,14 @@ rows_sug_linhas = ""
 for s in gfd.SUGESTOES_LINHAS:
     rows_sug_linhas += (f"<tr><td style='font-weight:bold;text-align:left;padding-left:6px;'>{s[0]}</td>"
                          f"<td style='text-align:left;font-size:8px;'>{s[1]}</td>"
-                         f"<td style='text-align:left;font-size:8px;color:#0e7c7b;font-weight:700;'>{s[2]}</td></tr>")
+                         f"<td style='text-align:left;font-size:8px;color:#0E7C6E;font-weight:700;'>{s[2]}</td></tr>")
 
 pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Página 19 · Melhoria Contínua — Plano de Ação da Semana", "Síntese analítica sobre tratativas, acompanhamentos, linhas, carros e instrutores", "Foco #1 da semana", _p19_foco)}
   <div class="grid-3" style="margin-bottom:6px;">
-    <div class="metric" style="background:#fef2f2;border-color:#fecaca;"><div class="lbl" style="color:#dc2626;">Ação imediata</div><div class="val" style="font-size:11px;color:#0f172a;">{_p19_acao}</div><div class="aux">{_p19_acao_aux}</div></div>
-    <div class="metric" style="background:#fffbeb;border-color:#fde68a;"><div class="lbl" style="color:#b45309;">Investigar</div><div class="val" style="font-size:11px;color:#0f172a;">{_p19_inv}</div><div class="aux">{_p19_inv_aux}</div></div>
-    <div class="metric" style="background:#f0fdf4;border-color:#bbf7d0;"><div class="lbl" style="color:#15803d;">Replicar</div><div class="val" style="font-size:11px;color:#0f172a;">{_p19_rep}</div><div class="aux">Vale testar em outros motoristas da mesma linha</div></div>
+    <div class="metric" style="background:#fef2f2;border-color:#fecaca;"><div class="lbl" style="color:#dc2626;">Ação imediata</div><div class="val" style="font-size:11px;color:#1F2D2B;">{_p19_acao}</div><div class="aux">{_p19_acao_aux}</div></div>
+    <div class="metric" style="background:#fffbeb;border-color:#fde68a;"><div class="lbl" style="color:#b45309;">Investigar</div><div class="val" style="font-size:11px;color:#1F2D2B;">{_p19_inv}</div><div class="aux">{_p19_inv_aux}</div></div>
+    <div class="metric" style="background:#f0fdf4;border-color:#bbf7d0;"><div class="lbl" style="color:#15803d;">Replicar</div><div class="val" style="font-size:11px;color:#1F2D2B;">{_p19_rep}</div><div class="aux">Vale testar em outros motoristas da mesma linha</div></div>
   </div>
   <div class="grid-2">
     <div class="card"><div class="card-title">Motoristas — sugestão de novo acompanhamento ou tratativa</div><div class="card-body" style="max-height:105mm;overflow:hidden;">
@@ -1692,10 +1713,10 @@ def _cap_titulo(t):
 
 
 _idx_linhas = "".join(
-    f'<tr style="background:{"#ffffff" if i % 2 else "#f8fafc"};">'
+    f'<tr style="background:{"#ffffff" if i % 2 else "#EAF4F2"};">'
     f'<td style="width:52px;text-align:center;font-size:11.5px;font-weight:800;'
-    f'color:#0e7c7b;padding:7px 4px;">{n:02d}</td>'
-    f'<td style="text-align:left;padding:7px 14px;font-size:11px;color:#0f172a;">'
+    f'color:#0E7C6E;padding:7px 4px;">{n:02d}</td>'
+    f'<td style="text-align:left;padding:7px 14px;font-size:11px;color:#1F2D2B;">'
     f'{_cap_titulo(t)}</td></tr>'
     for i, (n, t) in enumerate(_idx))
 

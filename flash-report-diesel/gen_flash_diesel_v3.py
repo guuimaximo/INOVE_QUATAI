@@ -929,6 +929,63 @@ def _causa_cluster(ant, ref, chave, km_min=500.0):
     return out
 
 
+def _agg_vel(rows, chave):
+    """Soma km e HORAS por grupo. Alimenta o mesmo _decompor_kml: aquela funcao decompoe
+    km dividido por qualquer coisa, e com horas no lugar de litros o resultado sai em
+    km/h. Os campos continuam com nome kml_* - e a mesma conta, outra unidade."""
+    from collections import defaultdict as _dd2
+    d = _dd2(lambda: [0.0, 0.0])
+    for r in rows:
+        km, mins = _num(r.get("km_rodado")), _num(r.get("minutos_em_viagem"))
+        k = str(r.get(chave) or "").strip()
+        if k and km and mins:
+            d[k][0] += km
+            d[k][1] += mins / 60.0
+    return d
+
+
+def _vel_de(rows):
+    km = h = 0.0
+    for r in rows:
+        _km, _mi = _num(r.get("km_rodado")), _num(r.get("minutos_em_viagem"))
+        if _km and _mi:
+            km += _km
+            h += _mi / 60.0
+    return (km / h) if h else None
+
+
+def _analise_velocidade(ant, ref, todos_ant, todos_ref):
+    """Responde: a velocidade caiu por troca de linha ou porque as mesmas linhas ficaram
+    mais lentas? E compara com a frota inteira na MESMA janela - se a frota toda
+    desacelerou, o problema e transito da cidade e nao escala do cluster."""
+    dec = _decompor_kml(_agg_vel(ant, "linha"), _agg_vel(ref, "linha"))
+    if not dec:
+        return None
+    frota_ant, frota_ref = _vel_de(todos_ant), _vel_de(todos_ref)
+    linhas = []
+    for i in dec["itens"]:
+        if i["km_ant"] < 500 or i["km_ref"] < 500:
+            continue   # mesmo piso das outras tabelas: pouca km oscila demais
+        linhas.append({
+            "nome": i["nome"], "km_ref": i["km_ref"],
+            "vel_ant": i["kml_ant"], "vel_ref": i["kml_ref"],
+            "var": round(100 * (i["kml_ref"] - i["kml_ant"]) / i["kml_ant"], 1)
+            if i["kml_ant"] else None,
+            "share_ant": i["share_ant"], "share_ref": i["share_ref"],
+        })
+    linhas.sort(key=lambda x: x["var"] if x["var"] is not None else 0)
+    return {
+        "vel_ant": dec["kml_ant"], "vel_ref": dec["kml_ref"],
+        "var_pct": round(100 * dec["delta"] / dec["kml_ant"], 2) if dec["kml_ant"] else None,
+        "mix": dec["mix"], "mesmas": dec["desemp"],
+        "frota_ant": round(frota_ant, 2) if frota_ant else None,
+        "frota_ref": round(frota_ref, 2) if frota_ref else None,
+        "frota_var": round(100 * (frota_ref - frota_ant) / frota_ant, 2)
+        if (frota_ant and frota_ref) else None,
+        "linhas": linhas,
+    }
+
+
 def _analise_cluster(rows_pd, cluster_de, cluster, nome_chapa):
     """Diagnostico de um cluster: por que o KM/L caiu (ou subiu) contra o mes anterior.
 
@@ -972,6 +1029,16 @@ def _analise_cluster(rows_pd, cluster_de, cluster, nome_chapa):
                 it["nome"] = nome_chapa(it["nome"])
         dims[dim] = d
     base = dims["linha"]
+    # frota inteira na mesma janela, para saber se a desaceleracao e so do cluster
+    _todos_ant = [r for r in rows_pd
+                  if (int(r.get("ano") or 0), int(r["mes"])) == _ym_ant
+                  and len(str(r.get("dia") or "")) >= 10
+                  and int(str(r["dia"])[8:10]) <= _dia_max]
+    _todos_ref = [r for r in rows_pd
+                  if (int(r.get("ano") or 0), int(r["mes"])) == _ym_ref
+                  and len(str(r.get("dia") or "")) >= 10
+                  and int(str(r["dia"])[8:10]) <= _dia_max]
+    vel = _analise_velocidade(ant, ref, _todos_ant, _todos_ref)
     # ----- a resposta de "por que caiu": condicoes da operacao x conducao -----
     pa, pr = _perfil(ant), _perfil(ref)
     ca, cr = _por_100(pa), _por_100(pr)
@@ -1000,6 +1067,7 @@ def _analise_cluster(rows_pd, cluster_de, cluster, nome_chapa):
     return {
         "cluster": cluster,
         "causa": causa,
+        "vel": vel,
         "dia_max": _dia_max,   # os dois meses cortados no mesmo dia
         "kml_ant": base["kml_ant"], "kml_ref": base["kml_ref"], "delta": base["delta"],
         "var_pct": round(100 * base["delta"] / base["kml_ant"], 2),
@@ -1123,6 +1191,15 @@ if _bcnt_url and _bcnt_key:
             _ac["pior_cluster"] = _qd[0][0] if _qd else None
             ANALISE_CLUSTER = _ac
             print(f"[cluster] Pagina de diagnostico do {CLUSTER_DIAGNOSTICO} ao vivo.")
+            _v = _ac.get("vel")
+            if _v:
+                print(f"[vel] {CLUSTER_DIAGNOSTICO}: {_v['vel_ant']} -> {_v['vel_ref']} km/h "
+                      f"({_v['var_pct']}%) | frota: {_v['frota_ant']} -> {_v['frota_ref']} "
+                      f"({_v['frota_var']}%) | mix {_v['mix']:+.3f} mesmas linhas {_v['mesmas']:+.3f}")
+                for _l in _v["linhas"]:
+                    print(f"[vel]   {_l['nome']:8} km {_l['km_ref']:7} "
+                          f"vel {_l['vel_ant']:6} -> {_l['vel_ref']:6} ({_l['var']:+.1f}%) "
+                          f"part {_l['share_ant']}% -> {_l['share_ref']}%")
         else:
             print(f"[cluster] sem dado para diagnosticar o {CLUSTER_DIAGNOSTICO}; pagina omitida.")
         # Pagina 7: piores e melhores motoristas do mes de referencia (min. 500 km)
@@ -1856,6 +1933,48 @@ def chart_kml_historico():
     plt.close(fig)
 
 
+def chart_cluster_velocidade():
+    """Velocidade por linha, mes anterior x mes de referencia, com a media da frota como
+    referencia vertical. Responde de bater o olho se a linha desacelerou junto com a
+    cidade ou se destoou."""
+    if not (ANALISE_CLUSTER and ANALISE_CLUSTER.get("vel") and ANALISE_CLUSTER["vel"]["linhas"]):
+        return
+    v = ANALISE_CLUSTER["vel"]
+    linhas = v["linhas"][:9]
+    fig, ax = plt.subplots(figsize=(12.4, 4.9))
+    y = np.arange(len(linhas))
+    alt = 0.36
+    ax.barh(y + alt / 2, [l["vel_ant"] for l in linhas], height=alt,
+            color=GREY, label=f"{MES3_ANT}")
+    ax.barh(y - alt / 2, [l["vel_ref"] for l in linhas], height=alt,
+            color=TEAL, label=f"{MES3_REF}")
+    for i, l in enumerate(linhas):
+        ax.text(l["vel_ant"] + 0.12, y[i] + alt / 2, fmt(l["vel_ant"], 1),
+                va="center", fontsize=11, color=DARK)
+        cor = RED if (l["var"] or 0) < 0 else GREEN
+        ax.text(l["vel_ref"] + 0.12, y[i] - alt / 2,
+                f"{fmt(l['vel_ref'],1)}  ({pct(l['var'])})",
+                va="center", fontsize=11.5, fontweight="bold", color=cor)
+    if v["frota_ref"]:
+        ax.axvline(v["frota_ref"], color=GOLD, linestyle="--", linewidth=2.4,
+                   label=f"Média da frota {MES3_REF} ({fmt(v['frota_ref'],1)})", zorder=1)
+    ax.set_yticks(y)
+    ax.set_yticklabels([l["nome"] for l in linhas], fontsize=13.5,
+                       fontweight="bold", color=DARK)
+    ax.invert_yaxis()
+    ax.set_xlabel("Velocidade média (km/h)", fontsize=13, color=DARK)
+    ax.tick_params(axis="x", labelsize=11.5)
+    ax.set_xlim(0, max(max(l["vel_ant"], l["vel_ref"]) for l in linhas) * 1.30)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=3,
+              fontsize=12, frameon=False)
+    for sp in ["top", "right", "left"]:
+        ax.spines[sp].set_visible(False)
+    ax.grid(axis="x", linestyle=":", alpha=0.45)
+    fig.tight_layout()
+    fig.savefig(OUT / "v3_cluster_vel.png", dpi=150, transparent=True)
+    plt.close(fig)
+
+
 def chart_cluster_cascata():
     """Cascata: sai do KM/L do mes anterior, aplica o efeito das CONDICOES da operacao
     (o consumo ideal da rota mudou) e o efeito da CONDUCAO (a sobra em cima do ideal
@@ -2460,7 +2579,7 @@ for f in [chart_kml_historico, chart_semanal_evolucao, chart_semanal_variacao_pc
           chart_donut_tratativas, chart_instrutores_diario,
           chart_antes_depois_barras, chart_meritocracia_donut, chart_divergencia_carros, chart_aderencia_carros, chart_aderencia_empresa_diaria,
           # saem sozinhos se ANALISE_CLUSTER for None (sem dado para o cluster investigado)
-          chart_cluster_cascata, chart_cluster_diagnostico]:
+          chart_cluster_cascata, chart_cluster_diagnostico, chart_cluster_velocidade]:
     f()
 chart_motoristas_lollipop(PIORES, "Top 10 — Maior distância da meta", "v3_piores.png", RED)
 chart_motoristas_lollipop(MELHORES, "Top 10 — Melhor desempenho", "v3_melhores.png", GREEN)

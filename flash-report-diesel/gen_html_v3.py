@@ -512,6 +512,83 @@ if _ac:
   {footer(0)}
 </div>""")
 
+# ---- Pagina irma do diagnostico: o que aconteceu com a VELOCIDADE do cluster ----
+# A velocidade e o que decide a acao: se as mesmas linhas ficaram mais lentas junto com a
+# frota, o assunto e transito e tempo de viagem (operacao); se o cluster desacelerou
+# sozinho, e escala/itinerario dele. Sem isso o desperdicio da pagina anterior fica sem
+# dono - foi o proprio usuario que perguntou "a velocidade caiu, o que aconteceu?".
+_v = _ac.get("vel") if _ac else None
+if _v and _v["linhas"]:
+    _vc = "#c0392b" if (_v["var_pct"] or 0) < 0 else "#1e7a34"
+    _fc = "#c0392b" if (_v["frota_var"] or 0) < 0 else "#1e7a34"
+    _so_cluster = (_v["frota_var"] is not None and _v["var_pct"] is not None
+                   and _v["var_pct"] < _v["frota_var"] - 1.5)
+    _junto = (_v["frota_var"] is not None and _v["var_pct"] is not None
+              and abs(_v["var_pct"] - _v["frota_var"]) <= 1.5)
+    _mix_manda = abs(_v["mix"]) > abs(_v["mesmas"])
+    _piores_v = [l for l in _v["linhas"] if (l["var"] or 0) < 0][:3]
+
+    if _junto:
+        _tit_v = f"A frota inteira desacelerou junto — é trânsito, não escala do {_CL}"
+        _txt_v = (f"O {_CL} saiu de {fmt(_v['vel_ant'],1)} para {fmt(_v['vel_ref'],1)} km/h "
+                  f"({pct(_v['var_pct'])}) e a frota toda foi de {fmt(_v['frota_ant'],1)} para "
+                  f"{fmt(_v['frota_ref'],1)} km/h ({pct(_v['frota_var'])}) na mesma janela. "
+                  f"Como os dois caem quase igual, a desaceleração não é do cluster: é a "
+                  f"cidade. O consumo ideal da base não enxerga trânsito, então esse tempo "
+                  f"parado aparece como desperdício na página anterior.")
+    elif _so_cluster:
+        _tit_v = f"O {_CL} desacelerou mais que a frota — o problema é dele"
+        _txt_v = (f"O {_CL} caiu {pct(_v['var_pct'])} (de {fmt(_v['vel_ant'],1)} para "
+                  f"{fmt(_v['vel_ref'],1)} km/h) enquanto a frota variou {pct(_v['frota_var'])} "
+                  f"(de {fmt(_v['frota_ant'],1)} para {fmt(_v['frota_ref'],1)}). A diferença "
+                  f"aponta para o que mudou dentro do cluster — itinerário, horário ou escala — "
+                  f"e não para trânsito geral.")
+    else:
+        _tit_v = f"O {_CL} segurou a velocidade melhor que a frota"
+        _txt_v = (f"O {_CL} variou {pct(_v['var_pct'])} (de {fmt(_v['vel_ant'],1)} para "
+                  f"{fmt(_v['vel_ref'],1)} km/h) contra {pct(_v['frota_var'])} da frota "
+                  f"(de {fmt(_v['frota_ant'],1)} para {fmt(_v['frota_ref'],1)}).")
+    _txt_v += (f" Dentro do cluster, a mudança de linhas responde por {_sinal(_v['mix'],2)} km/h "
+               f"e as mesmas linhas ficando mais lentas por {_sinal(_v['mesmas'],2)} km/h — "
+               + ("ou seja, pesou a troca de escala."
+                  if _mix_manda else
+                  "ou seja, são as mesmas linhas rodando mais devagar."))
+    if _piores_v:
+        _txt_v += (" Linhas que mais perderam velocidade: "
+                   + ", ".join(f"{l['nome']} ({pct(l['var'])})" for l in _piores_v) + ".")
+
+    _rows_v = ""
+    for l in _v["linhas"]:
+        cor = "#c0392b" if (l["var"] or 0) < 0 else "#1e7a34"
+        _rows_v += (f"<tr><td style='text-align:left;padding-left:7px;font-weight:700;'>{l['nome']}</td>"
+                    f"<td>{fmt(l['km_ref']/1000,1)} mil</td>"
+                    f"<td>{fmt(l['vel_ant'],1)} &rarr; <b>{fmt(l['vel_ref'],1)}</b></td>"
+                    f"<td style='color:{cor};font-weight:800;'>{pct(l['var'])}</td>"
+                    f"<td>{fmt(l['share_ant'],1)}% &rarr; {fmt(l['share_ref'],1)}%</td></tr>")
+
+    pages.append(f"""<div class="page-break"></div><div class="page">
+  {page_header(f"Cluster {_CL} — o que aconteceu com a velocidade",
+               f"Período: <b>{periodo_label}</b> · {MESANT_NOME} cortado no mesmo dia (01 a {_ac['dia_max']:02d}) · velocidade = km rodado ÷ tempo em viagem",
+               "Velocidade no mês", f"{fmt(_v['vel_ref'],1)} km/h")}
+  <div class="grid-4" style="margin-bottom:7px;">
+    <div class="metric"><div class="lbl">Velocidade do {_CL}</div><div class="val" style="color:{_vc};font-size:13px;">{fmt(_v['vel_ant'],1)} &rarr; {fmt(_v['vel_ref'],1)}</div><div class="aux">km/h · {pct(_v['var_pct'])}</div></div>
+    <div class="metric"><div class="lbl">Velocidade da frota inteira</div><div class="val" style="color:{_fc};font-size:13px;">{fmt(_v['frota_ant'],1)} &rarr; {fmt(_v['frota_ref'],1)}</div><div class="aux">km/h · {pct(_v['frota_var'])} — mesma janela</div></div>
+    <div class="metric"><div class="lbl">Efeito troca de linha</div><div class="val" style="font-size:13px;">{_sinal(_v['mix'],2)}</div><div class="aux">km/h — mudou o que o cluster roda</div></div>
+    <div class="metric"><div class="lbl">Efeito mesmas linhas</div><div class="val" style="font-size:13px;">{_sinal(_v['mesmas'],2)}</div><div class="aux">km/h — a linha ficou mais lenta</div></div>
+  </div>
+  <div class="cons-box" style="margin:0 0 7px 0;border-left:5px solid {_vc};">
+    <div class="cons-title">{_tit_v}</div>
+    <div class="cons-text" style="font-size:10.2px;line-height:1.4;">{_txt_v}</div></div>
+  <div class="card" style="margin-bottom:7px;"><div class="card-title">Velocidade por linha — {MES3ANT} × {MES3REF}</div><div class="card-body" style="padding:4px 8px;">
+    <div class="chart-wrap chart-wrap-diag" style="border:none;padding:0;"><img src="v3_cluster_vel.png"/></div>
+  </div></div>
+  <div class="card"><div class="card-title">Velocidade por linha — detalhamento</div><div class="card-body" style="padding:5px 7px;">
+    <table class="tbl-compact"><thead><tr><th style="text-align:left;padding-left:7px;">Linha</th><th>Km rodado</th><th>km/h {MES3ANT}&rarr;{MES3REF}</th><th>Variação</th><th>Participação no km do cluster</th></tr></thead>
+    <tbody>{_rows_v}</tbody></table>
+  </div></div>
+  {footer(0)}
+</div>""")
+
 # ================= PAGINA 4: LINHA VS META + VELOCIDADE (formato completo) =================
 # (kml_ref_medio foi removido: era calculado e nunca usado, e concorria com kml_ref_pond,
 #  que e o valor de fato exibido no tile "KM/L Mes Referencia".)

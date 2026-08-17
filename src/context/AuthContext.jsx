@@ -61,6 +61,19 @@ export function AuthProvider({ children }) {
   const userRef = useRef(user);
   userRef.current = user;
 
+  // Estado de gravação do Farol (iframe), COMPARTILHADO entre as guardas de
+  // sessão. Enquanto grava, NUNCA deslogar — o logout desmonta o Layout/iframe
+  // e mataria a gravação. O Farol manda postMessage { type:"farol:recording" }.
+  const RECORDING_HEARTBEAT_MS = 3 * 60 * 60 * 1000; // 3h
+  const recordingRef = useRef({ active: false, lastPing: 0 });
+  const verificandoSessaoRef = useRef(false);
+  const gravandoNoFarol = useCallback(() => {
+    const r = recordingRef.current;
+    if (!r.active) return false;
+    if (Date.now() - r.lastPing > RECORDING_HEARTBEAT_MS) { r.active = false; return false; }
+    return true;
+  }, [RECORDING_HEARTBEAT_MS]);
+
   const persistUser = useCallback((userData) => {
     const normalized = normalizeStoredAppUser(userData);
 
@@ -115,6 +128,31 @@ export function AuthProvider({ children }) {
       setUser(null);
     }
   }, []);
+
+  // Guarda de sessão do Supabase: se o UI está "logado" mas a sessão do Supabase
+  // MORREU (ex.: incidente/refresh falho), as consultas saem como anon e as
+  // tabelas trancadas dão "permission denied for table ..." (ora numa, ora
+  // noutra). Tenta restaurar; se não existe e não renova, força o relogin —
+  // MAS nunca durante uma gravação no Farol (deslogar mataria o iframe/gravação).
+  const garantirSessaoSupabase = useCallback(async () => {
+    if (verificandoSessaoRef.current) return;
+    const stored = getStoredUser();
+    if (!stored || !isSessionValid()) return; // sem login / sessão de UI expirada (o timer trata)
+    verificandoSessaoRef.current = true;
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session) return; // sessão Supabase ok
+      const { data: renovado, error } = await supabase.auth.refreshSession();
+      if (renovado?.session) return; // conseguiu restaurar
+      if (error && !/session|token/i.test(String(error.message || ""))) return; // erro de rede: não desloga
+      if (gravandoNoFarol()) return; // gravando: NUNCA deslogar (mataria a gravação)
+      await logout(); // sessão morta de verdade → relogin
+    } catch {
+      /* silencioso: não desloga por exceção ambígua (ex.: rede) */
+    } finally {
+      verificandoSessaoRef.current = false;
+    }
+  }, [logout, gravandoNoFarol]);
 
   const refreshUser = useCallback(async () => {
     const {
@@ -311,32 +349,16 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const activityEvents = ["mousemove", "keydown", "click", "scroll", "visibilitychange"];
 
-    // Gravação ativa no Farol (iframe) suspende o logout por inatividade.
+    // Gravação ativa no Farol (iframe) suspende o logout por inatividade E a
+    // guarda de sessão (ver gravandoNoFarol/recordingRef no topo do componente).
     // O Farol envia postMessage { type: "farol:recording", active: bool } ao
-    // iniciar/parar; opcionalmente repete como heartbeat. A janela é longa
-    // porque o Farol pode mandar o sinal só no início: uma reunião gravada
-    // não pode derrubar a sessão no meio. Se ele parar sem avisar (fechou a
-    // aba/iframe), a proteção expira sozinha ao fim da janela.
-    const RECORDING_HEARTBEAT_MS = 3 * 60 * 60 * 1000; // 3h
-    let recordingActive = false;
-    let recordingLastPing = 0;
-
-    const isRecording = () => {
-      if (!recordingActive) return false;
-      if (Date.now() - recordingLastPing > RECORDING_HEARTBEAT_MS) {
-        recordingActive = false;
-        return false;
-      }
-      return true;
-    };
-
+    // iniciar/parar; uma reunião gravada não pode derrubar a sessão no meio.
     const onMessage = (ev) => {
       const data = ev?.data;
       if (!data || typeof data !== "object") return;
       if (data.type !== "farol:recording") return;
-      recordingActive = data.active !== false;
-      recordingLastPing = Date.now();
-      if (recordingActive) touchActivity();
+      recordingRef.current = { active: data.active !== false, lastPing: Date.now() };
+      if (recordingRef.current.active) touchActivity();
     };
 
     const onActivity = () => {
@@ -358,7 +380,7 @@ export function AuthProvider({ children }) {
     window.addEventListener("message", onMessage);
 
     const timer = window.setInterval(() => {
-      if (isRecording()) {
+      if (gravandoNoFarol()) {
         touchActivity();
         void syncPresence();
         void syncAccessSnapshot();
@@ -378,6 +400,7 @@ export function AuthProvider({ children }) {
       }
 
       if (document.visibilityState === "visible") {
+        void garantirSessaoSupabase(); // pega sessão morta em até 30s (não só no foco)
         void syncPresence();
         void syncAccessSnapshot();
       }
@@ -388,58 +411,28 @@ export function AuthProvider({ children }) {
       window.removeEventListener("message", onMessage);
       window.clearInterval(timer);
     };
-  }, [logout, syncAccessSnapshot, syncPresence]);
+  }, [logout, syncAccessSnapshot, syncPresence, gravandoNoFarol, garantirSessaoSupabase]);
 
-  // Mantém o token JWT do Supabase fresco ao voltar de idle. O UI mantém o
-  // usuário logado por atividade (isSessionValid ~4h), mas o access token do
-  // Supabase expira em ~1h; com a aba em segundo plano / máquina dormindo, o
-  // auto-refresh não dispara e as tabelas passam a dar 401 até relogar. Ao
-  // voltar o foco/visibilidade, reativamos o refresh (que renova na hora um
-  // token expirado). startAutoRefresh funciona mesmo se o auto-refresh do
-  // init estiver desligado; o AuthContext não desloga em "piscadas" de token.
+  // Ao voltar o foco/visibilidade: reativa o auto-refresh do token e verifica a
+  // sessão (garantirSessaoSupabase renova ou força relogin se ela morreu — mas
+  // nunca durante gravação no Farol). Complementa a checagem do intervalo de 30s.
   useEffect(() => {
-    let checando = false;
-
-    const aoVoltar = async () => {
-      if (document.visibilityState !== "visible") {
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        try { supabase.auth.startAutoRefresh?.(); } catch { /* noop */ }
+        void garantirSessaoSupabase();
+      } else {
         try { supabase.auth.stopAutoRefresh?.(); } catch { /* noop */ }
-        return;
-      }
-      try { supabase.auth.startAutoRefresh?.(); } catch { /* noop */ }
-
-      // Guarda de sessão: se o UI está "logado" mas a sessão do Supabase MORREU
-      // (ex.: incidente/refresh falho), as consultas saem como anon e as tabelas
-      // trancadas dão "permission denied for table ..." (ora numa, ora noutra).
-      // Tenta restaurar; se não der, força o relogin — melhor que operar quebrado
-      // como anon. Só age quando a sessão REALMENTE não existe E não renova; não
-      // afeta "piscadas" (aí o refresh restaura e mantém o usuário logado).
-      if (checando) return;
-      checando = true;
-      try {
-        const stored = getStoredUser();
-        if (!stored || !isSessionValid()) return; // sem login / sessão de UI expirada (o timer trata)
-        const { data } = await supabase.auth.getSession();
-        if (data?.session) return; // sessão Supabase ok
-        const { data: renovado, error } = await supabase.auth.refreshSession();
-        if (renovado?.session) return; // conseguiu restaurar
-        if (error && !/session|token/i.test(String(error.message || ""))) return; // erro de rede: não desloga
-        await logout(); // sessão morta de verdade → relogin
-      } catch {
-        /* silencioso: não desloga por exceção ambígua (ex.: rede) */
-      } finally {
-        checando = false;
       }
     };
-
-    const onVis = () => { void aoVoltar(); };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("focus", onVis);
-    void aoVoltar(); // ao montar
+    onVis(); // ao montar
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("focus", onVis);
     };
-  }, [logout]);
+  }, [garantirSessaoSupabase]);
 
   const value = useMemo(
     () => ({

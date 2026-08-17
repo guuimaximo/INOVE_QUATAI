@@ -693,19 +693,10 @@ export default function Dashboard() {
         const dailyKeys = enumerateDates(start, referenciaDia);
         const monthKeys = buildLastMonthKeys(referenciaMes, 6);
 
-        const [
-          premiacaoMes,
-          kmRodadoMes,
-          sosMes,
-          avariasRows,
-          tratativasRows,
-          acompanhamentosMes,
-          sessoesMes,
-          feriasPeriodos,
-          feriasPlanos,
-          afastadosRows,
-          embarcadosRows,
-        ] = await Promise.all([
+        // allSettled: uma tabela que falha (ex.: "permission denied" quando a
+        // sessão caiu p/ anon) NÃO derruba o dashboard inteiro — só aquele KPI
+        // fica vazio, o resto carrega normal.
+        const _dashRes = await Promise.allSettled([
           supabaseA
             ? fetchAllRows(
                 supabaseA
@@ -783,6 +774,19 @@ export default function Dashboard() {
             "created_at"
           ),
         ]);
+
+        const _val = (i) => (_dashRes[i] && _dashRes[i].status === "fulfilled" ? _dashRes[i].value : []);
+        const premiacaoMes = _val(0);
+        const kmRodadoMes = _val(1);
+        const sosMes = _val(2);
+        const avariasRows = _val(3);
+        const tratativasRows = _val(4);
+        const acompanhamentosMes = _val(5);
+        const sessoesMes = _val(6);
+        const feriasPeriodos = _val(7);
+        const feriasPlanos = _val(8);
+        const afastadosRows = _val(9);
+        const embarcadosRows = _val(10);
 
         const premiacaoNormalizada = (premiacaoMes || [])
           .map((row) => {

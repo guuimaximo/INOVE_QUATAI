@@ -398,22 +398,48 @@ export function AuthProvider({ children }) {
   // token expirado). startAutoRefresh funciona mesmo se o auto-refresh do
   // init estiver desligado; o AuthContext não desloga em "piscadas" de token.
   useEffect(() => {
-    const reativarRefresh = () => {
+    let checando = false;
+
+    const aoVoltar = async () => {
+      if (document.visibilityState !== "visible") {
+        try { supabase.auth.stopAutoRefresh?.(); } catch { /* noop */ }
+        return;
+      }
+      try { supabase.auth.startAutoRefresh?.(); } catch { /* noop */ }
+
+      // Guarda de sessão: se o UI está "logado" mas a sessão do Supabase MORREU
+      // (ex.: incidente/refresh falho), as consultas saem como anon e as tabelas
+      // trancadas dão "permission denied for table ..." (ora numa, ora noutra).
+      // Tenta restaurar; se não der, força o relogin — melhor que operar quebrado
+      // como anon. Só age quando a sessão REALMENTE não existe E não renova; não
+      // afeta "piscadas" (aí o refresh restaura e mantém o usuário logado).
+      if (checando) return;
+      checando = true;
       try {
-        if (document.visibilityState === "visible") supabase.auth.startAutoRefresh?.();
-        else supabase.auth.stopAutoRefresh?.();
+        const stored = getStoredUser();
+        if (!stored || !isSessionValid()) return; // sem login / sessão de UI expirada (o timer trata)
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) return; // sessão Supabase ok
+        const { data: renovado, error } = await supabase.auth.refreshSession();
+        if (renovado?.session) return; // conseguiu restaurar
+        if (error && !/session|token/i.test(String(error.message || ""))) return; // erro de rede: não desloga
+        await logout(); // sessão morta de verdade → relogin
       } catch {
-        /* silencioso */
+        /* silencioso: não desloga por exceção ambígua (ex.: rede) */
+      } finally {
+        checando = false;
       }
     };
-    document.addEventListener("visibilitychange", reativarRefresh);
-    window.addEventListener("focus", reativarRefresh);
-    reativarRefresh(); // garante o refresh ativo ao montar
+
+    const onVis = () => { void aoVoltar(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    void aoVoltar(); // ao montar
     return () => {
-      document.removeEventListener("visibilitychange", reativarRefresh);
-      window.removeEventListener("focus", reativarRefresh);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onVis);
     };
-  }, []);
+  }, [logout]);
 
   const value = useMemo(
     () => ({

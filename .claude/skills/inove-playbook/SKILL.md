@@ -54,6 +54,14 @@ Projeto: app de gestão operacional (React + Vite + Supabase), usado pela opera�
 - **Nunca** colar service_role key no repo/bundle. Ela já está em texto puro no `.claude/settings.local.json` e `.bat` (dívida pendente de rotacionar).
 - Tabela de usuários = `usuarios_aprovadores` (senha em texto puro, mas não legível por anon — ver memória).
 
+## 1.1. "permission denied for table X" (sessão morta → anon)  ⚠️
+
+- **Sintoma:** usuário aparece logado (nome na tela), mas telas dão **`permission denied for table ...`** — e **a tabela muda a cada hora** (ora `sos_acionamentos`, ora outra). Painéis zeram.
+- **Causa:** o app tem **duas sessões** — a do Supabase (JWT) e a "de UI" própria (localStorage, ~4h, `isSessionValid`). Quando a sessão do **Supabase morre** (refresh falho, incidente), o UI continua "logado" mas as consultas saem **sem token = `anon`**. As tabelas trancadas pro anon (RLS Fase 1) negam → "permission denied". Cada tela bate numa tabela trancada diferente → erro "muda de tabela".
+- **NÃO é grant faltando.** Confirme: `has_table_privilege('authenticated','public.<tabela>','SELECT')` = **true** e `anon` = **false**. Se for assim, o problema é a **sessão anon**, não a permissão. (Diferença chave: token **expirado** = HTTP **401** "JWT expired"; role **anon sem grant** = HTTP **403** "permission denied for table" — este último = rodando sem sessão.)
+- **Fix (feito, commit `53b7051`):** no `AuthContext`, ao voltar o foco, verifica a sessão do Supabase; se morreu, tenta `refreshSession()`; se não renova, **força logout → relogin** (melhor que operar como anon). Não afeta "piscadas". Complementa o refresh-on-focus (`f0c70ba`) e o retry-em-401 no cliente (`481523e`, `src/supabase.js`). Painéis que buscam várias tabelas: usar **`Promise.allSettled`** (não `all`) pra uma tabela falha não zerar tudo.
+- **Atalho pro usuário:** sair e entrar de novo pega sessão nova e conserta na hora.
+
 ## 2. Deploy
 
 - **Tudo roda do branch `main`** (Render faz auto-deploy; as GitHub Actions agendadas leem o branch default = `main`). Para uma correção entrar em produção, precisa estar no `main`.

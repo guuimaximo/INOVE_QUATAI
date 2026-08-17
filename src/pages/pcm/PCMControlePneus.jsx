@@ -658,7 +658,13 @@ export default function PCMControlePneus() {
       let status = "NAO LOCALIZADO";
       let local = "Nao encontrado no TransNet";
 
-      if (inativo) {
+      const situacaoEstoque = String(estoque?.situacao || "").toUpperCase();
+      if (situacaoEstoque.includes("APOIO")) {
+        // Lançado manualmente no estoque como veículo de apoio (pneu deixado no SOS).
+        // Designação manual tem prioridade sobre o que o TransNet mostra.
+        status = "VEICULO DE APOIO";
+        local = estoque?.situacao || "Veiculo de apoio (SOS)";
+      } else if (inativo) {
         const situacaoFisica = String(estoque?.situacao || "").toUpperCase();
         status = situacaoFisica.includes("SUCATA") ? "SUCATA OK" : "SUCATA";
         local = inativo.motivo || "Inativo no TransNet";
@@ -829,8 +835,8 @@ export default function PCMControlePneus() {
         if (!hay.includes(q)) return false;
       }
       if (filtroStatus && row.status !== filtroStatus) return false;
-      if (filtroComparacao === "CORRETO" && !["BORRACHARIA", "SUCATA OK"].includes(row.status)) return false;
-      if (filtroComparacao === "INCORRETO" && ["BORRACHARIA", "SUCATA OK"].includes(row.status)) return false;
+      if (filtroComparacao === "CORRETO" && !["BORRACHARIA", "SUCATA OK", "VEICULO DE APOIO"].includes(row.status)) return false;
+      if (filtroComparacao === "INCORRETO" && ["BORRACHARIA", "SUCATA OK", "VEICULO DE APOIO"].includes(row.status)) return false;
       if (filtroDataAuditoria) {
         if (!row.data_estoque) return false;
         const inicio = new Date(`${filtroDataAuditoria}T00:00:00`);
@@ -913,8 +919,8 @@ export default function PCMControlePneus() {
   const estoqueKpis = useMemo(() => {
     return {
       fisicoTotal: estoqueComparado.fisico.length,
-      fisicoBorracharia: estoqueComparado.fisico.filter((item) => ["BORRACHARIA", "SUCATA OK"].includes(item.status)).length,
-      fisicoDivergente: estoqueComparado.fisico.filter((item) => !["BORRACHARIA", "SUCATA OK"].includes(item.status)).length,
+      fisicoBorracharia: estoqueComparado.fisico.filter((item) => ["BORRACHARIA", "SUCATA OK", "VEICULO DE APOIO"].includes(item.status)).length,
+      fisicoDivergente: estoqueComparado.fisico.filter((item) => !["BORRACHARIA", "SUCATA OK", "VEICULO DE APOIO"].includes(item.status)).length,
       transnetTotal: estoqueComparado.transnet.length,
       transnetNoEstoque: estoqueComparado.transnet.filter((item) => item.status === "NO ESTOQUE").length,
       transnetEmCarro: estoqueComparado.transnet.filter((item) => item.status === "EM CARRO").length,
@@ -1441,6 +1447,7 @@ export default function PCMControlePneus() {
             <>
               <option value="BORRACHARIA">BORRACHARIA</option>
               <option value="EM CARRO">EM CARRO</option>
+              <option value="VEICULO DE APOIO">VEICULO DE APOIO</option>
               <option value="OUTRO LOCAL">OUTRO LOCAL</option>
               <option value="SUCATA">SUCATA</option>
               <option value="SUCATA OK">SUCATA OK</option>
@@ -1641,7 +1648,7 @@ export default function PCMControlePneus() {
                         <td className="px-2 py-2 text-slate-700">{row.marca || "-"}</td>
                         <td className="px-2 py-2 text-slate-700">{row.situacao_inove || "-"}</td>
                         <td className="px-2 py-2">
-                          <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "BORRACHARIA" ? "#7c3aed" : row.status === "SUCATA OK" ? "#16a34a" : row.status === "EM CARRO" ? "#ca8a04" : row.status === "OUTRO LOCAL" ? "#2563eb" : row.status === "SUCATA" ? "#dc2626" : "#ea580c" }}>
+                          <span className="rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: row.status === "BORRACHARIA" ? "#7c3aed" : row.status === "SUCATA OK" ? "#16a34a" : row.status === "EM CARRO" ? "#ca8a04" : row.status === "VEICULO DE APOIO" ? "#0d9488" : row.status === "OUTRO LOCAL" ? "#2563eb" : row.status === "SUCATA" ? "#dc2626" : "#ea580c" }}>
                             {row.status}
                           </span>
                         </td>

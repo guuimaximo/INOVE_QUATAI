@@ -25,6 +25,33 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("ENV do Supabase ausente (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)");
 }
 
+// Retry automático em 401 por token vencido. Depois de um tempo idle, o access
+// token pode expirar antes de renovar; a 1a consulta volta 401 e as tabelas
+// "falham do nada". Aqui, se QUALQUER requisição volta 401, a gente renova a
+// sessão e REFAZ a requisição UMA vez com o token novo — sem o usuário perceber
+// e sem precisar deslogar/logar. No caminho normal (2xx) o comportamento é
+// idêntico ao fetch padrão. Não age em chamadas /auth (elas cuidam do próprio
+// token) e o retry usa o fetch nativo, então não há loop.
+let clienteRef = null;
+async function fetchComRetry(input, init) {
+  const res = await fetch(input, init);
+  if (res.status !== 401 || !clienteRef) return res;
+
+  const url = typeof input === "string" ? input : (input && input.url) || "";
+  if (url.includes("/auth/v1/")) return res;
+
+  try {
+    const { data, error } = await clienteRef.auth.refreshSession();
+    const token = data && data.session && data.session.access_token;
+    if (error || !token) return res;
+    const headers = new Headers(init && init.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    return await fetch(input, { ...init, headers });
+  } catch {
+    return res;
+  }
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: "sb-inove-auth",
@@ -33,4 +60,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: !Capacitor.isNativePlatform(),
     flowType: "pkce",
   },
+  global: { fetch: fetchComRetry },
 });
+
+clienteRef = supabase;

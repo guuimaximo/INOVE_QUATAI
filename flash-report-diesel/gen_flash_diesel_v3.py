@@ -1482,6 +1482,10 @@ def _cobertura_linhas(sessoes, acomp_de_id, rows_pd, meses):
     # operacao por (chapa, dia): km por linha e por carro
     op = _dd4(lambda: {"linha": _dd4(float), "carro": _dd4(float)})
     linha_carros, linha_km = _dd4(set), _dd4(float)
+    # Motoristas distintos por (linha, dia): a media disso nos dias uteis e o efetivo
+    # que a linha usa por dia - o "programado". Contar motoristas distintos no trimestre
+    # inteiro nao serve: com rodizio, quem passou uma vez conta igual ao fixo da linha.
+    linha_dia_mot, linha_dia_km = _dd4(set), _dd4(float)
     # KM/L da linha em cada mes da janela: e o que permite cruzar cobertura com resultado
     # (a linha mais acompanhada esta melhorando?). Chave (linha, ano, mes) -> [km, litros].
     linha_mes = _dd4(lambda: [0.0, 0.0])
@@ -1507,6 +1511,10 @@ def _cobertura_linhas(sessoes, acomp_de_id, rows_pd, meses):
             op[k]["carro"][pf] += km
             linha_carros[ln].add(pf)
         linha_km[ln] += km
+        _ch = _norm_chapa(r.get("motorista"))
+        if _ch:
+            linha_dia_mot[(ln, d)].add(_ch)
+            linha_dia_km[(ln, d)] += km
         lt = _num(r.get("litros_consumidos")) or 0.0
         if lt > 0:
             _mk = linha_mes[(ln, int(d[:4]), int(d[5:7]))]
@@ -1535,10 +1543,32 @@ def _cobertura_linhas(sessoes, acomp_de_id, rows_pd, meses):
         if dia["carro"]:
             a["carros"].add(max(dia["carro"].items(), key=lambda x: x[1])[0])
 
+    def _mot_dia_util(ln):
+        """Media de motoristas distintos por dia util (seg a sex) na linha.
+
+        Feriado e dia atipico entram na conta puxando a media para baixo - a operacao
+        roda com escala reduzida. Por isso so contam os dias uteis em que a linha rodou
+        pelo menos metade da mediana de km dos seus proprios dias uteis. Sem esse corte,
+        um feriado no meio do trimestre ja derrubava o "programado" da linha.
+        """
+        dias = [(d, linha_dia_km[(ln, d)], len(linha_dia_mot[(ln, d)]))
+                for (l2, d) in linha_dia_mot if l2 == ln]
+        uteis = [(d, km, n) for (d, km, n) in dias
+                 if _dtref.date(int(d[:4]), int(d[5:7]), int(d[8:10])).weekday() < 5]
+        if not uteis:
+            return None, 0
+        kms = sorted(km for (_d, km, _n) in uteis)
+        mediana = kms[len(kms) // 2]
+        cheios = [n for (_d, km, n) in uteis if km >= mediana * 0.5]
+        if not cheios:
+            return None, 0
+        return round(sum(cheios) / len(cheios), 1), len(cheios)
+
     out = []
     for ln in sorted(linha_km, key=lambda x: -linha_km[x]):
         a = por_linha.get(ln, {"n": 0, "motoristas": set(), "carros": set(), "instrutores": set()})
         ncarros = len(linha_carros[ln]) or 1
+        _md, _nd = _mot_dia_util(ln)
         _kmls = []
         for (_yy, _mm) in meses_lbl:
             _c = linha_mes.get((ln, _yy, _mm))
@@ -1553,6 +1583,9 @@ def _cobertura_linhas(sessoes, acomp_de_id, rows_pd, meses):
             "instrutores": len([i for i in a["instrutores"] if i]),
             "km_mil": round(linha_km[ln] / 1000, 1),
             "por_carro": round(a["n"] / ncarros, 2),
+            "mot_dia": _md,          # motoristas por dia util = efetivo programado
+            "dias_uteis": _nd,
+            "por_motorista": round(a["n"] / _md, 2) if _md else None,
         })
     # ordem pedida: total de acompanhamentos, do maior para o menor
     out.sort(key=lambda x: (-x["n"], -x["por_carro"]))
@@ -1671,9 +1704,10 @@ if _inv_url and _inv_key:
                       f"{len(_cob3['linhas'])} linhas desde {_cob3['ini']}; "
                       f"{_cob3['sem_acomp']} linha(s) sem nenhum; "
                       f"{_cob3['sem_operacao']} sessao(oes) sem operacao no dia.")
-                for _l in _cob3["linhas"][:12]:
-                    print(f"[cobertura]   {_l['linha']:8} n={_l['n']:4} carros_linha={_l['carros_linha']:3} "
-                          f"por_carro={_l['por_carro']:5} km={_l['km_mil']} mil")
+                for _l in _cob3["linhas"][:20]:
+                    print(f"[cobertura]   {_l['linha']:8} n={_l['n']:4} mot/dia={_l['mot_dia']} "
+                          f"({_l['dias_uteis']} dias uteis) por_motorista={_l['por_motorista']} "
+                          f"carros={_l['carros_linha']} km={_l['km_mil']} mil")
         except Exception as _e:
             print(f"[cobertura] falhou ({_e}).")
 

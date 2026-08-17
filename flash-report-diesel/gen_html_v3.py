@@ -1417,7 +1417,8 @@ if _cb and _cb["linhas"]:
     _cb_zero = [l for l in _cb_l if l["n"] == 0]
     _cb_ini = _cb["ini"]
     _cb_ini_lbl = f"{_cb_ini[8:10]}/{_cb_ini[5:7]}/{_cb_ini[:4]}"
-    _cb_med = round(_cb["total"] / sum(l["carros_linha"] or 1 for l in _cb_l), 2) if _cb_l else 0
+    _cb_mot_tot = sum(l["mot_dia"] or 0 for l in _cb_l)
+    _cb_med = round(_cb["total"] / _cb_mot_tot, 2) if _cb_mot_tot else 0
 
     # KM/L do primeiro para o ultimo mes da janela, para colorir a tendencia da linha
     def _cb_tend(l):
@@ -1439,8 +1440,9 @@ if _cb and _cb["linhas"]:
             out += (f"<tr style='{fundo}'>"
                     f"<td style='text-align:left;padding-left:7px;font-weight:800;color:{cor};'>{l['linha']}</td>"
                     f"<td style='font-weight:800;color:{cor};font-size:9px;'>{l['n']}</td>"
+                    f"<td>{fmt(l['mot_dia'],1) if l.get('mot_dia') else '&ndash;'}</td>"
+                    f"<td style='font-weight:700;'>{fmt(l['por_motorista'],2) if l.get('por_motorista') else '&ndash;'}</td>"
                     f"<td>{l['carros_linha']}</td>"
-                    f"<td style='font-weight:700;'>{fmt(l['por_carro'],2)}</td>"
                     + cels
                     + f"<td style='color:{cort};font-weight:800;'>{tend}</td>"
                     f"<td>{fmt(l['km_mil'],1)}</td></tr>")
@@ -1448,12 +1450,15 @@ if _cb and _cb["linhas"]:
 
     _cb_mm = _cb.get("meses_lbl") or []
     _cb_cab = ("<thead><tr><th style='text-align:left;padding-left:7px;'>Linha</th>"
-               "<th>Acomp.</th><th>Carros<br/>da linha</th><th>Acomp.<br/>por carro</th>"
+               "<th>Acomp.</th><th>Motoristas<br/>por dia útil</th>"
+               "<th>Acomp. por<br/>motorista</th><th>Carros<br/>da linha</th>"
                + "".join(f"<th>KM/L<br/>{m}</th>" for m in _cb_mm)
                + "<th>Δ KM/L<br/>no trimestre</th><th>Km rodado<br/>(mil)</th></tr></thead>")
     _cb_top = ", ".join(f"{l['linha']} ({l['n']})" for l in _cb_l[:3])
-    _cb_pc = sorted(_cb_l, key=lambda x: -x["por_carro"])[:3]
-    _cb_pior_pc = [l for l in sorted(_cb_l, key=lambda x: x["por_carro"]) if l["carros_linha"] >= 20][:3]
+    _cb_cm = [l for l in _cb_l if l.get("por_motorista") is not None]
+    _cb_pc = sorted(_cb_cm, key=lambda x: -x["por_motorista"])[:3]
+    _cb_pior_pc = [l for l in sorted(_cb_cm, key=lambda x: x["por_motorista"])
+                   if (l["mot_dia"] or 0) >= 10][:3]
     _cb_fundo = [l for l in _cb_com][-3:]
     _cb_txt = (f"Nos últimos {_cb['meses']} meses (desde {_cb_ini_lbl}) foram registrados "
                f"<b>{_cb['total']} acompanhamentos</b> distribuídos em "
@@ -1461,11 +1466,14 @@ if _cb and _cb["linhas"]:
                f"A linha de cada acompanhamento vem da operação do motorista naquele dia — "
                f"é onde ele estava rodando, não uma lotação de cadastro. "
                f"Mais acompanhadas em número absoluto: {_cb_top}. "
-               f"Proporcionalmente à frota da linha, a melhor cobertura é de "
-               + ", ".join(f"{l['linha']} ({fmt(l['por_carro'],2)}/carro)" for l in _cb_pc)
-               + (("; as mais descobertas entre as linhas de frota grande são "
-                   + ", ".join(f"{l['linha']} ({fmt(l['por_carro'],2)}/carro)" for l in _cb_pior_pc)
-                   + ".") if _cb_pior_pc else "."))
+               f"Proporcionalmente ao efetivo da linha, a melhor cobertura é de "
+               + ", ".join(f"{l['linha']} ({fmt(l['por_motorista'],2)} por motorista)" for l in _cb_pc)
+               + (("; as mais descobertas entre as linhas de efetivo grande são "
+                   + ", ".join(f"{l['linha']} ({fmt(l['por_motorista'],2)})" for l in _cb_pior_pc)
+                   + ".") if _cb_pior_pc else ".")
+               + " O efetivo é a média de motoristas distintos por dia útil na linha, "
+               "descartando os dias em que ela rodou menos da metade do seu km típico "
+               "(feriado e dia atípico puxariam o número para baixo).")
     if _cb_zero:
         _cb_txt += (f" <b>{len(_cb_zero)} linha(s) não receberam nenhum acompanhamento</b> "
                     f"no trimestre: " + ", ".join(l["linha"] for l in _cb_zero[:14])
@@ -1476,13 +1484,13 @@ if _cb and _cb["linhas"]:
 
     pages.append(f"""<div class="page-break"></div><div class="page">
   {page_header("Cobertura de Acompanhamento por Linha — últimos 3 meses",
-               f"Desde <b>{_cb_ini_lbl}</b> · linha do acompanhamento = onde o motorista rodou no dia · ordenado pelo total de acompanhamentos · KM/L de cada mês do trimestre",
+               f"Desde <b>{_cb_ini_lbl}</b> · linha do acompanhamento = onde o motorista rodou no dia · ordenado pelo total de acompanhamentos · efetivo = média de motoristas por dia útil",
                "Acompanhamentos", str(_cb["total"]))}
   <div class="grid-4" style="margin-bottom:7px;">
     <div class="metric"><div class="lbl">Acompanhamentos no trimestre</div><div class="val">{_cb['total']}</div><div class="aux">desde {_cb_ini_lbl}</div></div>
     <div class="metric"><div class="lbl">Linhas atendidas</div><div class="val">{len(_cb_com)} de {len(_cb_l)}</div><div class="aux">linhas que rodaram no período</div></div>
     <div class="metric"><div class="lbl">Linhas sem nenhum</div><div class="val" style="color:{'#c0392b' if _cb_zero else '#1e7a34'};">{len(_cb_zero)}</div><div class="aux">nenhum acompanhamento no trimestre</div></div>
-    <div class="metric"><div class="lbl">Média por carro</div><div class="val">{fmt(_cb_med,2)}</div><div class="aux">acompanhamentos por carro da frota</div></div>
+    <div class="metric"><div class="lbl">Média por motorista</div><div class="val">{fmt(_cb_med,2)}</div><div class="aux">acomp. por motorista programado no trimestre</div></div>
   </div>
   <div class="card" style="margin-bottom:7px;"><div class="card-body" style="padding:5px 7px;">
     <table class="tbl-compact">{_cb_cab}<tbody>{_cb_rows(_cb_l)}</tbody></table>

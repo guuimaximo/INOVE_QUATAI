@@ -1482,6 +1482,16 @@ def _cobertura_linhas(sessoes, acomp_de_id, rows_pd, meses):
     # operacao por (chapa, dia): km por linha e por carro
     op = _dd4(lambda: {"linha": _dd4(float), "carro": _dd4(float)})
     linha_carros, linha_km = _dd4(set), _dd4(float)
+    # KM/L da linha em cada mes da janela: e o que permite cruzar cobertura com resultado
+    # (a linha mais acompanhada esta melhorando?). Chave (linha, ano, mes) -> [km, litros].
+    linha_mes = _dd4(lambda: [0.0, 0.0])
+    meses_lbl = []
+    _yl, _ml = _y, _m
+    for _ in range(meses):
+        meses_lbl.append((_yl, _ml))
+        _ml += 1
+        if _ml == 13:
+            _ml, _yl = 1, _yl + 1
     for r in rows_pd:
         d = str(r.get("dia") or "")[:10]
         if len(d) < 10 or d < ini.isoformat() or d >= MES_FIM.isoformat():
@@ -1497,6 +1507,11 @@ def _cobertura_linhas(sessoes, acomp_de_id, rows_pd, meses):
             op[k]["carro"][pf] += km
             linha_carros[ln].add(pf)
         linha_km[ln] += km
+        lt = _num(r.get("litros_consumidos")) or 0.0
+        if lt > 0:
+            _mk = linha_mes[(ln, int(d[:4]), int(d[5:7]))]
+            _mk[0] += km
+            _mk[1] += lt
 
     por_linha = _dd4(lambda: {"n": 0, "motoristas": set(), "carros": set(), "instrutores": set()})
     sem_operacao = 0
@@ -1524,8 +1539,13 @@ def _cobertura_linhas(sessoes, acomp_de_id, rows_pd, meses):
     for ln in sorted(linha_km, key=lambda x: -linha_km[x]):
         a = por_linha.get(ln, {"n": 0, "motoristas": set(), "carros": set(), "instrutores": set()})
         ncarros = len(linha_carros[ln]) or 1
+        _kmls = []
+        for (_yy, _mm) in meses_lbl:
+            _c = linha_mes.get((ln, _yy, _mm))
+            _kmls.append(round(_c[0] / _c[1], 3) if (_c and _c[1] > 0) else None)
         out.append({
             "linha": ln,
+            "kmls": _kmls,
             "n": a["n"],
             "motoristas": len(a["motoristas"]),
             "carros_acomp": len(a["carros"]),
@@ -1534,10 +1554,11 @@ def _cobertura_linhas(sessoes, acomp_de_id, rows_pd, meses):
             "km_mil": round(linha_km[ln] / 1000, 1),
             "por_carro": round(a["n"] / ncarros, 2),
         })
-    # ordem pedida: acompanhamentos por carro da linha, do mais coberto ao menos
-    out.sort(key=lambda x: (-x["por_carro"], -x["n"]))
+    # ordem pedida: total de acompanhamentos, do maior para o menor
+    out.sort(key=lambda x: (-x["n"], -x["por_carro"]))
     return {
         "ini": ini.isoformat(), "meses": meses,
+        "meses_lbl": [f"{_MES3[_mm - 1]}/{_yy}" for (_yy, _mm) in meses_lbl],
         "linhas": out,
         "total": sum(x["n"] for x in out),
         "sem_operacao": sem_operacao,
@@ -2065,8 +2086,10 @@ def chart_kml_historico():
 
 
 def chart_cobertura_linhas():
-    """Acompanhamentos por carro em cada linha, com a media da frota marcada. Ordenado
-    igual a tabela. Barra vermelha = linha abaixo da metade da media, que e onde a
+    """NAO usado hoje: a pagina de cobertura precisa da folha inteira para caber as 18
+    linhas com o KM/L de cada mes. Fica pronto para o dia em que o grafico ganhar pagina
+    propria. Acompanhamentos por carro em cada linha, com a media da frota marcada. Ordenado
+    igual a tabela (total de acompanhamentos). Barra vermelha = linha abaixo da metade da media, que e onde a
     cobertura esta realmente furada."""
     if not (ACOMP_LINHAS and ACOMP_LINHAS["linhas"]):
         return
@@ -2749,7 +2772,7 @@ for f in [chart_kml_historico, chart_semanal_evolucao, chart_semanal_variacao_pc
           chart_donut_tratativas, chart_instrutores_diario,
           chart_antes_depois_barras, chart_meritocracia_donut, chart_divergencia_carros, chart_aderencia_carros, chart_aderencia_empresa_diaria,
           # saem sozinhos se ANALISE_CLUSTER for None (sem dado para o cluster investigado)
-          chart_cluster_cascata, chart_cluster_diagnostico, chart_cluster_velocidade, chart_cobertura_linhas]:
+          chart_cluster_cascata, chart_cluster_diagnostico, chart_cluster_velocidade]:
     f()
 chart_motoristas_lollipop(PIORES, "Top 10 — Maior distância da meta", "v3_piores.png", RED)
 chart_motoristas_lollipop(MELHORES, "Top 10 — Melhor desempenho", "v3_melhores.png", GREEN)

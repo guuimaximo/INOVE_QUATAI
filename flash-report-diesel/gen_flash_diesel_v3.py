@@ -122,6 +122,9 @@ KML_MENSAL_TELEMETRIA = {"jun": 2.732, "jul": 2.706}
 CLUSTER_DIAGNOSTICO = os.environ.get("FLASH_CLUSTER_DIAG", "").strip().upper() or "C11"
 ANALISE_CLUSTER = None   # None = sem dado ao vivo; a pagina inteira some do relatorio
 
+# Cobertura de acompanhamento por linha nos ultimos 3 meses (None = pagina nao sai).
+ACOMP_LINHAS = None
+
 # KM/L semanal Transnet (oficial), ultimas 8 semanas (seg-dom, semana da direita e parcial)
 KML_SEMANAL = [
     ("05/05-11/05", 2.6654),
@@ -1447,6 +1450,101 @@ TRATATIVAS_PENDENTES_PRAZO = [
 # status cru = "Concluida"/"Pendente"; ATRASADA vs PENDENTE_NO_PRAZO calculado pelo SLA da
 # prioridade (Gravissima 1d, Alta 3d, Media 7d, Baixa 15d) sobre dias em aberto desde created_at.
 # kml_meta/kml_real vem de metadata.kpis.
+def _norm_chapa(c):
+    """Chapa aparece como '30061156', ' 30061156', '30061156.0' e com zero a esquerda,
+    conforme o sistema. Sem normalizar, o cruzamento entre os dois bancos nao casa."""
+    x = str(c or "").strip()
+    if x.endswith(".0"):
+        x = x[:-2]
+    return x.lstrip("0")
+
+
+def _cobertura_linhas(sessoes, acomp_de_id, rows_pd, meses):
+    """Quantos acompanhamentos cada linha recebeu nos ultimos `meses` meses.
+
+    diesel_acompanhamentos nao guarda linha nem carro - so o motorista. Entao a linha de
+    cada sessao vem da OPERACAO daquele motorista naquele dia (premiacao_diaria: chapa,
+    dia, linha, prefixo), pegando a linha em que ele rodou mais km no dia. E a linha em
+    que o acompanhamento de fato aconteceu, nao uma lotacao cadastrada.
+
+    Traz TODAS as linhas que rodaram no periodo, inclusive as que ficaram com zero - a
+    lista de quem nao foi acompanhado e o motivo de existir a pagina.
+    """
+    from collections import defaultdict as _dd4
+    # janela: primeiro dia do mes de referencia menos (meses-1) meses
+    _y, _m = MES_REF_ANO, MES_REF_MM
+    for _ in range(meses - 1):
+        _m -= 1
+        if _m == 0:
+            _m, _y = 12, _y - 1
+    ini = _dtref.date(_y, _m, 1)
+
+    # operacao por (chapa, dia): km por linha e por carro
+    op = _dd4(lambda: {"linha": _dd4(float), "carro": _dd4(float)})
+    linha_carros, linha_km = _dd4(set), _dd4(float)
+    for r in rows_pd:
+        d = str(r.get("dia") or "")[:10]
+        if len(d) < 10 or d < ini.isoformat() or d >= MES_FIM.isoformat():
+            continue
+        km = _num(r.get("km_rodado")) or 0.0
+        ln = str(r.get("linha") or "").strip()
+        pf = str(r.get("prefixo") or "").strip()
+        if not ln or km <= 0:
+            continue
+        k = (_norm_chapa(r.get("motorista")), d)
+        op[k]["linha"][ln] += km
+        if pf:
+            op[k]["carro"][pf] += km
+            linha_carros[ln].add(pf)
+        linha_km[ln] += km
+
+    por_linha = _dd4(lambda: {"n": 0, "motoristas": set(), "carros": set(), "instrutores": set()})
+    sem_operacao = 0
+    for ss in sessoes:
+        d = str(ss.get("data_sessao") or "")[:10]
+        if len(d) < 10 or d < ini.isoformat():
+            continue
+        info = acomp_de_id.get(ss.get("acompanhamento_id"))
+        if not info:
+            continue
+        ch = _norm_chapa(info[1])
+        dia = op.get((ch, d))
+        if not dia or not dia["linha"]:
+            sem_operacao += 1
+            continue
+        ln = max(dia["linha"].items(), key=lambda x: x[1])[0]
+        a = por_linha[ln]
+        a["n"] += 1
+        a["motoristas"].add(ch)
+        a["instrutores"].add((ss.get("instrutor_nome") or "").strip())
+        if dia["carro"]:
+            a["carros"].add(max(dia["carro"].items(), key=lambda x: x[1])[0])
+
+    out = []
+    for ln in sorted(linha_km, key=lambda x: -linha_km[x]):
+        a = por_linha.get(ln, {"n": 0, "motoristas": set(), "carros": set(), "instrutores": set()})
+        ncarros = len(linha_carros[ln]) or 1
+        out.append({
+            "linha": ln,
+            "n": a["n"],
+            "motoristas": len(a["motoristas"]),
+            "carros_acomp": len(a["carros"]),
+            "carros_linha": len(linha_carros[ln]),
+            "instrutores": len([i for i in a["instrutores"] if i]),
+            "km_mil": round(linha_km[ln] / 1000, 1),
+            "por_carro": round(a["n"] / ncarros, 2),
+        })
+    # ordem pedida: acompanhamentos por carro da linha, do mais coberto ao menos
+    out.sort(key=lambda x: (-x["por_carro"], -x["n"]))
+    return {
+        "ini": ini.isoformat(), "meses": meses,
+        "linhas": out,
+        "total": sum(x["n"] for x in out),
+        "sem_operacao": sem_operacao,
+        "sem_acomp": sum(1 for x in out if x["n"] == 0),
+    }
+
+
 _inv_url, _inv_key = supabase_creds("inove")
 if _inv_url and _inv_key:
     import datetime as _dtt
@@ -1522,9 +1620,42 @@ if _inv_url and _inv_key:
             if len(_b) < 1000:
                 break
             _off += 1000
+        # janela propria de 3 meses para a pagina de cobertura por linha: as sessoes
+        # acima sao so do mes corrente, e a pergunta e sobre o trimestre.
+        _ss3, _off = [], 0
+        _y3, _m3 = MES_REF_ANO, MES_REF_MM
+        for _ in range(2):
+            _m3 -= 1
+            if _m3 == 0:
+                _m3, _y3 = 12, _y3 - 1
+        _ini3 = _dtref.date(_y3, _m3, 1).isoformat()
+        while True:
+            _b = _sb_get(_inv_url, _inv_key, "diesel_acompanhamento_sessoes",
+                         [("select", "data_sessao,instrutor_nome,acompanhamento_id"),
+                          ("data_sessao", f"gte.{_ini3}"), ("limit", "1000"), ("offset", str(_off))])
+            _ss3 += _b
+            if len(_b) < 1000:
+                break
+            _off += 1000
     except Exception as _e:
         _ss = None
+        _ss3 = None
         print(f"[inove] sessoes falhou ({_e}).")
+    if _ss3 and _pd:
+        try:
+            _cob3 = _cobertura_linhas(_ss3, _acm, _pd, 3)
+            if _cob3["linhas"]:
+                ACOMP_LINHAS = _cob3
+                print(f"[cobertura] {_cob3['total']} acompanhamentos em "
+                      f"{len(_cob3['linhas'])} linhas desde {_cob3['ini']}; "
+                      f"{_cob3['sem_acomp']} linha(s) sem nenhum; "
+                      f"{_cob3['sem_operacao']} sessao(oes) sem operacao no dia.")
+                for _l in _cob3["linhas"][:12]:
+                    print(f"[cobertura]   {_l['linha']:8} n={_l['n']:4} carros_linha={_l['carros_linha']:3} "
+                          f"por_carro={_l['por_carro']:5} km={_l['km_mil']} mil")
+        except Exception as _e:
+            print(f"[cobertura] falhou ({_e}).")
+
     if _ss:
         from collections import defaultdict as _dd3
 

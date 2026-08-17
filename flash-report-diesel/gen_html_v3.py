@@ -1406,6 +1406,76 @@ pages.append(f"""<div class="page-break"></div><div class="page">
   {footer(12)}
 </div>""")
 
+# ============ PAGINA: COBERTURA DE ACOMPANHAMENTO POR LINHA (3 MESES) ============
+# diesel_acompanhamentos so guarda o motorista, entao a linha de cada sessao vem da
+# operacao daquele motorista naquele dia. A tabela traz TODAS as linhas que rodaram no
+# trimestre, inclusive as zeradas - a lista de quem nao foi acompanhado e o assunto.
+_cb = gfd.ACOMP_LINHAS
+if _cb and _cb["linhas"]:
+    _cb_l = _cb["linhas"]
+    _cb_com = [l for l in _cb_l if l["n"] > 0]
+    _cb_zero = [l for l in _cb_l if l["n"] == 0]
+    _cb_ini = _cb["ini"]
+    _cb_ini_lbl = f"{_cb_ini[8:10]}/{_cb_ini[5:7]}/{_cb_ini[:4]}"
+    _cb_med = round(_cb["total"] / sum(l["carros_linha"] or 1 for l in _cb_l), 2) if _cb_l else 0
+
+    def _cb_rows(itens):
+        out = ""
+        for l in itens:
+            zero = l["n"] == 0
+            cor = "#c0392b" if zero else "#1F2D2B"
+            fundo = "background:#fdeeec;" if zero else ""
+            out += (f"<tr style='{fundo}'>"
+                    f"<td style='text-align:left;padding-left:7px;font-weight:800;color:{cor};'>{l['linha']}</td>"
+                    f"<td style='font-weight:800;color:{cor};'>{l['n']}</td>"
+                    f"<td>{l['carros_linha']}</td>"
+                    f"<td style='font-weight:700;color:{cor};'>{fmt(l['por_carro'],2)}</td>"
+                    f"<td>{fmt(l['km_mil'],1)}</td></tr>")
+        return out
+
+    _cb_cab = ("<thead><tr><th style='text-align:left;padding-left:7px;'>Linha</th>"
+               "<th>Acomp.</th><th>Carros<br/>da linha</th><th>Acomp.<br/>por carro</th>"
+               "<th>Km rodado<br/>(mil)</th></tr></thead>")
+    _cb_meio = (len(_cb_l) + 1) // 2
+    _cb_top = ", ".join(f"{l['linha']} ({fmt(l['por_carro'],2)})" for l in _cb_l[:3])
+    _cb_fundo = [l for l in _cb_com][-3:]
+    _cb_txt = (f"Nos últimos {_cb['meses']} meses (desde {_cb_ini_lbl}) foram registrados "
+               f"<b>{_cb['total']} acompanhamentos</b> distribuídos em "
+               f"{len(_cb_com)} das {len(_cb_l)} linhas que rodaram no período. "
+               f"A linha de cada acompanhamento vem da operação do motorista naquele dia — "
+               f"é onde ele estava rodando, não uma lotação de cadastro. "
+               f"Melhor cobertura por carro: {_cb_top}.")
+    if _cb_zero:
+        _cb_txt += (f" <b>{len(_cb_zero)} linha(s) não receberam nenhum acompanhamento</b> "
+                    f"no trimestre: " + ", ".join(l["linha"] for l in _cb_zero[:14])
+                    + ("..." if len(_cb_zero) > 14 else "") + ".")
+    if _cb["sem_operacao"]:
+        _cb_txt += (f" {_cb['sem_operacao']} sessão(ões) ficaram de fora por não haver "
+                    f"registro de operação do motorista na data.")
+
+    pages.append(f"""<div class="page-break"></div><div class="page">
+  {page_header("Cobertura de Acompanhamento por Linha — últimos 3 meses",
+               f"Desde <b>{_cb_ini_lbl}</b> · linha do acompanhamento = onde o motorista rodou no dia · ordenado por acompanhamentos por carro",
+               "Acompanhamentos", str(_cb["total"]))}
+  <div class="grid-4" style="margin-bottom:7px;">
+    <div class="metric"><div class="lbl">Acompanhamentos no trimestre</div><div class="val">{_cb['total']}</div><div class="aux">desde {_cb_ini_lbl}</div></div>
+    <div class="metric"><div class="lbl">Linhas atendidas</div><div class="val">{len(_cb_com)} de {len(_cb_l)}</div><div class="aux">linhas que rodaram no período</div></div>
+    <div class="metric"><div class="lbl">Linhas sem nenhum</div><div class="val" style="color:{'#c0392b' if _cb_zero else '#1e7a34'};">{len(_cb_zero)}</div><div class="aux">nenhum acompanhamento no trimestre</div></div>
+    <div class="metric"><div class="lbl">Média por carro</div><div class="val">{fmt(_cb_med,2)}</div><div class="aux">acompanhamentos por carro da frota</div></div>
+  </div>
+  <div class="grid-2" style="gap:10px;margin-bottom:7px;">
+    <div class="card"><div class="card-body" style="padding:5px 7px;">
+      <table class="tbl-compact">{_cb_cab}<tbody>{_cb_rows(_cb_l[:_cb_meio])}</tbody></table>
+    </div></div>
+    <div class="card"><div class="card-body" style="padding:5px 7px;">
+      <table class="tbl-compact">{_cb_cab}<tbody>{_cb_rows(_cb_l[_cb_meio:])}</tbody></table>
+    </div></div>
+  </div>
+  <div class="cons-box" style="margin-top:0;"><div class="cons-title">Leitura da cobertura</div>
+  <div class="cons-text">{_cb_txt}</div></div>
+  {footer(0)}
+</div>""")
+
 # ================= PAGINA 9: EVOLUCAO INDIVIDUAL + 30 DIAS =================
 rows_acomp = ""
 # Ordena aqui tambem (e nao so na origem) para o fallback fixo respeitar a ordem

@@ -1463,6 +1463,9 @@ if _cb and _cb["linhas"]:
     <div class="metric"><div class="lbl">Linhas sem nenhum</div><div class="val" style="color:{'#c0392b' if _cb_zero else '#1e7a34'};">{len(_cb_zero)}</div><div class="aux">nenhum acompanhamento no trimestre</div></div>
     <div class="metric"><div class="lbl">Média por carro</div><div class="val">{fmt(_cb_med,2)}</div><div class="aux">acompanhamentos por carro da frota</div></div>
   </div>
+  <div class="card" style="margin-bottom:7px;"><div class="card-title">Acompanhamentos por carro em cada linha</div><div class="card-body" style="padding:4px 8px;">
+    <div class="chart-wrap chart-wrap-diag" style="border:none;padding:0;"><img src="v3_cobertura.png"/></div>
+  </div></div>
   <div class="grid-2" style="gap:10px;margin-bottom:7px;">
     <div class="card"><div class="card-body" style="padding:5px 7px;">
       <table class="tbl-compact">{_cb_cab}<tbody>{_cb_rows(_cb_l[:_cb_meio])}</tbody></table>

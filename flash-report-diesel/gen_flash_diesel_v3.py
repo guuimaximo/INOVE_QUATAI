@@ -2064,6 +2064,43 @@ def chart_kml_historico():
     plt.close(fig)
 
 
+def chart_cobertura_linhas():
+    """Acompanhamentos por carro em cada linha, com a media da frota marcada. Ordenado
+    igual a tabela. Barra vermelha = linha abaixo da metade da media, que e onde a
+    cobertura esta realmente furada."""
+    if not (ACOMP_LINHAS and ACOMP_LINHAS["linhas"]):
+        return
+    dados = ACOMP_LINHAS["linhas"][:18]
+    tot_carros = sum(l["carros_linha"] or 1 for l in ACOMP_LINHAS["linhas"])
+    media = (ACOMP_LINHAS["total"] / tot_carros) if tot_carros else 0
+    fig, ax = plt.subplots(figsize=(12.4, 4.3))
+    y = np.arange(len(dados))
+    vals = [l["por_carro"] for l in dados]
+    cores = [RED if v < media * 0.5 else (GOLD if v < media else TEAL) for v in vals]
+    ax.barh(y, vals, color=cores, height=0.62, zorder=3)
+    for i, l in enumerate(dados):
+        ax.text(vals[i] + max(vals) * 0.015, i,
+                f"{fmt(vals[i], 2)}  ({l['n']} acomp. / {l['carros_linha']} carros)",
+                va="center", fontsize=11, fontweight="bold", color=DARK, zorder=4)
+    if media:
+        ax.axvline(media, color=DARK, linestyle="--", linewidth=2.2, zorder=2,
+                   label=f"Média da frota ({fmt(media, 2)} por carro)")
+        ax.legend(loc="lower right", fontsize=11.5, frameon=False)
+    ax.set_yticks(y)
+    ax.set_yticklabels([l["linha"] for l in dados], fontsize=12.5,
+                       fontweight="bold", color=DARK)
+    ax.invert_yaxis()
+    ax.set_xlim(0, max(vals) * 1.42 if vals else 1)
+    ax.set_xlabel("Acompanhamentos por carro da linha", fontsize=12.5, color=DARK)
+    ax.tick_params(axis="x", labelsize=11)
+    for sp in ["top", "right", "left"]:
+        ax.spines[sp].set_visible(False)
+    ax.grid(axis="x", linestyle=":", alpha=0.45)
+    fig.tight_layout()
+    fig.savefig(OUT / "v3_cobertura.png", dpi=150, transparent=True)
+    plt.close(fig)
+
+
 def chart_cluster_velocidade():
     """Velocidade por linha, mes anterior x mes de referencia, com a media da frota como
     referencia vertical. Responde de bater o olho se a linha desacelerou junto com a
@@ -2712,7 +2749,7 @@ for f in [chart_kml_historico, chart_semanal_evolucao, chart_semanal_variacao_pc
           chart_donut_tratativas, chart_instrutores_diario,
           chart_antes_depois_barras, chart_meritocracia_donut, chart_divergencia_carros, chart_aderencia_carros, chart_aderencia_empresa_diaria,
           # saem sozinhos se ANALISE_CLUSTER for None (sem dado para o cluster investigado)
-          chart_cluster_cascata, chart_cluster_diagnostico, chart_cluster_velocidade]:
+          chart_cluster_cascata, chart_cluster_diagnostico, chart_cluster_velocidade, chart_cobertura_linhas]:
     f()
 chart_motoristas_lollipop(PIORES, "Top 10 — Maior distância da meta", "v3_piores.png", RED)
 chart_motoristas_lollipop(MELHORES, "Top 10 — Melhor desempenho", "v3_melhores.png", GREEN)

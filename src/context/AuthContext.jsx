@@ -67,6 +67,11 @@ export function AuthProvider({ children }) {
   const RECORDING_HEARTBEAT_MS = 3 * 60 * 60 * 1000; // 3h
   const recordingRef = useRef({ active: false, lastPing: 0 });
   const verificandoSessaoRef = useRef(false);
+  // Última interação do usuário. A guarda de sessão NUNCA força relogin enquanto
+  // o usuário está trabalhando (evita cair no meio de uma foto/ficha de troca ou
+  // auditoria — a câmera dispara visibilitychange e não pode derrubar o trabalho).
+  const ultimaAtividadeRef = useRef(Date.now());
+  const IDLE_PARA_RELOGIN_MS = 90 * 1000; // 90s sem atividade
   const gravandoNoFarol = useCallback(() => {
     const r = recordingRef.current;
     if (!r.active) return false;
@@ -146,7 +151,11 @@ export function AuthProvider({ children }) {
       if (renovado?.session) return; // conseguiu restaurar
       if (error && !/session|token/i.test(String(error.message || ""))) return; // erro de rede: não desloga
       if (gravandoNoFarol()) return; // gravando: NUNCA deslogar (mataria a gravação)
-      await logout(); // sessão morta de verdade → relogin
+      // NUNCA deslogar enquanto o usuário está trabalhando (ex.: tirando foto no
+      // meio de uma troca/auditoria — a câmera dispara visibilitychange). Só força
+      // o relogin quando ele estiver realmente ocioso, pra não perder a ficha.
+      if (Date.now() - ultimaAtividadeRef.current < IDLE_PARA_RELOGIN_MS) return;
+      await logout(); // sessão morta de verdade E usuário ocioso → relogin
     } catch {
       /* silencioso: não desloga por exceção ambígua (ex.: rede) */
     } finally {
@@ -362,6 +371,7 @@ export function AuthProvider({ children }) {
     };
 
     const onActivity = () => {
+      ultimaAtividadeRef.current = Date.now();
       if (document.visibilityState === "visible") {
         touchActivity();
         // So troca o usuario se a IDENTIDADE mudou (ex.: outra aba logou com

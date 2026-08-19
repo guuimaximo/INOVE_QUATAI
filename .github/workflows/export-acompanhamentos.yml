@@ -1,0 +1,42 @@
+name: Diesel · Exportar acompanhamentos (detalhado)
+
+# Sob demanda apenas: gera o CSV com uma linha por sessao de acompanhamento
+# (data, motorista, linha, tabela, hora de inicio e fim) e sobe como artefato.
+# Nao commita nada e nao encosta no bot semanal do Flash Report.
+on:
+  workflow_dispatch:
+    inputs:
+      meses:
+        description: "Quantos meses para tras"
+        required: false
+        default: "3"
+
+jobs:
+  exportar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Exportar CSV
+        working-directory: flash-report-diesel
+        env:
+          EXPORT_MESES: ${{ github.event.inputs.meses }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_BCNT_URL: ${{ secrets.SUPABASE_BCNT_URL }}
+          SUPABASE_BCNT_KEY: ${{ secrets.SUPABASE_BCNT_KEY }}
+        run: python export_acompanhamentos.py
+
+      - name: Sobe o CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: acompanhamentos-detalhe
+          path: flash-report-diesel/acompanhamentos_detalhe.csv
+          if-no-files-found: error
+          retention-days: 14

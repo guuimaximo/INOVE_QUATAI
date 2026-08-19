@@ -573,23 +573,27 @@ async function captureNativePhoto(fileNamePrefix) {
 
   const photo = await Camera.getPhoto({
     source: CameraSource.Camera,
-    resultType: CameraResultType.Base64,
+    // Uri (não Base64): a foto NÃO é carregada inteira na memória JS. Segurar
+    // várias fotos em base64 fazia o Android matar o app ao voltar da câmera
+    // ("fecha e abre" na última foto, perdendo a ficha). Com Uri, guardamos só o
+    // caminho do arquivo e lemos os bytes só na hora do upload.
+    resultType: CameraResultType.Uri,
     quality: 75,
-    // Reduz a foto ainda no nativo (no maximo 1600px): base64 menor = preview e
-    // upload rapidos, sem a tela travar ao "entrar" a foto.
-    width: 1600,
+    width: 1600, // reduz ainda no nativo (máx. 1600px)
     correctOrientation: true,
     promptLabelHeader: "Foto do pneu",
     promptLabelPhoto: "Galeria",
     promptLabelPicture: "Camera",
   });
 
-  if (!photo?.base64String) return null;
+  const webPath = photo?.webPath;
+  if (!webPath) return null;
 
-  const extension = photo.format || "jpg";
-  const mimeType = photo.format ? `image/${photo.format}` : "image/jpeg";
-  const bytes = base64ToUint8Array(photo.base64String);
-  return new File([bytes], `${fileNamePrefix}.${extension}`, { type: mimeType });
+  const resp = await fetch(webPath);
+  const blob = await resp.blob();
+  const extension = (blob.type && blob.type.split("/")[1]) || photo.format || "jpg";
+  const mimeType = blob.type || (photo.format ? `image/${photo.format}` : "image/jpeg");
+  return new File([blob], `${fileNamePrefix}.${extension}`, { type: mimeType });
 }
 
 function buildTrocaResumo(row) {

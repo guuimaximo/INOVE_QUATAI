@@ -96,10 +96,44 @@ CAND_TABELA = ["tabela", "tabela_operacional", "nr_tabela", "cod_tabela", "servi
 col_tabela = next((c for c in CAND_TABELA if c in cols_pd), None)
 print(f"[sonda] coluna de tabela na premiacao: {col_tabela or 'NAO EXISTE'}")
 
+# A tabela operacional pode estar dentro de um JSON (metadata / foco_snapshot). Varre as
+# chaves de verdade, inclusive aninhadas, em vez de supor que nao existe.
+def chaves_json(url, key, tab, campos, n=400):
+    achou = set()
+    try:
+        am = get(url, key, tab, [("select", ",".join(campos)), ("limit", str(n))])
+    except Exception as e:
+        print(f"[sonda] json de {tab} falhou: {e}")
+        return achou
+
+    def anda(v, pre=""):
+        if isinstance(v, dict):
+            for k, vv in v.items():
+                achou.add(f"{pre}{k}")
+                anda(vv, f"{pre}{k}.")
+        elif isinstance(v, list):
+            for vv in v[:3]:
+                anda(vv, pre)
+    for r in am:
+        for c in campos:
+            anda(r.get(c), f"{c}.")
+    return achou
+
+
+ch_ss = chaves_json(inv_url, inv_key, "diesel_acompanhamento_sessoes",
+                    ["metadata", "foco_snapshot"])
+ch_ac = chaves_json(inv_url, inv_key, "diesel_acompanhamentos", ["metadata", "checklist"])
+print(f"[sonda] chaves em sessoes.metadata/foco: {sorted(ch_ss)[:60]}")
+print(f"[sonda] chaves em acompanhamentos.metadata/checklist: {sorted(ch_ac)[:60]}")
+alvo = [c for c in sorted(ch_ss | ch_ac)
+        if any(t in c.lower() for t in ("tabela", "servic", "escala", "carro", "veic", "linha"))]
+print(f"[sonda] chaves que parecem tabela/linha/veiculo: {alvo}")
+
 # ---- sessoes + motorista ----
 sess = pagina(inv_url, inv_key,
               "diesel_acompanhamento_sessoes",
-              [("select", "data_sessao,instrutor_nome,iniciado_em,encerrado_em,"
+              [("select", "data_sessao,instrutor_nome,iniciado_em,encerrado_em,hora_inicio,"
+                          "hora_fim,linha_snapshot,status_sessao,sessao_numero,"
                           "acompanhamento_id,foco_snapshot"),
                ("data_sessao", f"gte.{ini.isoformat()}")])
 print(f"[export] {len(sess)} sessoes desde {ini}")
@@ -152,7 +186,10 @@ for s in sess:
     dia = por_dia.get((norm_chapa(chapa), data))
     if not dia:
         sem_op += 1
-    ini_h, fim_h = hora(s.get("iniciado_em")), hora(s.get("encerrado_em"))
+    # hora_inicio/hora_fim sao campos proprios da sessao; iniciado_em/encerrado_em sao
+    # timestamps UTC do registro. Prefere o campo proprio e cai no timestamp se faltar.
+    ini_h = str(s.get("hora_inicio") or "")[:5] or hora(s.get("iniciado_em"))
+    fim_h = str(s.get("hora_fim") or "")[:5] or hora(s.get("encerrado_em"))
     dur = ""
     if ini_h and fim_h:
         a = dt.datetime.strptime(ini_h, "%H:%M")
@@ -165,13 +202,20 @@ for s in sess:
         "data": data,
         "motorista": nome.title(),
         "chapa": chapa,
-        "linha": topo(dia["linha"]) if dia else "",
+        # linha_snapshot e a linha capturada na hora do acompanhamento - e a fonte certa.
+        # A linha da operacao do dia fica como reserva, para as sessoes sem snapshot.
+        "linha": (str(s.get("linha_snapshot") or "").strip()
+                  or (topo(dia["linha"]) if dia else "")),
+        "linha_origem": ("snapshot" if str(s.get("linha_snapshot") or "").strip()
+                         else ("operacao do dia" if dia else "")),
         "tabela": (topo(dia["tabela"]) if dia else "") if col_tabela else "",
         "carro": topo(dia["carro"]) if dia else "",
         "hora_inicio": ini_h,
         "hora_fim": fim_h,
         "duracao_min": dur,
         "instrutor": (s.get("instrutor_nome") or "").title(),
+        "sessao": s.get("sessao_numero") or "",
+        "status": s.get("status_sessao") or "",
         "foco": s.get("foco_snapshot") or "",
     })
 
@@ -187,7 +231,9 @@ with dest.open("w", encoding="utf-8-sig", newline="") as f:
 com_hora = sum(1 for r in linhas_csv if r["hora_inicio"])
 com_fim = sum(1 for r in linhas_csv if r["hora_fim"])
 com_linha = sum(1 for r in linhas_csv if r["linha"])
+por_snap = sum(1 for r in linhas_csv if r.get("linha_origem") == "snapshot")
 com_tab = sum(1 for r in linhas_csv if r["tabela"])
 print(f"[export] {len(linhas_csv)} sessoes escritas em {dest.name}")
 print(f"[export] com hora inicio: {com_hora} | com hora fim: {com_fim} | "
-      f"com linha: {com_linha} | com tabela: {com_tab} | sem operacao no dia: {sem_op}")
+      f"com linha: {com_linha} (snapshot: {por_snap}) | com tabela: {com_tab} | "
+      f"sem operacao no dia: {sem_op}")

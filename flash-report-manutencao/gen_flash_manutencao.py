@@ -5,11 +5,13 @@
 
 import os
 import re
+import unicodedata
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 
 from supabase import create_client
 from playwright.sync_api import sync_playwright
@@ -279,6 +281,67 @@ def is_ocorrencia_valida_para_mkbf(oc):
     if tipo == "SEGUIU VIAGEM":
         return False
     return True
+
+
+# ==============================================================================
+# CLASSIFICAÇÃO DE EMBARCADOS
+# ------------------------------------------------------------------------------
+# A base tem DUAS classificações que não conversam entre si: `grupo_manutencao`
+# (preenchido com "Validador"/"Roleta"/"Itinerário"/... em parte dos registros) e
+# `problema_encontrado` (texto livre). Ex.: dos 63 SOs com problema "Validador",
+# 61 estão no grupo genérico "Elétrico" e só 2 no grupo "Validador". Nenhum dos
+# dois campos sozinho fecha a conta — por isso a classificação é a UNIÃO deles,
+# com a reclamação do motorista como rede de segurança.
+# ==============================================================================
+EMB_FAMILIAS = ["Validador/Bilhetagem", "Catraca/Roleta", "Itinerário/Letreiro",
+                "Telemetria", "GPS/AVL/TCO", "Câmera/Vision"]
+
+# grupo_manutencao -> família (quando preenchido, é autoritativo)
+_EMB_POR_GRUPO = {
+    "VALIDADOR": "Validador/Bilhetagem",
+    "CONTA GIRO": "Validador/Bilhetagem",
+    "ROLETA": "Catraca/Roleta",
+    "ITINERÁRIO": "Itinerário/Letreiro",
+    "ITINERARIO": "Itinerário/Letreiro",
+    "TELEMETRIA": "Telemetria",
+    "GPS/AVL/TCO": "GPS/AVL/TCO",
+}
+
+# regex sobre problema_encontrado / reclamacao_motorista (sem depender de unaccent)
+_EMB_POR_TEXTO = [
+    (re.compile(r"validad|conta giro|reconhecimento facial|bilhet", re.I), "Validador/Bilhetagem"),
+    (re.compile(r"catraca|roleta", re.I), "Catraca/Roleta"),
+    (re.compile(r"letreiro|itiner", re.I), "Itinerário/Letreiro"),
+    (re.compile(r"telemetr|telem[aá]t", re.I), "Telemetria"),
+    (re.compile(r"\bgps\b|\bavl\b|rastre", re.I), "GPS/AVL/TCO"),
+    (re.compile(r"c[aâ]mera|vision|\bdvr\b", re.I), "Câmera/Vision"),
+]
+
+# "Catraca de Freio" é o catraca/regulador do freio (Mecânica), NÃO a catraca de
+# passageiro. Sem esta exclusão entram 18 SOs mecânicos por ano como embarcado.
+_EMB_FALSOS_AMIGOS = re.compile(r"catraca de freio", re.I)
+
+
+def classificar_embarcado(grupo, problema, reclamacao=None):
+    """Retorna a família de embarcado do SO, ou None se não for embarcado."""
+    p = "" if problema is None or (isinstance(problema, float) and pd.isna(problema)) else str(problema)
+    g = "" if grupo is None or (isinstance(grupo, float) and pd.isna(grupo)) else str(grupo)
+    r = "" if reclamacao is None or (isinstance(reclamacao, float) and pd.isna(reclamacao)) else str(reclamacao)
+
+    if _EMB_FALSOS_AMIGOS.search(p):
+        return None
+
+    fam = _EMB_POR_GRUPO.get(g.strip().upper())
+    if fam:
+        return fam
+
+    for rx, fam in _EMB_POR_TEXTO:
+        if rx.search(p):
+            return fam
+    for rx, fam in _EMB_POR_TEXTO:
+        if rx.search(r):
+            return fam
+    return None
 
 
 # ==============================================================================
@@ -1122,6 +1185,108 @@ def processar_embarcados() -> dict:
 
 
 # ==============================================================================
+# PROCESSAMENTO - EMBARCADOS · INTERVENÇÕES (SOs de estrada)
+# ==============================================================================
+def carregar_sos_embarcados(periodo_inicio: date, periodo_fim: date) -> pd.DataFrame:
+    rows = fetch_all_table_period(
+        table_name="sos_acionamentos",
+        select_fields=("id, data_sos, veiculo, linha, ocorrencia, status, problema_encontrado, "
+                       "grupo_manutencao, reclamacao_motorista, setor_manutencao"),
+        date_field="data_sos",
+        start_date=periodo_inicio, end_date=periodo_fim,
+    )
+    cols = ["id", "data_sos", "veiculo", "linha", "ocorrencia", "status", "problema_encontrado",
+            "grupo_manutencao", "reclamacao_motorista", "setor_manutencao"]
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    return pd.DataFrame(rows)
+
+
+def processar_embarcados_intervencoes(periodo_inicio: date, periodo_fim: date,
+                                      meses_hist: int = 12) -> dict:
+    """Intervenções de embarcados no mês + evolução mensal e mix por ocorrência.
+
+    Diferente da página de SRs (câmeras/vision em aberto), aqui a unidade é o
+    ACIONAMENTO na rua: quantas vezes um embarcado tirou o carro de operação ou
+    exigiu socorro. Telemetria, por exemplo, quase sempre é 'seguiu viagem' —
+    não entra no MKBF, mas é intervenção e consome equipe.
+    """
+    ini_hist = month_start(add_months(periodo_fim, -(meses_hist - 1)))
+    df = carregar_sos_embarcados(ini_hist, periodo_fim)
+
+    vazio = {
+        "total": 0, "total_geral": 0, "share_pct": 0.0, "recolhidos": 0, "seguiu": 0,
+        "por_familia": pd.DataFrame(columns=["familia", "total", "seguiu", "recolheu", "troca", "outros"]),
+        "por_mes": pd.DataFrame(columns=["mes", "emb", "tot", "pct"]),
+        "top_veiculos": pd.DataFrame(columns=["veiculo", "qtd", "familias"]),
+        "top_problemas": pd.DataFrame(columns=["problema", "qtd"]),
+        "periodo_label": periodo_label(periodo_inicio, periodo_fim),
+    }
+    if df.empty:
+        return vazio
+
+    df["data_sos"] = pd.to_datetime(df["data_sos"], errors="coerce").dt.date
+    df = df.dropna(subset=["data_sos"]).copy()
+    df["familia"] = [
+        classificar_embarcado(g, p, r)
+        for g, p, r in zip(df["grupo_manutencao"], df["problema_encontrado"], df["reclamacao_motorista"])
+    ]
+    df["tipo_norm"] = df["ocorrencia"].apply(normalize_tipo)
+
+    # --- evolução mensal (histórico completo) ---
+    df["mes"] = pd.to_datetime(df["data_sos"]).dt.to_period("M")
+    por_mes = (df.groupby("mes")
+               .agg(emb=("familia", lambda s: int(s.notna().sum())), tot=("id", "size"))
+               .reset_index().sort_values("mes"))
+    por_mes["pct"] = (por_mes["emb"] / por_mes["tot"].replace(0, pd.NA) * 100).fillna(0.0)
+
+    # --- recorte do mês de referência ---
+    mes = df[(df["data_sos"] >= periodo_inicio) & (df["data_sos"] <= periodo_fim)].copy()
+    emb = mes[mes["familia"].notna()].copy()
+
+    total = int(len(emb))
+    total_geral = int(len(mes))
+    share = (total / total_geral * 100) if total_geral else 0.0
+
+    if emb.empty:
+        por_familia = vazio["por_familia"]
+        top_veiculos = vazio["top_veiculos"]
+        top_problemas = vazio["top_problemas"]
+    else:
+        # colunas indicadoras + soma simples: evita groupby.apply, cujo contrato
+        # (include_groups) mudou entre pandas 2.x e 3.x
+        emb["_seguiu"] = (emb["tipo_norm"] == "SEGUIU VIAGEM").astype(int)
+        emb["_recolheu"] = (emb["tipo_norm"] == "RECOLHEU").astype(int)
+        emb["_troca"] = (emb["tipo_norm"] == "TROCA").astype(int)
+        emb["_outros"] = (~emb["tipo_norm"].isin(["SEGUIU VIAGEM", "RECOLHEU", "TROCA"])).astype(int)
+        por_familia = (emb.groupby("familia", as_index=False)
+                       .agg(total=("id", "size"), seguiu=("_seguiu", "sum"),
+                            recolheu=("_recolheu", "sum"), troca=("_troca", "sum"),
+                            outros=("_outros", "sum"))
+                       .sort_values("total", ascending=False))
+        top_veiculos = (emb.groupby("veiculo")
+                        .agg(qtd=("id", "size"),
+                             familias=("familia", lambda s: ", ".join(sorted(set(s)))))
+                        .reset_index().sort_values("qtd", ascending=False).head(8))
+        top_problemas = (emb["problema_encontrado"].fillna("(não informado)")
+                         .value_counts().head(8).rename_axis("problema")
+                         .reset_index(name="qtd"))
+
+    return {
+        "total": total,
+        "total_geral": total_geral,
+        "share_pct": float(share),
+        "recolhidos": int((emb["tipo_norm"] == "RECOLHEU").sum()) if not emb.empty else 0,
+        "seguiu": int((emb["tipo_norm"] == "SEGUIU VIAGEM").sum()) if not emb.empty else 0,
+        "por_familia": por_familia,
+        "por_mes": por_mes,
+        "top_veiculos": top_veiculos,
+        "top_problemas": top_problemas,
+        "periodo_label": periodo_label(periodo_inicio, periodo_fim),
+    }
+
+
+# ==============================================================================
 # PROCESSAMENTO - MOTORISTAS (procedentes / improcedentes)
 # ==============================================================================
 def processar_motoristas(periodo_inicio: date, periodo_fim: date) -> dict:
@@ -1251,6 +1416,151 @@ def processar_pagina_4(periodo_fim: date) -> dict:
         "top_veiculo": top_veiculo,
         "top_5_linhas": top_5_linhas,
         "top_5_carros": top_5_carros
+    }
+
+
+# ==============================================================================
+# PROCESSAMENTO - DEFEITOS · EVOLUÇÃO MENSAL
+# ==============================================================================
+def _rotulo_defeito_canonico(serie: pd.Series) -> dict:
+    """Mapa {grafia_original -> grafia canônica} agrupando por caixa/acento/espaço.
+
+    A base tem o mesmo defeito escrito de formas diferentes ("câmbio"/"Câmbio",
+    "CARCAÇA"/"Carcaça"). Sem isso o mesmo defeito vira duas linhas na matriz e
+    a evolução mensal fica partida ao meio. A grafia vencedora é a mais frequente.
+    """
+    def _chave(v: str) -> str:
+        s = unicodedata.normalize("NFKD", v.lower())
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        return re.sub(r"\s+", " ", s).strip()
+
+    # loop explícito: no pandas 3.0 astype(str) preserva NA em vez de gerar "nan",
+    # e o groupby descarta essas chaves, quebrando o lookup do vencedor
+    freq: dict[str, dict[str, int]] = {}
+    for v in serie.tolist():
+        if v is None or v is pd.NA or (isinstance(v, float) and pd.isna(v)):
+            continue
+        orig = str(v).strip()
+        if not orig or orig.lower() in ("nan", "none", "<na>"):
+            continue
+        k = _chave(orig)
+        freq.setdefault(k, {})
+        freq[k][orig] = freq[k].get(orig, 0) + 1
+
+    mapa: dict[str, str] = {}
+    for grafias in freq.values():
+        canonico = max(grafias.items(), key=lambda kv: kv[1])[0]
+        for g in grafias:
+            mapa[g] = canonico
+    return mapa
+
+
+def processar_defeitos_evolucao(periodo_fim: date, meses: int = 6, top_n: int = 12) -> dict:
+    """Matriz defeito × mês das intervenções que contam para o MKBF.
+
+    Base = mesma da página de Raio-X: ocorrências válidas para MKBF (exclui
+    'seguiu viagem'), ou seja, o que de fato tirou o carro de operação.
+    """
+    ini = month_start(add_months(periodo_fim, -(meses - 1)))
+    df = carregar_sos_pagina_4(ini, periodo_fim)
+
+    meses_lista = [month_start(add_months(periodo_fim, -i)) for i in range(meses - 1, -1, -1)]
+    meses_labels = [f"{pt_month_name(m)[:3]}/{str(m.year)[2:]}" for m in meses_lista]
+
+    vazio = {
+        "meses_labels": meses_labels, "matriz": pd.DataFrame(), "total_mes": 0,
+        "total_periodo": 0, "top_defeito_mes": "N/D", "maior_alta": None,
+        "maior_queda": None, "df_linhas_grafico": pd.DataFrame(),
+        "periodo_label": periodo_label(ini, periodo_fim), "distintos": 0,
+    }
+    if df.empty:
+        return vazio
+
+    df["data_sos"] = pd.to_datetime(df["data_sos"], errors="coerce").dt.date
+    df = df.dropna(subset=["data_sos"]).copy()
+    df["valida_mkbf"] = df["ocorrencia"].apply(is_ocorrencia_valida_para_mkbf)
+    base = df[df["valida_mkbf"]].copy()
+    if base.empty:
+        return vazio
+
+    base["defeito"] = (base["problema_encontrado"].astype(str).str.strip()
+                       .replace({"": "N/D", "None": "N/D", "nan": "N/D"}))
+    base = base[base["defeito"] != "N/D"].copy()
+    if base.empty:
+        return vazio
+    base["defeito"] = base["defeito"].map(_rotulo_defeito_canonico(base["defeito"])).fillna(base["defeito"])
+    base["mes_label"] = base["data_sos"].apply(lambda d: f"{pt_month_name(d)[:3]}/{str(d.year)[2:]}")
+
+    matriz = (base.pivot_table(index="defeito", columns="mes_label", values="id",
+                               aggfunc="count", fill_value=0))
+    for lab in meses_labels:
+        if lab not in matriz.columns:
+            matriz[lab] = 0
+    matriz = matriz[meses_labels]
+    matriz["Total"] = matriz.sum(axis=1)
+
+    mes_atual, meses_ant = meses_labels[-1], meses_labels[:-1]
+    # O mês de referência quase sempre está PARCIAL (o relatório roda no meio do
+    # mês). Comparar contagem bruta contra meses fechados jogaria todo defeito
+    # para "queda". Por isso a tendência compara RITMO DIÁRIO, reprojetado em 30
+    # dias, e a média usa os meses anteriores (não o mês anterior isolado, que
+    # oscila demais em defeito de baixa frequência).
+    dias_corridos = max((periodo_fim - month_start(periodo_fim)).days + 1, 1)
+    dias_por_mes = {
+        lab: (month_end(m) - m).days + 1
+        for lab, m in zip(meses_labels, meses_lista)
+    }
+    dias_por_mes[mes_atual] = dias_corridos
+
+    if meses_ant:
+        taxa_ant = sum((matriz[lab] / dias_por_mes[lab]) for lab in meses_ant) / len(meses_ant)
+    else:
+        taxa_ant = 0.0
+    taxa_atual = matriz[mes_atual] / dias_corridos
+    matriz["media_ant"] = taxa_ant * 30 if meses_ant else 0.0
+    matriz["proj_atual"] = taxa_atual * 30
+    matriz["delta"] = matriz["proj_atual"] - matriz["media_ant"]
+    matriz = matriz.sort_values("Total", ascending=False)
+
+    top = matriz.head(top_n).copy().reset_index()
+
+    # altas/quedas só entre defeitos com massa mínima — senão 0→2 vira "alta de 200%"
+    relevantes = matriz[matriz["Total"] >= 4]
+    maior_alta = maior_queda = None
+    if not relevantes.empty:
+        alta = relevantes.sort_values("delta", ascending=False).iloc[0]
+        queda = relevantes.sort_values("delta", ascending=True).iloc[0]
+        if alta["delta"] > 0:
+            maior_alta = {"defeito": alta.name, "atual": int(alta[mes_atual]),
+                          "proj": float(alta["proj_atual"]),
+                          "media": float(alta["media_ant"]), "delta": float(alta["delta"])}
+        if queda["delta"] < 0:
+            maior_queda = {"defeito": queda.name, "atual": int(queda[mes_atual]),
+                           "proj": float(queda["proj_atual"]),
+                           "media": float(queda["media_ant"]), "delta": float(queda["delta"])}
+
+    df_graf = matriz.head(5)[meses_labels].copy()
+
+    total_mes = int(base[base["mes_label"] == mes_atual].shape[0])
+    top_def_mes = "N/D"
+    serie_mes = base[base["mes_label"] == mes_atual]["defeito"]
+    if not serie_mes.empty:
+        top_def_mes = serie_mes.value_counts().index[0]
+
+    return {
+        "meses_labels": meses_labels,
+        "matriz": top,
+        "total_mes": total_mes,
+        "total_periodo": int(len(base)),
+        "distintos": int(matriz.shape[0]),
+        "dias_corridos": dias_corridos,
+        "mes_parcial": dias_corridos < ((month_end(periodo_fim) - month_start(periodo_fim)).days + 1),
+        "top_defeito_mes": top_def_mes,
+        "maior_alta": maior_alta,
+        "maior_queda": maior_queda,
+        "df_linhas_grafico": df_graf,
+        "periodo_label": periodo_label(ini, periodo_fim),
+        "mes_atual_label": mes_atual,
     }
 
 
@@ -1855,6 +2165,96 @@ def gerar_grafico_embarcados_mensal(por_mes: pd.DataFrame, mes_ref_period, camin
     ax.set_yticks([])
     _teal_axes_style(ax)
     ax.spines["left"].set_visible(False)
+    fig.tight_layout(pad=0.3)
+    plt.savefig(caminho_img, dpi=140, bbox_inches="tight", transparent=True)
+    plt.close()
+
+
+def gerar_grafico_defeitos_evolucao(df_linhas: pd.DataFrame, meses_labels: list, caminho_img: Path):
+    """Uma linha por defeito (top 5) ao longo dos meses."""
+    if df_linhas is None or df_linhas.empty:
+        _empty_chart(caminho_img, "Evolução dos Defeitos", figsize=(9.0, 2.3))
+        return
+    cores = ["#0d9488", "#dc2626", "#2563eb", "#b45309", "#7c3aed"]
+    fig, ax = plt.subplots(figsize=(9.0, 2.3))
+    x = range(len(meses_labels))
+    max_v = 1
+    pontas = []
+    for i, (defeito, linha) in enumerate(df_linhas.iterrows()):
+        vals = [int(linha.get(m, 0)) for m in meses_labels]
+        max_v = max(max_v, max(vals))
+        cor = cores[i % len(cores)]
+        ax.plot(x, vals, color=cor, linewidth=1.7, marker="o", markersize=3.4,
+                label=str(defeito)[:22])
+        pontas.append((vals[-1], cor))
+    ax.set_ylim(0, max_v * 1.25)
+
+    # rótulo só na ponta direita (rotular todos os pontos embola as 5 séries).
+    # Defeitos de baixa frequência terminam quase no mesmo valor, então os
+    # rótulos se sobrepõem — empilha em degraus quando ficam perto demais.
+    min_gap = max_v * 0.085
+    ocupados = []
+    for val, cor in sorted(pontas, key=lambda t: t[0]):
+        y = val
+        while any(abs(y - o) < min_gap for o in ocupados):
+            y += min_gap
+        ocupados.append(y)
+        ax.annotate(str(val), (len(meses_labels) - 1, y), textcoords="offset points",
+                    xytext=(7, -2.5), fontsize=7, fontweight="bold", color=cor)
+    ax.set_xlim(-0.3, len(meses_labels) - 0.3)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(meses_labels, fontsize=7.5)
+    ax.tick_params(axis="y", labelsize=7)
+    _teal_axes_style(ax)
+    ax.grid(axis="y", color="#e2ecea", linewidth=0.6)
+    ax.set_axisbelow(True)
+    ax.legend(fontsize=6.8, ncol=5, frameon=False, loc="upper center",
+              bbox_to_anchor=(0.5, 1.18), handlelength=1.4, columnspacing=1.0)
+    fig.tight_layout(pad=0.3)
+    plt.savefig(caminho_img, dpi=140, bbox_inches="tight", transparent=True)
+    plt.close()
+
+
+def gerar_grafico_emb_interv_mensal(por_mes: pd.DataFrame, mes_ref_period, caminho_img: Path):
+    """Barras = intervenções de embarcados/mês; linha = % sobre o total de intervenções."""
+    df = por_mes.copy()
+    if df.empty:
+        _empty_chart(caminho_img, "Intervenções de Embarcados por Mês", figsize=(9.0, 2.5))
+        return
+    df = df.sort_values("mes").tail(12)
+    labels = [pt_month_name(m.to_timestamp().date())[:3] for m in df["mes"]]
+    qtd = [int(v) for v in df["emb"]]
+    pct = [float(v) for v in df["pct"]]
+    cores = [GREY if df["mes"].iloc[i] == mes_ref_period else TEAL for i in range(len(df))]
+
+    fig, ax = plt.subplots(figsize=(9.0, 2.5))
+    ax.bar(range(len(df)), qtd, color=cores, width=0.6)
+    max_v = max(qtd) if qtd else 1
+    for i, v in enumerate(qtd):
+        ax.text(i, v + max_v * 0.03, str(v), ha="center", va="bottom",
+                fontsize=7.5, fontweight="bold", color=TEAL_DARK)
+    ax.set_ylim(0, max_v * 1.34)
+    ax.set_xticks(range(len(df)))
+    ax.set_xticklabels(labels, fontsize=7.5)
+    ax.set_yticks([])
+    _teal_axes_style(ax)
+    ax.spines["left"].set_visible(False)
+
+    ax2 = ax.twinx()
+    ax2.plot(range(len(df)), pct, color="#dc2626", linewidth=1.6, marker="o", markersize=3.2)
+    for i, v in enumerate(pct):
+        # offset em pontos + halo branco: o rótulo cai sobre barra teal em vários
+        # meses, e vermelho sobre teal fica ilegível sem contorno
+        ax2.annotate(f"{v:.0f}%", (i, v), textcoords="offset points", xytext=(0, 7),
+                     ha="center", fontsize=6.8, fontweight="bold", color="#dc2626",
+                     path_effects=[pe.withStroke(linewidth=2.2, foreground="white")])
+    # limite inferior negativo empurra a linha para o terço superior, acima das barras
+    max_p = max(pct) if pct else 1
+    ax2.set_ylim(-max_p * 1.35, max_p * 1.10)
+    ax2.set_yticks([])
+    for s in ax2.spines.values():
+        s.set_visible(False)
+
     fig.tight_layout(pad=0.3)
     plt.savefig(caminho_img, dpi=140, bbox_inches="tight", transparent=True)
     plt.close()
@@ -2710,8 +3110,11 @@ def gerar_html_consolidado_teal(
     dados_regen: dict, dados_borracharia: dict, dados_gns: dict,
     dados_embarcados: dict, dados_motoristas: dict, dados_sr: dict,
     dados_prev: dict, df_acuracidade_mensal: pd.DataFrame, dados_oport: dict,
-    img: dict, html_path: Path,
+    img: dict, html_path: Path, dados_emb_interv: dict | None = None,
+    dados_defeitos: dict | None = None,
 ):
+    dados_emb_interv = dados_emb_interv or {}
+    dados_defeitos = dados_defeitos or {}
     theme_css = (TEMPLATES_DIR / "theme_teal.css").read_text(encoding="utf-8")
 
     periodo_fim = dados_p1["periodo_fim"]
@@ -2761,10 +3164,11 @@ def gerar_html_consolidado_teal(
     itens_indice = [
         "Intervenções — Mês / MKBF", "Intervenções — Dia e Projeções",
         "Análise por Linha, Horário e Cluster", "Raio-X de Defeitos e Ofensores",
-        "Regeneração do DPF", "Borracharia — Pneus", "Intervenções por Motorista",
+        "Defeitos — Evolução Mensal", "Regeneração do DPF", "Borracharia — Pneus", "Intervenções por Motorista",
         "Solicitação de Reparo — Aderência", "Solicitação de Reparo por Grupo",
         "Controle de Preventivas", "GNS — Carros Parados",
-        "Embarcados — Câmeras e Vision", "Oportunidades de Melhoria",
+        "Embarcados — Câmeras e Vision", "Embarcados — Intervenções na Operação",
+        "Oportunidades de Melhoria",
     ]
     rows_indice = "".join(
         f'<tr><td style="width:40px;text-align:center;font-weight:900;color:#0d9488;">{i+1:02d}</td>'
@@ -2801,7 +3205,7 @@ def gerar_html_consolidado_teal(
 """
 
     def footer_block(n: int) -> str:
-        return f'<div class="footer"><div>Gerado automaticamente · Página {n}/15 · dados reais</div><div>{footer_right}</div></div>'
+        return f'<div class="footer"><div>Gerado automaticamente · Página {n}/17 · dados reais</div><div>{footer_right}</div></div>'
 
     paginas = []
 
@@ -2987,7 +3391,93 @@ def gerar_html_consolidado_teal(
 </div>
 """)
 
-    # ===================== P5 · Regeneração do DPF =====================
+    # ===================== P5 · Defeitos · Evolução Mensal =====================
+    dv = dados_defeitos
+    meses_lbl = dv.get("meses_labels", [])
+    mtz = dv.get("matriz", pd.DataFrame())
+    mes_atual_lbl = dv.get("mes_atual_label", meses_lbl[-1] if meses_lbl else "")
+
+    th_meses = "".join(
+        f'<th style="{"background:#0f3d38;color:#fff;" if m == mes_atual_lbl else ""}">{m}</th>'
+        for m in meses_lbl
+    )
+
+    def _cel_delta(d):
+        if d is None or (isinstance(d, float) and pd.isna(d)):
+            return '<td class="muted">—</td>'
+        if d >= 1:
+            return f'<td style="color:#dc2626;font-weight:800;">▲ {_num_br(abs(d),1)}</td>'
+        if d <= -1:
+            return f'<td style="color:#166534;font-weight:800;">▼ {_num_br(abs(d),1)}</td>'
+        return '<td class="muted">estável</td>'
+
+    rows_mtz = ""
+    for _, r in mtz.iterrows():
+        cels = "".join(
+            f'<td style="{"font-weight:800;background:#ecfdf5;" if m == mes_atual_lbl else ""}">{_fmt_int(r[m])}</td>'
+            for m in meses_lbl
+        )
+        rows_mtz += (
+            f'<tr><td style="text-align:left;padding-left:6px;font-weight:700;">{r["defeito"]}</td>'
+            f'{cels}<td style="font-weight:800;">{_fmt_int(r["Total"])}</td>{_cel_delta(r.get("delta"))}</tr>'
+        )
+    rows_mtz = rows_mtz or '<tr><td colspan="9" class="muted">Sem defeitos no período</td></tr>'
+
+    alta, queda = dv.get("maior_alta"), dv.get("maior_queda")
+
+    def _destaque(d, cor):
+        return (
+            f'<div style="font-size:16px;font-weight:900;color:{cor};line-height:1.1;">{d["defeito"]}</div>'
+            f'<div style="font-size:9px;color:#5b716c;margin-top:3px;">{d["atual"]} até agora — ritmo de '
+            f'<b>{_num_br(d["proj"],1)}/mês</b> contra média de {_num_br(d["media"],1)} nos meses anteriores</div>'
+        )
+
+    alta_html = _destaque(alta, "#dc2626") if alta else '<div class="muted" style="font-size:10px;">Nenhuma alta relevante</div>'
+    queda_html = _destaque(queda, "#166534") if queda else '<div class="muted" style="font-size:10px;">Nenhuma queda relevante</div>'
+
+    nota_parcial = (
+        f'<div style="font-size:8.5px;color:#92400e;background:#fef3c7;border-radius:5px;padding:4px 8px;margin-bottom:7px;">'
+        f'<b>{mes_atual_lbl} está parcial</b> ({dv.get("dias_corridos",0)} dias corridos). A coluna de tendência compara '
+        f'<b>ritmo diário reprojetado em 30 dias</b> — sem isso todo defeito apareceria em queda só por causa do mês incompleto.</div>'
+        if dv.get("mes_parcial") else ""
+    )
+
+    cons_def = (
+        f"A tabela lê o defeito no tempo: cada linha é um defeito e cada coluna um mês, para enxergar se ele está "
+        f"subindo ou cedendo — visão que o Raio-X (página 4) não dá, porque lá o defeito aparece só como o maior de "
+        f"cada linha ou carro. A base são as {_fmt_int(dv.get('total_periodo',0))} intervenções válidas para MKBF no "
+        f"período ({dv.get('periodo_label','')}), ou seja, exclui 'seguiu viagem' — é o que realmente tirou carro de "
+        f"operação. No mês foram {_fmt_int(dv.get('total_mes',0))} intervenções em {_fmt_int(dv.get('distintos',0))} "
+        f"defeitos distintos, lideradas por <b>{dv.get('top_defeito_mes','N/D')}</b>. A tendência compara o ritmo diário "
+        f"do mês, reprojetado em 30 dias, contra a <b>média</b> dos meses anteriores — média, e não o mês anterior "
+        f"isolado, que oscila demais em defeito de baixa frequência. Altas e quedas destacadas consideram apenas "
+        f"defeitos com 4+ ocorrências no período, senão um salto de 0 para 2 apareceria como a maior alta do mês."
+    )
+
+    paginas.append(f"""
+<div class="page">
+{header_block("DEFEITOS · EVOLUÇÃO MENSAL", f"O mesmo defeito mês a mês · Base: intervenções que contam para o MKBF · <b>{dv.get('periodo_label','')}</b>", "Intervenções no mês", _fmt_int(dv.get('total_mes',0)))}
+  <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px;">
+    <div class="metric" style="border-left:4px solid #0d9488;"><div class="lbl">Defeito nº 1 do Mês</div><div class="val" style="font-size:15px;color:#0f766e;line-height:1.15;">{dv.get('top_defeito_mes','N/D')}</div></div>
+    <div class="metric"><div class="lbl">Defeitos Distintos</div><div class="val">{_fmt_int(dv.get('distintos',0))}</div><div class="aux">No período</div></div>
+    <div class="metric"><div class="lbl">Intervenções no Período</div><div class="val">{_fmt_int(dv.get('total_periodo',0))}</div><div class="aux">Válidas p/ MKBF</div></div>
+    <div class="metric"><div class="lbl">Intervenções no Mês</div><div class="val">{_fmt_int(dv.get('total_mes',0))}</div><div class="aux">{mes_atual_lbl}</div></div>
+  </div>
+  {nota_parcial}
+  <div class="card" style="margin-bottom:7px;"><div class="card-title">Matriz Defeito × Mês · Coluna destacada = mês de referência</div><div class="card-body">
+    <table class="compact"><thead><tr><th style="text-align:left;padding-left:6px;">Defeito</th>{th_meses}<th>Total</th><th>Tendência<br/><span style="font-weight:400;font-size:7.5px;">ritmo/mês</span></th></tr></thead><tbody>{rows_mtz}</tbody></table>
+  </div></div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:7px;">
+    <div class="card" style="margin-bottom:0;border-left:4px solid #dc2626;"><div class="card-title">Maior Alta do Mês</div><div class="card-body" style="padding:9px 12px;">{alta_html}</div></div>
+    <div class="card" style="margin-bottom:0;border-left:4px solid #16a34a;"><div class="card-title">Maior Queda do Mês</div><div class="card-body" style="padding:9px 12px;">{queda_html}</div></div>
+  </div>
+  <div class="card" style="margin-bottom:7px;"><div class="card-title">Evolução dos 5 Maiores Defeitos</div><div class="card-body">{img_tag_h('defeitos_evol', 165)}</div></div>
+  <div class="cons-box"><div class="cons-title">Considerações · Evolução dos Defeitos</div><div class="cons-text">{cons_def}</div></div>
+{footer_block(5)}
+</div>
+""")
+
+    # ===================== P6 · Regeneração do DPF =====================
     top_v = dados_regen.get("top_veiculos", pd.DataFrame())
     pior_veic = top_v.iloc[0]["prefixo"] if not top_v.empty else "N/D"
     pior_veic_eventos = int(top_v.iloc[0]["eventos"]) if not top_v.empty else 0
@@ -3056,11 +3546,11 @@ def gerar_html_consolidado_teal(
     </div>
   </div>
   <div class="cons-box"><div class="cons-title">Considerações · Regeneração</div><div class="cons-text">{cons_regen}</div></div>
-{footer_block(5)}
+{footer_block(6)}
 </div>
 """)
 
-    # ===================== P6 · Borracharia =====================
+    # ===================== P7 · Borracharia =====================
     b = dados_borracharia
     if b.get('estoque_fisico') is not None:
         estoque_val = _fmt_int(b['estoque_fisico'])
@@ -3106,11 +3596,11 @@ def gerar_html_consolidado_teal(
     <div class="card" style="margin-bottom:0;"><div class="card-title">Pneus Divergentes · Físico ≠ TransNet</div><div class="card-body"><table style="font-size:9px;"><thead><tr><th>Fogo</th><th>Veículo</th><th>Posição</th><th>Status</th></tr></thead><tbody>{rows_diverg}</tbody></table></div></div>
   </div>
   <div class="cons-box"><div class="cons-title">Considerações · Borracharia</div><div class="cons-text">{cons_borr}</div></div>
-{footer_block(6)}
+{footer_block(7)}
 </div>
 """)
 
-    # ===================== P7 · Motoristas =====================
+    # ===================== P8 · Motoristas =====================
     m = dados_motoristas
     rows_proc = "".join(
         f'<tr><td style="text-align:left;padding-left:8px;font-weight:700;">{r["motorista_nome"]}</td><td style="font-weight:700;color:#0d9488;">{int(r["qtd"])}</td></tr>'
@@ -3137,11 +3627,11 @@ def gerar_html_consolidado_teal(
   </div>
   <div class="card"><div class="card-title">Improcedentes por Mês — {periodo_fim.year}</div><div class="card-body"><div class="chart-wrap">{img_tag('motoristas')}</div></div></div>
   <div class="cons-box"><div class="cons-title">Considerações · Motoristas</div><div class="cons-text">{cons_mot}</div></div>
-{footer_block(7)}
+{footer_block(8)}
 </div>
 """)
 
-    # ===================== P8 · Solicitação de Reparo (competência) =====================
+    # ===================== P9 · Solicitação de Reparo (competência) =====================
     sr = dados_sr
     sit_a = sr["situacao_atual"]; sit_ant = sr["situacao_anterior"]
     meta_sr = sr["meta_competencia"]
@@ -3199,11 +3689,11 @@ def gerar_html_consolidado_teal(
     </div>
   </div>
   <div class="cons-box"><div class="cons-title">Considerações · Solicitação de Reparo</div><div class="cons-text">{cons_sr}</div></div>
-{footer_block(8)}
+{footer_block(9)}
 </div>
 """)
 
-    # ===================== P9 · SR por Grupo =====================
+    # ===================== P10 · SR por Grupo =====================
     abg = sr["aberto_por_grupo"]; adg = sr["aderencia_por_grupo"]
     rows_aberto_grupo = "".join(
         f'<tr><td style="text-align:left;padding-left:6px;font-weight:700;">{r["grupo"]}</td><td style="font-weight:700;color:#991b1b;">{int(r["abertas"])}</td>'
@@ -3247,11 +3737,11 @@ def gerar_html_consolidado_teal(
     </div>
   </div>
   <div class="cons-box"><div class="cons-title">Considerações · SR por Grupo</div><div class="cons-text">{cons_grupo}</div></div>
-{footer_block(9)}
+{footer_block(10)}
 </div>
 """)
 
-    # ===================== P10 · Preventivas =====================
+    # ===================== P11 · Preventivas =====================
     pv = dados_prev
     rows_por_plano = "".join(
         f'<tr><td style="text-align:left;padding-left:6px;">{r["ds_plano"]}</td><td style="font-weight:700;color:#991b1b;">{int(r["qtd"])}</td></tr>'
@@ -3291,11 +3781,11 @@ def gerar_html_consolidado_teal(
     </div>
   </div>
   <div class="cons-box"><div class="cons-title">Considerações · Preventivas</div><div class="cons-text">{cons_prev}</div></div>
-{footer_block(10)}
+{footer_block(11)}
 </div>
 """)
 
-    # ===================== P11 · GNS =====================
+    # ===================== P12 · GNS =====================
     g = dados_gns
     def _trunc(s, n=40):
         s = str(s or "").strip()
@@ -3336,11 +3826,11 @@ def gerar_html_consolidado_teal(
     <div class="card" style="margin-bottom:0;"><div class="card-title">Distribuição por Setor</div><div class="card-body"><table><thead><tr><th style="text-align:left;padding-left:6px;">Setor</th><th>Parados</th></tr></thead><tbody>{rows_setor}</tbody></table></div></div>
   </div>
   <div class="cons-box"><div class="cons-title">Considerações · GNS</div><div class="cons-text">{cons_gns}</div></div>
-{footer_block(11)}
+{footer_block(12)}
 </div>
 """)
 
-    # ===================== P12 · Embarcados =====================
+    # ===================== P13 · Embarcados =====================
     e = dados_embarcados
     df_crit = e.get("df_criticos", pd.DataFrame())
     rows_crit = "".join(
@@ -3368,11 +3858,88 @@ def gerar_html_consolidado_teal(
   <div class="card"><div class="card-title">Câmeras / Vision Críticos em Aberto</div><div class="card-body"><table><thead><tr><th>Aberto em</th><th>Veículo</th><th>Tipo</th><th style="text-align:left;padding-left:6px;">Problema</th><th>Prioridade</th></tr></thead><tbody>{rows_crit}</tbody></table></div></div>
   <div class="card"><div class="card-title">Solicitações por Mês</div><div class="card-body">{img_tag('embarcados')}</div></div>
   <div class="cons-box"><div class="cons-title">Considerações · Embarcados</div><div class="cons-text">{cons_emb}</div></div>
-{footer_block(12)}
+{footer_block(13)}
 </div>
 """)
 
-    # ===================== P13 · Oportunidades =====================
+    # ===================== P14 · Embarcados · Intervenções =====================
+    ei = dados_emb_interv
+    fam_df = ei.get("por_familia", pd.DataFrame())
+    tot_emb = ei.get("total", 0)
+
+    _FAM_COR = {
+        "Validador/Bilhetagem": "#0d9488", "Catraca/Roleta": "#2563eb",
+        "Itinerário/Letreiro": "#b45309", "Telemetria": "#7c3aed",
+        "GPS/AVL/TCO": "#0891b2", "Câmera/Vision": "#dc2626",
+    }
+    rows_fam = "".join(
+        f'<tr><td style="text-align:left;padding-left:6px;">'
+        f'<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:{_FAM_COR.get(r["familia"], TEAL)};margin-right:6px;"></span>'
+        f'<b>{r["familia"]}</b></td>'
+        f'<td style="font-weight:800;">{_fmt_int(r["total"])}</td>'
+        f'<td>{_fmt_int(r["seguiu"])}</td><td>{_fmt_int(r["recolheu"])}</td>'
+        f'<td>{_fmt_int(r["troca"])}</td><td>{_fmt_int(r["outros"])}</td>'
+        f'<td>{_num_br(r["total"] / tot_emb * 100 if tot_emb else 0, 1)}%</td></tr>'
+        for _, r in fam_df.iterrows()
+    ) or '<tr><td colspan="7" class="muted">Sem intervenções de embarcados no período</td></tr>'
+
+    tv = ei.get("top_veiculos", pd.DataFrame())
+    rows_veic = "".join(
+        f'<tr><td style="font-weight:700;">{r["veiculo"]}</td><td>{_fmt_int(r["qtd"])}</td>'
+        f'<td style="text-align:left;padding-left:6px;font-size:8.5px;">{r["familias"]}</td></tr>'
+        for _, r in tv.iterrows()
+    ) or '<tr><td colspan="3" class="muted">Sem reincidência no período</td></tr>'
+
+    tp = ei.get("top_problemas", pd.DataFrame())
+    rows_prob = "".join(
+        f'<tr><td style="text-align:left;padding-left:6px;">{r["problema"]}</td><td>{_fmt_int(r["qtd"])}</td></tr>'
+        for _, r in tp.iterrows()
+    ) or '<tr><td colspan="2" class="muted">Sem dados</td></tr>'
+
+    # SRs de câmera/vision — o outro lado do mesmo parque de embarcados
+    _tipos_sr = e.get("por_tipo_total", {}) or {}
+    sr_cam_vis = sum(v for k, v in _tipos_sr.items()
+                     if str(k).upper() in ("CAMERAS", "CÂMERAS", "VISION"))
+
+    seguiu_pct = (ei.get("seguiu", 0) / tot_emb * 100) if tot_emb else 0.0
+    cons_ei = (
+        f"Embarcados responderam por {_fmt_int(tot_emb)} das {_fmt_int(ei.get('total_geral', 0))} intervenções do período "
+        f"({_num_br(ei.get('share_pct', 0.0), 1)}%). Destas, {_fmt_int(ei.get('recolhidos', 0))} terminaram em recolhimento — "
+        f"impacto direto no MKBF e na operação — e {_fmt_int(ei.get('seguiu', 0))} ({_num_br(seguiu_pct, 0)}%) seguiram viagem, "
+        f"ou seja, não entram no MKBF mas consomem plantonista e socorro. A classificação usa a união de "
+        f"<b>grupo de manutenção</b> e <b>problema encontrado</b>, porque os dois campos são preenchidos com critérios "
+        f"diferentes na origem; \"Catraca de Freio\" é excluída por ser item mecânico, não embarcado. "
+        f"Em paralelo, o parque de câmeras e vision acumula {_fmt_int(sr_cam_vis)} solicitações de reparo no histórico "
+        f"(detalhe na página anterior) — falhas ali quase nunca geram SO, mas comprometem a defesa jurídica."
+    )
+
+    paginas.append(f"""
+<div class="page">
+{header_block("EMBARCADOS NA OPERAÇÃO", f"Validador, catraca, letreiro, telemetria, GPS e vision · Período: <b>{ei.get('periodo_label','')}</b>", "Intervenções no mês", _fmt_int(tot_emb))}
+  <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px;">
+    <div class="metric" style="border-left:4px solid #0d9488;"><div class="lbl">Intervenções</div><div class="val" style="color:#0f766e;">{_fmt_int(tot_emb)}</div><div class="aux">{_num_br(ei.get('share_pct',0.0),1)}% do total do mês</div></div>
+    <div class="metric" style="border-left:4px solid #dc2626;"><div class="lbl">Recolhimentos</div><div class="val" style="color:#dc2626;">{_fmt_int(ei.get('recolhidos',0))}</div><div class="aux">Entram no MKBF</div></div>
+    <div class="metric"><div class="lbl">Seguiu Viagem</div><div class="val">{_fmt_int(ei.get('seguiu',0))}</div><div class="aux">{_num_br(seguiu_pct,0)}% — fora do MKBF</div></div>
+    <div class="metric"><div class="lbl">SRs Câmera / Vision</div><div class="val">{_fmt_int(sr_cam_vis)}</div><div class="aux">Histórico · ver pág. 12</div></div>
+  </div>
+  <div class="card" style="margin-bottom:7px;"><div class="card-title">Intervenções por Família de Embarcado</div><div class="card-body">
+    <table><thead><tr><th style="text-align:left;padding-left:6px;">Família</th><th>Total</th><th>Seguiu Viagem</th><th>Recolheu</th><th>Troca</th><th>Outros</th><th>% do total</th></tr></thead><tbody>{rows_fam}</tbody></table>
+  </div></div>
+  <div class="grid" style="grid-template-columns:1.15fr 0.85fr;margin-bottom:7px;">
+    <div class="card" style="margin-bottom:0;"><div class="card-title">Carros com Mais Ocorrências de Embarcado</div><div class="card-body">
+      <table><thead><tr><th>Veículo</th><th>Qtd</th><th style="text-align:left;padding-left:6px;">Famílias</th></tr></thead><tbody>{rows_veic}</tbody></table>
+    </div></div>
+    <div class="card" style="margin-bottom:0;"><div class="card-title">Problemas Mais Frequentes</div><div class="card-body">
+      <table><thead><tr><th style="text-align:left;padding-left:6px;">Problema</th><th>Qtd</th></tr></thead><tbody>{rows_prob}</tbody></table>
+    </div></div>
+  </div>
+  <div class="card" style="margin-bottom:7px;"><div class="card-title">Evolução Mensal · Barras = intervenções de embarcados · Linha vermelha = % sobre o total</div><div class="card-body">{img_tag_h('emb_interv', 175)}</div></div>
+  <div class="cons-box"><div class="cons-title">Considerações · Embarcados na Operação</div><div class="cons-text">{cons_ei}</div></div>
+{footer_block(14)}
+</div>
+""")
+
+    # ===================== P15 · Oportunidades =====================
     o = dados_oport
     ex_rep = "".join(
         f'<li style="margin-bottom:4px;">Veículo <b>{ex["veiculo"]}</b> voltou a quebrar em {ex["dias"]} dia(s) — {ex["problema"]}</li>'
@@ -3426,7 +3993,7 @@ def gerar_html_consolidado_teal(
       </div>
     </div>
   </div>
-{footer_block(13)}
+{footer_block(15)}
 </div>
 """)
 
@@ -3444,7 +4011,7 @@ def gerar_html_consolidado_teal(
         f'{corpo}\n</body>\n</html>\n'
     )
     html_path.write_text(html, encoding="utf-8")
-    print(f"✅ HTML consolidado (teal, 15 páginas) salvo: {html_path}")
+    print(f"✅ HTML consolidado (teal, 17 páginas) salvo: {html_path}")
 
 
 def gerar_pdf_do_html(html_path: Path, pdf_path: Path):
@@ -3495,7 +4062,7 @@ def main():
     )
 
     try:
-        # ---- Processamento de todas as seções (15 páginas) ----
+        # ---- Processamento de todas as seções (17 páginas) ----
         dados_p1 = processar_pagina_1(periodo_inicio, periodo_fim)
         dados_p2 = processar_pagina_2(periodo_inicio, periodo_fim, dados_p1["df_diario_atual"], dados_p1["resumo_atual"])
         dados_p3 = processar_pagina_3(periodo_fim)
@@ -3505,6 +4072,8 @@ def main():
         dados_borracharia = processar_borracharia(periodo_fim)
         dados_gns = processar_gns(periodo_inicio, periodo_fim)
         dados_embarcados = processar_embarcados()
+        dados_emb_interv = processar_embarcados_intervencoes(periodo_inicio, periodo_fim)
+        dados_defeitos = processar_defeitos_evolucao(periodo_fim)
         dados_motoristas = processar_motoristas(periodo_inicio, periodo_fim)
         dados_sr = processar_solicitacao_reparo(periodo_fim)
         dados_prev = processar_planos_vencidos()
@@ -3532,6 +4101,8 @@ def main():
         img_sr_ader = out_dir / "flash_manutencao_sr_aderencia.png"
         img_sr_aging = out_dir / "flash_manutencao_sr_aging.png"
         img_embarcados = out_dir / "flash_manutencao_embarcados.png"
+        img_emb_interv = out_dir / "flash_manutencao_emb_interv.png"
+        img_defeitos_evol = out_dir / "flash_manutencao_defeitos_evol.png"
         img_motoristas = out_dir / "flash_manutencao_motoristas.png"
         img_borracharia = out_dir / "flash_manutencao_borracharia.png"
 
@@ -3551,6 +4122,8 @@ def main():
         gerar_grafico_sr_aderencia(dados_sr["competencia_mensal"], dados_sr["meta_competencia"], img_sr_ader)
         gerar_grafico_sr_aging(dados_sr["buckets_aberto"], img_sr_aging)
         gerar_grafico_embarcados_mensal(dados_embarcados["por_mes"], mes_ref_period, img_embarcados)
+        gerar_grafico_emb_interv_mensal(dados_emb_interv["por_mes"], mes_ref_period, img_emb_interv)
+        gerar_grafico_defeitos_evolucao(dados_defeitos["df_linhas_grafico"], dados_defeitos["meses_labels"], img_defeitos_evol)
         gerar_grafico_motoristas_improcedentes(dados_motoristas["improcedentes_por_mes"], periodo_fim.year, img_motoristas)
         gerar_grafico_borracharia_trocas(dados_borracharia["trocas_por_mes"], dados_borracharia["mes_ref"], img_borracharia)
 
@@ -3559,6 +4132,7 @@ def main():
             "p3_linha": img_p3_linha, "p3_horario": img_p3_horario, "p3_top": img_p3_top,
             "regen": img_regen, "gns": img_gns, "sr_ader": img_sr_ader, "sr_aging": img_sr_aging,
             "embarcados": img_embarcados, "motoristas": img_motoristas, "borracharia": img_borracharia,
+            "emb_interv": img_emb_interv, "defeitos_evol": img_defeitos_evol,
         }
 
         gerar_html_consolidado_teal(
@@ -3566,7 +4140,8 @@ def main():
             dados_regen, dados_borracharia, dados_gns,
             dados_embarcados, dados_motoristas, dados_sr,
             dados_prev, df_acuracidade_mensal, dados_oport,
-            img_map, html_path,
+            img_map, html_path, dados_emb_interv=dados_emb_interv,
+            dados_defeitos=dados_defeitos,
         )
 
         gerar_pdf_do_html(html_path, pdf_path)
@@ -3593,7 +4168,7 @@ def main():
             mes_ref=mes_ref,
         )
 
-        print("✅ [OK] Flash Report Manutenção (Consolidado, 15 páginas) concluído.")
+        print("✅ [OK] Flash Report Manutenção (Consolidado, 17 páginas) concluído.")
         print(f"📄 PDF Unificado: {pdf_path}")
         print(f"🌐 HTML: {html_path}")
         print(f"☁️ Storage base: {base_folder}")

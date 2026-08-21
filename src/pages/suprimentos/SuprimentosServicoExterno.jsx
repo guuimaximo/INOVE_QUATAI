@@ -257,6 +257,13 @@ function itemRetornoMeta(item) {
   return { tone: "emerald", label: "Voltou · consertado" };
 }
 
+// Texto de retorno da peça para o PDF/impressão.
+function retornoTextoItem(item) {
+  if (!item?.retornado) return "Pendente";
+  const base = item.consertado === false ? "Voltou (sem conserto)" : "Voltou (consertado)";
+  return item.retornado_em ? `${base} — ${formatDateBR(item.retornado_em)}` : base;
+}
+
 const EMPTY_ITEM = {
   peca_id: "", codigo: "", descricao: "", quantidade: "1", unidade: "un", obs: "", fotos_urls: [],
   // retorno por peça:
@@ -570,6 +577,7 @@ function legacyPrintFicha(record) {
         <td>${it.descricao || ""}</td>
         <td>${it.quantidade || ""} ${it.unidade || ""}</td>
         <td>${it.obs || ""}</td>
+        <td>${retornoTextoItem(it)}</td>
       </tr>`
     ).join("");
 
@@ -605,8 +613,8 @@ function legacyPrintFicha(record) {
     <div class="field" style="grid-column:1/-1"><label>Motivo / Serviço</label><p>${record.motivo||"—"}</p></div>
     ${record.observacao?`<div class="field" style="grid-column:1/-1"><label>Observações</label><p>${record.observacao}</p></div>`:""}
   </div>
-  <table><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd/Un</th><th>Obs.</th></tr></thead>
-  <tbody>${itensHtml||'<tr><td colspan="5">Nenhum item.</td></tr>'}</tbody></table>
+  <table><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd/Un</th><th>Obs.</th><th>Retorno</th></tr></thead>
+  <tbody>${itensHtml||'<tr><td colspan="6">Nenhum item.</td></tr>'}</tbody></table>
   <div class="sig">
     <div class="sig-block"><p><strong>Responsável pela entrega</strong></p>
       <p style="margin-top:4px;font-size:11px;color:#64748b">${record.criado_por_nome||"—"}</p>
@@ -651,6 +659,7 @@ function printFicha(record) {
       <td>${escapePrintHtml(it.descricao || "")}</td>
       <td>${escapePrintHtml(`${it.quantidade || ""} ${it.unidade || ""}`.trim())}</td>
       <td>${escapePrintHtml(it.obs || "")}</td>
+      <td>${escapePrintHtml(retornoTextoItem(it))}</td>
     </tr>`)
     .join("");
 
@@ -783,8 +792,8 @@ function printFicha(record) {
   <section class="mb-3 nobreak">
     <div class="section-title">3. Itens enviados</div>
     <table class="compact">
-      <thead><tr><th style="width:36px">#</th><th style="width:95px">Código</th><th>Descrição</th><th style="width:90px">Qtd/Un</th><th>Obs.</th></tr></thead>
-      <tbody>${itensHtml || '<tr><td colspan="5" style="text-align:center;padding:8px">Nenhum item.</td></tr>'}</tbody>
+      <thead><tr><th style="width:36px">#</th><th style="width:95px">Código</th><th>Descrição</th><th style="width:90px">Qtd/Un</th><th>Obs.</th><th style="width:120px">Retorno</th></tr></thead>
+      <tbody>${itensHtml || '<tr><td colspan="6" style="text-align:center;padding:8px">Nenhum item.</td></tr>'}</tbody>
     </table>
   </section>
 

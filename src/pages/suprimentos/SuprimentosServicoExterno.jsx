@@ -233,11 +233,35 @@ function EvidenciasDropzone({ files, setFiles }) {
 
 function statusMeta(status) {
   if (status === "Retornado")          return { tone: "emerald", label: "Retornado" };
+  if (status === "Retorno parcial")    return { tone: "blue",    label: "Retorno parcial" };
   if (status === "Cancelado")          return { tone: "rose",    label: "Cancelado" };
   return                                      { tone: "amber",   label: "Em posse do terceiro" };
 }
 
-const EMPTY_ITEM = { peca_id: "", codigo: "", descricao: "", quantidade: "1", unidade: "un", obs: "", fotos_urls: [] };
+// Status da ordem DERIVADO dos itens: nenhum retornado = Em posse; todos = Retornado;
+// alguns = Retorno parcial. (Cancelado é definido à parte e tem prioridade.)
+function statusDerivado(itens, statusAtual) {
+  if (statusAtual === "Cancelado") return "Cancelado";
+  const arr = Array.isArray(itens) ? itens : [];
+  if (!arr.length) return "Em posse do terceiro";
+  const retornados = arr.filter((it) => it?.retornado).length;
+  if (retornados === 0) return "Em posse do terceiro";
+  if (retornados >= arr.length) return "Retornado";
+  return "Retorno parcial";
+}
+
+// Rótulo do estado de retorno de UMA peça.
+function itemRetornoMeta(item) {
+  if (!item?.retornado) return { tone: "amber", label: "Pendente" };
+  if (item.consertado === false) return { tone: "rose", label: "Voltou · sem conserto" };
+  return { tone: "emerald", label: "Voltou · consertado" };
+}
+
+const EMPTY_ITEM = {
+  peca_id: "", codigo: "", descricao: "", quantidade: "1", unidade: "un", obs: "", fotos_urls: [],
+  // retorno por peça:
+  retornado: false, consertado: null, retornado_em: null, retorno_obs: "", qtd_retornada: "",
+};
 
 /* ─── upload fotos (reutiliza bucket suprimentos) ─────────────── */
 async function uploadFotos(files) {
@@ -1121,6 +1145,20 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
   });
   const [retornoFiles, setRetornoFiles] = useState([]);
 
+  // Recebimento POR PEÇA: espelho editável dos itens, com os campos de retorno.
+  const [itensRetorno, setItensRetorno] = useState(() =>
+    (record.itens || []).map((it) => ({
+      ...it,
+      retornado: !!it.retornado,
+      consertado: it.consertado ?? null,
+      retornado_em: it.retornado_em || null,
+      retorno_obs: it.retorno_obs || "",
+      qtd_retornada: it.qtd_retornada ?? "",
+    }))
+  );
+  const setItemRet = (index, patch) =>
+    setItensRetorno((arr) => arr.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+
   // observação form
   const [obsForm, setObsForm] = useState({ descricao: "" });
 
@@ -1131,7 +1169,8 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
   const [error, setError] = useState("");
 
   const meta = statusMeta(record.status);
-  const canAct = record.status === "Em posse do terceiro";
+  // Pode agir enquanto ainda há peça pendente (Em posse OU Retorno parcial).
+  const canAct = record.status === "Em posse do terceiro" || record.status === "Retorno parcial";
 
   async function loadMovs() {
     setLoadingMovs(true);
@@ -1147,33 +1186,64 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
   useEffect(() => { loadMovs(); }, []);
 
   async function registrarRetorno() {
+    // Recebimento POR PEÇA. As peças marcadas "Recebido" entram; as demais ficam
+    // pendentes. O status da ordem é derivado (parcial/retornado).
+    const jaRetornados = (record.itens || []).filter((it) => it?.retornado).length;
+    const marcados = itensRetorno.filter((it) => it.retornado).length;
+    if (marcados === 0) { setError("Marque ao menos uma peça como recebida."); return; }
+    if (marcados === jaRetornados) { setError("Nenhuma peça nova foi marcada como recebida."); return; }
+
     setSaving(true); setError("");
     let uploadedUrls = [];
     if (retornoFiles.length > 0) {
       uploadedUrls = await uploadSuprimentosFiles(retornoFiles, `servico-externo/${record.id}/retorno`);
     }
-    const aprovado = retornoForm.aprovado === "Sim";
-    const descricaoMov = [
-      aprovado ? "Servico aprovado." : "Servico nao aprovado.",
-      retornoForm.descricao,
-    ].filter(Boolean).join(" ");
-    const { error: err } = await supabase.from("suprimentos_servico_externo").update({
-      status: "Retornado",
-      nota_retorno_numero: retornoForm.nota_retorno_numero || null,
-      nota_retorno_data: retornoForm.nota_retorno_data || null,
-      retornado_em: new Date().toISOString(),
-      retornado_obs: retornoForm.descricao || null,
-      servico_aprovado: aprovado,
-      valor_aprovado: retornoForm.valor ? Number(retornoForm.valor) : null,
-    }).eq("id", record.id);
+
+    const hoje = todayISO();
+    // Normaliza os itens: quem foi marcado recebido agora ganha data (se faltou);
+    // consertado default = true (só vira false se o usuário marcar "Não").
+    const novosItens = itensRetorno.map((it) => {
+      if (!it.retornado) {
+        return { ...it, retornado: false, consertado: null, retornado_em: null };
+      }
+      return {
+        ...it,
+        retornado: true,
+        consertado: it.consertado === false ? false : true,
+        retornado_em: it.retornado_em || hoje,
+        retorno_obs: it.retorno_obs || "",
+        qtd_retornada: it.qtd_retornada === "" || it.qtd_retornada == null ? null : Number(it.qtd_retornada),
+      };
+    });
+
+    const novoStatus = statusDerivado(novosItens, record.status);
+    const totalPecas = novosItens.length;
+    const semConserto = novosItens.filter((it) => it.retornado && it.consertado === false).length;
+
+    const update = {
+      itens: novosItens,
+      status: novoStatus,
+      nota_retorno_numero: retornoForm.nota_retorno_numero || record.nota_retorno_numero || null,
+      nota_retorno_data: retornoForm.nota_retorno_data || record.nota_retorno_data || null,
+    };
+    if (novoStatus === "Retornado") update.retornado_em = new Date().toISOString();
+
+    const { error: err } = await supabase
+      .from("suprimentos_servico_externo").update(update).eq("id", record.id);
     if (err) { setError(err.message); setSaving(false); return; }
+
+    const parcial = novoStatus === "Retorno parcial";
+    const descricaoMov =
+      (parcial ? `Retorno parcial: ${marcados}/${totalPecas} peças recebidas.` : `Retorno concluído: ${totalPecas}/${totalPecas} peças.`) +
+      (semConserto ? ` ${semConserto} sem conserto.` : "") +
+      (retornoForm.descricao ? ` ${retornoForm.descricao}` : "");
+
     await supabase.from("suprimentos_se_movimentacoes").insert({
       se_id: record.id,
       tipo: "Retorno",
-      descricao: descricaoMov || "Retorno registrado.",
+      descricao: descricaoMov.trim(),
       fotos_urls: uploadedUrls,
-      valor: retornoForm.valor ? Number(retornoForm.valor) : null,
-      qtd_retornada: retornoForm.qtd_retornada ? Number(retornoForm.qtd_retornada) : null,
+      qtd_retornada: marcados,
       criado_por_id: userInfo?.id || null,
       criado_por_login: userInfo?.login || null,
       criado_por_nome: userInfo?.nome || null,
@@ -1310,9 +1380,19 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
               <div>
                 <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Itens</p>
                 <div className="space-y-3">
-                  {(record.itens || []).map((it, i) => (
-                    <ItemRow key={i} item={it} index={i} onChange={() => {}} onRemove={() => {}} onPickCatalog={() => {}} readOnly />
-                  ))}
+                  {(record.itens || []).map((it, i) => {
+                    const rm = itemRetornoMeta(it);
+                    return (
+                      <div key={i}>
+                        <div className="mb-1 flex items-center gap-2">
+                          <StatusChip tone={rm.tone}>{rm.label}</StatusChip>
+                          {it.retornado && it.retornado_em && <span className="text-[11px] text-slate-400">em {formatDateBR(it.retornado_em)}</span>}
+                          {it.retornado && it.retorno_obs && <span className="text-[11px] text-slate-500">· {it.retorno_obs}</span>}
+                        </div>
+                        <ItemRow item={it} index={i} onChange={() => {}} onRemove={() => {}} onPickCatalog={() => {}} readOnly />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </>
@@ -1375,29 +1455,67 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
           {/* ── RETORNO ── */}
           {tab === "retorno" && canAct && (
             <div className="space-y-4">
-              <p className="text-sm font-semibold text-slate-600">Registre o retorno dos itens e informe o que foi realizado.</p>
+              <p className="text-sm font-semibold text-slate-600">Marque as peças que voltaram. Você pode receber <b>só algumas</b> — as demais ficam pendentes.</p>
+
+              <div className="space-y-3">
+                {itensRetorno.map((it, i) => {
+                  const jaEra = !!(record.itens || [])[i]?.retornado; // recebida num retorno anterior
+                  return (
+                    <div key={i} className={`rounded-xl border p-3 ${it.retornado ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200 bg-white"}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-800">{it.descricao || it.codigo || `Item ${i + 1}`}</p>
+                          <p className="text-xs text-slate-500">{it.codigo ? `Cód. ${it.codigo} · ` : ""}{it.quantidade} {it.unidade}</p>
+                        </div>
+                        <label className={`flex shrink-0 items-center gap-2 text-sm font-semibold ${jaEra ? "text-slate-400" : "text-slate-700 cursor-pointer"}`}>
+                          <input type="checkbox" className="h-4 w-4 accent-emerald-600" checked={!!it.retornado} disabled={jaEra}
+                            onChange={(e) => setItemRet(i, { retornado: e.target.checked, consertado: e.target.checked ? (it.consertado ?? true) : null })} />
+                          Recebido
+                        </label>
+                      </div>
+                      {it.retornado && !jaEra && (
+                        <div className="mt-3 grid grid-cols-2 gap-3">
+                          <Field label="Consertou?">
+                            <select className={inputClass} value={it.consertado === false ? "Nao" : "Sim"}
+                              onChange={(e) => setItemRet(i, { consertado: e.target.value === "Sim" })}>
+                              <option value="Sim">Sim</option>
+                              <option value="Nao">Não</option>
+                            </select>
+                          </Field>
+                          <Field label="Data do retorno">
+                            <input type="date" className={inputClass} value={it.retornado_em || todayISO()}
+                              onChange={(e) => setItemRet(i, { retornado_em: e.target.value })} />
+                          </Field>
+                          <Field label="Qtd. retornada">
+                            <input type="number" className={inputClass} placeholder={String(it.quantidade || "")} value={it.qtd_retornada ?? ""}
+                              onChange={(e) => setItemRet(i, { qtd_retornada: e.target.value })} />
+                          </Field>
+                          <Field label="Observação da peça">
+                            <input className={inputClass} placeholder="ex.: trocado retentor / sem conserto" value={it.retorno_obs || ""}
+                              onChange={(e) => setItemRet(i, { retorno_obs: e.target.value })} />
+                          </Field>
+                        </div>
+                      )}
+                      {jaEra && (
+                        <p className="mt-2 text-[11px] font-semibold text-emerald-700">
+                          Já recebida{it.retornado_em ? ` em ${formatDateBR(it.retornado_em)}` : ""} · {it.consertado === false ? "sem conserto" : "consertado"}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Nº Nota de Retorno">
+                <Field label="Nº Nota de Retorno (opcional)">
                   <input className={inputClass} placeholder="ex.: 005678" value={retornoForm.nota_retorno_numero} onChange={(e) => setRetornoForm((f) => ({ ...f, nota_retorno_numero: e.target.value }))} />
                 </Field>
                 <Field label="Data da Nota de Retorno">
                   <input type="date" className={inputClass} value={retornoForm.nota_retorno_data} onChange={(e) => setRetornoForm((f) => ({ ...f, nota_retorno_data: e.target.value }))} />
                 </Field>
-                <Field label="Servico aprovado?" required>
-                  <select className={inputClass} value={retornoForm.aprovado} onChange={(e) => setRetornoForm((f) => ({ ...f, aprovado: e.target.value }))}>
-                    <option value="Sim">Sim</option>
-                    <option value="Nao">Nao</option>
-                  </select>
-                </Field>
-                <Field label="Valor aprovado (R$)">
-                  <input className={inputClass} type="number" placeholder="0,00" value={retornoForm.valor} onChange={(e) => setRetornoForm((f) => ({ ...f, valor: e.target.value }))} />
-                </Field>
-                <Field label="Qtd. retornada">
-                  <input className={inputClass} type="number" placeholder="1" value={retornoForm.qtd_retornada} onChange={(e) => setRetornoForm((f) => ({ ...f, qtd_retornada: e.target.value }))} />
-                </Field>
               </div>
-              <Field label="O que foi feito / condição dos itens" required>
-                <textarea rows={3} className={textareaClass} placeholder="Descreva o que foi realizado, condições de retorno…" value={retornoForm.descricao} onChange={(e) => setRetornoForm((f) => ({ ...f, descricao: e.target.value }))} />
+              <Field label="Observação geral do retorno (opcional)">
+                <textarea rows={2} className={textareaClass} placeholder="Algo geral sobre este recebimento…" value={retornoForm.descricao} onChange={(e) => setRetornoForm((f) => ({ ...f, descricao: e.target.value }))} />
               </Field>
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Evidências do retorno</p>
@@ -1457,7 +1575,7 @@ function InfoField({ label, value, className = "" }) {
 /* ════════════════════════════════════════════════════════════════
    MAIN PAGE
 ═══════════════════════════════════════════════════════════════════ */
-const STATUS_OPTIONS = ["Todos", "Em posse do terceiro", "Retornado", "Cancelado"];
+const STATUS_OPTIONS = ["Todos", "Em posse do terceiro", "Retorno parcial", "Retornado", "Cancelado"];
 
 export default function SuprimentosServicoExterno() {
   const { user } = useContext(AuthContext);

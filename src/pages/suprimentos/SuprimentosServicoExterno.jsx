@@ -238,28 +238,60 @@ function statusMeta(status) {
   return                                      { tone: "amber",   label: "Em posse do terceiro" };
 }
 
-// Status da ordem DERIVADO dos itens: nenhum retornado = Em posse; todos = Retornado;
-// alguns = Retorno parcial. (Cancelado é definido à parte e tem prioridade.)
+// Quantidade ENVIADA da peça (número > 0) ou null quando não é quantificável.
+function qtdEnviadaItem(it) {
+  const q = Number(it?.quantidade);
+  return Number.isFinite(q) && q > 0 ? q : null;
+}
+// Quantidade acumulada já RETORNADA da peça (0 quando vazio/indefinido).
+function qtdRetornadaItem(it) {
+  const q = Number(it?.qtd_retornada);
+  return Number.isFinite(q) && q > 0 ? q : 0;
+}
+// Peça totalmente recebida? A flag `retornado:true` (fluxo antigo ou fechamento
+// da última unidade) tem prioridade; senão compara quantidade retornada x enviada.
+function itemCompleto(it) {
+  if (it?.retornado === true) return true;
+  const env = qtdEnviadaItem(it);
+  if (env == null) return false;
+  return qtdRetornadaItem(it) >= env;
+}
+// Peça teve algum retorno (parcial ou total)?
+function itemTemRetorno(it) {
+  return it?.retornado === true || qtdRetornadaItem(it) > 0;
+}
+
+// Status da ordem DERIVADO dos itens: nenhum retorno = Em posse; todos completos =
+// Retornado; algum incompleto = Retorno parcial. (Cancelado tem prioridade.)
 function statusDerivado(itens, statusAtual) {
   if (statusAtual === "Cancelado") return "Cancelado";
   const arr = Array.isArray(itens) ? itens : [];
   if (!arr.length) return "Em posse do terceiro";
-  const retornados = arr.filter((it) => it?.retornado).length;
-  if (retornados === 0) return "Em posse do terceiro";
-  if (retornados >= arr.length) return "Retornado";
+  if (!arr.some(itemTemRetorno)) return "Em posse do terceiro";
+  if (arr.every(itemCompleto)) return "Retornado";
   return "Retorno parcial";
 }
 
 // Rótulo do estado de retorno de UMA peça.
 function itemRetornoMeta(item) {
-  if (!item?.retornado) return { tone: "amber", label: "Pendente" };
+  if (!itemTemRetorno(item)) return { tone: "amber", label: "Pendente" };
+  if (!itemCompleto(item)) {
+    const env = qtdEnviadaItem(item);
+    const ret = qtdRetornadaItem(item);
+    return { tone: "blue", label: env != null ? `Parcial · ${ret}/${env}` : "Parcial" };
+  }
   if (item.consertado === false) return { tone: "rose", label: "Voltou · sem conserto" };
   return { tone: "emerald", label: "Voltou · consertado" };
 }
 
 // Texto de retorno da peça para o PDF/impressão.
 function retornoTextoItem(item) {
-  if (!item?.retornado) return "Pendente";
+  if (!itemTemRetorno(item)) return "Pendente";
+  if (!itemCompleto(item)) {
+    const env = qtdEnviadaItem(item);
+    const ret = qtdRetornadaItem(item);
+    return env != null ? `Parcial: ${ret} de ${env} (falta ${env - ret})` : "Parcial";
+  }
   const base = item.consertado === false ? "Voltou (sem conserto)" : "Voltou (consertado)";
   return item.retornado_em ? `${base} — ${formatDateBR(item.retornado_em)}` : base;
 }
@@ -1154,16 +1186,26 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
   });
   const [retornoFiles, setRetornoFiles] = useState([]);
 
-  // Recebimento POR PEÇA: espelho editável dos itens, com os campos de retorno.
+  // Recebimento POR PEÇA e POR QUANTIDADE: espelho editável dos itens. Cada peça
+  // pode voltar em várias rodadas até completar a quantidade enviada.
   const [itensRetorno, setItensRetorno] = useState(() =>
-    (record.itens || []).map((it) => ({
-      ...it,
-      retornado: !!it.retornado,
-      consertado: it.consertado ?? null,
-      retornado_em: it.retornado_em || null,
-      retorno_obs: it.retorno_obs || "",
-      qtd_retornada: it.qtd_retornada ?? "",
-    }))
+    (record.itens || []).map((it) => {
+      const env = qtdEnviadaItem(it);
+      const ja = qtdRetornadaItem(it);
+      const falta = env != null ? Math.max(0, env - ja) : null;
+      return {
+        ...it,
+        _env: env,             // quantidade enviada (ou null se não quantificável)
+        _ja: ja,               // quantidade já retornada em rodadas anteriores
+        _falta: falta,         // quanto ainda falta voltar
+        _completo: itemCompleto(it),
+        receberAgora: false,   // marca esta peça para receber NESTA rodada
+        qtd_agora: falta != null ? String(falta) : "", // padrão: recebe o que falta
+        consertado: it.consertado === false ? false : true,
+        retornado_em: it.retornado_em || todayISO(),
+        retorno_obs: "",
+      };
+    })
   );
   const setItemRet = (index, patch) =>
     setItensRetorno((arr) => arr.map((it, i) => (i === index ? { ...it, ...patch } : it)));
@@ -1195,12 +1237,20 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
   useEffect(() => { loadMovs(); }, []);
 
   async function registrarRetorno() {
-    // Recebimento POR PEÇA. As peças marcadas "Recebido" entram; as demais ficam
-    // pendentes. O status da ordem é derivado (parcial/retornado).
-    const jaRetornados = (record.itens || []).filter((it) => it?.retornado).length;
-    const marcados = itensRetorno.filter((it) => it.retornado).length;
-    if (marcados === 0) { setError("Marque ao menos uma peça como recebida."); return; }
-    if (marcados === jaRetornados) { setError("Nenhuma peça nova foi marcada como recebida."); return; }
+    // Recebimento POR PEÇA e POR QUANTIDADE. Só entram as peças ainda incompletas
+    // marcadas "Receber agora". A quantidade da rodada acumula na peça; quando
+    // atinge o enviado, a peça vira completa. O status da ordem é derivado.
+    const escolhidos = itensRetorno.filter((it) => !it._completo && it.receberAgora);
+    if (escolhidos.length === 0) { setError("Marque ao menos uma peça para receber agora."); return; }
+
+    // Valida a quantidade recebida nesta rodada (peças quantificáveis).
+    for (const it of escolhidos) {
+      if (it._env == null) continue;
+      const n = Number(it.qtd_agora);
+      const nome = it.descricao || it.codigo || "peça";
+      if (!Number.isFinite(n) || n <= 0) { setError(`Informe a quantidade recebida de "${nome}".`); return; }
+      if (n > it._falta) { setError(`"${nome}": recebido (${n}) maior que o que falta (${it._falta}).`); return; }
+    }
 
     setSaving(true); setError("");
     let uploadedUrls = [];
@@ -1209,25 +1259,27 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
     }
 
     const hoje = todayISO();
-    // Normaliza os itens: quem foi marcado recebido agora ganha data (se faltou);
-    // consertado default = true (só vira false se o usuário marcar "Não").
-    const novosItens = itensRetorno.map((it) => {
-      if (!it.retornado) {
-        return { ...it, retornado: false, consertado: null, retornado_em: null };
-      }
+    // Aplica a rodada sobre os itens ORIGINAIS (sem os campos auxiliares _*).
+    const novosItens = (record.itens || []).map((orig, idx) => {
+      const ui = itensRetorno[idx];
+      if (!ui || ui._completo || !ui.receberAgora) return orig; // inalterado
+      const env = ui._env;
+      const recebe = env != null ? Number(ui.qtd_agora) : null;
+      const novoTotal = env != null ? Math.min(env, ui._ja + recebe) : null;
+      const completoAgora = env != null ? novoTotal >= env : true;
       return {
-        ...it,
-        retornado: true,
-        consertado: it.consertado === false ? false : true,
-        retornado_em: it.retornado_em || hoje,
-        retorno_obs: it.retorno_obs || "",
-        qtd_retornada: it.qtd_retornada === "" || it.qtd_retornada == null ? null : Number(it.qtd_retornada),
+        ...orig,
+        qtd_retornada: env != null ? novoTotal : (orig.qtd_retornada ?? null),
+        consertado: ui.consertado === false ? false : true,
+        retorno_obs: ui.retorno_obs || orig.retorno_obs || "",
+        retornado_em: ui.retornado_em || hoje,
+        retornado: completoAgora,
       };
     });
 
     const novoStatus = statusDerivado(novosItens, record.status);
-    const totalPecas = novosItens.length;
-    const semConserto = novosItens.filter((it) => it.retornado && it.consertado === false).length;
+    const semConserto = escolhidos.filter((it) => it.consertado === false).length;
+    const totalUnRecebidas = escolhidos.reduce((s, it) => s + (it._env != null ? Number(it.qtd_agora) : 0), 0);
 
     const update = {
       itens: novosItens,
@@ -1241,9 +1293,17 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
       .from("suprimentos_servico_externo").update(update).eq("id", record.id);
     if (err) { setError(err.message); setSaving(false); return; }
 
+    const partesTxt = escolhidos.map((it) => {
+      const nome = it.descricao || it.codigo || "peça";
+      if (it._env == null) return nome;
+      const total = Math.min(it._env, it._ja + Number(it.qtd_agora));
+      return `${nome} ${total}/${it._env}`;
+    }).join("; ");
+
     const parcial = novoStatus === "Retorno parcial";
     const descricaoMov =
-      (parcial ? `Retorno parcial: ${marcados}/${totalPecas} peças recebidas.` : `Retorno concluído: ${totalPecas}/${totalPecas} peças.`) +
+      (parcial ? "Retorno parcial. " : "Retorno concluído. ") +
+      `Recebido: ${partesTxt}.` +
       (semConserto ? ` ${semConserto} sem conserto.` : "") +
       (retornoForm.descricao ? ` ${retornoForm.descricao}` : "");
 
@@ -1252,7 +1312,7 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
       tipo: "Retorno",
       descricao: descricaoMov.trim(),
       fotos_urls: uploadedUrls,
-      qtd_retornada: marcados,
+      qtd_retornada: totalUnRecebidas || escolhidos.length,
       criado_por_id: userInfo?.id || null,
       criado_por_login: userInfo?.login || null,
       criado_por_nome: userInfo?.nome || null,
@@ -1395,8 +1455,8 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
                       <div key={i}>
                         <div className="mb-1 flex items-center gap-2">
                           <StatusChip tone={rm.tone}>{rm.label}</StatusChip>
-                          {it.retornado && it.retornado_em && <span className="text-[11px] text-slate-400">em {formatDateBR(it.retornado_em)}</span>}
-                          {it.retornado && it.retorno_obs && <span className="text-[11px] text-slate-500">· {it.retorno_obs}</span>}
+                          {itemTemRetorno(it) && it.retornado_em && <span className="text-[11px] text-slate-400">em {formatDateBR(it.retornado_em)}</span>}
+                          {itemTemRetorno(it) && it.retorno_obs && <span className="text-[11px] text-slate-500">· {it.retorno_obs}</span>}
                         </div>
                         <ItemRow item={it} index={i} onChange={() => {}} onRemove={() => {}} onPickCatalog={() => {}} readOnly />
                       </div>
@@ -1464,26 +1524,40 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
           {/* ── RETORNO ── */}
           {tab === "retorno" && canAct && (
             <div className="space-y-4">
-              <p className="text-sm font-semibold text-slate-600">Marque as peças que voltaram. Você pode receber <b>só algumas</b> — as demais ficam pendentes.</p>
+              <p className="text-sm font-semibold text-slate-600">Marque as peças que voltaram. Dá pra receber <b>só uma parte da quantidade</b> — o restante fica pendente pra uma próxima rodada.</p>
 
               <div className="space-y-3">
                 {itensRetorno.map((it, i) => {
-                  const jaEra = !!(record.itens || [])[i]?.retornado; // recebida num retorno anterior
+                  const completo = it._completo;
+                  const env = it._env;
+                  const infoQtd = env != null
+                    ? `${env} ${it.unidade || ""} enviado${it._ja > 0 ? ` · ${it._ja} já retornado${it._falta > 0 ? ` · falta ${it._falta}` : ""}` : ""}`
+                    : `${it.quantidade || ""} ${it.unidade || ""}`;
                   return (
-                    <div key={i} className={`rounded-xl border p-3 ${it.retornado ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200 bg-white"}`}>
+                    <div key={i} className={`rounded-xl border p-3 ${completo ? "border-emerald-200 bg-emerald-50/40" : it.receberAgora ? "border-blue-200 bg-blue-50/40" : "border-slate-200 bg-white"}`}>
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-slate-800">{it.descricao || it.codigo || `Item ${i + 1}`}</p>
-                          <p className="text-xs text-slate-500">{it.codigo ? `Cód. ${it.codigo} · ` : ""}{it.quantidade} {it.unidade}</p>
+                          <p className="text-xs text-slate-500">{it.codigo ? `Cód. ${it.codigo} · ` : ""}{infoQtd}</p>
                         </div>
-                        <label className={`flex shrink-0 items-center gap-2 text-sm font-semibold ${jaEra ? "text-slate-400" : "text-slate-700 cursor-pointer"}`}>
-                          <input type="checkbox" className="h-4 w-4 accent-emerald-600" checked={!!it.retornado} disabled={jaEra}
-                            onChange={(e) => setItemRet(i, { retornado: e.target.checked, consertado: e.target.checked ? (it.consertado ?? true) : null })} />
-                          Recebido
-                        </label>
+                        {completo ? (
+                          <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Recebida</span>
+                        ) : (
+                          <label className="flex shrink-0 items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
+                            <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={!!it.receberAgora}
+                              onChange={(e) => setItemRet(i, { receberAgora: e.target.checked })} />
+                            Receber agora
+                          </label>
+                        )}
                       </div>
-                      {it.retornado && !jaEra && (
+                      {!completo && it.receberAgora && (
                         <div className="mt-3 grid grid-cols-2 gap-3">
+                          {env != null && (
+                            <Field label={`Qtd. recebida agora (falta ${it._falta})`}>
+                              <input type="number" min="1" max={it._falta} className={inputClass} value={it.qtd_agora}
+                                onChange={(e) => setItemRet(i, { qtd_agora: e.target.value })} />
+                            </Field>
+                          )}
                           <Field label="Consertou?">
                             <select className={inputClass} value={it.consertado === false ? "Nao" : "Sim"}
                               onChange={(e) => setItemRet(i, { consertado: e.target.value === "Sim" })}>
@@ -1495,19 +1569,15 @@ function DetalheModal({ record, onClose, onUpdated, onEdit, onDelete, userInfo }
                             <input type="date" className={inputClass} value={it.retornado_em || todayISO()}
                               onChange={(e) => setItemRet(i, { retornado_em: e.target.value })} />
                           </Field>
-                          <Field label="Qtd. retornada">
-                            <input type="number" className={inputClass} placeholder={String(it.quantidade || "")} value={it.qtd_retornada ?? ""}
-                              onChange={(e) => setItemRet(i, { qtd_retornada: e.target.value })} />
-                          </Field>
                           <Field label="Observação da peça">
                             <input className={inputClass} placeholder="ex.: trocado retentor / sem conserto" value={it.retorno_obs || ""}
                               onChange={(e) => setItemRet(i, { retorno_obs: e.target.value })} />
                           </Field>
                         </div>
                       )}
-                      {jaEra && (
+                      {completo && (
                         <p className="mt-2 text-[11px] font-semibold text-emerald-700">
-                          Já recebida{it.retornado_em ? ` em ${formatDateBR(it.retornado_em)}` : ""} · {it.consertado === false ? "sem conserto" : "consertado"}
+                          Recebida totalmente{it.retornado_em ? ` · último em ${formatDateBR(it.retornado_em)}` : ""} · {it.consertado === false ? "sem conserto" : "consertado"}
                         </p>
                       )}
                     </div>

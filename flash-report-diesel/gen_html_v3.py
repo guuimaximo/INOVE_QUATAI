@@ -1909,11 +1909,11 @@ CRONOGRAMA = [
         ("Enquete de Fixação", "Carros com Vazamento de Ar", "14/08", True),
     ]),
     ("3ª Semana", "17 a 21/08", [
-        ("Imagem Motivacional", "", "17/08", False),
-        ("Vídeo - Min. do Conhecimento", "", "18/08", False),
-        ("Imagem Informativa", "", "19/08", False),
-        ("Podcast - Fala, Motô!", "", "20/08", False),
-        ("Enquete de Fixação", "", "21/08", False),
+        ("Imagem Motivacional", "", "17/08", True),
+        ("Vídeo - Min. do Conhecimento", "Extra Econômica", "18/08", True),
+        ("Imagem Informativa", "Extra Econômica", "19/08", True),
+        ("Podcast - Fala, Motô!", "Segredos de um Bom KM/L: Hábitos que fazem a diferença", "20/08", True),
+        ("Enquete de Fixação", "Extra Econômica", "21/08", True),
     ]),
     ("4ª Semana", "24 a 28/08", [
         ("Imagem Motivacional", "", "24/08", False),
@@ -1979,7 +1979,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div>{_crono_left}</div>
     <div>{_crono_right}
       <div class="cons-box"><div class="cons-title">Sobre o cronograma</div>
-      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos já foram executados. A série da 1ª semana foi "Parado Ligado: Consumo ou Desperdício?", trabalhada em vídeo, imagem informativa e enquete de fixação para reforçar o custo do motor em marcha lenta, somada ao podcast "Benefícios sem Mistério: Entenda Como Tudo Funciona". A 2ª semana tratou de "Carros com Vazamento de Ar" em imagem informativa e enquete de fixação, tema de manutenção que impacta diretamente o consumo. {_crono_pend}</div></div>
+      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos já foram executados. A série da 1ª semana foi "Parado Ligado: Consumo ou Desperdício?", trabalhada em vídeo, imagem informativa e enquete de fixação para reforçar o custo do motor em marcha lenta, somada ao podcast "Benefícios sem Mistério: Entenda Como Tudo Funciona". A 2ª semana tratou de "Carros com Vazamento de Ar" em imagem informativa e enquete de fixação, tema de manutenção que impacta diretamente o consumo. Na 3ª semana a série foi "Extra Econômica", fechando com o podcast "Segredos de um Bom KM/L: Hábitos que fazem a diferença" — o tema mais direto ao indicador que este relatório acompanha. {_crono_pend}</div></div>
     </div>
   </div>
   {footer(18)}

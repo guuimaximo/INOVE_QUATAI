@@ -760,6 +760,36 @@ export default function Usuarios() {
     }
   }
 
+  // Garante a conta no Supabase Auth do usuario (via Edge Function service_role).
+  // Sem ela, o usuario loga em contingencia (anon) e a RLS Fase 1 barra os dados.
+  // Idempotente: nao faz nada se ja tem auth_user_id. Chamada ao aprovar/ativar.
+  async function garantirContaAuth(usuarioRow) {
+    if (!usuarioRow?.id || usuarioRow.auth_user_id) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("provisionar-auth-usuario", {
+        body: { usuario_id: usuarioRow.id },
+      });
+      if (error) {
+        console.warn("Falha ao provisionar conta Auth:", error.message);
+        return;
+      }
+      if (data?.ok && data.auth_user_id) {
+        setUsuarios((prev) =>
+          prev.map((u) => (u.id === usuarioRow.id ? { ...u, auth_user_id: data.auth_user_id, migrado_auth: true } : u))
+        );
+        if (data.status === "criado") {
+          setFeedback({ type: "success", text: "Acesso provisionado: conta de login criada. O usuario ja consegue entrar e carregar os dados." });
+        }
+      } else if (data && data.ok === false && data.status === "sem_email_real") {
+        setFeedback({ type: "error", text: "Usuario aprovado, mas SEM e-mail real: peca para ele cadastrar um e-mail valido, senao nao consegue entrar/carregar dados." });
+      } else if (data && data.ok === false) {
+        console.warn("Provisionamento Auth nao concluido:", data.error || data.status);
+      }
+    } catch (err) {
+      console.warn("Erro ao provisionar conta Auth:", err);
+    }
+  }
+
   async function atualizarNivel(id, nivel) {
     setSavingId(id);
     setFeedback(null);
@@ -809,6 +839,11 @@ export default function Usuarios() {
     setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? data : usuario)));
     if (usuarioSelecionado?.id === id) setUsuarioSelecionado(data);
     setFeedback({ type: "success", text: `Status do cadastro alterado para ${statusCadastro}.` });
+    // Ao APROVAR, garante que a conta Auth do usuario exista (senao ele loga
+    // como anon e a RLS nao libera os dados).
+    if (normalizeText(statusCadastro) === "aprovado") {
+      await garantirContaAuth(data);
+    }
     setSavingId(null);
   }
 
@@ -835,6 +870,10 @@ export default function Usuarios() {
 
     setUsuarios((prev) => prev.map((usuario) => (usuario.id === id ? data : usuario)));
     await sincronizarProfileUsuario({ authUserId: data?.auth_user_id, ativo: novoStatus });
+    // Ao ATIVAR, garante a conta Auth (idempotente) para o acesso funcionar.
+    if (novoStatus) {
+      await garantirContaAuth(data);
+    }
     if (usuarioSelecionado?.id === id) setUsuarioSelecionado(data);
     if (currentUser?.usuario_id === id || currentUser?.id === id) {
       persistCurrentUser({ ...currentUser, ...data });

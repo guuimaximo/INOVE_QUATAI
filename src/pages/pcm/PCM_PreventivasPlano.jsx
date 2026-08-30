@@ -134,17 +134,26 @@ export default function PCM_PreventivasPlano() {
   // "Feito" automatico: para cada item programado, existe uma preventiva realizada
   // do mesmo prefixo (comparando so digitos) com data_realizacao >= data_planejada.
   const progComStatus = useMemo(() => {
+    // "Feito" casa pela DATA DE ABERTURA DA OS (data_realizacao da tabela
+    // preventivas): conta se existe uma OS do mesmo carro aberta na MESMA SEMANA
+    // do plano (segunda a domingo). Assim serviços abertos um pouco antes/depois
+    // do dia programado ainda contam — antes o `>= data_planejada` derrubava as
+    // OS abertas antes do dia programado.
+    const semIni = semana;
+    const semFim = toISODateLocal(new Date(new Date(semana + "T00:00:00").getTime() + 6 * 86400000));
     return progItems.map((it) => {
       const dig = soDigitos(it.prefixo);
-      const feito = realizadas.some(
-        (r) =>
-          soDigitos(r.prefixo) &&
-          (soDigitos(r.prefixo) === dig || soDigitos(r.prefixo).endsWith(dig) || dig.endsWith(soDigitos(r.prefixo))) &&
-          (!it.data_planejada || String(r.data_realizacao || "") >= String(it.data_planejada))
-      );
+      const feito = realizadas.some((r) => {
+        const rp = soDigitos(r.prefixo);
+        if (!rp) return false;
+        const mesmoCarro = rp === dig || rp.endsWith(dig) || dig.endsWith(rp);
+        if (!mesmoCarro) return false;
+        const dr = String(r.data_realizacao || "");
+        return dr >= semIni && dr <= semFim;
+      });
       return { ...it, feito };
     });
-  }, [progItems, realizadas]);
+  }, [progItems, realizadas, semana]);
 
   // Programado por carro (chave = prefixo/veic, igual ao l.veic do Gerencial),
   // para mostrar a data programada como etiqueta e pintar a linha no Gerencial.

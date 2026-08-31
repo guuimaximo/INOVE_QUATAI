@@ -129,8 +129,11 @@ export function canUserAccessPageKey(user, pageKey, accessProfileMap = {}) {
   if (!key) return false;
   if (!user?.nivel) return false;
 
-  // Administrador sempre vê tudo — não depende de profileMap nem DB.
   const nivelNorm = normalizeText(user.nivel).toLowerCase();
+  // DP360 concentra dados pessoais e automações do ponto: acesso exclusivo de administrador.
+  if (key === "dp360") return nivelNorm === "administrador" || nivelNorm === "admin";
+
+  // Administrador sempre vê tudo — não depende de profileMap nem DB.
   if (nivelNorm === "administrador" || nivelNorm === "admin") return true;
 
   const explicitBlocked = new Set(normalizePageKeyArray(user?.paginas_bloqueadas));

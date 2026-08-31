@@ -133,6 +133,7 @@ export default function Sidebar() {
   );
   const showInicioExecutivo = canSee("/painel");
   const showInicioBasico = !showInicioExecutivo;
+  const showDP360 = canSee("/dp360");
   const podeVerFarol = useMemo(() => canUserSeeFarol(user, profileMap), [profileMap, user]);
 
   function abrirFarol() {
@@ -161,6 +162,7 @@ export default function Sidebar() {
     () => ({
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
       inicioBasico: { path: "/inicio-rapido", label: "Início", icon: <FaHome /> },
+      dp360: { path: "/dp360", label: "DP360 · Gestão de Ponto", icon: <FaUserClock /> },
       pessoas: {
         label: "Pessoas",
         icon: <FaUsers />,
@@ -408,6 +410,13 @@ export default function Sidebar() {
           <NavLink to={links.inicioBasico.path} className={navLinkClass}>
             {links.inicioBasico.icon}
             <span className="whitespace-nowrap">{links.inicioBasico.label}</span>
+          </NavLink>
+        )}
+
+        {showDP360 && (
+          <NavLink to={links.dp360.path} className={navLinkClass}>
+            {links.dp360.icon}
+            <span className="whitespace-nowrap">{links.dp360.label}</span>
           </NavLink>
         )}
 

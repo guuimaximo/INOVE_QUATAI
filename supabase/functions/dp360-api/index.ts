@@ -41,6 +41,18 @@ const FONTES: Fonte[] = [
   { nome: "Casos", tabela: "ponto_caso", coluna: "date_ref" },
 ];
 
+async function consultarDp360(base: string, chave: string, tabela: string, consulta: string) {
+  const resposta = await fetch(`${base}/rest/v1/${tabela}?${consulta}`, {
+    headers: {
+      apikey: chave,
+      Authorization: `Bearer ${chave}`,
+      Accept: "application/json",
+    },
+  });
+  if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+  return await resposta.json();
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ ok: false, error: "use POST" }, 405);
@@ -89,25 +101,53 @@ serve(async (req: Request) => {
   } catch {
     return json({ ok: false, error: "corpo JSON inválido" }, 400);
   }
-  if ((corpo.action ?? "overview") !== "overview") {
+  const action = corpo.action ?? "overview";
+  if (action !== "overview" && action !== "refeicao") {
     return json({ ok: false, error: "ação DP360 não permitida" }, 400);
   }
 
   const base = dp360Url.replace(/\/$/, "");
+  if (action === "refeicao") {
+    try {
+      const colunas = [
+        "cracha", "data_ref", "status_almoco",
+        "sugestao_inicio", "sugestao_fim", "sugestao_duracao_min",
+        "sugestao_sst_inicio", "sugestao_sst_fim", "sugestao_sst_duracao_min",
+        "transnet_almoco_inicio", "transnet_almoco_fim", "transnet_almoco_duracao_min",
+        "programado_inicio", "programado_fim",
+      ].join(",");
+      const linhas = await consultarDp360(
+        base,
+        dp360Service,
+        "ponto_intervalo",
+        `select=${encodeURIComponent(colunas)}&order=data_ref.desc,cracha.asc&limit=200`,
+      );
+      return json({
+        ok: true,
+        coletado_em: new Date().toISOString(),
+        linhas: linhas.map((linha: Record<string, unknown>) => ({
+          cracha: String(linha.cracha ?? ""),
+          data: linha.data_ref ?? null,
+          situacao: linha.status_almoco ?? "SEM STATUS",
+          citatti: { inicio: linha.sugestao_inicio ?? null, fim: linha.sugestao_fim ?? null, duracao_min: linha.sugestao_duracao_min ?? null },
+          sst: { inicio: linha.sugestao_sst_inicio ?? null, fim: linha.sugestao_sst_fim ?? null, duracao_min: linha.sugestao_sst_duracao_min ?? null },
+          ponto: { inicio: linha.transnet_almoco_inicio ?? null, fim: linha.transnet_almoco_fim ?? null, duracao_min: linha.transnet_almoco_duracao_min ?? null },
+          programado: { inicio: linha.programado_inicio ?? null, fim: linha.programado_fim ?? null },
+        })),
+      });
+    } catch (error) {
+      return json({ ok: false, error: `não foi possível consultar a refeição: ${mensagemSegura(error)}` }, 502);
+    }
+  }
+
   const consultarFonte = async (fonte: Fonte) => {
     try {
-      const resposta = await fetch(
-        `${base}/rest/v1/${fonte.tabela}?select=${encodeURIComponent(fonte.coluna)}&order=${fonte.coluna}.desc&limit=1`,
-        {
-          headers: {
-            apikey: dp360Service,
-            Authorization: `Bearer ${dp360Service}`,
-            Accept: "application/json",
-          },
-        },
+      const linhas = await consultarDp360(
+        base,
+        dp360Service,
+        fonte.tabela,
+        `select=${encodeURIComponent(fonte.coluna)}&order=${fonte.coluna}.desc&limit=1`,
       );
-      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
-      const linhas = await resposta.json();
       return { nome: fonte.nome, atualizado_em: linhas?.[0]?.[fonte.coluna] ?? null, ok: true };
     } catch (error) {
       return { nome: fonte.nome, atualizado_em: null, ok: false, erro: mensagemSegura(error) };

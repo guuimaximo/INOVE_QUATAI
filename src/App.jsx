@@ -89,6 +89,7 @@ const Atestados = lazy(() => import("./pages/pessoas/Atestados"));
 const ControleReservas = lazy(() => import("./pages/pessoas/ControleReservas"));
 const OrganogramaCanvas = lazy(() => import("./pages/pessoas/OrganogramaCanvas"));
 const VagasCentral = lazy(() => import("./pages/pessoas/VagasCentral"));
+const DP360Cluster = lazy(() => import("./pages/dp360/DP360Cluster"));
 
 const DesempenhoLancamento = lazy(() => import("./pages/desempenho-diesel/DesempenhoLancamento"));
 const DesempenhoDieselResumo = lazy(() => import("./pages/desempenho-diesel/DesempenhoDieselResumo"));
@@ -233,6 +234,8 @@ export default function App() {
               <Route path="/" element={<HomeDecider />} />
               <Route path="/inove" element={<HomeDecider />} />
               <Route path="/painel" element={<Dashboard />} />
+              <Route path="/dp360" element={<DP360Cluster />} />
+              <Route path="/dp360/:aba" element={<DP360Cluster />} />
               <Route path="/controle-especial" element={<Navigate to="/controle-especial/central" replace />} />
               <Route path="/controle-especial/central" element={<ControleEspecialCentral />} />
               <Route path="/controle-especial/lancamento" element={<ControleEspecialLancamento />} />

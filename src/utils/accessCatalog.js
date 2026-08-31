@@ -3,6 +3,7 @@ export const APP_ACCESS_PAGES = [
   { key: "inicio_rapido", label: "Inicio Rapido", category: "Portal", path: "/inicio-rapido", patterns: ["/inicio-rapido"] },
   { key: "painel", label: "Painel Executivo", category: "Portal", path: "/painel", patterns: ["/painel"] },
   { key: "cadastros_hub", label: "Cadastros (central)", category: "Cadastros", path: "/cadastros", patterns: ["/cadastros"] },
+  { key: "dp360", label: "DP360 · Gestão de Ponto", category: "DP360", path: "/dp360", patterns: ["/dp360", "/dp360/:aba"] },
 
   { key: "tratativas_resumo", label: "Tratativas Resumo", category: "Tratativas", path: "/tratativas-resumo", patterns: ["/tratativas-resumo"] },
   { key: "tratativas_solicitacao", label: "Tratativas Solicitacao", category: "Tratativas", path: "/solicitar", patterns: ["/solicitar"] },

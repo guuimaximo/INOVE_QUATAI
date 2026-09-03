@@ -3280,7 +3280,9 @@ export default function PCMTrocaPneus() {
   }
 
   function handleEditarAuditoriaCompleta() {
-    if (!isAdmin || consulta.tab !== TAB_AUDITORIA || !consulta.row) return;
+    // Editar auditoria liberado para quem tem acesso à página (a própria página
+    // já é gated por login/permissão). A troca continua restrita a admin.
+    if (consulta.tab !== TAB_AUDITORIA || !consulta.row) return;
     setAuditoriaEditId(consulta.row.id);
     setAuditoriaForm(createAuditoriaFormFromRow(consulta.row));
     setConsulta((current) => ({ ...current, open: false }));
@@ -5729,7 +5731,7 @@ export default function PCMTrocaPneus() {
         tab={consulta.tab}
         row={consulta.row}
         canEditTrocaCompleta={consulta.tab === TAB_TROCA && isAdmin}
-        canEditAuditoriaCompleta={consulta.tab === TAB_AUDITORIA && isAdmin}
+        canEditAuditoriaCompleta={consulta.tab === TAB_AUDITORIA}
         transnetSaving={transnetSaving}
         checkingStatusKey={checkingStatusKey}
         isNativeShell={isNativeShell}

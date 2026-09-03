@@ -95,19 +95,31 @@ def carregar():
 
 
 def computar(dados):
-    dia = defaultdict(lambda: {"km": 0., "lt": 0., "n": 0, "veic": [], "ks": 0., "cs": 0.})
+    dia = defaultdict(lambda: {"km": 0., "lt": 0., "n": 0, "veic": [], "ks": 0., "cs": 0., "rod": set(), "ab": set()})
     for r in dados:
         dd = r["data_consolidada"]
         kt, ct = num(r["km_transnet"]), num(r["combustivel_transnet"])
         ks, cs = num(r["km_sst"]), num(r["combustivel_sst"])
         d = dia[dd]
-        if kt and ct and kt > 0 and ct > 0:
-            d["km"] += kt; d["lt"] += ct; d["n"] += 1
-            d["veic"].append((r["veiculo"], r.get("placa") or "", kt, ct))
+        v = str(r["veiculo"])
+        if (kt and kt > 50) or (ks and ks > 50):
+            d["rod"].add(v)                     # veiculo que RODOU de fato no dia
+        if ct and ct > 0:
+            d["ab"].add(v)                      # veiculo que ABASTECEU no dia
+            d["lt"] += ct                       # conta TODO litro da bomba (inclui tanque cheio com carro parado)
+            if kt and kt > 0:
+                d["km"] += kt; d["n"] += 1
+                d["veic"].append((r["veiculo"], r.get("placa") or "", kt, ct))
         if ks and cs and cs > 0 and 1.0 <= ks / cs <= 4.5:
             d["ks"] += ks; d["cs"] += cs
 
-    cons = sorted([x for x in dia if dia[x]["n"] >= MIN_VEIC_CONSOLIDADO])
+    # Dia consolidado = teve nº mínimo de veículos E >=85% dos que RODARAM tambem ABASTECERAM.
+    # Isso rejeita dia com PROBLEMA NA BOMBA / abastecimento ainda carregando (frota rodou mas
+    # poucos abasteceram), sem confundir com fim de semana (poucos carros, mas quase todos abastecem).
+    def _completo(x):
+        nr = len(dia[x]["rod"]); na = len(dia[x]["ab"])
+        return nr >= MIN_VEIC_CONSOLIDADO and na >= 0.85 * nr
+    cons = sorted([x for x in dia if dia[x]["n"] >= MIN_VEIC_CONSOLIDADO and _completo(x)])
     if len(cons) < 2:
         return None
     REF, PREV = cons[-1], cons[-2]
@@ -179,7 +191,7 @@ def computar(dados):
 def carregar_extras():
     ano = datetime.date.today().year
     tr = sb_get("indicadores_diesel", [
-        ("select", "data_consolidada,km_transnet,combustivel_transnet"),
+        ("select", "data_consolidada,veiculo,km_transnet,combustivel_transnet"),
         ("data_consolidada", f"gte.{ano}-01-01"), ("order", "data_consolidada")])
     prem = bcnt_get("premiacao_diaria_atualizada", [
         ("select", "mes,prefixo,linha,km_rodado,litros_consumidos,meta_kml_usada"), ("ano", f"eq.{ano}")])
@@ -187,12 +199,15 @@ def carregar_extras():
     return tr, prem, veic
 
 
-def computar_extras(tr, prem, veic):
+def computar_extras(tr, prem, veic, mes_ref=None):
     trm = defaultdict(lambda: [0., 0.])
     for r in tr:
         kt, ct = num(r["km_transnet"]), num(r["combustivel_transnet"])
-        if kt and ct and kt > 0 and ct > 0:
-            m = int(r["data_consolidada"][5:7]); trm[m][0] += kt; trm[m][1] += ct
+        if not (ct and ct > 0):
+            continue
+        m = int(r["data_consolidada"][5:7]); trm[m][1] += ct   # todo litro
+        if kt and kt > 0:
+            trm[m][0] += kt
     telm = defaultdict(lambda: [0., 0.])
     for r in prem:
         km, lt = num(r["km_rodado"]), num(r["litros_consumidos"])
@@ -207,7 +222,9 @@ def computar_extras(tr, prem, veic):
             serie.append((m, round(t, 3), round(te, 3)))
 
     cl = {str(v["nr_ordem"]): v.get("per_cluster") for v in veic if v.get("nr_ordem")}
-    mes_atual = max(int(r["mes"]) for r in prem if r.get("mes"))
+    # mes de referencia = mes do dia consolidado do report (mes_ref). Sem ele, cai no ultimo
+    # mes da premiacao — que no VIRAR do mes aponta o mes novo com 1 dia (linha/cluster vazios).
+    mes_atual = mes_ref if mes_ref else max(int(r["mes"]) for r in prem if r.get("mes"))
     clu = defaultdict(lambda: [0., 0., 0.]); lin = defaultdict(lambda: [0., 0., 0.])
     for r in prem:
         if int(r["mes"]) != mes_atual:
@@ -221,7 +238,23 @@ def computar_extras(tr, prem, veic):
         L = r.get("linha")
         if L:
             lin[L][0] += km; lin[L][1] += lt; lin[L][2] += mt * km
-    clusters = sorted([(k, round(a[0] / a[1], 3), round(a[2] / a[0], 3), round(a[0]))
+    # BOMBA (TransNet) por cluster = mesmo mapeamento veiculo->cluster sobre indicadores_diesel
+    bmb = defaultdict(lambda: [0., 0.])
+    for r in tr:
+        if int(r["data_consolidada"][5:7]) != mes_atual:
+            continue
+        kt, ct = num(r["km_transnet"]), num(r["combustivel_transnet"])
+        if not (ct and ct > 0):
+            continue
+        c = cl.get(str(r.get("veiculo")))
+        if not c:
+            continue
+        bmb[c][1] += ct              # todo litro
+        if kt and kt > 0:
+            bmb[c][0] += kt
+    # tuple: (cluster, kml_telemetria, meta, km_total, kml_bomba)
+    clusters = sorted([(k, round(a[0] / a[1], 3), round(a[2] / a[0], 3), round(a[0]),
+                        round(bmb[k][0] / bmb[k][1], 3) if bmb[k][1] > 0 else None)
                        for k, a in clu.items() if a[0] > 2000], key=lambda x: -x[1])
     linhas = sorted([(k, round(a[0] / a[1], 3), round(a[2] / a[0], 3), round(a[0]))
                      for k, a in lin.items() if a[0] > 3000], key=lambda x: x[1])
@@ -345,19 +378,24 @@ def render_cluster(clusters, mes_atual, path):
     if not clusters:
         return False
     fig, ax = plt.subplots(figsize=(10, 6))
-    names = [c[0] for c in clusters]; kml = [c[1] for c in clusters]; meta = [c[2] for c in clusters]; kms = [c[3] for c in clusters]
-    x = np.arange(len(clusters))
-    cols = [GREEN if k >= m else (AMBER if k >= m - 0.12 else RED) for k, m in zip(kml, meta)]
-    ax.bar(x, kml, width=0.55, color=cols, edgecolor="#334155", lw=0.5, zorder=3)
-    for i, (k, m, km) in enumerate(zip(kml, meta, kms)):
-        ax.plot([i - 0.30, i + 0.30], [m, m], color=DARK, lw=2.2, zorder=4)
-        ax.text(i, k + 0.006, br(k, 3), ha="center", fontsize=12, fontweight="bold", color=DARK)
+    names = [c[0] for c in clusters]; tel = [c[1] for c in clusters]; meta = [c[2] for c in clusters]; kms = [c[3] for c in clusters]
+    bmb = [(c[4] if len(c) > 4 else None) for c in clusters]
+    x = np.arange(len(clusters)); w = 0.38
+    ax.bar(x - w/2, tel, width=w, color=PURP, edgecolor="#334155", lw=0.5, zorder=3, label="Telemetria (SST)")
+    ax.bar(x + w/2, [b or 0 for b in bmb], width=w, color=TEAL, edgecolor="#334155", lw=0.5, zorder=3, label="Bomba (Transnet)")
+    for i, (t, b, m, km) in enumerate(zip(tel, bmb, meta, kms)):
+        ax.plot([i - 0.46, i + 0.46], [m, m], color=DARK, lw=2.0, zorder=4)
+        ax.text(i - w/2, t + 0.006, br(t, 3), ha="center", fontsize=9.5, fontweight="bold", color=PURP)
+        if b:
+            ax.text(i + w/2, b + 0.006, br(b, 3), ha="center", fontsize=9.5, fontweight="bold", color=TEAL)
         ax.text(i, 0.06, f"meta {br(m)}", ha="center", fontsize=9, color=GREY, transform=ax.get_xaxis_transform())
         ax.text(i, -0.13, f"{km/1000:.0f} mil km", ha="center", fontsize=8.5, color=GREY, transform=ax.get_xaxis_transform())
     ax.set_xticks(x); ax.set_xticklabels(names, fontsize=13, fontweight="bold")
-    ax.set_ylim(min(kml + meta) - 0.14, max(kml + meta) + 0.05); ax.set_ylabel("KM/L (telemetria)", fontsize=11.5)
-    ax.set_title(f"Como estamos por CLUSTER - {MESNOME[mes_atual]} (parcial)", fontsize=15, fontweight="bold", color=DARK, pad=12)
-    ax.text(0.99, 0.96, "traco preto = meta do cluster", transform=ax.transAxes, ha="right", fontsize=9, color=GREY)
+    allv = tel + [b for b in bmb if b] + meta
+    ax.set_ylim(min(allv) - 0.14, max(allv) + 0.05); ax.set_ylabel("KM/L", fontsize=11.5)
+    ax.set_title(f"Como estamos por CLUSTER - {MESNOME[mes_atual]}", fontsize=15, fontweight="bold", color=DARK, pad=12)
+    ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
+    ax.text(0.99, 0.90, "traco preto = meta do cluster", transform=ax.transAxes, ha="right", fontsize=9, color=GREY)
     for sp in ["top", "right"]:
         ax.spines[sp].set_visible(False)
     ax.grid(axis="y", linestyle=":", alpha=0.3)
@@ -537,7 +575,7 @@ def main():
     # extras (best-effort: nunca derruba o nucleo)
     if BU and BK:
         try:
-            e = computar_extras(*carregar_extras())
+            e = computar_extras(*carregar_extras(), mes_ref=int(o["REF"][5:7]))
             if render_mensal(e["serie_mes"], "diario_mensal.png", "diario_mensal_tab.png"):
                 fotos.append(("diario_mensal.png", "Evolução mensal do ano — Transnet x Telemetria"))
                 fotos.append(("diario_mensal_tab.png", "KM/L do ano — mês a mês"))

@@ -1656,8 +1656,8 @@ export default function EstoqueDieselOperacao() {
           <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-500">
               {isS500
-                ? "S500 exige regua atual T2 e usa bombas 2 e 3."
-                : "S10 exige regua atual T1 e usa bomba 1."}
+                ? "S500 exige regua atual T2 e usa bomba 3."
+                : "S10 exige regua atual T1 e usa bombas 1 e 2."}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {form.id ? (
@@ -2033,7 +2033,7 @@ export default function EstoqueDieselOperacao() {
           <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">Bombas</h3>
-              <p className="mt-1 text-xs font-bold text-slate-500">S500 usa bombas 2 e 3. S10 usa bomba 1.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">S500 usa bomba 3. S10 usa bombas 1 e 2.</p>
               <div className="mt-4 space-y-4">
                 {form.pumps.map((pump, index) => {
                   const previousPump = (previousEntry?.pumps || []).find(

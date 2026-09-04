@@ -2680,8 +2680,6 @@ function ConsultaModal({
 
 export default function PCMTrocaPneus() {
   const { user } = useContext(AuthContext);
-  const isAdmin =
-    norm(user?.nivel).toLowerCase() === "administrador" || norm(user?.nivel).toLowerCase() === "adm";
   const isNativeShell = Capacitor.isNativePlatform();
   const [searchParams, setSearchParams] = useSearchParams();
   const userName = safeText(user?.nome || user?.login || user?.email) || "Equipe PCM";
@@ -3290,7 +3288,7 @@ export default function PCMTrocaPneus() {
   }
 
   function handleEditarTrocaCompleta() {
-    if (!isAdmin || consulta.tab !== TAB_TROCA || !consulta.row) return;
+    if (consulta.tab !== TAB_TROCA || !consulta.row) return;
     setTrocaEditId(consulta.row.id);
     setTrocaForm(createTrocaFormFromRow(consulta.row));
     setConsulta((current) => ({ ...current, open: false }));
@@ -5730,7 +5728,7 @@ export default function PCMTrocaPneus() {
         open={consulta.open}
         tab={consulta.tab}
         row={consulta.row}
-        canEditTrocaCompleta={consulta.tab === TAB_TROCA && isAdmin}
+        canEditTrocaCompleta={consulta.tab === TAB_TROCA}
         canEditAuditoriaCompleta={consulta.tab === TAB_AUDITORIA}
         transnetSaving={transnetSaving}
         checkingStatusKey={checkingStatusKey}

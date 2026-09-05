@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardCheck, Lock, MapPin, RefreshCw, Search, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
+import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "../regrasGps";
 
 /* =============================================================================
    Revisão (Passo 2) — porte da tela do DP360 (Sistemas/PONTO: app/ui/app.js
@@ -24,23 +25,11 @@ import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 /* ---------- constantes (espelham main.py; mexeu aqui, mexe lá) ---------- */
 const TOL_ENTRADA_MIN = 10; // minutos ANTES do início da operação
 const TOL_SAIDA_MIN = 8; // minutos DEPOIS do fim da operação
-const RAIO_VEIC = 500; // m — batida × posição operacional do veículo (gps_carro)
-const RAIO_LOCAL = 100; // m — batida × local conhecido (garagem/terminal/estação)
 const SUG_JORNADA_MAX_MIN = 13 * 60; // 780 min: acima disso não é jornada, é defeito
 const DIVERGENCIA_BILHETAGEM_MIN = 20; // bilhetagem "fora da curva" na entrada
 
-// Locais LEGÍTIMOS de batida (main.py:122 LOCAIS). Os 4 "PIV" saíram em 18/08 e
-// não voltam sem o DP mandar — eles legitimavam justamente a batida distante.
-const LOCAIS = [
-  ["Garagem 046", -23.4801, -46.3032],
-  ["Terminal Santa Tereza", -23.505333, -46.357778],
-  ["Terminal GCM", -23.487727, -46.349599],
-  ["Terminal Manoel Feio", -23.479842, -46.367979],
-  ["Estação Lado de Baixo", -23.485251, -46.348544],
-  ["Apoio Estação", -23.485393, -46.347392],
-  ["MOOV", -23.47468, -46.349947],
-  ["Estação Itaqua lado de cima", -23.489316, -46.349816],
-];
+// A régua de GPS (LOCAIS, raios, Haversine, reserva, "não medido") mora em
+// ../regrasGps.js — porte de main.py `_regua_local`. Não duplicar aqui.
 
 const CATEGORIAS_PADRAO = ["MOTORISTA", "INTERNO", "APRENDIZ"];
 const PAGINAS_POR_LOTE = 6; // 6 × 1000 linhas de ponto_diario ≈ 15 dias de datas
@@ -111,23 +100,8 @@ const difCircularMin = (a, b) => {
 };
 
 /* ---------- GPS: batida fora de lugar ---------- */
-function haversine(la1, lo1, la2, lo2) {
-  const rad = Math.PI / 180;
-  const dla = (la2 - la1) * rad;
-  const dlo = (lo2 - lo1) * rad;
-  const a =
-    Math.sin(dla / 2) ** 2 + Math.cos(la1 * rad) * Math.cos(la2 * rad) * Math.sin(dlo / 2) ** 2;
-  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function localConhecido(lat, lng) {
-  let melhor = null;
-  for (const [nome, la, lo] of LOCAIS) {
-    const d = haversine(lat, lng, la, lo);
-    if (!melhor || d < melhor.dist) melhor = { nome, dist: d };
-  }
-  return melhor;
-}
+// A conta em si é do módulo `../regrasGps` (porte de main.py `_regua_local`,
+// linhas 191-299). Aqui ficou só o que é de TELA.
 
 const numero = (v) => {
   const n = parseFloat(v);
@@ -135,51 +109,31 @@ const numero = (v) => {
 };
 
 /**
- * Régua da batida (espelha main.py `_regua_local` de forma simplificada).
- * A batida é medida contra a POSIÇÃO OPERACIONAL DO VEÍCULO (gps_carro) mais
- * próxima no relógio: acima de 500 m está fora. Sem âncora com coordenada, cai
- * para o local conhecido mais próximo, que só aceita até 100 m.
- * TODO(port DP360): a régua completa também trata dia de reserva (batida em
- * local conhecido vale por si) e âncora sem coordenada — porte junto do mapa.
+ * Roda a régua completa de um crachá/dia e devolve o pacote que a grade e o
+ * pop-up consomem: o resumo (total/fora/naoMedido/maiorDistancia) + a lista
+ * batida a batida.
  */
-function calcularGps(batidas, ancoras) {
-  const comCoord = (ancoras || []).filter((a) => numero(a.latitude) != null && numero(a.longitude) != null);
-  const resumo = { total: 0, fora: 0, dist: null, hora: "", detalhes: [] };
-  for (const b of batidas || []) {
-    const la = numero(b.latitude);
-    const lo = numero(b.longitude);
-    if (la == null || lo == null) continue;
-    resumo.total += 1;
-    const bm = hm2m(b.hora);
-    let ancora = null;
-    for (const a of comCoord) {
-      const am = hm2m(a.hora);
-      const gap = am == null || bm == null ? 9999 : difCircularMin(am, bm);
-      if (!ancora || gap < ancora.gap) ancora = { ...a, gap };
-    }
-    let dist = null;
-    let fora = false;
-    let referencia = "";
-    if (ancora) {
-      dist = haversine(la, lo, numero(ancora.latitude), numero(ancora.longitude));
-      fora = dist > RAIO_VEIC;
-      referencia = `veículo ${ancora.veiculo || ""}`.trim();
-    } else {
-      const perto = localConhecido(la, lo);
-      dist = perto ? perto.dist : null;
-      fora = !perto || perto.dist > RAIO_LOCAL;
-      referencia = perto ? perto.nome : "local conhecido";
-    }
-    if (fora) {
-      resumo.fora += 1;
-      if (dist != null && (resumo.dist == null || dist > resumo.dist)) {
-        resumo.dist = dist;
-        resumo.hora = fmtHora(b.hora);
-      }
-    }
-    resumo.detalhes.push({ hora: fmtHora(b.hora), dist, fora, referencia, origem: b.origem || "" });
+function calcularGps({ batidas, ancoras, ehReserva, opIni, opFim }) {
+  const detalhes = reguaLocal({
+    batidas,
+    ancorasVeiculo: ancoras,
+    ehReserva,
+    opIni,
+    opFim,
+  });
+  return { ...resumoGps(detalhes), detalhes };
+}
+
+/** Texto da referência que decidiu a batida (usado no pop-up). */
+function referenciaGps(d) {
+  if (d.fonte === "RESERVA") return `reserva · ${d.nomeLocal || "local conhecido"}`;
+  if (d.via === "veiculo") {
+    const carro = String(d.veiculo || "").trim();
+    return [carro ? `veículo ${carro}` : "veículo", d.poi].filter(Boolean).join(" · ");
   }
-  return resumo;
+  if (d.via === "local") return d.nomeLocal || d.localMaisProximo || "local conhecido";
+  // via === null → âncora do veículo sem coordenada.
+  return d.poi ? `${d.poi} — sem coordenada` : "âncora do veículo sem coordenada";
 }
 
 /* ---------- regra da sugestão (exibição do que a view já decidiu) ---------- */
@@ -363,23 +317,54 @@ function Avisado({ caso }) {
   return <Pilula texto={`📤 ${quando}`} tom="amber" titulo={`Enviado em ${quando} — ainda não abriu no app`} />;
 }
 
+// TRÊS estados, nunca dois. "Não medido" (âncora do veículo sem coordenada)
+// tem balde próprio: contá-lo como "junto" é o falso 'junto' que contamina a
+// régua e a sugestão (main.py:274-276, bug ALENCAR/Ciganos).
 function LocalGps({ gps }) {
   if (!gps || !gps.total) return <span className="text-slate-400">—</span>;
-  if (!gps.fora)
+
+  const nm = gps.naoMedido || 0;
+  const dicaNm = nm
+    ? ` ${nm} batida(s) não medida(s) — âncora do veículo sem coordenada (terminal que a régua não sabe localizar).`
+    : "";
+  const selo = nm ? (
+    <span
+      className="ml-1 rounded bg-slate-200 px-1 text-[10px] font-black text-slate-600"
+      title={`${nm} batida(s) não medida(s) — âncora do veículo sem coordenada.`}
+    >
+      n/m {nm}
+    </span>
+  ) : null;
+
+  if (gps.fora)
     return (
       <span
-        className="whitespace-nowrap font-bold text-emerald-700"
-        title={`Todas as ${gps.total} batida(s) junto da referência operacional (≤ ${RAIO_VEIC} m do veículo).`}
+        className="whitespace-nowrap font-bold text-rose-700"
+        title={`${gps.fora} de ${gps.total} batida(s) FORA. A mais longe: ${fmtDist(gps.maiorDistancia)}${gps.horaMaisLonge ? ` às ${gps.horaMaisLonge}` : ""}.${dicaNm}`}
       >
-        ✓ junto ({gps.total})
+        📍 {gps.fora}/{gps.total} fora · {fmtDist(gps.maiorDistancia)}
+        {selo}
       </span>
     );
+
+  // Nada fora, mas nada medido: não dá para dizer "junto".
+  if (!gps.junto)
+    return (
+      <span
+        className="whitespace-nowrap font-bold text-slate-500"
+        title={`Nenhuma das ${gps.total} batida(s) pôde ser medida — a âncora do veículo veio sem coordenada. Não é "junto": é sem informação.`}
+      >
+        n/m ({gps.total})
+      </span>
+    );
+
   return (
     <span
-      className="whitespace-nowrap font-bold text-rose-700"
-      title={`${gps.fora} de ${gps.total} batida(s) FORA. A mais longe: ${fmtDist(gps.dist)}${gps.hora ? ` às ${gps.hora}` : ""}.`}
+      className="whitespace-nowrap font-bold text-emerald-700"
+      title={`${gps.junto} de ${gps.total} batida(s) junto da referência operacional (≤ ${RAIO_VEIC} m do veículo, ou ≤ ${RAIO_LOCAL} m do local conhecido).${dicaNm}`}
     >
-      📍 {gps.fora}/{gps.total} fora · {fmtDist(gps.dist)}
+      ✓ junto ({gps.junto})
+      {selo}
     </span>
   );
 }
@@ -879,16 +864,37 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                   {gps.detalhes.map((d, i) => (
                     <li
                       key={`${d.hora}-${i}`}
-                      className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${d.fora ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}
+                      className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${
+                        d.fora === null
+                          ? "bg-slate-100 text-slate-600"
+                          : d.fora
+                            ? "bg-rose-50 text-rose-800"
+                            : "bg-emerald-50 text-emerald-800"
+                      }`}
+                      title={
+                        d.fora === null
+                          ? "Não medido: a âncora do veículo veio sem coordenada — não dá para calcular distância. Não conta como junto."
+                          : d.fonte === "RESERVA"
+                            ? "Dia de reserva: sem carro atribuído, a batida em local conhecido vale por si."
+                            : `${d.papel || "—"} · ${d.fonte || "sem fonte"}${d.horaVeiculo ? ` · veículo às ${d.horaVeiculo}` : ""}`
+                      }
                     >
                       <span className="font-bold tabular-nums">{d.hora || "—"}</span>
-                      <span className="truncate px-2 text-[11px] font-semibold opacity-80">{d.referencia}</span>
-                      <span className="font-bold">
-                        {d.fora ? "fora" : "junto"} · {fmtDist(d.dist)}
+                      <span className="truncate px-2 text-[11px] font-semibold opacity-80">
+                        {referenciaGps(d)}
+                      </span>
+                      <span className="whitespace-nowrap font-bold">
+                        {d.fora === null ? "não medido" : `${d.fora ? "fora" : "junto"} · ${fmtDist(d.distancia)}`}
                       </span>
                     </li>
                   ))}
                 </ul>
+              )}
+              {!!gps?.naoMedido && (
+                <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                  {gps.naoMedido} batida(s) não medida(s): a posição operacional do veículo veio só com o
+                  nome do terminal, sem coordenada. Não vira "junto" nem "fora".
+                </p>
               )}
               {/* TODO(port DP360): mapa Leaflet com as cercas (garagem 100 m,
                   terminal 100 m, veículo 500 m) — fica para a fase do mapa. */}
@@ -1038,6 +1044,22 @@ const COLUNAS_PONTO_DIARIO = [
   "almoco_diverge_cartao",
 ].join(",");
 
+// Só o que a régua de GPS precisa da `ponto_gordura`: a janela da operação
+// (escada real > citatti > bilhetagem > SST) e a marca de dia de reserva.
+const COLUNAS_GORDURA_GPS = [
+  "cracha",
+  "data_ref",
+  "real_inicio",
+  "real_fim",
+  "op_inicio",
+  "op_fim",
+  "val_inicio",
+  "val_fim",
+  "sst_vinculo",
+  "sst_desvinculo",
+  "tem_reserva_inove",
+].join(",");
+
 /* =============================================================================
    Componente
    ========================================================================== */
@@ -1123,6 +1145,15 @@ export default function Revisao() {
       });
 
     // GPS carrega em separado: a grade não espera por ele.
+    // A `ponto_gordura` entra aqui por DOIS motivos, os mesmos do app antigo
+    // (main.py `get_gps_flags`, 6929-6957):
+    //   1. a JANELA DA OPERAÇÃO (real > citatti > bilhetagem > SST), que ancora
+    //      cada ponta na régua — sem ela a entrada é medida contra o carro da
+    //      hora errada;
+    //   2. `tem_reserva_inove`, a marca de DIA DE RESERVA. Sem carro atribuído,
+    //      batida em local conhecido vale por si (main.py:281-288) — é o que
+    //      apagava o falso "bateu fora" do ANTONIO (03:10 na Garagem 046
+    //      aparecendo "a 4,9 km do veículo (07:08)").
     Promise.all([
       lerTudoDP360("ponto_gps", {
         colunas: "cracha,hora,latitude,longitude,origem",
@@ -1130,12 +1161,17 @@ export default function Revisao() {
         ordem: "cracha.asc",
       }),
       lerTudoDP360("gps_carro", {
-        colunas: "cracha,hora,latitude,longitude,veiculo,poi,cerca,tipo,fonte",
+        colunas: "cracha,hora,latitude,longitude,veiculo,poi,cerca,tipo,fonte,linha",
         filtros: { date_ref: `eq.${data}` },
         ordem: "cracha.asc",
       }),
+      lerTudoDP360("ponto_gordura", {
+        colunas: COLUNAS_GORDURA_GPS,
+        filtros: { data_ref: `eq.${data}` },
+        ordem: "cracha.asc",
+      }),
     ])
-      .then(([batidas, carros]) => {
+      .then(([batidas, carros, gordura]) => {
         if (!ativo) return;
         const porCracha = {};
         const balde = (cracha) => {
@@ -1145,10 +1181,28 @@ export default function Revisao() {
         };
         for (const b of batidas) balde(b.cracha).batidas.push(b);
         for (const c of carros) balde(c.cracha).ancoras.push(c);
+
+        // Mesma escada do app antigo para a janela da operação.
+        const contexto = {};
+        for (const g of gordura) {
+          contexto[cra8(g.cracha)] = {
+            opIni: g.real_inicio || g.op_inicio || g.val_inicio || g.sst_vinculo || "",
+            opFim: g.real_fim || g.op_fim || g.val_fim || g.sst_desvinculo || "",
+            ehReserva: ehVerdadeiro(g.tem_reserva_inove),
+          };
+        }
+
         const resumo = {};
         for (const [cr, dados] of Object.entries(porCracha)) {
           if (!dados.batidas.length) continue;
-          resumo[cr] = calcularGps(dados.batidas, dados.ancoras);
+          const ctx = contexto[cr] || { opIni: "", opFim: "", ehReserva: false };
+          resumo[cr] = calcularGps({
+            batidas: dados.batidas,
+            ancoras: dados.ancoras,
+            ehReserva: ctx.ehReserva,
+            opIni: ctx.opIni,
+            opFim: ctx.opFim,
+          });
         }
         setGpsPorCracha(resumo);
       })
@@ -1421,7 +1475,9 @@ export default function Revisao() {
       <p className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
         <MapPin size={12} />
         Régua do GPS: mais de {RAIO_VEIC} m da posição do veículo (gps_carro) é "fora"; sem veículo, vale o local
-        conhecido até {RAIO_LOCAL} m. Tolerância do alvo: entrada −{TOL_ENTRADA_MIN} min, saída +{TOL_SAIDA_MIN} min.
+        conhecido até {RAIO_LOCAL} m. Em dia de <b>reserva</b> ele não tem carro — batida em local conhecido vale
+        por si. <b>n/m</b> = não medido: a âncora do veículo veio sem coordenada, e isso não conta como "junto".
+        Tolerância do alvo: entrada −{TOL_ENTRADA_MIN} min, saída +{TOL_SAIDA_MIN} min.
       </p>
 
       {aberta && (

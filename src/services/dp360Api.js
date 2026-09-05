@@ -37,6 +37,35 @@ export async function lerDP360(tabela, { colunas, filtros, ordem, limite, offset
   return dados.linhas || [];
 }
 
+/**
+ * Datas distintas de uma coluna, já deduplicadas NO SERVIDOR (desc).
+ * Serve para montar o seletor de dia sem a tela ter de paginar a tabela toda.
+ *
+ * O cache é AQUI, no navegador, de propósito: descobrir os dias custa varrer
+ * milhares de linhas (~5-8 s) porque o PostgREST não faz DISTINCT, e o cache em
+ * memória da Edge Function não segura — cada chamada pode cair num isolate novo
+ * (medido: 2 chamadas seguidas, nenhuma acertou o cache). A base só muda no
+ * import diário, então guardar por sessão deixa a troca de aba instantânea.
+ */
+const CACHE_DATAS = new Map();
+const CACHE_DATAS_MS = 10 * 60 * 1000;
+
+export async function lerDatasDP360(tabela, coluna, filtros) {
+  const chave = `${tabela}|${coluna}|${JSON.stringify(filtros || null)}`;
+  const guardado = CACHE_DATAS.get(chave);
+  if (guardado && Date.now() - guardado.em < CACHE_DATAS_MS) return guardado.datas;
+
+  const dados = await chamar({ action: "datas", tabela, coluna, filtros });
+  const datas = dados.datas || [];
+  CACHE_DATAS.set(chave, { em: Date.now(), datas });
+  return datas;
+}
+
+/** Esquece as datas guardadas (usar no botão de recarregar das abas). */
+export function limparCacheDatasDP360() {
+  CACHE_DATAS.clear();
+}
+
 /** Lê a tabela inteira paginando (com teto de segurança para não travar a tela). */
 export async function lerTudoDP360(tabela, opcoes = {}, maxPaginas = 40) {
   const passo = Math.min(opcoes.limite || LIMITE_PAGINA, LIMITE_PAGINA);

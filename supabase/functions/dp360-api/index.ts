@@ -80,6 +80,15 @@ const TABELAS: Record<string, Acesso> = {
 };
 
 const LIMITE_MAX = 5000;
+
+// Cache das listas de datas. Descobrir os dias distintos custa varrer milhares de
+// linhas (o PostgREST nao faz DISTINCT) — medido ~8 s na ponto_gordura.
+// ATENCAO: isto acerta pouco. Cada invocacao pode cair num isolate novo, e no
+// teste duas chamadas seguidas erraram o cache. O cache que REALMENTE segura e o
+// do navegador, em src/services/dp360Api.js. Este aqui e so um bonus quando a
+// mesma instancia atende de novo.
+const CACHE_DATAS = new Map<string, { em: number; datas: string[] }>();
+const CACHE_DATAS_MS = 5 * 60 * 1000;
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // PostgREST: "eq.123", "in.(a,b)", "gte.2026-01-01", "not.is.null"...
 const FILTRO_VALOR = /^[A-Za-z_.]+\.[^&#]*$/;
@@ -186,6 +195,52 @@ serve(async (req: Request) => {
     };
     const fontes = await Promise.all(FONTES.map(consultarFonte));
     return json({ ok: true, coletado_em: new Date().toISOString(), fontes });
+  }
+
+  /* ── datas: valores distintos de uma coluna (o PostgREST nao faz DISTINCT) ─
+     Sem isto cada aba paginava milhares de linhas so para montar o seletor de
+     data. Aqui a deduplicacao acontece no servidor e volta uma lista pequena. */
+  if (acao === "datas") {
+    const tabela = String(corpo.tabela ?? "");
+    const cfg = TABELAS[tabela];
+    if (!cfg?.ler) return json({ ok: false, error: "tabela não liberada para a DP360" }, 403);
+
+    const coluna = String(corpo.coluna ?? "");
+    if (!IDENT.test(coluna)) return json({ ok: false, error: "coluna inválida" }, 400);
+
+    const filtros = montarFiltros(corpo.filtros);
+    if (filtros === null) return json({ ok: false, error: "filtros inválidos" }, 400);
+
+    const chaveCache = `${tabela}|${coluna}|${filtros.qs}`;
+    const guardado = CACHE_DATAS.get(chaveCache);
+    if (guardado && Date.now() - guardado.em < CACHE_DATAS_MS) {
+      return json({ ok: true, tabela, coluna, datas: guardado.datas, total: guardado.datas.length, cache: true });
+    }
+
+    const vistos = new Set<string>();
+    const PAG = 1000;
+    const MAX_PAGINAS = 25; // teto de seguranca (~25 mil linhas varridas)
+    try {
+      for (let pagina = 0; pagina < MAX_PAGINAS; pagina += 1) {
+        let qs = `select=${encodeURIComponent(coluna)}&order=${encodeURIComponent(coluna)}.desc`;
+        qs += `&limit=${PAG}&offset=${pagina * PAG}`;
+        if (filtros.qs) qs += `&${filtros.qs}`;
+        const r = await fetch(`${base}/rest/v1/${tabela}?${qs}`, { headers: hDp });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const linhas = await r.json();
+        for (const l of linhas ?? []) {
+          const v = l?.[coluna];
+          if (v != null && v !== "") vistos.add(String(v).slice(0, 10));
+        }
+        if (!Array.isArray(linhas) || linhas.length < PAG) break;
+      }
+    } catch (error) {
+      return json({ ok: false, error: mensagemSegura(error) }, 502);
+    }
+
+    const datas = [...vistos].sort().reverse();
+    CACHE_DATAS.set(chaveCache, { em: Date.now(), datas });
+    return json({ ok: true, tabela, coluna, datas, total: datas.length, cache: false });
   }
 
   /* ── read: consulta uma tabela da allowlist ─────────────────────────────── */

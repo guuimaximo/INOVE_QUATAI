@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MapPin, RefreshCw, UserRound, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
+import { GARAGEM, dentroDoLocal, distanciaM, localConhecido } from "../regrasGps";
 
 // Porte da tela "por motorista" do DP360 (Sistemas/PONTO: app/ui/app.js `viewMotorista`
 // + `renderMot`, e app/main.py `get_pessoas_lista` / `get_pontos_pessoa`).
@@ -12,22 +13,9 @@ import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 
 /* ────────────────────────────── constantes portadas ────────────────────────────── */
 
-// LOCAIS oficiais — cópia literal de app/main.py (~linha 122). Os quatro "PIV" saíram de
-// lá em 18/08 e NÃO devem voltar sem o DP mandar: legitimavam batidas a quilômetros do
-// ponto legítimo mais próximo. Mexeu lá, mexe aqui.
-const LOCAIS = [
-  { nome: "Garagem 046", lat: -23.4801, lon: -46.3032 },
-  { nome: "Terminal Santa Tereza", lat: -23.505333, lon: -46.357778 },
-  { nome: "Terminal GCM", lat: -23.487727, lon: -46.349599 },
-  { nome: "Terminal Manoel Feio", lat: -23.479842, lon: -46.367979 },
-  { nome: "Estação Lado de Baixo", lat: -23.485251, lon: -46.348544 },
-  { nome: "Apoio Estação", lat: -23.485393, lon: -46.347392 },
-  { nome: "MOOV", lat: -23.47468, lon: -46.349947 },
-  { nome: "Estação Itaqua lado de cima", lat: -23.489316, lon: -46.349816 },
-];
-const GARAGEM = LOCAIS[0];
-const RAIO_GARAGEM = 100; // metros
-const RAIO_TERMINAL = 100; // metros
+// LOCAIS oficiais, raios e Haversine vêm do módulo `../regrasGps` (porte de
+// app/main.py). Não duplicar a lista aqui: os quatro "PIV" saíram dela em 18/08 e
+// uma segunda cópia é justamente como eles voltariam sem ninguém notar.
 
 const DIAS_SEM = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 const JANELA_PADRAO_DIAS = 30; // período inicial: fim − 30 dias (a base guarda ~70 dias)
@@ -97,35 +85,15 @@ function fmtQuando(valor) {
 
 /* ────────────────────────────────── GPS ───────────────────────────────────────── */
 
-// Haversine, raio 6371000 m — mesma conta do `_dist_m` do main.py (resultado inteiro).
-function distanciaM(la1, lo1, la2, lo2) {
-  const rad = Math.PI / 180;
-  const dla = (la2 - la1) * rad;
-  const dlo = (lo2 - lo1) * rad;
-  const a =
-    Math.sin(dla / 2) ** 2 +
-    Math.cos(la1 * rad) * Math.cos(la2 * rad) * Math.sin(dlo / 2) ** 2;
-  return Math.trunc(6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-}
-
-function raioLocal(nome) {
-  return String(nome || "").toLowerCase().startsWith("terminal") ? RAIO_TERMINAL : RAIO_GARAGEM;
-}
-
-/** Local conhecido MAIS PRÓXIMO da batida (nome + distância em metros). */
-function localMaisProximo(lat, lon) {
-  let melhor = null;
-  for (const loc of LOCAIS) {
-    const d = distanciaM(lat, lon, loc.lat, loc.lon);
-    if (!melhor || d < melhor.dist) melhor = { nome: loc.nome, dist: d };
-  }
-  return melhor;
-}
-
-/** "Fora" = a batida está a mais de 100 m de TODOS os locais conhecidos. */
-function estaDentro(perto) {
-  return !!perto && perto.dist <= raioLocal(perto.nome);
-}
+// ATENÇÃO — RÉGUA DIFERENTE DA REVISÃO, DE PROPÓSITO.
+// A grade "por motorista" do app original usa a régua SIMPLES: a batida vale se estiver
+// a até 100 m de um LOCAL CONHECIDO (garagem/terminal/estação). Ela NÃO mede contra a
+// posição operacional do veículo, e portanto não tem "não medido" nem regra de reserva —
+// veja `get_pontos_pessoa` em app/main.py:7390-7403 ("mesma lógica do get_gps_flags" no
+// comentário, mas o código de fato só usa `_local_conhecido` + `_local_dentro`).
+// A régua completa (veículo 500 m, reserva, não medido) é a da Revisão, em `reguaLocal`.
+// Aqui só trocamos o código duplicado pelas funções do módulo — a semântica da coluna
+// GPS continua exatamente a mesma.
 
 function fmtDistancia(metros) {
   const d = Number(metros) || 0;
@@ -137,13 +105,13 @@ function analisarBatidaGps(linha) {
   const lat = Number(linha.latitude);
   const lon = Number(linha.longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  const perto = localMaisProximo(lat, lon);
+  const perto = localConhecido(lat, lon);
   return {
     dia: soData(linha.date_ref),
     hora: String(linha.hora ?? "").slice(0, 5),
     local: perto?.nome || "",
-    distLocal: perto?.dist ?? null,
-    dentro: estaDentro(perto),
+    distLocal: perto?.distancia ?? null,
+    dentro: !!perto && dentroDoLocal(perto.nome, perto.distancia),
     distGaragem: distanciaM(lat, lon, GARAGEM.lat, GARAGEM.lon),
   };
 }

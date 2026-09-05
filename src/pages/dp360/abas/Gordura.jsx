@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Bus, Gauge, Info, PauseCircle, Search, X } from "lucide-react";
+import { AlertTriangle, Bus, CalendarClock, Gauge, Info, PauseCircle, Search, X } from "lucide-react";
 import AbaShell from "./AbaShell";
-import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
+import { lerDatasDP360, lerTudoDP360 } from "../../../services/dp360Api";
+// A reserva LANÇADA pelo gestor mora na base do PRÓPRIO INOVE (tabela
+// `reservas_motoristas` — quem grava é src/pages/pessoas/ControleReservas.jsx:91-99 e
+// 460-489), NÃO na base de importação do DP360. Por isso ela não está (nem deve estar)
+// na allowlist do gateway `dp360-api`: aqui se lê com o cliente Supabase normal do
+// INOVE, exatamente como o app antigo faz em ferramenta/supabase_client.py:695-715.
+import { supabase } from "../../../supabase";
 
 // ---------------------------------------------------------------------------
 // PASSO 4 — GORDURA DE PONTO (só MOTORISTA).
@@ -28,6 +34,15 @@ const TOL_SAIDA = 8;
 // Assinatura da reserva sem lançamento (main.py `_aplica_reserva_gps`).
 const RES_GPS_ESCALA = 15; // GPS × escala: até isso é a mesma hora
 const RES_GPS_BILH = 30; // bilhetagem depois disso do GPS = ele estava esperando, não rodando
+
+// Tolerância aplicada DEPOIS da união com a reserva lançada (main.py:4876 e 4884).
+// AMBIGUIDADE (herdada do original): aqui o Python usa 10 nas DUAS pontas, enquanto a
+// régua declarada na tela e usada em `camadaAlvo` é 10 na entrada e 8 na SAÍDA
+// (TOL_SAIDA). Ou seja, uma saída com 9 min de gordura vira TOLERANCIA_OPERACIONAL
+// nesta camada e seria P-alguma-coisa em qualquer outro caminho. Portado como está para
+// não divergir do app antigo; se o DP decidir alinhar, é só trocar esta constante por
+// TOL_SAIDA no lado da saída.
+const TOL_RESERVA_INOVE = 10;
 
 const PISOS = [
   { valor: 0, rotulo: "tudo" },
@@ -292,6 +307,99 @@ function camadaLinha99(g, com99) {
   return out;
 }
 
+// Reservas LANÇADAS no INOVE para um dia, indexadas por crachá|dia.
+// Porte de `ferramenta/supabase_client.py:695-715` (`ler_reservas_motoristas`), só que
+// filtrado pelo dia — a aba já é por dia e o volume é pequeno (dezenas).
+// DEGRADAÇÃO: se a tabela não existir, a RLS negar ou a rede cair, devolve vazio e a aba
+// segue SEM a camada, igual ao try/except do original (main.py:4851-4856).
+async function lerReservasInove(dia) {
+  try {
+    const { data, error } = await supabase
+      .from("reservas_motoristas")
+      .select("funcionario_cracha,data_referencia,hora_entrada,hora_saida,cobertura,atualizado_em")
+      .eq("data_referencia", dia)
+      .order("atualizado_em", { ascending: true, nullsFirst: true });
+    if (error) throw error;
+    const mapa = new Map();
+    // Ordem crescente + "o último vence" deixa a reserva MAIS RECENTE do dia — mesmo
+    // critério do pop-up do app antigo (`order=atualizado_em.desc&limit=1`,
+    // supabase_client.py:732). O lote do Python ordenava só por data e ficava com uma
+    // qualquer quando havia duas no mesmo dia.
+    (data || []).forEach((r) => {
+      const cra = cracha8(r.funcionario_cracha);
+      if (!cra) return; // sem crachá não há como casar com a gordura
+      mapa.set(chaveDe(cra, r.data_referencia), r);
+    });
+    return mapa;
+  } catch {
+    return new Map();
+  }
+}
+
+// `_aplica_reserva` (main.py:4844-4885) — RESERVA LANÇADA PELO GESTOR no INOVE.
+// Quem estava de reserva estava À DISPOSIÇÃO desde a hora lançada pelo gestor; a espera
+// até assumir a tabela NÃO é gordura. Então a operação real vale a UNIÃO reserva ∪
+// operação: início = min(entrada da reserva, real) e fim = max(saída da reserva, real).
+// Medido no original: 31 de 55 dias com reserva cobravam indevidamente (62,5 h).
+// Os valores antigos ficam em `*_sem_reserva` para não perder o rastro do que mudou.
+function camadaReservaInove(g, reservas) {
+  const r = reservas.get(chaveDe(g.cracha, g.data_ref));
+  if (!r) return g;
+
+  // AMBIGUIDADE (também do original): min/max são no relógio cru, sem `variante`. A
+  // reserva vem de um formulário e é sempre 00:00-23:59, enquanto `real_fim` pode passar
+  // das 24h ("26:08") no turno que cruza a meia-noite. Nesse caso o max já escolhe o
+  // real, que é o certo; mas uma reserva lançada de madrugada num turno virado pode não
+  // casar de volta. main.py:4863-4866 tem exatamente a mesma limitação — não inventei
+  // correção aqui para não divergir do número que o DP já conhece.
+  const rem = hm2m(r.hora_entrada); // reserva: entrada lançada
+  const rsm = hm2m(r.hora_saida); // reserva: saída lançada
+  const oi = hm2m(g.real_inicio);
+  const of = hm2m(g.real_fim);
+  const inicios = [rem, oi].filter((v) => v != null);
+  const fins = [rsm, of].filter((v) => v != null);
+  const ni = inicios.length ? Math.min(...inicios) : null;
+  const nf = fins.length ? Math.max(...fins) : null;
+  const pe = hm2m(g.tn_entrada);
+  const ps = hm2m(g.tn_saida);
+
+  const out = { ...g };
+  // Marca SEMPRE que existe lançamento, mesmo quando nenhuma ponta muda: é esta flag
+  // que faz `camadaReservaGps` sair do caminho (main.py:4868 lendo em 4901).
+  out.tem_reserva_inove = true;
+  out.reserva_inove_entrada = fmtHora(r.hora_entrada);
+  out.reserva_inove_saida = fmtHora(r.hora_saida);
+  out.reserva_inove_cobertura = txt(r.cobertura);
+
+  if (ni != null && ni !== oi) {
+    out.real_inicio_sem_reserva = txt(g.real_inicio);
+    out.gordura_entrada_sem_reserva = txt(g.gordura_entrada);
+    out.nivel_entrada_sem_reserva = txt(g.nivel_entrada);
+    out.real_inicio = m2hm(ni);
+    if (pe != null) {
+      const ge = Math.round((ni - pe) * 10) / 10;
+      out.gordura_entrada = String(ge);
+      // main.py:4876 — 10 min, ver AMBIGUIDADE em TOL_RESERVA_INOVE.
+      out.nivel_entrada =
+        Math.abs(ge) <= TOL_RESERVA_INOVE ? "TOLERANCIA_OPERACIONAL" : txt(g.nivel_entrada);
+    }
+  }
+  if (nf != null && nf !== of) {
+    out.real_fim_sem_reserva = txt(g.real_fim);
+    out.gordura_saida_sem_reserva = txt(g.gordura_saida);
+    out.nivel_saida_sem_reserva = txt(g.nivel_saida);
+    out.real_fim = m2hm(nf);
+    if (ps != null) {
+      const gs = Math.round((ps - nf) * 10) / 10;
+      out.gordura_saida = String(gs);
+      // main.py:4884 — também 10 aqui, e NÃO TOL_SAIDA (8). Inconsistência do original.
+      out.nivel_saida =
+        Math.abs(gs) <= TOL_RESERVA_INOVE ? "TOLERANCIA_OPERACIONAL" : txt(g.nivel_saida);
+    }
+  }
+  return out;
+}
+
 // `_aplica_reserva_gps` — reserva SEM lançamento, detectada pelo próprio dado. Na
 // reserva o motorista está à disposição mas não vende passagem: a bilhetagem só começa
 // quando ele assume uma tabela, e o tempo de espera sumia da jornada. A assinatura é
@@ -446,8 +554,10 @@ function ModalNiveis({ aoFechar }) {
         estiver na tolerância — uma ponta nunca anula a outra.
       </p>
       <p className="mt-2 text-xs leading-5 text-slate-500">
-        Nesta fase a aba é somente leitura. A reserva <b>lançada pelo gestor no INOVE</b> ainda não é
-        aplicada aqui (ela mora em outra base); a reserva detectada pelo GPS, sim.
+        Nesta fase a aba é somente leitura. As <b>duas reservas</b> já entram na conta: a{" "}
+        <b>lançada pelo gestor no INOVE</b> (ícone de agenda) — a operação real vira a união{" "}
+        <b>reserva ∪ operação</b>, porque ele estava à disposição desde a hora lançada — e a{" "}
+        <b>detectada pelo GPS</b> (ícone de pausa), para o dia em que ninguém lançou.
       </p>
     </Overlay>
   );
@@ -552,6 +662,26 @@ function PainelDetalhe({ linha, aoFechar }) {
 
   const temRealManual = [r.rm_entrada, r.rm_alm_saida, r.rm_alm_volta, r.rm_saida].some((v) => fmtHora(v));
 
+  // O que a reserva LANÇADA alargou. Só entra a ponta que de fato mudou: o original
+  // grava `*_sem_reserva` apenas quando altera (main.py:4869-4871 e 4877-4879), então a
+  // ausência do campo já significa "a operação sozinha já cobria o período lançado".
+  const semReserva = [
+    {
+      lado: "Entrada",
+      antes: r.real_inicio_sem_reserva,
+      agora: r.real_inicio,
+      minutos: num(r.gordura_entrada_sem_reserva),
+      nivel: txt(r.nivel_entrada_sem_reserva),
+    },
+    {
+      lado: "Saída",
+      antes: r.real_fim_sem_reserva,
+      agora: r.real_fim,
+      minutos: num(r.gordura_saida_sem_reserva),
+      nivel: txt(r.nivel_saida_sem_reserva),
+    },
+  ].filter((s) => fmtHora(s.antes));
+
   return (
     <Overlay
       titulo={`${txt(r.nm_funcionario) || "Colaborador"} · ${fmtData(r.data_ref)}`}
@@ -567,7 +697,12 @@ function PainelDetalhe({ linha, aoFechar }) {
             <Bus size={13} /> Linha 99 · Citatti é a fonte
           </span>
         )}
-        {r.__reserva && (
+        {r.__reservaInove && (
+          <span className="flex items-center gap-1 rounded-lg bg-fuchsia-100 px-2 py-1 text-fuchsia-800">
+            <CalendarClock size={13} /> Reserva lançada pelo gestor
+          </span>
+        )}
+        {r.__reserva && !r.__reservaInove && (
           <span className="flex items-center gap-1 rounded-lg bg-purple-100 px-2 py-1 text-purple-800">
             <PauseCircle size={13} /> {r.reserva_por_gps ? "Reserva detectada pelo GPS" : "Reserva"}
           </span>
@@ -593,6 +728,13 @@ function PainelDetalhe({ linha, aoFechar }) {
             </thead>
             <tbody className="divide-y divide-slate-100">
               <Fonte rotulo="Escala" cor="bg-slate-400" ini={r.esc_inicio} fim={r.esc_fim} />
+              {/* Lançamento do gestor no INOVE — some sozinho quando não há reserva. */}
+              <Fonte
+                rotulo="Reserva (INOVE)"
+                cor="bg-fuchsia-500"
+                ini={r.reserva_inove_entrada}
+                fim={r.reserva_inove_saida}
+              />
               <Fonte rotulo="GPS (Citatti)" cor="bg-emerald-500" ini={r.op_inicio} fim={r.op_fim} />
               <Fonte rotulo="SS (SST)" cor="bg-emerald-500" ini={r.sst_vinculo} fim={r.sst_desvinculo} />
               <Fonte
@@ -650,6 +792,42 @@ function PainelDetalhe({ linha, aoFechar }) {
             nivel={r.nivel_saida}
           />
         </div>
+        {/* O operador precisa ver O QUE MUDOU quando a reserva entrou na conta: senão o
+            número da tela não bate com o cru da `ponto_gordura` e ninguém confia. */}
+        {r.__reservaInove && (
+          <div className="mt-2 rounded-xl border border-fuchsia-200 bg-fuchsia-50 px-3 py-2.5">
+            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-fuchsia-800">
+              <CalendarClock size={14} /> Reserva lançada pelo gestor
+            </div>
+            <p className="mt-1 text-sm leading-6 text-fuchsia-900">
+              Lançada das <b className="font-mono">{H(r.reserva_inove_entrada)}</b> às{" "}
+              <b className="font-mono">{H(r.reserva_inove_saida)}</b>
+              {txt(r.reserva_inove_cobertura) ? ` · cobertura: ${txt(r.reserva_inove_cobertura)}` : ""}. Ele
+              estava <b>à disposição</b> desde a hora lançada, então a operação real é a{" "}
+              <b>união reserva ∪ operação</b> — a espera até assumir a tabela não é gordura.
+            </p>
+            {semReserva.length ? (
+              <ul className="mt-1.5 grid gap-1 text-xs font-semibold leading-5 text-fuchsia-900">
+                {semReserva.map((s) => (
+                  <li key={s.lado}>
+                    <b>{s.lado}</b> — sem a reserva o real era{" "}
+                    <span className="font-mono">{H(s.antes)}</span>
+                    {s.minutos == null
+                      ? ""
+                      : ` (${s.minutos > 0 ? "+" : ""}${Math.round(s.minutos)} min${
+                          s.nivel ? `, ${s.nivel.toLowerCase().replace(/_/g, " ")}` : ""
+                        })`}
+                    ; com a reserva passou a <span className="font-mono">{H(s.agora)}</span>.
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1.5 text-xs font-semibold leading-5 text-fuchsia-900">
+                Nenhuma ponta mudou: a operação já cobria todo o período lançado.
+              </p>
+            )}
+          </div>
+        )}
         {txt(r.justificativa) && (
           <p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
             {txt(r.justificativa)}
@@ -706,29 +884,21 @@ export default function Gordura() {
   const [detalhe, setDetalhe] = useState(null);
 
   // Lista de dias com gordura calculada — `data_ref` distintas, mais recente primeiro.
+  // A deduplicação acontece NO SERVIDOR, na ação `datas` do gateway
+  // (supabase/functions/dp360-api/index.ts:191-228, atalho em
+  // src/services/dp360Api.js:53-62). Antes a aba paginava até 40 mil linhas de
+  // `data_ref` só para montar este <select>; agora volta uma lista curta e cacheada.
   useEffect(() => {
     let ativo = true;
     (async () => {
       try {
-        const vistas = new Set();
-        for (let pagina = 0; pagina < 8; pagina += 1) {
-          // eslint-disable-next-line no-await-in-loop
-          const bloco = await lerDP360("ponto_gordura", {
-            colunas: "data_ref",
-            ordem: "data_ref.desc",
-            limite: 5000,
-            offset: pagina * 5000,
-          });
-          bloco.forEach((r) => {
-            const d = dia10(r.data_ref);
-            if (d) vistas.add(d);
-          });
-          if (bloco.length < 5000) break;
-        }
+        const ordenadas = await lerDatasDP360("ponto_gordura", "data_ref");
         if (!ativo) return;
-        const ordenadas = [...vistas].sort().reverse();
-        setDatas(ordenadas);
-        setData(ordenadas[0] || "");
+        // O gateway já corta em 10 e devolve desc; o `dia10` é só cinto de segurança
+        // para o dia que a coluna vier como timestamp.
+        const limpas = ordenadas.map(dia10).filter(Boolean);
+        setDatas(limpas);
+        setData(limpas[0] || "");
       } catch (falha) {
         if (ativo) setErro(falha?.message || "Falha ao listar os dias com gordura calculada.");
       } finally {
@@ -744,12 +914,14 @@ export default function Gordura() {
     // Gordura é a base; as demais tabelas só enriquecem. Se uma delas falhar, a
     // lista continua de pé (sem cartão/alvo) em vez de a aba inteira cair.
     const vazio = () => [];
-    const [gordura, diario, linha99, realManual, casos] = await Promise.all([
+    const [gordura, diario, linha99, realManual, casos, reservas] = await Promise.all([
       lerTudoDP360("ponto_gordura", { filtros: { data_ref: `eq.${dia}` }, ordem: "cracha.asc" }),
       lerTudoDP360("ponto_diario", { filtros: { date_ref: `eq.${dia}` } }).catch(vazio),
       lerTudoDP360("ponto_linha99", { filtros: { data_ref: `eq.${dia}` } }).catch(vazio),
       lerTudoDP360("ponto_real_manual", { filtros: { date_ref: `eq.${dia}` } }).catch(vazio),
       lerTudoDP360("ponto_caso", { filtros: { date_ref: `eq.${dia}` } }).catch(vazio),
+      // Outra base (o Supabase do próprio INOVE) e outro cliente — já degrada sozinha.
+      lerReservasInove(dia),
     ]);
 
     const indexar = (arr, colDia) => {
@@ -768,13 +940,14 @@ export default function Gordura() {
       const rm = rmMapa.get(chave) || {};
       const caso = casoMapa.get(chave) || {};
 
-      // Mesma ordem do app antigo (main.py `_gord`):
+      // Mesma ordem do app antigo (main.py:4699-4704, `_gord`):
       // linha 99 -> reserva do INOVE -> reserva por GPS -> alvo.
-      // TODO(porte): `_aplica_reserva` depende de `reservas_motoristas`, que vive na
-      // base do INOVE e não está na allowlist do gateway DP360. Enquanto não entrar,
-      // um dia com reserva LANÇADA pelo gestor pode aparecer com gordura na entrada
-      // que o app antigo neutralizaria. A reserva detectada pelo GPS já é aplicada.
-      const g = camadaAlvo(camadaReservaGps(camadaLinha99(bruta, com99)), pd);
+      // A ordem importa: a reserva por GPS só age quando NÃO há lançamento do gestor
+      // (`tem_reserva_inove`), e o alvo é sempre a última palavra sobre a gordura.
+      const g = camadaAlvo(
+        camadaReservaGps(camadaReservaInove(camadaLinha99(bruta, com99), reservas)),
+        pd,
+      );
 
       const cartao = cartoesGordura(g, pd, rm, caso);
       const nivies = [txt(g.nivel_entrada).toUpperCase(), txt(g.nivel_saida).toUpperCase()];
@@ -783,6 +956,9 @@ export default function Gordura() {
         __chave: chave,
         __cartao: cartao,
         __linha99: !!g.prioridade_citatti_linha99 || com99.has(chave),
+        // Duas coisas diferentes: o gestor LANÇOU a reserva no INOVE (documento, manda
+        // em tudo) x a reserva foi DEDUZIDA do dado (GPS) ou o nível saiu RESERVA.
+        __reservaInove: ehVerdade(g.tem_reserva_inove),
         __reserva:
           !!g.reserva_por_gps || ehVerdade(g.tem_reserva_inove) || nivies.includes("RESERVA"),
         __casoStatus: txt(caso.correcao_status) || txt(caso.aceite) || "",
@@ -968,7 +1144,10 @@ export default function Gordura() {
               <Bus size={14} className="text-indigo-600" /> linha 99 (Citatti é a fonte das pontas)
             </span>
             <span className="flex items-center gap-1.5">
-              <PauseCircle size={14} className="text-purple-600" /> reserva / prontidão (não corrige, valida)
+              <CalendarClock size={14} className="text-fuchsia-600" /> reserva lançada pelo gestor (real = reserva ∪ operação)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <PauseCircle size={14} className="text-purple-600" /> reserva por GPS / prontidão (não corrige, valida)
             </span>
             <span className="text-slate-400">Clique na linha para ver as fontes do dia.</span>
           </div>
@@ -1015,8 +1194,29 @@ export default function Gordura() {
                               <Bus size={14} aria-label="linha 99" />
                             </span>
                           )}
-                          {r.__reserva && (
-                            <span title="Reserva / prontidão — não corrige, só valida" className="shrink-0 text-purple-600">
+                          {/* Lançada pelo gestor x deduzida do dado são coisas distintas
+                              e o operador precisa distinguir de relance. */}
+                          {r.__reservaInove && (
+                            <span
+                              title={`Reserva lançada pelo gestor no INOVE${
+                                fmtHora(r.reserva_inove_entrada) || fmtHora(r.reserva_inove_saida)
+                                  ? ` — ${H(r.reserva_inove_entrada)} às ${H(r.reserva_inove_saida)}`
+                                  : ""
+                              } — real = união reserva ∪ operação`}
+                              className="shrink-0 text-fuchsia-600"
+                            >
+                              <CalendarClock size={14} aria-label="reserva lançada pelo gestor" />
+                            </span>
+                          )}
+                          {r.__reserva && !r.__reservaInove && (
+                            <span
+                              title={
+                                r.reserva_por_gps
+                                  ? "Reserva detectada pelo GPS (ninguém lançou) — não corrige, só valida"
+                                  : "Reserva / prontidão — não corrige, só valida"
+                              }
+                              className="shrink-0 text-purple-600"
+                            >
                               <PauseCircle size={14} aria-label="reserva" />
                             </span>
                           )}

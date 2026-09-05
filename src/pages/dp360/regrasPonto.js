@@ -294,11 +294,21 @@ function _num(v) {
  *   detalhe: a parte explicativa que o Python concatena na origem
  *   origemTexto: a string EXATA que o Python devolve como `origem`, pra bater com o histórico
  *
- * AMBIGUIDADE: o Python monta o rótulo com `round(cd)` — arredondamento bancário
- * (round(0.5) -> 0, round(1.5) -> 2). O JS Math.round arredonda 0.5 sempre pra cima.
- * Só afeta o TEXTO quando a duração vem fracionária (na base ela é inteira). Não afeta
- * nenhuma decisão — a comparação usa `cd`/`sd` crus.
+ * RESOLVIDO (era AMBIGUIDADE): o Python monta o rótulo com `round(cd)`, que é
+ * arredondamento bancário (metade vai pro PAR: round(0.5)->0, round(1.5)->2), e o
+ * Math.round do JS sobe sempre. Usamos `arredondaComoPython` para o texto bater.
+ * Não era teórico: das 18.291 linhas de ponto_intervalo, 1.816 têm duração .5 e 103
+ * caem neste ramo. A decisão nunca dependeu disso (a comparação usa `cd`/`sd` crus).
  */
+// round() do Python e HALF-TO-EVEN (metade vai pro par); Math.round sobe sempre.
+// So e usado em ROTULO — nenhuma decisao depende dele.
+function arredondaComoPython(n) {
+  const piso = Math.floor(n);
+  const resto = n - piso;
+  if (resto > 0.5) return piso + 1;
+  if (resto < 0.5) return piso;
+  return piso % 2 === 0 ? piso : piso + 1;
+}
 export function almocoDaRefeicao(linhaIntervalo) {
   const iv = linhaIntervalo || {};
   const ci = iv.sugestao_inicio;
@@ -314,7 +324,7 @@ export function almocoDaRefeicao(linhaIntervalo) {
     };
   }
   if (sd !== null && sd >= MIN_ALMOCO) {
-    const det = cd !== null ? `Citatti ${Math.round(cd)}min < ${MIN_ALMOCO}` : '';
+    const det = cd !== null ? `Citatti ${arredondaComoPython(cd)}min < ${MIN_ALMOCO}` : '';
     return {
       inicio: si,
       fim: sf,
@@ -326,7 +336,7 @@ export function almocoDaRefeicao(linhaIntervalo) {
   }
   // nenhuma das duas alcança o piso: devolve a do Citatti pra ficar visível que é curta
   if (cd !== null) {
-    const det = `${Math.round(cd)}min — abaixo de ${MIN_ALMOCO}`;
+    const det = `${arredondaComoPython(cd)}min — abaixo de ${MIN_ALMOCO}`;
     return {
       inicio: ci, fim: cf, duracaoMin: cd, origem: 'Citatti', detalhe: det, origemTexto: `Citatti ${det}`,
     };
@@ -966,9 +976,9 @@ export function julgaAcoes({
 
   // ---- cascata do alvo (main.py:6514-6531)
   let e = _ou(caso.entrada || caso.alvo_entrada, g.alvoEntrada || g.alvo_entrada,
-    sug.entrada || sug.entrada_sug);
+    sug.entrada_sug ?? sug.entrada);
   let s = _ou(caso.saida || caso.alvo_saida, g.alvoSaida || g.alvo_saida,
-    sug.saida || sug.saida_sug);
+    sug.saida_sug ?? sug.saida);
   let fonte;
   if (_txt(caso.entrada || caso.alvo_entrada) || _txt(caso.saida || caso.alvo_saida)) {
     const orig = _txt(caso.origem);
@@ -1006,8 +1016,8 @@ export function julgaAcoes({
 
   const batCp = batidasDoCartao(cartao);
   const mira = [
-    [PONTA_ENTRADA, hm2min(esc.entrada || esc.esc_entrada)],
-    [PONTA_SAIDA, hm2min(esc.saida || esc.esc_saida)],
+    [PONTA_ENTRADA, hm2min(esc.esc_entrada ?? esc.entrada)],
+    [PONTA_SAIDA, hm2min(esc.esc_saida ?? esc.saida)],
     [PONTA_ALM_SAIDA, hm2min(almS)],
     [PONTA_ALM_VOLTA, hm2min(almV)],
   ].filter(([, m]) => m !== null);
